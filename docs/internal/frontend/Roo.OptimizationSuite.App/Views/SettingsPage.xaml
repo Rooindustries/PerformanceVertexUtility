@@ -10,55 +10,68 @@
 
     <Grid Padding="{StaticResource RooPageMargin}">
         <ScrollViewer>
-            <StackPanel Spacing="26" MaxWidth="860" HorizontalAlignment="Left">
+            <StackPanel Spacing="18" MaxWidth="860" HorizontalAlignment="Left">
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Settings" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
-                    <TextBlock Text="Theme, safety, and the Roo identity." Style="{StaticResource PageSubtitleTextBlockStyle}"
-                               Foreground="{StaticResource RooTextSecondaryBrush}" />
-                </StackPanel>
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Appearance" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="14">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Text="Theme" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="Roo Blue is the default. Blackout is the darker match-night setup." Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <ComboBox Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
-                                          ItemsSource="{x:Bind ViewModel.Themes}" DisplayMemberPath="Name" SelectedValuePath="Id"
-                                          SelectedValue="{x:Bind ViewModel.SelectedThemeId, Mode=TwoWay}" />
-                            </Grid>
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Text="Reduced effects" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="Turns down glow and blur so weaker GPUs keep more room for the game." Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" IsOn="{x:Bind ViewModel.ReducedEffects, Mode=TwoWay}" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Safety defaults" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Padding="6"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Theme, safety, and the Roo identity." FontSize="13" LineHeight="19" TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="14">
+                        <TextBlock Text="APPEARANCE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="Theme" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Roo Blue is the default. Blackout is the darker match-night setup." Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                      ItemsSource="{x:Bind ViewModel.Themes}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                      SelectedValue="{x:Bind ViewModel.SelectedThemeId, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="Reduced effects" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Turns down glow and blur so weaker GPUs keep more room for the game." Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" IsOn="{x:Bind ViewModel.ReducedEffects, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                    <StackPanel>
+                        <TextBlock Text="SAFETY DEFAULTS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}"
+                                   Padding="20,18,20,8" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.SafetyRows}">
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="vm:SafetyRow">
-                                    <Grid Padding="12,12" ColumnSpacing="12">
+                                    <Grid Padding="20,12" ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
@@ -70,20 +83,18 @@
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
-                    </Border>
-                </StackPanel>
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Product identity" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind ViewModel.ProductName, Mode=OneWay}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextDisplayBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.Tagline}" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.VersionText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                            <TextBlock Text="Roo Industries / rooindustries.com" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="PRODUCT IDENTITY" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.ProductName, Mode=OneWay}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextDisplayBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.Tagline}" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.VersionText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="Roo Industries / rooindustries.com" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                    </StackPanel>
+                </Border>
 
             </StackPanel>
         </ScrollViewer>

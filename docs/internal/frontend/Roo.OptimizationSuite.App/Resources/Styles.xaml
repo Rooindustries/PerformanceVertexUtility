@@ -98,4 +98,41 @@
         <Setter Property="UseSystemFocusVisuals" Value="True" />
     </Style>
 
+    <ThemeShadow x:Key="RooPanelShadow" />
+
+    <Style x:Key="PanelBorderStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Background" Value="{StaticResource RooSurfaceCardBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource RooBorderBrush}" />
+        <Setter Property="Shadow" Value="{StaticResource RooPanelShadow}" />
+    </Style>
+
+    <Style x:Key="FocalPanelBorderStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="22" />
+        <Setter Property="Background" Value="{StaticResource RooSurfaceCardBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource RooBorderAccentBrush}" />
+        <Setter Property="Shadow" Value="{StaticResource RooPanelShadow}" />
+    </Style>
+
+    <Style x:Key="CommandHeaderBorderStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="24,20" />
+        <Setter Property="Background" Value="{StaticResource RooGlassMenuBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource RooBorderBrush}" />
+        <Setter Property="Shadow" Value="{StaticResource RooPanelShadow}" />
+    </Style>
+
+    <Style x:Key="PanelLabelTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource RooFontFamily}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CharacterSpacing" Value="70" />
+        <Setter Property="LineHeight" Value="15" />
+    </Style>
+
 </ResourceDictionary>

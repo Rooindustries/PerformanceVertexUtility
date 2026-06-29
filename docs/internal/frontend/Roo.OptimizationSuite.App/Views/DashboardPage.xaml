@@ -9,41 +9,29 @@
 
     <Page.Resources>
         <DataTemplate x:Key="StatusLineTemplate" x:DataType="vm:StatusLine">
-            <Grid Padding="0,11" ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center"
-                           TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+            <StackPanel Padding="0,7" Spacing="3">
+                <TextBlock Text="{x:Bind Label}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextPrimaryBrush}" />
                 </StackPanel>
-            </Grid>
+            </StackPanel>
         </DataTemplate>
 
         <DataTemplate x:Key="UsageLineTemplate" x:DataType="vm:UsageLine">
-            <Grid Padding="0,9" ColumnSpacing="12">
+            <Grid Padding="0,7" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Spacing="5">
-                    <TextBlock Text="{x:Bind Name}" FontSize="14" LineHeight="20" Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{x:Bind Detail}" FontSize="11" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="{x:Bind Name}" FontSize="13" LineHeight="18" Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Detail}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooTextMutedBrush}" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold"
+                <TextBlock Grid.Column="1" Text="{x:Bind Value}" FontSize="13" FontWeight="SemiBold"
                            VerticalAlignment="Center" Foreground="{StaticResource RooTextDisplayBrush}" />
             </Grid>
-        </DataTemplate>
-
-        <DataTemplate x:Key="StatCellTemplate" x:DataType="vm:MetricTile">
-            <StackPanel Spacing="5" Padding="0,0,18,0">
-                <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <TextBlock Text="{x:Bind Caption}" FontSize="11" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
-            </StackPanel>
         </DataTemplate>
     </Page.Resources>
 
@@ -56,8 +44,7 @@
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource CardBorderStyle}"
-                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
@@ -69,103 +56,118 @@
 
         <ScrollViewer x:Name="DashScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
-                <Grid ColumnSpacing="24">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock Text="{x:Bind ViewModel.VerdictHeadline, Mode=OneWay}" FontSize="24" FontWeight="SemiBold"
-                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                        <Grid ColumnSpacing="8">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center"
-                                     Fill="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.VerdictSummary, Mode=OneWay}" FontSize="14" TextWrapping="Wrap"
-                                       VerticalAlignment="Center" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="{x:Bind ViewModel.VerdictHeadline, Mode=OneWay}" FontSize="23" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
+                                             Fill="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.VerdictSummary, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                               VerticalAlignment="Center" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </Grid>
+                            </StackPanel>
                         </Grid>
-                    </StackPanel>
-                    <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReviewProcessPlanClick"
-                            Style="{StaticResource NavCtaButtonStyle}"
-                            Background="{StaticResource RooNavCtaBrush}" Foreground="White">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="White" />
-                            <TextBlock Text="See What To Tune" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
-
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Current Session" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.SessionLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
-                    </Border>
-                </StackPanel>
-
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Memory" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="16">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.MemoryStats}" ItemTemplate="{StaticResource StatCellTemplate}">
-                                <ItemsRepeater.Layout>
-                                    <UniformGridLayout MinItemWidth="150" MinColumnSpacing="8" MinRowSpacing="12" ItemsStretch="Fill" />
-                                </ItemsRepeater.Layout>
-                            </ItemsRepeater>
-                            <TextBlock Text="What's using the most" FontSize="12" LineHeight="17" FontWeight="SemiBold" Foreground="{StaticResource RooTextMutedBrush}" />
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.TopMemoryUsers}" ItemTemplate="{StaticResource UsageLineTemplate}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Background Load" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="16">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundStats}" ItemTemplate="{StaticResource StatCellTemplate}">
-                                <ItemsRepeater.Layout>
-                                    <UniformGridLayout MinItemWidth="150" MinColumnSpacing="8" MinRowSpacing="12" ItemsStretch="Fill" />
-                                </ItemsRepeater.Layout>
-                            </ItemsRepeater>
-                            <TextBlock Text="Most you can push back" FontSize="12" LineHeight="17" FontWeight="SemiBold" Foreground="{StaticResource RooTextMutedBrush}" />
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundOffenders}" ItemTemplate="{StaticResource UsageLineTemplate}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReviewProcessPlanClick"
+                                Style="{StaticResource NavCtaButtonStyle}"
+                                Background="{StaticResource RooNavCtaBrush}" Foreground="White">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="White" />
+                                <TextBlock Text="See What To Tune" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
 
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1.5*" />
+                        <ColumnDefinition Width="1*" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Spacing="12">
-                        <TextBlock Text="Protected During A Tune" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                        <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.ProtectedApps}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+
+                    <Border Grid.Column="0" Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28">
+                        <StackPanel Spacing="18">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="MEMORY PRESSURE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="RAM in use" FontSize="14" VerticalAlignment="Bottom" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{x:Bind ViewModel.MemoryPressureLabel, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,4"
+                                                   Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                        <TextBlock VerticalAlignment="Bottom" Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"><Run Text="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" FontSize="30" FontWeight="SemiBold" /><Run Text="%" FontSize="16" FontWeight="SemiBold" /></TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                                <ProgressBar Value="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" Maximum="100" Height="10" CornerRadius="5"
+                                             Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"
+                                             Background="{StaticResource RooSurfaceInputBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="TOP CONSUMERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.TopMemoryUsers}" ItemTemplate="{StaticResource UsageLineTemplate}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Spacing="16">
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="THIS SESSION" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SessionLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                            </StackPanel>
                         </Border>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="12">
-                        <TextBlock Text="Sensors" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                        <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.SensorLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SensorLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                            </StackPanel>
                         </Border>
                     </StackPanel>
                 </Grid>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Drivers" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="12">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="BACKGROUND APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="Most you can push back to free memory" FontSize="12" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundOffenders}" ItemTemplate="{StaticResource UsageLineTemplate}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="DRIVERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.DriverLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
                             <TextBlock Text="{x:Bind ViewModel.DriverNote, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                        Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
                     </Border>
-                </StackPanel>
+                </Grid>
 
             </StackPanel>
         </ScrollViewer>

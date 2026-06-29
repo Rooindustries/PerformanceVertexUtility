@@ -16,8 +16,7 @@
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource CardBorderStyle}"
-                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Can't read your hardware yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
@@ -29,17 +28,31 @@
 
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Drivers &amp; Settings" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
-                    <TextBlock Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooTextSecondaryBrush}"
-                               Text="Your hardware and driver path. Driver changes stay locked until you approve them." />
-                </StackPanel>
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="Drivers &amp; Settings" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Your hardware and driver path. Driver changes stay locked until you approve them."
+                                           FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
 
-                <Border Style="{StaticResource CardBorderStyle}"
-                        Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="16">
+                        <TextBlock Text="HARDWARE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="118" />
@@ -76,10 +89,9 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Network and devices" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Padding="6"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="NETWORK AND DEVICES" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.NetworkAdapters}">
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="models:NetworkAdapterInfo">
@@ -98,97 +110,96 @@
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Driver path" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
-                            Visibility="{x:Bind ViewModel.HasRecommendations, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                        <StackPanel Spacing="6">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="DRIVER PATH" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.HasRecommendations, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
                             <TextBlock Text="No driver updates matched your hardware." FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
                             <TextBlock Text="Driver changes stay manual either way. Nothing installs until you approve it."
                                        FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
-                    </Border>
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Recommendations}">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout MinItemWidth="360" MinColumnSpacing="12" MinRowSpacing="12" ItemsStretch="Fill" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="models:DriverRecommendation">
-                                <Border Style="{StaticResource CardBorderStyle}"
-                                        Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                                    <StackPanel Spacing="10">
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="5">
-                                                <TextBlock Text="{x:Bind Vendor}" FontSize="11" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
-                                                <TextBlock Text="{x:Bind Version}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{x:Bind Stability}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="{x:Bind Stability, Converter={StaticResource RiskToBrush}}" />
-                                        </Grid>
-                                        <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
-                                        <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Review before install" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                            <Button Grid.Column="1" Content="Install" IsEnabled="False" Padding="14,6" />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </StackPanel>
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Recommendations}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="360" MinColumnSpacing="12" MinRowSpacing="12" ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:DriverRecommendation">
+                                    <Border Style="{StaticResource CardBorderStyle}"
+                                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                                        <StackPanel Spacing="10">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="5">
+                                                    <TextBlock Text="{x:Bind Vendor}" FontSize="11" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
+                                                    <TextBlock Text="{x:Bind Version}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Stability}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{x:Bind Stability, Converter={StaticResource RiskToBrush}}" />
+                                            </Grid>
+                                            <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
+                                            <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Review before install" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
+                                                <Button Grid.Column="1" Content="Install" IsEnabled="False" Padding="14,6" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Border>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="GPU settings" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
-                            Visibility="{x:Bind ViewModel.HasNvidia, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                        <TextBlock Text="{x:Bind ViewModel.GpuNote, Mode=OneWay}" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
-                    </Border>
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.NvidiaProfiles}">
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="models:NvidiaProfileEntry">
-                                <Border Style="{StaticResource CardBorderStyle}"
-                                        Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                                    <StackPanel Spacing="10">
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="5">
-                                                <TextBlock Text="{x:Bind Name}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                                <TextBlock Text="{x:Bind SourceFile}" FontSize="11" LineHeight="16" FontFamily="Consolas, monospace" Foreground="{StaticResource RooTextMutedBrush}" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="{x:Bind Status, Converter={StaticResource RiskToBrush}}" />
-                                        </Grid>
-                                        <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
-                                        <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Export your profile first" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                            <Button Grid.Column="1" Content="Apply Setting" IsEnabled="False" Padding="14,6" />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </StackPanel>
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="GPU SETTINGS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.GpuNote, Mode=OneWay}" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
+                                   Visibility="{x:Bind ViewModel.HasNvidia, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.NvidiaProfiles}">
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:NvidiaProfileEntry">
+                                    <Border Style="{StaticResource CardBorderStyle}"
+                                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                                        <StackPanel Spacing="10">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="5">
+                                                    <TextBlock Text="{x:Bind Name}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                                    <TextBlock Text="{x:Bind SourceFile}" FontSize="11" LineHeight="16" FontFamily="Consolas, monospace" Foreground="{StaticResource RooTextMutedBrush}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{x:Bind Status, Converter={StaticResource RiskToBrush}}" />
+                                            </Grid>
+                                            <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
+                                            <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Export your profile first" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
+                                                <Button Grid.Column="1" Content="Apply Setting" IsEnabled="False" Padding="14,6" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Border>
 
             </StackPanel>
         </ScrollViewer>

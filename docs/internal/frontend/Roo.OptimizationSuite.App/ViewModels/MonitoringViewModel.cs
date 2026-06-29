@@ -39,10 +39,10 @@ public partial class MonitoringViewModel : PageViewModelBase
         LiveTiles.Add(new MetricTile("Windows Memory", Format.Bytes(summary.CommitUsedBytes), "commit charge"));
 
         PendingTiles.Clear();
-        PendingTiles.Add(new MetricTile("Average FPS", "Not measured yet", "needs a capture tool"));
-        PendingTiles.Add(new MetricTile("1% Low", "Not measured yet", "needs a capture tool"));
-        PendingTiles.Add(new MetricTile("Frametime", "Not measured yet", "needs a capture tool"));
-        PendingTiles.Add(new MetricTile("GPU Load", "Not measured yet", CleanDevice(gpu)));
+        PendingTiles.Add(new MetricTile("Average FPS", "—", "frames per second"));
+        PendingTiles.Add(new MetricTile("1% Low", "—", "worst-case dips"));
+        PendingTiles.Add(new MetricTile("Frametime", "—", "milliseconds"));
+        PendingTiles.Add(new MetricTile("GPU Load", "—", CleanDevice(gpu)));
 
         Sensors.Clear();
         Sensors.Add(new StatusLine("Windows counters", "Connected", "safe"));
