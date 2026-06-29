@@ -60,8 +60,7 @@
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource CardBorderStyle}"
-                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Can't read installed apps yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
@@ -77,14 +76,28 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Spacing="10">
-                <TextBlock Text="Clean Junk" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
-                <TextBlock Text="Pick an app to review its uninstall and leftovers." FontSize="14" LineHeight="20" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooTextMutedBrush}">
-                    <Run Text="{x:Bind ViewModel.AppCount, Mode=OneWay}" /><Run Text=" apps installed" />
-                    <Run Text="   ·   Nothing is removed until you approve it." />
-                </TextBlock>
-            </StackPanel>
+            <Border Grid.Row="0" Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                        <StackPanel Grid.Column="1" Spacing="7">
+                            <TextBlock Text="Clean Junk" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                            <TextBlock Text="Pick an app to review its uninstall and leftovers." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooTextMutedBrush}">
+                                <Run Text="{x:Bind ViewModel.AppCount, Mode=OneWay}" /><Run Text=" apps installed" />
+                                <Run Text="   ·   Nothing is removed until you approve it." />
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
 
             <Grid Grid.Row="1" x:Name="MasterDetail" ColumnSpacing="18" RowSpacing="16" SizeChanged="MasterDetail_SizeChanged">
                 <Grid.ColumnDefinitions>
@@ -103,17 +116,18 @@
                     </Grid.RowDefinitions>
                     <TextBox Grid.Row="0" PlaceholderText="Search installed apps"
                              Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}" Padding="6,2"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <ListView ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Single"
-                                  SelectedItem="{x:Bind ViewModel.SelectedApp, Mode=TwoWay}"
-                                  ItemTemplate="{StaticResource AppItemTemplate}"
-                                  Background="Transparent" />
+                    <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                        <StackPanel>
+                            <TextBlock Text="INSTALLED APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" Padding="20,16,20,8" />
+                            <ListView ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Single"
+                                      SelectedItem="{x:Bind ViewModel.SelectedApp, Mode=TwoWay}"
+                                      ItemTemplate="{StaticResource AppItemTemplate}"
+                                      Background="Transparent" Padding="6,0,6,6" />
+                        </StackPanel>
                     </Border>
                 </Grid>
 
-                <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource CardBorderStyle}" Padding="0"
-                        Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
                   <Grid>
 
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Padding="40"
@@ -129,6 +143,7 @@
                         <StackPanel Padding="24,22,24,24" Spacing="26">
 
                             <StackPanel Spacing="7">
+                                <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <TextBlock Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold"
                                                Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
@@ -141,7 +156,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Official uninstall" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="OFFICIAL UNINSTALL" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <Border CornerRadius="8" Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}" BorderThickness="1" Padding="14,12">
                                     <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="12" FontFamily="Consolas, monospace"
                                                TextWrapping="Wrap" MaxLines="4" LineHeight="19" LineStackingStrategy="BlockLineHeight"
@@ -156,7 +171,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Leftover scan" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="LEFTOVER SCAN" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <StackPanel Orientation="Horizontal" Spacing="12">
                                     <Button Content="Scan for leftovers" Command="{x:Bind ViewModel.ScanLeftoversCommand}"
                                             IsEnabled="{x:Bind ViewModel.CanScan, Mode=OneWay}" Padding="12,7" />
@@ -172,7 +187,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Cleanup list" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="CLEANUP LIST" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <TextBlock Text="Anything removed is backed up first, and removal stays off until you approve it."
                                            FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <Button Content="Remove leftovers" IsEnabled="False" Padding="12,7" HorizontalAlignment="Left" />

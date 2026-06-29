@@ -26,8 +26,7 @@
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource CardBorderStyle}"
-                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
@@ -37,35 +36,48 @@
 
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Before &amp; After" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="14" LineHeight="20" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                </StackPanel>
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="Before &amp; After" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Right now (your baseline)" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="RIGHT NOW (YOUR BASELINE)" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Baseline}" ItemTemplate="{StaticResource BaselineTileTemplate}">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout MinItemWidth="170" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
                             </ItemsRepeater.Layout>
                         </ItemsRepeater>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                <StackPanel Spacing="12">
-                    <TextBlock Text="After a tune" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <Border Style="{StaticResource CardBorderStyle}" Padding="40"
-                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                        <StackPanel Spacing="10" HorizontalAlignment="Center">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="AFTER A TUNE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <StackPanel Spacing="10" HorizontalAlignment="Center" Padding="0,18">
                             <FontIcon Glyph="&#xE9D9;" FontSize="26" Foreground="{StaticResource RooTextMutedBrush}" HorizontalAlignment="Center" />
                             <TextBlock Text="{x:Bind ViewModel.EmptyNote, Mode=OneWay}" TextWrapping="Wrap" TextAlignment="Center"
                                        MaxWidth="520" Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
 
             </StackPanel>
         </ScrollViewer>

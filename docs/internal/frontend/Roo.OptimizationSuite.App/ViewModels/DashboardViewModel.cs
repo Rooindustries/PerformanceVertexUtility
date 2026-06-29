@@ -15,6 +15,9 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private string _verdictLevel = "medium";
     [ObservableProperty] private string? _verdictSummary;
     [ObservableProperty] private string? _driverNote;
+    [ObservableProperty] private int _memoryUsedPercent;
+    [ObservableProperty] private string _memoryPressureLabel = "Reading";
+    [ObservableProperty] private string? _memoryPressureLine;
 
     public ObservableCollection<StatusLine> SessionLines { get; } = new();
     public ObservableCollection<MetricTile> MemoryStats { get; } = new();
@@ -97,16 +100,17 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private void BuildMemory(ProcessInventorySummary s, long usedRam, long totalRam, int ramGb, DriverHardwareSummary? hw)
     {
-        MemoryStats.Clear();
-        MemoryStats.Add(new MetricTile("RAM Free", Format.Bytes(s.AvailableMemoryBytes),
-            ramGb > 0 ? ramGb + " GB installed" : "available now"));
+        MemoryUsedPercent = totalRam > 0 ? (int)System.Math.Round((double)usedRam / totalRam * 100) : 0;
+        MemoryPressureLabel = MemoryUsedPercent switch
+        {
+            >= 85 => "Heavy",
+            >= 70 => "Moderate",
+            _ => "Light",
+        };
 
-        var usedCaption = totalRam > 0
-            ? ((int)System.Math.Round((double)usedRam / totalRam * 100)) + "% of memory"
-            : "in use";
-        MemoryStats.Add(new MetricTile("RAM In Use", Format.Bytes(usedRam), usedCaption));
-        MemoryStats.Add(new MetricTile("Windows Memory", Format.Bytes(s.CommitUsedBytes), "commit charge"));
-        MemoryStats.Add(new MetricTile("VRAM Used", "Unavailable", "Not measured yet"));
+        var totalText = ramGb > 0 ? ramGb + " GB" : Format.Bytes(totalRam);
+        MemoryPressureLine = Format.Bytes(s.AvailableMemoryBytes) + " free of " + totalText
+            + "  ·  Windows memory " + Format.Bytes(s.CommitUsedBytes);
     }
 
     private void BuildTopUsers(IReadOnlyList<ProcessItem> processes)

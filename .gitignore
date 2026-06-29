@@ -21,6 +21,8 @@ logs/
 *.bak
 
 # Internal planning/context not intended for the public repo.
+.gitignore.d/
+docs/internal/gitignored/
 docs/internal/claude-*.md
 docs/internal/session-context.md
 docs/internal/frontend-preview/
@@ -28,4 +30,5 @@ docs/internal/frontend/screenshots/
 docs/internal/references/
 
 # Large bundled development archive; release packaging should decide what to include.
+vendor/
 vendor/Utilities.zip
