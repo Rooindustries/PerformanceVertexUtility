@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "catalogId": "protected-processes",
+  "name": "Protected Process Catalog",
+  "description": "Process names and patterns that must not be demoted by process-profile automation.",
+  "protectedProcesses": [
+    {
+      "itemId": "windows-core-processes",
+      "category": "windows-core",
+      "classification": "protected",
+      "names": [
+        "System",
+        "System Idle Process",
+        "Secure System",
+        "Registry",
+        "smss.exe",
+        "csrss.exe",
+        "LsaIso.exe",
+        "wininit.exe",
+        "services.exe",
+        "lsass.exe",
+        "svchost.exe",
+        "LogonUI.exe",
+        "conhost.exe",
+        "winload.exe",
+        "winresume.exe",
+        "fontdrvhost.exe",
+        "winlogon.exe",
+        "dwm.exe",
+        "explorer.exe",
+        "taskhostw.exe",
+        "sihost.exe",
+        "RuntimeBroker.exe",
+        "SearchIndexer.exe",
+        "StartMenuExperienceHost.exe",
+        "ShellExperienceHost.exe",
+        "TextInputHost.exe",
+        "ctfmon.exe",
+        "WmiPrvSE.exe"
+      ],
+      "reason": "Windows session, shell, service host, or authentication process.",
+      "reasonCodes": [
+        "WINDOWS_CORE_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "windows",
+        "core",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "security-and-firewall",
+      "category": "security",
+      "classification": "protected",
+      "names": [
+        "MsMpEng.exe",
+        "SecurityHealthService.exe",
+        "SecurityHealthSystray.exe",
+        "NisSrv.exe",
+        "MpDefenderCoreService.exe",
+        "MsSense.exe",
+        "SenseIR.exe",
+        "SenseNdr.exe",
+        "smartscreen.exe"
+      ],
+      "reason": "Security, Defender, SmartScreen, or firewall-adjacent workload.",
+      "reasonCodes": [
+        "SECURITY_PROTECTED",
+        "DEFENDER_PROTECTED",
+        "FIREWALL_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "security",
+        "defender",
+        "firewall",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "network-and-vpn",
+      "category": "network",
+      "classification": "protected",
+      "names": [
+        "Tailscale.exe",
+        "tailscale-ipn.exe",
+        "tailscaled.exe",
+        "WireGuard.exe",
+        "wireguard.exe",
+        "openvpn.exe",
+        "ZeroTier One.exe",
+        "zerotier-one_x64.exe",
+        "WlanExt.exe",
+        "dasHost.exe"
+      ],
+      "reason": "Network, VPN, Wi-Fi, device association, or low-latency connectivity process.",
+      "reasonCodes": [
+        "NETWORK_PROTECTED",
+        "VPN_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "network",
+        "vpn",
+        "connectivity",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "audio-and-input",
+      "category": "audio-input",
+      "classification": "protected",
+      "names": [
+        "audiodg.exe",
+        "Wispr Flow.exe",
+        "InputApp.exe",
+        "TextInputHost.exe",
+        "ctfmon.exe",
+        "lghub.exe",
+        "lghub_agent.exe",
+        "Razer Synapse Service.exe",
+        "RazerCentralService.exe",
+        "SteelSeriesGG.exe",
+        "NahimicSvc32.exe",
+        "NahimicSvc64.exe"
+      ],
+      "reason": "Audio, microphone, voice dictation, keyboard, mouse, or input-device process.",
+      "reasonCodes": [
+        "AUDIO_INPUT_PROTECTED",
+        "WISPR_FLOW_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "audio",
+        "input",
+        "voice",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "anti-cheat",
+      "category": "anti-cheat",
+      "classification": "protected",
+      "names": [
+        "vgtray.exe",
+        "vgc.exe",
+        "EasyAntiCheat.exe",
+        "EasyAntiCheat_EOS.exe",
+        "EACLauncher.exe",
+        "BEService.exe",
+        "BEService_x64.exe",
+        "BattleEye.exe",
+        "FACEIT.exe",
+        "FACEITService.exe"
+      ],
+      "reason": "Anti-cheat processes are protected from runtime priority changes.",
+      "reasonCodes": [
+        "ANTI_CHEAT_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "anti-cheat",
+        "game-integrity",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "gpu-driver-control",
+      "category": "gpu-driver",
+      "classification": "protected",
+      "names": [
+        "NVDisplay.Container.exe",
+        "NVIDIA Container.exe",
+        "nvcontainer.exe",
+        "NVIDIA Web Helper.exe",
+        "nvsphelper64.exe",
+        "RadeonSoftware.exe",
+        "AMDRSServ.exe",
+        "amdow.exe",
+        "cncmd.exe",
+        "igfxEM.exe",
+        "igfxCUIService.exe",
+        "IntelGraphicsSoftware.exe"
+      ],
+      "reason": "GPU driver, overlay, display, or control process.",
+      "reasonCodes": [
+        "GPU_DRIVER_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "gpu",
+        "driver",
+        "display",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "streaming-and-voice-companions",
+      "category": "protected-companion",
+      "classification": "protectedCompanion",
+      "names": [
+        "obs64.exe",
+        "obs32.exe",
+        "Discord.exe"
+      ],
+      "reason": "OBS and Discord are part of the target gameplay and streaming workload.",
+      "reasonCodes": [
+        "STREAM_COMPANION_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "streaming",
+        "voice",
+        "protected-companion"
+      ]
+    },
+    {
+      "itemId": "store-webview-and-update",
+      "category": "windows-app-dependency",
+      "classification": "protected",
+      "names": [
+        "msedgewebview2.exe",
+        "MicrosoftEdgeUpdate.exe",
+        "MoUsoCoreWorker.exe",
+        "UsoClient.exe",
+        "TiWorker.exe",
+        "TrustedInstaller.exe",
+        "WinStore.App.exe",
+        "storeagent.exe",
+        "wsappx.exe"
+      ],
+      "reason": "Store, WebView2, and Windows Update components are protected unless a profile explicitly marks a safe app-specific helper.",
+      "reasonCodes": [
+        "STORE_WEBVIEW_UPDATE_PROTECTED",
+        "WEBVIEW2_PROTECTED",
+        "WINDOWS_UPDATE_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "store",
+        "webview2",
+        "windows-update",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "samsung-continuity",
+      "category": "samsung-continuity",
+      "classification": "protected",
+      "names": [
+        "SamsungContinuityService.exe",
+        "SamsungContinuityWindowsService.exe",
+        "SamsungQuickShare.exe",
+        "SamsungFlow.exe",
+        "SamsungMultiControl.exe",
+        "SamsungDeviceContinuity.exe",
+        "SamsungAccount.exe",
+        "SamsungCloud.exe",
+        "PhoneExperienceHost.exe"
+      ],
+      "reason": "Samsung phone continuity and cross-device processes are protected by default.",
+      "reasonCodes": [
+        "SAMSUNG_CONTINUITY_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "samsung",
+        "continuity",
+        "phone-link",
+        "do-not-demote"
+      ]
+    }
+  ]
+}

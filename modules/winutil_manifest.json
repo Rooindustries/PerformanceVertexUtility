@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "name": "Chris Titus Tech Windows Utility",
+    "shortName": "WinUtil",
+    "repository": "https://github.com/ChrisTitusTech/winutil",
+    "documentation": "https://winutil.christitus.com/",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "repoUpdatedAtUtc": "2026-06-27T23:27:15Z",
+    "capturedDate": "2026-06-28",
+    "configBaseUrl": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config"
+  },
+  "integrationMode": "source-compatible-feature-catalog",
+  "policy": {
+    "executeRemoteScriptDirectly": false,
+    "usePinnedOrVendoredDefinitions": true,
+    "showPreviewBeforeChanges": true,
+    "requireRestorePointForSystemTweaks": true,
+    "requireExplicitConfirmationForAdvancedTweaks": true,
+    "respectExistingLeanOptimizerProtections": true,
+    "notes": [
+      "Do not run the public irm/iex launcher from inside the app.",
+      "Import or mirror audited feature definitions, then route actions through the app safety model.",
+      "Chris Titus WinUtil is an inspiration and source catalog; the Roo app should use Roo branding, navigation, backup, rollback, and telemetry rules."
+    ]
+  },
+  "configFiles": [
+    {
+      "id": "applications",
+      "path": "config/applications.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/applications.json",
+      "currentCount": 194,
+      "categories": [
+        {"name": "Utilities", "count": 50},
+        {"name": "Development", "count": 29},
+        {"name": "Multimedia Tools", "count": 25},
+        {"name": "Microsoft Tools", "count": 18},
+        {"name": "Pro Tools", "count": 17},
+        {"name": "Communications", "count": 16},
+        {"name": "Browsers", "count": 15},
+        {"name": "Games", "count": 14},
+        {"name": "Selfhosted Tools", "count": 10}
+      ],
+      "appPlacement": "Apps page, Install tab",
+      "implementationPlan": "Use as a curated package catalog. Prefer winget/package-manager installs with selected package preview, dependency notes, and per-app install logs."
+    },
+    {
+      "id": "tweaks",
+      "path": "config/tweaks.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/tweaks.json",
+      "currentCount": 67,
+      "categories": [
+        {"name": "Essential Tweaks", "count": 18},
+        {"name": "Customize Preferences", "count": 24},
+        {"name": "z__Advanced Tweaks - CAUTION", "count": 23},
+        {"name": "Performance Plans - NOT FOR LAPTOPS", "count": 2}
+      ],
+      "appPlacement": "Optimize page and Settings page",
+      "implementationPlan": "Map each tweak into the existing manifest-backed preview/apply/rollback system. Advanced caution items stay opt-in; performance plans are not default on laptops."
+    },
+    {
+      "id": "features",
+      "path": "config/feature.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/feature.json",
+      "currentCount": 29,
+      "categories": [
+        {"name": "Features", "count": 11},
+        {"name": "Fixes", "count": 6},
+        {"name": "Legacy Windows Panels", "count": 10},
+        {"name": "Powershell Profile Powershell 7+ Only", "count": 2},
+        {"name": "Remote Access", "count": 1}
+      ],
+      "appPlacement": "Tools page or Settings page",
+      "implementationPlan": "Expose optional Windows feature toggles, repair workflows, and legacy panel launchers with clear confirmations. Remote access and autologin require extra warnings."
+    },
+    {
+      "id": "dns",
+      "path": "config/dns.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/dns.json",
+      "currentCount": 8,
+      "providers": [
+        "Google",
+        "Cloudflare",
+        "Cloudflare_Malware",
+        "Cloudflare_Malware_Adult",
+        "Open_DNS",
+        "Quad9",
+        "AdGuard_Ads_Trackers",
+        "AdGuard_Ads_Trackers_Malware_Adult"
+      ],
+      "appPlacement": "Network tools inside Optimize or Settings",
+      "implementationPlan": "Show adapter detection, current DNS backup, provider choice, test resolution, apply, and rollback."
+    },
+    {
+      "id": "presets",
+      "path": "config/preset.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/preset.json",
+      "presets": [
+        {"name": "Minimal", "count": 5},
+        {"name": "Standard", "count": 13},
+        {"name": "Advanced", "count": 17}
+      ],
+      "appPlacement": "Optimize page presets",
+      "implementationPlan": "Use as reference presets only after each member tweak has been audited against this app's protected services, registry patterns, Samsung continuity rules, and rollback support."
+    },
+    {
+      "id": "navigation",
+      "path": "config/appnavigation.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/appnavigation.json",
+      "appPlacement": "Install catalog grouping reference",
+      "implementationPlan": "Use only as package catalog grouping inspiration; keep the Roo app shell aligned with Windows Settings-style navigation."
+    },
+    {
+      "id": "themes",
+      "path": "config/themes.json",
+      "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/themes.json",
+      "appPlacement": "Not used for branding",
+      "implementationPlan": "Do not import WinUtil visual themes into the product. Roo Blue and Blackout Gold remain the app themes."
+    }
+  ],
+  "preserveByDefault": [
+    "Wi-Fi",
+    "Bluetooth",
+    "DNS client",
+    "Tailscale",
+    "Wispr Flow",
+    "Windows Defender",
+    "Firewall",
+    "Microsoft Store",
+    "WebView2",
+    "Windows Update",
+    "Samsung phone continuity services"
+  ],
+  "advancedReviewRequired": [
+    "Edge removal or debloat",
+    "OneDrive removal",
+    "Xbox and gaming component removal",
+    "IPv6 disablement",
+    "Teredo changes",
+    "Fullscreen optimization disablement",
+    "Windows AI removal",
+    "Notification/calendar disablement",
+    "Reserved storage disablement",
+    "Ultimate Performance power plan on laptops",
+    "Autologin",
+    "Remote access/OpenSSH server"
+  ]
+}

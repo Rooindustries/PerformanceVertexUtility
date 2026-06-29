@@ -1,0 +1,103 @@
+<Page
+    x:Class="Roo.OptimizationSuite.Views.MonitoringPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Roo.OptimizationSuite.ViewModels"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <Page.Resources>
+        <DataTemplate x:Key="LiveTileTemplate" x:DataType="vm:MetricTile">
+            <StackPanel Spacing="6" Padding="0,0,18,0">
+                <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" LineHeight="26" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="PendingTileTemplate" x:DataType="vm:MetricTile">
+            <StackPanel Spacing="6" Padding="0,0,18,0">
+                <TextBlock Text="{x:Bind Value}" FontSize="16" FontWeight="SemiBold" LineHeight="22" Foreground="{StaticResource RooTextMutedBrush}" />
+                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SensorTemplate" x:DataType="vm:StatusLine">
+            <Grid Padding="0,10" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="{StaticResource RooPageMargin}">
+
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <ProgressRing IsActive="True" Width="40" Height="40" />
+            <TextBlock Text="Reading this PC" Foreground="{StaticResource RooTextMutedBrush}" />
+        </StackPanel>
+
+        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
+                Style="{StaticResource CardBorderStyle}"
+                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Live Feel" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="14" LineHeight="20" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Right now" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.LiveTiles}" ItemTemplate="{StaticResource LiveTileTemplate}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Frame feel" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.PendingTiles}" ItemTemplate="{StaticResource PendingTileTemplate}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </Border>
+                    <TextBlock Text="Connect PresentMon or HWiNFO64 during a session to measure FPS, 1% lows, and frametimes."
+                               FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                </StackPanel>
+
+                <StackPanel Spacing="12" MaxWidth="560" HorizontalAlignment="Left">
+                    <TextBlock Text="Sensors" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Sensors}" ItemTemplate="{StaticResource SensorTemplate}" />
+                    </Border>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

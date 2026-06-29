@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "profileId": "overwatch-stream-session",
+  "name": "Overwatch Stream Session",
+  "profileKind": "process-priority",
+  "risk": "medium",
+  "targetScenario": "Overwatch with OBS, Discord, and a 144 Hz stream workload on 16 GB RAM class machines.",
+  "gameTags": [
+    "overwatch",
+    "streaming",
+    "discord",
+    "144hz",
+    "ram-pressure"
+  ],
+  "protectedCatalogPath": "protected-processes.json",
+  "foregroundGame": {
+    "ruleId": "boost-foreground-game",
+    "processNames": [
+      "Overwatch.exe"
+    ],
+    "priorityClass": "AboveNormal",
+    "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+    "reasonCodes": [
+      "FOREGROUND_GAME_BOOST",
+      "FRAME_TIME_STABILITY"
+    ]
+  },
+  "targetGames": [
+    {
+      "gameId": "overwatch",
+      "displayName": "Overwatch 2",
+      "processNames": [
+        "Overwatch.exe"
+      ],
+      "priorityClass": "AboveNormal",
+      "reasonCodes": [
+        "OVERWATCH_TARGET_GAME"
+      ]
+    }
+  ],
+  "protectedCompanions": [
+    {
+      "itemId": "protect-obs",
+      "type": "process",
+      "name": "obs64.exe",
+      "names": [
+        "obs64.exe",
+        "obs32.exe"
+      ],
+      "matchType": "exact",
+      "reason": "OBS is protected because stream encode and capture stability are part of Game Session.",
+      "reasonCodes": [
+        "OBS_PROTECTED",
+        "STREAM_CAPTURE_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "streaming",
+        "capture",
+        "do-not-demote"
+      ]
+    },
+    {
+      "itemId": "protect-discord",
+      "type": "process",
+      "name": "Discord.exe",
+      "names": [
+        "Discord.exe"
+      ],
+      "matchType": "exact",
+      "reason": "Discord is protected from aggressive demotion to preserve voice and stream reliability.",
+      "reasonCodes": [
+        "DISCORD_PROTECTED",
+        "VOICE_CHAT_PROTECTED"
+      ],
+      "defaultAction": "block",
+      "tags": [
+        "voice",
+        "stream-companion",
+        "do-not-demote"
+      ]
+    }
+  ],
+  "protectedPreviewProcessNames": [
+    "obs64.exe",
+    "obs32.exe",
+    "Discord.exe",
+    "Tailscale.exe",
+    "tailscale-ipn.exe",
+    "tailscaled.exe",
+    "Wispr Flow.exe",
+    "MsMpEng.exe",
+    "SecurityHealthService.exe",
+    "audiodg.exe",
+    "msedgewebview2.exe",
+    "NVDisplay.Container.exe",
+    "NVIDIA Container.exe",
+    "nvcontainer.exe",
+    "SamsungContinuityService.exe",
+    "SamsungContinuityWindowsService.exe",
+    "SamsungQuickShare.exe",
+    "SamsungFlow.exe",
+    "PhoneExperienceHost.exe"
+  ],
+  "safeCandidates": [
+    {
+      "ruleId": "sync-clients-manual-review",
+      "match": {
+        "processNames": [
+          "OneDrive.exe",
+          "GoogleDriveFS.exe",
+          "Dropbox.exe"
+        ]
+      },
+      "reason": "Sync clients can create RAM, disk, and network pressure, but this MVP keeps them as manual-review candidates.",
+      "reasonCodes": [
+        "SYNC_CLIENT_MANUAL_REVIEW"
+      ],
+      "risk": "low"
+    }
+  ],
+  "rules": [
+    {
+      "ruleId": "boost-foreground-game",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "Overwatch.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "AboveNormal",
+        "reason": "Boost the foreground game process for steadier CPU scheduling."
+      },
+      "risk": "medium",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    },
+    {
+      "ruleId": "demote-browser-renderers",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "steamwebhelper.exe",
+          "EpicWebHelper.exe"
+        ],
+        "namePatterns": [
+          "*webhelper*.exe",
+          "*cef*.exe"
+        ],
+        "processCategories": [
+          "browserWebView"
+        ],
+        "excludeProcessNames": [
+          "msedgewebview2.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Background browser and launcher helper processes are memory and wakeup pressure candidates."
+      },
+      "risk": "low",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    },
+    {
+      "ruleId": "demote-launchers-updaters",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "Battle.net.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "RiotClientServices.exe",
+          "EADesktop.exe",
+          "UbisoftConnect.exe",
+          "GalaxyClient.exe"
+        ],
+        "namePatterns": [
+          "*launcher*.exe",
+          "*updater*.exe",
+          "*update*.exe"
+        ],
+        "excludeProcessNames": [
+          "MicrosoftEdgeUpdate.exe",
+          "MoUsoCoreWorker.exe",
+          "UsoClient.exe",
+          "TiWorker.exe",
+          "TrustedInstaller.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running."
+      },
+      "risk": "low",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    },
+    {
+      "ruleId": "demote-vendor-trays",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "AdobeCollabSync.exe",
+          "CCXProcess.exe",
+          "GoogleCrashHandler.exe",
+          "GoogleCrashHandler64.exe",
+          "ArmouryCrate.UserSessionHelper.exe"
+        ],
+        "namePatterns": [
+          "*tray*.exe",
+          "*helper*.exe"
+        ],
+        "excludeProcessNames": [
+          "NVIDIA Web Helper.exe",
+          "nvsphelper64.exe",
+          "RazerCentralService.exe",
+          "lghub_agent.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Non-critical tray helpers are background workload candidates during Game Session."
+      },
+      "risk": "low",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    },
+    {
+      "ruleId": "affinity-preview-placeholder",
+      "enabled": false,
+      "match": {
+        "processNames": [
+          "Overwatch.exe"
+        ]
+      },
+      "action": {
+        "actionType": "previewOnlyAffinity",
+        "reason": "Affinity rules remain preview-only until benchmarked and reversible."
+      },
+      "risk": "advanced",
+      "rollback": {
+        "restoreAffinity": true
+      }
+    }
+  ],
+  "telemetryTargets": [
+    "frame-time-stability",
+    "1-percent-low-fps",
+    "0.1-percent-low-fps",
+    "process-count",
+    "working-set",
+    "private-bytes",
+    "commit-pressure"
+  ],
+  "rollbackPolicy": {
+    "supported": true,
+    "scope": "process-priority",
+    "stateRoot": "backend\\state",
+    "restoreOriginalPriorityClass": true,
+    "keepLatestCount": 10,
+    "minimumDays": 14
+  },
+  "safety": {
+    "confirmedApplyChanges": [
+      "PriorityClass"
+    ],
+    "previewOnlyChanges": [
+      "Affinity",
+      "IoPriority",
+      "PowerThrottling"
+    ],
+    "continuousEnforcement": false,
+    "runtimeService": false
+  }
+}

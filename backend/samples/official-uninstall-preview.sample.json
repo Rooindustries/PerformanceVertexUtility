@@ -1,0 +1,68 @@
+{
+  "actionId": "apps.previewOfficialUninstall",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "dryRun": true,
+  "status": "preview",
+  "policyPath": "backend\\uninstall\\uninstall-policy.json",
+  "commands": [
+    {
+      "appId": "registry:overwolf",
+      "displayName": "Overwolf",
+      "publisher": "Overwolf Ltd.",
+      "sourceType": "registry",
+      "packageId": "Overwolf.Overwolf",
+      "primaryClassification": "overlay",
+      "commandType": "registry-uninstall-string",
+      "rawCommand": "\"C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe\"",
+      "executable": "C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe",
+      "arguments": null,
+      "quietRawCommand": null,
+      "quietExecutable": null,
+      "quietArguments": null,
+      "hasQuietCommand": false,
+      "requiresElevation": true,
+      "protected": false,
+      "blocked": false,
+      "risk": "medium",
+      "confidence": "high",
+      "executionAllowed": false,
+      "executionMode": "preview-only",
+      "rollbackPrerequisites": {
+        "restorePointRequired": true,
+        "appInventoryExportRequired": true,
+        "leftoverScanAfterUninstall": true
+      },
+      "metadata": {},
+      "warnings": []
+    }
+  ],
+  "summary": {
+    "requestedCount": 1,
+    "commandPreviewCount": 1,
+    "blockedCount": 0,
+    "executionAllowedCount": 0,
+    "willRunUninstallers": false
+  },
+  "warnings": [
+    {
+      "code": "OFFICIAL_UNINSTALL_PREVIEW_ONLY",
+      "message": "Official uninstall command metadata was returned without executing commands.",
+      "severity": "info",
+      "source": "apps.officialUninstall",
+      "target": null,
+      "blocking": false,
+      "recommendedAction": "Use this output for UI review only in the MVP.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-28T10:00:00Z",
+      "level": "info",
+      "message": "Official uninstall command preview completed without command execution."
+    }
+  ]
+}

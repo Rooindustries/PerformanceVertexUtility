@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "machine": {
+    "manufacturer": "ASUS",
+    "model": "ROG Strix G16",
+    "systemType": "x64-based PC",
+    "osCaption": "Microsoft Windows 11 Pro",
+    "osBuild": "26100"
+  },
+  "cpu": {
+    "name": "Intel Core i7-13650HX",
+    "manufacturer": "GenuineIntel",
+    "cores": 14,
+    "logicalProcessors": 20
+  },
+  "memory": {
+    "totalPhysicalBytes": 17179869184,
+    "ramClassGb": 16
+  },
+  "gpus": [
+    {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "vendor": "NVIDIA",
+      "pnpDeviceId": "PCI\\VEN_10DE&DEV_28E0&SUBSYS_1A2B1043&REV_A1",
+      "adapterRamBytes": 8589934592,
+      "driverVersion": "32.0.15.6070",
+      "driverDate": "2026-05-30"
+    },
+    {
+      "name": "Intel UHD Graphics",
+      "vendor": "Intel",
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_A7A0&SUBSYS_1A2B1043&REV_04",
+      "adapterRamBytes": 1073741824,
+      "driverVersion": "32.0.101.6972",
+      "driverDate": "2026-05-10"
+    }
+  ],
+  "networkAdapters": [
+    {
+      "name": "Intel Wi-Fi 6E AX211 160MHz",
+      "vendor": "Intel",
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_51F1&SUBSYS_00948086&REV_01",
+      "driverVersion": "23.150.0.4",
+      "protected": true,
+      "reason": "Wi-Fi is protected by default"
+    },
+    {
+      "name": "Tailscale Tunnel",
+      "vendor": "Tailscale Inc.",
+      "pnpDeviceId": "ROOT\\NET\\0001",
+      "driverVersion": "1.68.2.0",
+      "protected": true,
+      "reason": "Tailscale is protected by default"
+    }
+  ]
+}

@@ -1,0 +1,285 @@
+{
+  "actionId": "performance.previewProfile",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "sample-session-20260628-100000",
+  "dryRun": true,
+  "risk": "medium",
+  "requiresElevation": false,
+  "status": "preview",
+  "preview": [
+    {
+      "previewId": "boost-foreground-game-gameTarget-overwatch-18344",
+      "type": "processPriority",
+      "target": "Overwatch.exe:18344",
+      "displayName": "Overwatch 2",
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "AboveNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "boost-foreground-game",
+      "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+      "reasonCodes": [
+        "OVERWATCH_TARGET_GAME",
+        "GAME_TARGET"
+      ],
+      "classification": "gameTarget",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "medium",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 3276800000,
+        "privateBytes": 4110417920,
+        "cpuPercent": 28.4,
+        "classification": "gameTarget"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "AboveNormal",
+        "reason": "Foreground game boost for frame-time stability during OBS and Discord workload."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "protect-obs-protectedcompanion-obs64-9276",
+      "type": "processPriority",
+      "target": "obs64.exe:9276",
+      "displayName": "OBS Studio",
+      "processId": 9276,
+      "processName": "obs64.exe",
+      "executablePath": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "noChange",
+      "ruleId": "protectedCompanion",
+      "reason": "OBS is protected because stream encode and capture stability are part of Game Session.",
+      "reasonCodes": [
+        "OBS_PROTECTED",
+        "STREAM_CAPTURE_PROTECTED"
+      ],
+      "classification": "protectedCompanion",
+      "blocked": true,
+      "blockedReason": "OBS is protected because stream encode and capture stability are part of Game Session.",
+      "risk": "protected",
+      "confidence": "high",
+      "protected": true,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 702545920,
+        "privateBytes": 966367641,
+        "cpuPercent": 8.1,
+        "classification": "protectedCompanion"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "reason": "OBS is protected because stream encode and capture stability are part of Game Session."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": null
+    },
+    {
+      "previewId": "demote-launchers-updaters-demotioncandidate-battle-net-6480",
+      "type": "processPriority",
+      "target": "Battle.net.exe:6480",
+      "displayName": "Battle.net",
+      "processId": 6480,
+      "processName": "Battle.net.exe",
+      "executablePath": "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "BelowNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "demote-launchers-updaters",
+      "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running.",
+      "reasonCodes": [
+        "BACKGROUND_DEMOTION_CANDIDATE"
+      ],
+      "classification": "demotionCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 408944640,
+        "privateBytes": 501219328,
+        "cpuPercent": 1.4,
+        "classification": "demotionCandidate"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "lower",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "store-webview-and-update-protected-msedgewebview2-16520",
+      "type": "processPriority",
+      "target": "msedgewebview2.exe:16520",
+      "displayName": "Microsoft Edge WebView2",
+      "processId": 16520,
+      "processName": "msedgewebview2.exe",
+      "executablePath": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\125.0.2535.92\\msedgewebview2.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "noChange",
+      "ruleId": "protected",
+      "reason": "Store, WebView2, and Windows Update components are protected unless a profile explicitly marks a safe app-specific helper.",
+      "reasonCodes": [
+        "STORE_WEBVIEW_UPDATE_PROTECTED",
+        "WEBVIEW2_PROTECTED",
+        "WINDOWS_UPDATE_PROTECTED"
+      ],
+      "classification": "protected",
+      "blocked": true,
+      "blockedReason": "Store, WebView2, and Windows Update components are protected unless a profile explicitly marks a safe app-specific helper.",
+      "risk": "protected",
+      "confidence": "high",
+      "protected": true,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 120586240,
+        "privateBytes": 171966464,
+        "cpuPercent": 0.4,
+        "classification": "protected"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "reason": "Store, WebView2, and Windows Update components are protected unless a profile explicitly marks a safe app-specific helper."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": null
+    },
+    {
+      "previewId": "network-and-vpn-protected-tailscale-4028",
+      "type": "processPriority",
+      "target": "Tailscale.exe:4028",
+      "displayName": "Tailscale",
+      "processId": 4028,
+      "processName": "Tailscale.exe",
+      "executablePath": "C:\\Program Files\\Tailscale\\tailscale-ipn.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "noChange",
+      "ruleId": "protected",
+      "reason": "Network, VPN, Wi-Fi, device association, or low-latency connectivity process.",
+      "reasonCodes": [
+        "NETWORK_PROTECTED",
+        "VPN_PROTECTED"
+      ],
+      "classification": "protected",
+      "blocked": true,
+      "blockedReason": "Network, VPN, Wi-Fi, device association, or low-latency connectivity process.",
+      "risk": "protected",
+      "confidence": "high",
+      "protected": true,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 81788928,
+        "privateBytes": 99614720,
+        "cpuPercent": 0.2,
+        "classification": "protected"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "reason": "Network, VPN, Wi-Fi, device association, or low-latency connectivity process."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "backup": null,
+  "result": null,
+  "warnings": [
+    {
+      "code": "PROCESS_PROFILE_PREVIEW_ONLY",
+      "message": "Preview built without applying process priority changes.",
+      "severity": "info",
+      "source": "performance.profile",
+      "target": "overwatch-stream-session",
+      "blocking": false,
+      "recommendedAction": "Run Apply-ProcessProfile.ps1 with -ConfirmApply only after reviewing the preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-28T10:00:00Z",
+      "level": "info",
+      "message": "Preview generated for profile overwatch-stream-session."
+    }
+  ]
+}

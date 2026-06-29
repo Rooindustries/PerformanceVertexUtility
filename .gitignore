@@ -1,0 +1,31 @@
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+**/publish/
+**/artifacts/
+**/TestResults/
+
+# Local IDE/user state
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.rsuser
+
+# Runtime data and logs
+logs/
+*.log
+*.tmp
+*.bak
+
+# Internal planning/context not intended for the public repo.
+docs/internal/claude-*.md
+docs/internal/session-context.md
+docs/internal/frontend-preview/
+docs/internal/frontend/screenshots/
+docs/internal/references/
+
+# Large bundled development archive; release packaging should decide what to include.
+vendor/Utilities.zip

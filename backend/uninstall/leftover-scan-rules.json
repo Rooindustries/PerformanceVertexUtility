@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "rulesetId": "conservative-leftover-scan-rules",
+  "name": "Conservative Leftover Scan Rules",
+  "description": "Metadata-only leftover candidates. Shared paths and fuzzy matches are protected by default.",
+  "protectedPaths": [
+    {
+      "pathPattern": "C:\\Windows*",
+      "reason": "Windows system path."
+    },
+    {
+      "pathPattern": "C:\\Program Files\\Common Files*",
+      "reason": "Shared program files path."
+    },
+    {
+      "pathPattern": "C:\\Program Files (x86)\\Common Files*",
+      "reason": "Shared program files path."
+    },
+    {
+      "pathPattern": "%LOCALAPPDATA%\\CEF*",
+      "reason": "Shared Chromium Embedded Framework cache path."
+    },
+    {
+      "pathPattern": "%LOCALAPPDATA%\\Microsoft*",
+      "reason": "Microsoft shared user profile path."
+    }
+  ],
+  "protectedRegistryPatterns": [
+    "HKLM\\\\Software\\\\Microsoft\\\\Windows",
+    "HKCU\\\\Software\\\\Microsoft\\\\Windows",
+    "HKLM\\\\Software\\\\Microsoft\\\\VisualStudio",
+    "HKLM\\\\Software\\\\Microsoft\\\\NET Framework",
+    "HKLM\\\\Software\\\\Classes"
+  ],
+  "genericRules": {
+    "deriveInstallLocationCandidate": true,
+    "deriveProductGuidRegistryCandidate": true,
+    "deriveVendorRegistryCandidate": true,
+    "deriveAppDataCandidates": true,
+    "scanServicesReadOnly": true,
+    "scanScheduledTasksReadOnly": true,
+    "scanStartupEntriesReadOnly": true,
+    "allowFuzzySharedPaths": false
+  },
+  "candidateDefaults": {
+    "folder": {
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true
+    },
+    "file": {
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true
+    },
+    "registryKey": {
+      "confidence": "medium",
+      "risk": "medium",
+      "defaultSelected": false
+    },
+    "registryValue": {
+      "confidence": "medium",
+      "risk": "medium",
+      "defaultSelected": false
+    },
+    "service": {
+      "confidence": "high",
+      "risk": "medium",
+      "defaultSelected": false
+    },
+    "scheduledTask": {
+      "confidence": "high",
+      "risk": "medium",
+      "defaultSelected": false
+    },
+    "startupEntry": {
+      "confidence": "medium",
+      "risk": "medium",
+      "defaultSelected": false
+    }
+  },
+  "knownAppRules": [
+    {
+      "ruleId": "overwolf",
+      "match": {
+        "displayNamePatterns": [
+          "*Overwolf*"
+        ],
+        "packageIdPatterns": [
+          "*Overwolf*"
+        ],
+        "publisherPatterns": [
+          "Overwolf*"
+        ]
+      },
+      "knownAppDataPaths": [
+        "%LOCALAPPDATA%\\Overwolf",
+        "%APPDATA%\\Overwolf",
+        "%PROGRAMDATA%\\Overwolf"
+      ],
+      "vendorRegistryKeys": [
+        "HKCU\\Software\\Overwolf",
+        "HKLM\\Software\\Overwolf"
+      ],
+      "serviceNamePatterns": [
+        "*Overwolf*"
+      ],
+      "scheduledTaskPatterns": [
+        "*Overwolf*"
+      ],
+      "startupValuePatterns": [
+        "*Overwolf*"
+      ]
+    },
+    {
+      "ruleId": "intel-driver-support-assistant",
+      "match": {
+        "displayNamePatterns": [
+          "*Intel Driver*Support Assistant*"
+        ],
+        "packageIdPatterns": [
+          "*Intel.DriverAndSupportAssistant*"
+        ],
+        "publisherPatterns": [
+          "Intel*"
+        ]
+      },
+      "knownAppDataPaths": [
+        "%PROGRAMDATA%\\Intel\\DSA",
+        "%LOCALAPPDATA%\\Intel\\DSA"
+      ],
+      "vendorRegistryKeys": [
+        "HKLM\\Software\\Intel\\Driver and Support Assistant",
+        "HKCU\\Software\\Intel\\Driver and Support Assistant"
+      ],
+      "serviceNamePatterns": [
+        "*DSAService*",
+        "*Intel*Driver*Support*"
+      ],
+      "scheduledTaskPatterns": [
+        "*Intel*Driver*Support*",
+        "*DSA*"
+      ],
+      "startupValuePatterns": [
+        "*Intel Driver*Support*"
+      ]
+    },
+    {
+      "ruleId": "battle-net",
+      "match": {
+        "displayNamePatterns": [
+          "*Battle.net*"
+        ],
+        "packageIdPatterns": [
+          "*Blizzard.BattleNet*"
+        ],
+        "publisherPatterns": [
+          "Blizzard*"
+        ]
+      },
+      "knownAppDataPaths": [
+        "%PROGRAMDATA%\\Battle.net",
+        "%APPDATA%\\Battle.net",
+        "%LOCALAPPDATA%\\Battle.net",
+        "%LOCALAPPDATA%\\Blizzard Entertainment"
+      ],
+      "vendorRegistryKeys": [
+        "HKCU\\Software\\Blizzard Entertainment",
+        "HKLM\\Software\\Blizzard Entertainment"
+      ],
+      "serviceNamePatterns": [
+        "*Battle.net*",
+        "*Blizzard*"
+      ],
+      "scheduledTaskPatterns": [
+        "*Battle.net*",
+        "*Blizzard*"
+      ],
+      "startupValuePatterns": [
+        "*Battle.net*",
+        "*Blizzard*"
+      ]
+    },
+    {
+      "ruleId": "epic-games-launcher",
+      "match": {
+        "displayNamePatterns": [
+          "*Epic Games Launcher*"
+        ],
+        "packageIdPatterns": [
+          "*EpicGames*"
+        ],
+        "publisherPatterns": [
+          "Epic Games*"
+        ]
+      },
+      "knownAppDataPaths": [
+        "%PROGRAMDATA%\\Epic",
+        "%LOCALAPPDATA%\\EpicGamesLauncher",
+        "%LOCALAPPDATA%\\Epic Games"
+      ],
+      "vendorRegistryKeys": [
+        "HKCU\\Software\\Epic Games",
+        "HKLM\\Software\\Epic Games"
+      ],
+      "serviceNamePatterns": [
+        "*Epic*"
+      ],
+      "scheduledTaskPatterns": [
+        "*Epic*"
+      ],
+      "startupValuePatterns": [
+        "*Epic*"
+      ]
+    },
+    {
+      "ruleId": "steam",
+      "match": {
+        "displayNamePatterns": [
+          "Steam"
+        ],
+        "packageIdPatterns": [
+          "*Valve.Steam*"
+        ],
+        "publisherPatterns": [
+          "Valve*"
+        ]
+      },
+      "knownAppDataPaths": [
+        "%PROGRAMDATA%\\Steam",
+        "%LOCALAPPDATA%\\Steam",
+        "%APPDATA%\\Steam"
+      ],
+      "vendorRegistryKeys": [
+        "HKCU\\Software\\Valve",
+        "HKLM\\Software\\Valve"
+      ],
+      "serviceNamePatterns": [
+        "*Steam*"
+      ],
+      "scheduledTaskPatterns": [
+        "*Steam*"
+      ],
+      "startupValuePatterns": [
+        "*Steam*"
+      ]
+    }
+  ]
+}

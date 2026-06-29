@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "brand": {
+    "name": "Roo Industries",
+    "shortName": "Roo",
+    "tagline": "Precision Performance Engineering",
+    "website": "https://www.rooindustries.com",
+    "sourceRepository": "https://github.com/Rooindustries/RooIndustries",
+    "capturedDate": "2026-06-27"
+  },
+  "assetsRoot": "assets\\brand\\roo-industries",
+  "font": {
+    "family": "Manrope Variable",
+    "fallback": "system-ui, sans-serif",
+    "file": "assets\\brand\\roo-industries\\manrope-latin-variable.woff2",
+    "fontFaceCss": "assets\\brand\\roo-industries\\rooindustries-font-face.css",
+    "notes": [
+      "The deployed site preloads Manrope and src\\roboto-latin.css declares Manrope Variable.",
+      "The source Tailwind config still names the sans stack Roboto Flex Variable; treat that as a naming mismatch, not the app font."
+    ]
+  },
+  "logos": {
+    "primary": "assets\\brand\\roo-industries\\embed_logo.png",
+    "appIcon96": "assets\\brand\\roo-industries\\favicon-96x96.png",
+    "faviconIco": "assets\\brand\\roo-industries\\favicon.ico",
+    "faviconSvg": "assets\\brand\\roo-industries\\favicon.svg",
+    "webLogo": "assets\\brand\\roo-industries\\logo.webp",
+    "animatedApng": "assets\\brand\\roo-industries\\logo-animated-small.apng",
+    "animatedWebm": "assets\\brand\\roo-industries\\logo-animated-small.webm",
+    "pwa192": "assets\\brand\\roo-industries\\web-app-manifest-192x192.png",
+    "pwa512": "assets\\brand\\roo-industries\\web-app-manifest-512x512.png",
+    "appleTouchIcon": "assets\\brand\\roo-industries\\apple-touch-icon.png"
+  },
+  "themeReferences": {
+    "completeCss": "assets\\brand\\roo-industries\\rooindustries-index.css",
+    "compiledCssA": "assets\\brand\\roo-industries\\ac6c1e2fbccf4be9.css",
+    "compiledCssB": "assets\\brand\\roo-industries\\ad8bcc07b5fc0557.css",
+    "tailwindReference": "assets\\brand\\roo-industries\\rooindustries-tailwind.config.js",
+    "webManifest": "assets\\brand\\roo-industries\\manifest.json"
+  },
+  "themes": [
+    {
+      "id": "roo-blue",
+      "sourceThemeAttribute": "default",
+      "name": "Roo Blue",
+      "role": "canonical",
+      "summary": "Abyssal navy and electric cyan performance theme.",
+      "tokens": {
+        "canvas": "#020617",
+        "canvasDeep": "#000040",
+        "surface": "#07162d",
+        "surfaceElevated": "#061226",
+        "surfaceInput": "#0c162a",
+        "textPrimary": "#ffffff",
+        "textDisplay": "#22d3ee",
+        "textAccent": "#67e8f9",
+        "accent": "#22d3ee",
+        "accentStrong": "#0284c7",
+        "accentGlow": "#03e9f4",
+        "info": "#38bdf8",
+        "warning": "#fbbf24",
+        "success": "#34d399",
+        "danger": "#f87171"
+      },
+      "gradients": {
+        "appBackground": "linear-gradient(to top, #00b7c0 0%, #006185 30%, #001f5a 65%, #000040 100%)",
+        "displayText": "linear-gradient(to right, #38bdf8, #3b82f6)",
+        "primaryButton": "linear-gradient(90deg, rgba(56, 189, 248, 1) 0%, rgba(2, 132, 199, 1) 38%, rgba(29, 78, 216, 1) 100%)"
+      }
+    },
+    {
+      "id": "black-gold",
+      "sourceThemeAttribute": "dark",
+      "name": "Blackout Gold",
+      "role": "premium alternate",
+      "summary": "Obsidian and graphite theme with warm benchmark gold accents.",
+      "tokens": {
+        "canvas": "#030303",
+        "canvasDeep": "#070707",
+        "surface": "#0d0d0d",
+        "surfaceElevated": "#090909",
+        "surfaceInput": "#0c0c0c",
+        "textPrimary": "#ffffff",
+        "textSecondary": "#deded7",
+        "textMuted": "#8f8f86",
+        "textDisplay": "#f7f7f2",
+        "accent": "#e8b94a",
+        "accentStrong": "#c9962e",
+        "accentGlow": "#ffd76e",
+        "linkHover": "#ffe08a",
+        "info": "#e8c97a",
+        "warning": "#fbbf24",
+        "success": "#34d399",
+        "danger": "#f87171",
+        "voltage": "#ff5a2f"
+      },
+      "gradients": {
+        "appBackground": "linear-gradient(to top, #0a0a0a 0%, #060606 30%, #030303 65%, #000000 100%)",
+        "displayText": "linear-gradient(92deg, #fff3cd 0%, #ffd76e 28%, #e8b94a 52%, #c9962e 74%, #ffe9a8 100%)"
+      }
+    }
+  ],
+  "implementationRules": [
+    "Treat both themes as dark themes; do not create a light mode unless explicitly designed later.",
+    "Use semantic tokens for UI surfaces, text, borders, actions, status colors, and glows.",
+    "Default the client app to Roo Blue, and offer Blackout Gold as the premium/alternate theme.",
+    "Use the animated logo only in splash, loading, or low-frequency brand moments.",
+    "Keep operational app surfaces quieter than the website: dense dashboards, clear status, and restrained glow."
+  ]
+}

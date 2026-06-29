@@ -1,0 +1,20 @@
+<Application
+    x:Class="Roo.OptimizationSuite.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <muxc:XamlControlsResources />
+                <ResourceDictionary Source="ms-appx:///Resources/Theme.RooBlue.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Brand.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+            <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="RooGlassMenuBrush" />
+            <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="RooGlassMenuBrush" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

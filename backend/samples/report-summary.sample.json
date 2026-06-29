@@ -1,0 +1,87 @@
+{
+  "reportId": "sample-report-20260628-100000",
+  "productName": "Roo Industries Optimization Suite",
+  "generatedAtUtc": "2026-06-28T10:00:00Z",
+  "title": "More FPS. Less Input Lag.",
+  "scenario": {
+    "game": "Overwatch 2",
+    "backgroundWorkload": [
+      "OBS Studio",
+      "Discord voice and stream",
+      "Battle.net launcher",
+      "browser/WebView helpers"
+    ],
+    "ramClassGb": 16,
+    "displayTargetHz": 144,
+    "goal": "Cleaner 1% lows and fewer spikes while OBS and Discord stay clean"
+  },
+  "findings": [
+    {
+      "findingId": "background-process-pressure",
+      "severity": "warning",
+      "title": "Less junk running",
+      "detail": "Sample workload shows 136 background processes. Launchers, browser helpers, overlays, and vendor utilities are competing during gameplay.",
+      "evidence": [
+        "processCount=178",
+        "backgroundProcessCount=136",
+        "browserWebViewProcessCount=22"
+      ]
+    },
+    {
+      "findingId": "stream-companions-protected",
+      "severity": "info",
+      "title": "OBS setup stays safe",
+      "detail": "Capture, voice, and stream stability stay protected while the game gets more room.",
+      "evidence": [
+        "obs64.exe protected",
+        "Discord.exe protected"
+      ]
+    },
+    {
+      "findingId": "driver-profile-manual",
+      "severity": "info",
+      "title": "Drivers stay manual",
+      "detail": "Driver installers, DDU, NVCleanstall, and NVIDIA settings stay locked until hardware match and user confirmation."
+    }
+  ],
+  "metricSummary": {
+    "averageFps": 143.2,
+    "fps1PercentLow": 112.7,
+    "fpsPoint1PercentLow": 84.5,
+    "frameTimeSpikesOver16ms": 8,
+    "availableMemoryBytes": 5127536640,
+    "gpuSharedMemoryUsedBytes": 966367641
+  },
+  "recommendedActions": [
+    {
+      "actionId": "performance.previewProcessPlan",
+      "label": "Tune My PC",
+      "risk": "medium",
+      "reason": "Give the game more room while OBS and Discord stay protected."
+    },
+    {
+      "actionId": "apps.reviewStartupHeavy",
+      "label": "Check startup junk",
+      "risk": "safe",
+      "reason": "Overlays, launchers, and vendor updaters are likely background workload contributors."
+    },
+    {
+      "actionId": "drivers.reviewRecommendations",
+      "label": "Check driver path",
+      "risk": "safe",
+      "reason": "Driver choice should prioritize stability and lows, not only newest version."
+    }
+  ],
+  "artifacts": [
+    {
+      "artifactId": "sample-process-inventory",
+      "type": "json",
+      "path": "backend\\samples\\process-inventory.sample.json"
+    },
+    {
+      "artifactId": "sample-process-profile-preview",
+      "type": "json",
+      "path": "backend\\samples\\process-profile-preview.sample.json"
+    }
+  ]
+}

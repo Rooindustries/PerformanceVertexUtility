@@ -1,0 +1,107 @@
+{
+  "snapshotId": "sample-telemetry-20260628-100000",
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "context": {
+    "scenario": "Overwatch with OBS and Discord stream",
+    "profileId": "overwatch-stream-session",
+    "captureMode": "sample",
+    "displayTargetHz": 144
+  },
+  "metrics": {
+    "averageFps": 143.2,
+    "fps1PercentLow": 112.7,
+    "fpsPoint1PercentLow": 84.5,
+    "frameTimeBudgetMs": 6.94,
+    "frameTimeSpikesOver16ms": 8,
+    "frameTimeSpikesOver25ms": 2,
+    "frameTimeSpikesOver33ms": 0,
+    "processCount": 178,
+    "backgroundProcessCount": 136,
+    "workingSetBytes": 11188305920,
+    "privateBytes": 13619896320,
+    "availableMemoryBytes": 5127536640,
+    "gpuDedicatedMemoryUsedBytes": 4286578688,
+    "gpuSharedMemoryUsedBytes": 966367641,
+    "cpuTotalPercent": 62.4,
+    "gpuTotalPercent": 88.5,
+    "gpuEncodePercent": 21.2
+  },
+  "processes": [
+    {
+      "pid": 18344,
+      "name": "Overwatch.exe",
+      "displayName": "Overwatch 2",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "publisher": "Blizzard Entertainment, Inc.",
+      "commandLine": "\"C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe\"",
+      "category": "foregroundGame",
+      "protection": "candidate",
+      "roleTags": [
+        "game",
+        "foreground-boost-target"
+      ],
+      "sessionId": 1,
+      "priorityClass": "Normal",
+      "cpuPercent": 28.4,
+      "workingSetBytes": 3276800000,
+      "privateBytes": 4110417920,
+      "gpuDedicatedBytes": 3984588800,
+      "gpuSharedBytes": 536870912,
+      "isForegroundCandidate": true,
+      "canChangePriority": true,
+      "risk": "medium"
+    },
+    {
+      "pid": 9276,
+      "name": "obs64.exe",
+      "displayName": "OBS Studio",
+      "executablePath": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+      "publisher": "OBS Project",
+      "commandLine": "\"C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe\"",
+      "category": "captureStreaming",
+      "protection": "protected",
+      "roleTags": [
+        "streaming",
+        "capture",
+        "do-not-demote"
+      ],
+      "sessionId": 1,
+      "priorityClass": "Normal",
+      "cpuPercent": 8.1,
+      "workingSetBytes": 702545920,
+      "privateBytes": 966367641,
+      "gpuDedicatedBytes": 318767104,
+      "gpuSharedBytes": 134217728,
+      "isForegroundCandidate": false,
+      "canChangePriority": false,
+      "risk": "protected"
+    }
+  ],
+  "providers": [
+    {
+      "providerId": "built-in-windows",
+      "state": "available",
+      "quality": "complete"
+    },
+    {
+      "providerId": "presentmon",
+      "state": "sample",
+      "quality": "fixture"
+    },
+    {
+      "providerId": "hwinfo64",
+      "state": "optional-not-detected",
+      "quality": "not-used"
+    }
+  ],
+  "quality": {
+    "isSample": true,
+    "confidence": "medium",
+    "missingSignals": [
+      "actual-hwinfo-sensors",
+      "actual-presentmon-capture",
+      "actual-network-jitter"
+    ]
+  }
+}
