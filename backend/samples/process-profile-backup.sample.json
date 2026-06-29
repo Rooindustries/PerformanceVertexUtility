@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "backupId": "sample-process-profile-backup-20260628-100000",
+  "createdAtUtc": "2026-06-28T10:00:00Z",
+  "actionId": "performance.applyProfile",
+  "profileId": "overwatch-stream-session",
+  "profilePath": "backend\\profiles\\game-session.profile.json",
+  "dryRun": false,
+  "snapshots": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "originalPriorityClass": "Normal",
+      "proposedPriorityClass": "AboveNormal",
+      "capturedAtUtc": "2026-06-28T10:00:00Z",
+      "profileId": "overwatch-stream-session",
+      "ruleId": "boost-foreground-game",
+      "reason": "Foreground game boost for frame-time stability during OBS and Discord workload."
+    },
+    {
+      "processId": 6480,
+      "processName": "Battle.net.exe",
+      "executablePath": "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe",
+      "originalPriorityClass": "Normal",
+      "proposedPriorityClass": "BelowNormal",
+      "capturedAtUtc": "2026-06-28T10:00:00Z",
+      "profileId": "overwatch-stream-session",
+      "ruleId": "demote-launchers-updaters",
+      "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running."
+    }
+  ]
+}

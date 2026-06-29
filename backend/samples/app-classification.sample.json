@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "source": "local-read-only",
+  "inventoryPath": "backend\\samples\\installed-app-inventory.sample.json",
+  "protectedCatalogPath": "backend\\uninstall\\protected-apps.json",
+  "policyPath": "backend\\uninstall\\uninstall-policy.json",
+  "summary": {
+    "appCount": 3,
+    "normalAppCount": 0,
+    "launcherCount": 0,
+    "overlayCount": 1,
+    "vendorToolCount": 0,
+    "sharedRuntimeCount": 0,
+    "driverCount": 0,
+    "securityNetworkComponentCount": 0,
+    "storeWebView2Count": 1,
+    "antiCheatCount": 0,
+    "obsDiscordDependencyCount": 1,
+    "protectedWindowsComponentCount": 0,
+    "protectedCount": 2,
+    "blockedByDefaultCount": 2
+  },
+  "apps": [
+    {
+      "appId": "registry:overwolf",
+      "displayName": "Overwolf",
+      "publisher": "Overwolf Ltd.",
+      "sourceType": "registry",
+      "packageId": "Overwolf.Overwolf",
+      "categories": [
+        "overlay",
+        "startup-heavy",
+        "game-helper"
+      ],
+      "primaryClassification": "overlay",
+      "risk": "medium",
+      "protected": false,
+      "blockByDefault": false,
+      "matchedProtectedRuleIds": [],
+      "reasonCodes": [
+        "APP_CLASSIFIED"
+      ],
+      "protectionReasons": [],
+      "recommendedAction": "Eligible for uninstall queue preview. Official uninstall must be reviewed before any future execution.",
+      "uninstallSafety": {
+        "officialUninstallPreviewOnly": true,
+        "queueAllowedByDefault": true,
+        "leftoverDeletionPreviewOnly": true,
+        "confirmedExecutionEnabled": false
+      }
+    },
+    {
+      "appId": "registry:microsoft-edge-webview2-runtime",
+      "displayName": "Microsoft Edge WebView2 Runtime",
+      "publisher": "Microsoft Corporation",
+      "sourceType": "registry",
+      "packageId": "Microsoft.EdgeWebView2Runtime",
+      "categories": [
+        "runtime",
+        "windows-app-dependency"
+      ],
+      "primaryClassification": "store-webview2",
+      "risk": "protected",
+      "protected": true,
+      "blockByDefault": true,
+      "matchedProtectedRuleIds": [
+        "store-webview2-components"
+      ],
+      "reasonCodes": [
+        "PROTECTED_CATALOG_MATCH"
+      ],
+      "protectionReasons": [
+        "Shared runtime required by multiple Windows and desktop apps",
+        "Store, Xbox, Gaming Services, and WebView2 packages can be shared Windows app dependencies."
+      ],
+      "recommendedAction": "Blocked by preview policy. Keep protected components out of the bulk uninstall queue.",
+      "uninstallSafety": {
+        "officialUninstallPreviewOnly": true,
+        "queueAllowedByDefault": false,
+        "leftoverDeletionPreviewOnly": true,
+        "confirmedExecutionEnabled": false
+      }
+    },
+    {
+      "appId": "registry:obs-studio",
+      "displayName": "OBS Studio",
+      "publisher": "OBS Project",
+      "sourceType": "registry",
+      "packageId": "OBSProject.OBSStudio",
+      "categories": [
+        "capture",
+        "streaming",
+        "target-scenario"
+      ],
+      "primaryClassification": "obs-discord-dependency",
+      "risk": "protected",
+      "protected": true,
+      "blockByDefault": true,
+      "matchedProtectedRuleIds": [
+        "stream-companions"
+      ],
+      "reasonCodes": [
+        "PROTECTED_CATALOG_MATCH"
+      ],
+      "protectionReasons": [
+        "Protected companion app for Overwatch streaming scenario",
+        "OBS and Discord are protected for the Overwatch streaming target scenario."
+      ],
+      "recommendedAction": "Blocked by preview policy. Keep protected components out of the bulk uninstall queue.",
+      "uninstallSafety": {
+        "officialUninstallPreviewOnly": true,
+        "queueAllowedByDefault": false,
+        "leftoverDeletionPreviewOnly": true,
+        "confirmedExecutionEnabled": false
+      }
+    }
+  ]
+}

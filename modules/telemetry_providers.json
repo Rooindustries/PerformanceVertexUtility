@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "id": "computer-use-display",
+      "name": "Computer Use Display",
+      "type": "visual-smoke-test",
+      "required": false,
+      "availableInAutomationHost": true,
+      "uses": [
+        "window screenshots",
+        "visible app launch checks",
+        "blocking dialog detection",
+        "benchmark result screen verification"
+      ],
+      "neverAutomate": [
+        "Windows security settings",
+        "Windows privacy permission prompts",
+        "passwords",
+        "CAPTCHAs",
+        "destructive UI actions"
+      ]
+    },
+    {
+      "id": "capframex",
+      "name": "CapFrameX",
+      "type": "frame-time-capture",
+      "required": false,
+      "commonPaths": [
+        "C:\\Program Files\\CapFrameX",
+        "C:\\Program Files (x86)\\CapFrameX"
+      ],
+      "outputs": ["fps-average", "fps-1-percent-low", "frametime-variance", "csv"]
+    },
+    {
+      "id": "presentmon",
+      "name": "PresentMon",
+      "type": "frame-time-capture",
+      "required": false,
+      "commonPaths": [
+        "C:\\Program Files\\PresentMon",
+        "C:\\Program Files (x86)\\PresentMon"
+      ],
+      "outputs": ["present-events", "frame-times", "csv"]
+    },
+    {
+      "id": "rtss",
+      "name": "RTSS / RivaTuner Statistics Server",
+      "type": "overlay-telemetry",
+      "required": false,
+      "commonPaths": [
+        "C:\\Program Files (x86)\\RivaTuner Statistics Server",
+        "C:\\Program Files\\RivaTuner Statistics Server"
+      ],
+      "outputs": ["overlay", "fps", "frametime"]
+    },
+    {
+      "id": "hwinfo64",
+      "name": "HWiNFO64",
+      "type": "sensor-telemetry",
+      "required": false,
+      "commonPaths": [
+        "C:\\Program Files\\HWiNFO64"
+      ],
+      "outputs": ["sensors", "temperature", "power", "utilization"]
+    },
+    {
+      "id": "built-in-windows",
+      "name": "Built-in Windows Counters",
+      "type": "system-metrics",
+      "required": true,
+      "outputs": ["process-count", "service-count", "working-set", "private-bytes", "commit", "cpu", "disk", "network"]
+    }
+  ]
+}

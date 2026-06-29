@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "entries": [
+    {
+      "profileId": "framesync",
+      "name": "FrameSync",
+      "vendor": "NVIDIA",
+      "sourceFile": "Utilities\\Other\\framesync.nip",
+      "sourceTool": "NVIDIA Profile Inspector",
+      "status": "seed-profile",
+      "supportedHardware": [
+        "PCI\\VEN_10DE"
+      ],
+      "gameTags": [
+        "overwatch-2",
+        "frame-pacing",
+        "obs-discord-stream"
+      ],
+      "manualApplyRequired": true,
+      "benchmarkStatus": "needs-local-benchmark",
+      "risk": "medium",
+      "notes": "Frame pacing settings need NVIDIA hardware detection, export first, approval, and a benchmark check before use."
+    }
+  ],
+  "policy": {
+    "autoApplyAllowed": false,
+    "manualApplyRequiresNvidiaGpu": true,
+    "manualApplyRequiresExportFirst": true,
+    "benchmarkBeforeRecommend": true,
+    "topProfilesToExposeAfterTesting": 5
+  }
+}

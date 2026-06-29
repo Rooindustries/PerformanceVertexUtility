@@ -1,0 +1,126 @@
+{
+  "manifestId": "sample-cleanup-manifest-overwolf-20260628-100000",
+  "productName": "Roo Industries Optimization Suite",
+  "schemaVersion": 1,
+  "appId": "registry:overwolf",
+  "displayName": "Overwolf",
+  "createdAtUtc": "2026-06-28T10:00:00Z",
+  "dryRun": true,
+  "executionMode": "preview-only",
+  "sourceScanId": "sample-leftover-overwolf-20260628-100000",
+  "items": [
+    {
+      "itemId": "folder:programfiles-overwolf",
+      "type": "folder",
+      "target": "C:\\Program Files (x86)\\Overwolf",
+      "matchedBy": [
+        "installLocation",
+        "publisher",
+        "signedPath"
+      ],
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true,
+      "protected": false,
+      "reason": "Install folder is still sitting there after the app uninstall path.",
+      "metadata": {
+        "previewOnly": true
+      }
+    },
+    {
+      "itemId": "folder:localappdata-overwolf",
+      "type": "folder",
+      "target": "C:\\Users\\Client\\AppData\\Local\\Overwolf",
+      "matchedBy": [
+        "publisher",
+        "productName",
+        "knownAppDataPath"
+      ],
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true,
+      "protected": false,
+      "reason": "User cache and app data left by the selected app.",
+      "metadata": {
+        "previewOnly": true
+      }
+    }
+  ],
+  "excludedItems": [
+    {
+      "itemId": "registry:hklcu-overwolf",
+      "target": "HKCU\\Software\\Overwolf",
+      "reason": "Left out until you approve the cleanup."
+    },
+    {
+      "itemId": "runtime:vc-redist",
+      "target": "HKLM\\Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
+      "reason": "Protected shared runtime. Leave it alone."
+    }
+  ],
+  "rollback": {
+    "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup\\sample-cleanup-manifest-overwolf-20260628-100000",
+    "rollbackActionId": "apps.rollbackCleanup",
+    "rollbackSupported": true,
+    "restorePoint": {
+      "requiredBeforeFutureApply": true,
+      "created": false,
+      "previewOnly": true
+    },
+    "fileBackupRequirements": [
+      {
+        "itemId": "folder:programfiles-overwolf",
+        "type": "folder",
+        "target": "C:\\Program Files (x86)\\Overwolf",
+        "mode": "copy-before-delete",
+        "required": true,
+        "completed": false,
+        "previewOnly": true
+      },
+      {
+        "itemId": "folder:localappdata-overwolf",
+        "type": "folder",
+        "target": "C:\\Users\\Client\\AppData\\Local\\Overwolf",
+        "mode": "copy-before-delete",
+        "required": true,
+        "completed": false,
+        "previewOnly": true
+      }
+    ],
+    "registryExportRequirements": [],
+    "serviceStateBackupRequirements": [],
+    "scheduledTaskBackupRequirements": [],
+    "startupEntryBackupRequirements": [],
+    "manifestExportRequired": true
+  },
+  "summary": {
+    "itemCount": 2,
+    "excludedCount": 2,
+    "lowRiskCount": 2,
+    "mediumRiskCount": 0,
+    "highRiskCount": 0,
+    "protectedCount": 0,
+    "highConfidenceCount": 2,
+    "mediumConfidenceCount": 0,
+    "requiresElevation": true,
+    "confirmationRequired": true,
+    "willDeleteOnApply": false,
+    "willEditRegistry": false,
+    "willEditServices": false,
+    "willEditScheduledTasks": false,
+    "dryRunWritesState": false
+  },
+  "warnings": [
+    {
+      "code": "CLEANUP_MANIFEST_PREVIEW_ONLY",
+      "message": "Delete plan is review-only. No files, folders, registry keys, services, tasks, or startup entries were changed.",
+      "severity": "info",
+      "source": "apps.cleanupManifest",
+      "target": "registry:overwolf",
+      "blocking": false,
+      "recommendedAction": "Review the backup and restore-point plan before approving cleanup.",
+      "details": null
+    }
+  ],
+  "errors": []
+}

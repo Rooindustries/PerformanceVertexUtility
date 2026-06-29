@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "profileId": "background-demotion-mvp",
+  "name": "Background Demotion MVP",
+  "profileKind": "process-priority",
+  "risk": "low",
+  "targetScenario": "Preview and optionally lower priority for known non-critical background helpers while preserving protected workloads.",
+  "protectedCatalogPath": "protected-processes.json",
+  "foregroundGame": {
+    "ruleId": "no-foreground-boost",
+    "processNames": [],
+    "priorityClass": "Normal",
+    "reason": "This profile does not boost a game target.",
+    "reasonCodes": [
+      "BACKGROUND_DEMOTION_ONLY"
+    ]
+  },
+  "targetGames": [],
+  "protectedCompanions": [],
+  "protectedPreviewProcessNames": [
+    "Tailscale.exe",
+    "Wispr Flow.exe",
+    "MsMpEng.exe",
+    "audiodg.exe",
+    "msedgewebview2.exe"
+  ],
+  "safeCandidates": [
+    {
+      "ruleId": "sync-clients-manual-review",
+      "match": {
+        "processNames": [
+          "OneDrive.exe",
+          "GoogleDriveFS.exe",
+          "Dropbox.exe"
+        ]
+      },
+      "reason": "Sync clients remain manual-review candidates in the MVP.",
+      "reasonCodes": [
+        "SYNC_CLIENT_MANUAL_REVIEW"
+      ],
+      "risk": "low"
+    }
+  ],
+  "rules": [
+    {
+      "ruleId": "demote-browser-renderers",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "steamwebhelper.exe",
+          "EpicWebHelper.exe"
+        ],
+        "namePatterns": [
+          "*webhelper*.exe",
+          "*cef*.exe"
+        ],
+        "processCategories": [
+          "browserWebView"
+        ],
+        "excludeProcessNames": [
+          "msedgewebview2.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Background browser helpers are safe priority-demotion candidates."
+      },
+      "risk": "low",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    },
+    {
+      "ruleId": "demote-launchers-updaters",
+      "enabled": true,
+      "match": {
+        "processNames": [
+          "Battle.net.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "RiotClientServices.exe",
+          "EADesktop.exe",
+          "UbisoftConnect.exe",
+          "GalaxyClient.exe"
+        ],
+        "namePatterns": [
+          "*launcher*.exe",
+          "*updater*.exe",
+          "*update*.exe"
+        ],
+        "excludeProcessNames": [
+          "MicrosoftEdgeUpdate.exe",
+          "MoUsoCoreWorker.exe",
+          "UsoClient.exe",
+          "TiWorker.exe",
+          "TrustedInstaller.exe"
+        ]
+      },
+      "action": {
+        "actionType": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Launchers and updaters should use lower priority while a game workload is active."
+      },
+      "risk": "low",
+      "rollback": {
+        "restorePriorityClass": true
+      }
+    }
+  ],
+  "telemetryTargets": [
+    "process-count",
+    "working-set",
+    "private-bytes",
+    "commit-pressure"
+  ],
+  "rollbackPolicy": {
+    "supported": true,
+    "scope": "process-priority",
+    "stateRoot": "backend\\state",
+    "restoreOriginalPriorityClass": true
+  },
+  "safety": {
+    "confirmedApplyChanges": [
+      "PriorityClass"
+    ],
+    "previewOnlyChanges": [
+      "Affinity",
+      "IoPriority",
+      "PowerThrottling"
+    ],
+    "continuousEnforcement": false,
+    "runtimeService": false
+  }
+}

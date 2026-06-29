@@ -1,0 +1,114 @@
+<Page
+    x:Class="Roo.OptimizationSuite.Views.PerformanceProfilesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Roo.OptimizationSuite.ViewModels"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <Page.Resources>
+        <DataTemplate x:Key="GtRowTemplate" x:DataType="vm:GameAppRow">
+            <Grid Padding="14,11" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2.2*" />
+                    <ColumnDefinition Width="1.3*" />
+                    <ColumnDefinition Width="1.15*" />
+                    <ColumnDefinition Width="1.05*" />
+                    <ColumnDefinition Width="0.95*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{x:Bind Name}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{x:Bind Role}" VerticalAlignment="Center" FontSize="13"
+                           Foreground="{StaticResource RooTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{x:Bind Priority}" VerticalAlignment="Center" FontSize="13"
+                           Foreground="{StaticResource RooTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{x:Bind Ram}" VerticalAlignment="Center" FontSize="13" Foreground="{StaticResource RooTextDisplayBrush}" />
+                <TextBlock Grid.Column="4" Text="{x:Bind Plan}" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{x:Bind PlanState, Converter={StaticResource RiskToBrush}}" />
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="{StaticResource RooPageMargin}">
+
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <ProgressRing IsActive="True" Width="40" Height="40" />
+            <TextBlock Text="Reading your processes" Foreground="{StaticResource RooTextMutedBrush}" />
+        </StackPanel>
+
+        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
+                Style="{StaticResource CardBorderStyle}"
+                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Can't read your processes yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
+                           Foreground="{StaticResource RooTextSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="10">
+                        <TextBlock Text="Game Tune" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{x:Bind ViewModel.GameStatusLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                            <TextBlock Text="{x:Bind ViewModel.GameStatus, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="{x:Bind ViewModel.RuleSummary, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="660" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                        <Button Content="Apply Profile" IsEnabled="False" Padding="16,9" HorizontalAlignment="Right" />
+                        <TextBlock Text="Nothing changes until you apply." FontSize="11" LineHeight="16"
+                                   Foreground="{StaticResource RooTextMutedBrush}" HorizontalAlignment="Right" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Spacing="12">
+                    <TextBlock VerticalAlignment="Center" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}">
+                        <Run Text="{x:Bind ViewModel.AppsCount, Mode=OneWay}" /><Run Text=" apps" />
+                        <Run Text="   ·   " /><Run Text="{x:Bind ViewModel.KeepCount, Mode=OneWay}" /><Run Text=" kept safe" />
+                        <Run Text="   ·   " /><Run Text="{x:Bind ViewModel.QuietCount, Mode=OneWay}" /><Run Text=" can quiet down" />
+                    </TextBlock>
+                    <TextBox PlaceholderText="Search apps" HorizontalAlignment="Stretch"
+                             Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="0"
+                        Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                    <StackPanel>
+                        <Grid Padding="14,12" ColumnSpacing="12" Background="{StaticResource RooSurfaceElevatedBrush}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2.2*" />
+                                <ColumnDefinition Width="1.3*" />
+                                <ColumnDefinition Width="1.15*" />
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="0.95*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="App" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Grid.Column="1" Text="Role" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Grid.Column="2" Text="Priority" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Grid.Column="3" Text="Memory" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Grid.Column="4" Text="Plan" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        </Grid>
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Rows}" ItemTemplate="{StaticResource GtRowTemplate}" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "dashboardStatus": "ready-for-preview",
+  "headline": {
+    "title": "More FPS. Less Input Lag.",
+    "summary": "Tuned for ranked games: cleaner 1% lows, fewer spikes, and less junk running."
+  },
+  "systemSummary": {
+    "ramClassGb": 16,
+    "targetScenario": "Overwatch 2 with OBS, Discord, and a 144 Hz stream workload",
+    "processCount": 178,
+    "backgroundProcessCount": 136,
+    "availableMemoryBytes": 5127536640,
+    "commitUsedBytes": 11811160064,
+    "gpuDedicatedMemoryUsedBytes": 4286578688,
+    "gpuSharedMemoryUsedBytes": 966367641,
+    "riskSignal": "medium-memory-pressure"
+  },
+  "cards": [
+    {
+      "cardId": "safety",
+      "title": "Protected by default",
+      "state": "protected",
+      "primaryMetric": "Review first",
+      "detail": "No app gets touched until you approve the tune."
+    },
+    {
+      "cardId": "processPressure",
+      "title": "Less junk running",
+      "state": "watch",
+      "primaryMetric": "136 running",
+      "detail": "Launchers, browser helpers, overlays, and vendor updaters are competing with the game."
+    },
+    {
+      "cardId": "memoryPressure",
+      "title": "RAM is tight",
+      "state": "watch",
+      "primaryMetric": "4.8 GB available",
+      "detail": "16 GB system with OBS and Discord open. Keep room for the match first."
+    },
+    {
+      "cardId": "driverProfiles",
+      "title": "Driver path",
+      "state": "manual",
+      "primaryMetric": "Manual only",
+      "detail": "Driver and NVIDIA settings stay locked until hardware match and approval."
+    }
+  ],
+  "recommendedNextActions": [
+    {
+      "actionId": "performance.previewProcessPlan",
+      "label": "Tune My PC",
+      "risk": "medium",
+      "reason": "Give Overwatch more room while OBS and Discord stay protected.",
+      "requiresElevation": false,
+      "dryRun": true
+    },
+    {
+      "actionId": "apps.inventory",
+      "label": "Clean Startup Junk",
+      "risk": "safe",
+      "reason": "Find launchers, overlays, and vendor updaters that start with Windows.",
+      "requiresElevation": false,
+      "dryRun": true
+    },
+    {
+      "actionId": "drivers.recommend",
+      "label": "Check Driver Path",
+      "risk": "safe",
+      "reason": "Keep stability first. Driver installs stay manual until reviewed.",
+      "requiresElevation": false,
+      "dryRun": true
+    }
+  ],
+  "providerStatus": [
+    {
+      "providerId": "built-in-windows",
+      "state": "available",
+      "outputs": [
+        "process-count",
+        "working-set",
+        "private-bytes",
+        "commit"
+      ]
+    },
+    {
+      "providerId": "hwinfo64",
+      "state": "optional-not-detected",
+      "outputs": [
+        "sensors",
+        "temperature",
+        "power"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "summary": {
+    "appCount": 15,
+    "normalAppCount": 4,
+    "launcherCount": 4,
+    "overlayCount": 2,
+    "vendorToolCount": 3,
+    "protectedRuntimeCount": 4,
+    "startupHeavyCount": 5,
+    "estimatedSizeBytes": 48533159936
+  },
+  "sources": [
+    "registry",
+    "msi",
+    "appx",
+    "winget"
+  ],
+  "apps": [
+    {
+      "appId": "registry:obs-studio",
+      "displayName": "OBS Studio",
+      "publisher": "OBS Project",
+      "version": "30.2.3",
+      "installLocation": "C:\\Program Files\\obs-studio",
+      "uninstallString": "\"C:\\Program Files\\obs-studio\\uninstall.exe\"",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "OBSProject.OBSStudio",
+      "estimatedSizeBytes": 734003200,
+      "installDate": "20260518",
+      "categories": [
+        "capture",
+        "streaming",
+        "target-scenario"
+      ],
+      "risk": "medium",
+      "protected": true,
+      "protectionReasons": [
+        "OBS stays protected so the stream does not fall apart mid-match."
+      ],
+      "startupImpact": "medium"
+    },
+    {
+      "appId": "registry:discord",
+      "displayName": "Discord",
+      "publisher": "Discord Inc.",
+      "version": "1.0.9168",
+      "installLocation": "C:\\Users\\Client\\AppData\\Local\\Discord",
+      "uninstallString": "\"C:\\Users\\Client\\AppData\\Local\\Discord\\Update.exe\" --uninstall",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Discord.Discord",
+      "estimatedSizeBytes": 1090519040,
+      "installDate": "20260604",
+      "categories": [
+        "voice",
+        "chat",
+        "stream-companion"
+      ],
+      "risk": "medium",
+      "protected": true,
+      "protectionReasons": [
+        "Discord stays protected so voice and stream stay clean."
+      ],
+      "startupImpact": "high"
+    },
+    {
+      "appId": "registry:battlenet",
+      "displayName": "Battle.net",
+      "publisher": "Blizzard Entertainment, Inc.",
+      "version": "2.31.4.14736",
+      "installLocation": "C:\\Program Files (x86)\\Battle.net",
+      "uninstallString": "\"C:\\Program Files (x86)\\Battle.net\\Battle.net Uninstaller.exe\"",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Blizzard.BattleNet",
+      "estimatedSizeBytes": 858993459,
+      "installDate": "20260602",
+      "categories": [
+        "launcher",
+        "game-platform"
+      ],
+      "risk": "low",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "medium"
+    },
+    {
+      "appId": "registry:steam",
+      "displayName": "Steam",
+      "publisher": "Valve Corporation",
+      "version": "2.10.91.91",
+      "installLocation": "C:\\Program Files (x86)\\Steam",
+      "uninstallString": "\"C:\\Program Files (x86)\\Steam\\uninstall.exe\"",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Valve.Steam",
+      "estimatedSizeBytes": 3113851289,
+      "installDate": "20260520",
+      "categories": [
+        "launcher",
+        "game-platform",
+        "webview-heavy"
+      ],
+      "risk": "low",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "high"
+    },
+    {
+      "appId": "registry:epic-games-launcher",
+      "displayName": "Epic Games Launcher",
+      "publisher": "Epic Games, Inc.",
+      "version": "17.2.1",
+      "installLocation": "C:\\Program Files (x86)\\Epic Games\\Launcher",
+      "uninstallString": "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}",
+      "quietUninstallString": "MsiExec.exe /X{11111111-2222-3333-4444-555555555555} /qn",
+      "sourceType": "msi",
+      "packageId": "EpicGames.EpicGamesLauncher",
+      "estimatedSizeBytes": 2147483648,
+      "installDate": "20260416",
+      "categories": [
+        "launcher",
+        "game-platform",
+        "startup-heavy"
+      ],
+      "risk": "low",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "high"
+    },
+    {
+      "appId": "registry:overwolf",
+      "displayName": "Overwolf",
+      "publisher": "Overwolf Ltd.",
+      "version": "0.269.0.12",
+      "installLocation": "C:\\Program Files (x86)\\Overwolf",
+      "uninstallString": "\"C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe\"",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Overwolf.Overwolf",
+      "estimatedSizeBytes": 1288490188,
+      "installDate": "20260311",
+      "categories": [
+        "overlay",
+        "startup-heavy",
+        "game-helper"
+      ],
+      "risk": "medium",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "high"
+    },
+    {
+      "appId": "registry:geforce-experience",
+      "displayName": "NVIDIA App",
+      "publisher": "NVIDIA Corporation",
+      "version": "11.0.3.210",
+      "installLocation": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App",
+      "uninstallString": "\"C:\\Program Files\\NVIDIA Corporation\\Installer2\\installer.exe\" -uninstall",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Nvidia.NvidiaApp",
+      "estimatedSizeBytes": 1717986918,
+      "installDate": "20260612",
+      "categories": [
+        "overlay",
+        "gpu-vendor-tool",
+        "driver-adjacent"
+      ],
+      "risk": "medium",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "medium"
+    },
+    {
+      "appId": "registry:intel-driver-support-assistant",
+      "displayName": "Intel Driver & Support Assistant",
+      "publisher": "Intel",
+      "version": "24.6.49.8",
+      "installLocation": "C:\\Program Files (x86)\\Intel\\Driver and Support Assistant",
+      "uninstallString": "MsiExec.exe /X{66666666-7777-8888-9999-000000000000}",
+      "quietUninstallString": "MsiExec.exe /X{66666666-7777-8888-9999-000000000000} /qn",
+      "sourceType": "msi",
+      "packageId": "Intel.DriverAndSupportAssistant",
+      "estimatedSizeBytes": 314572800,
+      "installDate": "20260402",
+      "categories": [
+        "vendor-tool",
+        "update-helper"
+      ],
+      "risk": "low",
+      "protected": false,
+      "protectionReasons": [],
+      "startupImpact": "medium"
+    },
+    {
+      "appId": "registry:microsoft-edge-webview2-runtime",
+      "displayName": "Microsoft Edge WebView2 Runtime",
+      "publisher": "Microsoft Corporation",
+      "version": "125.0.2535.92",
+      "installLocation": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView",
+      "uninstallString": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\125.0.2535.92\\Installer\\setup.exe\" --uninstall --msedgewebview --system-level",
+      "quietUninstallString": null,
+      "sourceType": "registry",
+      "packageId": "Microsoft.EdgeWebView2Runtime",
+      "estimatedSizeBytes": 707788800,
+      "installDate": "20260610",
+      "categories": [
+        "runtime",
+        "windows-app-dependency"
+      ],
+      "risk": "protected",
+      "protected": true,
+      "protectionReasons": [
+        "Shared runtime required by multiple Windows and desktop apps"
+      ],
+      "startupImpact": "none"
+    },
+    {
+      "appId": "registry:vc-runtime-2015-2022-x64",
+      "displayName": "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
+      "publisher": "Microsoft Corporation",
+      "version": "14.40.33810.0",
+      "installLocation": null,
+      "uninstallString": "MsiExec.exe /X{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
+      "quietUninstallString": "MsiExec.exe /X{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE} /qn",
+      "sourceType": "msi",
+      "packageId": "Microsoft.VCRedist.2015+.x64",
+      "estimatedSizeBytes": 25165824,
+      "installDate": "20260525",
+      "categories": [
+        "runtime",
+        "shared-dependency"
+      ],
+      "risk": "protected",
+      "protected": true,
+      "protectionReasons": [
+        "Shared runtime required by games, launchers, OBS plugins, and desktop apps"
+      ],
+      "startupImpact": "none"
+    },
+    {
+      "appId": "appx:microsoft.gamingapp",
+      "displayName": "Xbox",
+      "publisher": "Microsoft Corporation",
+      "version": "2406.1001.20.0",
+      "installLocation": "C:\\Program Files\\WindowsApps\\Microsoft.GamingApp_2406.1001.20.0_x64__8wekyb3d8bbwe",
+      "uninstallString": null,
+      "quietUninstallString": null,
+      "sourceType": "appx",
+      "packageId": "Microsoft.GamingApp",
+      "estimatedSizeBytes": null,
+      "installDate": null,
+      "categories": [
+        "store-app",
+        "gaming-component"
+      ],
+      "risk": "advanced",
+      "protected": true,
+      "protectionReasons": [
+        "Gaming component removal requires explicit review because it can affect Game Pass, Game Bar, and store components"
+      ],
+      "startupImpact": "low"
+    }
+  ]
+}

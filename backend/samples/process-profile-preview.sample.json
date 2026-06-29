@@ -1,0 +1,233 @@
+{
+  "actionId": "performance.previewProfile",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "sample-process-profile-preview-20260628-100000",
+  "dryRun": true,
+  "risk": "medium",
+  "requiresElevation": false,
+  "status": "preview",
+  "preview": [
+    {
+      "previewId": "boost-foreground-game-gameTarget-overwatch-18344",
+      "type": "processPriority",
+      "target": "Overwatch.exe:18344",
+      "displayName": "Overwatch 2",
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "AboveNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "boost-foreground-game",
+      "reason": "Give the game more room while OBS and Discord stay open.",
+      "reasonCodes": [
+        "OVERWATCH_TARGET_GAME",
+        "GAME_TARGET"
+      ],
+      "classification": "gameTarget",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "medium",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 3276800000,
+        "privateBytes": 4110417920,
+        "cpuPercent": 28.4,
+        "classification": "gameTarget"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "AboveNormal",
+        "reason": "Give the game more room while OBS and Discord stay open."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "demote-browser-renderers-demotioncandidate-chrome-14064",
+      "type": "processPriority",
+      "target": "chrome.exe:14064",
+      "displayName": "Chrome Renderer",
+      "processId": 14064,
+      "processName": "chrome.exe",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "BelowNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "demote-browser-renderers",
+      "reason": "Browser and launcher helpers are taking room the match can use.",
+      "reasonCodes": [
+        "BACKGROUND_DEMOTION_CANDIDATE"
+      ],
+      "classification": "demotionCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 734003200,
+        "privateBytes": 880803840,
+        "cpuPercent": 2.7,
+        "classification": "demotionCandidate"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Browser and launcher helpers are taking room the match can use."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "lower",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "sync-clients-manual-review-safecandidate-onedrive-18888",
+      "type": "processPriority",
+      "target": "OneDrive.exe:18888",
+      "displayName": "Microsoft OneDrive",
+      "processId": 18888,
+      "processName": "OneDrive.exe",
+      "executablePath": "C:\\Users\\Client\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "noChange",
+      "ruleId": "sync-clients-manual-review",
+      "reason": "Sync clients can hit RAM, disk, and network. Review before touching them.",
+      "reasonCodes": [
+        "SYNC_CLIENT_MANUAL_REVIEW"
+      ],
+      "classification": "safeCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 171966464,
+        "privateBytes": 218103808,
+        "cpuPercent": 0.8,
+        "classification": "safeCandidate"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "reason": "Sync clients can hit RAM, disk, and network. Review before touching them."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": null
+    },
+    {
+      "previewId": "samsung-continuity-protected-samsungcontinuityservice-22100",
+      "type": "processPriority",
+      "target": "SamsungContinuityService.exe:22100",
+      "displayName": "Samsung Continuity Service",
+      "processId": 22100,
+      "processName": "SamsungContinuityService.exe",
+      "executablePath": "C:\\Program Files\\Samsung\\Continuity\\SamsungContinuityService.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "noChange",
+      "ruleId": "protected",
+      "reason": "Samsung cross-device features stay protected by default.",
+      "reasonCodes": [
+        "SAMSUNG_CONTINUITY_PROTECTED"
+      ],
+      "classification": "protected",
+      "blocked": true,
+      "blockedReason": "Samsung cross-device features stay protected by default.",
+      "risk": "protected",
+      "confidence": "high",
+      "protected": true,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 73400320,
+        "privateBytes": 83886080,
+        "cpuPercent": 0.1,
+        "classification": "protected"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "reason": "Samsung cross-device features stay protected by default."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "backup": null,
+  "result": null,
+  "warnings": [
+    {
+      "code": "PROCESS_PROFILE_PREVIEW_ONLY",
+      "message": "Tune preview built without changing process priority.",
+      "severity": "info",
+      "source": "performance.profile",
+      "target": "overwatch-stream-session",
+      "blocking": false,
+      "recommendedAction": "Review the tune before approving process changes.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-28T10:00:00Z",
+      "level": "info",
+      "message": "Tune preview generated for Overwatch with OBS and Discord."
+    }
+  ]
+}

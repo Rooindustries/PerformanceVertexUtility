@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "catalogVersion": "2026.06.sample",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "recommendations": [
+    {
+      "driverId": "nvidia-560.70-notebook-stable",
+      "vendor": "NVIDIA",
+      "version": "560.70",
+      "packagePath": "tools\\Drivers\\Graphics\\NVIDIA_560.70_Notebook.exe",
+      "hardwareMatches": [
+        "PCI\\VEN_10DE"
+      ],
+      "gameTags": [
+        "overwatch-2",
+        "fortnite",
+        "valorant"
+      ],
+      "stability": "tested",
+      "notes": "Stable slot aimed at cleaner 1% lows and OBS compatibility on RTX 40-series laptop GPUs. Review first.",
+      "manualInstallRequired": true,
+      "risk": "medium"
+    },
+    {
+      "driverId": "nvidia-555.99-notebook-fallback",
+      "vendor": "NVIDIA",
+      "version": "555.99",
+      "packagePath": "tools\\Drivers\\Graphics\\NVIDIA_555.99_Notebook.exe",
+      "hardwareMatches": [
+        "PCI\\VEN_10DE"
+      ],
+      "gameTags": [
+        "overwatch-2",
+        "apex-legends"
+      ],
+      "stability": "recommended",
+      "notes": "Fallback slot for systems that stutter or break capture on newer branches.",
+      "manualInstallRequired": true,
+      "risk": "medium"
+    },
+    {
+      "driverId": "intel-wifi-23.150-stable",
+      "vendor": "Intel",
+      "version": "23.150.0.4",
+      "packagePath": "tools\\Drivers\\Network\\Intel_WiFi_23.150.exe",
+      "hardwareMatches": [
+        "PCI\\VEN_8086&DEV_51F1"
+      ],
+      "gameTags": [
+        "discord-streaming",
+        "low-latency-network"
+      ],
+      "stability": "candidate",
+      "notes": "Network driver candidate for cleaner Discord voice and stream stability. Review first.",
+      "manualInstallRequired": true,
+      "risk": "medium"
+    }
+  ],
+  "manualInstallGate": {
+    "requiresHardwareMatch": true,
+    "requiresUserDownloadOrLocalPackage": true,
+    "requiresRestorePoint": true,
+    "dduAutomationAllowed": false,
+    "nvcleanstallAutomationAllowed": false,
+    "warnings": [
+      "No driver installs automatically from this list.",
+      "DDU and NVCleanstall stay guided and manual."
+    ]
+  }
+}

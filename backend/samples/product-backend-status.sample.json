@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "generatedAtUtc": "2026-06-28T10:00:00Z",
+  "status": "preview-ready",
+  "backendPackageVersion": "0.1.0-contracts",
+  "harness": {
+    "name": "Roo backend harness",
+    "role": "legacy harness boundary",
+    "supportedReadOnlyActions": [
+      "ListModules",
+      "ToolInventory"
+    ],
+    "systemChangingActions": [
+      "ApplyModule",
+      "RollbackModule"
+    ],
+    "systemChangingGate": "Requires -ConfirmApply outside backend contract samples"
+  },
+  "safety": {
+    "defaultMode": "dryRun",
+    "requiresExplicitConfirmation": true,
+    "backupRequiredBeforeApply": true,
+    "rollbackVisible": true,
+    "remoteScriptExecutionAllowed": false,
+    "driverAutomationAllowed": false,
+    "leftoverDeletionAllowedByDefault": false
+  },
+  "workflowReadiness": [
+    {
+      "workflowId": "performanceProfiles",
+      "name": "Process Profile Engine",
+      "contractStatus": "draft",
+      "implementationStatus": "preview-dry-run-and-confirmed-priority-apply",
+      "nextBackendStep": "Add benchmark-backed affinity, I/O priority, power throttling, and runtime enforcement after the priority MVP is validated."
+    },
+    {
+      "workflowId": "uninstallCleanup",
+      "name": "Bulk Uninstall And Leftover Cleanup",
+      "contractStatus": "draft",
+      "implementationStatus": "sample-and-read-only-inventory",
+      "nextBackendStep": "Create official uninstall command preview and app-specific leftover scanners."
+    },
+    {
+      "workflowId": "driversProfiles",
+      "name": "Drivers And NVIDIA Profiles",
+      "contractStatus": "draft",
+      "implementationStatus": "sample-and-read-only-hardware-inventory",
+      "nextBackendStep": "Wire hardware match scoring and manual install/profile gates."
+    }
+  ],
+  "dataContracts": [
+    "common action envelope",
+    "process inventory",
+    "process profile",
+    "uninstall app inventory",
+    "leftover scan result",
+    "driver recommendation catalog",
+    "NVIDIA profile catalog entry",
+    "telemetry snapshot",
+    "report summary"
+  ],
+  "limitations": [
+    "Process priority apply exists only behind -ConfirmApply and is not run by validation.",
+    "Affinity, I/O priority, power throttling, uninstall cleanup, driver installs, and profile-tool automation are not implemented in this pass.",
+    "Discovery scripts are read-only and may omit fields that require privileged or provider-specific access."
+  ]
+}

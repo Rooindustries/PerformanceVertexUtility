@@ -1,0 +1,161 @@
+{
+  "actionId": "performance.applyProfile",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "sample-process-profile-dry-run-20260628-100000",
+  "dryRun": true,
+  "risk": "medium",
+  "requiresElevation": false,
+  "status": "preview",
+  "preview": [
+    {
+      "previewId": "boost-foreground-game-gameTarget-overwatch-18344",
+      "type": "processPriority",
+      "target": "Overwatch.exe:18344",
+      "displayName": "Overwatch 2",
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "AboveNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "boost-foreground-game",
+      "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+      "reasonCodes": [
+        "OVERWATCH_TARGET_GAME",
+        "GAME_TARGET"
+      ],
+      "classification": "gameTarget",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "medium",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 3276800000,
+        "privateBytes": 4110417920,
+        "cpuPercent": 28.4,
+        "classification": "gameTarget"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "AboveNormal",
+        "reason": "Foreground game boost for frame-time stability during OBS and Discord workload."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "demote-launchers-updaters-demotioncandidate-battle-net-6480",
+      "type": "processPriority",
+      "target": "Battle.net.exe:6480",
+      "displayName": "Battle.net",
+      "processId": 6480,
+      "processName": "Battle.net.exe",
+      "executablePath": "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "BelowNormal",
+      "proposedAction": "setPriority",
+      "ruleId": "demote-launchers-updaters",
+      "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running.",
+      "reasonCodes": [
+        "BACKGROUND_DEMOTION_CANDIDATE"
+      ],
+      "classification": "demotionCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "Normal",
+        "workingSetBytes": 408944640,
+        "privateBytes": 501219328,
+        "cpuPercent": 1.4,
+        "classification": "demotionCandidate"
+      },
+      "proposedState": {
+        "action": "setPriority",
+        "priorityClass": "BelowNormal",
+        "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "lower",
+        "targetMetrics": [
+          "frame-time-stability",
+          "1-percent-low-fps",
+          "0.1-percent-low-fps",
+          "process-count"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "captureOriginalState": true
+      }
+    }
+  ],
+  "backup": null,
+  "result": {
+    "resultId": "dry-run-apply-20260628-100000",
+    "status": "preview",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-28T10:00:00Z",
+    "summary": "Dry-run only. No process priority changes were applied.",
+    "changedItems": [],
+    "skippedItems": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "proposedPriorityClass": "AboveNormal",
+        "reason": "Dry-run apply; -ConfirmApply was not provided."
+      },
+      {
+        "processId": 6480,
+        "processName": "Battle.net.exe",
+        "proposedPriorityClass": "BelowNormal",
+        "reason": "Dry-run apply; -ConfirmApply was not provided."
+      }
+    ],
+    "metricsBefore": null,
+    "metricsAfter": null,
+    "artifacts": []
+  },
+  "warnings": [
+    {
+      "code": "CONFIRM_APPLY_REQUIRED",
+      "message": "Apply-ProcessProfile.ps1 did not change any process because -ConfirmApply was omitted.",
+      "severity": "info",
+      "source": "performance.profile",
+      "target": "overwatch-stream-session",
+      "blocking": false,
+      "recommendedAction": "Review the preview, then rerun with -ConfirmApply if changes are desired.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-28T10:00:00Z",
+      "level": "info",
+      "message": "Dry-run apply completed without changing process priorities."
+    }
+  ]
+}

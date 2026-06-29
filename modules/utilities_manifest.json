@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "sourceArchive": "vendor\\Utilities.zip",
+  "bundlePolicy": {
+    "developmentMode": "bundled-archive",
+    "releaseMode": "bundled-tools",
+    "notes": [
+      "Do not silently run driver cleaners, privacy tools, uninstallers, or driver installers.",
+      "Do not bypass or remove licenses from third-party software.",
+      "Where licensing is undesirable, build a native replacement module instead of cloning or bypassing the commercial tool.",
+      "Keep benchmark tooling separate from the main app UI, but allow internal benchmark-provider integration."
+    ]
+  },
+  "tools": [
+    {
+      "id": "process-lasso",
+      "name": "Process Lasso",
+      "archivePaths": ["Utilities/processlassosetup64.exe"],
+      "userUses": true,
+      "autoRunAllowed": true,
+      "appRole": "startup-runtime-or-native-replacement",
+      "integrationPlan": "Support Process Lasso profiles if properly installed/licensed, but prioritize building a native scheduler profile engine for priorities, affinities, I/O priority, and per-game rules.",
+      "risk": "medium",
+      "notes": "Do not bypass Process Lasso licensing. Replace needed behavior with native app code where possible."
+    },
+    {
+      "id": "hwinfo",
+      "name": "HWiNFO",
+      "archivePaths": ["Utilities/hwi_834x.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "monitoring-section",
+      "integrationPlan": "Create a separate monitoring section for CPU/GPU/RAM sensors, temperatures, clocks, power, utilization, and logging. Prefer reading HWiNFO shared memory or exported sensors when available.",
+      "risk": "low"
+    },
+    {
+      "id": "cpu-z",
+      "name": "CPU-Z",
+      "archivePaths": ["Utilities/cpu-z_2.17-en.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "manual-diagnostics",
+      "integrationPlan": "Expose as a manual launcher and optionally parse exported reports for RAM type, slots, CPU model, motherboard, and BIOS.",
+      "risk": "low"
+    },
+    {
+      "id": "gpu-z",
+      "name": "GPU-Z",
+      "archivePaths": ["Utilities/GPU-Z.2.68.0.exe"],
+      "userUses": false,
+      "autoRunAllowed": false,
+      "appRole": "optional-manual-diagnostics",
+      "integrationPlan": "Keep as optional manual GPU diagnostics if needed for VRAM, PCIe, driver, and sensor checks.",
+      "risk": "low"
+    },
+    {
+      "id": "msi-afterburner",
+      "name": "MSI Afterburner",
+      "archivePaths": ["Utilities/MSIAfterburnerInstaller466.exe"],
+      "userUses": true,
+      "autoRunAllowed": true,
+      "appRole": "startup-runtime",
+      "integrationPlan": "Expose install/launch/profile management. Startup is allowed only after user configures and approves GPU profiles. Do not auto-overclock by default.",
+      "risk": "high"
+    },
+    {
+      "id": "ddu",
+      "name": "Display Driver Uninstaller",
+      "archivePaths": ["Utilities/Other/DDU v18.0.8.9/Display Driver Uninstaller.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "manual-driver-clean-room",
+      "integrationPlan": "Offer a guided driver-clean workflow with restore point, network pause option, safe-mode instructions, and post-clean driver install selection. Never run silently.",
+      "risk": "high"
+    },
+    {
+      "id": "nvcleanstall",
+      "name": "NVCleanstall",
+      "archivePaths": ["Utilities/Stock Only (otherwise not necessary)/NVCleanstall_1.19.0.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "manual-nvidia-driver-builder",
+      "integrationPlan": "Use for NVIDIA-only client workflows. Gate by hardware detection. Pair with tested driver recommendations and game tags.",
+      "risk": "high"
+    },
+    {
+      "id": "nvidia-profile-inspector",
+      "name": "NVIDIA Profile Inspector",
+      "archivePaths": ["Utilities/Other/NVPI/nvidiaProfileInspector.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "profile-import-and-test",
+      "integrationPlan": "Provide manual import/export, NIP catalog, benchmark comparison, and top-five tested profile recommendations. Gate by NVIDIA GPU detection.",
+      "risk": "medium",
+      "profileFiles": [
+        {
+          "id": "framesync",
+          "name": "FrameSync",
+          "archivePath": "Utilities/Other/framesync.nip",
+          "status": "seed-profile",
+          "testPolicy": "Benchmark before recommending."
+        }
+      ]
+    },
+    {
+      "id": "oosu10",
+      "name": "O&O ShutUp10++",
+      "archivePaths": ["Utilities/Stock Only (otherwise not necessary)/OOSU10.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "privacy-reference-or-manual-launch",
+      "integrationPlan": "Use as a reference/manual launcher. Native app should implement only the safe privacy subset with rollback and protected ecosystem rules.",
+      "risk": "medium"
+    },
+    {
+      "id": "wpd",
+      "name": "WPD",
+      "archivePaths": ["Utilities/Stock Only (otherwise not necessary)/WPD.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "privacy-reference-or-manual-launch",
+      "integrationPlan": "Use as a reference/manual launcher. Native app should implement validated privacy toggles rather than blindly applying WPD presets.",
+      "risk": "medium"
+    },
+    {
+      "id": "bulk-uninstaller-native",
+      "name": "Native Bulk Uninstaller",
+      "archivePaths": ["Utilities/revosetup.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "native-replacement",
+      "integrationPlan": "Build an in-app bulk uninstaller that enumerates MSI, uninstall registry entries, winget packages, Appx packages, services, tasks, startup entries, leftover files, and orphaned registry keys. Do not clone or bypass Revo licensing.",
+      "risk": "high"
+    },
+    {
+      "id": "device-cleanup",
+      "name": "Device Cleanup",
+      "archivePaths": ["Utilities/Other/DeviceCleanup.exe", "Utilities/Other/DeviceCleanup.ini"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "dead-device-cleanup",
+      "integrationPlan": "Build a dead-device cleanup module using Windows PnP inventory. Default to preview list, backup/export, then cleanup only disconnected/non-present devices.",
+      "risk": "medium"
+    },
+    {
+      "id": "userdiag",
+      "name": "UserDiag",
+      "archivePaths": ["Utilities/UserDiag.exe"],
+      "userUses": true,
+      "autoRunAllowed": false,
+      "appRole": "diagnostic-and-sales-funnel",
+      "integrationPlan": "Keep as separate diagnostic section. After diagnostics, show a plan recommendation CTA based on CPU/GPU/RAM/storage findings and matching services on rooindustries.com.",
+      "risk": "medium"
+    },
+    {
+      "id": "autoruns",
+      "name": "Autoruns",
+      "archivePaths": ["Utilities/autoruns.exe"],
+      "userUses": false,
+      "autoRunAllowed": false,
+      "appRole": "advanced-startup-inspector",
+      "integrationPlan": "Educate and optionally expose as an advanced manual tool. Native app should implement safer startup inventory first.",
+      "risk": "medium",
+      "explanation": "Autoruns shows nearly everything configured to launch automatically: Run keys, services, drivers, scheduled tasks, shell extensions, browser helpers, codecs, AppInit DLLs, and more. It is powerful but easy to overdo."
+    },
+    {
+      "id": "thorium",
+      "name": "Thorium",
+      "archivePaths": ["Utilities/thorium_AVX2_mini_installer.exe"],
+      "userUses": false,
+      "autoRunAllowed": false,
+      "appRole": "excluded-by-default",
+      "integrationPlan": "Do not include in default workflow.",
+      "risk": "low"
+    },
+    {
+      "id": "vesktop",
+      "name": "Vesktop",
+      "archivePaths": ["Utilities/Vesktop-Setup-1.6.1.exe"],
+      "userUses": false,
+      "autoRunAllowed": false,
+      "appRole": "excluded-by-default",
+      "integrationPlan": "Do not include in default workflow.",
+      "risk": "low"
+    }
+  ],
+  "driverStrategy": {
+    "mode": "hardware-and-game-aware-recommendations",
+    "description": "Driver installers are shown only when matching hardware is detected. The app should also detect installed games and show driver recommendations tagged by tested game logos.",
+    "defaultBehavior": "recommend-only",
+    "installBehavior": "manual-confirmation-required",
+    "metadataUpdate": "allow app-side driver/game metadata updates without rebuilding the app"
+  },
+  "benchmarkStrategy": {
+    "mainAppClutterPolicy": "keep-benchmarking-separate",
+    "internalProviders": ["CapFrameX", "RTSS", "PresentMon", "HWiNFO", "Computer Use display checks"],
+    "description": "The app should orchestrate benchmarking internally when needed, but benchmark setup/results should remain in a separate workflow rather than cluttering the main optimizer dashboard."
+  }
+}

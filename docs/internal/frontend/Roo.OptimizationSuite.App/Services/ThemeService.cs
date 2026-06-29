@@ -1,0 +1,92 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.UI.Xaml;
+
+namespace Roo.OptimizationSuite.Services;
+
+public sealed record ThemeOption(string Id, string Name, string ResourceUri);
+
+public sealed class ThemeService
+{
+    private const string ThemeKey = "themeId";
+    private const string EffectsKey = "reducedEffects";
+    private const string ProbeBrushKey = "RooCanvasBrush";
+
+    public static readonly ThemeOption RooBlue = new("roo-blue", "Roo Blue", "ms-appx:///Resources/Theme.RooBlue.xaml");
+    public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
+
+    private readonly SettingsStore _settings;
+
+    public IReadOnlyList<ThemeOption> Options { get; } = new[] { RooBlue, BlackoutGold };
+    public string CurrentThemeId { get; private set; } = RooBlue.Id;
+    public bool ReducedEffects { get; private set; }
+
+    public event Action? ThemeChanged;
+    public event Action? EffectsChanged;
+
+    public ThemeService(SettingsStore settings)
+    {
+        _settings = settings;
+    }
+
+    public void ApplyPersistedTheme()
+    {
+        var stored = _settings.Get(ThemeKey);
+        var option = Options.FirstOrDefault(o => o.Id == stored) ?? RooBlue;
+        CurrentThemeId = option.Id;
+        ReducedEffects = _settings.Get(EffectsKey) == "1";
+        if (option.Id != RooBlue.Id)
+        {
+            SwapDictionary(option);
+        }
+    }
+
+    public void SetReducedEffects(bool reduced)
+    {
+        if (reduced == ReducedEffects)
+        {
+            return;
+        }
+
+        ReducedEffects = reduced;
+        _settings.Set(EffectsKey, reduced ? "1" : "0");
+        EffectsChanged?.Invoke();
+    }
+
+    public void SetTheme(string themeId)
+    {
+        if (themeId == CurrentThemeId)
+        {
+            return;
+        }
+
+        var option = Options.FirstOrDefault(o => o.Id == themeId);
+        if (option is null)
+        {
+            return;
+        }
+
+        SwapDictionary(option);
+        CurrentThemeId = option.Id;
+        _settings.Set(ThemeKey, option.Id);
+        ThemeChanged?.Invoke();
+    }
+
+    private static void SwapDictionary(ThemeOption option)
+    {
+        var merged = Application.Current.Resources.MergedDictionaries;
+        var replacement = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
+
+        for (var i = 0; i < merged.Count; i++)
+        {
+            if (merged[i].ContainsKey(ProbeBrushKey))
+            {
+                merged[i] = replacement;
+                return;
+            }
+        }
+
+        merged.Add(replacement);
+    }
+}

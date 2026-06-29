@@ -1,0 +1,2713 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rooindustries.com/schemas/optimization-suite/backend-contracts.schema.json",
+  "title": "Roo Industries Optimization Suite Backend Contracts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "productName",
+    "contracts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "productName": {
+      "const": "Roo Industries Optimization Suite"
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contractDescriptor"
+      }
+    }
+  },
+  "$defs": {
+    "contractDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "definitionRef",
+        "workflow",
+        "summary"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "definitionRef": {
+          "type": "string"
+        },
+        "workflow": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "stable",
+            "deprecated"
+          ],
+          "default": "draft"
+        }
+      }
+    },
+    "riskLevel": {
+      "type": "string",
+      "enum": [
+        "safe",
+        "low",
+        "medium",
+        "high",
+        "advanced",
+        "protected"
+      ]
+    },
+    "issueSeverity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "issueModel": {
+      "title": "Error Or Warning Model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "severity",
+        "source"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/issueSeverity"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocking": {
+          "type": "boolean",
+          "default": false
+        },
+        "recommendedAction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "progressEvent": {
+      "title": "Progress Event",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "actionId",
+        "timestampUtc",
+        "stage",
+        "message"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "actionId": {
+          "type": "string"
+        },
+        "correlationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timestampUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "previewing",
+            "backingUp",
+            "applying",
+            "scanning",
+            "rollingBack",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "message": {
+          "type": "string"
+        },
+        "currentItem": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "actionPreview": {
+      "title": "Action Preview",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previewId",
+        "type",
+        "target",
+        "proposedState",
+        "risk",
+        "requiresConfirmation"
+      ],
+      "properties": {
+        "previewId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "processId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "processName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executablePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currentPriorityClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposedPriorityClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposedAction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "setPriority",
+            "restorePriority",
+            "noChange",
+            null
+          ]
+        },
+        "ruleId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasonCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "classification": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "gameTarget",
+            "protected",
+            "protectedCompanion",
+            "safeCandidate",
+            "demotionCandidate",
+            "unknown",
+            "rollbackCandidate",
+            null
+          ]
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "blockedReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currentState": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "proposedState": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "impact": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "protected": {
+          "type": "boolean",
+          "default": false
+        },
+        "requiresConfirmation": {
+          "type": "boolean"
+        },
+        "rollbackSupported": {
+          "type": "boolean"
+        },
+        "rollback": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "actionResult": {
+      "title": "Action Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultId",
+        "status",
+        "summary",
+        "changedItems",
+        "skippedItems"
+      ],
+      "properties": {
+        "resultId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "success",
+            "partial",
+            "failed",
+            "cancelled",
+            "rolledBack"
+          ]
+        },
+        "startedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "metricsBefore": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "metricsAfter": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "backupRollbackMetadata": {
+      "title": "Backup Or Rollback Metadata",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backupId",
+        "scope",
+        "createdAtUtc",
+        "rollbackSupported",
+        "snapshots"
+      ],
+      "properties": {
+        "backupId": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restorePoint": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "type",
+              "target"
+            ],
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "originalState": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "rollbackActionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rollbackSupported": {
+          "type": "boolean"
+        },
+        "retentionPolicy": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "actionEnvelope": {
+      "title": "Common Action Envelope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "risk",
+        "requiresElevation",
+        "status",
+        "preview",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "correlationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "requiresElevation": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "queued",
+            "running",
+            "success",
+            "partial",
+            "failed",
+            "cancelled",
+            "rolledBack"
+          ]
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionPreview"
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/actionResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "protectedItemModel": {
+      "title": "Protected Item Model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "type",
+        "name",
+        "reason",
+        "defaultAction"
+      ],
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "process",
+            "service",
+            "registryPath",
+            "driver",
+            "application",
+            "scheduledTask",
+            "fileSystemPath",
+            "device"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "matchType": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "prefix",
+            "pattern",
+            "publisher",
+            "hardwareId"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": [
+            "block",
+            "warn",
+            "manualOnly"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "protectedAppCatalog": {
+      "title": "Protected App Catalog",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "catalogId",
+        "protectedApps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "catalogId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "defaultPolicy": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "protectedApps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedAppRule"
+          }
+        }
+      }
+    },
+    "protectedAppRule": {
+      "title": "Protected App Rule",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "type",
+        "appType",
+        "name",
+        "match",
+        "reason",
+        "defaultAction",
+        "risk"
+      ],
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "appType": {
+          "type": "string",
+          "enum": [
+            "normal-app",
+            "launcher",
+            "overlay",
+            "vendor-tool",
+            "shared-runtime",
+            "driver",
+            "security-network-component",
+            "store-webview2",
+            "anti-cheat",
+            "obs-discord-dependency",
+            "protected-windows-component"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "matchType": {
+          "type": "string"
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "reason": {
+          "type": "string"
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": [
+            "block",
+            "warn",
+            "manualOnly"
+          ]
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "processInventory": {
+      "title": "Process Inventory",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "summary",
+        "processes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "processes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processItem"
+          }
+        }
+      }
+    },
+    "processItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pid",
+        "name",
+        "category",
+        "protection",
+        "workingSetBytes"
+      ],
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executablePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commandLine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "foregroundGame",
+            "captureStreaming",
+            "voiceChat",
+            "launcher",
+            "browserWebView",
+            "vendorUtility",
+            "windowsCore",
+            "security",
+            "network",
+            "audioInput",
+            "backgroundApp",
+            "unknown"
+          ]
+        },
+        "protection": {
+          "type": "string",
+          "enum": [
+            "protected",
+            "warn",
+            "candidate",
+            "unknown"
+          ]
+        },
+        "roleTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sessionId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "priorityClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cpuPercent": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "workingSetBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "privateBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "gpuDedicatedBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "gpuSharedBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "isForegroundCandidate": {
+          "type": "boolean"
+        },
+        "canChangePriority": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        }
+      }
+    },
+    "processClassification": {
+      "title": "Process Classification",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "profileId",
+        "summary",
+        "processes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profilePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protectedCatalogPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetGameProcessName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "processes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processClassificationItem"
+          }
+        }
+      }
+    },
+    "processClassificationItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "pid",
+        "name",
+        "classification",
+        "reasonCodes",
+        "sessionProfileMatched",
+        "canChangePriority"
+      ],
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "gameTarget",
+            "protected",
+            "protectedCompanion",
+            "safeCandidate",
+            "demotionCandidate",
+            "unknown"
+          ]
+        },
+        "reasonCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "matchedRuleId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "matchedProtectedItemId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "matchedProfileItemId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionProfileMatched": {
+          "type": "boolean"
+        },
+        "profileMatched": {
+          "type": "boolean"
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "canChangePriority": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        }
+      }
+    },
+    "processProfileBackupManifest": {
+      "title": "Process Profile Backup Manifest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "backupId",
+        "createdAtUtc",
+        "profileId",
+        "snapshots"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "backupId": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "actionId": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "profilePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "processId",
+              "processName",
+              "originalPriorityClass",
+              "proposedPriorityClass",
+              "profileId",
+              "ruleId"
+            ],
+            "properties": {
+              "processId": {
+                "type": "integer"
+              },
+              "processName": {
+                "type": "string"
+              },
+              "executablePath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "originalPriorityClass": {
+                "type": "string"
+              },
+              "proposedPriorityClass": {
+                "type": "string"
+              },
+              "capturedAtUtc": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "profileId": {
+                "type": "string"
+              },
+              "ruleId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "processRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId",
+        "match",
+        "action",
+        "risk",
+        "rollback"
+      ],
+      "properties": {
+        "ruleId": {
+          "type": "string"
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "action": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "rollback": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "performanceProfile": {
+      "title": "Performance Profile",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "profileId",
+        "name",
+        "risk",
+        "rules",
+        "protectedItems"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "targetScenario": {
+          "type": "string"
+        },
+        "gameTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processRule"
+          }
+        },
+        "protectedItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedItemModel"
+          }
+        },
+        "telemetryTargets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rollbackPolicy": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "processSessionProfile": {
+      "title": "Game Session Profile",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "modeId",
+        "name",
+        "targetScenario",
+        "foregroundGame",
+        "protectedCompanions",
+        "backgroundDemotion",
+        "rollbackPolicy"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "modeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "targetScenario": {
+          "type": "string"
+        },
+        "foregroundGame": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "protectedCompanions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedItemModel"
+          }
+        },
+        "backgroundDemotion": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processRule"
+          }
+        },
+        "expectedImpact": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rollbackPolicy": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "processRulePreviewApplyResult": {
+      "title": "Process Rule Preview Or Apply Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "profileId",
+        "ruleResults"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/actionEnvelope"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "ruleResults": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "uninstallAppInventory": {
+      "title": "Uninstall App Inventory",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "summary",
+        "apps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "apps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uninstallApp"
+          }
+        }
+      }
+    },
+    "uninstallApp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "displayName",
+        "sourceType",
+        "risk",
+        "protected"
+      ],
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installLocation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uninstallString": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quietUninstallString": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "registry",
+            "msi",
+            "appx",
+            "winget",
+            "manualCatalog"
+          ]
+        },
+        "packageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "estimatedSizeBytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "installDate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "protectionReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "startupImpact": {
+          "type": "string",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "appClassificationResult": {
+      "title": "App Classification Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "summary",
+        "apps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "inventoryPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protectedCatalogPath": {
+          "type": "string"
+        },
+        "policyPath": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "apps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/appClassificationItem"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "appClassificationItem": {
+      "title": "App Classification Item",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "displayName",
+        "sourceType",
+        "primaryClassification",
+        "risk",
+        "protected",
+        "blockByDefault",
+        "uninstallSafety"
+      ],
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "primaryClassification": {
+          "type": "string",
+          "enum": [
+            "normal-app",
+            "launcher",
+            "overlay",
+            "vendor-tool",
+            "shared-runtime",
+            "driver",
+            "security-network-component",
+            "store-webview2",
+            "anti-cheat",
+            "obs-discord-dependency",
+            "protected-windows-component"
+          ]
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "blockByDefault": {
+          "type": "boolean"
+        },
+        "matchedProtectedRuleIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasonCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protectionReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendedAction": {
+          "type": "string"
+        },
+        "uninstallSafety": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "uninstallQueue": {
+      "title": "Uninstall Queue",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queueId",
+        "productName",
+        "createdAtUtc",
+        "selectedApps",
+        "policy"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "queueId": {
+          "type": "string"
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "selectedApps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uninstallQueueItem"
+          }
+        },
+        "blockedApps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "missingApps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "uninstallQueueItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "displayName",
+        "officialUninstallFirst",
+        "leftoverScan",
+        "risk",
+        "requiresElevation"
+      ],
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "primaryClassification": {
+          "type": "string"
+        },
+        "officialUninstallFirst": {
+          "type": "boolean"
+        },
+        "leftoverScan": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "requiresElevation": {
+          "type": "boolean"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "officialUninstallCommandPreview": {
+      "title": "Official Uninstall Command Preview",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "dryRun",
+        "status",
+        "commands",
+        "summary"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "apps.previewOfficialUninstall"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dryRun": {
+          "const": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "partial",
+            "failed"
+          ]
+        },
+        "policyPath": {
+          "type": "string"
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/officialUninstallCommand"
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "officialUninstallCommand": {
+      "title": "Official Uninstall Command",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "displayName",
+        "sourceType",
+        "commandType",
+        "executionAllowed",
+        "executionMode"
+      ],
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "primaryClassification": {
+          "type": "string"
+        },
+        "commandType": {
+          "type": "string"
+        },
+        "rawCommand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "arguments": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quietRawCommand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quietExecutable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quietArguments": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hasQuietCommand": {
+          "type": "boolean"
+        },
+        "requiresElevation": {
+          "type": "boolean"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "executionAllowed": {
+          "const": false
+        },
+        "executionMode": {
+          "const": "preview-only"
+        },
+        "rollbackPrerequisites": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "leftoverScanResult": {
+      "title": "Leftover Scan Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scanId",
+        "productName",
+        "appId",
+        "displayName",
+        "capturedAtUtc",
+        "items"
+      ],
+      "properties": {
+        "scanId": {
+          "type": "string"
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "classification": {
+          "$ref": "#/$defs/appClassificationItem"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/leftoverItem"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "leftoverItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "type",
+        "target",
+        "confidence",
+        "risk",
+        "defaultSelected",
+        "protected"
+      ],
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "file",
+            "folder",
+            "service",
+            "scheduledTask",
+            "startupEntry",
+            "registryKey",
+            "registryValue"
+          ]
+        },
+        "target": {
+          "type": "string"
+        },
+        "matchedBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "defaultSelected": {
+          "type": "boolean"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "cleanupDeletionManifest": {
+      "title": "Cleanup Deletion Manifest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestId",
+        "productName",
+        "appId",
+        "createdAtUtc",
+        "dryRun",
+        "items",
+        "rollback"
+      ],
+      "properties": {
+        "manifestId": {
+          "type": "string"
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "executionMode": {
+          "type": "string",
+          "enum": [
+            "preview-only"
+          ]
+        },
+        "sourceScanId": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/leftoverItem"
+          }
+        },
+        "excludedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "rollback": {
+          "$ref": "#/$defs/cleanupRollbackExportMetadata"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "cleanupRollbackExportMetadata": {
+      "title": "Cleanup Rollback And Export Metadata",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rollbackSupported"
+      ],
+      "properties": {
+        "backupRoot": {
+          "type": "string"
+        },
+        "rollbackActionId": {
+          "type": "string"
+        },
+        "rollbackSupported": {
+          "type": "boolean"
+        },
+        "restorePoint": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "fileBackupRequirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cleanupBackupRequirement"
+          }
+        },
+        "registryExportRequirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cleanupBackupRequirement"
+          }
+        },
+        "serviceStateBackupRequirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cleanupBackupRequirement"
+          }
+        },
+        "scheduledTaskBackupRequirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cleanupBackupRequirement"
+          }
+        },
+        "startupEntryBackupRequirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cleanupBackupRequirement"
+          }
+        },
+        "manifestExportRequired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cleanupBackupRequirement": {
+      "title": "Cleanup Backup Requirement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "type",
+        "target",
+        "mode",
+        "required",
+        "completed",
+        "previewOnly"
+      ],
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "previewOnly": {
+          "type": "boolean"
+        }
+      }
+    },
+    "driverHardwareInventory": {
+      "title": "Driver Hardware Inventory",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "machine",
+        "gpus"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "machine": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "cpu": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "gpus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "networkAdapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "installedDrivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/installedDriverInfo"
+          }
+        }
+      }
+    },
+    "installedDriverInfo": {
+      "title": "Installed Driver Info",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driverId",
+        "deviceName",
+        "vendor",
+        "deviceClass",
+        "version"
+      ],
+      "properties": {
+        "driverId": {
+          "type": "string"
+        },
+        "deviceName": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "deviceClass": {
+          "type": "string"
+        },
+        "hardwareIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "infName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "driverRecommendationCatalog": {
+      "title": "Driver Recommendation Catalog",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "catalogVersion",
+        "recommendations"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "catalogVersion": {
+          "type": "string"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recommendations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/driverRecommendation"
+          }
+        },
+        "manualInstallGate": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "driverRecommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driverId",
+        "vendor",
+        "version",
+        "hardwareMatches",
+        "gameTags",
+        "stability",
+        "manualInstallRequired"
+      ],
+      "properties": {
+        "driverId": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "packagePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hardwareMatches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "gameTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stability": {
+          "type": "string",
+          "enum": [
+            "tested",
+            "recommended",
+            "candidate",
+            "avoid",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        },
+        "manualInstallRequired": {
+          "type": "boolean"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        }
+      }
+    },
+    "gameTagMetadata": {
+      "title": "Game Tag Metadata",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gameId",
+        "displayName",
+        "processNames",
+        "optimizationFocus"
+      ],
+      "properties": {
+        "gameId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "launcherIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "processNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "optimizationFocus": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "nvidiaProfileCatalogEntry": {
+      "title": "NVIDIA Profile Catalog Entry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profileId",
+        "name",
+        "sourceFile",
+        "status",
+        "manualApplyRequired",
+        "risk"
+      ],
+      "properties": {
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "vendor": {
+          "const": "NVIDIA"
+        },
+        "sourceFile": {
+          "type": "string"
+        },
+        "sourceTool": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "seed-profile",
+            "tested",
+            "candidate",
+            "retired"
+          ]
+        },
+        "supportedHardware": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "gameTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "manualApplyRequired": {
+          "type": "boolean"
+        },
+        "benchmarkStatus": {
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/riskLevel"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "telemetrySnapshot": {
+      "title": "Telemetry Snapshot",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshotId",
+        "productName",
+        "capturedAtUtc",
+        "context",
+        "metrics"
+      ],
+      "properties": {
+        "snapshotId": {
+          "type": "string"
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "processes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processItem"
+          }
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "reportSummary": {
+      "title": "Report Summary",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reportId",
+        "productName",
+        "generatedAtUtc",
+        "title",
+        "scenario",
+        "findings",
+        "recommendedActions"
+      ],
+      "properties": {
+        "reportId": {
+          "type": "string"
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "generatedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string"
+        },
+        "scenario": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "metricSummary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "recommendedActions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

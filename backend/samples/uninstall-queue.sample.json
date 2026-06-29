@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "queueId": "sample-uninstall-queue-20260628-100000",
+  "productName": "Roo Industries Optimization Suite",
+  "createdAtUtc": "2026-06-28T10:00:00Z",
+  "dryRun": true,
+  "status": "preview",
+  "selectedApps": [
+    {
+      "appId": "registry:overwolf",
+      "displayName": "Overwolf",
+      "officialUninstallFirst": true,
+      "leftoverScan": true,
+      "risk": "medium",
+      "requiresElevation": true,
+      "warnings": [
+        {
+          "code": "OVERLAY_APP",
+          "message": "This app may be tied to overlays or game companion widgets.",
+          "severity": "warning",
+          "source": "apps.uninstallQueue",
+          "target": "registry:overwolf",
+          "blocking": false,
+          "recommendedAction": "Close games and launchers before removing it.",
+          "details": null
+        }
+      ]
+    },
+    {
+      "appId": "registry:intel-driver-support-assistant",
+      "displayName": "Intel Driver & Support Assistant",
+      "officialUninstallFirst": true,
+      "leftoverScan": true,
+      "risk": "low",
+      "requiresElevation": true,
+      "warnings": []
+    }
+  ],
+  "blockedApps": [
+    {
+      "appId": "registry:microsoft-edge-webview2-runtime",
+      "displayName": "Microsoft Edge WebView2 Runtime",
+      "primaryClassification": "store-webview2",
+      "risk": "protected",
+      "protected": true,
+      "reason": "Shared Windows runtime. Store, Xbox, Gaming Services, WebView2, and desktop apps can depend on it.",
+      "matchedProtectedRuleIds": [
+        "store-webview2-components"
+      ]
+    }
+  ],
+  "missingApps": [],
+  "policy": {
+    "confirmationRequired": true,
+    "restorePointRequired": true,
+    "leftoverDeletionDefault": "preview-only",
+    "protectedAppsBlocked": true,
+    "officialUninstallOnlyUntilConfirmed": true,
+    "confirmedExecutionEnabled": false,
+    "dryRunWritesState": false
+  },
+  "summary": {
+    "requestedCount": 3,
+    "selectedCount": 2,
+    "blockedCount": 1,
+    "missingCount": 0,
+    "willRunUninstallers": false,
+    "willDeleteLeftovers": false
+  },
+  "warnings": [
+    {
+      "code": "QUEUE_PREVIEW_ONLY",
+      "message": "Cleanup list built without running uninstallers or deleting leftovers.",
+      "severity": "info",
+      "source": "apps.uninstallQueue",
+      "target": null,
+      "blocking": false,
+      "recommendedAction": "Review the official uninstall path before approving cleanup.",
+      "details": null
+    }
+  ],
+  "errors": []
+}

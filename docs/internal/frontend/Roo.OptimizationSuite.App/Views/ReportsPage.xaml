@@ -1,0 +1,73 @@
+<Page
+    x:Class="Roo.OptimizationSuite.Views.ReportsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Roo.OptimizationSuite.ViewModels"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <Page.Resources>
+        <DataTemplate x:Key="BaselineTileTemplate" x:DataType="vm:MetricTile">
+            <StackPanel Spacing="6" Padding="0,0,18,0">
+                <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" LineHeight="26" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+            </StackPanel>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="{StaticResource RooPageMargin}">
+
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <ProgressRing IsActive="True" Width="40" Height="40" />
+            <TextBlock Text="Reading this PC" Foreground="{StaticResource RooTextMutedBrush}" />
+        </StackPanel>
+
+        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
+                Style="{StaticResource CardBorderStyle}"
+                Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}"
+                Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="26" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Before &amp; After" Style="{StaticResource PageTitleTextBlockStyle}" Foreground="{StaticResource RooDisplayTextBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="14" LineHeight="20" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Right now (your baseline)" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Baseline}" ItemTemplate="{StaticResource BaselineTileTemplate}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="170" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="After a tune" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="40"
+                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                        <StackPanel Spacing="10" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE9D9;" FontSize="26" Foreground="{StaticResource RooTextMutedBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind ViewModel.EmptyNote, Mode=OneWay}" TextWrapping="Wrap" TextAlignment="Center"
+                                       MaxWidth="520" Foreground="{StaticResource RooTextMutedBrush}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

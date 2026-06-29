@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "contracts": [
+    {
+      "name": "common action envelope",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "all",
+      "summary": "Shared preview, apply, rollback, warning, error, and log wrapper for backend actions.",
+      "status": "draft"
+    },
+    {
+      "name": "action preview",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionPreview",
+      "workflow": "all",
+      "summary": "Single proposed change shown before an action applies.",
+      "status": "draft"
+    },
+    {
+      "name": "action result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionResult",
+      "workflow": "all",
+      "summary": "Structured outcome for previews, applies, partial applies, failures, and rollbacks.",
+      "status": "draft"
+    },
+    {
+      "name": "progress event",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/progressEvent",
+      "workflow": "all",
+      "summary": "Incremental status event for long-running backend work.",
+      "status": "draft"
+    },
+    {
+      "name": "error and warning model",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/issueModel",
+      "workflow": "all",
+      "summary": "User-facing warning and error structure with blocking state and remediation guidance.",
+      "status": "draft"
+    },
+    {
+      "name": "backup and rollback metadata",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/backupRollbackMetadata",
+      "workflow": "all",
+      "summary": "Saved state, restore-point status, and rollback action metadata.",
+      "status": "draft"
+    },
+    {
+      "name": "protected item model",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/protectedItemModel",
+      "workflow": "all",
+      "summary": "Protected processes, services, drivers, apps, tasks, devices, and paths.",
+      "status": "draft"
+    },
+    {
+      "name": "protected app catalog",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/protectedAppCatalog",
+      "workflow": "uninstall cleanup",
+      "summary": "Protected app and dependency rules blocked by bulk uninstall previews.",
+      "status": "draft"
+    },
+    {
+      "name": "process inventory",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processInventory",
+      "workflow": "process profiles",
+      "summary": "Read-only process list with workload category, memory pressure, and safety classification.",
+      "status": "draft"
+    },
+    {
+      "name": "process classification",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processClassification",
+      "workflow": "process profiles",
+      "summary": "Game-session-aware process classification with protected, companion, target, safe-candidate, and demotion-candidate buckets.",
+      "status": "draft"
+    },
+    {
+      "name": "performance profile",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/performanceProfile",
+      "workflow": "process profiles",
+      "summary": "Versioned priority, affinity, demotion, telemetry, and rollback profile.",
+      "status": "draft"
+    },
+    {
+      "name": "game session profile",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processSessionProfile",
+      "workflow": "process profiles",
+      "summary": "Overwatch, OBS, Discord, and stream-focused profile shape.",
+      "status": "draft"
+    },
+    {
+      "name": "process rule preview/apply result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processRulePreviewApplyResult",
+      "workflow": "process profiles",
+      "summary": "Per-rule preview or apply outcome for process scheduling changes.",
+      "status": "draft"
+    },
+    {
+      "name": "process profile backup manifest",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processProfileBackupManifest",
+      "workflow": "process profiles",
+      "summary": "Saved original process priority state used for rollback after confirmed profile apply.",
+      "status": "draft"
+    },
+    {
+      "name": "uninstall app inventory",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/uninstallAppInventory",
+      "workflow": "uninstall cleanup",
+      "summary": "Installed application list from registry, MSI, Appx, winget, or manual catalog sources.",
+      "status": "draft"
+    },
+    {
+      "name": "app classification result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/appClassificationResult",
+      "workflow": "uninstall cleanup",
+      "summary": "Read-only classification of installed apps into normal, launcher, overlay, vendor, runtime, driver, security, Store/WebView2, anti-cheat, OBS/Discord dependency, and protected Windows buckets.",
+      "status": "draft"
+    },
+    {
+      "name": "uninstall queue",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/uninstallQueue",
+      "workflow": "uninstall cleanup",
+      "summary": "Selected apps and policy gates for official uninstall followed by leftover scanning.",
+      "status": "draft"
+    },
+    {
+      "name": "official uninstall command preview",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/officialUninstallCommandPreview",
+      "workflow": "uninstall cleanup",
+      "summary": "Official uninstall command metadata returned without executing uninstallers.",
+      "status": "draft"
+    },
+    {
+      "name": "leftover scan result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/leftoverScanResult",
+      "workflow": "uninstall cleanup",
+      "summary": "Preview of files, folders, services, tasks, startup entries, and registry references.",
+      "status": "draft"
+    },
+    {
+      "name": "cleanup deletion manifest",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cleanupDeletionManifest",
+      "workflow": "uninstall cleanup",
+      "summary": "Confirmed cleanup manifest with rollback/export metadata.",
+      "status": "draft"
+    },
+    {
+      "name": "cleanup rollback/export metadata",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cleanupRollbackExportMetadata",
+      "workflow": "uninstall cleanup",
+      "summary": "File backup, registry export, service state, scheduled task, startup entry, restore point, and rollback metadata for cleanup manifests.",
+      "status": "draft"
+    },
+    {
+      "name": "driver hardware inventory",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverHardwareInventory",
+      "workflow": "drivers and profiles",
+      "summary": "Read-only machine, CPU, memory, GPU, and network hardware inventory.",
+      "status": "draft"
+    },
+    {
+      "name": "installed driver info",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/installedDriverInfo",
+      "workflow": "drivers and profiles",
+      "summary": "Installed device driver metadata for recommendation matching.",
+      "status": "draft"
+    },
+    {
+      "name": "driver recommendation catalog",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverRecommendationCatalog",
+      "workflow": "drivers and profiles",
+      "summary": "Game-aware and hardware-aware driver recommendation entries.",
+      "status": "draft"
+    },
+    {
+      "name": "game tag metadata",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTagMetadata",
+      "workflow": "drivers and profiles",
+      "summary": "Game process names, launchers, and optimization focus tags.",
+      "status": "draft"
+    },
+    {
+      "name": "NVIDIA profile catalog entry",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/nvidiaProfileCatalogEntry",
+      "workflow": "drivers and profiles",
+      "summary": "NVIDIA Profile Inspector profile metadata and manual-apply gate.",
+      "status": "draft"
+    },
+    {
+      "name": "telemetry snapshot",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/telemetrySnapshot",
+      "workflow": "telemetry and reports",
+      "summary": "Point-in-time performance, process, provider, and quality data.",
+      "status": "draft"
+    },
+    {
+      "name": "report summary",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/reportSummary",
+      "workflow": "telemetry and reports",
+      "summary": "User-facing findings, metrics, recommended actions, and artifacts.",
+      "status": "draft"
+    }
+  ]
+}

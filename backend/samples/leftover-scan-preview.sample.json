@@ -1,0 +1,174 @@
+{
+  "scanId": "sample-leftover-overwolf-20260628-100000",
+  "productName": "Roo Industries Optimization Suite",
+  "schemaVersion": 1,
+  "appId": "registry:overwolf",
+  "displayName": "Overwolf",
+  "capturedAtUtc": "2026-06-28T10:00:00Z",
+  "dryRun": true,
+  "classification": {
+    "appId": "registry:overwolf",
+    "displayName": "Overwolf",
+    "publisher": "Overwolf Ltd.",
+    "sourceType": "registry",
+    "packageId": "Overwolf.Overwolf",
+    "categories": [
+      "overlay",
+      "startup-heavy",
+      "game-helper"
+    ],
+    "primaryClassification": "overlay",
+    "risk": "medium",
+    "protected": false,
+    "blockByDefault": false,
+    "matchedProtectedRuleIds": [],
+    "reasonCodes": [
+      "APP_CLASSIFIED"
+    ],
+    "protectionReasons": [],
+    "recommendedAction": "Can be added to cleanup review. Official uninstall comes first.",
+    "uninstallSafety": {
+      "officialUninstallPreviewOnly": true,
+      "queueAllowedByDefault": true,
+      "leftoverDeletionPreviewOnly": true,
+      "confirmedExecutionEnabled": false
+    }
+  },
+  "summary": {
+    "itemCount": 8,
+    "highConfidenceCount": 4,
+    "mediumConfidenceCount": 3,
+    "lowConfidenceCount": 1,
+    "defaultSelectedCount": 3,
+    "protectedCount": 2,
+    "estimatedRecoverableBytes": 805306368,
+    "deletionMode": "preview-only"
+  },
+  "items": [
+    {
+      "itemId": "folder:programfiles-overwolf",
+      "type": "folder",
+      "target": "C:\\Program Files (x86)\\Overwolf",
+      "matchedBy": [
+        "installLocation",
+        "publisher",
+        "signedPath"
+      ],
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true,
+      "protected": false,
+      "reason": "Install folder is still sitting there after the app uninstall path."
+    },
+    {
+      "itemId": "folder:localappdata-overwolf",
+      "type": "folder",
+      "target": "C:\\Users\\Client\\AppData\\Local\\Overwolf",
+      "matchedBy": [
+        "publisher",
+        "productName",
+        "knownAppDataPath"
+      ],
+      "confidence": "high",
+      "risk": "low",
+      "defaultSelected": true,
+      "protected": false,
+      "reason": "User cache and app data left by the selected app."
+    },
+    {
+      "itemId": "task:overwolf-updater",
+      "type": "scheduledTask",
+      "target": "\\Overwolf\\Overwolf Updater",
+      "matchedBy": [
+        "taskPath",
+        "publisher"
+      ],
+      "confidence": "high",
+      "risk": "medium",
+      "defaultSelected": true,
+      "protected": false,
+      "reason": "Updater task left by the selected app."
+    },
+    {
+      "itemId": "service:overwolf-updater",
+      "type": "service",
+      "target": "OverwolfUpdater",
+      "matchedBy": [
+        "serviceName",
+        "binaryPath",
+        "publisher"
+      ],
+      "confidence": "high",
+      "risk": "medium",
+      "defaultSelected": false,
+      "protected": false,
+      "reason": "Service needs backup and explicit approval before removal."
+    },
+    {
+      "itemId": "registry:hklcu-overwolf",
+      "type": "registryKey",
+      "target": "HKCU\\Software\\Overwolf",
+      "matchedBy": [
+        "vendorKey"
+      ],
+      "confidence": "medium",
+      "risk": "medium",
+      "defaultSelected": false,
+      "protected": false,
+      "reason": "Registry key matches the app vendor. Export first."
+    },
+    {
+      "itemId": "startup:overwolf",
+      "type": "startupEntry",
+      "target": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Overwolf",
+      "matchedBy": [
+        "runKeyValue",
+        "binaryPath"
+      ],
+      "confidence": "medium",
+      "risk": "medium",
+      "defaultSelected": false,
+      "protected": false,
+      "reason": "Startup entry should wait until the official uninstall is done."
+    },
+    {
+      "itemId": "folder:shared-cef-cache",
+      "type": "folder",
+      "target": "C:\\Users\\Client\\AppData\\Local\\CEF",
+      "matchedBy": [
+        "fuzzyName"
+      ],
+      "confidence": "low",
+      "risk": "high",
+      "defaultSelected": false,
+      "protected": true,
+      "reason": "Shared Chromium cache path. Other apps may use it."
+    },
+    {
+      "itemId": "runtime:vc-redist",
+      "type": "registryKey",
+      "target": "HKLM\\Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
+      "matchedBy": [
+        "dependency"
+      ],
+      "confidence": "medium",
+      "risk": "protected",
+      "defaultSelected": false,
+      "protected": true,
+      "reason": "Shared runtime. Keep it protected."
+    }
+  ],
+  "warnings": [
+    {
+      "code": "LEFTOVER_SCAN_PREVIEW_ONLY",
+      "message": "Leftover check found candidates without deleting files, folders, services, tasks, startup entries, or registry keys.",
+      "severity": "info",
+      "source": "apps.leftoverScan",
+      "target": "registry:overwolf",
+      "blocking": false,
+      "recommendedAction": "Review candidates, backups, and restore-point needs before cleanup.",
+      "details": null
+    }
+  ],
+  "errors": []
+}

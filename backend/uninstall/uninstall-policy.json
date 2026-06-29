@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "policyId": "uninstall-cleanup-preview-mvp",
+  "name": "Uninstall And Cleanup Preview MVP Policy",
+  "previewOnly": true,
+  "confirmedExecutionEnabled": false,
+  "blockProtectedAppsByDefault": true,
+  "allowProtectedOverrideInMvp": false,
+  "officialUninstall": {
+    "previewOnly": true,
+    "executeInMvp": false,
+    "preferOfficialUninstallString": true,
+    "showQuietCommandWhenPresent": true,
+    "requireExplicitConfirmationBeforeFutureExecution": true,
+    "restorePointRequiredBeforeFutureExecution": true,
+    "blockedCommandFamilies": [
+      "winget uninstall",
+      "msiexec uninstall",
+      "remove-appxpackage",
+      "third-party uninstaller automation",
+      "driver cleanup tools"
+    ]
+  },
+  "queue": {
+    "officialUninstallFirst": true,
+    "leftoverScanAfterOfficialUninstall": true,
+    "requiresElevation": true,
+    "confirmationRequired": true,
+    "protectedAppsBlocked": true,
+    "maxBatchSize": 25
+  },
+  "leftoverScan": {
+    "previewOnly": true,
+    "allowFuzzySharedPathDeletion": false,
+    "metadataSignals": [
+      "installLocation",
+      "publisher",
+      "productGuid",
+      "packageId",
+      "knownAppDataPath",
+      "serviceReference",
+      "scheduledTaskReference",
+      "startupReference"
+    ],
+    "defaultSelectedTypes": [
+      "folder",
+      "file"
+    ],
+    "defaultSelectedConfidence": [
+      "high"
+    ]
+  },
+  "cleanupDeletion": {
+    "previewOnly": true,
+    "allowDeletionInMvp": false,
+    "requireFileBackup": true,
+    "requireRegistryExport": true,
+    "requireServiceStateBackup": true,
+    "requireScheduledTaskExport": true,
+    "requireStartupEntryExport": true,
+    "rollbackActionId": "apps.rollbackCleanup",
+    "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
+  },
+  "state": {
+    "repoStateRoot": "backend\\state",
+    "dryRunWritesState": false
+  }
+}

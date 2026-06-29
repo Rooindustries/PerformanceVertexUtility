@@ -1,0 +1,184 @@
+param(
+    [switch]$IncludeWinget
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Convert-ToStableId {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return 'unknown' }
+    $id = $Value.ToLowerInvariant() -replace '[^a-z0-9]+','-'
+    return $id.Trim('-')
+}
+
+function Convert-EstimatedSizeBytes {
+    param([object]$EstimatedSizeKb)
+    if ($null -eq $EstimatedSizeKb) { return $null }
+    try { return [uint64]$EstimatedSizeKb * 1KB } catch { return $null }
+}
+
+function Get-AppRisk {
+    param([string]$Name, [string]$Publisher)
+    $text = (($Name + ' ' + $Publisher) -as [string]).ToLowerInvariant()
+    if ($text -match 'visual c\+\+|redistributable|\.net|directx|webview2|windows desktop runtime|microsoft store|windows app runtime|graphics driver|audio driver|network driver|defender|security') { return 'protected' }
+    if ($text -match 'driver|nvidia|amd|intel|realtek|tailscale|vpn|anticheat|anti-cheat|battleye|easy anti-cheat|vanguard') { return 'medium' }
+    if ($text -match 'overlay|overwolf|afterburner|rtss|uninstaller|cleanup') { return 'medium' }
+    return 'low'
+}
+
+function Get-AppCategories {
+    param([string]$Name, [string]$Publisher)
+    $text = (($Name + ' ' + $Publisher) -as [string]).ToLowerInvariant()
+    $tags = New-Object System.Collections.Generic.List[string]
+    if ($text -match 'steam|battle\.net|epic games|riot|ubisoft|ea app|launcher') { $tags.Add('launcher') }
+    if ($text -match 'obs|streamlabs|capture') { $tags.Add('capture') }
+    if ($text -match 'discord|teamspeak|voice') { $tags.Add('voice-chat') }
+    if ($text -match 'overwolf|overlay|geforce experience|nvidia app|rtss|afterburner') { $tags.Add('overlay') }
+    if ($text -match 'intel|nvidia|amd|asus|realtek|samsung|logitech|razer') { $tags.Add('vendor-tool') }
+    if ($text -match 'visual c\+\+|redistributable|\.net|directx|runtime|webview2') { $tags.Add('runtime') }
+    if ($tags.Count -eq 0) { $tags.Add('application') }
+    return @($tags.ToArray() | Select-Object -Unique)
+}
+
+function Get-StartupImpact {
+    param([string]$Name, [string]$Publisher)
+    $text = (($Name + ' ' + $Publisher) -as [string]).ToLowerInvariant()
+    if ($text -match 'steam|epic|battle\.net|riot|discord|overwolf|teams|onedrive') { return 'high' }
+    if ($text -match 'nvidia app|geforce|intel|asus|realtek|updater|launcher|overlay') { return 'medium' }
+    if ($text -match 'runtime|redistributable|webview2|\.net|directx') { return 'none' }
+    return 'unknown'
+}
+
+function New-AppRecord {
+    param([object]$Item, [string]$SourceType)
+    $name = [string]$Item.DisplayName
+    $publisher = if ($Item.Publisher) { [string]$Item.Publisher } else { $null }
+    $risk = Get-AppRisk $name $publisher
+    $protected = ($risk -eq 'protected')
+    $stableId = Convert-ToStableId ($SourceType + ':' + $name + ':' + $Item.PSChildName)
+    [pscustomobject]@{
+        appId = "$SourceType`:$stableId"
+        displayName = $name
+        publisher = $publisher
+        version = if ($Item.DisplayVersion) { [string]$Item.DisplayVersion } else { $null }
+        installLocation = if ($Item.InstallLocation) { [string]$Item.InstallLocation } else { $null }
+        uninstallString = if ($Item.UninstallString) { [string]$Item.UninstallString } else { $null }
+        quietUninstallString = if ($Item.QuietUninstallString) { [string]$Item.QuietUninstallString } else { $null }
+        sourceType = if ($SourceType -eq 'registry' -and (($Item.WindowsInstaller -eq 1) -or ([string]$Item.UninstallString -match 'MsiExec'))) { 'msi' } else { $SourceType }
+        packageId = if ($Item.PSChildName) { [string]$Item.PSChildName } else { $null }
+        estimatedSizeBytes = Convert-EstimatedSizeBytes $Item.EstimatedSize
+        installDate = if ($Item.InstallDate) { [string]$Item.InstallDate } else { $null }
+        categories = @(Get-AppCategories $name $publisher)
+        risk = $risk
+        protected = $protected
+        protectionReasons = if ($protected) { @('Shared runtime, driver-adjacent component, security component, or protected Windows dependency') } else { @() }
+        startupImpact = Get-StartupImpact $name $publisher
+    }
+}
+
+$apps = New-Object System.Collections.Generic.List[object]
+$sources = New-Object System.Collections.Generic.List[string]
+
+$registryRoots = @(
+    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
+
+foreach ($root in $registryRoots) {
+    $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue | Where-Object { -not [string]::IsNullOrWhiteSpace($_.DisplayName) })
+    if ($items.Count -gt 0) { $sources.Add('registry') | Out-Null }
+    foreach ($item in $items) {
+        $apps.Add((New-AppRecord $item 'registry')) | Out-Null
+    }
+}
+
+if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+    $appxItems = @(Get-AppxPackage -ErrorAction SilentlyContinue)
+    if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
+    foreach ($pkg in $appxItems) {
+        $risk = Get-AppRisk $pkg.Name $pkg.Publisher
+        $protected = ($risk -eq 'protected' -or $pkg.Publisher -match 'Microsoft')
+        $apps.Add([pscustomobject]@{
+            appId = 'appx:' + (Convert-ToStableId $pkg.PackageFullName)
+            displayName = [string]$pkg.Name
+            publisher = [string]$pkg.Publisher
+            version = [string]$pkg.Version
+            installLocation = if ($pkg.InstallLocation) { [string]$pkg.InstallLocation } else { $null }
+            uninstallString = $null
+            quietUninstallString = $null
+            sourceType = 'appx'
+            packageId = [string]$pkg.PackageFamilyName
+            estimatedSizeBytes = $null
+            installDate = $null
+            categories = @(Get-AppCategories $pkg.Name $pkg.Publisher)
+            risk = if ($protected) { 'protected' } else { $risk }
+            protected = $protected
+            protectionReasons = if ($protected) { @('Appx package is protected by default until dependency impact is known') } else { @() }
+            startupImpact = Get-StartupImpact $pkg.Name $pkg.Publisher
+        }) | Out-Null
+    }
+}
+
+if ($IncludeWinget) {
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        $sources.Add('winget') | Out-Null
+        try {
+            $wingetPath = [string]$winget.Source
+            $lines = @(& $wingetPath list --accept-source-agreements --disable-interactivity 2>$null)
+            foreach ($line in $lines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                if ($line -match '^\s*Name\s+Id\s+Version') { continue }
+                if ($line -match '^\s*-{3,}') { continue }
+                $parts = @($line.Trim() -split '\s{2,}')
+                if ($parts.Count -lt 3) { continue }
+                $name = $parts[0]
+                $packageId = $parts[1]
+                $version = $parts[2]
+                $risk = Get-AppRisk $name ''
+                $apps.Add([pscustomobject]@{
+                    appId = 'winget:' + (Convert-ToStableId $packageId)
+                    displayName = $name
+                    publisher = $null
+                    version = $version
+                    installLocation = $null
+                    uninstallString = $null
+                    quietUninstallString = $null
+                    sourceType = 'winget'
+                    packageId = $packageId
+                    estimatedSizeBytes = $null
+                    installDate = $null
+                    categories = @(Get-AppCategories $name '')
+                    risk = $risk
+                    protected = ($risk -eq 'protected')
+                    protectionReasons = if ($risk -eq 'protected') { @('Protected by runtime or driver classification') } else { @() }
+                    startupImpact = Get-StartupImpact $name ''
+                }) | Out-Null
+            }
+        } catch {
+        }
+    }
+}
+
+$appArray = @($apps.ToArray() | Sort-Object displayName, sourceType -Unique)
+$sources = @($sources.ToArray() + @($appArray | Select-Object -ExpandProperty sourceType) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+$summary = [pscustomobject]@{
+    appCount = $appArray.Count
+    normalAppCount = @($appArray | Where-Object { $_.risk -in @('safe','low') }).Count
+    launcherCount = @($appArray | Where-Object { $_.categories -contains 'launcher' }).Count
+    overlayCount = @($appArray | Where-Object { $_.categories -contains 'overlay' }).Count
+    vendorToolCount = @($appArray | Where-Object { $_.categories -contains 'vendor-tool' }).Count
+    protectedRuntimeCount = @($appArray | Where-Object { $_.protected }).Count
+    startupHeavyCount = @($appArray | Where-Object { $_.startupImpact -eq 'high' }).Count
+    estimatedSizeBytes = [uint64](($appArray | Where-Object { $null -ne $_.estimatedSizeBytes } | Measure-Object estimatedSizeBytes -Sum).Sum)
+}
+
+[pscustomobject]@{
+    schemaVersion = 1
+    productName = 'Roo Industries Optimization Suite'
+    capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+    summary = $summary
+    sources = @($sources)
+    apps = $appArray
+} | ConvertTo-Json -Depth 8

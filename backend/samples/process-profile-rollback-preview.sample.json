@@ -1,0 +1,166 @@
+{
+  "actionId": "performance.rollbackProfile",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "sample-process-profile-rollback-20260628-100000",
+  "dryRun": true,
+  "risk": "low",
+  "requiresElevation": false,
+  "status": "preview",
+  "preview": [
+    {
+      "previewId": "rollback-overwatch-18344",
+      "type": "processPriorityRollback",
+      "target": "Overwatch.exe:18344",
+      "displayName": "Overwatch.exe",
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "currentPriorityClass": "AboveNormal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "restorePriority",
+      "ruleId": "boost-foreground-game",
+      "reason": "Restore the original process priority class captured before apply.",
+      "reasonCodes": [
+        "ROLLBACK_PRIORITY_RESTORE"
+      ],
+      "classification": "rollbackCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "AboveNormal"
+      },
+      "proposedState": {
+        "action": "restorePriority",
+        "priorityClass": "Normal",
+        "reason": "Restore the original process priority class captured before apply."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "rollback-safety"
+        ]
+      },
+      "rollback": null
+    },
+    {
+      "previewId": "rollback-battle-net-6480",
+      "type": "processPriorityRollback",
+      "target": "Battle.net.exe:6480",
+      "displayName": "Battle.net.exe",
+      "processId": 6480,
+      "processName": "Battle.net.exe",
+      "executablePath": "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe",
+      "currentPriorityClass": "BelowNormal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "restorePriority",
+      "ruleId": "demote-launchers-updaters",
+      "reason": "Restore the original process priority class captured before apply.",
+      "reasonCodes": [
+        "ROLLBACK_PRIORITY_RESTORE"
+      ],
+      "classification": "rollbackCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "BelowNormal"
+      },
+      "proposedState": {
+        "action": "restorePriority",
+        "priorityClass": "Normal",
+        "reason": "Restore the original process priority class captured before apply."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "rollback-safety"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "backup": {
+    "backupId": "sample-process-profile-backup-20260628-100000",
+    "scope": "process-priority-profile",
+    "createdAtUtc": "2026-06-28T10:00:00Z",
+    "location": "backend\\samples\\process-profile-backup.sample.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-priority",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "processPriority",
+        "target": "Overwatch.exe:18344",
+        "originalState": {
+          "priorityClass": "Normal",
+          "proposedPriorityClass": "AboveNormal"
+        }
+      },
+      {
+        "type": "processPriority",
+        "target": "Battle.net.exe:6480",
+        "originalState": {
+          "priorityClass": "Normal",
+          "proposedPriorityClass": "BelowNormal"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.rollbackProfile",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "rollback-20260628-100000",
+    "status": "preview",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-28T10:00:00Z",
+    "summary": "Rollback preview completed. No process priority changes were applied.",
+    "changedItems": [],
+    "skippedItems": [],
+    "metricsBefore": null,
+    "metricsAfter": null,
+    "artifacts": [
+      {
+        "type": "processProfileBackup",
+        "path": "backend\\samples\\process-profile-backup.sample.json"
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "ROLLBACK_PREVIEW_ONLY",
+      "message": "Rollback preview did not change any process because -ConfirmApply was omitted.",
+      "severity": "info",
+      "source": "performance.rollback",
+      "target": "backend\\samples\\process-profile-backup.sample.json",
+      "blocking": false,
+      "recommendedAction": "Rerun with -ConfirmApply only after reviewing the rollback preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-28T10:00:00Z",
+      "level": "info",
+      "message": "Rollback preview completed. No process priority changes were applied."
+    }
+  ]
+}

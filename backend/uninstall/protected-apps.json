@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "catalogId": "protected-apps",
+  "name": "Protected Uninstall App Catalog",
+  "description": "Applications and dependency classes blocked or manual-gated by uninstall and cleanup preview workflows.",
+  "defaultPolicy": {
+    "blockProtectedAppsByDefault": true,
+    "allowProtectedOverrideInMvp": false,
+    "previewOnly": true
+  },
+  "protectedApps": [
+    {
+      "itemId": "microsoft-shared-runtimes",
+      "type": "application",
+      "appType": "shared-runtime",
+      "name": "Microsoft shared runtimes",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*Visual C++*Redistributable*",
+          "*Microsoft .NET*",
+          "*.NET Runtime*",
+          "*Windows Desktop Runtime*",
+          "*DirectX*Runtime*",
+          "*Windows App Runtime*"
+        ],
+        "publisherPatterns": [
+          "Microsoft*"
+        ],
+        "categoryTags": [
+          "runtime",
+          "shared-dependency"
+        ]
+      },
+      "reason": "Shared runtimes are used by games, launchers, OBS plugins, Discord, and desktop apps.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "runtime",
+        "dependency",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "store-webview2-components",
+      "type": "application",
+      "appType": "store-webview2",
+      "name": "Store and WebView2 components",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*WebView2*",
+          "*Microsoft Store*",
+          "*Gaming Services*",
+          "*Xbox*",
+          "*Microsoft.UI.Xaml*",
+          "*VCLibs*"
+        ],
+        "packageIdPatterns": [
+          "Microsoft.EdgeWebView2Runtime",
+          "Microsoft.GamingApp",
+          "Microsoft.Xbox*",
+          "Microsoft.StorePurchaseApp",
+          "Microsoft.WindowsStore",
+          "Microsoft.VCLibs*",
+          "Microsoft.UI.Xaml*"
+        ],
+        "publisherPatterns": [
+          "Microsoft*"
+        ],
+        "categoryTags": [
+          "store-app",
+          "windows-app-dependency",
+          "gaming-component"
+        ]
+      },
+      "reason": "Store, Xbox, Gaming Services, and WebView2 packages can be shared Windows app dependencies.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "store",
+        "webview2",
+        "windows-app-dependency",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "windows-security-network",
+      "type": "application",
+      "appType": "security-network-component",
+      "name": "Security, firewall, VPN, and network components",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*Defender*",
+          "*Security*",
+          "*Firewall*",
+          "*Tailscale*",
+          "*WireGuard*",
+          "*OpenVPN*",
+          "*ZeroTier*",
+          "*Network Driver*",
+          "*Wi-Fi Driver*",
+          "*Ethernet Driver*"
+        ],
+        "publisherPatterns": [
+          "Microsoft*",
+          "Tailscale*",
+          "WireGuard*",
+          "OpenVPN*",
+          "ZeroTier*"
+        ],
+        "categoryTags": [
+          "security",
+          "network",
+          "vpn"
+        ]
+      },
+      "reason": "Security, firewall, VPN, Wi-Fi, and network components are protected for connectivity and safety.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "security",
+        "network",
+        "vpn",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "hardware-drivers",
+      "type": "driver",
+      "appType": "driver",
+      "name": "Hardware driver packages",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*Graphics Driver*",
+          "*Display Driver*",
+          "*Audio Driver*",
+          "*Bluetooth Driver*",
+          "*Chipset Driver*",
+          "*NVIDIA Graphics Driver*",
+          "*Realtek*Driver*",
+          "*Intel*Graphics Driver*",
+          "*Intel*Network Driver*",
+          "*Intel*Wireless Driver*"
+        ],
+        "publisherPatterns": [
+          "NVIDIA*",
+          "Advanced Micro Devices*",
+          "AMD*",
+          "Intel*",
+          "Realtek*",
+          "Qualcomm*",
+          "MediaTek*"
+        ],
+        "categoryTags": [
+          "driver",
+          "gpu-driver",
+          "audio-driver",
+          "network-driver"
+        ]
+      },
+      "reason": "Driver package removal belongs in a separate driver workflow with restore and manual gates.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "driver",
+        "hardware",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "anti-cheat-components",
+      "type": "application",
+      "appType": "anti-cheat",
+      "name": "Anti-cheat components",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*Easy Anti-Cheat*",
+          "*EasyAntiCheat*",
+          "*BattlEye*",
+          "*Battleye*",
+          "*Riot Vanguard*",
+          "*FACEIT*Anti-Cheat*"
+        ],
+        "packageIdPatterns": [
+          "*EasyAntiCheat*",
+          "*BattlEye*",
+          "*Vanguard*",
+          "*FACEIT*"
+        ],
+        "categoryTags": [
+          "anti-cheat",
+          "game-integrity"
+        ]
+      },
+      "reason": "Anti-cheat components can affect installed games and require explicit game-aware validation.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "anti-cheat",
+        "game-integrity",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "stream-companions",
+      "type": "application",
+      "appType": "obs-discord-dependency",
+      "name": "OBS and Discord target-scenario companions",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "OBS Studio",
+          "Discord"
+        ],
+        "packageIdPatterns": [
+          "OBSProject.OBSStudio",
+          "Discord.Discord"
+        ],
+        "categoryTags": [
+          "capture",
+          "streaming",
+          "voice",
+          "chat",
+          "stream-companion",
+          "target-scenario"
+        ]
+      },
+      "reason": "OBS and Discord are protected for the Overwatch streaming target scenario.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "obs",
+        "discord",
+        "target-scenario",
+        "do-not-uninstall"
+      ]
+    },
+    {
+      "itemId": "protected-windows-components",
+      "type": "application",
+      "appType": "protected-windows-component",
+      "name": "Protected Windows components",
+      "matchType": "pattern",
+      "match": {
+        "displayNamePatterns": [
+          "*Windows Feature Experience Pack*",
+          "*Microsoft Edge*",
+          "*OneDrive*",
+          "*Phone Link*",
+          "*Windows Update*",
+          "*Microsoft Update Health Tools*"
+        ],
+        "publisherPatterns": [
+          "Microsoft*"
+        ],
+        "sourceTypes": [
+          "appx"
+        ],
+        "categoryTags": [
+          "windows-component",
+          "windows-update",
+          "store-app"
+        ]
+      },
+      "reason": "Windows components are blocked from bulk uninstall until a dedicated repair/removal flow exists.",
+      "defaultAction": "block",
+      "risk": "protected",
+      "tags": [
+        "windows",
+        "component",
+        "do-not-uninstall"
+      ]
+    }
+  ]
+}
