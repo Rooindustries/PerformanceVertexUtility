@@ -276,6 +276,13 @@
       "status": "draft"
     },
     {
+      "name": "uninstall cleanup controlled runners",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "uninstall cleanup",
+      "summary": "Mock official-uninstaller and leftover-deletion runner envelope with backup/export, exact target allowlist, manifest approval, rollback manifest, hidden invocation, and blocked real-system runner gates.",
+      "status": "draft"
+    },
+    {
       "name": "driver hardware inventory",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverHardwareInventory",
       "workflow": "drivers and profiles",
@@ -325,6 +332,13 @@
       "status": "draft"
     },
     {
+      "name": "NVIDIA NIP controlled executor",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "drivers and profiles",
+      "summary": "Mock NVPI export/import and restore executor envelope with NVIDIA hardware, benchmark, approval, export-before-import, rollback manifest, timeout, hidden invocation, and blocked real NVPI gates.",
+      "status": "draft"
+    },
+    {
       "name": "stutter optimization preview contracts",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
@@ -336,6 +350,13 @@
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
       "summary": "Disposable fixture-only shader cache backup/delete/restore envelope; real cache deletion remains blocked.",
+      "status": "draft"
+    },
+    {
+      "name": "stutter optimization controlled executor",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "{source} and WinUtil parity",
+      "summary": "Mock or disposable-fixture executor envelope for standby memory, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore; real system-changing runners remain blocked.",
       "status": "draft"
     },
     {
