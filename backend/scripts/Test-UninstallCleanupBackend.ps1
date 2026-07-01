@@ -63,11 +63,13 @@ $requiredFiles = @(
     'backend\scripts\Preview-OfficialUninstall.ps1',
     'backend\scripts\Preview-LeftoverScan.ps1',
     'backend\scripts\New-CleanupDeletionManifest.ps1',
+    'backend\scripts\New-UninstallCleanupExecutionPlan.ps1',
     'backend\scripts\Test-UninstallCleanupBackend.ps1',
     'backend\samples\installed-app-inventory.sample.json',
     'backend\samples\app-classification.sample.json',
     'backend\samples\uninstall-queue.sample.json',
     'backend\samples\official-uninstall-preview.sample.json',
+    'backend\samples\uninstall-cleanup-execution-plan.sample.json',
     'backend\samples\leftover-scan-preview.sample.json',
     'backend\samples\cleanup-deletion-manifest.sample.json'
 )
@@ -84,6 +86,7 @@ foreach ($relative in @(
     'backend\samples\app-classification.sample.json',
     'backend\samples\uninstall-queue.sample.json',
     'backend\samples\official-uninstall-preview.sample.json',
+    'backend\samples\uninstall-cleanup-execution-plan.sample.json',
     'backend\samples\leftover-scan-preview.sample.json',
     'backend\samples\cleanup-deletion-manifest.sample.json'
 )) {
@@ -94,6 +97,8 @@ $stateBefore = Get-StateEntryCount
 
 $sampleInventory = Join-Path $repoRoot 'backend\samples\installed-app-inventory.sample.json'
 $sampleScan = Join-Path $repoRoot 'backend\samples\leftover-scan-preview.sample.json'
+$sampleOfficialPreview = Join-Path $repoRoot 'backend\samples\official-uninstall-preview.sample.json'
+$sampleCleanupManifest = Join-Path $repoRoot 'backend\samples\cleanup-deletion-manifest.sample.json'
 
 try {
     $classificationOutput = & (Join-Path $PSScriptRoot 'Get-AppClassification.ps1') -InventoryPath $sampleInventory
@@ -177,6 +182,30 @@ try {
     }
 } catch {
     Add-Failure "Cleanup deletion manifest preview failed: $($_.Exception.Message)"
+}
+
+try {
+    $planOutput = & (Join-Path $PSScriptRoot 'New-UninstallCleanupExecutionPlan.ps1') -OfficialPreviewPath $sampleOfficialPreview -CleanupManifestPath $sampleCleanupManifest
+    $plan = ($planOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($plan.dryRun -eq $true -and $plan.executionMode -eq 'design-only' -and $plan.capabilities.canRunUninstallers -eq $false -and $plan.capabilities.canDeleteLeftovers -eq $false -and $plan.summary.executionReady -eq $false) {
+        Add-Pass 'Uninstall cleanup execution plan is design-only and cannot execute uninstall or cleanup actions'
+    } else {
+        Add-Failure 'Uninstall cleanup execution plan reported executable state'
+    }
+    $policyGate = @($plan.gates | Where-Object { $_.gateId -eq 'policy-confirmed-execution-enabled' }) | Select-Object -First 1
+    $backupGate = @($plan.gates | Where-Object { $_.gateId -eq 'backup-exports-complete' }) | Select-Object -First 1
+    if ($policyGate.blocking -eq $true -and $backupGate.blocking -eq $true -and $plan.summary.blockingGateCount -ge 1) {
+        Add-Pass 'Execution plan exposes blocking policy and backup gates before future apply'
+    } else {
+        Add-Failure 'Execution plan did not expose expected blocking gates'
+    }
+    if ($plan.summary.willRunUninstallers -eq $false -and $plan.summary.willDeleteLeftovers -eq $false -and $plan.summary.dryRunWritesState -eq $false) {
+        Add-Pass 'Execution plan preserves no-uninstall, no-delete, no-state-write invariant'
+    } else {
+        Add-Failure 'Execution plan violated dry-run invariant'
+    }
+} catch {
+    Add-Failure "Uninstall cleanup execution plan failed: $($_.Exception.Message)"
 }
 
 $stateAfter = Get-StateEntryCount
