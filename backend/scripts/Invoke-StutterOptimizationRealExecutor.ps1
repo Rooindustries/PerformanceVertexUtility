@@ -1,0 +1,236 @@
+param(
+    [ValidateSet('standby-memory','timer-resolution','power-plan','shader-cache-cleanup','service-pause-preview')]
+    [string]$OptimizationId,
+    [string]$ShaderCacheRoot = '',
+    [string[]]$ServiceName = @(),
+    [uint32]$TimerPeriodMilliseconds = 1,
+    [int]$TimerDurationMilliseconds = 250,
+    [int]$TimeoutSeconds = 15,
+    [string]$OutputPath = '',
+    [switch]$ConfirmApply,
+    [switch]$AllowRealSystemExecution,
+    [switch]$UserApproved
+)
+
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'StutterOptimization.Common.ps1')
+. (Join-Path $PSScriptRoot 'BackendExecutor.Common.ps1')
+
+function Invoke-PowerCfg {
+    param([string[]]$Arguments)
+    $powerCfg = Join-Path $env:SystemRoot 'System32\powercfg.exe'
+    if (-not (Test-Path -LiteralPath $powerCfg)) { $powerCfg = 'powercfg.exe' }
+    return Invoke-RooBackendHiddenProcess -FilePath $powerCfg -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+}
+
+function Get-ActivePowerSchemeGuidFromText {
+    param([string]$Text)
+    if ($Text -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') { return $matches[1] }
+    return ''
+}
+
+function Get-StandbyMemorySnapshot {
+    $perf = $null
+    try { $perf = Get-CimInstance -ClassName Win32_PerfFormattedData_PerfOS_Memory -ErrorAction Stop } catch { $perf = $null }
+    $os = $null
+    try { $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop } catch { $os = $null }
+    return [pscustomobject]@{
+        capturedAtUtc = Get-RooUtcStamp
+        standbyCacheReserveBytes = Get-RooPropertyValue $perf 'StandbyCacheReserveBytes' $null
+        standbyCacheNormalPriorityBytes = Get-RooPropertyValue $perf 'StandbyCacheNormalPriorityBytes' $null
+        standbyCacheCoreBytes = Get-RooPropertyValue $perf 'StandbyCacheCoreBytes' $null
+        availableMBytes = Get-RooPropertyValue $perf 'AvailableMBytes' $null
+        freePhysicalMemoryKBytes = Get-RooPropertyValue $os 'FreePhysicalMemory' $null
+        totalVisibleMemoryKBytes = Get-RooPropertyValue $os 'TotalVisibleMemorySize' $null
+    }
+}
+
+function Get-ServiceReadiness {
+    param([string[]]$Names)
+    $records = New-Object System.Collections.Generic.List[object]
+    foreach ($name in @(Get-RooArray $Names)) {
+        $service = $null
+        $cim = $null
+        try { $service = Get-Service -Name ([string]$name) -ErrorAction Stop } catch { $service = $null }
+        try { $cim = Get-CimInstance -ClassName Win32_Service -Filter ("Name='{0}'" -f ([string]$name).Replace("'", "''")) -ErrorAction Stop } catch { $cim = $null }
+        $records.Add([pscustomobject]@{
+            name = [string]$name
+            exists = ($null -ne $service)
+            status = if ($service) { [string]$service.Status } else { $null }
+            canPauseAndContinue = if ($service) { [bool]$service.CanPauseAndContinue } else { $false }
+            dependentServices = if ($service) { @($service.DependentServices | ForEach-Object { $_.Name }) } else { @() }
+            requiredServices = if ($service) { @($service.ServicesDependedOn | ForEach-Object { $_.Name }) } else { @() }
+            startMode = Get-RooPropertyValue $cim 'StartMode' $null
+            state = Get-RooPropertyValue $cim 'State' $null
+            processId = Get-RooPropertyValue $cim 'ProcessId' $null
+            runnerLayerReady = ($null -ne $service)
+            realPauseRequiresApproval = $true
+        }) | Out-Null
+    }
+    return @($records.ToArray())
+}
+
+try {
+    $realRequested = [bool]$AllowRealSystemExecution
+    $requiresRealFlag = ($OptimizationId -in @('timer-resolution','power-plan'))
+    $gates = @(
+        (New-RooBackendExecutorGate 'explicit-user-approval' 'Explicit approval evidence captured' $true ([bool]$UserApproved) 'Real/detection stutter executor requires user approval evidence for this validation.' $null),
+        (New-RooBackendExecutorGate 'real-system-flag' 'Real system execution flag supplied when needed' $requiresRealFlag ((-not $requiresRealFlag) -or $realRequested) 'Timer and power plan reversible sessions require -AllowRealSystemExecution.' ([pscustomobject]@{ optimizationId = $OptimizationId })),
+        (New-RooBackendExecutorGate 'confirm-apply' 'Confirmed execution requested when needed' $requiresRealFlag ((-not $requiresRealFlag) -or [bool]$ConfirmApply) 'Timer and power plan reversible sessions require -ConfirmApply.' $null)
+    )
+    $blockingGates = @($gates | Where-Object { $_.blocking })
+    $canRunReal = ($blockingGates.Count -eq 0)
+    $sequence = New-Object System.Collections.Generic.List[object]
+    $capability = [ordered]@{}
+    $status = if ($canRunReal) { 'success' } elseif ($ConfirmApply -or $AllowRealSystemExecution) { 'blocked' } else { 'preview' }
+    $nextStep = ''
+
+    switch ($OptimizationId) {
+        'timer-resolution' {
+            if ($canRunReal) {
+                $timerResult = Invoke-RooBackendPowerShellShim -ShimPath (Join-Path $PSScriptRoot 'Invoke-TimerResolutionSession.ps1') -Arguments @('-PeriodMilliseconds', [string]$TimerPeriodMilliseconds, '-DurationMilliseconds', [string]$TimerDurationMilliseconds) -TimeoutSeconds $TimeoutSeconds
+                $timerJson = $null
+                try { $timerJson = ([string](Get-RooPropertyValue $timerResult 'stdout' '') | ConvertFrom-Json) } catch { $timerJson = $null }
+                $sequence.Add([pscustomobject]@{ order = 1; step = 'timer-resolution-bounded-session'; result = $timerResult; parsedResult = $timerJson; completed = ($timerResult.exitCode -eq 0 -and $timerResult.timedOut -ne $true) }) | Out-Null
+                if ($timerResult.exitCode -ne 0 -or $timerResult.timedOut) { $status = 'capability-limited' }
+                $capability.timerRestoreProved = [bool](Get-RooPropertyValue (Get-RooPropertyValue $timerJson 'summary' $null) 'restoreCalledOnExit' $false)
+                $nextStep = 'Use the bounded helper for session-scoped timer requests only; never persist timer resolution outside the owned helper process.'
+            }
+        }
+        'power-plan' {
+            if ($canRunReal) {
+                $originalGuid = ''
+                $tempGuid = ''
+                try {
+                    $getActive = Invoke-PowerCfg @('/getactivescheme')
+                    $sequence.Add([pscustomobject]@{ order = 1; step = 'power-get-active'; result = $getActive; completed = ($getActive.exitCode -eq 0 -and -not $getActive.timedOut) }) | Out-Null
+                    $originalGuid = Get-ActivePowerSchemeGuidFromText ([string](Get-RooPropertyValue $getActive 'stdout' ''))
+                    if ([string]::IsNullOrWhiteSpace($originalGuid)) { throw 'Could not parse active power scheme GUID from powercfg output.' }
+                    $duplicate = Invoke-PowerCfg @('/duplicatescheme', $originalGuid)
+                    $sequence.Add([pscustomobject]@{ order = 2; step = 'power-duplicate-temp'; result = $duplicate; completed = ($duplicate.exitCode -eq 0 -and -not $duplicate.timedOut) }) | Out-Null
+                    $tempGuid = Get-ActivePowerSchemeGuidFromText ([string](Get-RooPropertyValue $duplicate 'stdout' ''))
+                    if ([string]::IsNullOrWhiteSpace($tempGuid)) { throw 'Could not parse duplicated temporary power scheme GUID from powercfg output.' }
+                    $rename = Invoke-PowerCfg @('/changename', $tempGuid, 'Roo Temporary Validation Plan')
+                    $sequence.Add([pscustomobject]@{ order = 3; step = 'power-rename-temp'; result = $rename; completed = ($rename.exitCode -eq 0 -and -not $rename.timedOut) }) | Out-Null
+                    $select = Invoke-PowerCfg @('/setactive', $tempGuid)
+                    $sequence.Add([pscustomobject]@{ order = 4; step = 'power-select-temp'; result = $select; completed = ($select.exitCode -eq 0 -and -not $select.timedOut) }) | Out-Null
+                    Start-Sleep -Milliseconds 100
+                } catch {
+                    $status = 'capability-limited'
+                    $nextStep = 'Inspect the captured powercfg command, exit code, stdout, and stderr; Windows may require policy permission to duplicate or select power schemes.'
+                    $sequence.Add([pscustomobject]@{ order = 90; step = 'power-error'; error = $_.Exception.Message; completed = $false }) | Out-Null
+                } finally {
+                    if (-not [string]::IsNullOrWhiteSpace($originalGuid)) {
+                        $restore = Invoke-PowerCfg @('/setactive', $originalGuid)
+                        $sequence.Add([pscustomobject]@{ order = 98; step = 'power-restore-original'; result = $restore; completed = ($restore.exitCode -eq 0 -and -not $restore.timedOut) }) | Out-Null
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($tempGuid)) {
+                        $delete = Invoke-PowerCfg @('/delete', $tempGuid)
+                        $sequence.Add([pscustomobject]@{ order = 99; step = 'power-delete-temp'; result = $delete; completed = ($delete.exitCode -eq 0 -and -not $delete.timedOut) }) | Out-Null
+                    }
+                }
+                $capability.originalSchemeGuid = $originalGuid
+                $capability.temporarySchemeGuid = $tempGuid
+                $capability.restoreAttempted = @($sequence.ToArray() | Where-Object { $_.step -eq 'power-restore-original' }).Count -gt 0
+                $capability.cleanupAttempted = @($sequence.ToArray() | Where-Object { $_.step -eq 'power-delete-temp' }).Count -gt 0
+                if ([string]::IsNullOrWhiteSpace($nextStep)) { $nextStep = 'Temporary power plan duplicate/select/restore/delete completed; keep future plan imports behind the same restore/delete guard.' }
+            }
+        }
+        'standby-memory' {
+            $before = Get-StandbyMemorySnapshot
+            $after = Get-StandbyMemorySnapshot
+            $sequence.Add([pscustomobject]@{ order = 1; step = 'standby-memory-readonly-counters'; before = $before; after = $after; completed = $true }) | Out-Null
+            $status = 'capability-limited'
+            $capability.readOnlyCountersImplemented = $true
+            $capability.oneShotClearRunnerScaffolded = $true
+            $capability.executionRequires = 'Administrator rights plus a signed/native helper that can call NtSetSystemInformation(SystemMemoryListInformation) or an approved EmptyStandbyList-equivalent API.'
+            $nextStep = 'Build and sign a native helper for SystemMemoryListInformation standby-list purge, then keep it behind approval and before/after counter capture.'
+        }
+        'shader-cache-cleanup' {
+            $root = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { Join-Path $env:LOCALAPPDATA 'NVIDIA' } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
+            $items = @(Get-RooStutterShaderCacheItems $root)
+            $plan = @($items | ForEach-Object {
+                [pscustomobject]@{
+                    itemId = Get-RooPropertyValue $_ 'itemId' ''
+                    source = Get-RooPropertyValue $_ 'path' ''
+                    relativePath = Get-RooPropertyValue $_ 'relativePath' ''
+                    backupPathPreview = Join-Path '<approved-backup-root>' ([string](Get-RooPropertyValue $_ 'relativePath' ''))
+                    deleteWouldUseFixturePlanner = $true
+                }
+            })
+            $sequence.Add([pscustomobject]@{ order = 1; step = 'shader-cache-real-path-readiness-plan'; root = $root; itemCount = $items.Count; plan = $plan; completed = $true }) | Out-Null
+            $status = 'success'
+            $capability.realPathPlannerImplemented = $true
+            $capability.realDeletionAttempted = $false
+            $capability.sameBackupDeleteRestorePlanner = $true
+            $nextStep = 'Require exact target allowlist, approved backup root, and rollback manifest before enabling real shader-cache deletion.'
+        }
+        'service-pause-preview' {
+            $records = Get-ServiceReadiness $ServiceName
+            $sequence.Add([pscustomobject]@{ order = 1; step = 'service-status-dependency-analysis'; services = $records; completed = $true }) | Out-Null
+            $status = 'success'
+            $capability.serviceAnalyzerImplemented = $true
+            $capability.realPauseRunnerLayerReady = $true
+            $capability.realPauseAttempted = $false
+            $nextStep = 'Require exact service allowlist, dependency review, and approval before running pause/restore against real services.'
+        }
+    }
+
+    $runs = @($sequence.ToArray())
+    $result = [pscustomobject]@{
+        actionId = 'performance.stutterOptimization.realExecutor'
+        schemaVersion = 1
+        productName = $script:RooStutterProductName
+        capturedAtUtc = Get-RooUtcStamp
+        optimizationId = $OptimizationId
+        dryRun = ($OptimizationId -notin @('timer-resolution','power-plan') -or -not $canRunReal)
+        status = $status
+        executionMode = switch ($OptimizationId) {
+            'timer-resolution' { 'real-reversible-timer-session' }
+            'power-plan' { 'real-reversible-power-plan-session' }
+            'standby-memory' { 'real-readonly-capability-detection' }
+            'shader-cache-cleanup' { 'real-path-readiness-preview' }
+            'service-pause-preview' { 'real-readonly-service-analysis' }
+        }
+        gates = @($gates)
+        executionSequence = $runs
+        capabilities = [pscustomobject]$capability
+        summary = [pscustomobject]@{
+            executionStepCount = $runs.Count
+            completedStepCount = @($runs | Where-Object { $_.completed -eq $true }).Count
+            timeoutCount = @($runs | Where-Object { $_.result.timedOut -eq $true }).Count
+            nonZeroExitCount = @($runs | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count
+            willPersist = $false
+            willLaunchExternalUtility = ($OptimizationId -eq 'power-plan')
+            willLaunchForbiddenUtility = $false
+            willEditRegistry = $false
+            willEditServices = $false
+            willDeleteRealFiles = $false
+            focusStealPrevented = (@($runs | Where-Object { $_.result.invocation.focusStealPrevented -eq $false }).Count -eq 0)
+            blockingGateCount = $blockingGates.Count
+            nextEngineeringStep = $nextStep
+        }
+        warnings = @((New-RooStutterIssue 'STUTTER_REAL_EXECUTOR_CONTROLLED' 'Controlled stutter executor evaluated reversible or read-only capability path.' 'info' $OptimizationId $false $nextStep $null))
+        errors = @()
+        logs = @((New-RooLog 'Controlled stutter real/detection executor completed.'))
+    }
+    Write-RooJsonOutput $result $OutputPath
+} catch {
+    $errorResult = [pscustomobject]@{
+        actionId = 'performance.stutterOptimization.realExecutor'
+        schemaVersion = 1
+        productName = $script:RooStutterProductName
+        capturedAtUtc = Get-RooUtcStamp
+        optimizationId = $OptimizationId
+        dryRun = $true
+        status = 'failed'
+        executionMode = 'blocked'
+        executionSequence = @()
+        summary = [pscustomobject]@{ willPersist = $false; willLaunchForbiddenUtility = $false; nextEngineeringStep = 'Check optimizer id, permissions, helper availability, and captured command evidence.' }
+        warnings = @()
+        errors = @((New-RooStutterIssue 'STUTTER_REAL_EXECUTOR_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check optimizer id, permissions, helper availability, and captured command evidence.' $null))
+        logs = @((New-RooLog 'Controlled stutter real/detection executor failed.' 'error'))
+    }
+    Write-RooJsonOutput $errorResult $OutputPath
+    exit 1
+}
