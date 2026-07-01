@@ -62,6 +62,27 @@
     "rollbackActionId": "apps.rollbackCleanup",
     "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
   },
+  "executionDesign": {
+    "previewOnly": true,
+    "executorImplemented": false,
+    "planActionId": "apps.planUninstallCleanupExecution",
+    "requireOfficialUninstallPreview": true,
+    "requireCleanupManifest": true,
+    "requirePostUninstallLeftoverRescan": true,
+    "requireExplicitUserConfirmation": true,
+    "requireRestorePointBeforeApply": true,
+    "requireBackupsBeforeApply": true,
+    "allowProtectedItemApply": false,
+    "dryRunWritesState": false,
+    "phases": [
+      "preflight-review",
+      "official-uninstall",
+      "post-uninstall-leftover-rescan",
+      "backup-and-export",
+      "cleanup-apply",
+      "verify-and-rollback-ready"
+    ]
+  },
   "state": {
     "repoStateRoot": "backend\\state",
     "dryRunWritesState": false
