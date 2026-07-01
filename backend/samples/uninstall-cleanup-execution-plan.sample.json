@@ -7,7 +7,7 @@
   "displayName": "Overwolf",
   "createdAtUtc": "2026-06-28T10:00:00Z",
   "dryRun": true,
-  "executionMode": "design-only",
+  "executionMode": "guarded-fixture-ready",
   "status": "blocked",
   "policyPath": "backend\\uninstall\\uninstall-policy.json",
   "sourceArtifacts": {
@@ -18,11 +18,14 @@
     "sourceScanId": "sample-leftover-overwolf-20260628-100000"
   },
   "capabilities": {
-    "currentCapability": "preview-and-plan-only",
-    "executorImplemented": false,
+    "currentCapability": "preview-plan-and-disposable-fixture-executor",
+    "executorImplemented": true,
+    "fixtureExecutorImplemented": true,
+    "realSystemExecutorImplemented": false,
     "confirmedExecutionEnabled": false,
     "canRunUninstallers": false,
     "canDeleteLeftovers": false,
+    "canApplyDisposableFixture": true,
     "canEditRegistry": false,
     "canEditServices": false,
     "canEditScheduledTasks": false,
@@ -31,24 +34,35 @@
   "gates": [
     {
       "gateId": "policy-confirmed-execution-enabled",
-      "name": "Confirmed execution policy enabled",
+      "name": "Confirmed real-system execution policy enabled",
       "required": true,
       "satisfied": false,
       "blocking": true,
-      "reason": "Repository policy must explicitly enable confirmed execution before any executor can run.",
+      "reason": "Repository policy must explicitly enable confirmed real-system execution before real uninstall or cleanup can run.",
       "evidence": {
         "confirmedExecutionEnabled": false
       }
     },
     {
-      "gateId": "executor-implemented",
-      "name": "Executor implementation present",
+      "gateId": "fixture-executor-implemented",
+      "name": "Disposable fixture executor implementation present",
+      "required": true,
+      "satisfied": true,
+      "blocking": false,
+      "reason": "The backend exposes a fixture-only executor for backup and deletion validation.",
+      "evidence": {
+        "fixtureExecutorImplemented": true
+      }
+    },
+    {
+      "gateId": "real-system-executor-implemented",
+      "name": "Real-system executor implementation present",
       "required": true,
       "satisfied": false,
       "blocking": true,
-      "reason": "This backend currently creates a safe execution design only; no executor is implemented.",
+      "reason": "Real uninstall and real leftover deletion are intentionally not implemented in this build.",
       "evidence": {
-        "executorImplemented": false
+        "realSystemExecutorImplemented": false
       }
     },
     {
@@ -117,7 +131,7 @@
       "purpose": "Run the vendor or package-manager uninstall command before leftover cleanup.",
       "requiredGateIds": [
         "policy-confirmed-execution-enabled",
-        "executor-implemented",
+        "real-system-executor-implemented",
         "restore-point-before-apply",
         "explicit-user-confirmation"
       ],
@@ -164,23 +178,26 @@
     "willEditServices": false,
     "willEditScheduledTasks": false,
     "dryRunWritesState": false,
-    "executionReady": false
+    "executionReady": false,
+    "disposableFixtureExecutionReady": true
   },
   "policySummary": {
     "previewOnly": true,
     "confirmedExecutionEnabled": false,
-    "executorImplemented": false,
+    "executorImplemented": true,
+    "fixtureExecutorImplemented": true,
+    "realSystemExecutorImplemented": false,
     "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
   },
   "warnings": [
     {
-      "code": "EXECUTION_PLAN_DESIGN_ONLY",
-      "message": "Execution plan was produced without running uninstallers, deleting leftovers, editing registry, editing services, editing tasks, or writing state.",
+      "code": "EXECUTION_PLAN_FIXTURE_EXECUTOR_ONLY",
+      "message": "Execution plan was produced without running uninstallers, deleting real leftovers, editing registry, editing services, editing tasks, or writing repo state. Disposable fixture execution is available separately.",
       "severity": "info",
       "source": "apps.uninstallCleanupExecutionPlan",
       "target": "registry:overwolf",
       "blocking": false,
-      "recommendedAction": "Use this as the contract for a future confirmed executor.",
+      "recommendedAction": "Use Invoke-UninstallCleanupExecution.ps1 only with a temp fixture root for backend validation.",
       "details": null
     }
   ],

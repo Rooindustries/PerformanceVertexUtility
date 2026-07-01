@@ -38,6 +38,7 @@ try {
             skippedItems = @()
             restoredItems = @()
             activeRestraints = @()
+            runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $null -StateRoot $resolvedStateRoot -SessionPath $resolvedSessionPath -BackupManifestPath $null
             latestLogs = @()
             warnings = @((New-RooIssue 'PROCESS_GOVERNOR_SESSION_NOT_FOUND' 'No process governor session state was found.' 'warning' 'performance.governor' $resolvedStateRoot $false 'Start a confirmed session or provide a session path.' $null))
             errors = @()
@@ -97,6 +98,7 @@ try {
         skippedItems = @(Get-RooPropertyArray $session 'skippedItems')
         restoredItems = @(Get-RooPropertyArray $session 'restoredItems')
         activeRestraints = @(Get-RooPropertyArray $session 'activeRestraints')
+        runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $session -StateRoot $resolvedStateRoot -SessionPath $resolvedSessionPath -BackupManifestPath (Get-RooPropertyValue $session 'backupManifestPath' $null)
         latestLogs = @($latestLogs.ToArray())
         warnings = @(Get-RooPropertyArray $session 'warnings')
         errors = @(Get-RooPropertyArray $session 'errors')
@@ -130,6 +132,7 @@ try {
         skippedItems = @()
         restoredItems = @()
         activeRestraints = @()
+        runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $null -StateRoot $StateRoot -SessionPath $SessionPath -BackupManifestPath $null
         latestLogs = @()
         warnings = @()
         errors = @((New-RooIssue 'PROCESS_GOVERNOR_STATUS_FAILED' $_.Exception.Message 'error' 'performance.governor' $SessionPath $true 'Check the process governor session state path and retry.' $null))

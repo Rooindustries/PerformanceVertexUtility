@@ -68,16 +68,38 @@
         "backend/scripts/Test-UninstallCleanupBackend.ps1"
       ]
     },
-    "catalogOnlyDriverAndNvidiaProfile": {
+    "previewOnlyStutterContracts": {
       "executableScripts": [
-        "backend/scripts/Get-DriverHardwareSummary.ps1"
+        "backend/scripts/Preview-StutterOptimization.ps1",
+        "backend/scripts/Invoke-StutterOptimization.ps1",
+        "backend/scripts/Restore-StutterOptimization.ps1"
       ],
-      "rollbackOrBackupRules": [],
+      "rollbackOrBackupRules": [
+        "Standby memory, timer resolution, power plan, and service pause actions are preview-only and blocked from real system mutation.",
+        "Shader cache cleanup supports backup/delete/restore only for disposable temp fixtures.",
+        "Restore-StutterOptimization.ps1 restores shader-cache fixture files from a rollback manifest."
+      ],
+      "validationEvidence": [
+        "backend/scripts/Test-StutterOptimizationContracts.ps1"
+      ]
+    },
+    "previewOnlyDriverAndNvidiaProfileContracts": {
+      "executableScripts": [
+        "backend/scripts/Get-DriverHardwareSummary.ps1",
+        "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "backend/scripts/Invoke-NvidiaNipProfile.ps1",
+        "backend/scripts/Restore-NvidiaNipProfile.ps1"
+      ],
+      "rollbackOrBackupRules": [
+        "Preview-NvidiaNipProfile.ps1 emits export-before-import gates and rollback manifest metadata.",
+        "Invoke-NvidiaNipProfile.ps1 and Restore-NvidiaNipProfile.ps1 construct NVPI command contracts but do not launch NVIDIA Profile Inspector."
+      ],
       "validationEvidence": [
         "backend/samples/driver-recommendation-catalog.sample.json",
         "backend/samples/nvidia-profile-catalog.sample.json",
         "backend/catalogs/nvidia-profile-inspector-nip-catalog.json",
-        "backend/scripts/Test-NvidiaNipCatalog.ps1"
+        "backend/scripts/Test-NvidiaNipCatalog.ps1",
+        "backend/scripts/Test-NvidiaNipExecutionContract.ps1"
       ]
     }
   },
@@ -113,12 +135,18 @@
       "sourceProduct": "FSOS-X APBX playbook",
       "capabilityId": "playbook-power-plan-import-and-selection",
       "title": "Balanced, AMD, and Intel power-plan import/selection",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Power plan import/selection remains blocked; preview captures active scheme restore requirements."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -241,12 +269,18 @@
       "sourceProduct": "FSOS-X APBX playbook",
       "capabilityId": "playbook-timer-resolution-scheduled-task",
       "title": "SetTimerResolution boot scheduled task",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Timer resolution apply remains blocked until an owned lifecycle and stop/cleanup path are implemented."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -353,12 +387,18 @@
       "sourceProduct": "FSOS-X Dash",
       "capabilityId": "dash-clear-standby-memory",
       "title": "Clear standby memory for memory-heavy game stutter",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Standby memory clear is preview-only because it is transient and cannot be restored."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -366,12 +406,21 @@
       "sourceProduct": "FSOS-X Dash",
       "capabilityId": "dash-shader-cache-cleanup",
       "title": "DirectX/NVIDIA/AMD/Intel/Steam shader cache cleanup",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1",
+          "backend/scripts/Invoke-StutterOptimization.ps1",
+          "backend/scripts/Restore-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Real shader cache deletion remains blocked.",
+          "Disposable fixture shader-cache deletion writes a backup manifest and Restore-StutterOptimization.ps1 restores files from that manifest."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -379,12 +428,18 @@
       "sourceProduct": "FSOS-X Dash",
       "capabilityId": "dash-pause-non-essential-services",
       "title": "Temporarily pause non-essential services while gaming",
-      "backendStatus": "unsafe",
+      "backendStatus": "preview-only",
       "risk": "high",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Service pause apply is blocked until service state backup, dependency graph, and restore-failure validation exist."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -405,12 +460,18 @@
       "sourceProduct": "FSOS-X Dash",
       "capabilityId": "dash-power-plan-and-power-state-controls",
       "title": "Power plan switcher and high-performance power-state pinning",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Power plan apply is blocked; preview captures active scheme restore requirements."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -431,12 +492,18 @@
       "sourceProduct": "FSOS-X Dash",
       "capabilityId": "dash-timer-resolution-toggle",
       "title": "Global timer resolution toggle",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "risk": "medium",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Timer apply is blocked until an owned lifecycle and stop/cleanup path are implemented."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       }
     },
     {
@@ -505,18 +572,18 @@
     }
   ],
   "statusCounts": {
-    "missing": 13,
-    "unsafe": 9,
+    "missing": 7,
+    "unsafe": 8,
     "blocked": 2,
     "implemented-live": 2,
-    "preview-only": 1
+    "preview-only": 8
   },
   "topMissingOptimizationsFor16GbObsDiscordOverwatch": [
     {
       "rank": 1,
       "capabilityId": "dash-clear-standby-memory",
       "sourceProduct": "FSOS-X Dash",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Dash explicitly targets flushing standby memory for memory-heavy game stutter; 16 GB with OBS and Discord makes memory pressure a first-order suspect.",
       "safeBackendNeeded": "Read-only memory pressure evidence, standby list size capture, confirmed clear action, before/after validation, and no persistent state write."
     },
@@ -524,7 +591,7 @@
       "rank": 2,
       "capabilityId": "playbook-timer-resolution-scheduled-task",
       "sourceProduct": "FSOS-X APBX playbook",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Timer resolution can affect input/audio/frame pacing; APBX bundles a dedicated SetTimerResolution executable and Dash exposes a timer toggle.",
       "safeBackendNeeded": "Backend-owned timer lifecycle with process/task cleanup, measured current/min/max timer evidence, rollback, and validation."
     },
@@ -532,7 +599,7 @@
       "rank": 3,
       "capabilityId": "playbook-power-plan-import-and-selection",
       "sourceProduct": "FSOS-X APBX playbook / FSOS-X Dash",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Power plan and power-state pinning directly affect CPU clock residency and frame-time consistency while streaming.",
       "safeBackendNeeded": "Capture current active plan, import/apply only reviewed plans, restore previous GUID, and validate active scheme."
     },
@@ -540,7 +607,7 @@
       "rank": 4,
       "capabilityId": "dash-shader-cache-cleanup",
       "sourceProduct": "FSOS-X Dash",
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Dash names DirectX/NVIDIA/AMD/Intel/Steam shader caches; stale shader caches can present as game stutter after driver/game changes.",
       "safeBackendNeeded": "Preview per-cache paths, protect active game/OBS files, backup/delete manifest, and validation by path count/bytes only after confirmation."
     },
@@ -564,14 +631,14 @@
       "rank": 7,
       "capabilityId": "dash-pause-non-essential-services",
       "sourceProduct": "FSOS-X Dash",
-      "backendStatus": "unsafe",
+      "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Background services can compete with CPU/memory/disk while streaming, but blanket service stops are risky.",
       "safeBackendNeeded": "Per-service allowlist, dependency graph, state snapshot, time-boxed session restore, and OBS/Discord/game protection."
     }
   ],
   "sourceCounts": {
     "primaryArchive": {
-      "path": "C:\\Users\\serviroo\\Downloads\\FSOS-XR7.apbx",
+      "path": "source-archive:FSOS-XR7.apbx",
       "role": "primary",
       "listedEntries": 195,
       "extractedFiles": 195,
@@ -583,7 +650,7 @@
       "taskActions": 1319
     },
     "comparisonArchive": {
-      "path": "C:\\Users\\serviroo\\Downloads\\FSOS-XR6.5.apbx",
+      "path": "source-archive:FSOS-XR6.5.apbx",
       "role": "older-comparison-only",
       "listedEntries": 199,
       "extractedFiles": 194,

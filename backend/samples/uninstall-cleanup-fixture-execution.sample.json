@@ -1,0 +1,77 @@
+{
+  "actionId": "apps.invokeUninstallCleanupExecution",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-07-01T10:00:00Z",
+  "dryRun": false,
+  "status": "success",
+  "executionMode": "disposable-fixture-apply",
+  "appId": "fixture:fake-app",
+  "displayName": "Fixture Fake App",
+  "fixtureRoot": "%TEMP%\\roo-uninstall-cleanup-fixture",
+  "backupRoot": "%TEMP%\\roo-uninstall-cleanup-fixture\\_roo-cleanup-backup",
+  "gates": [
+    {
+      "gateId": "confirm-apply",
+      "required": true,
+      "satisfied": true,
+      "blocking": false
+    },
+    {
+      "gateId": "disposable-fixture-flag",
+      "required": true,
+      "satisfied": true,
+      "blocking": false
+    },
+    {
+      "gateId": "real-uninstaller-disabled",
+      "required": false,
+      "satisfied": true,
+      "blocking": false
+    }
+  ],
+  "rollback": {
+    "rollbackManifestPath": "%TEMP%\\roo-uninstall-cleanup-fixture\\_roo-cleanup-backup\\rollback-manifest.json",
+    "rollbackSupported": true,
+    "backupRecords": [
+      {
+        "itemId": "folder:fixture-cache",
+        "type": "folder",
+        "copied": true
+      }
+    ]
+  },
+  "changedItems": [
+    {
+      "itemId": "folder:fixture-cache",
+      "type": "folder",
+      "deleted": true
+    }
+  ],
+  "capabilities": {
+    "fixtureExecutorImplemented": true,
+    "realSystemExecutorImplemented": false,
+    "canRunUninstallers": false,
+    "canDeleteFixtureFiles": true,
+    "canDeleteRealFiles": false,
+    "canEditRegistry": false,
+    "canEditServices": false,
+    "canEditScheduledTasks": false
+  },
+  "summary": {
+    "commandPreviewCount": 1,
+    "cleanupItemCount": 1,
+    "backupCount": 1,
+    "deletedCount": 1,
+    "willRunUninstallers": false,
+    "willDeleteLeftovers": true,
+    "willDeleteRealFiles": false,
+    "willEditRegistry": false,
+    "willEditServices": false,
+    "willEditScheduledTasks": false,
+    "dryRunWritesState": false
+  },
+  "warnings": [],
+  "errors": []
+}
+

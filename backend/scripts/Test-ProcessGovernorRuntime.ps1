@@ -227,6 +227,11 @@ try {
     } else {
         Add-Failure 'Dry-run process governor session reported session or backup state'
     }
+    if ($dryRun.runtimeEvidence.productionRuntimeCapable -eq $true -and $dryRun.runtimeEvidence.externalProcessGovernorDependencyRequired -eq $false -and $dryRun.runtimeEvidence.frontendProcessRequired -eq $false -and $dryRun.runtimeEvidence.dryRunWritesState -eq $false) {
+        Add-Pass 'Dry-run process governor envelope reports native production runtime evidence without frontend or Process Lasso dependency'
+    } else {
+        Add-Failure 'Dry-run process governor runtime evidence was missing or unsafe'
+    }
     if (-not (Test-Path -LiteralPath $dryRunStateRoot)) {
         Add-Pass 'Dry-run process governor session left no backend state root behind'
     } else {
@@ -243,6 +248,11 @@ try {
         Add-Pass 'Process governor status reports notFound cleanly when no session exists'
     } else {
         Add-Failure 'Process governor status missing-session result had an unexpected shape'
+    }
+    if ($status.runtimeEvidence.productionRuntimeCapable -eq $true -and $status.runtimeEvidence.processLassoRequired -eq $false -and $status.runtimeEvidence.frontendProcessRequired -eq $false) {
+        Add-Pass 'Process governor status contract exposes runtime capability evidence even when no session exists'
+    } else {
+        Add-Failure 'Process governor status missing-session runtime evidence was incomplete'
     }
 } catch {
     Add-Failure "Process governor status notFound check failed: $($_.Exception.Message)"
@@ -322,6 +332,11 @@ try {
         Add-Pass 'Process governor status is restorable with an active restraint after confirmed apply'
     } else {
         Add-Failure 'Process governor status did not report active restorable restraint'
+    }
+    if ($statusAfterStart.runtimeEvidence.stateBacked -eq $true -and $statusAfterStart.runtimeEvidence.restoreContractAvailable -eq $true -and $statusAfterStart.runtimeEvidence.externalProcessGovernorDependencyRequired -eq $false -and $statusAfterStart.runtimeEvidence.frontendProcessRequired -eq $false) {
+        Add-Pass 'Confirmed process governor status reports state-backed restore-ready native runtime evidence'
+    } else {
+        Add-Failure 'Confirmed process governor status runtime evidence was incomplete'
     }
     $restorePreview = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -SessionPath $session.sessionPath | ConvertFrom-Json
     $afterRestorePreview = Get-RooProcessControlState $busyProbe.Id $null

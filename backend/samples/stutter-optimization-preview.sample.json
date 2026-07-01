@@ -1,0 +1,89 @@
+{
+  "actionId": "performance.stutterOptimization.preview",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-07-01T10:00:00Z",
+  "dryRun": true,
+  "status": "preview",
+  "executionMode": "preview-only",
+  "optimizationId": "all",
+  "contracts": [
+    {
+      "optimizationId": "standby-memory",
+      "backendStatus": "preview-only",
+      "proposedAction": {
+        "action": "standby-list-clear",
+        "applyAllowedNow": false,
+        "disposableFixtureSupported": false
+      },
+      "rollback": {
+        "rollbackSupported": false
+      }
+    },
+    {
+      "optimizationId": "timer-resolution",
+      "backendStatus": "preview-only",
+      "proposedAction": {
+        "action": "timer-resolution-session",
+        "applyAllowedNow": false,
+        "disposableFixtureSupported": false
+      },
+      "rollback": {
+        "rollbackSupported": true,
+        "implementedNow": false
+      }
+    },
+    {
+      "optimizationId": "power-plan",
+      "backendStatus": "preview-only",
+      "proposedAction": {
+        "action": "power-plan-import-or-select",
+        "applyAllowedNow": false,
+        "disposableFixtureSupported": false
+      },
+      "rollback": {
+        "rollbackSupported": true,
+        "restoreRequiredBeforeApply": true,
+        "implementedNow": false
+      }
+    },
+    {
+      "optimizationId": "shader-cache-cleanup",
+      "backendStatus": "fixture-apply-ready",
+      "proposedAction": {
+        "action": "shader-cache-backup-and-delete",
+        "applyAllowedNow": false,
+        "disposableFixtureSupported": true
+      },
+      "rollback": {
+        "rollbackSupported": true,
+        "backupRequiredBeforeDelete": true
+      }
+    },
+    {
+      "optimizationId": "service-pause-preview",
+      "backendStatus": "preview-only",
+      "proposedAction": {
+        "action": "service-pause-session",
+        "applyAllowedNow": false,
+        "disposableFixtureSupported": false
+      },
+      "rollback": {
+        "rollbackSupported": true,
+        "stateBackupRequired": true,
+        "implementedNow": false
+      }
+    }
+  ],
+  "summary": {
+    "contractCount": 5,
+    "realApplyAllowedCount": 0,
+    "fixtureApplyReadyCount": 1,
+    "willChangeSystem": false,
+    "willLaunchUtilities": false,
+    "willWriteState": false
+  },
+  "warnings": [],
+  "errors": []
+}
+

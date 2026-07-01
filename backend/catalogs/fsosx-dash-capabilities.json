@@ -457,14 +457,20 @@
       ],
       "phaseRefs": [],
       "actionRefs": [],
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Standby memory clear is preview-only because the transient action cannot be restored."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       },
       "risk": "medium",
-      "notes": "Very relevant for 16 GB RAM stutter, but current backend has no safe standby-list preview/apply/measurement flow."
+      "notes": "Backend now exposes memory-pressure preview evidence; real standby-list clearing remains blocked."
     },
     {
       "capabilityId": "dash-shader-cache-cleanup",
@@ -487,14 +493,23 @@
       ],
       "phaseRefs": [],
       "actionRefs": [],
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1",
+          "backend/scripts/Invoke-StutterOptimization.ps1",
+          "backend/scripts/Restore-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Real shader-cache cleanup is blocked.",
+          "Disposable fixture cleanup writes a backup manifest and can be restored by Restore-StutterOptimization.ps1."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       },
       "risk": "medium",
-      "notes": "Potentially useful for post-driver stutter but needs game-aware backup/exclusion rules and validation."
+      "notes": "Backend has preview plus disposable-fixture backup/delete/restore proof; real cache deletion remains blocked."
     },
     {
       "capabilityId": "dash-pause-non-essential-services",
@@ -518,14 +533,20 @@
       ],
       "phaseRefs": [],
       "actionRefs": [],
-      "backendStatus": "unsafe",
+      "backendStatus": "preview-only",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Service pause apply is blocked until service state backup, dependency graph, and restore-failure validation exist."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       },
       "risk": "high",
-      "notes": "No backend service-state backup/restore gate exists. This should not be treated as implemented."
+      "notes": "Backend exposes service pause candidates only; no service control command is called."
     },
     {
       "capabilityId": "dash-network-latency-and-adapter-toggles",
@@ -578,14 +599,20 @@
       ],
       "phaseRefs": [],
       "actionRefs": [],
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Power plan apply is blocked; preview captures active scheme restore requirements."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       },
       "risk": "medium",
-      "notes": "Likely relevant to frame-time consistency, but no backend power-state/power-plan restore exists."
+      "notes": "Backend exposes active-plan restore requirements; import/selection remains blocked."
     },
     {
       "capabilityId": "dash-windows-toggle-library",
@@ -699,14 +726,20 @@
       ],
       "phaseRefs": [],
       "actionRefs": [],
-      "backendStatus": "missing",
+      "backendStatus": "preview-only",
       "backendEvidence": {
-        "executableScripts": [],
-        "rollbackOrBackupRules": [],
-        "validationEvidence": []
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Timer apply is blocked until an owned lifecycle and stop/cleanup path are implemented."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
       },
       "risk": "medium",
-      "notes": "High stutter/latency relevance, but no backend task/process lifecycle and timing validation exists."
+      "notes": "Backend exposes timer-resolution status contract; no timer helper is launched."
     },
     {
       "capabilityId": "dash-uninstaller-and-leftover-cleanup",

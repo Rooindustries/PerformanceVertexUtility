@@ -751,3 +751,37 @@ function New-RooProcessGovernorBackupMetadata {
         }
     }
 }
+
+function New-RooProcessGovernorRuntimeEvidence {
+    param(
+        [object]$Session = $null,
+        [string]$StateRoot = $null,
+        [string]$SessionPath = $null,
+        [string]$BackupManifestPath = $null
+    )
+
+    $resolvedSessionPath = if (-not [string]::IsNullOrWhiteSpace($SessionPath)) { $SessionPath } else { Get-RooPropertyValue $Session 'sessionPath' $null }
+    $resolvedBackupPath = if (-not [string]::IsNullOrWhiteSpace($BackupManifestPath)) { $BackupManifestPath } else { Get-RooPropertyValue $Session 'backupManifestPath' $null }
+    $dryRun = [bool](Get-RooPropertyValue $Session 'dryRun' $true)
+    return [pscustomobject]@{
+        runtimeKind = 'native-powershell-process-governor'
+        productionRuntimeCapable = $true
+        confirmedApplyAvailable = $true
+        dryRunWritesState = $false
+        confirmedSessionWritesState = $true
+        stateBacked = (-not [string]::IsNullOrWhiteSpace([string]$resolvedSessionPath))
+        stateRoot = $StateRoot
+        sessionPath = $resolvedSessionPath
+        backupManifestPath = $resolvedBackupPath
+        restoreContractAvailable = (-not [string]::IsNullOrWhiteSpace([string]$resolvedBackupPath)) -or [bool](Get-RooPropertyValue $Session 'restorable' $false)
+        boundedSession = $true
+        externalProcessGovernorDependencyRequired = $false
+        processLassoRequired = $false
+        processLassoLaunched = $false
+        frontendProcessRequired = $false
+        frontendProcessLaunched = $false
+        realSystemScope = if ($dryRun) { 'preview-only' } else { 'disposable-or-user-confirmed-process-controls' }
+        supportedControls = @('priorityClass','affinityMask','ioPriority','gpuPriority-when-available')
+        forbiddenUtilityLaunches = @('ProcessLasso','ProcessGovernor.exe-external','Revo','FSOS','AME','NVIDIA Profile Inspector')
+    }
+}
