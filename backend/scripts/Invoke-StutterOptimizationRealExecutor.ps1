@@ -101,23 +101,27 @@ try {
             if ($canRunReal) {
                 $originalGuid = ''
                 $tempGuid = ''
+                $exportPath = Join-Path ([System.IO.Path]::GetTempPath()) ('roo-power-plan-import-' + [guid]::NewGuid().ToString('N') + '.pow')
                 try {
                     $getActive = Invoke-PowerCfg @('/getactivescheme')
                     $sequence.Add([pscustomobject]@{ order = 1; step = 'power-get-active'; result = $getActive; completed = ($getActive.exitCode -eq 0 -and -not $getActive.timedOut) }) | Out-Null
                     $originalGuid = Get-ActivePowerSchemeGuidFromText ([string](Get-RooPropertyValue $getActive 'stdout' ''))
                     if ([string]::IsNullOrWhiteSpace($originalGuid)) { throw 'Could not parse active power scheme GUID from powercfg output.' }
-                    $duplicate = Invoke-PowerCfg @('/duplicatescheme', $originalGuid)
-                    $sequence.Add([pscustomobject]@{ order = 2; step = 'power-duplicate-temp'; result = $duplicate; completed = ($duplicate.exitCode -eq 0 -and -not $duplicate.timedOut) }) | Out-Null
-                    $tempGuid = Get-ActivePowerSchemeGuidFromText ([string](Get-RooPropertyValue $duplicate 'stdout' ''))
-                    if ([string]::IsNullOrWhiteSpace($tempGuid)) { throw 'Could not parse duplicated temporary power scheme GUID from powercfg output.' }
+                    $export = Invoke-PowerCfg @('/export', $exportPath, $originalGuid)
+                    $sequence.Add([pscustomobject]@{ order = 2; step = 'power-export-active'; exportPath = $exportPath; result = $export; completed = ($export.exitCode -eq 0 -and -not $export.timedOut -and (Test-Path -LiteralPath $exportPath)) }) | Out-Null
+                    if ($export.exitCode -ne 0 -or $export.timedOut -or -not (Test-Path -LiteralPath $exportPath)) { throw 'Could not export active power scheme to temporary .pow file.' }
+                    $tempGuid = [guid]::NewGuid().ToString()
+                    $import = Invoke-PowerCfg @('/import', $exportPath, $tempGuid)
+                    $sequence.Add([pscustomobject]@{ order = 3; step = 'power-import-temp'; importPath = $exportPath; temporarySchemeGuid = $tempGuid; result = $import; completed = ($import.exitCode -eq 0 -and -not $import.timedOut) }) | Out-Null
+                    if ($import.exitCode -ne 0 -or $import.timedOut) { throw 'Could not import temporary power scheme from exported .pow file.' }
                     $rename = Invoke-PowerCfg @('/changename', $tempGuid, 'Roo Temporary Validation Plan')
-                    $sequence.Add([pscustomobject]@{ order = 3; step = 'power-rename-temp'; result = $rename; completed = ($rename.exitCode -eq 0 -and -not $rename.timedOut) }) | Out-Null
+                    $sequence.Add([pscustomobject]@{ order = 4; step = 'power-rename-temp'; result = $rename; completed = ($rename.exitCode -eq 0 -and -not $rename.timedOut) }) | Out-Null
                     $select = Invoke-PowerCfg @('/setactive', $tempGuid)
-                    $sequence.Add([pscustomobject]@{ order = 4; step = 'power-select-temp'; result = $select; completed = ($select.exitCode -eq 0 -and -not $select.timedOut) }) | Out-Null
+                    $sequence.Add([pscustomobject]@{ order = 5; step = 'power-select-temp'; result = $select; completed = ($select.exitCode -eq 0 -and -not $select.timedOut) }) | Out-Null
                     Start-Sleep -Milliseconds 100
                 } catch {
                     $status = 'capability-limited'
-                    $nextStep = 'Inspect the captured powercfg command, exit code, stdout, and stderr; Windows may require policy permission to duplicate or select power schemes.'
+                    $nextStep = 'Inspect the captured powercfg command, exit code, stdout, and stderr; Windows may require policy permission to export, import, select, restore, or delete power schemes.'
                     $sequence.Add([pscustomobject]@{ order = 90; step = 'power-error'; error = $_.Exception.Message; completed = $false }) | Out-Null
                 } finally {
                     if (-not [string]::IsNullOrWhiteSpace($originalGuid)) {
@@ -128,12 +132,17 @@ try {
                         $delete = Invoke-PowerCfg @('/delete', $tempGuid)
                         $sequence.Add([pscustomobject]@{ order = 99; step = 'power-delete-temp'; result = $delete; completed = ($delete.exitCode -eq 0 -and -not $delete.timedOut) }) | Out-Null
                     }
+                    if (-not [string]::IsNullOrWhiteSpace($exportPath) -and (Test-Path -LiteralPath $exportPath)) {
+                        Remove-Item -LiteralPath $exportPath -Force -ErrorAction SilentlyContinue
+                    }
                 }
                 $capability.originalSchemeGuid = $originalGuid
                 $capability.temporarySchemeGuid = $tempGuid
+                $capability.exportImportPathUsed = $true
+                $capability.temporaryPowFilePath = $exportPath
                 $capability.restoreAttempted = @($sequence.ToArray() | Where-Object { $_.step -eq 'power-restore-original' }).Count -gt 0
                 $capability.cleanupAttempted = @($sequence.ToArray() | Where-Object { $_.step -eq 'power-delete-temp' }).Count -gt 0
-                if ([string]::IsNullOrWhiteSpace($nextStep)) { $nextStep = 'Temporary power plan duplicate/select/restore/delete completed; keep future plan imports behind the same restore/delete guard.' }
+                if ([string]::IsNullOrWhiteSpace($nextStep)) { $nextStep = 'Temporary power plan export/import/select/restore/delete completed; keep future plan imports behind the same restore/delete guard.' }
             }
         }
         'standby-memory' {
