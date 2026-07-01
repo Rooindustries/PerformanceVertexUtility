@@ -41,7 +41,8 @@ docs/internal/**/captures/
 # Internal planning/context not intended for the public repo.
 .gitignore.d/
 docs/internal/gitignored/
-docs/internal/claude-*.md
+docs/internal/temp-*.md
+docs/internal/work-notes-*.md
 docs/internal/session-context.md
 docs/internal/frontend-preview/
 docs/internal/frontend/screenshots/
