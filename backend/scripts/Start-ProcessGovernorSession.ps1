@@ -55,8 +55,12 @@ function New-GovernorChangedItem {
         executablePath = Get-RooPropertyValue $Entry 'executablePath' $null
         originalPriorityClass = Get-RooPropertyValue $OriginalState 'priorityClass' $null
         appliedPriorityClass = Get-RooPropertyValue $AppliedState 'priorityClass' $null
+        originalAffinityMask = Get-RooPropertyValue $OriginalState 'affinityMask' $null
+        appliedAffinityMask = Get-RooPropertyValue $AppliedState 'affinityMask' $null
         originalIoPriority = Get-RooPropertyValue $OriginalState 'ioPriority' $null
         appliedIoPriority = Get-RooPropertyValue $AppliedState 'ioPriority' $null
+        originalGpuPriority = Get-RooPropertyValue $OriginalState 'gpuPriority' $null
+        appliedGpuPriority = Get-RooPropertyValue $AppliedState 'gpuPriority' $null
         appliedControls = @(Get-RooArray $AppliedControls)
         ruleId = [string](Get-RooPropertyValue $Entry 'ruleId' '')
         cpuPercent = Get-RooPropertyValue (Get-RooPropertyValue $Entry 'currentState' $null) 'cpuPercent' $null
@@ -82,8 +86,12 @@ function New-GovernorRestoredItem {
         executablePath = Get-RooPropertyValue $Snapshot 'executablePath' $null
         originalPriorityClass = Get-RooPropertyValue $Snapshot 'originalPriorityClass' $null
         restoredPriorityClass = Get-RooPropertyValue $RestoredState 'priorityClass' $null
+        originalAffinityMask = Get-RooPropertyValue $Snapshot 'originalAffinityMask' $null
+        restoredAffinityMask = Get-RooPropertyValue $RestoredState 'affinityMask' $null
         originalIoPriority = Get-RooPropertyValue $Snapshot 'originalIoPriority' $null
         restoredIoPriority = Get-RooPropertyValue $RestoredState 'ioPriority' $null
+        originalGpuPriority = Get-RooPropertyValue $Snapshot 'originalGpuPriority' $null
+        restoredGpuPriority = Get-RooPropertyValue $RestoredState 'gpuPriority' $null
         restoredControls = @(Get-RooArray $RestoredControls)
         ruleId = [string](Get-RooPropertyValue $Snapshot 'ruleId' '')
         reason = $Reason
@@ -99,12 +107,20 @@ function Get-GovernorRestoreChanges {
     )
     $changes = New-Object System.Collections.Generic.List[object]
     $originalPriority = Get-RooPropertyValue $Snapshot 'originalPriorityClass' $null
+    $originalAffinity = Get-RooPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalGpuPriority = Get-RooPropertyValue $Snapshot 'originalGpuPriority' $null
     if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and [string](Get-RooPropertyValue $CurrentState 'priorityClass' $null) -ne [string]$originalPriority) {
         $changes.Add((New-RooControlChange 'priorityClass' (Get-RooPropertyValue $CurrentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
     }
+    if ($null -ne $originalAffinity -and -not [string]::IsNullOrWhiteSpace([string]$originalAffinity) -and (Test-RooAffinityMaskAllowed $originalAffinity) -and [string](Get-RooPropertyValue $CurrentState 'affinityMask' $null) -ne [string]$originalAffinity) {
+        $changes.Add((New-RooControlChange 'affinityMask' (Get-RooPropertyValue $CurrentState 'affinityMask' $null) ([int64]$originalAffinity) 'restoreAffinity' 'Restore original CPU affinity after governor restraint.')) | Out-Null
+    }
     if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and [string](Get-RooPropertyValue $CurrentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
         $changes.Add((New-RooControlChange 'ioPriority' (Get-RooPropertyValue $CurrentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
+        $changes.Add((New-RooControlChange 'gpuPriority' (Get-RooPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
     }
     return @($changes.ToArray())
 }
@@ -388,7 +404,7 @@ try {
             }
 
             $entryToApply = New-RooProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooPropertyValue $sample 'totalCpuPercent' 0)) 'restrain' $sustainedSeconds
-            $entryChanges = @(Get-RooPreviewControlChanges $entryToApply)
+            $entryChanges = @(Get-RooGovernorApplicableControlChanges @(Get-RooPreviewControlChanges $entryToApply))
             if ($entryChanges.Count -eq 0 -or [bool](Get-RooPropertyValue $entryToApply 'blocked' $false)) {
                 $skip = New-GovernorSkippedItem $entryToApply (Get-RooPropertyValue $entryToApply 'blockedReason' 'No process control change was needed for governor restraint.') $pollIndex
                 $skipped.Add($skip) | Out-Null
@@ -410,8 +426,12 @@ try {
                 executablePath = Get-RooPropertyValue $entryToApply 'executablePath' $identity.currentPath
                 originalPriorityClass = $originalState.priorityClass
                 proposedPriorityClass = Get-RooPropertyValue $entryToApply 'proposedPriorityClass' $null
+                originalAffinityMask = $originalState.affinityMask
+                proposedAffinityMask = Get-RooPropertyValue $entryToApply 'proposedAffinityMask' $null
                 originalIoPriority = $originalState.ioPriority
                 proposedIoPriority = Get-RooPropertyValue $entryToApply 'proposedIoPriority' $null
+                originalGpuPriority = $originalState.gpuPriority
+                proposedGpuPriority = Get-RooPropertyValue $entryToApply 'proposedGpuPriority' $null
                 controlChanges = @($entryChanges)
                 capturedAtUtc = Get-RooUtcStamp
                 profileId = $profileId
