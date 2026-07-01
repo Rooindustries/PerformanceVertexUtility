@@ -21,29 +21,45 @@ public sealed partial class MainWindow : Window
         ["reports"] = typeof(ReportsPage),
     };
 
-    private string _currentTag = "dashboard";
+    private string _currentTag;
     private bool _onSettings;
+    private readonly string _pendingTag;
+    private readonly bool _pendingSettings;
 
-    public MainWindow()
+    public MainWindow() : this("dashboard", false)
+    {
+    }
+
+    public MainWindow(string navTag, bool onSettings)
     {
         InitializeComponent();
         Title = "Roo Industries Optimization Suite";
+        _pendingTag = navTag;
+        _pendingSettings = onSettings;
+        _currentTag = navTag;
         ConfigureTitleBar();
         LogoImage.Source = BrandAssets.TryGetLogo();
         App.Theme.ThemeChanged += OnThemeChanged;
         App.Theme.EffectsChanged += ApplyEffects;
+        Closed += OnWindowClosed;
         ApplyEffects();
-        ContentFrame.Navigate(typeof(DashboardPage));
+        Nav.Loaded += OnNavLoaded;
+    }
+
+    private void OnWindowClosed(object sender, WindowEventArgs args)
+    {
+        App.Theme.ThemeChanged -= OnThemeChanged;
+        App.Theme.EffectsChanged -= ApplyEffects;
     }
 
     private void ConfigureTitleBar()
     {
         var titleBar = AppWindow.TitleBar;
-        var canvas = Color.FromArgb(255, 0, 0, 64);
-        var surface = Color.FromArgb(255, 6, 18, 38);
-        var hover = Color.FromArgb(255, 7, 22, 45);
-        var text = Color.FromArgb(255, 255, 255, 255);
-        var muted = Color.FromArgb(255, 140, 150, 170);
+        var canvas = ThemeColor("RooCanvasDeepBrush", Color.FromArgb(255, 7, 7, 7));
+        var surface = ThemeColor("RooSurfaceElevatedBrush", Color.FromArgb(255, 9, 9, 9));
+        var hover = ThemeColor("RooSurfaceBrush", Color.FromArgb(255, 13, 13, 13));
+        var text = ThemeColor("RooTextPrimaryBrush", Color.FromArgb(255, 255, 255, 255));
+        var muted = ThemeColor("RooTextMutedBrush", Color.FromArgb(255, 143, 143, 134));
 
         titleBar.BackgroundColor = canvas;
         titleBar.InactiveBackgroundColor = surface;
@@ -57,6 +73,24 @@ public sealed partial class MainWindow : Window
         titleBar.ButtonHoverForegroundColor = text;
         titleBar.ButtonPressedBackgroundColor = surface;
         titleBar.ButtonPressedForegroundColor = text;
+    }
+
+    private static Color ThemeColor(string key, Color fallback)
+    {
+        if (Application.Current.Resources.TryGetValue(key, out var value))
+        {
+            if (value is SolidColorBrush solid)
+            {
+                return solid.Color;
+            }
+
+            if (value is LinearGradientBrush gradient && gradient.GradientStops.Count > 0)
+            {
+                return gradient.GradientStops[gradient.GradientStops.Count - 1].Color;
+            }
+        }
+
+        return fallback;
     }
 
     private void ApplyEffects()
@@ -73,6 +107,57 @@ public sealed partial class MainWindow : Window
                 Nav.SelectedItem = navItem;
                 return;
             }
+        }
+    }
+
+    private void ApplyNavFocusBrushes()
+    {
+        if (!(Application.Current.Resources.TryGetValue("RooFocusVisualBrush", out var value) && value is Brush primary))
+        {
+            return;
+        }
+
+        var secondary = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+        foreach (var item in Nav.MenuItems)
+        {
+            if (item is NavigationViewItem navItem)
+            {
+                navItem.FocusVisualPrimaryBrush = primary;
+                navItem.FocusVisualSecondaryBrush = secondary;
+            }
+        }
+
+        if (Nav.SettingsItem is NavigationViewItem settingsItem)
+        {
+            settingsItem.FocusVisualPrimaryBrush = primary;
+            settingsItem.FocusVisualSecondaryBrush = secondary;
+        }
+    }
+
+    private void OnNavLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyNavFocusBrushes();
+
+        if (_pendingSettings)
+        {
+            _onSettings = true;
+            Nav.SelectedItem = Nav.SettingsItem;
+            if (ContentFrame.Content is not SettingsPage)
+            {
+                ContentFrame.Navigate(typeof(SettingsPage));
+            }
+
+            return;
+        }
+
+        _onSettings = false;
+        _currentTag = _pendingTag;
+        SelectNav(_pendingTag);
+        if (PageMap.TryGetValue(_pendingTag, out var pageType) &&
+            (ContentFrame.Content is null || ContentFrame.Content.GetType() != pageType))
+        {
+            ContentFrame.Navigate(pageType);
         }
     }
 
@@ -95,18 +180,9 @@ public sealed partial class MainWindow : Window
 
     private void OnThemeChanged()
     {
-        if (Application.Current.Resources.TryGetValue("RooCanvasDeepBrush", out var canvas) && canvas is Brush brush)
-        {
-            RootGrid.Background = brush;
-        }
-
-        if (Application.Current.Resources.TryGetValue("RooAppRadialBrush", out var radial) && radial is Brush radialBrush)
-        {
-            RadialOverlay.Fill = radialBrush;
-        }
-
-        var target = _onSettings ? typeof(SettingsPage)
-            : PageMap.TryGetValue(_currentTag, out var pageType) ? pageType : typeof(DashboardPage);
-        ContentFrame.Navigate(target);
+        App.ApplyAccentResourceOverrides();
+        var tag = _currentTag;
+        var settings = _onSettings;
+        DispatcherQueue.TryEnqueue(() => App.RecreateMainWindow(tag, settings));
     }
 }

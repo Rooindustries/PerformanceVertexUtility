@@ -18,17 +18,21 @@
             OpenPaneLength="248"
             SelectionChanged="Nav_SelectionChanged">
 
+            <NavigationView.Resources>
+                <StaticResource x:Key="FocusVisualPrimaryBrush" ResourceKey="RooFocusVisualBrush" />
+                <SolidColorBrush x:Key="FocusVisualSecondaryBrush" Color="Transparent" />
+                <StaticResource x:Key="SystemControlFocusVisualPrimaryBrush" ResourceKey="RooFocusVisualBrush" />
+                <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="Transparent" />
+                <StaticResource x:Key="NavigationViewItemForegroundFocus" ResourceKey="RooTextPrimaryBrush" />
+            </NavigationView.Resources>
+
             <NavigationView.PaneHeader>
                 <Grid Padding="4,12,4,12" ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="9"
-                            Background="{StaticResource RooGlassBrush}"
-                            BorderBrush="{StaticResource RooBorderAccentBrush}" BorderThickness="1">
-                        <Image x:Name="LogoImage" Width="24" Height="24" Stretch="Uniform" />
-                    </Border>
+                    <Image x:Name="LogoImage" Grid.Column="0" Width="32" Height="32" Stretch="Uniform" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="ROO INDUSTRIES" FontFamily="{StaticResource RooFontFamily}"
                                    FontSize="13" FontWeight="SemiBold" CharacterSpacing="80"
@@ -77,15 +81,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <Rectangle Grid.Row="0" Height="1" VerticalAlignment="Top">
-                    <Rectangle.Fill>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Offset="0.0" Color="#00000000" />
-                            <GradientStop Offset="0.5" Color="#8067E8F9" />
-                            <GradientStop Offset="1.0" Color="#00000000" />
-                        </LinearGradientBrush>
-                    </Rectangle.Fill>
-                </Rectangle>
+                <Rectangle Grid.Row="0" Height="1" VerticalAlignment="Top" Fill="{StaticResource RooTopHairlineBrush}" />
                 <Frame x:Name="ContentFrame" Grid.Row="1" />
             </Grid>
         </NavigationView>

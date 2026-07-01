@@ -87,9 +87,9 @@
                         </Grid>
                         <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReviewProcessPlanClick"
                                 Style="{StaticResource NavCtaButtonStyle}"
-                                Background="{StaticResource RooNavCtaBrush}" Foreground="White">
+                                Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="White" />
+                                <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
                                 <TextBlock Text="See What To Tune" />
                             </StackPanel>
                         </Button>
@@ -122,7 +122,7 @@
                                 <ProgressBar Value="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" Maximum="100" Height="10" CornerRadius="5"
                                              Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"
                                              Background="{StaticResource RooSurfaceInputBrush}" />
-                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                             <StackPanel Spacing="6">
                                 <TextBlock Text="TOP CONSUMERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />

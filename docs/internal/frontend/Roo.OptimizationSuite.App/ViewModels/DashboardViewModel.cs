@@ -95,7 +95,7 @@ public partial class DashboardViewModel : PageViewModelBase
             ? new StatusLine("Companion apps", string.Join(" + ", companions) + " protected", "safe")
             : new StatusLine("Companion apps", "None running", "neutral"));
 
-        SessionLines.Add(new StatusLine("Refresh target", "Not set", "neutral"));
+        SessionLines.Add(new StatusLine("Session plan", "No tune applied yet", "neutral"));
     }
 
     private void BuildMemory(ProcessInventorySummary s, long usedRam, long totalRam, int ramGb, DriverHardwareSummary? hw)

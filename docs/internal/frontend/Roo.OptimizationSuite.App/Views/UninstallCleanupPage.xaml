@@ -130,11 +130,25 @@
                 <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
                   <Grid>
 
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Padding="40"
+                    <StackPanel VerticalAlignment="Top" Padding="24,18,24,28" Spacing="12"
                                 Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                        <FontIcon Glyph="&#xE74D;" FontSize="26" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <TextBlock Text="Pick an app on the left to review its uninstall and leftovers." TextWrapping="Wrap"
-                                   TextAlignment="Center" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="Pick an app to review" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                            <TextBlock Text="Select an app to walk through removing it cleanly. Nothing is removed until you approve it."
+                                       FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Spacing="9">
+                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
+                                <Run Text="Official uninstall" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Run its own uninstaller first." Foreground="{StaticResource RooTextMutedBrush}" />
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
+                                <Run Text="Leftover scan" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Find what it leaves behind." Foreground="{StaticResource RooTextMutedBrush}" />
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
+                                <Run Text="Cleanup list" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Approve removals, backed up first." Foreground="{StaticResource RooTextMutedBrush}" />
+                            </TextBlock>
+                        </StackPanel>
                     </StackPanel>
 
                     <ScrollViewer Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"

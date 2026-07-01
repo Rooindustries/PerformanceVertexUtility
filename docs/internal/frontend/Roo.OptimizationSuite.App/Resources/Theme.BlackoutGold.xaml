@@ -28,11 +28,13 @@
         <GradientStop Offset="0.0" Color="#F70E0E0E" />
         <GradientStop Offset="1.0" Color="#EB070707" />
     </LinearGradientBrush>
-    <SolidColorBrush x:Key="RooGlassHighlightBrush" Color="#29FFFFFF" />
+    <SolidColorBrush x:Key="RooGlassHighlightBrush" Color="#22F5ECD8" />
 
-    <SolidColorBrush x:Key="RooBorderBrush" Color="#29FFFFFF" />
-    <SolidColorBrush x:Key="RooBorderStrongBrush" Color="#42FFFFFF" />
-    <SolidColorBrush x:Key="RooBorderAccentBrush" Color="#52F0C35A" />
+    <SolidColorBrush x:Key="RooBorderBrush" Color="#2EC4963C" />
+    <SolidColorBrush x:Key="RooBorderStrongBrush" Color="#47C4963C" />
+    <SolidColorBrush x:Key="RooBorderAccentBrush" Color="#5CF0C35A" />
+    <SolidColorBrush x:Key="RooControlBorderBrush" Color="#40C4963C" />
+    <SolidColorBrush x:Key="RooFocusVisualBrush" Color="#C2F0C35A" />
 
     <SolidColorBrush x:Key="RooTextPrimaryBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="RooTextSecondaryBrush" Color="#DEDED7" />
@@ -45,10 +47,12 @@
     <SolidColorBrush x:Key="RooAccentGlowBrush" Color="#FFD76E" />
     <SolidColorBrush x:Key="RooAccentSoftBrush" Color="#66F0C35A" />
     <SolidColorBrush x:Key="RooOnAccentBrush" Color="#161208" />
-    <LinearGradientBrush x:Key="RooPrimaryButtonBrush" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Offset="0.0" Color="#FFD76E" />
-        <GradientStop Offset="0.5" Color="#E8B94A" />
-        <GradientStop Offset="1.0" Color="#C9962E" />
+    <SolidColorBrush x:Key="RooOnCtaBrush" Color="#F5DC9E" />
+    <LinearGradientBrush x:Key="RooPrimaryButtonBrush" StartPoint="0,0" EndPoint="0.12,1">
+        <GradientStop Offset="0.0" Color="#2D2D30" />
+        <GradientStop Offset="0.35" Color="#1B1B1E" />
+        <GradientStop Offset="0.72" Color="#0E0E10" />
+        <GradientStop Offset="1.0" Color="#191919" />
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="RooSuccessBrush" Color="#34D399" />
@@ -84,13 +88,22 @@
     <SolidColorBrush x:Key="RiskNeutralSoftBrush" Color="#0DFFFFFF" />
     <SolidColorBrush x:Key="RiskNeutralBorderBrush" Color="#42FFFFFF" />
 
-    <LinearGradientBrush x:Key="RooNavCtaBrush" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Offset="0.0" Color="#1C1C20" />
-        <GradientStop Offset="1.0" Color="#121215" />
+    <LinearGradientBrush x:Key="RooNavCtaBrush" StartPoint="0,0" EndPoint="0.12,1">
+        <GradientStop Offset="0.0" Color="#2D2D31" />
+        <GradientStop Offset="0.4" Color="#1B1B1F" />
+        <GradientStop Offset="0.74" Color="#0F0F12" />
+        <GradientStop Offset="1.0" Color="#1A1A1D" />
     </LinearGradientBrush>
-    <LinearGradientBrush x:Key="RooNavCtaHoverBrush" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Offset="0.0" Color="#26262B" />
-        <GradientStop Offset="1.0" Color="#18181C" />
+    <LinearGradientBrush x:Key="RooNavCtaHoverBrush" StartPoint="0,0" EndPoint="0.12,1">
+        <GradientStop Offset="0.0" Color="#37373C" />
+        <GradientStop Offset="0.4" Color="#232328" />
+        <GradientStop Offset="1.0" Color="#161619" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="RooTopHairlineBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#00000000" />
+        <GradientStop Offset="0.5" Color="#B3F0C35A" />
+        <GradientStop Offset="1.0" Color="#00000000" />
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="RooDisplayTextBrush" StartPoint="0,0" EndPoint="1,0">
