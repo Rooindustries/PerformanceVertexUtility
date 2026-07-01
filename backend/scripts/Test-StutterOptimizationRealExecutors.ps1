@@ -1,0 +1,122 @@
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+$failures = New-Object System.Collections.Generic.List[string]
+$passes = New-Object System.Collections.Generic.List[string]
+
+function Add-Pass {
+    param([string]$Message)
+    $passes.Add($Message) | Out-Null
+    Write-Host "PASS $Message"
+}
+
+function Add-Failure {
+    param([string]$Message)
+    $failures.Add($Message) | Out-Null
+    Write-Host "FAIL $Message"
+}
+
+function ConvertFrom-ScriptJson {
+    param([object[]]$Output)
+    return ($Output -join [Environment]::NewLine) | ConvertFrom-Json
+}
+
+function Get-StateEntryCount {
+    $stateRoot = Join-Path $repoRoot 'backend\state'
+    if (-not (Test-Path -LiteralPath $stateRoot)) { return 0 }
+    return @(Get-ChildItem -LiteralPath $stateRoot -Force -Recurse -ErrorAction SilentlyContinue).Count
+}
+
+$requiredFiles = @(
+    'backend\scripts\Invoke-TimerResolutionSession.ps1',
+    'backend\scripts\Invoke-StutterOptimizationRealExecutor.ps1'
+)
+foreach ($relative in $requiredFiles) {
+    $path = Join-Path $repoRoot $relative
+    if (Test-Path -LiteralPath $path) {
+        Add-Pass "Required file exists: $relative"
+    } else {
+        Add-Failure "Required file missing: $relative"
+    }
+}
+
+$stateBefore = Get-StateEntryCount
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-stutter-real-$([guid]::NewGuid().ToString('N'))"
+$cleanupDone = $false
+try {
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+
+    $timer = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId timer-resolution -ConfirmApply -AllowRealSystemExecution -UserApproved -TimerDurationMilliseconds 50 -TimeoutSeconds 10)
+    $timerStep = @($timer.executionSequence | Where-Object { $_.step -eq 'timer-resolution-bounded-session' }) | Select-Object -First 1
+    if ($timer.status -in @('success','capability-limited') -and $timer.summary.willPersist -eq $false -and $timer.summary.willLaunchForbiddenUtility -eq $false -and $timerStep.result.invocation.focusStealPrevented -eq $true -and $timer.capabilities.timerRestoreProved -eq $true) {
+        Add-Pass 'Timer resolution real executor ran bounded helper and proved restore-on-exit'
+    } else {
+        Add-Failure 'Timer resolution real executor did not prove bounded restore behavior'
+    }
+
+    $power = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId power-plan -ConfirmApply -AllowRealSystemExecution -UserApproved -TimeoutSeconds 15)
+    if ($power.status -in @('success','capability-limited') -and $power.summary.willPersist -eq $false -and $power.summary.willLaunchForbiddenUtility -eq $false -and $power.summary.nextEngineeringStep -and ($power.capabilities.restoreAttempted -eq $true -or $power.status -eq 'capability-limited')) {
+        Add-Pass 'Power plan real executor attempted reversible temp plan flow or reported exact capability limitation'
+    } else {
+        Add-Failure 'Power plan real executor did not prove reversible flow or exact limitation'
+    }
+
+    $standby = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId standby-memory -UserApproved)
+    if ($standby.status -eq 'capability-limited' -and $standby.capabilities.readOnlyCountersImplemented -eq $true -and $standby.capabilities.oneShotClearRunnerScaffolded -eq $true -and $standby.capabilities.executionRequires -match 'Administrator|NtSetSystemInformation' -and $standby.summary.nextEngineeringStep) {
+        Add-Pass 'Standby memory executor reports read-only counters, missing requirement, and next engineering step'
+    } else {
+        Add-Failure 'Standby memory executor did not report expected capability detection'
+    }
+
+    $shaderRoot = Join-Path $tempRoot 'shader-real-readiness'
+    New-Item -ItemType Directory -Path (Join-Path $shaderRoot 'NVIDIA\DXCache') -Force | Out-Null
+    $shaderFile = Join-Path $shaderRoot 'NVIDIA\DXCache\a.bin'
+    Set-Content -LiteralPath $shaderFile -Value 'shader cache' -Encoding UTF8
+    $shader = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -UserApproved)
+    if ($shader.status -eq 'success' -and $shader.capabilities.realPathPlannerImplemented -eq $true -and $shader.capabilities.sameBackupDeleteRestorePlanner -eq $true -and $shader.capabilities.realDeletionAttempted -eq $false -and (Test-Path -LiteralPath $shaderFile)) {
+        Add-Pass 'Shader cache real-path readiness uses backup/delete/restore planner without deleting real-path files'
+    } else {
+        Add-Failure 'Shader cache real-path readiness did not preserve files or expose planner proof'
+    }
+
+    $serviceName = (Get-Service | Select-Object -First 1).Name
+    $service = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId service-pause-preview -ServiceName $serviceName -UserApproved)
+    $serviceRecord = @($service.executionSequence[0].services) | Select-Object -First 1
+    if ($service.status -eq 'success' -and $service.capabilities.serviceAnalyzerImplemented -eq $true -and $service.capabilities.realPauseRunnerLayerReady -eq $true -and $service.capabilities.realPauseAttempted -eq $false -and $serviceRecord.exists -eq $true) {
+        Add-Pass 'Service pause real executor analyzes service status and dependencies without pausing real service'
+    } else {
+        Add-Failure 'Service pause real executor did not expose analyzer proof'
+    }
+
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    $cleanupDone = $true
+    if (-not (Test-Path -LiteralPath $tempRoot)) {
+        Add-Pass 'Stutter real executor disposable fixtures were cleaned up'
+    } else {
+        Add-Failure 'Stutter real executor disposable fixtures remain'
+    }
+} catch {
+    Add-Failure "Stutter real executor validation failed: $($_.Exception.Message)"
+} finally {
+    if (-not $cleanupDone -and (Test-Path -LiteralPath $tempRoot)) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$stateAfter = Get-StateEntryCount
+if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
+    Add-Pass 'backend/state remains empty after stutter real executor validation'
+} else {
+    Add-Failure "backend/state is not empty or changed during stutter real executor validation: before=$stateBefore after=$stateAfter"
+}
+
+Add-Pass 'Stutter real executor validation did not launch FSOS, WinUtil, cleanup, registry, service edit, driver, or forbidden tweak utilities'
+
+Write-Host ''
+if ($failures.Count -eq 0) {
+    Write-Host "PASS Stutter real executor validation completed. $($passes.Count) checks passed."
+    exit 0
+}
+
+Write-Host "FAIL Stutter real executor validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
+exit 1

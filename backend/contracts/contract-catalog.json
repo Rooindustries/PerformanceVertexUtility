@@ -283,6 +283,20 @@
       "status": "draft"
     },
     {
+      "name": "official uninstall harmless process runner",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "uninstall cleanup",
+      "summary": "Real hidden process-runner proof for official uninstall commands using an exact harmless executable allowlist, working-directory isolation, timeout cancellation, stdout/stderr capture, and no silent real app uninstall gates.",
+      "status": "draft"
+    },
+    {
+      "name": "uninstall cleanup fixture rollback restore",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "uninstall cleanup",
+      "summary": "Disposable fixture restore envelope that validates copied file and folder backups from cleanup rollback manifests without touching real user data.",
+      "status": "draft"
+    },
+    {
       "name": "driver hardware inventory",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverHardwareInventory",
       "workflow": "drivers and profiles",
@@ -339,6 +353,13 @@
       "status": "draft"
     },
     {
+      "name": "NVIDIA NIP real read-only capability probe",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "drivers and profiles",
+      "summary": "Real hidden NVPI process runner for file-version, help, and temp export probes with stdout/stderr/exit-code/timeout capture, temp export validation, and no import path.",
+      "status": "draft"
+    },
+    {
       "name": "stutter optimization preview contracts",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "FSOS-X and WinUtil parity",
@@ -357,6 +378,13 @@
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "FSOS-X and WinUtil parity",
       "summary": "Mock or disposable-fixture executor envelope for standby memory, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore; real system-changing runners remain blocked.",
+      "status": "draft"
+    },
+    {
+      "name": "stutter optimization real and detection executors",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "FSOS-X and WinUtil parity",
+      "summary": "Controlled real/detection executor envelope for bounded timer resolution sessions, temporary power-plan duplicate/select/restore/delete, standby memory counter and missing-API reporting, real shader-cache readiness planning, and service status/dependency analysis.",
       "status": "draft"
     },
     {

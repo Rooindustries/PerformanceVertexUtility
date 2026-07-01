@@ -75,19 +75,27 @@ function Invoke-RooBackendHiddenProcess {
     $exitCode = $null
     $stdout = ''
     $stderr = ''
+    $startError = $null
     try {
-        $started = $process.Start()
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            $timedOut = $true
-            try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
-            $process.WaitForExit(5000) | Out-Null
+        try {
+            $started = $process.Start()
+        } catch {
+            $startError = $_.Exception.Message
+            $started = $false
         }
-        try { $stdout = $stdoutTask.GetAwaiter().GetResult() } catch { $stdout = '' }
-        try { $stderr = $stderrTask.GetAwaiter().GetResult() } catch { $stderr = '' }
-        if (-not $timedOut) {
-            try { $exitCode = [int]$process.ExitCode } catch { $exitCode = $null }
+        if ($started) {
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+                $timedOut = $true
+                try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
+                $process.WaitForExit(5000) | Out-Null
+            }
+            try { $stdout = $stdoutTask.GetAwaiter().GetResult() } catch { $stdout = '' }
+            try { $stderr = $stderrTask.GetAwaiter().GetResult() } catch { $stderr = '' }
+            if (-not $timedOut) {
+                try { $exitCode = [int]$process.ExitCode } catch { $exitCode = $null }
+            }
         }
     } finally {
         $watch.Stop()
@@ -102,6 +110,7 @@ function Invoke-RooBackendHiddenProcess {
         arguments = @(Get-RooArray $Arguments)
         commandLine = Join-RooBackendExecutorCommandLine $FilePath @(Get-RooArray $Arguments)
         processStarted = $started
+        startError = $startError
         exitCode = $exitCode
         timedOut = $timedOut
         timeoutSeconds = $TimeoutSeconds
