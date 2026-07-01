@@ -66,6 +66,34 @@
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
                     <StackPanel>
+                        <StackPanel Padding="20,18,20,10" Spacing="6">
+                            <TextBlock Text="OPTIMIZATION ENGINE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.EngineStatus, Mode=OneWay}" FontSize="13" LineHeight="19"
+                                       Foreground="{StaticResource RooTextSecondaryBrush}" />
+                        </StackPanel>
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.EngineRows}">
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:StatusLine">
+                                    <Grid Padding="20,11" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Label}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Value}" VerticalAlignment="Center" FontWeight="SemiBold"
+                                                   TextAlignment="Right" Foreground="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                        <TextBlock Text="Roo's backend runs in short, bounded sessions and exits. Apply actions stay preview-first — nothing changes until you confirm it."
+                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" Padding="20,10,20,18" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                    <StackPanel>
                         <TextBlock Text="SAFETY DEFAULTS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}"
                                    Padding="20,18,20,8" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.SafetyRows}">

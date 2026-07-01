@@ -13,10 +13,12 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private bool _reducedEffects;
     [ObservableProperty] private string? _productName;
     [ObservableProperty] private string? _versionText;
+    [ObservableProperty] private string? _engineStatus;
 
     public string Tagline => "Precision Performance Engineering";
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
     public ObservableCollection<SafetyRow> SafetyRows { get; } = new();
+    public ObservableCollection<StatusLine> EngineRows { get; } = new();
 
     public SettingsViewModel()
     {
@@ -29,8 +31,58 @@ public partial class SettingsViewModel : PageViewModelBase
         var product = await Data.GetProductStatusAsync();
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
         VersionText = "Version " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
+        EngineStatus = ReadyLabel(product.Status) + "  ·  Engine " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
         BuildSafetyRows(product.Safety);
+        BuildEngineRows(product.WorkflowReadiness);
     }
+
+    private void BuildEngineRows(System.Collections.Generic.IReadOnlyList<WorkflowReadiness>? readiness)
+    {
+        EngineRows.Clear();
+        if (readiness is null)
+        {
+            return;
+        }
+
+        foreach (var workflow in readiness)
+        {
+            var (label, value, state) = DescribeWorkflow(workflow);
+            EngineRows.Add(new StatusLine(label, value, state));
+        }
+    }
+
+    private static (string label, string value, string state) DescribeWorkflow(WorkflowReadiness workflow)
+    {
+        var label = (workflow.WorkflowId ?? string.Empty) switch
+        {
+            "performanceProfiles" => "Game Tune",
+            "processGovernor" => "Background governor",
+            "persistentProcessPolicy" => "Process policy",
+            "uninstallCleanup" => "Clean Junk",
+            "driversProfiles" => "Drivers & hardware",
+            _ => string.IsNullOrWhiteSpace(workflow.Name) ? "Workflow" : workflow.Name!,
+        };
+
+        var (value, state) = (workflow.ImplementationStatus ?? string.Empty) switch
+        {
+            "preview-dry-run-confirmed-process-controls-and-live-restore" => ("Preview, apply, and live restore", "safe"),
+            "bounded-session-preview-confirmed-restraint-status-and-restore" => ("Session preview and restore", "safe"),
+            "bounded-session-preview-confirmed-launch-watcher-status-and-restore" => ("Session preview and restore", "safe"),
+            "sample-and-read-only-inventory" => ("Read-only preview", "low"),
+            "sample-and-read-only-hardware-inventory" => ("Read-only hardware read", "low"),
+            _ => ("In development", "low"),
+        };
+
+        return (label, value, state);
+    }
+
+    private static string ReadyLabel(string? status) => (status ?? string.Empty) switch
+    {
+        "preview-ready" => "Preview ready",
+        "ready" => "Ready",
+        "" => "Status unavailable",
+        _ => status!,
+    };
 
     private void BuildSafetyRows(SafetyStatus? safety)
     {

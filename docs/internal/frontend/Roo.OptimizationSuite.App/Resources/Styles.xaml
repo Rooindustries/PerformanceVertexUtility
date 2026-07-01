@@ -92,7 +92,8 @@
     <Style x:Key="NavCtaButtonStyle" TargetType="Button">
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Padding" Value="16,9,16,9" />
-        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource RooBorderAccentBrush}" />
         <Setter Property="FontFamily" Value="{StaticResource RooFontFamily}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />

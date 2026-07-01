@@ -13,8 +13,6 @@
             </ResourceDictionary.MergedDictionaries>
 
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
-            <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="RooGlassMenuBrush" />
-            <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="RooGlassMenuBrush" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

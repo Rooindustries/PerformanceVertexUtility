@@ -12,6 +12,8 @@ public sealed class ThemeService
     private const string ThemeKey = "themeId";
     private const string EffectsKey = "reducedEffects";
     private const string ProbeBrushKey = "RooCanvasBrush";
+    private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
+    private const string StylesProbeKey = "PanelBorderStyle";
 
     public static readonly ThemeOption RooBlue = new("roo-blue", "Roo Blue", "ms-appx:///Resources/Theme.RooBlue.xaml");
     public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
@@ -78,15 +80,38 @@ public sealed class ThemeService
         var merged = Application.Current.Resources.MergedDictionaries;
         var replacement = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
 
+        var swapped = false;
         for (var i = 0; i < merged.Count; i++)
         {
             if (merged[i].ContainsKey(ProbeBrushKey))
             {
                 merged[i] = replacement;
-                return;
+                swapped = true;
+                break;
             }
         }
 
-        merged.Add(replacement);
+        if (!swapped)
+        {
+            merged.Add(replacement);
+        }
+
+        ReloadStyles(merged);
+    }
+
+    private static void ReloadStyles(IList<ResourceDictionary> merged)
+    {
+        for (var i = 0; i < merged.Count; i++)
+        {
+            if (!merged[i].ContainsKey(StylesProbeKey))
+            {
+                continue;
+            }
+
+            var fresh = new ResourceDictionary();
+            merged[i] = fresh;
+            fresh.Source = new Uri(StylesUri);
+            return;
+        }
     }
 }

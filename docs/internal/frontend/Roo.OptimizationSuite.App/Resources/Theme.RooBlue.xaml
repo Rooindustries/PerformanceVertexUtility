@@ -45,6 +45,9 @@
     <SolidColorBrush x:Key="RooAccentGlowBrush" Color="#03E9F4" />
     <SolidColorBrush x:Key="RooAccentSoftBrush" Color="#8067E8F9" />
     <SolidColorBrush x:Key="RooOnAccentBrush" Color="#000000" />
+    <SolidColorBrush x:Key="RooOnCtaBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="RooControlBorderBrush" Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="RooFocusVisualBrush" Color="#B367E8F9" />
     <LinearGradientBrush x:Key="RooPrimaryButtonBrush" StartPoint="0,0" EndPoint="1,0">
         <GradientStop Offset="0.0" Color="#38BDF8" />
         <GradientStop Offset="0.38" Color="#0284C7" />
@@ -91,6 +94,12 @@
     <LinearGradientBrush x:Key="RooNavCtaHoverBrush" StartPoint="0,0" EndPoint="1,0">
         <GradientStop Offset="0.0" Color="#22D3EE" />
         <GradientStop Offset="1.0" Color="#60A5FA" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="RooTopHairlineBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#00000000" />
+        <GradientStop Offset="0.5" Color="#8067E8F9" />
+        <GradientStop Offset="1.0" Color="#00000000" />
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="RooDisplayTextBrush" StartPoint="0,0" EndPoint="1,0">

@@ -1,109 +1,115 @@
-# Roo Industries Optimization Suite — Frontend (first-pass scaffold)
+# Roo Industries Optimization Suite - WinUI Frontend
 
-Internal, ignored location (`docs/` is git-ignored). This is the WinUI 3 frontend shell built against the
-existing backend contracts and sample JSON. It is **not built or runnable yet** — see "Blocker" below.
+Internal WinUI 3 frontend for the local Roo Optimization Suite. The project is kept
+under `docs/internal/frontend` while the backend contracts and runtime scripts are
+still being hardened. It should stay a frontend shell: no risky Windows behavior is
+implemented directly in the UI layer.
 
-## Status
+## Build
 
-- UI/UX only. No backend behavior, no system-changing logic, no apply/uninstall/delete/driver actions are wired.
-- Every destructive/apply control is rendered disabled with a preview-vs-apply explanation.
-- Data comes exclusively from `backend/samples/*.json` through `Services/SampleDataService`.
-
-## Blocker: toolchain not installed
-
-This machine has the .NET host (`C:\Program Files\dotnet\dotnet.exe`) but **no .NET SDK** and **no Visual Studio**:
-
-- `dotnet --list-sdks` returns nothing; there is no `C:\Program Files\dotnet\sdk` folder.
-- `msbuild` is not on PATH; the Visual Studio installer directory does not exist.
-
-So the project cannot be restored or built here (`dotnet build` / `dotnet new` are unavailable), and the
-Windows App SDK / WinUI NuGet packages cannot be restored. The scaffold was authored to compile cleanly once
-the toolchain is present, but it has **not** been compiled.
-
-### What to install
-
-1. .NET SDK 8.0 (x64): https://dotnet.microsoft.com/download/dotnet/8.0
-2. Visual Studio 2022 with the **.NET Desktop Development** workload and the **Windows App SDK C# Templates**
-   component (or the standalone Windows App SDK 1.5). Alternatively, command-line only:
-   - `winget install Microsoft.DotNet.SDK.8`
-   - Restore is handled by the `Microsoft.WindowsAppSDK` PackageReference already in the csproj.
-
-### Build once the SDK exists
+Build from the repository root:
 
 ```powershell
-cd docs\internal\frontend\Roo.OptimizationSuite.App
-dotnet restore
-dotnet build -p:Platform=x64
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\scripts\Build-Frontend.ps1
 ```
 
-Unpackaged run (the csproj sets `WindowsPackageType=None`):
+The script builds:
+
+```text
+docs\internal\frontend\Roo.OptimizationSuite.App\Roo.OptimizationSuite.App.csproj
+```
+
+Default behavior:
+
+- Builds `Debug` with `-p:Platform=x64`.
+- Uses `ROO_DOTNET_EXE` or the `-DotNetPath` argument when provided.
+- Otherwise prefers `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`, then `dotnet.exe`
+  on `PATH`.
+- Requires a dotnet host with at least one installed SDK.
+- Builds only; it does not run or focus the app.
+
+Manual development run, from the project directory only:
 
 ```powershell
 dotnet run -p:Platform=x64
 ```
 
-At runtime the app locates `backend/samples` by walking up from the executable to the repository root (the
-folder containing `backend\samples`). Override with the `ROO_BACKEND_ROOT` environment variable if needed.
+## Runtime data sources
 
-## Promoting to the public repo
+`BackendLocator` resolves the repository root from `ROO_BACKEND_ROOT` when set.
+Without that override, it walks upward from the executable until it finds
+`backend\samples`.
 
-When the toolchain is available and the build is green, move the project folder to the preferred public path:
+The frontend currently reads data from two service paths:
+
+- `LiveDataService` runs read-oriented backend PowerShell scripts from
+  `backend\scripts` and consumes JSON output for process inventory, process
+  classification, hardware summary, installed-app inventory, and leftover preview
+  data.
+- `SampleDataService` reads `backend\samples\*.sample.json` for product status,
+  backend fixtures, driver recommendations, NVIDIA profile catalog data, telemetry
+  fixtures, and report summaries.
+
+Local UI preferences are stored in:
 
 ```text
-frontend\Roo.OptimizationSuite.App\
+%LOCALAPPDATA%\RooOptimizationSuite\settings.json
 ```
 
-Then copy the brand assets the app references into `Assets\` so they ship with the build:
-
-- `Assets\Fonts\Manrope.ttf` (a Manrope **ttf/otf** — WinUI cannot load the brand `.woff2` directly; once added,
-  point `RooFontFamily` in `Resources/Brand.xaml` at `ms-appx:///Assets/Fonts/Manrope.ttf#Manrope`).
-- `Assets\Brand\` logo PNGs from `assets\brand\roo-industries\` (then switch `Services/BrandAssets` to
-  `ms-appx:///` sources instead of the dev repo-asset lookup).
-
-## Architecture
+## Current shell
 
 ```text
 Roo.OptimizationSuite.App/
-  App.xaml(.cs)            App entry; lightweight service locator (App.Data, App.Theme); applies persisted theme.
-  MainWindow.xaml(.cs)     Settings-style NavigationView shell + content Frame; theme reload; nav helper.
+  App.xaml(.cs)             App entry, shared services, persisted theme, crash log hook.
+  MainWindow.xaml(.cs)      Settings-style NavigationView shell and page routing.
   Resources/
-    Theme.RooBlue.xaml     Roo Blue tokens (default).        <- translated from the brand source, see below
-    Theme.BlackoutGold.xaml Blackout Gold tokens (alternate).
-    Brand.xaml             Font family + shared sizing tokens.
-    Styles.xaml            Converters + typography + card/chip layout styles.
-  Models/                  POCOs matching the backend sample JSON shapes (System.Text.Json).
+    Theme.RooBlue.xaml      Default Roo Blue resource dictionary.
+    Theme.BlackoutGold.xaml Alternate Blackout Gold resource dictionary.
+    Brand.xaml              Font family and shared sizing tokens.
+    Styles.xaml             Converters, typography, card, chip, and layout styles.
+  Assets/Fonts/             Checked-in app font assets copied to output.
+  Models/                   System.Text.Json models for backend contracts and fixtures.
   Services/
-    BackendLocator         Resolves repo-relative backend\samples and brand asset dirs.
-    SampleDataService      Reads backend\samples\*.json into typed models (the only data seam).
-    ThemeService           Swaps the active theme ResourceDictionary; persists choice.
-    SettingsStore          JSON preference file under LocalAppData (works unpackaged).
-    BrandAssets            Loads the nav logo from the repo brand assets during development.
-  Converters/              Risk->brush (solid/soft/border), bytes, bool/string/count -> visibility.
-  ViewModels/              One per page; PageViewModelBase provides load/ready/empty/error state.
-  Views/                   Dashboard, TourneyMode, PerformanceProfiles, UninstallCleanup,
-                           DriversProfiles, Monitoring, Reports, Settings.
+    BackendLocator          Resolves repo-relative backend and brand asset locations.
+    LiveDataService         Runs read-oriented backend scripts and parses JSON.
+    SampleDataService       Loads checked-in sample JSON fixtures.
+    ThemeService            Swaps theme dictionaries and persists preference.
+    SettingsStore           Stores local UI preferences under LocalAppData.
+    BrandAssets             Loads repo brand logos during development.
+  ViewModels/               Page view models with load, ready, empty, and error state.
+  Views/
+    DashboardPage.xaml
+    PerformanceProfilesPage.xaml
+    UninstallCleanupPage.xaml
+    DriversProfilesPage.xaml
+    MonitoringPage.xaml
+    ReportsPage.xaml
+    SettingsPage.xaml
 ```
 
-### Theme provenance
+Navigation labels in the shell are Dashboard, Game Tune, Clean Junk, Drivers &
+Settings, Live Feel, Before & After, and Settings.
 
-Theme tokens are translated 1:1 from the copied Roo Industries source, not invented:
+## Theme and assets
 
-- `assets/brand/roo-industries/rooindustries-index.css` — `:root` / `html[data-theme="default"]` -> Roo Blue;
-  `html[data-theme="dark"]` -> Blackout Gold. `rgba()` values are written as `#AARRGGBB`.
-- `assets/brand/roo-industries/rooindustries-tailwind.config.js` — semantic token names (surface, ink, accent,
-  line, success/warning/danger/info) map onto the `Roo*` and `Risk*` brush keys.
-- `assets/brand/roo-industries/rooindustries-font-face.css` — declares the `Manrope Variable` family.
+- The app ships two dark theme dictionaries: Roo Blue and Blackout Gold.
+- `ThemeService` persists the selected theme and swaps the active resource
+  dictionary at runtime.
+- `Brand.xaml` currently points to the checked-in Roboto Flex TTF asset under
+  `Assets\Fonts`.
+- Development logo lookup comes from `assets\brand\roo-industries` through
+  `BrandAssets`.
 
-Both themes are dark (the shell pins `RequestedTheme="Dark"`). The app keeps operational surfaces quieter than the
-marketing site: flat canvas, single-level cards, restrained accent use; the brand `app-gradient` and
-`button-primary` gradients are available as `RooAppBackgroundBrush` / `RooPrimaryButtonBrush` for splash and the
-primary CTA only.
+If the project moves out of `docs/internal/frontend`, keep the build script,
+`BackendLocator`, and `BrandAssets` in sync. A packaged/public layout should copy
+the required brand images into the app `Assets` folder and use `ms-appx:///` asset
+URIs instead of repo-relative logo lookup.
 
-### Known first-pass limitations
+## Current limitations
 
-- Live theme switching swaps the active dictionary and re-navigates the current page so its `StaticResource`
-  brushes re-resolve. Shared `Style` objects that bake a brush would not live-update, so the styles here are
-  layout-only and pages set surface/border brushes at the element level. System chrome theming is a follow-up.
-- The Manrope brand font is `.woff2`; until a `.ttf/.otf` is added the font falls back to the Segoe UI variable
-  family (declared in `Resources/Brand.xaml`).
-- Sample-backed numbers are point-in-time fixtures; the Monitoring page surfaces the missing live signals.
+- Live data depends on the backend scripts being present under `backend\scripts`
+  and returning JSON that matches the frontend models.
+- Catalog-style data still comes from checked-in sample JSON until the matching
+  backend endpoints are wired.
+- The development logo path is repo-relative. Packaged builds need app-local brand
+  assets.

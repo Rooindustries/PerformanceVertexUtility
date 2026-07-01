@@ -116,19 +116,26 @@
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="DRIVER PATH" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.HasRecommendations, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                            <TextBlock Text="No driver updates matched your hardware." FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                            <TextBlock Text="Driver changes stay manual either way. Nothing installs until you approve it."
-                                       FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
-                        </StackPanel>
+                        <Grid ColumnSpacing="12" Visibility="{x:Bind ViewModel.HasRecommendations, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE73E;" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{StaticResource RiskSafeBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <TextBlock Text="No driver updates to review right now." FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Roo checks your hardware against the driver path and surfaces only matched updates here. Driver changes stay locked until you approve them."
+                                           FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Recommendations}">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout MinItemWidth="360" MinColumnSpacing="12" MinRowSpacing="12" ItemsStretch="Fill" />
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="models:DriverRecommendation">
-                                    <Border Style="{StaticResource CardBorderStyle}"
-                                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                                    <Border CornerRadius="8" BorderThickness="1" Padding="16"
+                                            Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
                                         <StackPanel Spacing="10">
                                             <Grid ColumnSpacing="12">
                                                 <Grid.ColumnDefinitions>
@@ -168,8 +175,8 @@
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.NvidiaProfiles}">
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="models:NvidiaProfileEntry">
-                                    <Border Style="{StaticResource CardBorderStyle}"
-                                            Background="{StaticResource RooSurfaceCardBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                                    <Border CornerRadius="8" BorderThickness="1" Padding="16"
+                                            Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
                                         <StackPanel Spacing="10">
                                             <Grid ColumnSpacing="12">
                                                 <Grid.ColumnDefinitions>
