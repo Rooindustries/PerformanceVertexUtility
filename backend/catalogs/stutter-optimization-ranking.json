@@ -1,0 +1,437 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "stutter-optimization-ranking",
+  "product": "LeanClientOptimizer",
+  "targetScenario": {
+    "name": "16 GB RAM Overwatch + OBS + Discord stutter reduction",
+    "game": "Overwatch",
+    "ramClassGb": 16,
+    "companionApps": [
+      "OBS",
+      "Discord"
+    ],
+    "primaryGoal": "Improve visible frame pacing and lows under memory, CPU wakeup, disk, encode, and network contention without breaking stream, voice, input, anti-cheat, security, or device functionality.",
+    "priorityOrder": [
+      "frame-time stability",
+      "1% low FPS and 0.1% low FPS",
+      "RAM and commit pressure reduction",
+      "background process and startup workload reduction",
+      "VRAM/shared-GPU-memory pressure reduction",
+      "input responsiveness",
+      "average FPS"
+    ]
+  },
+  "sourceInputs": [
+    {
+      "sourceProduct": "Gaming playbook",
+      "sourceKind": "gaming-playbook",
+      "path": "backend/catalogs/gaming-playbook-capabilities.json",
+      "role": "source-only capability evidence"
+    },
+    {
+      "sourceProduct": "Gaming toggles",
+      "sourceKind": "gaming-toggles",
+      "path": "backend/catalogs/gaming-toggles-capabilities.json",
+      "role": "source-only capability evidence"
+    },
+    {
+      "sourceProduct": "Gaming gap map",
+      "sourceKind": "gaming-gap-map",
+      "path": "backend/catalogs/gaming-gap-map.json",
+      "role": "existing {source} backend status and top missing {source} ranking"
+    },
+    {
+      "sourceProduct": "Chris Titus WinUtil",
+      "sourceKind": "winutil",
+      "path": "modules/winutil_manifest.json",
+      "role": "source-compatible feature catalog reference"
+    },
+    {
+      "sourceProduct": "Utilities.zip",
+      "sourceKind": "utilities",
+      "path": "modules/utilities_manifest.json",
+      "role": "manual utility and native replacement reference"
+    },
+    {
+      "sourceProduct": "LeanClientOptimizer performance target",
+      "sourceKind": "product-target",
+      "path": "docs/performance-target.md",
+      "role": "target scenario and scoring order"
+    }
+  ],
+  "rankingRules": {
+    "remainingOnly": true,
+    "doNotTreatAsImplemented": [
+      "source-only catalog entries",
+      "manual third-party utility launchers",
+      "remote-script or preset references",
+      "unsafe or preview-only backend evidence"
+    ],
+    "prefer": [
+      "native backend with preview, explicit confirmation, backup, rollback, and validation",
+      "changes that directly reduce frame-time spikes, RAM/commit pressure, or CPU wakeups during an active game session",
+      "changes that preserve OBS, Discord, audio, network, anti-cheat, GPU driver stack, Defender, firewall, Store, WebView2, Tailscale, Wispr Flow, and Samsung continuity"
+    ],
+    "deprioritize": [
+      "cosmetic shell changes",
+      "generic app installs",
+      "theme imports",
+      "broad privacy/security removals",
+      "blanket service or driver changes without machine-specific rollback",
+      "average-FPS-only changes that risk worse lows or stream stability"
+    ]
+  },
+  "rankedRemainingOptimizations": [
+    {
+      "rank": 1,
+      "optimizationId": "memory-pressure-standby-list-control",
+      "title": "Measure memory pressure and safely clear standby memory",
+      "sourceProducts": [
+        "Gaming toggles"
+      ],
+      "sourceRefs": [
+        "dash-clear-standby-memory"
+      ],
+      "currentBackendCoverage": "missing",
+      "whyForTarget": "Dash explicitly targets standby-memory flushing for memory-heavy game stutter. On a 16 GB machine with Overwatch, OBS, and Discord, available memory, commit pressure, and standby-list size are the most direct suspects before riskier OS changes.",
+      "safeBackendNeeded": [
+        "read-only memory, commit, working-set, and standby-list evidence",
+        "preview explaining when a clear is useful versus placebo",
+        "confirmed one-shot clear action only",
+        "before/after validation without persistent state writes",
+        "no service, registry, driver, cleanup, or security mutation"
+      ],
+      "firstSlice": "Add a read-only memory pressure report and rank standby-list clear as available only when pressure thresholds are met.",
+      "risk": "medium",
+      "riskReason": "Clearing standby memory can hide the root cause and may increase later disk/shader reloads if used blindly."
+    },
+    {
+      "rank": 2,
+      "optimizationId": "game-session-process-control-parity",
+      "title": "Finish Process Lasso-style native game-session controls",
+      "sourceProducts": [
+        "Utilities.zip",
+        "Gaming toggles"
+      ],
+      "sourceRefs": [
+        "process-lasso",
+        "dash-lower-other-processes"
+      ],
+      "currentBackendCoverage": "partial",
+      "whyForTarget": "The product target already treats process count, background helpers, launchers, WebViews, and wakeups as first-class stutter causes. The existing backend covers priority/governor flows, but remaining Process Lasso parity matters for sustained sessions.",
+      "safeBackendNeeded": [
+        "per-executable rules instead of name-only matches",
+        "I/O priority and power-throttling validation where supported",
+        "hardware-tested affinity profiles only",
+        "optional continuous enforcement with visible session stop/restore",
+        "OBS and Discord protection from aggressive demotion"
+      ],
+      "firstSlice": "Extend preview scoring for background processes with memory, CPU wakeups, disk, handles, and OBS/Discord protection reasons before adding new apply surfaces.",
+      "risk": "medium",
+      "riskReason": "Incorrect priority, affinity, or throttling choices can worsen lows, audio stability, or anti-cheat compatibility."
+    },
+    {
+      "rank": 3,
+      "optimizationId": "timer-resolution-session-lifecycle",
+      "title": "Backend-owned timer-resolution session",
+      "sourceProducts": [
+        "Gaming playbook",
+        "Gaming toggles"
+      ],
+      "sourceRefs": [
+        "playbook-timer-resolution-scheduled-task",
+        "dash-timer-resolution-toggle"
+      ],
+      "currentBackendCoverage": "missing",
+      "whyForTarget": "Timer resolution can affect input responsiveness and frame pacing. {source} APBX bundles SetTimerResolution and Dash exposes a toggle, but the app needs its own measured session lifecycle rather than a persistent scheduled task clone.",
+      "safeBackendNeeded": [
+        "read current, minimum, and maximum timer resolution",
+        "start only for a confirmed game session",
+        "single-owner process or task lifecycle",
+        "stop/cleanup on session end",
+        "validate resolution before and after",
+        "record power and battery caveats"
+      ],
+      "firstSlice": "Implement read-only timer resolution detection and score it against frame-time/input symptoms before enabling any apply path.",
+      "risk": "medium",
+      "riskReason": "Persistent low timer resolution can increase power use and interact poorly with other apps if cleanup fails."
+    },
+    {
+      "rank": 4,
+      "optimizationId": "power-plan-and-power-state-restore",
+      "title": "Power plan selection and high-performance state pinning with restore",
+      "sourceProducts": [
+        "Gaming playbook",
+        "Gaming toggles",
+        "Chris Titus WinUtil"
+      ],
+      "sourceRefs": [
+        "playbook-power-plan-import-and-selection",
+        "dash-power-plan-and-power-state-controls",
+        "winutil-config-tweaks-performance-plans"
+      ],
+      "currentBackendCoverage": "missing",
+      "whyForTarget": "CPU clock residency and power-state transitions can show up as frame-time variance while streaming. {source} and WinUtil both expose performance-plan concepts, but laptop and thermal risk make restore and validation mandatory.",
+      "safeBackendNeeded": [
+        "capture active power scheme and relevant processor settings",
+        "hardware class gate for desktop versus laptop",
+        "review imported plan contents before apply",
+        "session-scoped restore to previous GUID/settings",
+        "validate active scheme and monitor thermals/power"
+      ],
+      "firstSlice": "Add read-only active-plan inventory and laptop gate; keep imported/community plans catalog-only until reviewed.",
+      "risk": "medium",
+      "riskReason": "Aggressive plans can increase heat, fan noise, laptop drain, or throttling, which can make lows worse."
+    },
+    {
+      "rank": 5,
+      "optimizationId": "startup-and-background-workload-pruning",
+      "title": "Startup/background workload inspector before broad debloat",
+      "sourceProducts": [
+        "Chris Titus WinUtil",
+        "Utilities.zip",
+        "Gaming playbook"
+      ],
+      "sourceRefs": [
+        "winutil-config-tweaks",
+        "winutil-config-presets",
+        "autoruns",
+        "playbook-gaming-registry-kernel-memory-and-graphics-tweaks"
+      ],
+      "currentBackendCoverage": "partial",
+      "whyForTarget": "On 16 GB systems, stutter often comes from many resident helpers, launchers, scheduled tasks, overlays, updaters, and WebView-heavy apps. A startup inspector turns WinUtil presets, Autoruns-style visibility, and {source} tweak evidence into a safe preview workflow.",
+      "safeBackendNeeded": [
+        "inventory Run keys, startup folders, services, scheduled tasks, browser helpers, and updater entries",
+        "score by measured memory, CPU, disk, network, and launch frequency",
+        "protect OBS, Discord, game launchers needed for Overwatch, audio, input, network, security, Store, WebView2, and update components",
+        "disable only with backup and one-click restore",
+        "avoid importing WinUtil presets as defaults"
+      ],
+      "firstSlice": "Build a read-only startup/background pressure report and map entries to known protected categories before exposing disable actions.",
+      "risk": "medium",
+      "riskReason": "Startup trimming is useful but can break devices, updates, launchers, overlays, or companion app behavior if blanket-applied."
+    },
+    {
+      "rank": 6,
+      "optimizationId": "shader-cache-and-profile-stutter-workflow",
+      "title": "Game-aware shader cache cleanup and NVIDIA profile testing",
+      "sourceProducts": [
+        "Gaming toggles",
+        "Utilities.zip"
+      ],
+      "sourceRefs": [
+        "dash-shader-cache-cleanup",
+        "nvidia-profile-inspector",
+        "base-profile.nip"
+      ],
+      "currentBackendCoverage": "missing",
+      "whyForTarget": "Shader cache problems and driver/profile changes can present as Overwatch stutter, especially after driver updates. Dash names shader caches and Utilities includes NVIDIA Profile Inspector plus a seed profile, but both need game-aware validation.",
+      "safeBackendNeeded": [
+        "detect GPU vendor and installed driver",
+        "preview per-cache paths and byte counts",
+        "protect active game, OBS, and driver files",
+        "backup/delete manifest for cache cleanup",
+        "benchmark profile changes by 1% lows and frame-time spikes before recommendation",
+        "manual NVIDIA-only profile import/export gate"
+      ],
+      "firstSlice": "Add read-only shader-cache inventory and a profile-catalog scorecard; keep cleanup/import disabled until benchmark evidence exists.",
+      "risk": "medium",
+      "riskReason": "Cache deletion can cause temporary shader rebuild stutter, and untested driver profiles can reduce stability."
+    },
+    {
+      "rank": 7,
+      "optimizationId": "game-aware-driver-recommendation-clean-room",
+      "title": "Game-aware driver recommendation and manual clean-driver workflow",
+      "sourceProducts": [
+        "Utilities.zip"
+      ],
+      "sourceRefs": [
+        "ddu",
+        "nvcleanstall",
+        "driverStrategy"
+      ],
+      "currentBackendCoverage": "missing",
+      "whyForTarget": "Driver choice can affect 1% lows, OBS encode stability, shader behavior, and GPU memory pressure. Utilities already identify DDU and NVCleanstall as manual workflows, so the app should rank recommendations before any cleaner or installer is launched.",
+      "safeBackendNeeded": [
+        "read-only GPU, driver, game, and OBS/Discord compatibility inventory",
+        "known-good driver metadata by hardware and game",
+        "restore point and offline installer checklist",
+        "manual safe-mode and network guidance",
+        "no silent DDU or NVCleanstall execution",
+        "post-change benchmark comparison"
+      ],
+      "firstSlice": "Create a recommendation-only driver metadata catalog with Overwatch and OBS/Discord compatibility fields.",
+      "risk": "high",
+      "riskReason": "Driver cleaners and custom driver builds are high-impact and must stay manual, hardware-gated, and reversible."
+    },
+    {
+      "rank": 8,
+      "optimizationId": "native-uninstall-leftover-cleanup-for-background-bloat",
+      "title": "Native uninstall and leftover cleanup for resident bloat",
+      "sourceProducts": [
+        "Utilities.zip",
+        "Gaming toggles",
+        "Chris Titus WinUtil",
+        "Gaming playbook"
+      ],
+      "sourceRefs": [
+        "bulk-uninstaller-native",
+        "dash-uninstaller-and-leftover-cleanup",
+        "winutil-config-applications",
+        "playbook-appx-deprovision-and-debloat"
+      ],
+      "currentBackendCoverage": "preview-only",
+      "whyForTarget": "Removing unused resident apps, updaters, overlays, and scheduled helpers can permanently reduce RAM pressure and process count. It is less immediate than session controls but high leverage for repeat client machines.",
+      "safeBackendNeeded": [
+        "official uninstall preview before any action",
+        "leftover file, service, task, startup, and registry preview",
+        "publisher/install-location/GUID matching rather than fuzzy deletion",
+        "explicit protection for shared runtimes, drivers, anti-cheat, OBS, Discord, WebView2, Store, DirectX, .NET, VC++, security, audio, and network components",
+        "backup manifests and rollback/export artifacts"
+      ],
+      "firstSlice": "Keep the current cleanup path preview-only and add stutter-specific scoring for apps with resident services, scheduled tasks, overlays, or high memory footprint.",
+      "risk": "high",
+      "riskReason": "Uninstall and leftover cleanup can remove shared dependencies or break games and companion apps if evidence is weak."
+    },
+    {
+      "rank": 9,
+      "optimizationId": "winutil-safe-tweak-normalization",
+      "title": "Normalize WinUtil tweaks into safe, reversible Roo actions",
+      "sourceProducts": [
+        "Chris Titus WinUtil"
+      ],
+      "sourceRefs": [
+        "winutil-config-tweaks",
+        "winutil-config-features",
+        "winutil-config-presets"
+      ],
+      "currentBackendCoverage": "catalog-only",
+      "whyForTarget": "WinUtil has a broad tweak and feature catalog, including essential tweaks, advanced caution tweaks, and performance plans. The value is coverage, but the stutter goal needs a smaller audited subset rather than importing presets wholesale.",
+      "safeBackendNeeded": [
+        "pin or vendor source definitions",
+        "normalize each tweak to preview/apply/rollback metadata",
+        "label target impact such as RAM, startup, GameDVR, background apps, network, power, or cosmetics",
+        "keep advanced and preset members opt-in until individually audited",
+        "preserve LeanClientOptimizer protected services and registry patterns"
+      ],
+      "firstSlice": "Add read-only normalized WinUtil entries with target-impact tags and reject/default-off flags for risky advanced tweaks.",
+      "risk": "medium",
+      "riskReason": "WinUtil presets are broad; applying them without local guardrails could break protected functionality or hurt stream reliability."
+    },
+    {
+      "rank": 10,
+      "optimizationId": "network-latency-and-dns-guarded-tuning",
+      "title": "Guarded network latency, adapter, and DNS tuning",
+      "sourceProducts": [
+        "Gaming toggles",
+        "Gaming playbook",
+        "Chris Titus WinUtil"
+      ],
+      "sourceRefs": [
+        "dash-network-latency-and-adapter-toggles",
+        "playbook-network-and-usb-device-tuning",
+        "winutil-config-dns"
+      ],
+      "currentBackendCoverage": "unsafe",
+      "whyForTarget": "OBS upload and Discord voice expose jitter, packet loss, DNS issues, and adapter power-saving problems. This ranks below local frame pacing because adapter-level tweaks are hardware-specific and can quickly break connectivity.",
+      "safeBackendNeeded": [
+        "adapter inventory with vendor, driver, link speed, Wi-Fi/Ethernet, and current advanced properties",
+        "DNS backup and resolution tests",
+        "per-adapter allowlist for offload, moderation, EEE, Nagle, and throttling changes",
+        "latency, packet-loss, and throughput validation",
+        "one-click rollback to captured properties"
+      ],
+      "firstSlice": "Implement read-only network evidence and DNS preview/rollback metadata before any adapter mutation.",
+      "risk": "high",
+      "riskReason": "Blanket network tuning can break Wi-Fi, Bluetooth-adjacent features, VPN/Tailscale, streaming reliability, or normal connectivity."
+    },
+    {
+      "rank": 11,
+      "optimizationId": "service-pause-session-with-allowlist",
+      "title": "Time-boxed service pause with strict allowlist",
+      "sourceProducts": [
+        "Gaming toggles",
+        "Gaming playbook",
+        "Chris Titus WinUtil"
+      ],
+      "sourceRefs": [
+        "dash-pause-non-essential-services",
+        "playbook-service-startup-changes",
+        "winutil-config-tweaks"
+      ],
+      "currentBackendCoverage": "unsafe",
+      "whyForTarget": "Background services can consume memory, CPU, disk, and network resources during a match, but this is less attractive than process/session controls because service dependencies are fragile.",
+      "safeBackendNeeded": [
+        "per-service evidence and dependency graph",
+        "known-good allowlist rather than blocklist-only selection",
+        "capture startup type and running state",
+        "time-boxed session restore",
+        "hard protection for OBS, Discord, audio, network, input, anti-cheat, GPU, security, Store, WebView2, Windows Update, Samsung, Tailscale, and Wispr services"
+      ],
+      "firstSlice": "Only show a service pressure preview and candidate explanations; do not add apply until restore tests cover dependency failures.",
+      "risk": "high",
+      "riskReason": "Stopping the wrong service can cause audio dropouts, network loss, game launch failures, update issues, or broken devices."
+    },
+    {
+      "rank": 12,
+      "optimizationId": "diagnostic-sensor-and-bottleneck-correlation",
+      "title": "Correlate HWiNFO/UserDiag-style diagnostics with stutter decisions",
+      "sourceProducts": [
+        "Utilities.zip"
+      ],
+      "sourceRefs": [
+        "hwinfo",
+        "userdiag",
+        "benchmarkStrategy"
+      ],
+      "currentBackendCoverage": "catalog-only",
+      "whyForTarget": "Thermals, clocks, power, utilization, storage health, RAM configuration, and driver age decide whether an optimization is likely to help. This is not a direct tweak, but it prevents bad recommendations and explains remaining stutter.",
+      "safeBackendNeeded": [
+        "read-only sensor and diagnostic ingestion",
+        "explicit local evidence for CPU/GPU/RAM/storage bottlenecks",
+        "no silent third-party utility launch",
+        "benchmark correlation with frame-time spikes",
+        "transparent recommendation text rather than fake warnings"
+      ],
+      "firstSlice": "Add a read-only diagnostics evidence model that can annotate the top-ranked optimizations with confidence and blocking conditions.",
+      "risk": "low",
+      "riskReason": "Read-only diagnostics are low risk, but relying on optional third-party exports can make coverage inconsistent."
+    }
+  ],
+  "deprioritizedForThisTarget": [
+    {
+      "item": "WinUtil themes and navigation",
+      "reason": "No stutter relevance; preserve Roo branding and app shell."
+    },
+    {
+      "item": "Generic app install catalogs",
+      "reason": "Useful product surface but not an optimization unless tied to diagnostics or replacement tooling."
+    },
+    {
+      "item": "Thorium and Vesktop bundled utilities",
+      "reason": "Explicitly excluded by default in the Utilities manifest."
+    },
+    {
+      "item": "Defender, firewall, UAC, SmartScreen, vulnerable-driver-blocklist, or core security removal",
+      "reason": "High breakage and security risk; not justified for the Overwatch + OBS + Discord stutter target."
+    },
+    {
+      "item": "Wi-Fi, Bluetooth, Phone Link, Samsung continuity, Tailscale, Wispr Flow, Store, WebView2, and Windows Update removal",
+      "reason": "Protected product boundaries outweigh speculative performance gains."
+    },
+    {
+      "item": "Cosmetic shell personalization, wallpaper, taskbar, context-menu, and theme tweaks",
+      "reason": "No meaningful link to frame-time stability or memory pressure."
+    }
+  ],
+  "safeValidationOnly": [
+    "JSON parsing of this catalog and referenced local manifests",
+    "{source} catalog validation script",
+    "backend/state empty check"
+  ],
+  "safetyNotes": [
+    "This catalog is ranking metadata only and must not launch WinUI, {source}.exe, WinUtil, Process Lasso, Revo, AME Wizard, DDU, NVCleanstall, O&O, WPD, NVIDIA Profile Inspector, or any bundled utility.",
+    "This catalog does not authorize real registry, service, driver, uninstall, cleanup, network, security, power, or timer-resolution mutation.",
+    "Every ranked apply path requires a separate backend contract with preview, confirmation, backup, rollback, and validation evidence."
+  ]
+}
