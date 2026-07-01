@@ -75,7 +75,9 @@
       "rollbackOrBackupRules": [],
       "validationEvidence": [
         "backend/samples/driver-recommendation-catalog.sample.json",
-        "backend/samples/nvidia-profile-catalog.sample.json"
+        "backend/samples/nvidia-profile-catalog.sample.json",
+        "backend/catalogs/nvidia-profile-inspector-nip-catalog.json",
+        "backend/scripts/Test-NvidiaNipCatalog.ps1"
       ]
     }
   },
