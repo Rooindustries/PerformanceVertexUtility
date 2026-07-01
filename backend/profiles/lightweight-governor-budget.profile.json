@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "profileId": "lightweight-governor-budget",
+  "name": "Lightweight Governor Budget",
+  "profileKind": "lightweight-governor-budget",
+  "risk": "low",
+  "budgets": {
+    "idleBackendCpuAveragePercentMax": 0.5,
+    "backendPowerShellPrivateBytesMax": 78643200,
+    "backendPowerShellPrivateMegabytesMax": 75,
+    "backendStateEntryCountMaxAfterValidation": 0,
+    "pollIntervalMillisecondsMin": 500,
+    "defaultResidentMaxDurationSeconds": 5,
+    "maxResidentMaxDurationSeconds": 300,
+    "persistentUiProcessRequired": false,
+    "unboundedStateGrowthAllowed": false
+  },
+  "runtimeRequirements": {
+    "boundedForegroundCliSession": true,
+    "serviceReady": true,
+    "serviceInstallAllowedInThisPass": false,
+    "registryChangesAllowed": false,
+    "serviceChangesAllowed": false,
+    "driverChangesAllowed": false,
+    "powerPlanChangesAllowed": false,
+    "frontendLaunchAllowed": false,
+    "persistentUiProcessRequired": false,
+    "externalProcessGovernorDependencyRequired": false
+  },
+  "measurement": {
+    "script": "backend\\scripts\\Measure-RooBackendFootprint.ps1",
+    "residentHostScript": "backend\\scripts\\Start-RooResidentSessionHost.ps1",
+    "defaultSampleDurationSeconds": 3,
+    "defaultPollIntervalMilliseconds": 1000,
+    "requiresElevation": false,
+    "writesState": false
+  },
+  "statePolicy": {
+    "stateRoot": "backend\\state",
+    "validationLeavesStateEmpty": true,
+    "boundedTestArtifactsAllowed": false,
+    "retentionRequiredForResidentIdleValidation": false
+  }
+}

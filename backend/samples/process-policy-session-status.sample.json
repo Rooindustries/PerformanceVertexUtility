@@ -1,0 +1,50 @@
+{
+  "actionId": "performance.policy.sessionStatus",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-30T09:41:15.0000000Z",
+  "status": "restorable",
+  "sessionStatus": "restorable",
+  "rawSessionStatus": "completed",
+  "sessionId": "process-policy-live-policy-validation-20260630-094100",
+  "profileId": "live-policy-validation",
+  "profilePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\policy-session-profile.json",
+  "dryRun": false,
+  "stateRoot": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions",
+  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "restorable": true,
+  "active": false,
+  "completed": false,
+  "failed": false,
+  "startedAtUtc": "2026-06-30T09:41:00.0000000Z",
+  "completedAtUtc": "2026-06-30T09:41:14.0000000Z",
+  "summary": {
+    "changedItemCount": 4,
+    "skippedItemCount": 1,
+    "restoredItemCount": 0,
+    "activeApplicationCount": 3,
+    "pollCount": 12
+  },
+  "changedItems": [],
+  "skippedItems": [],
+  "restoredItems": [],
+  "activeApplications": [
+    {
+      "processId": 7404,
+      "processName": "RooPolicyExistingProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+      "ruleId": "policy-existing-name-command",
+      "appliedAtUtc": "2026-06-30T09:41:01.0000000Z"
+    }
+  ],
+  "latestLogs": [
+    {
+      "timestampUtc": "2026-06-30T09:41:14.0000000Z",
+      "level": "info",
+      "message": "Persistent policy poll 12 completed with 0 application(s), 0 skip(s), and 3 no-op match(es)."
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "productName": "Roo Industries Optimization Suite",
-  "policyId": "uninstall-cleanup-preview-mvp",
-  "name": "Uninstall And Cleanup Preview MVP Policy",
+  "policyId": "uninstall-cleanup-preview",
+  "name": "Uninstall And Cleanup Preview Policy",
   "previewOnly": true,
   "confirmedExecutionEnabled": false,
   "blockProtectedAppsByDefault": true,
-  "allowProtectedOverrideInMvp": false,
+  "allowProtectedOverrideInPreview": false,
   "officialUninstall": {
     "previewOnly": true,
-    "executeInMvp": false,
+    "executeInPreview": false,
     "preferOfficialUninstallString": true,
     "showQuietCommandWhenPresent": true,
     "requireExplicitConfirmationBeforeFutureExecution": true,
@@ -53,7 +53,7 @@
   },
   "cleanupDeletion": {
     "previewOnly": true,
-    "allowDeletionInMvp": false,
+    "allowDeletionInPreview": false,
     "requireFileBackup": true,
     "requireRegistryExport": true,
     "requireServiceStateBackup": true,

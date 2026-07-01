@@ -38,6 +38,51 @@ $requiredFiles = @(
     'backend\samples\process-profile-dry-run-result.sample.json',
     'backend\samples\process-profile-rollback-preview.sample.json',
     'backend\samples\process-profile-backup.sample.json',
+    'backend\samples\game-tune-session-dry-run.sample.json',
+    'backend\samples\game-tune-session-confirmed.sample.json',
+    'backend\samples\game-tune-session-status.sample.json',
+    'backend\samples\game-tune-session-restore-preview.sample.json',
+    'backend\samples\game-tune-session-restore-result.sample.json',
+    'backend\profiles\probalance-governor.profile.json',
+    'backend\scripts\ProcessGovernor.Common.ps1',
+    'backend\scripts\Preview-ProcessGovernor.ps1',
+    'backend\scripts\Start-ProcessGovernorSession.ps1',
+    'backend\scripts\Stop-ProcessGovernorSession.ps1',
+    'backend\scripts\Get-ProcessGovernorSessionStatus.ps1',
+    'backend\scripts\Test-ProcessGovernorRuntime.ps1',
+    'backend\scripts\Test-ProcessGovernorReliability.ps1',
+    'backend\samples\process-governor-preview.sample.json',
+    'backend\samples\process-governor-session-confirmed.sample.json',
+    'backend\samples\process-governor-session-status.sample.json',
+    'backend\samples\process-governor-stop-preview.sample.json',
+    'backend\samples\process-governor-stop-result.sample.json',
+    'backend\profiles\persistent-policy.profile.json',
+    'backend\scripts\ProcessPolicy.Common.ps1',
+    'backend\scripts\Preview-ProcessPolicy.ps1',
+    'backend\scripts\Start-ProcessPolicySession.ps1',
+    'backend\scripts\Stop-ProcessPolicySession.ps1',
+    'backend\scripts\Get-ProcessPolicySessionStatus.ps1',
+    'backend\scripts\Test-ProcessPolicyRuntime.ps1',
+    'backend\samples\process-policy-preview.sample.json',
+    'backend\samples\process-policy-session-confirmed.sample.json',
+    'backend\samples\process-policy-session-status.sample.json',
+    'backend\samples\process-policy-stop-preview.sample.json',
+    'backend\samples\process-policy-stop-result.sample.json',
+    'backend\profiles\lightweight-governor-budget.profile.json',
+    'backend\scripts\ResidentSessionHost.Common.ps1',
+    'backend\scripts\Measure-RooBackendFootprint.ps1',
+    'backend\scripts\Start-RooResidentSessionHost.ps1',
+    'backend\scripts\Get-RooResidentHostStatus.ps1',
+    'backend\scripts\Test-RooResidentBackendRuntime.ps1',
+    'backend\samples\backend-footprint-result.sample.json',
+    'backend\samples\lightweight-governor-budget.sample.json',
+    'backend\samples\resident-host-status.sample.json',
+    'backend\samples\all-control-policy-validation-result.sample.json',
+    'backend\native\ProcessGovernor\RooProcessGovernor.cs',
+    'backend\scripts\Get-NativeProcessGovernorToolchain.ps1',
+    'backend\scripts\Build-NativeProcessGovernor.ps1',
+    'backend\scripts\Start-NativeProcessGovernorSession.ps1',
+    'backend\scripts\Test-NativeProcessGovernorRuntime.ps1',
     'backend\samples\installed-app-inventory.sample.json',
     'backend\samples\app-classification.sample.json',
     'backend\samples\uninstall-queue.sample.json',
@@ -60,6 +105,11 @@ $requiredFiles = @(
     'backend\scripts\Preview-ProcessProfile.ps1',
     'backend\scripts\Apply-ProcessProfile.ps1',
     'backend\scripts\Restore-ProcessProfileBackup.ps1',
+    'backend\scripts\GameTuneSession.Common.ps1',
+    'backend\scripts\Start-GameTuneSession.ps1',
+    'backend\scripts\Stop-GameTuneSession.ps1',
+    'backend\scripts\Get-GameTuneSessionStatus.ps1',
+    'backend\scripts\Test-GameTuneSessionRuntime.ps1',
     'backend\scripts\Test-ProcessProfileBackend.ps1',
     'backend\scripts\Get-InstalledAppInventory.ps1',
     'backend\scripts\UninstallCleanup.Common.ps1',
@@ -69,7 +119,11 @@ $requiredFiles = @(
     'backend\scripts\Preview-LeftoverScan.ps1',
     'backend\scripts\New-CleanupDeletionManifest.ps1',
     'backend\scripts\Test-UninstallCleanupBackend.ps1',
-    'backend\scripts\Get-DriverHardwareSummary.ps1'
+    'backend\scripts\Get-DriverHardwareSummary.ps1',
+    'backend\catalogs\fsosx-playbook-capabilities.json',
+    'backend\catalogs\fsosx-dash-capabilities.json',
+    'backend\catalogs\fsosx-gap-map.json',
+    'backend\scripts\Test-FSOSXCatalogs.ps1'
 )
 
 foreach ($relative in $requiredFiles) {
@@ -86,7 +140,8 @@ $jsonRoots = @(
     (Join-Path $repoRoot 'backend\contracts'),
     (Join-Path $repoRoot 'backend\samples'),
     (Join-Path $repoRoot 'backend\profiles'),
-    (Join-Path $repoRoot 'backend\uninstall')
+    (Join-Path $repoRoot 'backend\uninstall'),
+    (Join-Path $repoRoot 'backend\catalogs')
 )
 
 foreach ($root in $jsonRoots) {
@@ -95,6 +150,19 @@ foreach ($root in $jsonRoots) {
             Test-JsonFile $file.FullName
         }
     }
+}
+
+try {
+    $catalogTestOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-FSOSXCatalogs.ps1') 2>&1
+    $catalogTestExitCode = $LASTEXITCODE
+    $catalogTestOutput | ForEach-Object { Write-Host $_ }
+    if ($catalogTestExitCode -eq 0) {
+        Add-Pass 'FSOS-X playbook and Dash catalog guardrails passed'
+    } else {
+        Add-Failure "FSOS-X catalog guardrails failed with exit code $catalogTestExitCode"
+    }
+} catch {
+    Add-Failure "FSOS-X catalog guardrails failed: $($_.Exception.Message)"
 }
 
 try {

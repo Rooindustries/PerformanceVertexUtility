@@ -17,11 +17,11 @@
       "name": "Process Lasso",
       "archivePaths": ["Utilities/processlassosetup64.exe"],
       "userUses": true,
-      "autoRunAllowed": true,
-      "appRole": "startup-runtime-or-native-replacement",
-      "integrationPlan": "Support Process Lasso profiles if properly installed/licensed, but prioritize building a native scheduler profile engine for priorities, affinities, I/O priority, and per-game rules.",
+      "autoRunAllowed": false,
+      "appRole": "optional-manual-reference",
+      "integrationPlan": "Do not require or launch this utility for resident backend operation. Build native scheduler controls for priorities, affinities, I/O priority, and per-game rules.",
       "risk": "medium",
-      "notes": "Do not bypass Process Lasso licensing. Replace needed behavior with native app code where possible."
+      "notes": "Do not bypass licensing. Resident governor validation must pass without this utility installed or running."
     },
     {
       "id": "hwinfo",

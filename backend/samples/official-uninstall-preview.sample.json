@@ -53,7 +53,7 @@
       "source": "apps.officialUninstall",
       "target": null,
       "blocking": false,
-      "recommendedAction": "Use this output for UI review only in the MVP.",
+      "recommendedAction": "Use this output for review before any uninstall command is allowed.",
       "details": null
     }
   ],

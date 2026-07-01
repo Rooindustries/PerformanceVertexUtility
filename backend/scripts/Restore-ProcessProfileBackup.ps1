@@ -55,7 +55,7 @@ function New-RollbackPreviewEntry {
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches) -or (-not (Test-RooPriorityAllowed $originalPriority))
     $reason = if ($blocked) {
         if (-not (Test-RooPriorityAllowed $originalPriority)) {
-            "Original priority class '$originalPriority' is outside the MVP allow-list."
+            "Original priority class '$originalPriority' is outside the allow-list."
         } else {
             [string]$Candidate.blockedReason
         }

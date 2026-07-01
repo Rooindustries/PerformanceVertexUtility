@@ -6,7 +6,7 @@
   "description": "Applications and dependency classes blocked or manual-gated by uninstall and cleanup preview workflows.",
   "defaultPolicy": {
     "blockProtectedAppsByDefault": true,
-    "allowProtectedOverrideInMvp": false,
+    "allowProtectedOverrideInPreview": false,
     "previewOnly": true
   },
   "protectedApps": [

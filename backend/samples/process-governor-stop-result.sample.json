@@ -1,0 +1,103 @@
+{
+  "actionId": "performance.governor.stopSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "process-governor-probalance-governor-20260630-093000",
+  "sessionId": "process-governor-probalance-governor-20260630-093000",
+  "dryRun": false,
+  "profileId": "probalance-governor",
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T09:30:10.0000000Z",
+  "completedAtUtc": "2026-06-30T09:30:10.0000000Z",
+  "sessionPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\session.json",
+  "backupManifestPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+  "restorable": false,
+  "preview": [],
+  "changedItems": [
+    {
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "restoredPriorityClass": "Normal",
+      "restoredIoPriority": "Normal",
+      "restoredControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "BelowNormal",
+          "proposedValue": "Normal",
+          "action": "restorePriority",
+          "reason": "Restore original process priority after governor restraint.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "govern-browser-renderers",
+      "restoredAtUtc": "2026-06-30T09:30:10.0000000Z"
+    }
+  ],
+  "skippedItems": [],
+  "restoredItems": [
+    {
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "restoredPriorityClass": "Normal",
+      "restoredIoPriority": "Normal",
+      "restoredControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "BelowNormal",
+          "proposedValue": "Normal",
+          "action": "restorePriority",
+          "reason": "Restore original process priority after governor restraint.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "govern-browser-renderers",
+      "restoredAtUtc": "2026-06-30T09:30:10.0000000Z"
+    }
+  ],
+  "backup": {
+    "backupId": "process-governor-probalance-governor-20260630-093000",
+    "scope": "process-governor-process-controls",
+    "createdAtUtc": "2026-06-30T09:30:00.0000000Z",
+    "location": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-restraint",
+      "id": null
+    },
+    "snapshots": [],
+    "rollbackActionId": "performance.governor.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "process-governor-restore-20260630-093010",
+    "status": "rolledBack",
+    "startedAtUtc": "2026-06-30T09:30:10.0000000Z",
+    "completedAtUtc": "2026-06-30T09:30:10.0000000Z",
+    "summary": "Process governor restore completed with 1 restored item(s) and 0 skipped item(s).",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "processGovernorSessionBackup",
+        "path": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json"
+      }
+    ]
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:30:10.0000000Z",
+      "level": "info",
+      "message": "Process governor restore completed with 1 restored item(s) and 0 skipped item(s)."
+    }
+  ]
+}

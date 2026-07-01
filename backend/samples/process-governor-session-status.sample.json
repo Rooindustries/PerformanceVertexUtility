@@ -1,0 +1,48 @@
+{
+  "actionId": "performance.governor.sessionStatus",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-30T09:30:08.0000000Z",
+  "status": "restorable",
+  "sessionStatus": "restorable",
+  "rawSessionStatus": "completed",
+  "sessionId": "process-governor-probalance-governor-20260630-093000",
+  "profileId": "probalance-governor",
+  "profilePath": "backend\\profiles\\probalance-governor.profile.json",
+  "dryRun": false,
+  "stateRoot": "backend\\state\\process-governor-sessions",
+  "sessionPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\session.json",
+  "backupManifestPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+  "restorable": true,
+  "active": false,
+  "completed": false,
+  "failed": false,
+  "startedAtUtc": "2026-06-30T09:30:00.0000000Z",
+  "completedAtUtc": "2026-06-30T09:30:07.0000000Z",
+  "summary": {
+    "changedItemCount": 1,
+    "skippedItemCount": 1,
+    "restoredItemCount": 0,
+    "activeRestraintCount": 1,
+    "pollCount": 6
+  },
+  "changedItems": [],
+  "skippedItems": [],
+  "restoredItems": [],
+  "activeRestraints": [
+    {
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "ruleId": "govern-browser-renderers"
+    }
+  ],
+  "latestLogs": [
+    {
+      "timestampUtc": "2026-06-30T09:30:07.0000000Z",
+      "level": "info",
+      "message": "Process governor poll 6 completed with 0 restraint(s), 0 restore(s), and 1 skip(s)."
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

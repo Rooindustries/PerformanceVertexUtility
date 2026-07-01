@@ -1,0 +1,69 @@
+{
+  "actionId": "performance.policy.validateAllControls",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-30T09:52:00.0000000Z",
+  "status": "completed",
+  "profileId": "live-policy-all-control-validation",
+  "dryRun": false,
+  "controls": [
+    {
+      "control": "priorityClass",
+      "status": "liveAppliedRestored",
+      "targetValue": "BelowNormal",
+      "originalValue": "Normal",
+      "appliedValue": "BelowNormal",
+      "restoredValue": "Normal",
+      "osStatus": null,
+      "message": "Disposable probe priority class was applied by persistent policy and restored."
+    },
+    {
+      "control": "affinityMask",
+      "status": "liveAppliedRestored",
+      "targetValue": 1,
+      "originalValue": 255,
+      "appliedValue": 1,
+      "restoredValue": 255,
+      "osStatus": null,
+      "message": "Disposable probe CPU affinity was applied by persistent policy and restored."
+    },
+    {
+      "control": "ioPriority",
+      "status": "liveAppliedRestored",
+      "targetValue": "Low",
+      "originalValue": "Normal",
+      "appliedValue": "Low",
+      "restoredValue": "Normal",
+      "osStatus": 0,
+      "message": "Disposable probe I/O priority was applied by persistent policy and restored."
+    },
+    {
+      "control": "gpuPriority",
+      "status": "unsupported",
+      "targetValue": "BelowNormal",
+      "originalValue": null,
+      "appliedValue": null,
+      "restoredValue": null,
+      "osStatus": -1073741823,
+      "message": "GPU scheduling priority was not available for this disposable probe on the current Windows session."
+    }
+  ],
+  "proof": {
+    "disposableProbeOnly": true,
+    "protectedAppsTouched": false,
+    "frontendProcessLaunched": false,
+    "backendStateEntryCountAfterCleanup": 0,
+    "leftoverProbeProcessCount": 0,
+    "externalProcessGovernorDependencyRequired": false,
+    "processLassoProcessStartedByValidation": false
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:52:00.0000000Z",
+      "level": "info",
+      "message": "Persistent policy all-control validation completed against disposable probes."
+    }
+  ]
+}

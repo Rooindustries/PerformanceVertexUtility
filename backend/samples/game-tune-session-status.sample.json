@@ -1,0 +1,53 @@
+{
+  "actionId": "performance.gameTune.sessionStatus",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-30T10:12:00Z",
+  "status": "restorable",
+  "sessionStatus": "restorable",
+  "rawSessionStatus": "completed",
+  "sessionId": "game-tune-overwatch-stream-session-20260630-101000",
+  "profileId": "overwatch-stream-session",
+  "profilePath": "backend\\profiles\\game-session.profile.json",
+  "targetGameProcessName": "Overwatch.exe",
+  "dryRun": false,
+  "stateRoot": "backend\\state\\game-tune-sessions",
+  "sessionPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\session.json",
+  "backupManifestPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+  "restorable": true,
+  "active": false,
+  "completed": false,
+  "failed": false,
+  "startedAtUtc": "2026-06-30T10:10:00Z",
+  "completedAtUtc": "2026-06-30T10:10:01Z",
+  "summary": {
+    "changedItemCount": 1,
+    "skippedItemCount": 1,
+    "restoredItemCount": 0,
+    "pollCount": 1
+  },
+  "changedItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "AboveNormal",
+      "ruleId": "boost-foreground-game",
+      "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+      "pollIndex": 1,
+      "changedAtUtc": "2026-06-30T10:10:00Z"
+    }
+  ],
+  "skippedItems": [],
+  "restoredItems": [],
+  "latestLogs": [
+    {
+      "timestampUtc": "2026-06-30T10:10:00Z",
+      "level": "info",
+      "message": "Game Tune poll 1 completed with 1 changed item(s), 0 dry-run item(s), and 0 skipped item(s)."
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

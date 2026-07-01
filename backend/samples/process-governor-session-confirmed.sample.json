@@ -1,0 +1,158 @@
+{
+  "actionId": "performance.governor.startSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "process-governor-probalance-governor-20260630-093000",
+  "sessionId": "process-governor-probalance-governor-20260630-093000",
+  "dryRun": false,
+  "profileId": "probalance-governor",
+  "profilePath": "backend\\profiles\\probalance-governor.profile.json",
+  "protectedCatalogPath": "backend\\profiles\\protected-processes.json",
+  "foregroundProcessId": 4520,
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T09:30:00.0000000Z",
+  "completedAtUtc": "2026-06-30T09:30:07.0000000Z",
+  "pollIntervalSeconds": 1,
+  "sampleIntervalMilliseconds": 500,
+  "maxDurationSeconds": 60,
+  "pollCount": 6,
+  "stateRoot": "backend\\state\\process-governor-sessions",
+  "sessionPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\session.json",
+  "backupManifestPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+  "restorable": true,
+  "activeRestraints": [
+    {
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "ruleId": "govern-browser-renderers",
+      "restrainedAtUtc": "2026-06-30T09:30:04.0000000Z",
+      "minimumUntilUtc": "2026-06-30T09:30:19.0000000Z"
+    }
+  ],
+  "changedItems": [
+    {
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "BelowNormal",
+      "originalIoPriority": "Normal",
+      "appliedIoPriority": "Low",
+      "appliedControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Temporarily lower background offender priority.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "govern-browser-renderers",
+      "cpuPercent": 13.4,
+      "totalCpuPercent": 48.2,
+      "sustainedSeconds": 8.2,
+      "reason": "Browser and launcher renderer helpers are background CPU restraint candidates during gameplay.",
+      "pollIndex": 4,
+      "changedAtUtc": "2026-06-30T09:30:04.0000000Z"
+    }
+  ],
+  "skippedItems": [
+    {
+      "processId": 4520,
+      "processName": "Discord.exe",
+      "cpuPercent": 2.1,
+      "ruleId": "governor-skip",
+      "reason": "Capture and voice companions are protected from governor restraint. Foreground process is excluded from governor restraint.",
+      "reasonCodes": [
+        "CAPTURE_VOICE_PROTECTED",
+        "FOREGROUND_PROCESS_EXCLUDED"
+      ],
+      "pollIndex": 1,
+      "skippedAtUtc": "2026-06-30T09:30:01.0000000Z"
+    }
+  ],
+  "restoredItems": [],
+  "polls": [
+    {
+      "pollIndex": 4,
+      "capturedAtUtc": "2026-06-30T09:30:04.0000000Z",
+      "totalCpuPercent": 48.2,
+      "previewCount": 2,
+      "wouldRestrainItems": [],
+      "changedItems": [],
+      "skippedItems": [],
+      "restoredItems": [],
+      "activeRestraintCount": 1
+    }
+  ],
+  "backup": {
+    "backupId": "process-governor-probalance-governor-20260630-093000",
+    "scope": "process-governor-process-controls",
+    "createdAtUtc": "2026-06-30T09:30:00.0000000Z",
+    "location": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-restraint",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "processGovernorRestraint",
+        "target": "chrome.exe:7344",
+        "originalState": {
+          "priorityClass": "Normal",
+          "ioPriority": "Normal",
+          "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.governor.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "process-governor-session-20260630-093007",
+    "status": "success",
+    "startedAtUtc": "2026-06-30T09:30:00.0000000Z",
+    "completedAtUtc": "2026-06-30T09:30:07.0000000Z",
+    "summary": "Process governor completed after 6 poll(s) with 1 restraint(s), 0 restore(s), 1 skip(s), and 1 active restraint(s).",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "processGovernorSessionState",
+        "path": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\session.json"
+      }
+    ]
+  },
+  "governor": {
+    "totalCpuPressureThresholdPercent": 35,
+    "perProcessCpuThresholdPercent": 8,
+    "timeOverThresholdSeconds": 8,
+    "minimumRestraintSeconds": 15,
+    "restoreCpuThresholdPercent": 3,
+    "cooldownAfterRestoreSeconds": 20,
+    "maxSessionDurationSeconds": 60,
+    "pollIntervalSeconds": 1,
+    "priorityClass": "BelowNormal",
+    "ioPriority": "Low",
+    "excludeForegroundProcess": true
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:30:07.0000000Z",
+      "level": "info",
+      "message": "Process governor poll 6 completed with 0 restraint(s), 0 restore(s), and 1 skip(s)."
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# Tourney Launch Plan
+# August Launch Plan
 
 Target launch window: August 15-16, 2026
 
@@ -6,7 +6,7 @@ Captured: June 28, 2026
 
 ## Launch Principle
 
-The app must be publishable, professional, and useful by the Tourney launch. The first release should be centered on the workflows that make the product valuable: Process Lasso-style performance profiles, Revo-style uninstall/cleanup, and driver/profile recommendations. The WinUI shell, WinUtil catalog, and reports exist to support those workflows, not to distract from them.
+The app must be publishable, professional, and useful by the August launch. The first release should be centered on the workflows that make the product valuable: Process Lasso-style performance profiles, Revo-style uninstall/cleanup, and driver/profile recommendations. The WinUI shell, WinUtil catalog, and reports exist to support those workflows, not to distract from them.
 
 The north-star performance target is smooth RAM-heavy and VRAM-heavy gameplay on 16 GB RAM class machines, especially Overwatch with OBS and Discord open, aiming for 144 Hz-class frame pacing where possible. See `docs/performance-target.md`.
 
@@ -30,7 +30,7 @@ Depth can continue after launch, but risky automation still needs preview, backu
   - Per-process priority profile catalog.
   - Per-process affinity/profile rules where safe.
   - Foreground game boost profile.
-  - Tourney Mode profile for Overwatch + OBS + Discord style workloads.
+  - Game Tune session profile for Overwatch + OBS + Discord style workloads.
   - Background app demotion preview.
   - Protected process list for Windows, security, network, Samsung continuity, Tailscale, and Wispr.
   - Apply/disable/rollback profile states.
@@ -129,7 +129,7 @@ These can appear as preview/manual workflows, but should not ship as aggressive 
 - Capture screenshots and release notes.
 - Prepare launch build.
 
-### August 15-August 16: Tourney Launch
+### August 15-August 16: Launch
 
 - Ship v1.
 - Monitor issues.

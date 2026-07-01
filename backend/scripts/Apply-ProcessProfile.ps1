@@ -153,7 +153,7 @@ try {
             $skipped.Add([pscustomobject]@{
                 processId = Get-RooPropertyValue $entry 'processId' 0
                 processName = Get-RooPropertyValue $entry 'processName' ''
-                reason = "Priority class '$targetPriority' is outside the MVP allow-list."
+                reason = "Priority class '$targetPriority' is outside the allow-list."
             }) | Out-Null
             continue
         }

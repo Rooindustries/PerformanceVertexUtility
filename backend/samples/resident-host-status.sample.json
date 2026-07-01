@@ -1,0 +1,93 @@
+{
+  "actionId": "backend.residentHost.status",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-30T09:51:00.0000000Z",
+  "status": "completed",
+  "sessionId": "resident-host-20260630-095055",
+  "host": {
+    "processId": 12040,
+    "processName": "powershell",
+    "executionMode": "foregroundCli",
+    "serviceReady": true,
+    "serviceInstalled": false,
+    "serviceInstallActionPerformed": false,
+    "persistentUiProcessRequired": false
+  },
+  "footprint": {
+    "elapsedRuntimeSeconds": 5.002,
+    "cpuTimeDeltaSeconds": 0.015625,
+    "averageCpuPercent": 0.0098,
+    "processorCount": 32,
+    "workingSetBytes": 69468160,
+    "privateBytes": 50593792,
+    "peakWorkingSetBytes": 69468160,
+    "peakPrivateBytes": 50593792,
+    "handleCount": 618,
+    "handleCountAvailable": true,
+    "budgetProfilePath": "backend\\profiles\\lightweight-governor-budget.profile.json",
+    "budgetEvaluation": {
+      "profileId": "lightweight-governor-budget",
+      "idleBackendCpuAveragePercentMax": 0.5,
+      "backendPowerShellPrivateBytesMax": 78643200,
+      "backendStateEntryCountMaxAfterValidation": 0,
+      "persistentUiProcessRequired": false,
+      "withinBudget": true,
+      "idleCpuWithinBudget": true,
+      "privateBytesWithinBudget": true,
+      "stateEntryCountWithinBudget": true,
+      "persistentUiRequirementWithinBudget": true
+    }
+  },
+  "currentMeasurement": {
+    "processId": 12040,
+    "processName": "powershell",
+    "workingSetBytes": 69468160,
+    "privateBytes": 50593792,
+    "cpuSeconds": 0.34375,
+    "handleCount": 618,
+    "handleCountAvailable": true
+  },
+  "bounds": {
+    "maxDurationSeconds": 5,
+    "pollIntervalMilliseconds": 1000,
+    "boundedForegroundSession": true,
+    "unboundedLoop": false
+  },
+  "state": {
+    "stateRoot": "backend\\state",
+    "wroteState": false,
+    "boundedStateEntryCount": 0,
+    "unboundedStateGrowthAllowed": false
+  },
+  "dependencyProof": {
+    "frontendProcessRequired": false,
+    "persistentUiProcessRequired": false,
+    "externalProcessGovernorDependencyRequired": false,
+    "processLassoProcessStartedByHost": false
+  },
+  "samples": [
+    {
+      "pollIndex": 1,
+      "capturedAtUtc": "2026-06-30T09:50:56.0000000Z",
+      "elapsedRuntimeSeconds": 1.001,
+      "workingSetBytes": 69468160,
+      "privateBytes": 50593792,
+      "cpuSeconds": 0.34375,
+      "handleCount": 618,
+      "handleCountAvailable": true
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:51:00.0000000Z",
+      "level": "info",
+      "message": "Resident host bounded foreground session completed without service installation or state writes."
+    }
+  ],
+  "startedAtUtc": "2026-06-30T09:50:55.0000000Z",
+  "completedAtUtc": "2026-06-30T09:51:00.0000000Z",
+  "pollCount": 5
+}

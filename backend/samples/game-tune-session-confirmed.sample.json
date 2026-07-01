@@ -1,0 +1,147 @@
+{
+  "actionId": "performance.gameTune.startSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "game-tune-overwatch-stream-session-20260630-101000",
+  "sessionId": "game-tune-overwatch-stream-session-20260630-101000",
+  "dryRun": false,
+  "profileId": "overwatch-stream-session",
+  "profilePath": "backend\\profiles\\game-session.profile.json",
+  "targetGameProcessName": "Overwatch.exe",
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T10:10:00Z",
+  "completedAtUtc": "2026-06-30T10:10:01Z",
+  "pollIntervalSeconds": 1,
+  "maxDurationSeconds": 1,
+  "pollCount": 1,
+  "stateRoot": "backend\\state\\game-tune-sessions",
+  "sessionPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\session.json",
+  "backupManifestPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+  "restorable": true,
+  "changedItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "AboveNormal",
+      "ruleId": "boost-foreground-game",
+      "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+      "pollIndex": 1,
+      "changedAtUtc": "2026-06-30T10:10:00Z"
+    }
+  ],
+  "skippedItems": [
+    {
+      "processId": 14064,
+      "processName": "obs64.exe",
+      "proposedPriorityClass": "Normal",
+      "ruleId": "protect-obs",
+      "reason": "Preview entry is protected or blocked.",
+      "pollIndex": 1,
+      "skippedAtUtc": "2026-06-30T10:10:00Z"
+    }
+  ],
+  "restoredItems": [],
+  "polls": [
+    {
+      "pollIndex": 1,
+      "capturedAtUtc": "2026-06-30T10:10:00Z",
+      "previewCount": 2,
+      "wouldApplyItems": [],
+      "changedItems": [
+        {
+          "processId": 18344,
+          "processName": "Overwatch.exe",
+          "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+          "originalPriorityClass": "Normal",
+          "appliedPriorityClass": "AboveNormal",
+          "ruleId": "boost-foreground-game",
+          "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+          "pollIndex": 1,
+          "changedAtUtc": "2026-06-30T10:10:00Z"
+        }
+      ],
+      "skippedItems": []
+    }
+  ],
+  "backup": {
+    "backupId": "game-tune-overwatch-stream-session-20260630-101000",
+    "scope": "game-tune-session-process-priority",
+    "createdAtUtc": "2026-06-30T10:10:00Z",
+    "location": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-priority",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "processPriority",
+        "target": "Overwatch.exe:18344",
+        "originalState": {
+          "priorityClass": "Normal",
+          "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.gameTune.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "game-tune-session-20260630-101001",
+    "status": "partial",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-30T10:10:01Z",
+    "summary": "Game Tune session completed after 1 poll(s) with 1 changed item(s), 1 skipped item(s), and 0 restored item(s).",
+    "changedItems": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+        "originalPriorityClass": "Normal",
+        "appliedPriorityClass": "AboveNormal",
+        "ruleId": "boost-foreground-game",
+        "reason": "Foreground game boost for frame-time stability during OBS and Discord workload.",
+        "pollIndex": 1,
+        "changedAtUtc": "2026-06-30T10:10:00Z"
+      }
+    ],
+    "skippedItems": [
+      {
+        "processId": 14064,
+        "processName": "obs64.exe",
+        "proposedPriorityClass": "Normal",
+        "ruleId": "protect-obs",
+        "reason": "Preview entry is protected or blocked.",
+        "pollIndex": 1,
+        "skippedAtUtc": "2026-06-30T10:10:00Z"
+      }
+    ],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "gameTuneSessionState",
+        "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\session.json"
+      },
+      {
+        "type": "gameTuneSessionBackup",
+        "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json"
+      }
+    ]
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T10:10:00Z",
+      "level": "info",
+      "message": "Confirmed Game Tune session state initialized."
+    }
+  ]
+}

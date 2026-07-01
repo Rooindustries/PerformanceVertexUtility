@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "productName": "Roo Industries Optimization Suite",
-  "profileId": "background-demotion-mvp",
-  "name": "Background Demotion MVP",
+  "profileId": "background-demotion",
+  "name": "Background Demotion",
   "profileKind": "process-priority",
   "risk": "low",
   "targetScenario": "Preview and optionally lower priority for known non-critical background helpers while preserving protected workloads.",
@@ -35,7 +35,7 @@
           "Dropbox.exe"
         ]
       },
-      "reason": "Sync clients remain manual-review candidates in the MVP.",
+      "reason": "Sync clients remain manual-review candidates until a user approves them.",
       "reasonCodes": [
         "SYNC_CLIENT_MANUAL_REVIEW"
       ],

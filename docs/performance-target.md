@@ -49,11 +49,11 @@ Launch testing should track:
 - Disk read/write spikes during gameplay.
 - Network stability if Discord stream or OBS stream is active.
 
-## Tourney Mode
+## Game Tune Session
 
-The app should include a Tourney Mode profile built around the primary target scenario.
+The app should include a Game Tune session profile built around the primary target scenario.
 
-Tourney Mode should:
+The session profile should:
 
 - Start from the safe optimizer profile.
 - Apply a game foreground boost.
