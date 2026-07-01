@@ -120,7 +120,9 @@ function Get-RooProcessGovernorConfig {
         maxSessionDurationSeconds = $maxDuration
         pollIntervalSeconds = $poll
         priorityClass = [string](Get-RooPropertyValue $restraint 'priorityClass' 'BelowNormal')
+        affinityMask = Get-RooPropertyValue $restraint 'affinityMask' $null
         ioPriority = Get-RooPropertyValue $restraint 'ioPriority' $null
+        gpuPriority = Get-RooPropertyValue $restraint 'gpuPriority' $null
         excludeForegroundProcess = [bool](Get-RooPropertyValue $governor 'excludeForegroundProcess' $true)
     }
 }
@@ -362,6 +364,17 @@ function Add-RooGovernorReason {
     }
 }
 
+function Get-RooGovernorApplicableControlChanges {
+    param([object[]]$ControlChanges)
+    $applicable = New-Object System.Collections.Generic.List[object]
+    foreach ($change in @(Get-RooArray $ControlChanges)) {
+        if (-not [bool](Get-RooPropertyValue $change 'blocked' $false)) {
+            $applicable.Add($change) | Out-Null
+        }
+    }
+    return @($applicable.ToArray())
+}
+
 function Get-RooProcessGovernorDecision {
     param(
         [object]$Process,
@@ -473,9 +486,13 @@ function New-RooProcessGovernorPreviewEntry {
     $cpuPercent = [double](Get-RooPropertyValue $Process 'cpuPercent' 0)
     $currentControls = Get-RooProcessControlState $processId (Get-RooPropertyValue $Process 'priorityClass' $null)
     $currentPriority = $currentControls.priorityClass
+    $currentAffinity = $currentControls.affinityMask
     $currentIoPriority = $currentControls.ioPriority
+    $currentGpuPriority = $currentControls.gpuPriority
     $proposedPriority = $currentPriority
+    $proposedAffinity = $currentAffinity
     $proposedIoPriority = $currentIoPriority
+    $proposedGpuPriority = $currentGpuPriority
     $controlChanges = New-Object System.Collections.Generic.List[object]
     $blocked = [bool]$decision.blocked
     $thresholdMet = ($TotalCpuPercent -ge [double]$Config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$Config.perProcessCpuThresholdPercent)
@@ -506,6 +523,17 @@ function New-RooProcessGovernorPreviewEntry {
                 $reason = "Priority class '$($Config.priorityClass)' is outside the allow-list."
             }
         }
+        $configuredAffinity = Get-RooPropertyValue $Config 'affinityMask' $null
+        if (-not $blocked -and $null -ne $configuredAffinity -and -not [string]::IsNullOrWhiteSpace([string]$configuredAffinity) -and [string]$currentAffinity -ne [string]$configuredAffinity) {
+            if (Test-RooAffinityMaskAllowed $configuredAffinity) {
+                $proposedAffinity = [int64]$configuredAffinity
+                $controlChanges.Add((New-RooControlChange 'affinityMask' $currentAffinity $proposedAffinity 'setAffinity' 'Temporarily set background offender CPU affinity.')) | Out-Null
+            } else {
+                $blocked = $true
+                $reason = "Affinity mask '$configuredAffinity' is invalid."
+                $controlChanges.Add((New-RooControlChange 'affinityMask' $currentAffinity $configuredAffinity 'setAffinity' 'Requested CPU affinity is invalid.' $true $reason)) | Out-Null
+            }
+        }
         if (-not $blocked -and -not [string]::IsNullOrWhiteSpace([string]$Config.ioPriority) -and [string]$currentIoPriority -ne [string]$Config.ioPriority) {
             if (Test-RooIoPriorityAllowed ([string]$Config.ioPriority)) {
                 $proposedIoPriority = [string]$Config.ioPriority
@@ -515,11 +543,26 @@ function New-RooProcessGovernorPreviewEntry {
                 $reason = "I/O priority '$($Config.ioPriority)' is outside the allow-list."
             }
         }
+        if (-not $blocked -and -not [string]::IsNullOrWhiteSpace([string]$Config.gpuPriority) -and [string]$currentGpuPriority -ne [string]$Config.gpuPriority) {
+            if (-not (Test-RooGpuPriorityAllowed ([string]$Config.gpuPriority))) {
+                $blocked = $true
+                $reason = "GPU priority '$($Config.gpuPriority)' is outside the allow-list."
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority ([string]$Config.gpuPriority) 'setGpuPriority' 'Requested GPU scheduling priority is outside the allow-list.' $true $reason)) | Out-Null
+            } elseif (-not [bool](Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false)) {
+                $blocked = $true
+                $reason = "GPU scheduling priority is unavailable for this process."
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority ([string]$Config.gpuPriority) 'setGpuPriority' 'Native GPU scheduling priority is unavailable for this process.' $true $reason)) | Out-Null
+            } else {
+                $proposedGpuPriority = [string]$Config.gpuPriority
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Temporarily set background offender GPU scheduling priority.')) | Out-Null
+            }
+        }
     }
 
+    $applicableControlChanges = @(Get-RooGovernorApplicableControlChanges @($controlChanges.ToArray()))
     $proposedAction = if ($blocked -or $controlChanges.Count -eq 0) {
         'noChange'
-    } elseif ($controlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $controlChanges[0] 'control' '') -eq 'priorityClass') {
+    } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') {
         'setPriority'
     } else {
         'setProcessControls'
@@ -538,12 +581,14 @@ function New-RooProcessGovernorPreviewEntry {
         executablePath = Get-RooPropertyValue $Process 'executablePath' $null
         currentPriorityClass = $currentPriority
         proposedPriorityClass = $proposedPriority
-        currentAffinityMask = $currentControls.affinityMask
-        proposedAffinityMask = $currentControls.affinityMask
+        currentAffinityMask = $currentAffinity
+        proposedAffinityMask = $proposedAffinity
         currentIoPriority = $currentIoPriority
         proposedIoPriority = $proposedIoPriority
-        currentGpuPriority = $currentControls.gpuPriority
-        proposedGpuPriority = $currentControls.gpuPriority
+        currentGpuPriority = $currentGpuPriority
+        proposedGpuPriority = $proposedGpuPriority
+        gpuPriorityAvailable = Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false
+        gpuPriorityStatus = Get-RooPropertyValue $currentControls 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
         ruleId = $ruleId
@@ -555,12 +600,14 @@ function New-RooProcessGovernorPreviewEntry {
         risk = if ($blocked) { 'protected' } else { 'low' }
         confidence = if ($blocked) { 'high' } else { 'medium' }
         protected = [bool]$decision.protected
-        requiresConfirmation = ($controlChanges.Count -gt 0 -and -not $blocked)
-        rollbackSupported = ($controlChanges.Count -gt 0 -and -not $blocked)
+        requiresConfirmation = ($applicableControlChanges.Count -gt 0 -and -not $blocked)
+        rollbackSupported = ($applicableControlChanges.Count -gt 0 -and -not $blocked)
         lifecycleState = $LifecycleState
         currentState = [pscustomobject]@{
             priorityClass = $currentPriority
+            affinityMask = $currentAffinity
             ioPriority = $currentIoPriority
+            gpuPriority = $currentGpuPriority
             cpuPercent = $cpuPercent
             totalCpuPercent = $TotalCpuPercent
             sustainedSeconds = $SustainedSeconds
@@ -569,7 +616,9 @@ function New-RooProcessGovernorPreviewEntry {
         proposedState = [pscustomobject]@{
             action = $proposedAction
             priorityClass = $proposedPriority
+            affinityMask = $proposedAffinity
             ioPriority = $proposedIoPriority
+            gpuPriority = $proposedGpuPriority
             reason = $reason
         }
         impact = [pscustomobject]@{
@@ -577,10 +626,12 @@ function New-RooProcessGovernorPreviewEntry {
             expectedCpuWakeupEffect = if ($proposedAction -eq 'noChange') { 'neutral' } else { 'lower' }
             targetMetrics = @('system-responsiveness','foreground-frame-time-stability','background-cpu-pressure')
         }
-        rollback = if ($controlChanges.Count -gt 0 -and -not $blocked) {
+        rollback = if ($applicableControlChanges.Count -gt 0 -and -not $blocked) {
             [pscustomobject]@{
                 restorePriorityClass = $currentPriority
+                restoreAffinityMask = $currentAffinity
                 restoreIoPriority = $currentIoPriority
+                restoreGpuPriority = $currentGpuPriority
                 captureOriginalState = $true
             }
         } else {
@@ -674,7 +725,9 @@ function New-RooProcessGovernorBackupMetadata {
             target = "$([string](Get-RooPropertyValue $snap 'processName' ''))`:$([int](Get-RooPropertyValue $snap 'processId' 0))"
             originalState = [pscustomobject]@{
                 priorityClass = Get-RooPropertyValue $snap 'originalPriorityClass' $null
+                affinityMask = Get-RooPropertyValue $snap 'originalAffinityMask' $null
                 ioPriority = Get-RooPropertyValue $snap 'originalIoPriority' $null
+                gpuPriority = Get-RooPropertyValue $snap 'originalGpuPriority' $null
                 executablePath = Get-RooPropertyValue $snap 'executablePath' $null
             }
         }) | Out-Null
