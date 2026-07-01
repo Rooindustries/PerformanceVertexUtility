@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "catalogId": "nvidia-profile-inspector-nip-catalog",
+  "catalogVersion": "2026.07.framesync-source",
+  "capturedAtUtc": "2026-07-01T15:30:00Z",
+  "sourceBoundary": {
+    "mode": "metadata-only",
+    "nvpiExecutionAllowed": false,
+    "nipImportAllowed": false,
+    "autoApplyAllowed": false,
+    "manualApplyRequired": true,
+    "manualApplyRequires": [
+      "detected NVIDIA GPU hardware match",
+      "current profile export before import",
+      "explicit user approval",
+      "local benchmark before recommendation"
+    ],
+    "notes": [
+      "This catalog is generated from static XML and file metadata only.",
+      "NVIDIA Profile Inspector must not be launched by backend validation.",
+      "NIP values are treated as candidates, not live desired state."
+    ]
+  },
+  "toolAsset": {
+    "id": "nvidia-profile-inspector",
+    "name": "NVIDIA Profile Inspector",
+    "archivePath": "Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+    "sha256": "3787C83B51EC7795931E1A02978DB20984A1E007D65F13DAFCF166E5E7642409",
+    "sizeBytes": 637440,
+    "lastObservedLocalTime": "2025-12-08T12:50:14",
+    "executionAllowedDuringCatalogValidation": false
+  },
+  "referenceXml": {
+    "archivePath": "Utilities\\Other\\NVPI\\Reference.xml",
+    "sha256": "512CE2C34D28514730E90369F2E08E9DE49D24944C610A5336A7B69C1A2FE35E",
+    "sizeBytes": 255585,
+    "customSettingCount": 398,
+    "matchedSettingIds": [
+      "11250737",
+      "269573258"
+    ],
+    "notes": "Reference.xml is used only as static setting-name evidence when IDs match."
+  },
+  "profiles": [
+    {
+      "profileId": "framesync",
+      "name": "FrameSync",
+      "vendor": "NVIDIA",
+      "sourceFile": "Utilities\\Other\\framesync.nip",
+      "sourceSha256": "D58339DB9678EB342BD38A9F811AC992BCA9B30CC6ED4C0081BF889474FDD201",
+      "sourceSizeBytes": 6037,
+      "sourceFormat": {
+        "kind": "NIP XML",
+        "xmlEncoding": "utf-16",
+        "rootElement": "ArrayOfProfile",
+        "profileElement": "Profile"
+      },
+      "profileNameInNip": "Base Profile",
+      "executableCount": 0,
+      "settingCount": 24,
+      "valueTypeCounts": {
+        "Dword": 23,
+        "String": 1
+      },
+      "status": "seed-profile",
+      "supportedHardware": [
+        "PCI\\VEN_10DE"
+      ],
+      "gameTags": [
+        "overwatch-2",
+        "frame-pacing",
+        "obs-discord-stream"
+      ],
+      "manualApplyRequired": true,
+      "benchmarkStatus": "needs-local-benchmark",
+      "risk": "medium",
+      "safetyNotes": [
+        "Profile targets the NVIDIA base profile and has no per-game executable binding.",
+        "Preferred OpenGL GPU is a string value and may be hardware-specific.",
+        "Do not recommend or import until export-first rollback and local benchmark evidence exist."
+      ],
+      "settings": [
+        {
+          "settingId": "1686376",
+          "settingIdHex": "0x19BB68",
+          "name": "Texture filtering - Negative LOD bias",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "3066610",
+          "settingIdHex": "0x2ECAF2",
+          "name": "Texture filtering - Trilinear optimization",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "5912412",
+          "settingIdHex": "0x5A375C",
+          "name": "Vertical Sync Tear Control",
+          "value": "2525368439",
+          "valueHex": "0x96861077",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "6600001",
+          "settingIdHex": "0x64B541",
+          "name": "Preferred refresh rate",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "8703344",
+          "settingIdHex": "0x84CD70",
+          "name": "Texture filtering - Anisotropic filter optimization",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "11041231",
+          "settingIdHex": "0xA879CF",
+          "name": "Vertical Sync",
+          "value": "138504007",
+          "valueHex": "0x08416747",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "11250737",
+          "settingIdHex": "0xABAC31",
+          "name": "Enable NIS2 App Count",
+          "referenceName": "Enable NIS2 App Count",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "11306135",
+          "settingIdHex": "0xAC8497",
+          "name": "Shader disk cache maximum size",
+          "value": "10240",
+          "valueHex": "0x00002800",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "13510289",
+          "settingIdHex": "0xCE2691",
+          "name": "Texture filtering - Quality",
+          "value": "20",
+          "valueHex": "0x00000014",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "15151633",
+          "settingIdHex": "0xE73211",
+          "name": "Texture filtering - Anisotropic sample optimization",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "269573258",
+          "settingIdHex": "0x10115C8A",
+          "name": "Whisper Mode",
+          "referenceName": "Whisper Mode",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "270198627",
+          "settingIdHex": "0x101AE763",
+          "name": "Flag to control smooth AFR behavior",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "270426537",
+          "settingIdHex": "0x101E61A9",
+          "name": "Anisotropic filtering setting",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "274197361",
+          "settingIdHex": "0x1057EB71",
+          "name": "Power management mode",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "276652957",
+          "settingIdHex": "0x107D639D",
+          "name": "Antialiasing - Gamma correction",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "276757595",
+          "settingIdHex": "0x107EFC5B",
+          "name": "Antialiasing - Mode",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "278196567",
+          "settingIdHex": "0x1094F157",
+          "name": "Toggle the VRR global feature",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "278196727",
+          "settingIdHex": "0x1094F1F7",
+          "name": "VRR requested state",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "279476687",
+          "settingIdHex": "0x10A879CF",
+          "name": "G-SYNC",
+          "value": "4",
+          "valueHex": "0x00000004",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "282245910",
+          "settingIdHex": "0x10D2BB16",
+          "name": "Anisotropic filtering mode",
+          "value": "1",
+          "valueHex": "0x00000001",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "282555346",
+          "settingIdHex": "0x10D773D2",
+          "name": "Antialiasing - Setting",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "294973784",
+          "settingIdHex": "0x1194F158",
+          "name": "Enable G-SYNC globally",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "544392611",
+          "settingIdHex": "0x2072C5A3",
+          "name": "OpenGL GDI compatibility",
+          "value": "0",
+          "valueHex": "0x00000000",
+          "valueType": "Dword"
+        },
+        {
+          "settingId": "550564838",
+          "settingIdHex": "0x20D0F3E6",
+          "name": "Preferred OpenGL GPU",
+          "value": "id,2.0:2C0510DE,00000100,GF - (432,3,161,16303) @ (0)",
+          "valueType": "String",
+          "hardwareSpecific": true
+        }
+      ]
+    }
+  ]
+}
