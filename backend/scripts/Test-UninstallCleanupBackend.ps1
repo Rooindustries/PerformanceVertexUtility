@@ -64,6 +64,7 @@ $requiredFiles = @(
     'backend\scripts\Preview-LeftoverScan.ps1',
     'backend\scripts\New-CleanupDeletionManifest.ps1',
     'backend\scripts\New-UninstallCleanupExecutionPlan.ps1',
+    'backend\scripts\Invoke-UninstallCleanupExecution.ps1',
     'backend\scripts\Test-UninstallCleanupBackend.ps1',
     'backend\samples\installed-app-inventory.sample.json',
     'backend\samples\app-classification.sample.json',
@@ -187,15 +188,16 @@ try {
 try {
     $planOutput = & (Join-Path $PSScriptRoot 'New-UninstallCleanupExecutionPlan.ps1') -OfficialPreviewPath $sampleOfficialPreview -CleanupManifestPath $sampleCleanupManifest
     $plan = ($planOutput -join [Environment]::NewLine) | ConvertFrom-Json
-    if ($plan.dryRun -eq $true -and $plan.executionMode -eq 'design-only' -and $plan.capabilities.canRunUninstallers -eq $false -and $plan.capabilities.canDeleteLeftovers -eq $false -and $plan.summary.executionReady -eq $false) {
-        Add-Pass 'Uninstall cleanup execution plan is design-only and cannot execute uninstall or cleanup actions'
+    if ($plan.dryRun -eq $true -and $plan.executionMode -eq 'guarded-fixture-ready' -and $plan.capabilities.fixtureExecutorImplemented -eq $true -and $plan.capabilities.realSystemExecutorImplemented -eq $false -and $plan.capabilities.canRunUninstallers -eq $false -and $plan.capabilities.canDeleteLeftovers -eq $false -and $plan.summary.executionReady -eq $false) {
+        Add-Pass 'Uninstall cleanup execution plan is fixture-executor ready while real uninstall and real cleanup remain blocked'
     } else {
         Add-Failure 'Uninstall cleanup execution plan reported executable state'
     }
     $policyGate = @($plan.gates | Where-Object { $_.gateId -eq 'policy-confirmed-execution-enabled' }) | Select-Object -First 1
     $backupGate = @($plan.gates | Where-Object { $_.gateId -eq 'backup-exports-complete' }) | Select-Object -First 1
-    if ($policyGate.blocking -eq $true -and $backupGate.blocking -eq $true -and $plan.summary.blockingGateCount -ge 1) {
-        Add-Pass 'Execution plan exposes blocking policy and backup gates before future apply'
+    $realExecutorGate = @($plan.gates | Where-Object { $_.gateId -eq 'real-system-executor-implemented' }) | Select-Object -First 1
+    if ($policyGate.blocking -eq $true -and $backupGate.blocking -eq $true -and $realExecutorGate.blocking -eq $true -and $plan.summary.disposableFixtureExecutionReady -eq $true) {
+        Add-Pass 'Execution plan exposes blocking real-system policy, executor, and backup gates while fixture validation is ready'
     } else {
         Add-Failure 'Execution plan did not expose expected blocking gates'
     }
@@ -206,6 +208,138 @@ try {
     }
 } catch {
     Add-Failure "Uninstall cleanup execution plan failed: $($_.Exception.Message)"
+}
+
+$fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-uninstall-cleanup-fixture-$([guid]::NewGuid().ToString('N'))"
+$fixtureCleanupDone = $false
+try {
+    $appFolder = Join-Path $fixtureRoot 'FakeApp'
+    $cacheFolder = Join-Path $fixtureRoot 'FakeAppCache'
+    $looseFile = Join-Path $fixtureRoot 'loose-cache.bin'
+    New-Item -ItemType Directory -Path $appFolder -Force | Out-Null
+    New-Item -ItemType Directory -Path $cacheFolder -Force | Out-Null
+    'fixture app file' | Set-Content -LiteralPath (Join-Path $appFolder 'app.txt') -Encoding UTF8
+    'fixture cache file' | Set-Content -LiteralPath (Join-Path $cacheFolder 'cache.txt') -Encoding UTF8
+    'fixture loose file' | Set-Content -LiteralPath $looseFile -Encoding UTF8
+
+    $officialFixturePath = Join-Path $fixtureRoot 'official-preview.json'
+    $manifestFixturePath = Join-Path $fixtureRoot 'cleanup-manifest.json'
+    $officialFixture = [pscustomobject]@{
+        actionId = 'apps.previewOfficialUninstall'
+        schemaVersion = 1
+        productName = 'Roo Industries Optimization Suite'
+        capturedAtUtc = '2026-07-01T00:00:00Z'
+        dryRun = $true
+        status = 'preview'
+        commands = @(
+            [pscustomobject]@{
+                appId = 'fixture:fake-app'
+                displayName = 'Fixture Fake App'
+                commandType = 'fixture-uninstall-string'
+                rawCommand = '"C:\Fixture\FakeUninstaller.exe"'
+                executable = 'C:\Fixture\FakeUninstaller.exe'
+                arguments = $null
+                protected = $false
+                blocked = $false
+                executionAllowed = $false
+            }
+        )
+        summary = [pscustomobject]@{ requestedCount = 1; commandPreviewCount = 1; blockedCount = 0; executionAllowedCount = 0; willRunUninstallers = $false }
+        warnings = @()
+        errors = @()
+        logs = @()
+    }
+    $cleanupFixture = [pscustomobject]@{
+        manifestId = 'fixture-cleanup-manifest'
+        productName = 'Roo Industries Optimization Suite'
+        schemaVersion = 1
+        appId = 'fixture:fake-app'
+        displayName = 'Fixture Fake App'
+        createdAtUtc = '2026-07-01T00:00:00Z'
+        dryRun = $true
+        executionMode = 'preview-only'
+        sourceScanId = 'fixture-scan'
+        items = @(
+            [pscustomobject]@{
+                itemId = 'folder:fixture-cache'
+                type = 'folder'
+                target = $cacheFolder
+                matchedBy = @('fixture')
+                confidence = 'high'
+                risk = 'low'
+                defaultSelected = $true
+                protected = $false
+                reason = 'Disposable fixture folder.'
+            },
+            [pscustomobject]@{
+                itemId = 'file:fixture-loose-cache'
+                type = 'file'
+                target = $looseFile
+                matchedBy = @('fixture')
+                confidence = 'high'
+                risk = 'low'
+                defaultSelected = $true
+                protected = $false
+                reason = 'Disposable fixture file.'
+            }
+        )
+        excludedItems = @()
+        rollback = [pscustomobject]@{
+            backupRoot = (Join-Path $fixtureRoot '_roo-cleanup-backup')
+            rollbackActionId = 'apps.rollbackCleanup'
+            rollbackSupported = $true
+            restorePoint = [pscustomobject]@{ requiredBeforeFutureApply = $false; created = $false; previewOnly = $true }
+            fileBackupRequirements = @()
+            registryExportRequirements = @()
+            serviceStateBackupRequirements = @()
+            scheduledTaskBackupRequirements = @()
+            startupEntryBackupRequirements = @()
+            manifestExportRequired = $true
+        }
+        summary = [pscustomobject]@{ itemCount = 2; willDeleteOnApply = $false; willEditRegistry = $false; willEditServices = $false; willEditScheduledTasks = $false; dryRunWritesState = $false }
+        warnings = @()
+        errors = @()
+    }
+    ($officialFixture | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $officialFixturePath -Encoding UTF8
+    ($cleanupFixture | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $manifestFixturePath -Encoding UTF8
+
+    $fixturePreview = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $manifestFixturePath -FixtureRoot $fixtureRoot
+    $fixturePreviewJson = ($fixturePreview -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($fixturePreviewJson.status -eq 'preview' -and $fixturePreviewJson.summary.willRunUninstallers -eq $false -and (Test-Path -LiteralPath $cacheFolder) -and (Test-Path -LiteralPath $looseFile)) {
+        Add-Pass 'Cleanup executor preview leaves disposable fixture files untouched'
+    } else {
+        Add-Failure 'Cleanup executor preview changed fixture files or reported unsafe state'
+    }
+
+    $fixtureBlocked = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $manifestFixturePath -FixtureRoot $fixtureRoot -ConfirmApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
+    $fixtureBlockedJson = ($fixtureBlocked -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($fixtureBlockedJson.status -eq 'blocked' -and $fixtureBlockedJson.summary.deletedCount -eq 0 -and (Test-Path -LiteralPath $cacheFolder) -and (Test-Path -LiteralPath $looseFile)) {
+        Add-Pass 'Cleanup executor blocks confirmed fixture deletion without disposable-fixture flag'
+    } else {
+        Add-Failure 'Cleanup executor did not block missing disposable-fixture flag'
+    }
+
+    $fixtureApply = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $manifestFixturePath -FixtureRoot $fixtureRoot -ConfirmApply -AllowDisposableFixtureApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
+    $fixtureApplyJson = ($fixtureApply -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($fixtureApplyJson.status -eq 'success' -and $fixtureApplyJson.summary.deletedCount -eq 2 -and $fixtureApplyJson.capabilities.canRunUninstallers -eq $false -and (Test-Path -LiteralPath $fixtureApplyJson.rollback.rollbackManifestPath) -and -not (Test-Path -LiteralPath $cacheFolder) -and -not (Test-Path -LiteralPath $looseFile)) {
+        Add-Pass 'Cleanup executor backs up and deletes only disposable fixture leftovers after approval gates'
+    } else {
+        Add-Failure 'Cleanup executor fixture apply did not produce expected backup/delete result'
+    }
+
+    Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+    $fixtureCleanupDone = $true
+    if (-not (Test-Path -LiteralPath $fixtureRoot)) {
+        Add-Pass 'Cleanup executor disposable fixtures were cleaned up'
+    } else {
+        Add-Failure 'Cleanup executor disposable fixtures remain'
+    }
+} catch {
+    Add-Failure "Cleanup executor fixture validation failed: $($_.Exception.Message)"
+} finally {
+    if (-not $fixtureCleanupDone -and (Test-Path -LiteralPath $fixtureRoot)) {
+        Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $stateAfter = Get-StateEntryCount

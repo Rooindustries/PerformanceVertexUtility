@@ -1,0 +1,148 @@
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+$failures = New-Object System.Collections.Generic.List[string]
+$passes = New-Object System.Collections.Generic.List[string]
+
+function Add-Pass {
+    param([string]$Message)
+    $passes.Add($Message) | Out-Null
+    Write-Host "PASS $Message"
+}
+
+function Add-Failure {
+    param([string]$Message)
+    $failures.Add($Message) | Out-Null
+    Write-Host "FAIL $Message"
+}
+
+function ConvertFrom-ScriptJson {
+    param([object[]]$Output)
+    return ($Output -join [Environment]::NewLine) | ConvertFrom-Json
+}
+
+function Get-StateEntryCount {
+    $stateRoot = Join-Path $repoRoot 'backend\state'
+    if (-not (Test-Path -LiteralPath $stateRoot)) { return 0 }
+    return @(Get-ChildItem -LiteralPath $stateRoot -Force -Recurse -ErrorAction SilentlyContinue).Count
+}
+
+$requiredFiles = @(
+    'backend\scripts\StutterOptimization.Common.ps1',
+    'backend\scripts\Preview-StutterOptimization.ps1',
+    'backend\scripts\Invoke-StutterOptimization.ps1',
+    'backend\scripts\Restore-StutterOptimization.ps1'
+)
+foreach ($relative in $requiredFiles) {
+    $path = Join-Path $repoRoot $relative
+    if (Test-Path -LiteralPath $path) {
+        Add-Pass "Required file exists: $relative"
+    } else {
+        Add-Failure "Required file missing: $relative"
+    }
+}
+
+$stateBefore = Get-StateEntryCount
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-stutter-contract-$([guid]::NewGuid().ToString('N'))"
+$cleanupDone = $false
+try {
+    $shaderRoot = Join-Path $tempRoot 'shader-cache'
+    New-Item -ItemType Directory -Path (Join-Path $shaderRoot 'NVIDIA\DXCache') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $shaderRoot 'DirectX') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $shaderRoot 'Steam') -Force | Out-Null
+    'nvidia-cache' | Set-Content -LiteralPath (Join-Path $shaderRoot 'NVIDIA\DXCache\a.bin') -Encoding UTF8
+    'directx-cache' | Set-Content -LiteralPath (Join-Path $shaderRoot 'DirectX\b.bin') -Encoding UTF8
+    'steam-cache' | Set-Content -LiteralPath (Join-Path $shaderRoot 'Steam\c.bin') -Encoding UTF8
+
+    $memoryPath = Join-Path $tempRoot 'memory.json'
+    $timerPath = Join-Path $tempRoot 'timer.json'
+    $powerPath = Join-Path $tempRoot 'power.json'
+    $servicePath = Join-Path $tempRoot 'services.json'
+    ([pscustomobject]@{ source = 'fixture'; totalPhysicalBytes = 17179869184; availableBytes = 1879048192; standbyBytes = 4294967296; commitUsedBytes = 13958643712; commitLimitBytes = 21474836480 } | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $memoryPath -Encoding UTF8
+    ([pscustomobject]@{ source = 'fixture'; current100ns = 156250; minimum100ns = 5000; maximum100ns = 156250 } | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $timerPath -Encoding UTF8
+    ([pscustomobject]@{ source = 'fixture'; activeSchemeGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'; activeSchemeName = 'Balanced'; isLaptop = $false } | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $powerPath -Encoding UTF8
+    ([pscustomobject]@{
+        source = 'fixture'
+        services = @(
+            [pscustomobject]@{ name = 'FixtureUpdater'; displayName = 'Fixture Updater'; protected = $false; allowPause = $true; state = 'Running'; startMode = 'Manual' },
+            [pscustomobject]@{ name = 'AudioEndpointBuilder'; displayName = 'Windows Audio Endpoint Builder'; protected = $true; allowPause = $false; state = 'Running'; startMode = 'Auto' }
+        )
+    } | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $servicePath -Encoding UTF8
+
+    $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Preview-StutterOptimization.ps1') -MemorySnapshotPath $memoryPath -TimerSnapshotPath $timerPath -PowerPlanSnapshotPath $powerPath -ShaderCacheRoot $shaderRoot -ServiceInventoryPath $servicePath)
+    if ($preview.status -eq 'preview' -and $preview.summary.contractCount -eq 5 -and $preview.summary.realApplyAllowedCount -eq 0 -and $preview.summary.fixtureApplyReadyCount -eq 1) {
+        Add-Pass 'Stutter optimization preview returns five backend contracts with only shader-cache fixture apply ready'
+    } else {
+        Add-Failure 'Stutter optimization preview returned an unexpected contract summary'
+    }
+    $standby = @($preview.contracts | Where-Object { $_.optimizationId -eq 'standby-memory' }) | Select-Object -First 1
+    $timer = @($preview.contracts | Where-Object { $_.optimizationId -eq 'timer-resolution' }) | Select-Object -First 1
+    $power = @($preview.contracts | Where-Object { $_.optimizationId -eq 'power-plan' }) | Select-Object -First 1
+    $service = @($preview.contracts | Where-Object { $_.optimizationId -eq 'service-pause-preview' }) | Select-Object -First 1
+    if ($standby.proposedAction.applyAllowedNow -eq $false -and $timer.proposedAction.applyAllowedNow -eq $false -and $power.proposedAction.applyAllowedNow -eq $false -and $service.proposedAction.applyAllowedNow -eq $false) {
+        Add-Pass 'Standby memory, timer resolution, power plan, and service pause contracts are preview-only'
+    } else {
+        Add-Failure 'One or more real system-changing stutter contracts reported apply-ready'
+    }
+
+    $blocked = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId standby-memory -ConfirmApply -AllowDisposableFixtureApply)
+    if ($blocked.status -eq 'blocked' -and $blocked.summary.willChangeSystem -eq $false) {
+        Add-Pass 'Non-fixture stutter apply remains blocked even with confirmation switches'
+    } else {
+        Add-Failure 'Non-fixture stutter apply was not blocked'
+    }
+
+    $applyBlocked = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply)
+    if ($applyBlocked.status -eq 'blocked' -and $applyBlocked.summary.deletedCount -eq 0 -and @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File).Count -eq 3) {
+        Add-Pass 'Shader cache fixture apply blocks without disposable-fixture flag and leaves files intact'
+    } else {
+        Add-Failure 'Shader cache fixture apply did not block safely without disposable-fixture flag'
+    }
+
+    $apply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
+    if ($apply.status -eq 'success' -and $apply.summary.deletedCount -eq 3 -and $apply.summary.willDeleteRealFiles -eq $false -and (Test-Path -LiteralPath $apply.rollback.rollbackManifestPath) -and @(Get-ChildItem -LiteralPath $shaderRoot -File -Recurse | Where-Object { $_.FullName -notlike '*_roo-shader-cache-backup*' }).Count -eq 0) {
+        Add-Pass 'Shader cache fixture apply backs up and deletes only disposable cache files'
+    } else {
+        Add-Failure 'Shader cache fixture apply did not produce expected backup/delete proof'
+    }
+
+    $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $apply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
+    if ($restore.status -eq 'success' -and $restore.summary.restoredCount -eq 3 -and @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | Where-Object { $_.FullName -notlike '*_roo-shader-cache-backup*' }).Count -eq 3) {
+        Add-Pass 'Shader cache fixture restore rehydrates files from rollback manifest'
+    } else {
+        Add-Failure 'Shader cache fixture restore did not restore expected files'
+    }
+
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    $cleanupDone = $true
+    if (-not (Test-Path -LiteralPath $tempRoot)) {
+        Add-Pass 'Stutter optimization disposable fixtures were cleaned up'
+    } else {
+        Add-Failure 'Stutter optimization disposable fixtures remain'
+    }
+} catch {
+    Add-Failure "Stutter optimization contract validation failed: $($_.Exception.Message)"
+} finally {
+    if (-not $cleanupDone -and (Test-Path -LiteralPath $tempRoot)) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$stateAfter = Get-StateEntryCount
+if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
+    Add-Pass 'backend/state remains empty after stutter optimization contract validation'
+} else {
+    Add-Failure "backend/state is not empty or changed during stutter validation: before=$stateBefore after=$stateAfter"
+}
+
+Add-Pass 'Stutter optimization validation did not launch {source}, WinUtil, timer, power, service, or cleanup utilities'
+
+Write-Host ''
+if ($failures.Count -eq 0) {
+    Write-Host "PASS Stutter optimization contract validation completed. $($passes.Count) checks passed."
+    exit 0
+}
+
+Write-Host "FAIL Stutter optimization contract validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
+exit 1
+

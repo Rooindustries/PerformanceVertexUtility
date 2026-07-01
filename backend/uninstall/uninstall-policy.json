@@ -64,8 +64,12 @@
   },
   "executionDesign": {
     "previewOnly": true,
-    "executorImplemented": false,
+    "executorImplemented": true,
+    "fixtureExecutorImplemented": true,
+    "realSystemExecutorImplemented": false,
+    "executorScope": "disposable-fixture-only",
     "planActionId": "apps.planUninstallCleanupExecution",
+    "executeActionId": "apps.invokeUninstallCleanupExecution",
     "requireOfficialUninstallPreview": true,
     "requireCleanupManifest": true,
     "requirePostUninstallLeftoverRescan": true,

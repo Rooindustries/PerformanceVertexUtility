@@ -260,6 +260,7 @@ try {
             backup = $null
             result = $result
             governor = $config
+            runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $null -StateRoot $null -SessionPath $null -BackupManifestPath $null
             warnings = @($warning)
             errors = @()
             logs = @((New-RooLog 'Process governor dry-run completed without live changes.'))
@@ -326,6 +327,7 @@ try {
         skippedItems = @()
         restoredItems = @()
         governor = $config
+        runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $null -StateRoot $resolvedGovernorStateRoot -SessionPath $sessionStatePath -BackupManifestPath $backupPath
         warnings = @()
         errors = @()
         logs = @()
@@ -642,6 +644,7 @@ try {
         backup = $backupMetadata
         result = $result
         governor = $config
+        runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $state -StateRoot $resolvedGovernorStateRoot -SessionPath $sessionStatePath -BackupManifestPath $(if ($backupMetadata) { $backupPath } else { $null })
         warnings = @($warnings.ToArray())
         errors = @($errors.ToArray())
         logs = @($logs.ToArray())
@@ -656,6 +659,7 @@ try {
     $state.activeRestraints = @($activeRestraints.Values)
     $state.restorable = ($activeRestraints.Count -gt 0)
     $state.backupManifestPath = if ($backupMetadata) { $backupPath } else { $null }
+    $state.runtimeEvidence = New-RooProcessGovernorRuntimeEvidence -Session $state -StateRoot $resolvedGovernorStateRoot -SessionPath $sessionStatePath -BackupManifestPath $(if ($backupMetadata) { $backupPath } else { $null })
     $state.warnings = @($warnings.ToArray())
     $state.errors = @($errors.ToArray())
     $state.logs = @($logs.ToArray())

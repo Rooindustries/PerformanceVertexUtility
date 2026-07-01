@@ -36,6 +36,27 @@
       "ruleId": "govern-browser-renderers"
     }
   ],
+  "runtimeEvidence": {
+    "runtimeKind": "native-powershell-process-governor",
+    "productionRuntimeCapable": true,
+    "confirmedApplyAvailable": true,
+    "dryRunWritesState": false,
+    "confirmedSessionWritesState": true,
+    "stateBacked": true,
+    "restoreContractAvailable": true,
+    "boundedSession": true,
+    "externalProcessGovernorDependencyRequired": false,
+    "processLassoRequired": false,
+    "processLassoLaunched": false,
+    "frontendProcessRequired": false,
+    "frontendProcessLaunched": false,
+    "supportedControls": [
+      "priorityClass",
+      "affinityMask",
+      "ioPriority",
+      "gpuPriority-when-available"
+    ]
+  },
   "latestLogs": [
     {
       "timestampUtc": "2026-06-30T09:30:07.0000000Z",

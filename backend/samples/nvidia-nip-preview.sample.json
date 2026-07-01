@@ -1,0 +1,71 @@
+{
+  "actionId": "drivers.nvidiaNip.previewProfile",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-07-01T10:00:00Z",
+  "profileId": "base-profile",
+  "dryRun": true,
+  "status": "preview",
+  "executionMode": "preview-only",
+  "profile": {
+    "profileId": "base-profile",
+    "name": "Base profile",
+    "profileNameInNip": "Base Profile",
+    "sourceFile": "Utilities\\Other\\base-profile.nip",
+    "settingCount": 24,
+    "supportedHardware": [
+      "PCI\\VEN_10DE"
+    ],
+    "risk": "medium"
+  },
+  "hardwareGate": {
+    "source": "provided-hardware-inventory",
+    "nvidiaGpuPresent": true,
+    "matchedGpus": [
+      {
+        "name": "NVIDIA GeForce RTX Fixture",
+        "vendor": "NVIDIA",
+        "pnpDeviceId": "PCI\\VEN_10DE&DEV_0000",
+        "driverVersion": "fixture"
+      }
+    ]
+  },
+  "commands": {
+    "exportCurrentProfile": {
+      "operation": "export",
+      "toolId": "nvidia-profile-inspector",
+      "executablePath": "Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+      "arguments": [
+        "-exportProfile",
+        "Base Profile",
+        "%TEMP%\\roo-nvidia-nip-export-base-profile-before.nip"
+      ],
+      "launchAllowedNow": false,
+      "processStarted": false
+    },
+    "importCandidateProfile": {
+      "operation": "import",
+      "toolId": "nvidia-profile-inspector",
+      "executablePath": "Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+      "arguments": [
+        "-importProfile",
+        "Utilities\\Other\\base-profile.nip"
+      ],
+      "launchAllowedNow": false,
+      "processStarted": false
+    }
+  },
+  "summary": {
+    "willRunNvpi": false,
+    "willImportProfile": false,
+    "willExportProfile": false,
+    "willWriteState": false,
+    "autoApplyAllowed": false,
+    "exportBeforeImportRequired": true,
+    "rollbackManifestReady": true,
+    "blockingGateCount": 4
+  },
+  "warnings": [],
+  "errors": []
+}
+
