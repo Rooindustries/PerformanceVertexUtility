@@ -55,10 +55,10 @@ try {
     }
 
     $power = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId power-plan -ConfirmApply -AllowRealSystemExecution -UserApproved -TimeoutSeconds 15)
-    if ($power.status -in @('success','capability-limited') -and $power.summary.willPersist -eq $false -and $power.summary.willLaunchForbiddenUtility -eq $false -and $power.summary.nextEngineeringStep -and ($power.capabilities.restoreAttempted -eq $true -or $power.status -eq 'capability-limited')) {
-        Add-Pass 'Power plan real executor attempted reversible temp plan flow or reported exact capability limitation'
+    if ($power.status -in @('success','capability-limited') -and $power.capabilities.exportImportPathUsed -eq $true -and $power.summary.willPersist -eq $false -and $power.summary.willLaunchForbiddenUtility -eq $false -and $power.summary.nextEngineeringStep -and ($power.capabilities.restoreAttempted -eq $true -or $power.status -eq 'capability-limited') -and -not (Test-Path -LiteralPath ([string]$power.capabilities.temporaryPowFilePath))) {
+        Add-Pass 'Power plan real executor attempted export/import/select/restore/delete flow or reported exact capability limitation'
     } else {
-        Add-Failure 'Power plan real executor did not prove reversible flow or exact limitation'
+        Add-Failure 'Power plan real executor did not prove export/import reversible flow or exact limitation'
     }
 
     $standby = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId standby-memory -UserApproved)

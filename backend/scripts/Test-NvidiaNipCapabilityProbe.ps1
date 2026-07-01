@@ -28,14 +28,24 @@ function Get-StateEntryCount {
 }
 
 function New-NvpiConsoleShim {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [switch]$SleepOnHelp
+    )
+    $sleepValue = if ($SleepOnHelp) { 'true' } else { 'false' }
     $source = @"
 using System;
 using System.IO;
+using System.Threading;
 public static class Program {
     public static int Main(string[] args) {
+        bool sleepOnHelp = String.Equals("__SLEEP_ON_HELP__", "true", StringComparison.OrdinalIgnoreCase);
         Console.WriteLine("shim-stdout:" + string.Join("|", args));
         Console.Error.WriteLine("shim-stderr:" + args.Length.ToString());
+        if (sleepOnHelp && args.Length > 0 && args[0] == "-?") {
+            Thread.Sleep(5000);
+            return 0;
+        }
         if (args.Length > 0 && args[0] == "-exportProfile") {
             if (args.Length < 3) { return 64; }
             File.WriteAllText(args[2], "mock exported profile");
@@ -46,6 +56,7 @@ public static class Program {
     }
 }
 "@
+    $source = $source.Replace('__SLEEP_ON_HELP__', $sleepValue)
     Add-Type -TypeDefinition $source -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop
 }
 
@@ -68,7 +79,9 @@ $cleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     $shimExe = Join-Path $tempRoot 'NvpiShim.exe'
+    $timeoutShimExe = Join-Path $tempRoot 'NvpiTimeoutShim.exe'
     New-NvpiConsoleShim $shimExe
+    New-NvpiConsoleShim $timeoutShimExe -SleepOnHelp
     $exportPath = Join-Path $tempRoot 'readonly-export.nip'
 
     $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $exportPath)
@@ -92,6 +105,14 @@ try {
         Add-Pass 'NVIDIA capability probe blocks export paths outside temp'
     } else {
         Add-Failure 'NVIDIA capability probe did not block unsafe export path'
+    }
+
+    $timeoutExportPath = Join-Path $tempRoot 'timeout-export.nip'
+    $timeout = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $timeoutShimExe -ExportPath $timeoutExportPath -AllowReadOnlyNvpiProbe -TimeoutSeconds 1 -PreserveProbeArtifacts)
+    if ($timeout.status -in @('success','capability-limited') -and $timeout.summary.timeoutCount -ge 1 -and $timeout.summary.noImportAttempted -eq $true -and $timeout.summary.focusStealPrevented -eq $true) {
+        Add-Pass 'NVIDIA capability probe captures timeout evidence without attempting import'
+    } else {
+        Add-Failure 'NVIDIA capability probe did not capture timeout evidence'
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
