@@ -1,0 +1,127 @@
+{
+  "actionId": "performance.policy.stopSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "process-policy-live-policy-validation-20260630-094100",
+  "sessionId": "process-policy-live-policy-validation-20260630-094100",
+  "dryRun": false,
+  "profileId": "live-policy-validation",
+  "status": "partial",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T09:41:16.0000000Z",
+  "completedAtUtc": "2026-06-30T09:41:16.0000000Z",
+  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "restorable": false,
+  "preview": [],
+  "changedItems": [
+    {
+      "processId": 7404,
+      "processName": "RooPolicyExistingProbe.exe",
+      "restoredPriorityClass": "Normal",
+      "restoredAffinityMask": 255,
+      "restoredIoPriority": "Normal",
+      "restoredGpuPriority": "Normal",
+      "restoredControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "BelowNormal",
+          "proposedValue": "Normal",
+          "action": "restorePriority",
+          "reason": "Restore original process priority after policy session.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-existing-name-command",
+      "restoredAtUtc": "2026-06-30T09:41:16.0000000Z"
+    }
+  ],
+  "skippedItems": [
+    {
+      "processId": 7720,
+      "processName": "RooPolicyRelaunchProbe.exe",
+      "reason": "Process is no longer running.",
+      "skippedAtUtc": "2026-06-30T09:41:16.0000000Z"
+    }
+  ],
+  "restoredItems": [
+    {
+      "processId": 7404,
+      "processName": "RooPolicyExistingProbe.exe",
+      "restoredPriorityClass": "Normal",
+      "restoredAffinityMask": 255,
+      "restoredIoPriority": "Normal",
+      "restoredGpuPriority": "Normal",
+      "restoredControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "BelowNormal",
+          "proposedValue": "Normal",
+          "action": "restorePriority",
+          "reason": "Restore original process priority after policy session.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-existing-name-command",
+      "restoredAtUtc": "2026-06-30T09:41:16.0000000Z"
+    }
+  ],
+  "backup": {
+    "backupId": "process-policy-live-policy-validation-20260630-094100",
+    "scope": "persistent-process-policy-controls",
+    "createdAtUtc": "2026-06-30T09:41:00.0000000Z",
+    "location": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-policy",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "persistentProcessPolicy",
+        "target": "RooPolicyExistingProbe.exe:7404",
+        "originalState": {
+          "priorityClass": "Normal",
+          "affinityMask": 255,
+          "ioPriority": "Normal",
+          "gpuPriority": "Normal",
+          "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+          "startTimeUtc": "2026-06-30T09:40:58.0000000Z"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.policy.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "process-policy-restore-20260630-094116",
+    "status": "partial",
+    "startedAtUtc": "2026-06-30T09:41:16.0000000Z",
+    "completedAtUtc": "2026-06-30T09:41:16.0000000Z",
+    "summary": "Persistent policy restore completed with 1 restored item(s) and 1 skipped item(s).",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "processPolicySessionBackup",
+        "path": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json"
+      }
+    ]
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:41:16.0000000Z",
+      "level": "info",
+      "message": "Persistent policy restore completed with 1 restored item(s) and 1 skipped item(s)."
+    }
+  ]
+}

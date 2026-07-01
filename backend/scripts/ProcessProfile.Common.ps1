@@ -1,5 +1,7 @@
 $script:RooProcessProductName = 'Roo Industries Optimization Suite'
-$script:RooAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal')
+$script:RooAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High')
+$script:RooAllowedIoPriorities = @('VeryLow', 'Low', 'Normal')
+$script:RooAllowedGpuPriorities = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High', 'Realtime')
 
 function Get-RooUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
@@ -537,4 +539,246 @@ function New-RooActionEnvelope {
 function Test-RooPriorityAllowed {
     param([string]$PriorityClass)
     return $script:RooAllowedPriorityClasses -contains $PriorityClass
+}
+
+function Ensure-RooNativeProcessControl {
+    if ('RooNativeProcessControl' -as [type]) { return }
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class RooNativeProcessControl {
+    [DllImport("gdi32.dll")]
+    public static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int priorityClass);
+    [DllImport("gdi32.dll")]
+    public static extern int D3DKMTSetProcessSchedulingPriorityClass(IntPtr process, int priorityClass);
+    [DllImport("ntdll.dll")]
+    public static extern int NtQueryInformationProcess(IntPtr process, int informationClass, ref int information, int informationLength, IntPtr returnLength);
+    [DllImport("ntdll.dll")]
+    public static extern int NtSetInformationProcess(IntPtr process, int informationClass, ref int information, int informationLength);
+}
+"@
+}
+
+function Convert-RooIoPriorityToValue {
+    param([string]$Priority)
+    switch ($Priority) {
+        'VeryLow' { return 0 }
+        'Idle' { return 0 }
+        'Low' { return 1 }
+        'Normal' { return 2 }
+        default { return $null }
+    }
+}
+
+function Convert-RooIoPriorityFromValue {
+    param([int]$Value)
+    switch ($Value) {
+        0 { return 'VeryLow' }
+        1 { return 'Low' }
+        2 { return 'Normal' }
+        default { return "Unknown($Value)" }
+    }
+}
+
+function Convert-RooGpuPriorityToValue {
+    param([string]$Priority)
+    switch ($Priority) {
+        'Idle' { return 0 }
+        'BelowNormal' { return 1 }
+        'Normal' { return 2 }
+        'AboveNormal' { return 3 }
+        'High' { return 4 }
+        'Realtime' { return 5 }
+        'RealTime' { return 5 }
+        default { return $null }
+    }
+}
+
+function Convert-RooGpuPriorityFromValue {
+    param([int]$Value)
+    switch ($Value) {
+        0 { return 'Idle' }
+        1 { return 'BelowNormal' }
+        2 { return 'Normal' }
+        3 { return 'AboveNormal' }
+        4 { return 'High' }
+        5 { return 'Realtime' }
+        default { return "Unknown($Value)" }
+    }
+}
+
+function Test-RooIoPriorityAllowed {
+    param([string]$Priority)
+    return $null -ne (Convert-RooIoPriorityToValue $Priority)
+}
+
+function Test-RooGpuPriorityAllowed {
+    param([string]$Priority)
+    return $null -ne (Convert-RooGpuPriorityToValue $Priority)
+}
+
+function Test-RooAffinityMaskAllowed {
+    param([object]$AffinityMask)
+    if ($null -eq $AffinityMask) { return $false }
+    try {
+        $mask = [int64]$AffinityMask
+        return $mask -gt 0
+    } catch {
+        return $false
+    }
+}
+
+function Get-RooProcessIoPriority {
+    param([System.Diagnostics.Process]$Process)
+    Ensure-RooNativeProcessControl
+    $value = 0
+    $status = [RooNativeProcessControl]::NtQueryInformationProcess($Process.Handle, 33, [ref]$value, 4, [IntPtr]::Zero)
+    if ($status -ne 0) {
+        return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
+    }
+    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIoPriorityFromValue $value; status = $status }
+}
+
+function Set-RooProcessIoPriority {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$Priority
+    )
+    Ensure-RooNativeProcessControl
+    $value = Convert-RooIoPriorityToValue $Priority
+    if ($null -eq $value) { throw "I/O priority '$Priority' is outside the allow-list." }
+    $status = [RooNativeProcessControl]::NtSetInformationProcess($Process.Handle, 33, [ref]$value, 4)
+    if ($status -ne 0) { throw "Failed to set I/O priority '$Priority' (NTSTATUS $status)." }
+}
+
+function Get-RooProcessGpuPriority {
+    param([System.Diagnostics.Process]$Process)
+    Ensure-RooNativeProcessControl
+    $value = 0
+    $status = [RooNativeProcessControl]::D3DKMTGetProcessSchedulingPriorityClass($Process.Handle, [ref]$value)
+    if ($status -ne 0) {
+        return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
+    }
+    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooGpuPriorityFromValue $value; status = $status }
+}
+
+function Set-RooProcessGpuPriority {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$Priority
+    )
+    Ensure-RooNativeProcessControl
+    $value = Convert-RooGpuPriorityToValue $Priority
+    if ($null -eq $value) { throw "GPU priority '$Priority' is outside the allow-list." }
+    $status = [RooNativeProcessControl]::D3DKMTSetProcessSchedulingPriorityClass($Process.Handle, $value)
+    if ($status -ne 0) { throw "Failed to set GPU priority '$Priority' (status $status)." }
+}
+
+function Get-RooProcessControlState {
+    param(
+        [int]$ProcessId,
+        [string]$FallbackPriorityClass = $null
+    )
+    $live = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $live) {
+        return [pscustomobject]@{
+            exists = $false
+            process = $null
+            priorityClass = $FallbackPriorityClass
+            affinityMask = $null
+            ioPriority = $null
+            gpuPriority = $null
+        }
+    }
+
+    $priority = $FallbackPriorityClass
+    try { $priority = [string]$live.PriorityClass } catch { }
+    $affinity = $null
+    try { $affinity = [int64]$live.ProcessorAffinity } catch { }
+    $io = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
+    try { $io = Get-RooProcessIoPriority $live } catch { }
+    $gpu = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
+    try { $gpu = Get-RooProcessGpuPriority $live } catch { }
+
+    return [pscustomobject]@{
+        exists = $true
+        process = $live
+        priorityClass = $priority
+        affinityMask = $affinity
+        ioPriority = if ($io.available) { $io.name } else { $null }
+        gpuPriority = if ($gpu.available) { $gpu.name } else { $null }
+        ioPriorityAvailable = [bool]$io.available
+        gpuPriorityAvailable = [bool]$gpu.available
+        ioPriorityStatus = $io.status
+        gpuPriorityStatus = $gpu.status
+    }
+}
+
+function New-RooControlChange {
+    param(
+        [string]$Control,
+        [object]$CurrentValue,
+        [object]$ProposedValue,
+        [string]$Action,
+        [string]$Reason,
+        [bool]$Blocked = $false,
+        [string]$BlockedReason = $null
+    )
+    return [pscustomobject]@{
+        control = $Control
+        currentValue = $CurrentValue
+        proposedValue = $ProposedValue
+        action = $Action
+        reason = $Reason
+        blocked = $Blocked
+        blockedReason = $BlockedReason
+    }
+}
+
+function Get-RooPreviewControlChanges {
+    param([object]$PreviewEntry)
+    $changes = @(Get-RooPropertyArray $PreviewEntry 'controlChanges')
+    if ($changes.Count -gt 0) { return $changes }
+    if ([string](Get-RooPropertyValue $PreviewEntry 'proposedAction' '') -eq 'setPriority') {
+        return @((New-RooControlChange `
+            -Control 'priorityClass' `
+            -CurrentValue (Get-RooPropertyValue $PreviewEntry 'currentPriorityClass' $null) `
+            -ProposedValue (Get-RooPropertyValue $PreviewEntry 'proposedPriorityClass' $null) `
+            -Action 'setPriority' `
+            -Reason (Get-RooPropertyValue $PreviewEntry 'reason' 'Set process priority.')))
+    }
+    return @()
+}
+
+function Invoke-RooProcessControlChange {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [object]$Change
+    )
+    $control = [string](Get-RooPropertyValue $Change 'control' '')
+    $value = Get-RooPropertyValue $Change 'proposedValue' $null
+    switch ($control) {
+        'priorityClass' {
+            $priority = [string]$value
+            if (-not (Test-RooPriorityAllowed $priority)) { throw "Priority class '$priority' is outside the allow-list." }
+            $Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$priority
+        }
+        'affinityMask' {
+            if (-not (Test-RooAffinityMaskAllowed $value)) { throw "Affinity mask '$value' is invalid." }
+            $Process.ProcessorAffinity = [IntPtr]([int64]$value)
+        }
+        'ioPriority' {
+            $priority = [string]$value
+            if (-not (Test-RooIoPriorityAllowed $priority)) { throw "I/O priority '$priority' is outside the allow-list." }
+            Set-RooProcessIoPriority $Process $priority
+        }
+        'gpuPriority' {
+            $priority = [string]$value
+            if (-not (Test-RooGpuPriorityAllowed $priority)) { throw "GPU priority '$priority' is outside the allow-list." }
+            Set-RooProcessGpuPriority $Process $priority
+        }
+        default {
+            throw "Unsupported process control '$control'."
+        }
+    }
 }

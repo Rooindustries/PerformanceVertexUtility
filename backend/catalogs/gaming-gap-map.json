@@ -1,0 +1,691 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "gaming-gap-map",
+  "productName": "Roo Industries Optimization Suite",
+  "sourceSeparation": {
+    "requiredSeparateProducts": true,
+    "products": [
+      {
+        "sourceKind": "gaming-playbook",
+        "sourceProduct": "Gaming playbook",
+        "catalogPath": "backend/catalogs/gaming-playbook-capabilities.json",
+        "definition": "OS-level optimization source parsed from APBX YAML and bundled assets."
+      },
+      {
+        "sourceKind": "gaming-toggles",
+        "sourceProduct": "Gaming toggles",
+        "catalogPath": "backend/catalogs/gaming-toggles-capabilities.json",
+        "definition": "Bundled app inspected from {source}.exe metadata/strings only."
+      }
+    ],
+    "mergedBucketAllowed": false
+  },
+  "backendStatusDefinitions": {
+    "implemented-live": "Confirmed backend execution exists and is paired with rollback or backup metadata plus validation evidence.",
+    "preview-only": "Backend can inventory, classify, or produce a dry-run plan, but does not apply the change.",
+    "catalog-only": "Backend has static catalog/sample knowledge only; no live inventory or apply path.",
+    "missing": "No equivalent backend capability exists yet.",
+    "unsafe": "Source action is destructive or security-sensitive and must not be implemented without a dedicated safety design.",
+    "blocked": "Capability cannot be safely mapped from source-only inspection, usually because Dash internals were not decompiled or third-party installers/binaries are opaque."
+  },
+  "currentBackendEvidence": {
+    "implementedLiveProcessControl": {
+      "executableScripts": [
+        "backend/scripts/Start-GameTuneSession.ps1",
+        "backend/scripts/Stop-GameTuneSession.ps1",
+        "backend/scripts/Start-ProcessPolicySession.ps1",
+        "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "backend/scripts/Start-ProcessGovernorSession.ps1",
+        "backend/scripts/Stop-ProcessGovernorSession.ps1"
+      ],
+      "rollbackOrBackupRules": [
+        "Game Tune and persistent policy sessions write backup manifests before confirmed process-control changes.",
+        "Stop-GameTuneSession.ps1 restores priority, affinity, I/O priority, and GPU priority from backup.",
+        "Stop-ProcessPolicySession.ps1 restores persistent process policy controls from backup.",
+        "Stop-ProcessGovernorSession.ps1 restores governor restraints from backup."
+      ],
+      "validationEvidence": [
+        "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+        "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+        "backend/scripts/Test-ProcessGovernorRuntime.ps1",
+        "backend/scripts/Test-ProcessGovernorReliability.ps1"
+      ]
+    },
+    "previewOnlyUninstallCleanup": {
+      "executableScripts": [
+        "backend/scripts/Get-InstalledAppInventory.ps1",
+        "backend/scripts/Get-AppClassification.ps1",
+        "backend/scripts/Preview-UninstallQueue.ps1",
+        "backend/scripts/Preview-OfficialUninstall.ps1",
+        "backend/scripts/Preview-LeftoverScan.ps1",
+        "backend/scripts/New-CleanupDeletionManifest.ps1"
+      ],
+      "rollbackOrBackupRules": [
+        "New-CleanupDeletionManifest.ps1 emits preview-only backup requirements for files, registry exports, services, scheduled tasks, and startup entries.",
+        "backend/uninstall/uninstall-policy.json marks official uninstall and cleanup deletion as preview-only."
+      ],
+      "validationEvidence": [
+        "backend/scripts/Test-UninstallCleanupBackend.ps1"
+      ]
+    },
+    "previewOnlyStutterContracts": {
+      "executableScripts": [
+        "backend/scripts/Preview-StutterOptimization.ps1",
+        "backend/scripts/Invoke-StutterOptimization.ps1",
+        "backend/scripts/Restore-StutterOptimization.ps1"
+      ],
+      "rollbackOrBackupRules": [
+        "Standby memory, timer resolution, power plan, and service pause actions are preview-only and blocked from real system mutation.",
+        "Shader cache cleanup supports backup/delete/restore only for disposable temp fixtures.",
+        "Restore-StutterOptimization.ps1 restores shader-cache fixture files from a rollback manifest."
+      ],
+      "validationEvidence": [
+        "backend/scripts/Test-StutterOptimizationContracts.ps1"
+      ]
+    },
+    "previewOnlyDriverAndNvidiaProfileContracts": {
+      "executableScripts": [
+        "backend/scripts/Get-DriverHardwareSummary.ps1",
+        "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "backend/scripts/Invoke-NvidiaNipProfile.ps1",
+        "backend/scripts/Restore-NvidiaNipProfile.ps1"
+      ],
+      "rollbackOrBackupRules": [
+        "Preview-NvidiaNipProfile.ps1 emits export-before-import gates and rollback manifest metadata.",
+        "Invoke-NvidiaNipProfile.ps1 and Restore-NvidiaNipProfile.ps1 construct NVPI command contracts but do not launch NVIDIA Profile Inspector."
+      ],
+      "validationEvidence": [
+        "backend/samples/driver-recommendation-catalog.sample.json",
+        "backend/samples/nvidia-profile-catalog.sample.json",
+        "backend/catalogs/nvidia-profile-inspector-nip-catalog.json",
+        "backend/scripts/Test-NvidiaNipCatalog.ps1",
+        "backend/scripts/Test-NvidiaNipExecutionContract.ps1"
+      ]
+    }
+  },
+  "capabilityStatusMap": [
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-install-gate-and-source-orchestration",
+      "title": "Admin-gated playbook phase orchestration",
+      "backendStatus": "missing",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-vcredist-directx-and-browser-installers",
+      "title": "VC++ redist, DirectX runtime, and browser installer bootstrap",
+      "backendStatus": "missing",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-power-plan-import-and-selection",
+      "title": "Balanced, AMD, and Intel power-plan import/selection",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Controlled temporary power-plan export/import/select/restore/delete is implemented; preview captures active scheme restore requirements and product apply remains approval-gated."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-appx-bloat-ai-store-xbox-removal",
+      "title": "Appx deprovision/removal for bloat, AI, Store, and Xbox/Game Bar",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Get-InstalledAppInventory.ps1",
+          "backend/scripts/Get-AppClassification.ps1",
+          "backend/scripts/Preview-UninstallQueue.ps1",
+          "backend/scripts/Preview-OfficialUninstall.ps1",
+          "backend/scripts/Preview-LeftoverScan.ps1",
+          "backend/scripts/New-CleanupDeletionManifest.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "New-CleanupDeletionManifest.ps1 emits preview-only backup requirements for files, registry exports, services, scheduled tasks, and startup entries.",
+          "backend/uninstall/uninstall-policy.json marks official uninstall and cleanup deletion as preview-only."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-UninstallCleanupBackend.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-edge-onedrive-webview2-strip",
+      "title": "Edge, OneDrive, and WebView2 removal/cleanup scripts",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Get-InstalledAppInventory.ps1",
+          "backend/scripts/Get-AppClassification.ps1",
+          "backend/scripts/Preview-UninstallQueue.ps1",
+          "backend/scripts/Preview-OfficialUninstall.ps1",
+          "backend/scripts/Preview-LeftoverScan.ps1",
+          "backend/scripts/New-CleanupDeletionManifest.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "New-CleanupDeletionManifest.ps1 emits preview-only backup requirements for files, registry exports, services, scheduled tasks, and startup entries.",
+          "backend/uninstall/uninstall-policy.json marks official uninstall and cleanup deletion as preview-only."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-UninstallCleanupBackend.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-defender-smartscreen-mitigations-removal",
+      "title": "Defender, SmartScreen, UAC, and security mitigation disable/removal",
+      "backendStatus": "unsafe",
+      "risk": "critical",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-service-and-scheduled-task-pruning",
+      "title": "Windows service and scheduled-task disable/delete matrix",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-privacy-telemetry-and-policy-registry-hardening",
+      "title": "Privacy, telemetry, cloud content, search, activity history, and policy registry hardening",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-gaming-registry-kernel-memory-and-graphics-tweaks",
+      "title": "Gaming registry/kernel/memory/graphics tweaks",
+      "backendStatus": "missing",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-network-and-usb-device-tuning",
+      "title": "Network adapter and USB device tuning",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-timer-resolution-scheduled-task",
+      "title": "SetTimerResolution boot scheduled task",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Controlled bounded timer-resolution lifecycle is implemented; preview captures status and product apply remains approval-gated."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-shell-ui-personalization-and-context-tools",
+      "title": "Shell personalization, dark mode, wallpaper, taskbar/start cleanup, and context-menu tools",
+      "backendStatus": "missing",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-cross-device-phone-link-and-known-folder-cleanup",
+      "title": "Cross-device/Phone Link purge and known-folder restore cleanup",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-gaming-toggles-bundled-app-install",
+      "title": "Bundle and install Gaming toggles as a separate app",
+      "backendStatus": "blocked",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-game-competitive-mode-process-controls",
+      "title": "Competitive Mode game process priority, I/O priority, and CPU affinity controls",
+      "backendStatus": "implemented-live",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Start-GameTuneSession.ps1",
+          "backend/scripts/Stop-GameTuneSession.ps1",
+          "backend/scripts/Start-ProcessPolicySession.ps1",
+          "backend/scripts/Stop-ProcessPolicySession.ps1",
+          "backend/scripts/Start-ProcessGovernorSession.ps1",
+          "backend/scripts/Stop-ProcessGovernorSession.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Game Tune and persistent policy sessions write backup manifests before confirmed process-control changes.",
+          "Stop-GameTuneSession.ps1 restores priority, affinity, I/O priority, and GPU priority from backup.",
+          "Stop-ProcessPolicySession.ps1 restores persistent process policy controls from backup.",
+          "Stop-ProcessGovernorSession.ps1 restores governor restraints from backup."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "backend/scripts/Test-ProcessGovernorRuntime.ps1",
+          "backend/scripts/Test-ProcessGovernorReliability.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-background-process-demotion-and-governor",
+      "title": "Lower other processes and govern background CPU contention",
+      "backendStatus": "implemented-live",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Start-GameTuneSession.ps1",
+          "backend/scripts/Stop-GameTuneSession.ps1",
+          "backend/scripts/Start-ProcessPolicySession.ps1",
+          "backend/scripts/Stop-ProcessPolicySession.ps1",
+          "backend/scripts/Start-ProcessGovernorSession.ps1",
+          "backend/scripts/Stop-ProcessGovernorSession.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Game Tune and persistent policy sessions write backup manifests before confirmed process-control changes.",
+          "Stop-GameTuneSession.ps1 restores priority, affinity, I/O priority, and GPU priority from backup.",
+          "Stop-ProcessPolicySession.ps1 restores persistent process policy controls from backup.",
+          "Stop-ProcessGovernorSession.ps1 restores governor restraints from backup."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "backend/scripts/Test-ProcessGovernorRuntime.ps1",
+          "backend/scripts/Test-ProcessGovernorReliability.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-clear-standby-memory",
+      "title": "Clear standby memory for memory-heavy game stutter",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Standby memory clear is preview-only because it is transient and cannot be restored."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-shader-cache-cleanup",
+      "title": "DirectX/NVIDIA/AMD/Intel/Steam shader cache cleanup",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1",
+          "backend/scripts/Invoke-StutterOptimization.ps1",
+          "backend/scripts/Restore-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Real shader-cache deletion is approval-gated and uses the controlled real-path planning plus backup/delete/restore contract.",
+          "Disposable fixture shader-cache deletion writes a backup manifest and Restore-StutterOptimization.ps1 restores files from that manifest."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-pause-non-essential-services",
+      "title": "Temporarily pause non-essential services while gaming",
+      "backendStatus": "preview-only",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Service pause apply is blocked until service state backup, dependency graph, and restore-failure validation exist."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-network-latency-and-adapter-toggles",
+      "title": "Network latency, TCP, offload, throttling, Nagle, LLMNR, NetBIOS, and adapter toggles",
+      "backendStatus": "unsafe",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-power-plan-and-power-state-controls",
+      "title": "Power plan switcher and high-performance power-state pinning",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Power plan apply is blocked; preview captures active scheme restore requirements."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-windows-toggle-library",
+      "title": "Large Windows tweak/toggle library",
+      "backendStatus": "missing",
+      "risk": "high",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-timer-resolution-toggle",
+      "title": "Global timer resolution toggle",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Preview-StutterOptimization.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "Timer apply is blocked until an owned lifecycle and stop/cleanup path are implemented."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-StutterOptimizationContracts.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-uninstaller-and-leftover-cleanup",
+      "title": "Installed app uninstaller and leftover review",
+      "backendStatus": "preview-only",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [
+          "backend/scripts/Get-InstalledAppInventory.ps1",
+          "backend/scripts/Get-AppClassification.ps1",
+          "backend/scripts/Preview-UninstallQueue.ps1",
+          "backend/scripts/Preview-OfficialUninstall.ps1",
+          "backend/scripts/Preview-LeftoverScan.ps1",
+          "backend/scripts/New-CleanupDeletionManifest.ps1"
+        ],
+        "rollbackOrBackupRules": [
+          "New-CleanupDeletionManifest.ps1 emits preview-only backup requirements for files, registry exports, services, scheduled tasks, and startup entries.",
+          "backend/uninstall/uninstall-policy.json marks official uninstall and cleanup deletion as preview-only."
+        ],
+        "validationEvidence": [
+          "backend/scripts/Test-UninstallCleanupBackend.ps1"
+        ]
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-store-app-restore",
+      "title": "Restore removed UWP/Microsoft Store apps",
+      "backendStatus": "missing",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-profile-import-export-and-settings",
+      "title": "Dash profile import/export and app settings",
+      "backendStatus": "blocked",
+      "risk": "low",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    },
+    {
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
+      "capabilityId": "dash-system-restore-and-update-downloads",
+      "title": "System restore, downloads, updates, links, and app lifecycle",
+      "backendStatus": "missing",
+      "risk": "medium",
+      "backendEvidence": {
+        "executableScripts": [],
+        "rollbackOrBackupRules": [],
+        "validationEvidence": []
+      }
+    }
+  ],
+  "statusCounts": {
+    "missing": 7,
+    "unsafe": 8,
+    "blocked": 2,
+    "implemented-live": 2,
+    "preview-only": 8
+  },
+  "topMissingOptimizationsFor16GbObsDiscordOverwatch": [
+    {
+      "rank": 1,
+      "capabilityId": "dash-clear-standby-memory",
+      "sourceProduct": "Gaming toggles",
+      "backendStatus": "preview-only",
+      "whyFor16GbObsDiscordOverwatch": "Dash explicitly targets flushing standby memory for memory-heavy game stutter; 16 GB with OBS and Discord makes memory pressure a first-order suspect.",
+      "safeBackendNeeded": "Read-only memory pressure evidence, standby list size capture, confirmed clear action, before/after validation, and no persistent state write."
+    },
+    {
+      "rank": 2,
+      "capabilityId": "playbook-timer-resolution-scheduled-task",
+      "sourceProduct": "Gaming playbook",
+      "backendStatus": "preview-only",
+      "whyFor16GbObsDiscordOverwatch": "Timer resolution can affect input/audio/frame pacing; APBX bundles a dedicated SetTimerResolution executable and Dash exposes a timer toggle.",
+      "safeBackendNeeded": "Backend-owned timer lifecycle with process/task cleanup, measured current/min/max timer evidence, rollback, and validation."
+    },
+    {
+      "rank": 3,
+      "capabilityId": "playbook-power-plan-import-and-selection",
+      "sourceProduct": "Gaming playbook / Gaming toggles",
+      "backendStatus": "preview-only",
+      "whyFor16GbObsDiscordOverwatch": "Power plan and power-state pinning directly affect CPU clock residency and frame-time consistency while streaming.",
+      "safeBackendNeeded": "Capture current active plan, import/apply only reviewed plans, restore previous GUID, and validate active scheme."
+    },
+    {
+      "rank": 4,
+      "capabilityId": "dash-shader-cache-cleanup",
+      "sourceProduct": "Gaming toggles",
+      "backendStatus": "preview-only",
+      "whyFor16GbObsDiscordOverwatch": "Dash names DirectX/NVIDIA/AMD/Intel/Steam shader caches; stale shader caches can present as game stutter after driver/game changes.",
+      "safeBackendNeeded": "Preview per-cache paths, protect active game/OBS files, backup/delete manifest, and validation by path count/bytes only after confirmation."
+    },
+    {
+      "rank": 5,
+      "capabilityId": "dash-network-latency-and-adapter-toggles",
+      "sourceProduct": "Gaming toggles / Gaming playbook",
+      "backendStatus": "unsafe",
+      "whyFor16GbObsDiscordOverwatch": "OBS upload and Discord voice make network jitter visible; Dash/playbook both target TCP/offload/throttling/adapter settings.",
+      "safeBackendNeeded": "Adapter-specific inventory, original advanced-property snapshot, allowlist by NIC/vendor, rollback, and latency/packet-loss validation."
+    },
+    {
+      "rank": 6,
+      "capabilityId": "playbook-gaming-registry-kernel-memory-and-graphics-tweaks",
+      "sourceProduct": "Gaming playbook",
+      "backendStatus": "missing",
+      "whyFor16GbObsDiscordOverwatch": "Contains graphics, memory-management, GameDVR/Game Bar, WER, and scheduler-adjacent settings likely related to frame pacing.",
+      "safeBackendNeeded": "Registry snapshot/restore, reboot requirement tracking, anti-cheat compatibility gates, and benchmark/ETW validation."
+    },
+    {
+      "rank": 7,
+      "capabilityId": "dash-pause-non-essential-services",
+      "sourceProduct": "Gaming toggles",
+      "backendStatus": "preview-only",
+      "whyFor16GbObsDiscordOverwatch": "Background services can compete with CPU/memory/disk while streaming, but blanket service stops are risky.",
+      "safeBackendNeeded": "Per-service allowlist, dependency graph, state snapshot, time-boxed session restore, and OBS/Discord/game protection."
+    }
+  ],
+  "sourceCounts": {
+    "primaryArchive": {
+      "path": "source-archive:{source}R7.apbx",
+      "role": "primary",
+      "listedEntries": 195,
+      "extractedFiles": 195,
+      "extractedDirectories": 5,
+      "configurationFiles": 8,
+      "taskYamlFiles": 7,
+      "mainYamlActions": 8,
+      "taskActions": 1319
+    },
+    "comparisonArchive": {
+      "path": "source-archive:{source}R6.5.apbx",
+      "role": "older-comparison-only",
+      "listedEntries": 199,
+      "extractedFiles": 194,
+      "extractedDirectories": 5
+    },
+    "assetCategoryCounts": {
+      "configuration": 8,
+      "script": 14,
+      "image": 9,
+      "directx-redist": 158,
+      "binary": 2,
+      "other": 3,
+      "power-plan": 1
+    },
+    "r65Comparison": {
+      "addedInR7": [
+        "Executables/restore-known-folders.ps1"
+      ],
+      "removedInR7": [],
+      "changedSize": [
+        "Configuration/Tasks/phase1-prepare.yml",
+        "Configuration/Tasks/phase4-gaming.yml",
+        "Configuration/Tasks/phase5-apply.yml",
+        "Configuration/Tasks/phase6-extended.yml",
+        "Configuration/Tasks/phase7-privacy.yml",
+        "Executables/{source}.exe",
+        "Executables/lockscreen.png",
+        "Executables/wallpaper.png",
+        "playbook.conf"
+      ],
+      "changedSizeCount": 9
+    }
+  },
+  "safetyNotes": [
+    "No WinUI app launch, AME Wizard run, playbook application, {source}.exe execution, registry/service/driver/cleanup/uninstall/privacy/power/network/security mutation was performed.",
+    "backend/state is intentionally not used by these catalogs or tests.",
+    "Capabilities marked implemented-live must retain executable backend scripts, rollback/backup rules, and validation evidence."
+  ]
+}

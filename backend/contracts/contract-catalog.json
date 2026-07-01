@@ -101,6 +101,125 @@
       "status": "draft"
     },
     {
+      "name": "game tune session start result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionEnvelope",
+      "workflow": "game tune runtime",
+      "summary": "Bounded Game Tune runtime session result with dry-run poll previews, confirmed priority changes, skips, backup metadata, warnings, errors, and logs.",
+      "status": "draft"
+    },
+    {
+      "name": "game tune session status",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionStatus",
+      "workflow": "game tune runtime",
+      "summary": "Frontend-readable status for the latest or selected Game Tune session, including active, completed, failed, and restorable state.",
+      "status": "draft"
+    },
+    {
+      "name": "game tune session stop result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionRestoreEnvelope",
+      "workflow": "game tune runtime",
+      "summary": "Game Tune stop or restore result with preview-by-default behavior and confirmed priority rollback details.",
+      "status": "draft"
+    },
+    {
+      "name": "process governor profile",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorProfile",
+      "workflow": "process governor",
+      "summary": "ProBalance-style process governor thresholds, restraint controls, protected process references, foreground exclusion, and candidate selectors.",
+      "status": "draft"
+    },
+    {
+      "name": "process governor preview",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorPreviewEnvelope",
+      "workflow": "process governor",
+      "summary": "Dry-run process governor CPU-pressure sample with would-restrain entries and protected or foreground skip reasons.",
+      "status": "draft"
+    },
+    {
+      "name": "process governor session start result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorSessionEnvelope",
+      "workflow": "process governor",
+      "summary": "Bounded process governor session result with sustained offender detection, confirmed temporary restraint, calm restore, backup metadata, warnings, errors, and logs.",
+      "status": "draft"
+    },
+    {
+      "name": "process governor session status",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorSessionStatus",
+      "workflow": "process governor",
+      "summary": "Frontend-readable status for the latest or selected process governor session, including active, completed, failed, and restorable state.",
+      "status": "draft"
+    },
+    {
+      "name": "process governor stop result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorRestoreEnvelope",
+      "workflow": "process governor",
+      "summary": "Process governor stop or restore result with preview-by-default behavior and confirmed restoration of temporary restraints.",
+      "status": "draft"
+    },
+    {
+      "name": "persistent process policy profile",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyProfile",
+      "workflow": "persistent process policy",
+      "summary": "Saved process policy rules with process-name, wildcard, path, category, command-line, protected exclusion, scenario tag, and process-control targets.",
+      "status": "draft"
+    },
+    {
+      "name": "persistent process policy preview",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyPreviewEnvelope",
+      "workflow": "persistent process policy",
+      "summary": "Dry-run process policy preview with matched rule IDs, current state, proposed state, protected skips, and no-op cases.",
+      "status": "draft"
+    },
+    {
+      "name": "persistent process policy session start result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicySessionEnvelope",
+      "workflow": "persistent process policy",
+      "summary": "Bounded persistent policy session result with launch watcher applications, backup snapshots, active applications, skipped entries, warnings, errors, and logs.",
+      "status": "draft"
+    },
+    {
+      "name": "persistent process policy session status",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicySessionStatus",
+      "workflow": "persistent process policy",
+      "summary": "Frontend-readable status for the latest or selected persistent process policy session, including active, completed, failed, and restorable state.",
+      "status": "draft"
+    },
+    {
+      "name": "persistent process policy stop result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyRestoreEnvelope",
+      "workflow": "persistent process policy",
+      "summary": "Persistent process policy stop or restore result with preview-by-default behavior and confirmed process-control rollback details.",
+      "status": "draft"
+    },
+    {
+      "name": "backend footprint result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/backendFootprintResult",
+      "workflow": "resident backend",
+      "summary": "Read-only backend process count, PowerShell host memory, CPU delta, handle count, elapsed time, and budget evaluation.",
+      "status": "draft"
+    },
+    {
+      "name": "lightweight governor budget",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/lightweightGovernorBudgetProfile",
+      "workflow": "resident backend",
+      "summary": "Acceptance budget for idle CPU, backend PowerShell memory, persistent UI absence, and bounded backend state.",
+      "status": "draft"
+    },
+    {
+      "name": "resident host status",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/residentHostStatus",
+      "workflow": "resident backend",
+      "summary": "Bounded foreground resident host status with self footprint, service-ready metadata, state proof, and dependency proof.",
+      "status": "draft"
+    },
+    {
+      "name": "all-control policy validation result",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/allControlPolicyValidationResult",
+      "workflow": "persistent process policy",
+      "summary": "Disposable-probe validation of priority, CPU affinity, I/O priority, and GPU scheduling priority with unsupported statuses when needed.",
+      "status": "draft"
+    },
+    {
       "name": "uninstall app inventory",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/uninstallAppInventory",
       "workflow": "uninstall cleanup",

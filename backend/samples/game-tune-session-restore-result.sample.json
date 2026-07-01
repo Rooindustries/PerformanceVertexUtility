@@ -1,0 +1,104 @@
+{
+  "actionId": "performance.gameTune.stopSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "game-tune-overwatch-stream-session-20260630-101000",
+  "sessionId": "game-tune-overwatch-stream-session-20260630-101000",
+  "dryRun": false,
+  "profileId": "overwatch-stream-session",
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T10:14:00Z",
+  "completedAtUtc": "2026-06-30T10:14:00Z",
+  "sessionPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\session.json",
+  "backupManifestPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+  "restorable": false,
+  "preview": [],
+  "changedItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "restoredPriorityClass": "Normal",
+      "ruleId": "boost-foreground-game",
+      "restoredAtUtc": "2026-06-30T10:14:00Z"
+    }
+  ],
+  "skippedItems": [],
+  "restoredItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "restoredPriorityClass": "Normal",
+      "ruleId": "boost-foreground-game",
+      "restoredAtUtc": "2026-06-30T10:14:00Z"
+    }
+  ],
+  "backup": {
+    "backupId": "game-tune-overwatch-stream-session-20260630-101000",
+    "scope": "game-tune-session-process-priority",
+    "createdAtUtc": "2026-06-30T10:10:00Z",
+    "location": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-priority",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "processPriority",
+        "target": "Overwatch.exe:18344",
+        "originalState": {
+          "priorityClass": "Normal",
+          "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.gameTune.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "game-tune-restore-20260630-101400",
+    "status": "rolledBack",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-30T10:14:00Z",
+    "summary": "Game Tune restore completed with 1 restored item(s) and 0 skipped item(s).",
+    "changedItems": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "restoredPriorityClass": "Normal",
+        "ruleId": "boost-foreground-game",
+        "restoredAtUtc": "2026-06-30T10:14:00Z"
+      }
+    ],
+    "skippedItems": [],
+    "restoredItems": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "restoredPriorityClass": "Normal",
+        "ruleId": "boost-foreground-game",
+        "restoredAtUtc": "2026-06-30T10:14:00Z"
+      }
+    ],
+    "artifacts": [
+      {
+        "type": "gameTuneSessionBackup",
+        "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json"
+      }
+    ]
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T10:14:00Z",
+      "level": "info",
+      "message": "Game Tune restore completed with 1 restored item(s) and 0 skipped item(s)."
+    }
+  ]
+}

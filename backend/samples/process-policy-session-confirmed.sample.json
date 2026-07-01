@@ -1,0 +1,251 @@
+{
+  "actionId": "performance.policy.startSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "process-policy-live-policy-validation-20260630-094100",
+  "sessionId": "process-policy-live-policy-validation-20260630-094100",
+  "dryRun": false,
+  "profileId": "live-policy-validation",
+  "profilePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\policy-session-profile.json",
+  "protectedCatalogPath": "backend\\profiles\\protected-processes.json",
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T09:41:00.0000000Z",
+  "completedAtUtc": "2026-06-30T09:41:14.0000000Z",
+  "pollIntervalSeconds": 1,
+  "maxDurationSeconds": 14,
+  "pollCount": 12,
+  "stateRoot": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions",
+  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "restorable": true,
+  "activeApplications": [
+    {
+      "processId": 7404,
+      "processName": "RooPolicyExistingProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+      "startTimeUtc": "2026-06-30T09:40:58.0000000Z",
+      "ruleId": "policy-existing-name-command",
+      "appliedAtUtc": "2026-06-30T09:41:01.0000000Z"
+    },
+    {
+      "processId": 7560,
+      "processName": "RooPolicyLaunchProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyLaunchProbe.exe",
+      "startTimeUtc": "2026-06-30T09:41:03.0000000Z",
+      "ruleId": "policy-launch-name-path-category",
+      "appliedAtUtc": "2026-06-30T09:41:04.0000000Z"
+    },
+    {
+      "processId": 7812,
+      "processName": "RooPolicyRelaunchProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyRelaunchProbe.exe",
+      "startTimeUtc": "2026-06-30T09:41:09.0000000Z",
+      "ruleId": "policy-relaunch-same-match",
+      "appliedAtUtc": "2026-06-30T09:41:10.0000000Z"
+    }
+  ],
+  "changedItems": [
+    {
+      "processId": 7404,
+      "processName": "RooPolicyExistingProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "BelowNormal",
+      "originalAffinityMask": 255,
+      "appliedAffinityMask": 255,
+      "originalIoPriority": "Normal",
+      "appliedIoPriority": "Normal",
+      "originalGpuPriority": "Normal",
+      "appliedGpuPriority": "Normal",
+      "appliedControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Apply saved process policy priority class.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-existing-name-command",
+      "reason": "Apply saved policy to a disposable process that was already running when the session started.",
+      "pollIndex": 1,
+      "changedAtUtc": "2026-06-30T09:41:01.0000000Z"
+    },
+    {
+      "processId": 7560,
+      "processName": "RooPolicyLaunchProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyLaunchProbe.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "BelowNormal",
+      "originalAffinityMask": 255,
+      "appliedAffinityMask": 255,
+      "originalIoPriority": "Normal",
+      "appliedIoPriority": "Normal",
+      "originalGpuPriority": "Normal",
+      "appliedGpuPriority": "Normal",
+      "appliedControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Apply saved process policy priority class.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-launch-name-path-category",
+      "reason": "Apply saved policy to a disposable process launched after the watcher starts.",
+      "pollIndex": 4,
+      "changedAtUtc": "2026-06-30T09:41:04.0000000Z"
+    },
+    {
+      "processId": 7720,
+      "processName": "RooPolicyRelaunchProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyRelaunchProbe.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "BelowNormal",
+      "originalAffinityMask": 255,
+      "appliedAffinityMask": 255,
+      "originalIoPriority": "Normal",
+      "appliedIoPriority": "Normal",
+      "originalGpuPriority": "Normal",
+      "appliedGpuPriority": "Normal",
+      "appliedControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Apply saved process policy priority class.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-relaunch-same-match",
+      "reason": "Apply saved policy to each new disposable process instance with the same match.",
+      "pollIndex": 7,
+      "changedAtUtc": "2026-06-30T09:41:07.0000000Z"
+    },
+    {
+      "processId": 7812,
+      "processName": "RooPolicyRelaunchProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyRelaunchProbe.exe",
+      "originalPriorityClass": "Normal",
+      "appliedPriorityClass": "BelowNormal",
+      "originalAffinityMask": 255,
+      "appliedAffinityMask": 255,
+      "originalIoPriority": "Normal",
+      "appliedIoPriority": "Normal",
+      "originalGpuPriority": "Normal",
+      "appliedGpuPriority": "Normal",
+      "appliedControls": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Apply saved process policy priority class.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "policy-relaunch-same-match",
+      "reason": "Apply saved policy to each new disposable process instance with the same match.",
+      "pollIndex": 10,
+      "changedAtUtc": "2026-06-30T09:41:10.0000000Z"
+    }
+  ],
+  "skippedItems": [
+    {
+      "processId": 7508,
+      "processName": "RooPolicyProtectedProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyProtectedProbe.exe",
+      "ruleId": "policy-protected-skip",
+      "reason": "Disposable protected validation probe is excluded from persistent policy control.",
+      "reasonCodes": [
+        "LIVE_POLICY_PROTECTED_RULE",
+        "LIVE_POLICY_PROTECTED_PROBE",
+        "PROFILE_PROTECTED_PROCESS"
+      ],
+      "pollIndex": 1,
+      "skippedAtUtc": "2026-06-30T09:41:01.0000000Z"
+    }
+  ],
+  "restoredItems": [],
+  "polls": [
+    {
+      "pollIndex": 10,
+      "capturedAtUtc": "2026-06-30T09:41:10.0000000Z",
+      "previewCount": 4,
+      "wouldApplyItems": [],
+      "changedItems": [],
+      "skippedItems": [],
+      "noOpItems": [],
+      "activeApplicationCount": 3
+    }
+  ],
+  "backup": {
+    "backupId": "process-policy-live-policy-validation-20260630-094100",
+    "scope": "persistent-process-policy-controls",
+    "createdAtUtc": "2026-06-30T09:41:00.0000000Z",
+    "location": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-policy",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "persistentProcessPolicy",
+        "target": "RooPolicyExistingProbe.exe:7404",
+        "originalState": {
+          "priorityClass": "Normal",
+          "affinityMask": 255,
+          "ioPriority": "Normal",
+          "gpuPriority": "Normal",
+          "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+          "startTimeUtc": "2026-06-30T09:40:58.0000000Z"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.policy.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "process-policy-session-20260630-094114",
+    "status": "success",
+    "startedAtUtc": "2026-06-30T09:41:00.0000000Z",
+    "completedAtUtc": "2026-06-30T09:41:14.0000000Z",
+    "summary": "Persistent policy session completed after 12 poll(s) with 4 application(s), 1 skip(s), and 3 active application(s).",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "processPolicySessionState",
+        "path": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json"
+      }
+    ]
+  },
+  "policy": {
+    "maxSessionDurationSeconds": 14,
+    "pollIntervalSeconds": 1
+  },
+  "warnings": [],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:41:14.0000000Z",
+      "level": "info",
+      "message": "Persistent policy poll 12 completed with 0 application(s), 0 skip(s), and 3 no-op match(es)."
+    }
+  ]
+}

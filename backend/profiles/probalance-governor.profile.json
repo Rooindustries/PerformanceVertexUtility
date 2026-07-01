@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "profileId": "probalance-governor",
+  "name": "ProBalance Governor",
+  "profileKind": "process-governor",
+  "risk": "medium",
+  "targetScenario": "Temporarily restrain sustained background CPU offenders while preserving foreground games, capture, voice, system, security, network, driver, and input workloads.",
+  "protectedCatalogPath": "protected-processes.json",
+  "governor": {
+    "thresholds": {
+      "totalCpuPressureThresholdPercent": 35,
+      "perProcessCpuThresholdPercent": 8,
+      "timeOverThresholdSeconds": 8,
+      "minimumRestraintSeconds": 15,
+      "restoreCpuThresholdPercent": 3,
+      "cooldownAfterRestoreSeconds": 20,
+      "maxSessionDurationSeconds": 60,
+      "pollIntervalSeconds": 1
+    },
+    "restraint": {
+      "priorityClass": "BelowNormal",
+      "ioPriority": "Low"
+    },
+    "excludeForegroundProcess": true,
+    "protectedProcesses": [
+      {
+        "itemId": "protect-capture-and-voice",
+        "type": "process",
+        "names": [
+          "obs64.exe",
+          "obs32.exe",
+          "Discord.exe"
+        ],
+        "reason": "Capture and voice companions are protected from governor restraint.",
+        "reasonCodes": [
+          "CAPTURE_VOICE_PROTECTED"
+        ],
+        "defaultAction": "block"
+      }
+    ],
+    "candidateSelectors": [
+      {
+        "ruleId": "govern-browser-renderers",
+        "enabled": true,
+        "match": {
+          "processNames": [
+            "chrome.exe",
+            "msedge.exe",
+            "firefox.exe",
+            "brave.exe",
+            "steamwebhelper.exe",
+            "EpicWebHelper.exe"
+          ],
+          "namePatterns": [
+            "*webhelper*.exe",
+            "*cef*.exe"
+          ],
+          "processCategories": [
+            "browserWebView"
+          ],
+          "excludeProcessNames": [
+            "msedgewebview2.exe"
+          ]
+        },
+        "reason": "Browser and launcher renderer helpers are background CPU restraint candidates during gameplay.",
+        "reasonCodes": [
+          "BROWSER_RENDERER_GOVERNOR_CANDIDATE"
+        ],
+        "risk": "low"
+      },
+      {
+        "ruleId": "govern-launchers-updaters",
+        "enabled": true,
+        "match": {
+          "processNames": [
+            "Battle.net.exe",
+            "steam.exe",
+            "EpicGamesLauncher.exe",
+            "RiotClientServices.exe",
+            "EADesktop.exe",
+            "UbisoftConnect.exe",
+            "GalaxyClient.exe"
+          ],
+          "namePatterns": [
+            "*launcher*.exe",
+            "*updater*.exe",
+            "*update*.exe"
+          ],
+          "excludeProcessNames": [
+            "MicrosoftEdgeUpdate.exe",
+            "MoUsoCoreWorker.exe",
+            "UsoClient.exe",
+            "TiWorker.exe",
+            "TrustedInstaller.exe"
+          ]
+        },
+        "reason": "Launchers and updaters can be temporarily restrained when they create sustained CPU pressure.",
+        "reasonCodes": [
+          "LAUNCHER_UPDATER_GOVERNOR_CANDIDATE"
+        ],
+        "risk": "low"
+      },
+      {
+        "ruleId": "govern-background-helpers",
+        "enabled": true,
+        "match": {
+          "processNames": [
+            "AdobeCollabSync.exe",
+            "CCXProcess.exe",
+            "GoogleCrashHandler.exe",
+            "GoogleCrashHandler64.exe",
+            "ArmouryCrate.UserSessionHelper.exe"
+          ],
+          "namePatterns": [
+            "*tray*.exe",
+            "*helper*.exe"
+          ],
+          "excludeProcessNames": [
+            "NVIDIA Web Helper.exe",
+            "nvsphelper64.exe",
+            "RazerCentralService.exe",
+            "lghub.exe",
+            "lghub_agent.exe"
+          ]
+        },
+        "reason": "Non-critical background helpers are temporary restraint candidates under sustained CPU pressure.",
+        "reasonCodes": [
+          "BACKGROUND_HELPER_GOVERNOR_CANDIDATE"
+        ],
+        "risk": "low"
+      }
+    ]
+  },
+  "telemetryTargets": [
+    "system-responsiveness",
+    "foreground-frame-time-stability",
+    "background-cpu-pressure",
+    "restraint-count",
+    "restore-count"
+  ],
+  "rollbackPolicy": {
+    "supported": true,
+    "scope": "process-governor-process-controls",
+    "stateRoot": "backend\\state",
+    "restoreOriginalPriorityClass": true,
+    "restoreOriginalIoPriority": true,
+    "keepLatestCount": 10,
+    "minimumDays": 14
+  },
+  "safety": {
+    "confirmedApplyChanges": [
+      "PriorityClass",
+      "IoPriority"
+    ],
+    "continuousEnforcement": true,
+    "runtimeService": false,
+    "foregroundExclusion": true
+  }
+}

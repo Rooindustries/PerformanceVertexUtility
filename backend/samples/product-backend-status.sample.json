@@ -31,8 +31,22 @@
       "workflowId": "performanceProfiles",
       "name": "Process Profile Engine",
       "contractStatus": "draft",
-      "implementationStatus": "preview-dry-run-and-confirmed-priority-apply",
-      "nextBackendStep": "Add benchmark-backed affinity, I/O priority, power throttling, and runtime enforcement after the priority MVP is validated."
+      "implementationStatus": "preview-dry-run-confirmed-process-controls-and-live-restore",
+      "nextBackendStep": "Add benchmark-backed profile presets, CPU Sets, and power-plan automation."
+    },
+    {
+      "workflowId": "processGovernor",
+      "name": "Process Governor",
+      "contractStatus": "draft",
+      "implementationStatus": "bounded-session-preview-confirmed-restraint-status-and-restore",
+      "nextBackendStep": "Tune thresholds from workload telemetry and add longer-running service-host integration behind explicit install gates."
+    },
+    {
+      "workflowId": "persistentProcessPolicy",
+      "name": "Persistent Process Policy",
+      "contractStatus": "draft",
+      "implementationStatus": "bounded-session-preview-confirmed-launch-watcher-status-and-restore",
+      "nextBackendStep": "Add service-host packaging and richer policy conflict resolution behind explicit install gates."
     },
     {
       "workflowId": "uninstallCleanup",
@@ -53,6 +67,8 @@
     "common action envelope",
     "process inventory",
     "process profile",
+    "process governor profile",
+    "persistent process policy profile",
     "uninstall app inventory",
     "leftover scan result",
     "driver recommendation catalog",
@@ -61,8 +77,9 @@
     "report summary"
   ],
   "limitations": [
-    "Process priority apply exists only behind -ConfirmApply and is not run by validation.",
-    "Affinity, I/O priority, power throttling, uninstall cleanup, driver installs, and profile-tool automation are not implemented in this pass.",
+    "Confirmed Game Tune apply is gated behind -ConfirmApply and live validation only targets a disposable local probe process.",
+    "Confirmed process governor and persistent policy validation target disposable local probe processes under temp state roots.",
+    "Remaining backend work: power throttling, CPU Sets, uninstall cleanup apply, driver installs, service-host packaging, and profile-tool automation.",
     "Discovery scripts are read-only and may omit fields that require privileged or provider-specific access."
   ]
 }

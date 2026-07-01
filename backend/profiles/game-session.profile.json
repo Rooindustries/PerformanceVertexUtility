@@ -3,7 +3,7 @@
   "productName": "Roo Industries Optimization Suite",
   "profileId": "overwatch-stream-session",
   "name": "Overwatch Stream Session",
-  "profileKind": "process-priority",
+  "profileKind": "process-controls",
   "risk": "medium",
   "targetScenario": "Overwatch with OBS, Discord, and a 144 Hz stream workload on 16 GB RAM class machines.",
   "gameTags": [
@@ -113,7 +113,7 @@
           "Dropbox.exe"
         ]
       },
-      "reason": "Sync clients can create RAM, disk, and network pressure, but this MVP keeps them as manual-review candidates.",
+      "reason": "Sync clients can create RAM, disk, and network pressure, so they stay manual-review until a user approves them.",
       "reasonCodes": [
         "SYNC_CLIENT_MANUAL_REVIEW"
       ],
@@ -241,7 +241,7 @@
       }
     },
     {
-      "ruleId": "affinity-preview-placeholder",
+      "ruleId": "affinity-profile-slot",
       "enabled": false,
       "match": {
         "processNames": [
@@ -249,8 +249,8 @@
         ]
       },
       "action": {
-        "actionType": "previewOnlyAffinity",
-        "reason": "Affinity rules remain preview-only until benchmarked and reversible."
+        "actionType": "setProcessControls",
+        "reason": "CPU affinity is available for benchmarked, hardware-specific profiles."
       },
       "risk": "advanced",
       "rollback": {
@@ -269,7 +269,7 @@
   ],
   "rollbackPolicy": {
     "supported": true,
-    "scope": "process-priority",
+    "scope": "process-controls",
     "stateRoot": "backend\\state",
     "restoreOriginalPriorityClass": true,
     "keepLatestCount": 10,
@@ -277,11 +277,12 @@
   },
   "safety": {
     "confirmedApplyChanges": [
-      "PriorityClass"
-    ],
-    "previewOnlyChanges": [
+      "PriorityClass",
       "Affinity",
       "IoPriority",
+      "GpuPriority"
+    ],
+    "previewOnlyChanges": [
       "PowerThrottling"
     ],
     "continuousEnforcement": false,

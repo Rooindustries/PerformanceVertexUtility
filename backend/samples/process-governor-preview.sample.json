@@ -1,0 +1,193 @@
+{
+  "actionId": "performance.governor.preview",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": null,
+  "dryRun": true,
+  "risk": "medium",
+  "requiresElevation": false,
+  "status": "preview",
+  "profileId": "probalance-governor",
+  "foregroundProcessId": 4520,
+  "sample": {
+    "capturedAtUtc": "2026-06-30T09:30:00.0000000Z",
+    "sampleIntervalSeconds": 0.5,
+    "processorCount": 16,
+    "totalCpuPercent": 48.2
+  },
+  "governor": {
+    "totalCpuPressureThresholdPercent": 35,
+    "perProcessCpuThresholdPercent": 8,
+    "timeOverThresholdSeconds": 8,
+    "minimumRestraintSeconds": 15,
+    "restoreCpuThresholdPercent": 3,
+    "cooldownAfterRestoreSeconds": 20,
+    "maxSessionDurationSeconds": 60,
+    "pollIntervalSeconds": 1,
+    "priorityClass": "BelowNormal",
+    "ioPriority": "Low",
+    "excludeForegroundProcess": true
+  },
+  "preview": [
+    {
+      "previewId": "govern-browser-renderers-chrome-7344",
+      "type": "processGovernorRestraint",
+      "target": "chrome.exe:7344",
+      "displayName": "chrome.exe",
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "BelowNormal",
+      "currentAffinityMask": 65535,
+      "proposedAffinityMask": 65535,
+      "currentIoPriority": "Normal",
+      "proposedIoPriority": "Low",
+      "currentGpuPriority": null,
+      "proposedGpuPriority": null,
+      "proposedAction": "setProcessControls",
+      "controlChanges": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "BelowNormal",
+          "action": "setPriority",
+          "reason": "Temporarily lower background offender priority.",
+          "blocked": false,
+          "blockedReason": null
+        },
+        {
+          "control": "ioPriority",
+          "currentValue": "Normal",
+          "proposedValue": "Low",
+          "action": "setIoPriority",
+          "reason": "Temporarily lower background offender I/O priority.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "govern-browser-renderers",
+      "reason": "Browser and launcher renderer helpers are background CPU restraint candidates during gameplay. Total CPU 48.2%, process CPU 13.4%. Governor would apply restraint after the configured grace period if sustained.",
+      "reasonCodes": [
+        "BROWSER_RENDERER_GOVERNOR_CANDIDATE"
+      ],
+      "classification": "demotionCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "lifecycleState": "preview",
+      "currentState": {
+        "priorityClass": "Normal",
+        "ioPriority": "Normal",
+        "cpuPercent": 13.4,
+        "totalCpuPercent": 48.2,
+        "sustainedSeconds": 0,
+        "category": "browserWebView"
+      },
+      "proposedState": {
+        "action": "setProcessControls",
+        "priorityClass": "BelowNormal",
+        "ioPriority": "Low",
+        "reason": "Browser and launcher renderer helpers are background CPU restraint candidates during gameplay. Total CPU 48.2%, process CPU 13.4%. Governor would apply restraint after the configured grace period if sustained."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "lower",
+        "targetMetrics": [
+          "system-responsiveness",
+          "foreground-frame-time-stability",
+          "background-cpu-pressure"
+        ]
+      },
+      "rollback": {
+        "restorePriorityClass": "Normal",
+        "restoreIoPriority": "Normal",
+        "captureOriginalState": true
+      }
+    },
+    {
+      "previewId": "governor-skip-discord-4520",
+      "type": "processGovernorRestraint",
+      "target": "Discord.exe:4520",
+      "displayName": "Discord.exe",
+      "processId": 4520,
+      "processName": "Discord.exe",
+      "executablePath": "C:\\Users\\roo\\AppData\\Local\\Discord\\app\\Discord.exe",
+      "currentPriorityClass": "Normal",
+      "proposedPriorityClass": "Normal",
+      "currentAffinityMask": 65535,
+      "proposedAffinityMask": 65535,
+      "currentIoPriority": "Normal",
+      "proposedIoPriority": "Normal",
+      "currentGpuPriority": null,
+      "proposedGpuPriority": null,
+      "proposedAction": "noChange",
+      "controlChanges": [],
+      "ruleId": "governor-skip",
+      "reason": "Capture and voice companions are protected from governor restraint. Foreground process is excluded from governor restraint.",
+      "reasonCodes": [
+        "CAPTURE_VOICE_PROTECTED",
+        "FOREGROUND_PROCESS_EXCLUDED"
+      ],
+      "classification": "protectedCompanion",
+      "blocked": true,
+      "blockedReason": "Capture and voice companions are protected from governor restraint. Foreground process is excluded from governor restraint.",
+      "risk": "protected",
+      "confidence": "high",
+      "protected": true,
+      "requiresConfirmation": false,
+      "rollbackSupported": false,
+      "lifecycleState": "skipped",
+      "currentState": {
+        "priorityClass": "Normal",
+        "ioPriority": "Normal",
+        "cpuPercent": 2.1,
+        "totalCpuPercent": 48.2,
+        "sustainedSeconds": 0,
+        "category": "voiceChat"
+      },
+      "proposedState": {
+        "action": "noChange",
+        "priorityClass": "Normal",
+        "ioPriority": "Normal",
+        "reason": "Capture and voice companions are protected from governor restraint. Foreground process is excluded from governor restraint."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "system-responsiveness",
+          "foreground-frame-time-stability",
+          "background-cpu-pressure"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "backup": null,
+  "result": null,
+  "warnings": [
+    {
+      "code": "PROCESS_GOVERNOR_PREVIEW_ONLY",
+      "message": "Process governor preview sampled CPU pressure without applying process changes.",
+      "severity": "info",
+      "source": "performance.governor",
+      "target": "probalance-governor",
+      "blocking": false,
+      "recommendedAction": "Run Start-ProcessGovernorSession.ps1 with -ConfirmApply only after reviewing the preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:30:00.0000000Z",
+      "level": "info",
+      "message": "Process governor preview sampled total CPU 48.2%."
+    }
+  ]
+}

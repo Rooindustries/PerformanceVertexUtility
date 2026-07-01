@@ -34,15 +34,15 @@ function Get-OfficialCommandPreview {
         $commandType = 'appx-package-removal-preview'
         $rawCommand = "Remove-AppxPackage -Package $packageId"
         $metadata = [pscustomobject]@{
-            mvpExecution = 'disabled'
-            reason = 'Appx package removal is not executable in this backend MVP.'
+            previewExecution = 'disabled'
+            reason = 'Appx package removal is metadata-only until the user confirms an uninstall path.'
         }
     } elseif ($sourceType -eq 'winget' -and -not [string]::IsNullOrWhiteSpace([string]$packageId)) {
         $commandType = 'winget-uninstall-preview'
         $rawCommand = "winget uninstall --id $packageId"
         $metadata = [pscustomobject]@{
-            mvpExecution = 'disabled'
-            reason = 'winget uninstall is metadata preview only in this backend MVP.'
+            previewExecution = 'disabled'
+            reason = 'winget uninstall is metadata-only until the user confirms an uninstall path.'
         }
     }
 
@@ -123,7 +123,7 @@ try {
             executionAllowedCount = 0
             willRunUninstallers = $false
         }
-        warnings = @((New-RooUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_ONLY' 'Official uninstall command metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Use this output for UI review only in the MVP.' $null))
+        warnings = @((New-RooUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_ONLY' 'Official uninstall command metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Use this output for review before any uninstall command is allowed.' $null))
         errors = @($errors.ToArray())
         logs = @((New-RooUninstallLog 'Official uninstall command preview completed without command execution.'))
     }

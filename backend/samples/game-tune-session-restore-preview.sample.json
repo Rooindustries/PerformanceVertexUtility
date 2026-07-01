@@ -1,0 +1,125 @@
+{
+  "actionId": "performance.gameTune.stopSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "game-tune-overwatch-stream-session-20260630-101000",
+  "sessionId": "game-tune-overwatch-stream-session-20260630-101000",
+  "dryRun": true,
+  "profileId": "overwatch-stream-session",
+  "status": "preview",
+  "sessionStatus": "preview",
+  "startedAtUtc": "2026-06-30T10:13:00Z",
+  "completedAtUtc": "2026-06-30T10:13:00Z",
+  "sessionPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\session.json",
+  "backupManifestPath": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+  "restorable": true,
+  "preview": [
+    {
+      "previewId": "game-tune-restore-overwatch-exe-18344",
+      "type": "gameTuneProcessPriorityRestore",
+      "target": "Overwatch.exe:18344",
+      "displayName": "Overwatch.exe",
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      "currentPriorityClass": "AboveNormal",
+      "proposedPriorityClass": "Normal",
+      "proposedAction": "restorePriority",
+      "ruleId": "boost-foreground-game",
+      "reason": "Restore original process priority from Game Tune session backup.",
+      "reasonCodes": [
+        "GAME_TUNE_PRIORITY_RESTORE"
+      ],
+      "classification": "rollbackCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "AboveNormal"
+      },
+      "proposedState": {
+        "action": "restorePriority",
+        "priorityClass": "Normal",
+        "reason": "Restore original process priority from Game Tune session backup."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "game-tune-restore-safety"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "changedItems": [],
+  "skippedItems": [],
+  "restoredItems": [],
+  "backup": {
+    "backupId": "game-tune-overwatch-stream-session-20260630-101000",
+    "scope": "game-tune-session-process-priority",
+    "createdAtUtc": "2026-06-30T10:10:00Z",
+    "location": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-priority",
+      "id": null
+    },
+    "snapshots": [
+      {
+        "type": "processPriority",
+        "target": "Overwatch.exe:18344",
+        "originalState": {
+          "priorityClass": "Normal",
+          "executablePath": "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe"
+        }
+      }
+    ],
+    "rollbackActionId": "performance.gameTune.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "game-tune-restore-20260630-101300",
+    "status": "preview",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-30T10:13:00Z",
+    "summary": "Game Tune restore preview completed. No process priority changes were applied.",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "gameTuneSessionBackup",
+        "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json"
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "GAME_TUNE_RESTORE_PREVIEW_ONLY",
+      "message": "Restore preview did not change any process because -ConfirmApply was omitted.",
+      "severity": "info",
+      "source": "performance.gameTune",
+      "target": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json",
+      "blocking": false,
+      "recommendedAction": "Rerun with -ConfirmApply only after reviewing the restore preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T10:13:00Z",
+      "level": "info",
+      "message": "Game Tune restore preview completed. No process priority changes were applied."
+    }
+  ]
+}

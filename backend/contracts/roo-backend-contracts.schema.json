@@ -249,6 +249,49 @@
             "null"
           ]
         },
+        "currentAffinityMask": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "proposedAffinityMask": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "currentIoPriority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposedIoPriority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currentGpuPriority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposedGpuPriority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "controlChanges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
         "proposedAction": {
           "type": [
             "string",
@@ -256,7 +299,12 @@
           ],
           "enum": [
             "setPriority",
+            "setAffinity",
+            "setIoPriority",
+            "setGpuPriority",
+            "setProcessControls",
             "restorePriority",
+            "restoreProcessControls",
             "noChange",
             null
           ]
@@ -1160,6 +1208,49 @@
               "proposedPriorityClass": {
                 "type": "string"
               },
+              "originalAffinityMask": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "proposedAffinityMask": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "originalIoPriority": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "proposedIoPriority": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "originalGpuPriority": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "proposedGpuPriority": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "controlChanges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
               "capturedAtUtc": {
                 "type": "string",
                 "format": "date-time"
@@ -1352,6 +1443,1946 @@
           "type": "string"
         },
         "ruleResults": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "gameTuneSessionResult": {
+      "title": "Game Tune Session Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultId",
+        "status",
+        "summary",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "artifacts"
+      ],
+      "properties": {
+        "resultId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "success",
+            "partial",
+            "failed",
+            "cancelled",
+            "rolledBack"
+          ]
+        },
+        "startedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "gameTuneSessionPoll": {
+      "title": "Game Tune Session Poll",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pollIndex",
+        "capturedAtUtc",
+        "previewCount",
+        "wouldApplyItems",
+        "changedItems",
+        "skippedItems"
+      ],
+      "properties": {
+        "pollIndex": {
+          "type": "integer"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "previewCount": {
+          "type": "integer"
+        },
+        "wouldApplyItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "gameTuneSessionEnvelope": {
+      "title": "Game Tune Session Start Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "sessionId",
+        "dryRun",
+        "profileId",
+        "profilePath",
+        "status",
+        "sessionStatus",
+        "startedAtUtc",
+        "completedAtUtc",
+        "pollIntervalSeconds",
+        "maxDurationSeconds",
+        "pollCount",
+        "restorable",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "polls",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.gameTune.startSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "correlationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profilePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetGameProcessName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "startedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "pollIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxDurationSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pollCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stateRoot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backupManifestPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "polls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gameTuneSessionPoll"
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/gameTuneSessionResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "gameTuneSessionRestoreEnvelope": {
+      "title": "Game Tune Session Stop Result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "sessionStatus",
+        "preview",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.gameTune.stopSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "correlationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed",
+            "partial"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed"
+          ]
+        },
+        "startedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "sessionPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backupManifestPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionPreview"
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/gameTuneSessionResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "gameTuneSessionStatus": {
+      "title": "Game Tune Session Status",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "status",
+        "sessionStatus",
+        "restorable",
+        "active",
+        "completed",
+        "failed",
+        "summary",
+        "latestLogs",
+        "warnings",
+        "errors"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.gameTune.sessionStatus"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "rawSessionStatus": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profilePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetGameProcessName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "stateRoot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backupManifestPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "startedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "latestLogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "processGovernorProfile": {
+      "title": "Process Governor Profile",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "profileId",
+        "name",
+        "profileKind",
+        "governor"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "profileKind": {
+          "const": "process-governor"
+        },
+        "protectedCatalogPath": {
+          "type": "string"
+        },
+        "governor": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "thresholds",
+            "restraint",
+            "candidateSelectors"
+          ]
+        }
+      }
+    },
+    "processGovernorPreviewEnvelope": {
+      "title": "Process Governor Preview",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "preview",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.governor.preview"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "dryRun": {
+          "const": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "failed"
+          ]
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processGovernorSessionEnvelope": {
+      "title": "Process Governor Session Start Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "sessionId",
+        "dryRun",
+        "profileId",
+        "status",
+        "sessionStatus",
+        "pollCount",
+        "restorable",
+        "activeRestraints",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "polls",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.governor.startSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "pollCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "activeRestraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "polls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processGovernorRestoreEnvelope": {
+      "title": "Process Governor Stop Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "sessionStatus",
+        "preview",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.governor.stopSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed",
+            "partial"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed"
+          ]
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processGovernorSessionStatus": {
+      "title": "Process Governor Session Status",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "status",
+        "sessionStatus",
+        "restorable",
+        "active",
+        "completed",
+        "failed",
+        "summary",
+        "latestLogs",
+        "warnings",
+        "errors"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.governor.sessionStatus"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "latestLogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "processPolicyProfile": {
+      "title": "Persistent Process Policy Profile",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "profileId",
+        "name",
+        "profileKind",
+        "policy"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "profileKind": {
+          "const": "persistent-process-policy"
+        },
+        "protectedCatalogPath": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "session",
+            "safety",
+            "rules"
+          ]
+        }
+      }
+    },
+    "processPolicyPreviewEnvelope": {
+      "title": "Persistent Process Policy Preview",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "preview",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.policy.preview"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "dryRun": {
+          "const": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "failed"
+          ]
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processPolicySessionEnvelope": {
+      "title": "Persistent Process Policy Session Start Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "sessionId",
+        "dryRun",
+        "profileId",
+        "status",
+        "sessionStatus",
+        "pollCount",
+        "restorable",
+        "activeApplications",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "polls",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.policy.startSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "profileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "pollCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "activeApplications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "polls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processPolicyRestoreEnvelope": {
+      "title": "Persistent Process Policy Stop Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "sessionStatus",
+        "preview",
+        "changedItems",
+        "skippedItems",
+        "restoredItems",
+        "backup",
+        "result",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.policy.stopSession"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed",
+            "partial"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "completed",
+            "failed"
+          ]
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "changedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "skippedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restoredItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/backupRollbackMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "processPolicySessionStatus": {
+      "title": "Persistent Process Policy Session Status",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "status",
+        "sessionStatus",
+        "restorable",
+        "active",
+        "completed",
+        "failed",
+        "summary",
+        "latestLogs",
+        "warnings",
+        "errors"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.policy.sessionStatus"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "sessionStatus": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "restorable",
+            "notFound"
+          ]
+        },
+        "restorable": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "latestLogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        }
+      }
+    },
+    "backendFootprintResult": {
+      "title": "Backend Footprint Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "dryRun",
+        "status",
+        "currentProcessCount",
+        "backendScriptProcess",
+        "elapsedRuntimeSeconds",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "backend.measureFootprint"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dryRun": {
+          "const": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "failed"
+          ]
+        },
+        "currentProcessCount": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "elapsedRuntimeSeconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "backendScriptProcess": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "budgetEvaluation": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "state": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "lightweightGovernorBudgetProfile": {
+      "title": "Lightweight Governor Budget Profile",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schemaVersion",
+        "productName",
+        "profileId",
+        "name",
+        "profileKind",
+        "budgets",
+        "runtimeRequirements"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "profileKind": {
+          "const": "lightweight-governor-budget"
+        },
+        "budgets": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "idleBackendCpuAveragePercentMax",
+            "backendPowerShellPrivateBytesMax",
+            "persistentUiProcessRequired",
+            "unboundedStateGrowthAllowed"
+          ]
+        },
+        "runtimeRequirements": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "boundedForegroundCliSession",
+            "serviceReady",
+            "serviceInstallAllowedInThisPass",
+            "frontendLaunchAllowed",
+            "externalProcessGovernorDependencyRequired"
+          ]
+        }
+      }
+    },
+    "residentHostStatus": {
+      "title": "Resident Host Status",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "status",
+        "host",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "enum": [
+            "backend.residentHost.status",
+            "backend.residentHost.start"
+          ]
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "failed",
+            "notFound"
+          ]
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "executionMode",
+            "serviceReady",
+            "serviceInstalled",
+            "persistentUiProcessRequired"
+          ]
+        },
+        "footprint": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "bounds": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "state": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "dependencyProof": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "allControlPolicyValidationResult": {
+      "title": "All-Control Policy Validation Result",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "capturedAtUtc",
+        "status",
+        "controls",
+        "proof",
+        "warnings",
+        "errors",
+        "logs"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "performance.policy.validateAllControls"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "failed"
+          ]
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "control",
+              "status",
+              "message"
+            ],
+            "properties": {
+              "control": {
+                "type": "string",
+                "enum": [
+                  "priorityClass",
+                  "affinityMask",
+                  "ioPriority",
+                  "gpuPriority"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "liveAppliedRestored",
+                  "unsupported",
+                  "failed"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "proof": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "disposableProbeOnly",
+            "frontendProcessLaunched",
+            "leftoverProbeProcessCount",
+            "externalProcessGovernorDependencyRequired"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issueModel"
+          }
+        },
+        "logs": {
           "type": "array",
           "items": {
             "type": "object",

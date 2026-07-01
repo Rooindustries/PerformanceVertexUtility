@@ -37,7 +37,7 @@ The split should let the frontend be built as a professional Roo Industries WinU
 - Priority/profile rules.
 - Affinity rules where safe and reversible.
 - Foreground game detection.
-- Tourney Mode backend behavior.
+- Game Tune session backend behavior.
 - Profile apply/disable/rollback.
 - Future runtime service or scheduled task design.
 
@@ -108,7 +108,7 @@ The split should let the frontend be built as a professional Roo Industries WinU
 
 - Dashboard composition.
 - Process profile editor UI.
-- Tourney Mode UI.
+- Game Tune session UI.
 - Bulk uninstall queue UI.
 - Leftover review UI.
 - Driver catalog UI.

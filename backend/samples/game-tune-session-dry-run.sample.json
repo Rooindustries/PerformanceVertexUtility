@@ -1,0 +1,106 @@
+{
+  "actionId": "performance.gameTune.startSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "game-tune-overwatch-stream-session-20260630-100000",
+  "sessionId": "game-tune-overwatch-stream-session-20260630-100000",
+  "dryRun": true,
+  "profileId": "overwatch-stream-session",
+  "profilePath": "backend\\profiles\\game-session.profile.json",
+  "targetGameProcessName": "Overwatch.exe",
+  "status": "completed",
+  "sessionStatus": "completed",
+  "startedAtUtc": "2026-06-30T10:00:00Z",
+  "completedAtUtc": "2026-06-30T10:00:01Z",
+  "pollIntervalSeconds": 1,
+  "maxDurationSeconds": 1,
+  "pollCount": 1,
+  "stateRoot": null,
+  "sessionPath": null,
+  "backupManifestPath": null,
+  "restorable": false,
+  "changedItems": [],
+  "skippedItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "proposedPriorityClass": "AboveNormal",
+      "ruleId": "boost-foreground-game",
+      "reason": "Dry-run session; -ConfirmApply was not provided.",
+      "pollIndex": 1,
+      "skippedAtUtc": "2026-06-30T10:00:00Z"
+    }
+  ],
+  "restoredItems": [],
+  "polls": [
+    {
+      "pollIndex": 1,
+      "capturedAtUtc": "2026-06-30T10:00:00Z",
+      "previewCount": 2,
+      "wouldApplyItems": [
+        {
+          "processId": 18344,
+          "processName": "Overwatch.exe",
+          "currentPriorityClass": "Normal",
+          "proposedPriorityClass": "AboveNormal",
+          "ruleId": "boost-foreground-game",
+          "reason": "Foreground game boost for frame-time stability during OBS and Discord workload."
+        }
+      ],
+      "changedItems": [],
+      "skippedItems": [
+        {
+          "processId": 18344,
+          "processName": "Overwatch.exe",
+          "proposedPriorityClass": "AboveNormal",
+          "ruleId": "boost-foreground-game",
+          "reason": "Dry-run session; -ConfirmApply was not provided.",
+          "pollIndex": 1,
+          "skippedAtUtc": "2026-06-30T10:00:00Z"
+        }
+      ]
+    }
+  ],
+  "backup": null,
+  "result": {
+    "resultId": "game-tune-session-20260630-100001",
+    "status": "preview",
+    "startedAtUtc": null,
+    "completedAtUtc": "2026-06-30T10:00:01Z",
+    "summary": "Game Tune session completed after 1 poll(s) with 0 changed item(s), 1 skipped item(s), and 0 restored item(s).",
+    "changedItems": [],
+    "skippedItems": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "proposedPriorityClass": "AboveNormal",
+        "ruleId": "boost-foreground-game",
+        "reason": "Dry-run session; -ConfirmApply was not provided.",
+        "pollIndex": 1,
+        "skippedAtUtc": "2026-06-30T10:00:00Z"
+      }
+    ],
+    "restoredItems": [],
+    "artifacts": []
+  },
+  "warnings": [
+    {
+      "code": "GAME_TUNE_DRY_RUN",
+      "message": "Game Tune session ran in dry-run mode. No process priority changes were applied.",
+      "severity": "info",
+      "source": "performance.gameTune",
+      "target": "overwatch-stream-session",
+      "blocking": false,
+      "recommendedAction": "Rerun with -ConfirmApply only after reviewing the per-poll preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T10:00:00Z",
+      "level": "info",
+      "message": "Game Tune session game-tune-overwatch-stream-session-20260630-100000 started."
+    }
+  ]
+}

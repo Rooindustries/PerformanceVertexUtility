@@ -5,6 +5,9 @@
 **/publish/
 **/artifacts/
 **/TestResults/
+packages/
+*.nupkg
+*.snupkg
 
 # Local IDE/user state
 .vs/
@@ -15,10 +18,25 @@
 *.rsuser
 
 # Runtime data and logs
+backend/state/
 logs/
 *.log
 *.tmp
+*.temp
 *.bak
+*.cache
+*.pid
+*.etl
+*.dmp
+
+# Scratch captures and local probe output
+scratch/
+tmp/
+temp/
+captures/
+scratch-captures/
+docs/internal/**/screenshots/
+docs/internal/**/captures/
 
 # Internal planning/context not intended for the public repo.
 .gitignore.d/

@@ -1,0 +1,135 @@
+{
+  "actionId": "performance.governor.stopSession",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "correlationId": "process-governor-probalance-governor-20260630-093000",
+  "sessionId": "process-governor-probalance-governor-20260630-093000",
+  "dryRun": true,
+  "profileId": "probalance-governor",
+  "status": "preview",
+  "sessionStatus": "preview",
+  "startedAtUtc": "2026-06-30T09:30:09.0000000Z",
+  "completedAtUtc": "2026-06-30T09:30:09.0000000Z",
+  "sessionPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\session.json",
+  "backupManifestPath": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+  "restorable": true,
+  "preview": [
+    {
+      "previewId": "process-governor-restore-chrome-7344",
+      "type": "processGovernorRestore",
+      "target": "chrome.exe:7344",
+      "displayName": "chrome.exe",
+      "processId": 7344,
+      "processName": "chrome.exe",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "currentPriorityClass": "BelowNormal",
+      "proposedPriorityClass": "Normal",
+      "currentAffinityMask": null,
+      "proposedAffinityMask": null,
+      "currentIoPriority": "Low",
+      "proposedIoPriority": "Normal",
+      "currentGpuPriority": null,
+      "proposedGpuPriority": null,
+      "proposedAction": "restoreProcessControls",
+      "controlChanges": [
+        {
+          "control": "priorityClass",
+          "currentValue": "BelowNormal",
+          "proposedValue": "Normal",
+          "action": "restorePriority",
+          "reason": "Restore original process priority after governor restraint.",
+          "blocked": false,
+          "blockedReason": null
+        }
+      ],
+      "ruleId": "govern-browser-renderers",
+      "reason": "Restore original process controls from process governor backup.",
+      "reasonCodes": [
+        "PROCESS_GOVERNOR_RESTORE"
+      ],
+      "classification": "rollbackCandidate",
+      "blocked": false,
+      "blockedReason": null,
+      "risk": "low",
+      "confidence": "medium",
+      "protected": false,
+      "requiresConfirmation": true,
+      "rollbackSupported": true,
+      "currentState": {
+        "priorityClass": "BelowNormal",
+        "ioPriority": "Low"
+      },
+      "proposedState": {
+        "action": "restoreProcessControls",
+        "priorityClass": "Normal",
+        "ioPriority": "Normal",
+        "reason": "Restore original process controls from process governor backup."
+      },
+      "impact": {
+        "expectedMemoryEffectBytes": 0,
+        "expectedCpuWakeupEffect": "neutral",
+        "targetMetrics": [
+          "process-governor-restore-safety"
+        ]
+      },
+      "rollback": null
+    }
+  ],
+  "changedItems": [],
+  "skippedItems": [],
+  "restoredItems": [],
+  "backup": {
+    "backupId": "process-governor-probalance-governor-20260630-093000",
+    "scope": "process-governor-process-controls",
+    "createdAtUtc": "2026-06-30T09:30:00.0000000Z",
+    "location": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+    "restorePoint": {
+      "requested": false,
+      "status": "not-required-for-process-restraint",
+      "id": null
+    },
+    "snapshots": [],
+    "rollbackActionId": "performance.governor.stopSession",
+    "rollbackSupported": true,
+    "retentionPolicy": {
+      "keepLatestCount": 10,
+      "minimumDays": 14
+    }
+  },
+  "result": {
+    "resultId": "process-governor-restore-20260630-093009",
+    "status": "preview",
+    "startedAtUtc": "2026-06-30T09:30:09.0000000Z",
+    "completedAtUtc": "2026-06-30T09:30:09.0000000Z",
+    "summary": "Process governor restore preview completed. No process changes were applied.",
+    "changedItems": [],
+    "skippedItems": [],
+    "restoredItems": [],
+    "artifacts": [
+      {
+        "type": "processGovernorSessionBackup",
+        "path": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json"
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "PROCESS_GOVERNOR_RESTORE_PREVIEW_ONLY",
+      "message": "Governor restore preview did not change any process because -ConfirmApply was omitted.",
+      "severity": "info",
+      "source": "performance.governor",
+      "target": "backend\\state\\process-governor-sessions\\process-governor-probalance-governor-20260630-093000\\backup.json",
+      "blocking": false,
+      "recommendedAction": "Rerun with -ConfirmApply only after reviewing the restore preview.",
+      "details": null
+    }
+  ],
+  "errors": [],
+  "logs": [
+    {
+      "timestampUtc": "2026-06-30T09:30:09.0000000Z",
+      "level": "info",
+      "message": "Process governor restore preview completed. No process changes were applied."
+    }
+  ]
+}

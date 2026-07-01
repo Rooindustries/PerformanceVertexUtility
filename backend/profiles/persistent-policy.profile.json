@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "profileId": "persistent-policy",
+  "name": "Persistent Process Policy",
+  "profileKind": "persistent-process-policy",
+  "risk": "medium",
+  "targetScenario": "Keep saved process controls enforced during a bounded optimization session while preserving games, capture, voice, driver, security, network, input, Store, WebView2, and Windows Update workloads.",
+  "protectedCatalogPath": "protected-processes.json",
+  "policy": {
+    "session": {
+      "pollIntervalSeconds": 1,
+      "maxSessionDurationSeconds": 60
+    },
+    "safety": {
+      "confirmedApplyRequiresRuleAllow": true,
+      "confirmedApplyRequiresPathRoot": true,
+      "confirmedApplyPathRoots": []
+    },
+    "protectedProcesses": [
+      {
+        "itemId": "protect-game-capture-voice-driver-network",
+        "type": "process",
+        "names": [
+          "obs64.exe",
+          "obs32.exe",
+          "Discord.exe",
+          "msedgewebview2.exe",
+          "MicrosoftEdgeUpdate.exe",
+          "MoUsoCoreWorker.exe",
+          "UsoClient.exe",
+          "TiWorker.exe",
+          "TrustedInstaller.exe"
+        ],
+        "reason": "Game companion, Store, WebView2, and Windows Update processes are protected from persistent policy changes.",
+        "reasonCodes": [
+          "PERSISTENT_POLICY_PROTECTED_COMPANION"
+        ],
+        "defaultAction": "block"
+      }
+    ],
+    "rules": [
+      {
+        "ruleId": "policy-browser-helper-low-io",
+        "enabled": true,
+        "allowConfirmedApply": false,
+        "match": {
+          "namePatterns": [
+            "*webhelper*.exe",
+            "*cef*.exe"
+          ],
+          "processCategories": [
+            "browserWebView"
+          ],
+          "excludeProcessNames": [
+            "msedgewebview2.exe"
+          ]
+        },
+        "controls": {
+          "priorityClass": "BelowNormal",
+          "ioPriority": "Low"
+        },
+        "reason": "Browser and launcher renderer helpers can be restrained during game-focused sessions when explicitly allowed by a safe apply profile.",
+        "reasonCodes": [
+          "PERSISTENT_POLICY_BROWSER_HELPER"
+        ],
+        "scenarioTags": [
+          "browser helper",
+          "launcher",
+          "game"
+        ],
+        "risk": "low"
+      },
+      {
+        "ruleId": "policy-launcher-background",
+        "enabled": true,
+        "allowConfirmedApply": false,
+        "match": {
+          "processNames": [
+            "Battle.net.exe",
+            "steam.exe",
+            "EpicGamesLauncher.exe",
+            "RiotClientServices.exe",
+            "EADesktop.exe",
+            "UbisoftConnect.exe"
+          ],
+          "excludeProcessNames": [
+            "MicrosoftEdgeUpdate.exe",
+            "MoUsoCoreWorker.exe",
+            "UsoClient.exe",
+            "TiWorker.exe",
+            "TrustedInstaller.exe"
+          ]
+        },
+        "controls": {
+          "priorityClass": "BelowNormal"
+        },
+        "reason": "Launchers can be kept below normal priority after the game is already running when a safe apply profile allows it.",
+        "reasonCodes": [
+          "PERSISTENT_POLICY_LAUNCHER"
+        ],
+        "scenarioTags": [
+          "launcher",
+          "game"
+        ],
+        "risk": "low"
+      },
+      {
+        "ruleId": "policy-capture-voice-no-change",
+        "enabled": true,
+        "allowConfirmedApply": false,
+        "match": {
+          "processNames": [
+            "obs64.exe",
+            "Discord.exe"
+          ]
+        },
+        "controls": {
+          "priorityClass": "Normal"
+        },
+        "reason": "Capture and voice entries are represented so preview can explain protected skips rather than silently ignoring them.",
+        "reasonCodes": [
+          "PERSISTENT_POLICY_CAPTURE_VOICE_SKIP"
+        ],
+        "scenarioTags": [
+          "capture",
+          "voice",
+          "game"
+        ],
+        "risk": "protected"
+      }
+    ]
+  },
+  "telemetryTargets": [
+    "persistent-policy-enforcement",
+    "launch-watcher-coverage",
+    "policy-restore-count"
+  ],
+  "rollbackPolicy": {
+    "supported": true,
+    "scope": "persistent-process-policy-controls",
+    "stateRoot": "backend\\state",
+    "restoreOriginalPriorityClass": true,
+    "restoreOriginalAffinityMask": true,
+    "restoreOriginalIoPriority": true,
+    "restoreOriginalGpuPriority": true,
+    "keepLatestCount": 10,
+    "minimumDays": 14
+  },
+  "safety": {
+    "confirmedApplyChanges": [
+      "PriorityClass",
+      "Affinity",
+      "IoPriority",
+      "GpuPriority"
+    ],
+    "continuousEnforcement": true,
+    "runtimeService": false,
+    "requiresExplicitApplyRoots": true
+  }
+}
