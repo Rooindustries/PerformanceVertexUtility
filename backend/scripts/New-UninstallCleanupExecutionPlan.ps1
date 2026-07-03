@@ -90,6 +90,14 @@ function Get-BackupRequirementCount {
     return @(Get-RooUninstallPropertyArray $Rollback $PropertyName).Count
 }
 
+function Test-ControlledUninstallRunnerImplemented {
+    $requiredRunnerScripts = @(
+        (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupRunners.ps1'),
+        (Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1')
+    )
+    return (@($requiredRunnerScripts | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0)
+}
+
 try {
     $policy = Read-RooUninstallPolicy $PolicyPath
     $officialPreview = Get-OfficialPreviewForPlan $OfficialPreviewPath $AppId $InventoryPath
@@ -104,7 +112,8 @@ try {
     $confirmedExecutionEnabled = [bool](Get-RooUninstallPropertyValue $policy 'confirmedExecutionEnabled' $false)
     $executorImplemented = [bool](Get-RooUninstallPropertyValue $policyExecutionDesign 'executorImplemented' $false)
     $fixtureExecutorImplemented = [bool](Get-RooUninstallPropertyValue $policyExecutionDesign 'fixtureExecutorImplemented' $false)
-    $realSystemExecutorImplemented = [bool](Get-RooUninstallPropertyValue $policyExecutionDesign 'realSystemExecutorImplemented' $false)
+    $controlledRunnerImplemented = Test-ControlledUninstallRunnerImplemented
+    $realSystemExecutorImplemented = ([bool](Get-RooUninstallPropertyValue $policyExecutionDesign 'realSystemExecutorImplemented' $false) -or $controlledRunnerImplemented)
     $officialErrors = @(Get-RooUninstallPropertyArray $officialPreview 'errors')
     $manifestErrors = @(Get-RooUninstallPropertyArray $cleanupManifest 'errors')
     $protectedSelected = @($manifestItems | Where-Object { [bool](Get-RooUninstallPropertyValue $_ 'protected' $false) })
@@ -121,7 +130,7 @@ try {
     $gates = New-Object System.Collections.Generic.List[object]
     $gates.Add((New-RooExecutionGate 'policy-confirmed-execution-enabled' 'Confirmed real-system execution policy enabled' $true $confirmedExecutionEnabled $true 'Repository policy must explicitly enable confirmed real-system execution before real uninstall or cleanup can run.' ([pscustomobject]@{ confirmedExecutionEnabled = $confirmedExecutionEnabled }))) | Out-Null
     $gates.Add((New-RooExecutionGate 'fixture-executor-implemented' 'Disposable fixture executor implementation present' $true $fixtureExecutorImplemented $true 'The backend must expose a fixture-only executor before live validation can prove backup and deletion mechanics.' ([pscustomobject]@{ fixtureExecutorImplemented = $fixtureExecutorImplemented }))) | Out-Null
-    $gates.Add((New-RooExecutionGate 'real-system-executor-implemented' 'Real-system executor implementation present' $true $realSystemExecutorImplemented $true 'Real uninstall and real leftover deletion are intentionally not implemented in this build.' ([pscustomobject]@{ realSystemExecutorImplemented = $realSystemExecutorImplemented }))) | Out-Null
+    $gates.Add((New-RooExecutionGate 'real-system-executor-implemented' 'Real-system executor implementation present' $true $realSystemExecutorImplemented $true 'Controlled official runner and rollback contracts must exist before real-system execution can be considered.' ([pscustomobject]@{ realSystemExecutorImplemented = $realSystemExecutorImplemented; controlledRunnerImplemented = $controlledRunnerImplemented }))) | Out-Null
     $gates.Add((New-RooExecutionGate 'official-preview-clean' 'Official uninstall preview has no blocking errors' $true ($officialErrors.Count -eq 0 -and $blockedCommands.Count -eq 0) $true 'Official uninstall metadata must resolve and the selected app must not be blocked.' ([pscustomobject]@{ errorCount = $officialErrors.Count; blockedCommandCount = $blockedCommands.Count }))) | Out-Null
     $gates.Add((New-RooExecutionGate 'manifest-clean' 'Cleanup manifest has no blocking errors' $true ($manifestErrors.Count -eq 0 -and $protectedSelected.Count -eq 0) $true 'Cleanup manifest must exclude protected items and contain no manifest errors.' ([pscustomobject]@{ errorCount = $manifestErrors.Count; protectedSelectedCount = $protectedSelected.Count }))) | Out-Null
     $gates.Add((New-RooExecutionGate 'restore-point-before-apply' 'Restore point required before future apply' $true $false $true 'A future executor must create a restore point before official uninstall or cleanup apply.' ([pscustomobject]@{ requiredBeforeFutureApply = [bool](Get-RooUninstallPropertyValue $restorePoint 'requiredBeforeFutureApply' $true); created = [bool](Get-RooUninstallPropertyValue $restorePoint 'created' $false) }))) | Out-Null
@@ -155,11 +164,12 @@ try {
             sourceScanId = [string](Get-RooUninstallPropertyValue $cleanupManifest 'sourceScanId' '')
         }
         capabilities = [pscustomobject]@{
-            currentCapability = 'preview-plan-and-disposable-fixture-executor'
+            currentCapability = 'preview-plan-disposable-fixture-and-controlled-runner'
             executorImplemented = $executorImplemented
             fixtureExecutorImplemented = $fixtureExecutorImplemented
             realSystemExecutorImplemented = $realSystemExecutorImplemented
             confirmedExecutionEnabled = $confirmedExecutionEnabled
+            canRunAllowlistedOfficialCommand = $realSystemExecutorImplemented
             canRunUninstallers = $false
             canDeleteLeftovers = $false
             canApplyDisposableFixture = $fixtureExecutorImplemented
@@ -184,9 +194,9 @@ try {
             [pscustomobject]@{
                 phaseId = 'official-uninstall'
                 order = 2
-                mode = 'future-executor'
+                mode = 'approval-gated-controlled-runner'
                 status = 'blocked'
-                purpose = 'Run the vendor or package-manager uninstall command before leftover cleanup.'
+                purpose = 'Run an allowlisted vendor or package-manager uninstall command before leftover cleanup.'
                 requiredGateIds = @('policy-confirmed-execution-enabled', 'real-system-executor-implemented', 'restore-point-before-apply', 'explicit-user-confirmation')
                 allowedNow = $false
                 commandPreviews = @($commands | ForEach-Object {
@@ -254,7 +264,7 @@ try {
             [pscustomobject]@{
                 phaseId = 'verify-and-rollback-ready'
                 order = 6
-                mode = 'future-executor'
+                mode = 'approval-gated-controlled-runner'
                 status = 'blocked'
                 purpose = 'Verify removal results and keep rollback metadata ready for restore.'
                 requiredGateIds = @('backup-exports-complete')
@@ -277,6 +287,7 @@ try {
             dryRunWritesState = $false
             executionReady = $false
             disposableFixtureExecutionReady = $fixtureExecutorImplemented
+            allowlistedOfficialRunnerReady = $realSystemExecutorImplemented
         }
         policySummary = [pscustomobject]@{
             previewOnly = [bool](Get-RooUninstallPropertyValue $policy 'previewOnly' $true)
@@ -287,8 +298,8 @@ try {
             backupRoot = [string](Get-RooUninstallPropertyValue (Get-RooUninstallPropertyValue $policy 'cleanupDeletion' $null) 'backupRoot' '')
         }
         warnings = @(
-            (New-RooUninstallIssue 'EXECUTION_PLAN_FIXTURE_EXECUTOR_ONLY' 'Execution plan was produced without running uninstallers, deleting real leftovers, editing registry, editing services, editing tasks, or writing repo state. Disposable fixture execution is available separately.' 'info' 'apps.uninstallCleanupExecutionPlan' $effectiveAppId $false 'Use Invoke-UninstallCleanupExecution.ps1 only with a temp fixture root for backend validation.' $null),
-            (New-RooUninstallIssue 'CONFIRMED_REAL_EXECUTION_DISABLED' 'Confirmed real uninstall and cleanup execution remains disabled by policy.' 'warning' 'apps.uninstallCleanupExecutionPlan' $effectiveAppId $true 'Keep real execution disabled until an audited real-system executor, backups, restore point, and confirmation flow exist.' $null)
+            (New-RooUninstallIssue 'EXECUTION_PLAN_CONTROLLED_RUNNER_GATED' 'Execution plan was produced without running uninstallers, deleting real leftovers, editing registry, editing services, editing tasks, or writing repo state. Controlled runner and disposable fixture execution are available separately.' 'info' 'apps.uninstallCleanupExecutionPlan' $effectiveAppId $false 'Use Invoke-UninstallCleanupRunners.ps1 only with exact executable allowlists and approval evidence; use Invoke-UninstallCleanupExecution.ps1 only with temp fixture roots for deletion validation.' $null),
+            (New-RooUninstallIssue 'CONFIRMED_REAL_EXECUTION_DISABLED' 'Confirmed real uninstall and cleanup execution remains disabled by policy.' 'warning' 'apps.uninstallCleanupExecutionPlan' $effectiveAppId $true 'Keep real execution disabled until policy, backups, restore point, executable allowlist, and confirmation gates are satisfied.' $null)
         )
         errors = @($officialErrors + $manifestErrors)
         logs = @((New-RooUninstallLog 'Uninstall cleanup execution plan generated without system changes.'))
@@ -307,11 +318,12 @@ try {
         executionMode = 'blocked'
         status = 'failed'
         capabilities = [pscustomobject]@{
-            currentCapability = 'preview-plan-and-disposable-fixture-executor'
+            currentCapability = 'preview-plan-disposable-fixture-and-controlled-runner'
             executorImplemented = $false
             fixtureExecutorImplemented = $false
-            realSystemExecutorImplemented = $false
+            realSystemExecutorImplemented = (Test-ControlledUninstallRunnerImplemented)
             confirmedExecutionEnabled = $false
+            canRunAllowlistedOfficialCommand = (Test-ControlledUninstallRunnerImplemented)
             canRunUninstallers = $false
             canDeleteLeftovers = $false
             canApplyDisposableFixture = $false

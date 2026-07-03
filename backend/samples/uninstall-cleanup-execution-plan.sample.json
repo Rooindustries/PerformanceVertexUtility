@@ -18,11 +18,12 @@
     "sourceScanId": "sample-leftover-overwolf-20260628-100000"
   },
   "capabilities": {
-    "currentCapability": "preview-plan-and-disposable-fixture-executor",
+    "currentCapability": "preview-plan-disposable-fixture-and-controlled-runner",
     "executorImplemented": true,
     "fixtureExecutorImplemented": true,
-    "realSystemExecutorImplemented": false,
+    "realSystemExecutorImplemented": true,
     "confirmedExecutionEnabled": false,
+    "canRunAllowlistedOfficialCommand": true,
     "canRunUninstallers": false,
     "canDeleteLeftovers": false,
     "canApplyDisposableFixture": true,
@@ -58,11 +59,12 @@
       "gateId": "real-system-executor-implemented",
       "name": "Real-system executor implementation present",
       "required": true,
-      "satisfied": false,
-      "blocking": true,
-      "reason": "Real uninstall and real leftover deletion are intentionally not implemented in this build.",
+      "satisfied": true,
+      "blocking": false,
+      "reason": "Controlled official runner and rollback contracts must exist before real-system execution can be considered.",
       "evidence": {
-        "realSystemExecutorImplemented": false
+        "realSystemExecutorImplemented": true,
+        "controlledRunnerImplemented": true
       }
     },
     {
@@ -126,9 +128,9 @@
     {
       "phaseId": "official-uninstall",
       "order": 2,
-      "mode": "future-executor",
+      "mode": "approval-gated-controlled-runner",
       "status": "blocked",
-      "purpose": "Run the vendor or package-manager uninstall command before leftover cleanup.",
+      "purpose": "Run an allowlisted vendor or package-manager uninstall command before leftover cleanup.",
       "requiredGateIds": [
         "policy-confirmed-execution-enabled",
         "real-system-executor-implemented",
@@ -171,7 +173,7 @@
     "executionAllowedCommandCount": 0,
     "cleanupItemCount": 2,
     "protectedSelectedCount": 0,
-    "blockingGateCount": 5,
+    "blockingGateCount": 4,
     "willRunUninstallers": false,
     "willDeleteLeftovers": false,
     "willEditRegistry": false,
@@ -179,25 +181,26 @@
     "willEditScheduledTasks": false,
     "dryRunWritesState": false,
     "executionReady": false,
-    "disposableFixtureExecutionReady": true
+    "disposableFixtureExecutionReady": true,
+    "allowlistedOfficialRunnerReady": true
   },
   "policySummary": {
     "previewOnly": true,
     "confirmedExecutionEnabled": false,
     "executorImplemented": true,
     "fixtureExecutorImplemented": true,
-    "realSystemExecutorImplemented": false,
+    "realSystemExecutorImplemented": true,
     "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
   },
   "warnings": [
     {
-      "code": "EXECUTION_PLAN_FIXTURE_EXECUTOR_ONLY",
-      "message": "Execution plan was produced without running uninstallers, deleting real leftovers, editing registry, editing services, editing tasks, or writing repo state. Disposable fixture execution is available separately.",
+      "code": "EXECUTION_PLAN_CONTROLLED_RUNNER_GATED",
+      "message": "Execution plan was produced without running uninstallers, deleting real leftovers, editing registry, editing services, editing tasks, or writing repo state. Controlled runner and disposable fixture execution are available separately.",
       "severity": "info",
       "source": "apps.uninstallCleanupExecutionPlan",
       "target": "registry:overwolf",
       "blocking": false,
-      "recommendedAction": "Use Invoke-UninstallCleanupExecution.ps1 only with a temp fixture root for backend validation.",
+      "recommendedAction": "Use Invoke-UninstallCleanupRunners.ps1 only with exact executable allowlists and approval evidence; use Invoke-UninstallCleanupExecution.ps1 only with temp fixture roots for deletion validation.",
       "details": null
     }
   ],

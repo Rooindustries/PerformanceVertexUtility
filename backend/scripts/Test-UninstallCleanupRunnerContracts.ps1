@@ -47,6 +47,39 @@ exit 0
     Set-Content -LiteralPath $Path -Value $content -Encoding UTF8
 }
 
+function Write-OfficialPreview {
+    param(
+        [string]$Path,
+        [string]$Executable,
+        [object[]]$Arguments
+    )
+    ([pscustomobject]@{
+        actionId = 'apps.previewOfficialUninstall'
+        schemaVersion = 1
+        productName = 'Roo Industries Optimization Suite'
+        capturedAtUtc = '2026-07-03T00:00:00Z'
+        dryRun = $true
+        status = 'preview'
+        commands = @(
+            [pscustomobject]@{
+                appId = 'fixture:fake-app'
+                displayName = 'Fixture Fake App'
+                commandType = 'harmless-real-runner'
+                rawCommand = 'harmless runner'
+                executable = $Executable
+                arguments = @($Arguments)
+                protected = $false
+                blocked = $false
+                executionAllowed = $false
+            }
+        )
+        summary = [pscustomobject]@{ requestedCount = 1; commandPreviewCount = 1; blockedCount = 0; executionAllowedCount = 0; willRunUninstallers = $false }
+        warnings = @()
+        errors = @()
+        logs = @()
+    } | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
 function Read-MockLog {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return @() }
@@ -167,10 +200,10 @@ try {
     } else {
         Add-Failure 'Uninstall cleanup mock runner did not prove guarded execution sequence'
     }
-    if ($success.summary.focusStealPrevented -eq $true -and $success.capabilities.realSystemRunnerImplemented -eq $false) {
-        Add-Pass 'Uninstall cleanup runner proves hidden mock invocation and blocked real-system runner'
+    if ($success.summary.focusStealPrevented -eq $true -and $success.capabilities.realSystemRunnerImplemented -eq $true) {
+        Add-Pass 'Uninstall cleanup runner proves hidden mock invocation while real runner path is implemented'
     } else {
-        Add-Failure 'Uninstall cleanup runner did not prove hidden invocation and real-system block'
+        Add-Failure 'Uninstall cleanup runner did not prove hidden invocation and implemented real runner'
     }
 
     $failOfficial = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupRunners.ps1') -OfficialPreviewPath $officialPath -CleanupManifestPath $manifestPath -ExecutorMode Mock -MockUninstallerShimPath $failShim -MockDeletionShimPath $failShim -ExactTargetAllowlist @($leftoverFolder, $leftoverFile) -ConfirmApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved -BackupsAndExportsCompleted -UserApproved)
@@ -180,12 +213,22 @@ try {
         Add-Failure 'Uninstall cleanup runner did not skip leftovers after official runner failure'
     }
 
-    $realBlocked = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupRunners.ps1') -OfficialPreviewPath $officialPath -CleanupManifestPath $manifestPath -ExecutorMode Real -ExactTargetAllowlist @($leftoverFolder, $leftoverFile) -ConfirmApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved -BackupsAndExportsCompleted -UserApproved -AllowRealSystemExecution)
-    $realGate = @($realBlocked.gates | Where-Object { $_.gateId -eq 'real-system-runner-implemented' }) | Select-Object -First 1
-    if ($realBlocked.status -eq 'blocked' -and $realGate.blocking -eq $true -and $realBlocked.capabilities.realSystemRunnerImplemented -eq $false -and @($realBlocked.executionSequence).Count -eq 0) {
-        Add-Pass 'Uninstall cleanup real-system runner remains blocked by design even with explicit flag'
+    $realPreviewPath = Join-Path $tempRoot 'official-real-preview.json'
+    $realShimPath = Join-Path $tempRoot 'official-real-shim.ps1'
+    $realLogPath = Join-Path $tempRoot 'official-real.log'
+    @"
+param([string]`$Value)
+[pscustomobject]@{ value = `$Value; cwd = (Get-Location).Path } | ConvertTo-Json -Compress
+'real-runner' | Set-Content -LiteralPath '$($realLogPath.Replace("'", "''"))' -Encoding UTF8
+exit 0
+"@ | Set-Content -LiteralPath $realShimPath -Encoding UTF8
+    $powershellPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Write-OfficialPreview $realPreviewPath $powershellPath @('-NoProfile','-ExecutionPolicy','Bypass','-File',$realShimPath,'approved app')
+    $realRun = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupRunners.ps1') -OfficialPreviewPath $realPreviewPath -CleanupManifestPath $manifestPath -ExecutorMode Real -AllowedOfficialExecutablePath $powershellPath -OfficialRunnerWorkingDirectory $tempRoot -ExactTargetAllowlist @($leftoverFolder, $leftoverFile) -ConfirmApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved -BackupsAndExportsCompleted -UserApproved -AllowRealSystemExecution)
+    if ($realRun.status -eq 'success' -and $realRun.capabilities.realSystemRunnerImplemented -eq $true -and $realRun.summary.willRunRealUninstaller -eq $true -and $realRun.summary.officialRunnerCompleted -eq $true -and $realRun.summary.focusStealPrevented -eq $true -and (Test-Path -LiteralPath $realLogPath)) {
+        Add-Pass 'Uninstall cleanup real runner executes harmless allowlisted official command through the real path'
     } else {
-        Add-Failure 'Uninstall cleanup real-system runner was not blocked by design'
+        Add-Failure 'Uninstall cleanup real runner did not execute the harmless allowlisted official command'
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force

@@ -272,14 +272,14 @@
       "name": "uninstall cleanup fixture execution",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
-      "summary": "Guarded fixture-only execution envelope for approved cleanup manifests; real uninstallers and real leftover deletion remain blocked.",
+      "summary": "Guarded fixture execution envelope for approved cleanup manifests with file/folder backup, deletion, and restore validation; real app uninstall requires the controlled official runner allowlist.",
       "status": "draft"
     },
     {
       "name": "uninstall cleanup controlled runners",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
-      "summary": "Mock official-uninstaller and leftover-deletion runner envelope with backup/export, exact target allowlist, manifest approval, rollback manifest, hidden invocation, and blocked real-system runner gates.",
+      "summary": "Official-uninstaller and leftover-deletion runner envelope with backup/export, exact executable and target allowlists, manifest approval, rollback manifest, hidden invocation, and real controlled runner gates.",
       "status": "draft"
     },
     {
@@ -377,7 +377,7 @@
       "name": "stutter optimization controlled executor",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "FSOS-X and WinUtil parity",
-      "summary": "Mock or disposable-fixture executor envelope for standby memory, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore; real system-changing runners remain blocked.",
+      "summary": "Mock, disposable-fixture, and real controlled executor envelope for standby memory helper contracts, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore.",
       "status": "draft"
     },
     {

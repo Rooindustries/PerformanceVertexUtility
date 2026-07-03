@@ -62,21 +62,35 @@ try {
     }
 
     $standby = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId standby-memory -UserApproved)
-    if ($standby.status -eq 'capability-limited' -and $standby.capabilities.readOnlyCountersImplemented -eq $true -and $standby.capabilities.oneShotClearRunnerScaffolded -eq $true -and $standby.capabilities.executionRequires -match 'Administrator|NtSetSystemInformation' -and $standby.summary.nextEngineeringStep) {
-        Add-Pass 'Standby memory executor reports read-only counters, missing requirement, and next engineering step'
+    if ($standby.status -eq 'helper-required' -and $standby.capabilities.readOnlyCountersImplemented -eq $true -and $standby.capabilities.oneShotClearRunnerScaffolded -eq $true -and $standby.capabilities.helperSourceExists -eq $true -and $standby.summary.nextEngineeringStep) {
+        Add-Pass 'Standby memory executor reports read-only counters and exact native helper source path'
     } else {
-        Add-Failure 'Standby memory executor did not report expected capability detection'
+        Add-Failure 'Standby memory executor did not report expected helper contract'
     }
 
     $shaderRoot = Join-Path $tempRoot 'shader-real-readiness'
-    New-Item -ItemType Directory -Path (Join-Path $shaderRoot 'NVIDIA\DXCache') -Force | Out-Null
-    $shaderFile = Join-Path $shaderRoot 'NVIDIA\DXCache\a.bin'
+    $shaderCacheRoot = Join-Path $shaderRoot 'NVIDIA\DXCache'
+    New-Item -ItemType Directory -Path $shaderCacheRoot -Force | Out-Null
+    $shaderFile = Join-Path $shaderCacheRoot 'a.bin'
     Set-Content -LiteralPath $shaderFile -Value 'shader cache' -Encoding UTF8
     $shader = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -UserApproved)
     if ($shader.status -eq 'success' -and $shader.capabilities.realPathPlannerImplemented -eq $true -and $shader.capabilities.sameBackupDeleteRestorePlanner -eq $true -and $shader.capabilities.realDeletionAttempted -eq $false -and (Test-Path -LiteralPath $shaderFile)) {
         Add-Pass 'Shader cache real-path readiness uses backup/delete/restore planner without deleting real-path files'
     } else {
         Add-Failure 'Shader cache real-path readiness did not preserve files or expose planner proof'
+    }
+    $shaderDelete = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderCacheRoot -ConfirmApply -AllowRealSystemExecution -UserApproved)
+    $rollbackPath = [string]$shaderDelete.capabilities.rollbackManifestPath
+    if ($shaderDelete.status -eq 'success' -and $shaderDelete.capabilities.approvalGatedDeletePathExecuted -eq $true -and (Test-Path -LiteralPath $rollbackPath) -and -not (Test-Path -LiteralPath $shaderFile)) {
+        Add-Pass 'Shader cache real executor validates approval-gated delete path on temp cache root'
+    } else {
+        Add-Failure 'Shader cache real executor did not validate approval-gated delete path'
+    }
+    $shaderRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $rollbackPath -ConfirmApply -AllowDisposableFixtureApply)
+    if ($shaderRestore.status -eq 'success' -and (Test-Path -LiteralPath $shaderFile)) {
+        Add-Pass 'Shader cache approval-gated delete path restores through rollback manifest'
+    } else {
+        Add-Failure 'Shader cache approval-gated delete path did not restore'
     }
 
     $serviceName = (Get-Service | Select-Object -First 1).Name
@@ -86,6 +100,20 @@ try {
         Add-Pass 'Service pause real executor analyzes service status and dependencies without pausing real service'
     } else {
         Add-Failure 'Service pause real executor did not expose analyzer proof'
+    }
+    $serviceShim = Join-Path $tempRoot 'service-shim.ps1'
+    $serviceLog = Join-Path $tempRoot 'service-shim.log'
+    @"
+param([Parameter(ValueFromRemainingArguments = `$true)][string[]]`$Rest)
+(`$Rest -join '|') | Add-Content -LiteralPath '$($serviceLog.Replace("'", "''"))'
+exit 0
+"@ | Set-Content -LiteralPath $serviceShim -Encoding UTF8
+    $serviceShimRun = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId service-pause-preview -ServiceName 'FixtureService' -ServiceShimPath $serviceShim -ConfirmApply -AllowRealSystemExecution -UserApproved)
+    $shimLog = if (Test-Path -LiteralPath $serviceLog) { @(Get-Content -LiteralPath $serviceLog) } else { @() }
+    if ($serviceShimRun.status -eq 'success' -and $serviceShimRun.capabilities.serviceShimRunnerExecuted -eq $true -and $shimLog.Count -eq 3 -and $shimLog[0] -match 'service-backup' -and $shimLog[1] -match 'service-pause' -and $shimLog[2] -match 'service-restore') {
+        Add-Pass 'Service pause real executor validates backup/pause/restore runner through harmless shim'
+    } else {
+        Add-Failure 'Service pause real executor did not validate shim runner'
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force

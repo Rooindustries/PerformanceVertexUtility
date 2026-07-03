@@ -48,6 +48,14 @@ function Test-RooPathInsideTemp {
     return $fullPath.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-ControlledUninstallRunnerImplemented {
+    $requiredRunnerScripts = @(
+        (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupRunners.ps1'),
+        (Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1')
+    )
+    return (@($requiredRunnerScripts | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0)
+}
+
 function New-RooCleanupExecutionGate {
     param(
         [string]$GateId,
@@ -118,6 +126,7 @@ function Remove-RooFixtureTarget {
 }
 
 try {
+    $realSystemExecutorImplemented = Test-ControlledUninstallRunnerImplemented
     $policy = Read-RooUninstallPolicy $PolicyPath
     $officialPreview = Resolve-RooExecutionInput $OfficialPreviewPath 'Official preview'
     $cleanupManifest = Resolve-RooExecutionInput $CleanupManifestPath 'Cleanup manifest'
@@ -216,7 +225,8 @@ try {
         changedItems = @($deletedRecords.ToArray())
         capabilities = [pscustomobject]@{
             fixtureExecutorImplemented = $true
-            realSystemExecutorImplemented = $false
+            realSystemExecutorImplemented = $realSystemExecutorImplemented
+            canRunAllowlistedOfficialCommand = $realSystemExecutorImplemented
             canRunUninstallers = $false
             canDeleteFixtureFiles = $canApplyFixture
             canDeleteRealFiles = $false
@@ -238,7 +248,7 @@ try {
             willEditScheduledTasks = $false
             dryRunWritesState = $false
         }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_EXECUTION_FIXTURE_ONLY' 'Cleanup execution is implemented only for disposable temp fixtures. Official uninstall commands and real leftover deletion remain blocked.' 'warning' 'apps.uninstallCleanupExecution' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $true 'Use fixture execution for backend validation only.' $null))
+        warnings = @((New-RooUninstallIssue 'CLEANUP_EXECUTION_FIXTURE_ONLY' 'Cleanup execution deletes only disposable temp fixtures. Official uninstall commands are handled by the separate controlled runner behind exact allowlist and approval gates; real leftover deletion remains blocked in this fixture executor.' 'warning' 'apps.uninstallCleanupExecution' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $true 'Use fixture execution for backend validation only; use controlled runners only with exact allowlists and approval evidence.' $null))
         errors = @()
         logs = @((New-RooUninstallLog 'Uninstall cleanup execution contract evaluated without launching uninstallers.'))
     }
@@ -253,7 +263,7 @@ try {
         dryRun = $true
         status = 'failed'
         executionMode = 'blocked'
-        capabilities = [pscustomobject]@{ fixtureExecutorImplemented = $true; realSystemExecutorImplemented = $false; canRunUninstallers = $false; canDeleteRealFiles = $false }
+        capabilities = [pscustomobject]@{ fixtureExecutorImplemented = $true; realSystemExecutorImplemented = (Test-ControlledUninstallRunnerImplemented); canRunAllowlistedOfficialCommand = (Test-ControlledUninstallRunnerImplemented); canRunUninstallers = $false; canDeleteRealFiles = $false }
         summary = [pscustomobject]@{ willRunUninstallers = $false; willDeleteLeftovers = $false; dryRunWritesState = $false }
         warnings = @()
         errors = @((New-RooUninstallIssue 'CLEANUP_EXECUTION_FAILED' $_.Exception.Message 'error' 'apps.uninstallCleanupExecution' $null $true 'Check official preview, cleanup manifest, and fixture root inputs.' $null))
