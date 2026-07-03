@@ -33,6 +33,22 @@
                            VerticalAlignment="Center" Foreground="{StaticResource RooTextDisplayBrush}" />
             </Grid>
         </DataTemplate>
+
+        <DataTemplate x:Key="ReadinessCardTemplate" x:DataType="vm:DashboardCard">
+            <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MinHeight="146">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                        <TextBlock Text="{x:Bind Title}" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                   Foreground="{StaticResource RooTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind PrimaryMetric}" FontSize="20" FontWeight="SemiBold" LineHeight="26"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind Detail}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextMutedBrush}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="{StaticResource RooPageMargin}">
@@ -90,11 +106,17 @@
                                 Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
-                                <TextBlock Text="See What To Tune" />
+                                <TextBlock Text="Tune My PC" />
                             </StackPanel>
                         </Button>
                     </Grid>
                 </Border>
+
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.ReadinessCards}" ItemTemplate="{StaticResource ReadinessCardTemplate}">
+                    <ItemsRepeater.Layout>
+                        <UniformGridLayout MinItemWidth="220" MinColumnSpacing="16" MinRowSpacing="16" ItemsStretch="Fill" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
 
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -140,8 +162,13 @@
                         </Border>
                         <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                             <StackPanel Spacing="10">
-                                <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SensorLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                                <TextBlock Text="STUTTER RISK" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                             Fill="{x:Bind ViewModel.StutterRiskLine.State, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                    <TextBlock Text="{x:Bind ViewModel.StutterRiskLine.Value, Mode=OneWay}" FontSize="14" LineHeight="20" FontWeight="SemiBold"
+                                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

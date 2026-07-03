@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Roo.OptimizationSuite.ViewModels;
 
@@ -11,5 +12,15 @@ public sealed partial class DriversProfilesPage : Page
     {
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
+    }
+
+    private async void OnCheckDriverPathClick(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.ReloadAsync();
+    }
+
+    private async void OnExportProfileClick(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.ReloadAsync();
     }
 }

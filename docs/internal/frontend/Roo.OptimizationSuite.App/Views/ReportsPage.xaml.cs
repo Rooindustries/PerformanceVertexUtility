@@ -12,4 +12,12 @@ public sealed partial class ReportsPage : Page
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
+
+    private void OnNextActionClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string route } && !string.IsNullOrWhiteSpace(route))
+        {
+            (App.MainWindow as MainWindow)?.SelectNav(route);
+        }
+    }
 }

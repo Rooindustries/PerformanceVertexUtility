@@ -24,6 +24,30 @@
             </StackPanel>
         </DataTemplate>
 
+        <DataTemplate x:Key="StutterToolTemplate" x:DataType="vm:StutterToolRow">
+            <Grid Padding="0,11" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" LineHeight="20"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind Why}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextMutedBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                        <TextBlock Text="{x:Bind StateLine}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                        <TextBlock Text="{x:Bind Caption}" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}"
+                                   Visibility="{x:Bind Caption, Converter={StaticResource StringToVisibility}}" />
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="2" Content="{x:Bind ActionLabel}" IsEnabled="False" Padding="14,6" VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="SensorTemplate" x:DataType="vm:StatusLine">
             <Grid Padding="0,10" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -64,6 +88,7 @@
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
@@ -76,6 +101,14 @@
                                 <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
+                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReadFramePacingClick"
+                                Style="{StaticResource NavCtaButtonStyle}"
+                                Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9D2;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
+                                <TextBlock Text="Read Frame Pacing" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </Border>
 
@@ -92,14 +125,28 @@
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="10">
-                        <TextBlock Text="FRAME FEEL" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="FRAME PACING" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.PendingTiles}" ItemTemplate="{StaticResource PendingTileTemplate}">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
                             </ItemsRepeater.Layout>
                         </ItemsRepeater>
-                        <TextBlock Text="Connect PresentMon or HWiNFO64 during a session to measure FPS, 1% lows, and frametimes."
-                                   FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Visibility="{x:Bind ViewModel.IsSampleCapture, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskNeutralBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.SampleCaptureLine, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                       TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="STUTTER TOOLS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.StutterTools}" ItemTemplate="{StaticResource StutterToolTemplate}" />
+                        <TextBlock Text="{x:Bind ViewModel.StutterFooterLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooTextMutedBrush}"
+                                   Visibility="{x:Bind ViewModel.StutterFooterLine, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                     </StackPanel>
                 </Border>
 

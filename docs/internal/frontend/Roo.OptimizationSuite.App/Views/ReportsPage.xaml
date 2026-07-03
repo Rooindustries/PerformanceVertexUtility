@@ -15,6 +15,50 @@
                 <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
             </StackPanel>
         </DataTemplate>
+
+        <DataTemplate x:Key="FindingTemplate" x:DataType="vm:FindingRow">
+            <Grid Padding="0,9" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Top" Margin="0,6,0,0"
+                         Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" LineHeight="20"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind Detail}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind Evidence}" FontSize="11" LineHeight="15" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextMutedBrush}"
+                               Visibility="{x:Bind Evidence, Converter={StaticResource StringToVisibility}}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="NextActionTemplate" x:DataType="vm:NextActionRow">
+            <Border CornerRadius="8" BorderThickness="1" Padding="16" Margin="0,0,0,12"
+                    Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{x:Bind Risk, Converter={StaticResource RiskToBrush}}" />
+                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind Label}" FontSize="14" FontWeight="SemiBold" LineHeight="20"
+                                   Foreground="{StaticResource RooTextPrimaryBrush}" />
+                        <TextBlock Text="{x:Bind Reason}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="{x:Bind Label}" Tag="{x:Bind Route}" Click="OnNextActionClick"
+                            VerticalAlignment="Center" Style="{StaticResource NavCtaButtonStyle}"
+                            Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="{StaticResource RooPageMargin}">
@@ -50,11 +94,39 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <TextBlock Text="Before &amp; After" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.ReportTitle, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.ScenarioLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextMutedBrush}"
+                                           Visibility="{x:Bind ViewModel.ScenarioLine, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                             </StackPanel>
                         </Grid>
                     </Grid>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="FINDINGS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Findings}" ItemTemplate="{StaticResource FindingTemplate}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="THE NUMBERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Numbers}" ItemTemplate="{StaticResource BaselineTileTemplate}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="170" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="WHAT TO DO NEXT" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextActions}" ItemTemplate="{StaticResource NextActionTemplate}" />
+                    </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
