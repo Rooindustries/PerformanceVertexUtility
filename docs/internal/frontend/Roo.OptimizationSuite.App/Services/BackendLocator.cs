@@ -7,6 +7,7 @@ public sealed class BackendLocator
 {
     public string? RepoRoot { get; }
     public string? SamplesDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "backend", "samples");
+    public string? CatalogsDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "backend", "catalogs");
     public string? BrandDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "assets", "brand", "roo-industries");
 
     public BackendLocator()
