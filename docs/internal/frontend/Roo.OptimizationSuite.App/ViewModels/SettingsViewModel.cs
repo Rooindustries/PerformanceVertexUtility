@@ -48,7 +48,6 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         EngineRows.Clear();
         SensorRows.Clear();
-        EngineRows.Add(new StatusLine("Theme", "Blackout Gold is the match setup. Nothing else to pick.", "protected"));
         EngineRows.Add(new StatusLine("Data source", DataSourceStatus ?? "Showing sample data (backend not found).", DataSourceState));
 
         var providers = new List<ProviderStatus>();

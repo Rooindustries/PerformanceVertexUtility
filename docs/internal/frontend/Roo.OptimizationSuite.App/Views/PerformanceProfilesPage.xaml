@@ -75,15 +75,24 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                    <TextBlock Text="Game Tune" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Game Tune" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                    <Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
                                                  Fill="{x:Bind ViewModel.GameStatusLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                        <TextBlock Text="{x:Bind ViewModel.GameStatus, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                                    </StackPanel>
-                                </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.GameStatus, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    </Grid>
+                                </Grid>
                                 <TextBlock Text="{x:Bind ViewModel.RuleSummary, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="640" />
                             </StackPanel>
