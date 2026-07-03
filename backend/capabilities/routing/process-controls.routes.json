@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "family": "process-controls",
+  "routes": [
+    {
+      "capabilityId": "process-controls.lightweight-governor-budget",
+      "preview": {
+        "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
+        "args": [
+          "-SampleDurationSeconds",
+          "1",
+          "-PollIntervalMilliseconds",
+          "250"
+        ],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "read-only budget measurement",
+        "nextRequiredStep": "Use preview to run Measure-RooBackendFootprint.ps1; this capability has no mutating apply path."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "read-only budget measurement",
+        "nextRequiredStep": "Use preview to run Measure-RooBackendFootprint.ps1; read-only budget measurement has no restore path."
+      },
+      "notes": "Worked example route for read-only backend footprint budget measurement."
+    }
+  ]
+}
