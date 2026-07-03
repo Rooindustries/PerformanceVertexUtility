@@ -349,7 +349,7 @@
       "name": "NVIDIA NIP controlled executor",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "drivers and profiles",
-      "summary": "Mock NVPI export/import and restore executor envelope with NVIDIA hardware, benchmark, approval, export-before-import, rollback manifest, timeout, hidden invocation, and blocked real NVPI gates.",
+      "summary": "Mock NVPI export/import and restore executor envelope with NVIDIA hardware, benchmark, approval, export-before-import, rollback manifest, timeout, hidden invocation, and real NVPI import kept behind explicit product approval gates.",
       "status": "draft"
     },
     {
@@ -370,7 +370,7 @@
       "name": "shader cache fixture apply and restore",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
-      "summary": "Disposable fixture-only shader cache backup/delete/restore envelope; real cache deletion remains blocked.",
+      "summary": "Disposable fixture shader cache backup/delete/restore envelope; real user-cache deletion is approval-gated and uses the controlled real executor planning path.",
       "status": "draft"
     },
     {
@@ -384,7 +384,14 @@
       "name": "stutter optimization real and detection executors",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
-      "summary": "Controlled real/detection executor envelope for bounded timer resolution sessions, temporary power-plan duplicate/select/restore/delete, standby memory counter and missing-API reporting, real shader-cache readiness planning, and service status/dependency analysis.",
+      "summary": "Controlled real/detection executor envelope for bounded timer resolution sessions, temporary power-plan duplicate/select/restore/delete, standby memory helper build/elevation planning, real shader-cache readiness planning, and service status/dependency analysis.",
+      "status": "draft"
+    },
+    {
+      "name": "validation temp artifact audit",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "backend validation hygiene",
+      "summary": "Read-only by default audit of old Roo validation artifacts under temp, with explicit cleanup flag and protected active roots.",
       "status": "draft"
     },
     {

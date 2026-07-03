@@ -27,9 +27,34 @@ function Get-StateEntryCount {
     return @(Get-ChildItem -LiteralPath $stateRoot -Force -Recurse -ErrorAction SilentlyContinue).Count
 }
 
+function Test-TimerCapabilityFailureEvidence {
+    param([object]$Timer)
+    $failure = $Timer.capabilities.timerApiFailure
+    if ($null -eq $failure) { return $false }
+    return (
+        $failure.timedOut -eq $true -or
+        -not [string]::IsNullOrWhiteSpace([string]$failure.startError) -or
+        ($null -ne $failure.processExitCode -and [int]$failure.processExitCode -ne 0) -or
+        ($null -ne $failure.beginResult -and [uint32]$failure.beginResult -ne 0) -or
+        ($null -ne $failure.endResult -and [uint32]$failure.endResult -ne 0)
+    )
+}
+
+function Test-PowerCapabilityFailureEvidence {
+    param([object]$Power)
+    $failure = $Power.capabilities.powerCommandFailure
+    if ($null -eq $failure -or [int]$failure.failedStepCount -lt 1) { return $false }
+    foreach ($step in @($failure.failedSteps)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$step.error)) { return $true }
+        if (-not [string]::IsNullOrWhiteSpace([string]$step.filePath) -and (@($step.arguments).Count -gt 0 -or $null -ne $step.exitCode -or $step.timedOut -eq $true -or -not [string]::IsNullOrWhiteSpace([string]$step.startError))) { return $true }
+    }
+    return $false
+}
+
 $requiredFiles = @(
     'backend\scripts\Invoke-TimerResolutionSession.ps1',
-    'backend\scripts\Invoke-StutterOptimizationRealExecutor.ps1'
+    'backend\scripts\Invoke-StutterOptimizationRealExecutor.ps1',
+    'backend\scripts\Build-StandbyMemoryHelper.ps1'
 )
 foreach ($relative in $requiredFiles) {
     $path = Join-Path $repoRoot $relative
@@ -48,24 +73,44 @@ try {
 
     $timer = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId timer-resolution -ConfirmApply -AllowRealSystemExecution -UserApproved -TimerDurationMilliseconds 50 -TimeoutSeconds 10)
     $timerStep = @($timer.executionSequence | Where-Object { $_.step -eq 'timer-resolution-bounded-session' }) | Select-Object -First 1
-    if ($timer.status -in @('success','capability-limited') -and $timer.summary.willPersist -eq $false -and $timer.summary.willLaunchForbiddenUtility -eq $false -and $timerStep.result.invocation.focusStealPrevented -eq $true -and $timer.capabilities.timerRestoreProved -eq $true) {
-        Add-Pass 'Timer resolution real executor ran bounded helper and proved restore-on-exit'
+    $timerSuccess = ($timer.status -eq 'success')
+    $timerLimitedWithEvidence = ($timer.status -eq 'capability-limited' -and (Test-TimerCapabilityFailureEvidence $timer))
+    if (($timerSuccess -or $timerLimitedWithEvidence) -and $timer.summary.willPersist -eq $false -and $timer.summary.willLaunchForbiddenUtility -eq $false -and $timerStep.result.invocation.focusStealPrevented -eq $true -and ($timer.capabilities.timerRestoreProved -eq $true -or $timerLimitedWithEvidence)) {
+        Add-Pass 'Timer resolution real executor prefers success and records exact API/process failure evidence otherwise'
     } else {
-        Add-Failure 'Timer resolution real executor did not prove bounded restore behavior'
+        Add-Failure 'Timer resolution real executor did not prove bounded restore behavior or exact failure evidence'
     }
 
     $power = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId power-plan -ConfirmApply -AllowRealSystemExecution -UserApproved -TimeoutSeconds 15)
-    if ($power.status -in @('success','capability-limited') -and $power.capabilities.exportImportPathUsed -eq $true -and $power.summary.willPersist -eq $false -and $power.summary.willLaunchForbiddenUtility -eq $false -and $power.summary.nextEngineeringStep -and ($power.capabilities.restoreAttempted -eq $true -or $power.status -eq 'capability-limited') -and -not (Test-Path -LiteralPath ([string]$power.capabilities.temporaryPowFilePath))) {
-        Add-Pass 'Power plan real executor attempted export/import/select/restore/delete flow or reported exact capability limitation'
+    $powerSuccess = ($power.status -eq 'success')
+    $powerLimitedWithEvidence = ($power.status -eq 'capability-limited' -and (Test-PowerCapabilityFailureEvidence $power))
+    if (($powerSuccess -or $powerLimitedWithEvidence) -and $power.capabilities.exportImportPathUsed -eq $true -and $power.summary.willPersist -eq $false -and $power.summary.willLaunchForbiddenUtility -eq $false -and $power.summary.nextEngineeringStep -and ($power.capabilities.restoreAttempted -eq $true -or $powerLimitedWithEvidence) -and -not (Test-Path -LiteralPath ([string]$power.capabilities.temporaryPowFilePath))) {
+        Add-Pass 'Power plan real executor prefers success and records exact powercfg failure evidence otherwise'
     } else {
-        Add-Failure 'Power plan real executor did not prove export/import reversible flow or exact limitation'
+        Add-Failure 'Power plan real executor did not prove export/import reversible flow or exact failure evidence'
     }
 
     $standby = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId standby-memory -UserApproved)
-    if ($standby.status -eq 'helper-required' -and $standby.capabilities.readOnlyCountersImplemented -eq $true -and $standby.capabilities.oneShotClearRunnerScaffolded -eq $true -and $standby.capabilities.helperSourceExists -eq $true -and $standby.summary.nextEngineeringStep) {
-        Add-Pass 'Standby memory executor reports read-only counters and exact native helper source path'
+    if ($standby.status -eq 'helper-required' -and $standby.capabilities.readOnlyCountersImplemented -eq $true -and $standby.capabilities.oneShotClearRunnerScaffolded -eq $true -and $standby.capabilities.helperSourceExists -eq $true -and $standby.capabilities.helperBuildScriptExists -eq $true -and $standby.capabilities.helperBuildPlan.capabilities.sourceExists -eq $true -and $standby.capabilities.helperElevationCommand -and $standby.summary.nextEngineeringStep) {
+        Add-Pass 'Standby memory executor reports read-only counters, helper source, build plan, and elevation command'
     } else {
         Add-Failure 'Standby memory executor did not report expected helper contract'
+    }
+    $standbyBuildPlan = $standby.capabilities.helperBuildPlan
+    if ($standbyBuildPlan.capabilities.toolchainDetected -eq $true) {
+        $helperOutput = Join-Path $tempRoot 'standby-helper\RooStandbyMemoryHelper.exe'
+        $helperBuild = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Build-StandbyMemoryHelper.ps1') -Build -HelperOutputPath $helperOutput -TimeoutSeconds 30)
+        if ($helperBuild.status -eq 'success' -and $helperBuild.capabilities.buildSucceeded -eq $true -and $helperBuild.capabilities.helperLaunchAttempted -eq $false -and (Test-Path -LiteralPath $helperOutput)) {
+            Add-Pass 'Standby memory helper builds to a disposable temp executable when csc toolchain is present'
+        } else {
+            Add-Failure 'Standby memory helper build did not succeed despite detected csc toolchain'
+        }
+    } else {
+        if ($standbyBuildPlan.status -eq 'preview' -and $standbyBuildPlan.elevation.commandLine) {
+            Add-Pass 'Standby memory helper reports build and elevation plan when no csc toolchain is present'
+        } else {
+            Add-Failure 'Standby memory helper did not report build/elevation plan without toolchain'
+        }
     }
 
     $shaderRoot = Join-Path $tempRoot 'shader-real-readiness'

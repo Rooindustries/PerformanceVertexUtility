@@ -248,7 +248,7 @@ try {
             willEditScheduledTasks = $false
             dryRunWritesState = $false
         }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_EXECUTION_FIXTURE_ONLY' 'Cleanup execution deletes only disposable temp fixtures. Official uninstall commands are handled by the separate controlled runner behind exact allowlist and approval gates; real leftover deletion remains blocked in this fixture executor.' 'warning' 'apps.uninstallCleanupExecution' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $true 'Use fixture execution for backend validation only; use controlled runners only with exact allowlists and approval evidence.' $null))
+        warnings = @((New-RooUninstallIssue 'CLEANUP_EXECUTION_FIXTURE_ONLY' 'Cleanup execution deletes only disposable temp fixtures. Official uninstall commands are handled by the separate controlled runner behind exact allowlist and approval gates; real leftover deletion is not performed by this fixture executor.' 'warning' 'apps.uninstallCleanupExecution' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $true 'Use fixture execution for backend validation only; use controlled runners only with exact allowlists and approval evidence.' $null))
         errors = @()
         logs = @((New-RooUninstallLog 'Uninstall cleanup execution contract evaluated without launching uninstallers.'))
     }

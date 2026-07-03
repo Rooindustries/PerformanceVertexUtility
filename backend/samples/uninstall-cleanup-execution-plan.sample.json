@@ -50,7 +50,7 @@
       "required": true,
       "satisfied": true,
       "blocking": false,
-      "reason": "The backend exposes a fixture-only executor for backup and deletion validation.",
+      "reason": "The backend exposes a disposable fixture executor for backup and deletion validation.",
       "evidence": {
         "fixtureExecutorImplemented": true
       }

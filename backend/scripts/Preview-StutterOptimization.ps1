@@ -22,7 +22,7 @@ function New-StandbyMemoryContract {
         optimizationId = 'standby-memory'
         title = 'Measure memory pressure and safely clear standby memory'
         sourceRefs = @('dash-clear-standby-memory')
-        backendStatus = 'preview-only'
+        backendStatus = 'helper-contract-ready'
         dryRun = $true
         evidence = [pscustomobject]@{
             memory = $memory
@@ -33,14 +33,14 @@ function New-StandbyMemoryContract {
         proposedAction = [pscustomobject]@{
             action = 'standby-list-clear'
             applyAllowedNow = $false
-            blockedReason = 'Real standby-list clearing is system-changing and remains blocked until a dedicated executor and before/after validation are approved.'
+            approvalGate = 'Build and elevate the owned standby-memory helper, then run through Invoke-StutterOptimizationRealExecutor.ps1 with before/after counters.'
             disposableFixtureSupported = $false
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $false
             reason = 'Standby memory clear is transient and cannot be restored; only before/after evidence can be captured.'
         }
-        warnings = @((New-RooStutterIssue 'STANDBY_MEMORY_APPLY_BLOCKED' 'Standby memory clear is preview-only in this backend contract.' 'warning' 'standby-memory' $true 'Use the memory evidence to decide whether a future one-shot executor is justified.' $null))
+        warnings = @((New-RooStutterIssue 'STANDBY_MEMORY_HELPER_APPROVAL_GATED' 'Standby memory clear has an owned helper source contract and remains product approval-gated because the purge is transient.' 'warning' 'standby-memory' $true 'Build the helper and run it only through the controlled real executor with before/after evidence.' $null))
     }
 }
 
@@ -53,21 +53,21 @@ function New-TimerResolutionContract {
         optimizationId = 'timer-resolution'
         title = 'Backend-owned timer-resolution session lifecycle'
         sourceRefs = @('playbook-timer-resolution-scheduled-task','dash-timer-resolution-toggle')
-        backendStatus = 'preview-only'
+        backendStatus = 'real-executor-ready'
         dryRun = $true
         evidence = [pscustomobject]@{ timerResolution = $timer }
         proposedAction = [pscustomobject]@{
             action = 'timer-resolution-session'
             applyAllowedNow = $false
-            blockedReason = 'Timer resolution changes require an owned lifecycle process and cleanup guarantees; no timer helper is launched by validation.'
+            approvalGate = 'Invoke-StutterOptimizationRealExecutor.ps1 runs a bounded timer helper only with confirmation, user approval, and -AllowRealSystemExecution.'
             disposableFixtureSupported = $false
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $true
             restoreAction = 'stop-owned-timer-session'
-            implementedNow = $false
+            implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'TIMER_RESOLUTION_APPLY_BLOCKED' 'Timer resolution apply is blocked; only the status contract is exposed.' 'warning' 'timer-resolution' $true 'Add a dedicated owned lifecycle before enabling apply.' $null))
+        warnings = @((New-RooStutterIssue 'TIMER_RESOLUTION_APPROVAL_GATED' 'Timer resolution apply is available through the controlled bounded executor and remains approval-gated from preview.' 'warning' 'timer-resolution' $true 'Use Invoke-StutterOptimizationRealExecutor.ps1 for the bounded session path.' $null))
     }
 }
 
@@ -80,22 +80,22 @@ function New-PowerPlanContract {
         optimizationId = 'power-plan'
         title = 'Power plan import and selection with restore'
         sourceRefs = @('playbook-power-plan-import-and-selection','dash-power-plan-and-power-state-controls','winutil-config-tweaks-performance-plans')
-        backendStatus = 'preview-only'
+        backendStatus = 'real-executor-ready'
         dryRun = $true
         evidence = [pscustomobject]@{ activePowerPlan = $power }
         proposedAction = [pscustomobject]@{
             action = 'power-plan-import-or-select'
             applyAllowedNow = $false
-            blockedReason = 'Power scheme import/selection is system-changing; this contract captures restore requirements only.'
+            approvalGate = 'Invoke-StutterOptimizationRealExecutor.ps1 validates temporary export/import/select/restore/delete only with confirmation, user approval, and -AllowRealSystemExecution.'
             disposableFixtureSupported = $false
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $true
             restoreActiveSchemeGuid = Get-RooPropertyValue $power 'activeSchemeGuid' $null
             restoreRequiredBeforeApply = $true
-            implementedNow = $false
+            implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'POWER_PLAN_APPLY_BLOCKED' 'Power plan import/selection remains preview-only.' 'warning' 'power-plan' $true 'Review active scheme and laptop/thermal gates before any future apply.' $null))
+        warnings = @((New-RooStutterIssue 'POWER_PLAN_APPROVAL_GATED' 'Power plan import/selection is available through the controlled temporary scheme executor and remains approval-gated from preview.' 'warning' 'power-plan' $true 'Review active scheme and laptop/thermal gates before invoking the reversible executor.' $null))
     }
 }
 
@@ -107,7 +107,7 @@ function New-ShaderCacheContract {
         optimizationId = 'shader-cache-cleanup'
         title = 'Game-aware shader cache cleanup'
         sourceRefs = @('dash-shader-cache-cleanup')
-        backendStatus = 'fixture-apply-ready'
+        backendStatus = 'real-planner-and-fixture-ready'
         dryRun = $true
         evidence = [pscustomobject]@{
             shaderCacheRoot = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $null } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
@@ -119,14 +119,14 @@ function New-ShaderCacheContract {
             action = 'shader-cache-backup-and-delete'
             applyAllowedNow = $false
             disposableFixtureSupported = $true
-            blockedReason = 'Real shader-cache deletion remains blocked; fixture apply is available only under a temp root with confirmation.'
+            approvalGate = 'Real-path planning exists; deletion uses the same backup/delete/restore engine only after exact target approval. Disposable fixture apply remains available under temp roots.'
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $true
             rollbackActionId = 'performance.stutterOptimization.restoreShaderCacheFixture'
             backupRequiredBeforeDelete = $true
         }
-        warnings = @((New-RooStutterIssue 'SHADER_CACHE_REAL_APPLY_BLOCKED' 'Shader cache cleanup can be applied only to disposable temp fixtures in this backend validation.' 'warning' 'shader-cache-cleanup' $true 'Use Invoke-StutterOptimization.ps1 with -AllowDisposableFixtureApply for fixture proof only.' $null))
+        warnings = @((New-RooStutterIssue 'SHADER_CACHE_APPROVAL_GATED' 'Shader cache cleanup has real-path planning and disposable-fixture apply; real user cache deletion remains approval-gated.' 'warning' 'shader-cache-cleanup' $true 'Use the controlled real executor only with exact target approval and rollback evidence.' $null))
     }
 }
 
@@ -138,7 +138,7 @@ function New-ServicePauseContract {
         optimizationId = 'service-pause-preview'
         title = 'Time-boxed service pause preview with strict allowlist'
         sourceRefs = @('dash-pause-non-essential-services')
-        backendStatus = 'preview-only'
+        backendStatus = 'service-runner-layer-ready'
         dryRun = $true
         evidence = [pscustomobject]@{
             serviceInventoryPath = if ([string]::IsNullOrWhiteSpace($ServiceInventoryPath)) { $null } else { Resolve-RooPath $ServiceInventoryPath $ServiceInventoryPath }
@@ -149,15 +149,15 @@ function New-ServicePauseContract {
         proposedAction = [pscustomobject]@{
             action = 'service-pause-session'
             applyAllowedNow = $false
-            blockedReason = 'Service pause is preview-only until dependency graph, state backup, and restore failure validation exist.'
+            approvalGate = 'Invoke-StutterOptimizationRealExecutor.ps1 provides service analysis and shim-validated backup/pause/restore sequencing; real services require exact service allowlist approval.'
             disposableFixtureSupported = $false
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $true
             stateBackupRequired = $true
-            implementedNow = $false
+            implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'SERVICE_PAUSE_APPLY_BLOCKED' 'Service pause is preview-only; no service control command is called.' 'warning' 'service-pause-preview' $true 'Keep this as candidate explanation until restore tests cover dependency failures.' $null))
+        warnings = @((New-RooStutterIssue 'SERVICE_PAUSE_APPROVAL_GATED' 'Service pause has a controlled runner layer and remains approval-gated for real services.' 'warning' 'service-pause-preview' $true 'Require exact service allowlist, dependency review, backup, and restore evidence before pausing real services.' $null))
     }
 }
 
@@ -189,6 +189,8 @@ try {
             contractCount = $contractArray.Count
             realApplyAllowedCount = @($contractArray | Where-Object { $_.proposedAction.applyAllowedNow -eq $true }).Count
             fixtureApplyReadyCount = @($contractArray | Where-Object { $_.proposedAction.disposableFixtureSupported -eq $true }).Count
+            controlledExecutorReadyCount = @($contractArray | Where-Object { [string]$_.backendStatus -in @('real-executor-ready','real-planner-and-fixture-ready','service-runner-layer-ready') }).Count
+            helperContractReadyCount = @($contractArray | Where-Object { [string]$_.backendStatus -eq 'helper-contract-ready' }).Count
             willChangeSystem = $false
             willLaunchUtilities = $false
             willWriteState = $false
@@ -217,4 +219,3 @@ try {
     Write-RooJsonOutput $errorResult $OutputPath
     exit 1
 }
-
