@@ -92,7 +92,7 @@ try {
     }
 
     $success = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $exportPath -AllowReadOnlyNvpiProbe -PreserveProbeArtifacts)
-    if ($success.status -eq 'success' -and $success.capabilities.realNvpiProcessRunnerImplemented -eq $true -and $success.capabilities.realNvpiHelpProbeAttempted -eq $true -and $success.capabilities.realNvpiExportProbeAttempted -eq $true -and $success.capabilities.realNvpiExportSucceeded -eq $true -and $success.capabilities.realNvpiImportAttempted -eq $false -and $success.summary.focusStealPrevented -eq $true -and $success.summary.stdoutCaptured -eq $true -and $success.summary.stderrCaptured -eq $true -and (Test-Path -LiteralPath $exportPath)) {
+    if ($success.status -eq 'success' -and $success.capabilities.realNvpiProcessRunnerImplemented -eq $true -and $success.capabilities.elevationHelperExists -eq $true -and $success.capabilities.realNvpiHelpProbeAttempted -eq $true -and $success.capabilities.realNvpiExportProbeAttempted -eq $true -and $success.capabilities.realNvpiExportSucceeded -eq $true -and $success.capabilities.realNvpiImportAttempted -eq $false -and $success.summary.focusStealPrevented -eq $true -and $success.summary.stdoutCaptured -eq $true -and $success.summary.stderrCaptured -eq $true -and (Test-Path -LiteralPath $exportPath)) {
         Add-Pass 'NVIDIA capability probe runs real hidden process help/export checks and captures stdout/stderr without import'
     } else {
         Add-Failure 'NVIDIA capability probe did not prove real hidden help/export capability'
@@ -101,7 +101,7 @@ try {
     $outsidePath = Join-Path $repoRoot 'not-temp-export.nip'
     $blockedPath = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $outsidePath -AllowReadOnlyNvpiProbe)
     $tempGate = @($blockedPath.gates | Where-Object { $_.gateId -eq 'export-path-temp' }) | Select-Object -First 1
-    if ($blockedPath.status -eq 'blocked' -and $tempGate.blocking -eq $true -and $blockedPath.summary.processRunnerInvoked -eq $false) {
+    if ($blockedPath.status -eq 'approval-or-input-required' -and $tempGate.blocking -eq $true -and $blockedPath.summary.processRunnerInvoked -eq $false) {
         Add-Pass 'NVIDIA capability probe blocks export paths outside temp'
     } else {
         Add-Failure 'NVIDIA capability probe did not block unsafe export path'
@@ -109,7 +109,7 @@ try {
 
     $timeoutExportPath = Join-Path $tempRoot 'timeout-export.nip'
     $timeout = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $timeoutShimExe -ExportPath $timeoutExportPath -AllowReadOnlyNvpiProbe -TimeoutSeconds 1 -PreserveProbeArtifacts)
-    if ($timeout.status -in @('success','capability-limited') -and $timeout.summary.timeoutCount -ge 1 -and $timeout.summary.noImportAttempted -eq $true -and $timeout.summary.focusStealPrevented -eq $true) {
+    if ($timeout.status -in @('success','probe-incomplete','cli-unsupported') -and $timeout.summary.timeoutCount -ge 1 -and $timeout.summary.noImportAttempted -eq $true -and $timeout.summary.focusStealPrevented -eq $true) {
         Add-Pass 'NVIDIA capability probe captures timeout evidence without attempting import'
     } else {
         Add-Failure 'NVIDIA capability probe did not capture timeout evidence'

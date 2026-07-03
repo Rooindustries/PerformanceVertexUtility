@@ -2,7 +2,9 @@ param(
     [ValidateSet('standby-memory','timer-resolution','power-plan','shader-cache-cleanup','service-pause-preview')]
     [string]$OptimizationId,
     [string]$ShaderCacheRoot = '',
+    [string]$BackupRoot = '',
     [string[]]$ServiceName = @(),
+    [string]$ServiceShimPath = '',
     [uint32]$TimerPeriodMilliseconds = 1,
     [int]$TimerDurationMilliseconds = 250,
     [int]$TimeoutSeconds = 15,
@@ -72,7 +74,7 @@ function Get-ServiceReadiness {
 
 try {
     $realRequested = [bool]$AllowRealSystemExecution
-    $requiresRealFlag = ($OptimizationId -in @('timer-resolution','power-plan'))
+    $requiresRealFlag = ($OptimizationId -in @('timer-resolution','power-plan') -or (-not [string]::IsNullOrWhiteSpace($ServiceShimPath)) -or ($OptimizationId -eq 'shader-cache-cleanup' -and [bool]$ConfirmApply))
     $gates = @(
         (New-RooBackendExecutorGate 'explicit-user-approval' 'Explicit approval evidence captured' $true ([bool]$UserApproved) 'Real/detection stutter executor requires user approval evidence for this validation.' $null),
         (New-RooBackendExecutorGate 'real-system-flag' 'Real system execution flag supplied when needed' $requiresRealFlag ((-not $requiresRealFlag) -or $realRequested) 'Timer and power plan reversible sessions require -AllowRealSystemExecution.' ([pscustomobject]@{ optimizationId = $OptimizationId })),
@@ -148,39 +150,74 @@ try {
         'standby-memory' {
             $before = Get-StandbyMemorySnapshot
             $after = Get-StandbyMemorySnapshot
+            $helperSourcePath = Resolve-RooPath '' (Join-Path $PSScriptRoot '..\native\StandbyMemoryHelper\RooStandbyMemoryHelper.cs')
             $sequence.Add([pscustomobject]@{ order = 1; step = 'standby-memory-readonly-counters'; before = $before; after = $after; completed = $true }) | Out-Null
-            $status = 'capability-limited'
+            $status = 'helper-required'
             $capability.readOnlyCountersImplemented = $true
             $capability.oneShotClearRunnerScaffolded = $true
-            $capability.executionRequires = 'Administrator rights plus a signed/native helper that can call NtSetSystemInformation(SystemMemoryListInformation) or an approved EmptyStandbyList-equivalent API.'
-            $nextStep = 'Build and sign a native helper for SystemMemoryListInformation standby-list purge, then keep it behind approval and before/after counter capture.'
+            $capability.helperSourcePath = $helperSourcePath
+            $capability.helperSourceExists = (Test-Path -LiteralPath $helperSourcePath -PathType Leaf)
+            $capability.executionRequires = 'Build this helper source as an elevated/admin executable, then launch it behind exact path, approval, and before/after counter gates.'
+            $nextStep = "Build and sign the native helper source at $helperSourcePath, then run the executable elevated behind approval and before/after counter capture."
         }
         'shader-cache-cleanup' {
             $root = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { Join-Path $env:LOCALAPPDATA 'NVIDIA' } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
-            $items = @(Get-RooStutterShaderCacheItems $root)
-            $plan = @($items | ForEach-Object {
-                [pscustomobject]@{
-                    itemId = Get-RooPropertyValue $_ 'itemId' ''
-                    source = Get-RooPropertyValue $_ 'path' ''
-                    relativePath = Get-RooPropertyValue $_ 'relativePath' ''
-                    backupPathPreview = Join-Path '<approved-backup-root>' ([string](Get-RooPropertyValue $_ 'relativePath' ''))
-                    deleteWouldUseFixturePlanner = $true
+            if ($ConfirmApply -and $AllowRealSystemExecution -and (Test-RooStutterPathInsideTemp $root)) {
+                $applyParams = @{
+                    OptimizationId = 'shader-cache-cleanup'
+                    ShaderCacheRoot = $root
+                    ConfirmApply = $true
+                    AllowDisposableFixtureApply = $true
                 }
-            })
-            $sequence.Add([pscustomobject]@{ order = 1; step = 'shader-cache-real-path-readiness-plan'; root = $root; itemCount = $items.Count; plan = $plan; completed = $true }) | Out-Null
-            $status = 'success'
+                if (-not [string]::IsNullOrWhiteSpace($BackupRoot)) { $applyParams['BackupRoot'] = $BackupRoot }
+                $applyOutput = & (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') @applyParams
+                $applyResult = ($applyOutput -join [Environment]::NewLine) | ConvertFrom-Json
+                $status = [string](Get-RooPropertyValue $applyResult 'status' 'failed')
+                $sequence.Add([pscustomobject]@{ order = 1; step = 'shader-cache-approved-delete-path'; root = $root; result = $applyResult; completed = ($status -eq 'success') }) | Out-Null
+                $capability.approvalGatedDeletePathExecuted = ($status -eq 'success')
+                $capability.rollbackManifestPath = Get-RooPropertyValue (Get-RooPropertyValue $applyResult 'rollback' $null) 'rollbackManifestPath' $null
+                $nextStep = 'Use the same backup/delete/restore engine for real shader cache deletion only after exact target allowlist and user approval.'
+            } else {
+                $items = @(Get-RooStutterShaderCacheItems $root)
+                $plan = @($items | ForEach-Object {
+                    [pscustomobject]@{
+                        itemId = Get-RooPropertyValue $_ 'itemId' ''
+                        source = Get-RooPropertyValue $_ 'path' ''
+                        relativePath = Get-RooPropertyValue $_ 'relativePath' ''
+                        backupPathPreview = Join-Path '<approved-backup-root>' ([string](Get-RooPropertyValue $_ 'relativePath' ''))
+                        deleteWouldUseFixturePlanner = $true
+                    }
+                })
+                $sequence.Add([pscustomobject]@{ order = 1; step = 'shader-cache-real-path-readiness-plan'; root = $root; itemCount = $items.Count; plan = $plan; completed = $true }) | Out-Null
+                $status = 'success'
+                $capability.approvalGatedDeletePathExecuted = $false
+                $nextStep = 'Require exact target allowlist, approved backup root, and rollback manifest before enabling real shader-cache deletion.'
+            }
             $capability.realPathPlannerImplemented = $true
             $capability.realDeletionAttempted = $false
             $capability.sameBackupDeleteRestorePlanner = $true
-            $nextStep = 'Require exact target allowlist, approved backup root, and rollback manifest before enabling real shader-cache deletion.'
         }
         'service-pause-preview' {
             $records = Get-ServiceReadiness $ServiceName
             $sequence.Add([pscustomobject]@{ order = 1; step = 'service-status-dependency-analysis'; services = $records; completed = $true }) | Out-Null
-            $status = 'success'
+            $serviceRunnerOk = $true
+            if (-not [string]::IsNullOrWhiteSpace($ServiceShimPath) -and $canRunReal) {
+                $order = 2
+                foreach ($svc in @(Get-RooArray $ServiceName)) {
+                    foreach ($verb in @('service-backup','service-pause','service-restore')) {
+                        $shimResult = Invoke-RooBackendPowerShellShim -ShimPath $ServiceShimPath -Arguments @($verb, [string]$svc) -TimeoutSeconds $TimeoutSeconds
+                        $ok = ((-not [bool](Get-RooPropertyValue $shimResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $shimResult 'exitCode' -1) -eq 0)
+                        if (-not $ok) { $serviceRunnerOk = $false }
+                        $sequence.Add([pscustomobject]@{ order = $order; step = $verb; serviceName = [string]$svc; result = $shimResult; completed = $ok }) | Out-Null
+                        $order++
+                    }
+                }
+            }
+            $status = if ($serviceRunnerOk) { 'success' } else { 'failed' }
             $capability.serviceAnalyzerImplemented = $true
             $capability.realPauseRunnerLayerReady = $true
             $capability.realPauseAttempted = $false
+            $capability.serviceShimRunnerExecuted = (-not [string]::IsNullOrWhiteSpace($ServiceShimPath) -and $canRunReal)
             $nextStep = 'Require exact service allowlist, dependency review, and approval before running pause/restore against real services.'
         }
     }

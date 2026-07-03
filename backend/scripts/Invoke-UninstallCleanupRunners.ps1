@@ -5,6 +5,9 @@ param(
     [string]$ExecutorMode = 'Preview',
     [string]$MockUninstallerShimPath = '',
     [string]$MockDeletionShimPath = '',
+    [string]$AllowedOfficialExecutablePath = '',
+    [string]$OfficialRunnerWorkingDirectory = '',
+    [string]$CancellationSignalPath = '',
     [string[]]$ExactTargetAllowlist = @(),
     [string]$RollbackManifestPath = '',
     [int]$TimeoutSeconds = 30,
@@ -58,6 +61,21 @@ function Invoke-MockCleanupRunner {
     return Invoke-RooBackendPowerShellShim -ShimPath $ShimPath -Arguments $Arguments -TimeoutSeconds $Timeout
 }
 
+function Get-OfficialRunnerArguments {
+    param([object]$Command)
+    $value = Get-RooUninstallPropertyValue $Command 'arguments' $null
+    if ($null -eq $value) { return @() }
+    if ($value -is [System.Array]) { return @($value | ForEach-Object { [string]$_ }) }
+    return @([string]$value)
+}
+
+function Test-RunnerPathInsideTemp {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $true }
+    $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    return [System.IO.Path]::GetFullPath($Path).StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 try {
     $officialPreview = Resolve-RunnerJsonInput $OfficialPreviewPath 'Official preview'
     $cleanupManifest = Resolve-RunnerJsonInput $CleanupManifestPath 'Cleanup manifest'
@@ -71,6 +89,12 @@ try {
     $executeRequested = ($ExecutorMode -ne 'Preview')
     $mockUninstallerPresent = (-not [string]::IsNullOrWhiteSpace($MockUninstallerShimPath) -and (Test-Path -LiteralPath (Resolve-RooPath $MockUninstallerShimPath $MockUninstallerShimPath)))
     $mockDeletionPresent = (-not [string]::IsNullOrWhiteSpace($MockDeletionShimPath) -and (Test-Path -LiteralPath (Resolve-RooPath $MockDeletionShimPath $MockDeletionShimPath)))
+    $commandExecutable = if ($command) { Resolve-RooUninstallPath ([string](Get-RooUninstallPropertyValue $command 'executable' '')) ([string](Get-RooUninstallPropertyValue $command 'executable' '')) } else { '' }
+    $allowedOfficialExecutable = if ([string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath)) { '' } else { Resolve-RooUninstallPath $AllowedOfficialExecutablePath $AllowedOfficialExecutablePath }
+    $officialRunnerWorkingDirectory = if ([string]::IsNullOrWhiteSpace($OfficialRunnerWorkingDirectory)) { '' } else { [System.IO.Path]::GetFullPath($OfficialRunnerWorkingDirectory) }
+    $officialExecutableAllowlisted = (-not [string]::IsNullOrWhiteSpace($commandExecutable) -and -not [string]::IsNullOrWhiteSpace($allowedOfficialExecutable) -and [System.IO.Path]::GetFullPath($commandExecutable).Equals([System.IO.Path]::GetFullPath($allowedOfficialExecutable), [System.StringComparison]::OrdinalIgnoreCase))
+    $cancellationRequested = (-not [string]::IsNullOrWhiteSpace($CancellationSignalPath) -and (Test-Path -LiteralPath (Resolve-RooUninstallPath $CancellationSignalPath $CancellationSignalPath)))
+    $workingDirectorySafe = Test-RunnerPathInsideTemp $officialRunnerWorkingDirectory
     $exactTargetsApproved = Test-ExactTargetAllowlist $items $ExactTargetAllowlist
 
     $gates = @(
@@ -86,7 +110,10 @@ try {
         (New-RooBackendExecutorGate 'mock-uninstaller-shim-present' 'Mock uninstaller shim present' $mockMode ((-not $mockMode) -or $mockUninstallerPresent) 'Mock official uninstaller validation requires a shim path.' ([pscustomobject]@{ mockUninstallerShimPath = $MockUninstallerShimPath })),
         (New-RooBackendExecutorGate 'mock-deletion-shim-present' 'Mock leftover deletion shim present' $mockMode ((-not $mockMode) -or $mockDeletionPresent) 'Mock leftover deletion validation requires a shim path.' ([pscustomobject]@{ mockDeletionShimPath = $MockDeletionShimPath })),
         (New-RooBackendExecutorGate 'real-system-explicit-flag' 'Real-system explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealSystemExecution) 'Real uninstall and cleanup runners require -AllowRealSystemExecution beyond confirmation.' $null),
-        (New-RooBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $false 'Real official uninstall and real leftover deletion are intentionally not implemented in this validation build.' $null)
+        (New-RooBackendExecutorGate 'official-executable-allowlist' 'Official executable exactly allowlisted' $realMode ((-not $realMode) -or $officialExecutableAllowlisted) 'Real runner mode requires the preview command executable to match the exact allowlist path.' ([pscustomobject]@{ commandExecutable = $commandExecutable; allowedOfficialExecutablePath = $allowedOfficialExecutable })),
+        (New-RooBackendExecutorGate 'official-runner-working-directory-safe' 'Official runner working directory isolated' $realMode ((-not $realMode) -or $workingDirectorySafe) 'Official runner working directory must be empty or under temp during validation.' ([pscustomobject]@{ workingDirectory = $officialRunnerWorkingDirectory })),
+        (New-RooBackendExecutorGate 'cancellation-not-requested' 'Cancellation signal absent' $realMode ((-not $realMode) -or -not $cancellationRequested) 'Cancellation signal prevents official runner start.' ([pscustomobject]@{ cancellationSignalPath = $CancellationSignalPath })),
+        (New-RooBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $true 'Real runner path is implemented behind exact executable, approval, backup/export, timeout, cancellation, and log-capture gates.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canExecute = ($blockingGates.Count -eq 0)
@@ -142,6 +169,22 @@ try {
                 reason = 'Official uninstall runner failed or timed out; leftover deletion runners were not attempted.'
             }) | Out-Null
         }
+    } elseif ($canExecute -and $realMode) {
+        $officialArgs = Get-OfficialRunnerArguments $command
+        $officialResult = Invoke-RooBackendHiddenProcess -FilePath $commandExecutable -Arguments $officialArgs -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $officialRunnerWorkingDirectory
+        $uninstallCompleted = ((-not [bool](Get-RooPropertyValue $officialResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $officialResult 'exitCode' -1) -eq 0)
+        if (-not $uninstallCompleted) { $status = 'failed' }
+        $sequence.Add([pscustomobject]@{
+            order = 1
+            runner = 'official-uninstaller'
+            runnerMode = 'real-controlled-process'
+            appId = [string](Get-RooUninstallPropertyValue $command 'appId' '')
+            rawCommand = Get-RooUninstallPropertyValue $command 'rawCommand' $null
+            executable = $commandExecutable
+            arguments = @($officialArgs)
+            result = $officialResult
+            completed = $uninstallCompleted
+        }) | Out-Null
     }
 
     $runs = @($sequence.ToArray())
@@ -185,24 +228,27 @@ try {
             officialUninstallerRunnerImplemented = $true
             leftoverDeletionRunnerImplemented = $true
             mockRunnerImplemented = $true
-            realSystemRunnerImplemented = $false
+            realSystemRunnerImplemented = $true
+            realRunnerRequiresExactExecutableAllowlist = $true
+            realAppUninstallPreventedByAllowlist = $true
             fixtureDeletionStillSupported = $true
         }
         summary = [pscustomobject]@{
             willRunMockRunner = ($canExecute -and $mockMode)
-            willRunRealUninstaller = $false
+            willRunRealUninstaller = ($canExecute -and $realMode)
             willDeleteRealLeftovers = $false
             officialRunnerAttempted = @($runs | Where-Object { $_.runner -eq 'official-uninstaller' }).Count -gt 0
             officialRunnerCompleted = $uninstallCompleted
             leftoverRunnerAttemptedCount = @($runs | Where-Object { $_.runner -eq 'leftover-deletion' -and -not $_.skipped }).Count
             leftoverRunnerCompletedCount = @($runs | Where-Object { $_.runner -eq 'leftover-deletion' -and $_.completed -eq $true }).Count
             leftoverRunnerSkippedUntilOfficialUninstallSucceeded = @($runs | Where-Object { $_.runner -eq 'leftover-deletion' -and $_.skipped }).Count -gt 0
+            cancellationRequested = $cancellationRequested
             timeoutCount = @($runs | Where-Object { $_.result.timedOut -eq $true }).Count
             nonZeroExitCount = @($runs | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count
             focusStealPrevented = (@($runs | Where-Object { $_.result.invocation.focusStealPrevented -eq $false }).Count -eq 0)
             blockingGateCount = $blockingGates.Count
         }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_RUNNERS_CONTROLLED' 'Cleanup runner abstraction evaluated with mock or blocked real-system gates.' 'info' 'apps.uninstallCleanupRunners' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $false 'Use mock runners for validation; use fixture executor for disposable live deletion.' $null))
+        warnings = @((New-RooUninstallIssue 'CLEANUP_RUNNERS_CONTROLLED' 'Cleanup runner abstraction evaluated with mock runners or the real controlled official process runner.' 'info' 'apps.uninstallCleanupRunners' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $false 'Use exact executable allowlists and backup/export evidence before real runner mode.' $null))
         errors = @()
         logs = @((New-RooUninstallLog 'Uninstall cleanup runner abstraction completed.'))
     }

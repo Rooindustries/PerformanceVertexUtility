@@ -50,7 +50,8 @@
   ],
   "capabilities": {
     "fixtureExecutorImplemented": true,
-    "realSystemExecutorImplemented": false,
+    "realSystemExecutorImplemented": true,
+    "canRunAllowlistedOfficialCommand": true,
     "canRunUninstallers": false,
     "canDeleteFixtureFiles": true,
     "canDeleteRealFiles": false,
@@ -74,4 +75,3 @@
   "warnings": [],
   "errors": []
 }
-

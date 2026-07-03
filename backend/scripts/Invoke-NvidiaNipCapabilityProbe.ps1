@@ -94,21 +94,30 @@ try {
     $timeoutCount = @($runArray | Where-Object { $_.result.timedOut -eq $true }).Count
     $nonZeroExitCount = @($runArray | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count
 
+    $startErrors = @($runArray | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'startError' '')) } | ForEach-Object { [string](Get-RooPropertyValue $_.result 'startError' '') })
+    $elevationRequired = (@($startErrors | Where-Object { $_ -match 'requires elevation|elevation|access is denied' }).Count -gt 0)
+    $cliUnsupported = ($canProbe -and -not $exportSucceeded -and -not $elevationRequired -and (@($runArray | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count -gt 0))
     $status = if (-not $canProbe) {
-        if ($AllowReadOnlyNvpiProbe) { 'blocked' } else { 'preview' }
+        if ($AllowReadOnlyNvpiProbe) { 'approval-or-input-required' } else { 'preview' }
     } elseif ($exportSucceeded) {
         'success'
+    } elseif ($elevationRequired) {
+        'requires-elevation'
+    } elseif ($cliUnsupported) {
+        'cli-unsupported'
     } else {
-        'capability-limited'
+        'probe-incomplete'
     }
 
-    $startErrors = @($runArray | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'startError' '')) } | ForEach-Object { [string](Get-RooPropertyValue $_.result 'startError' '') })
+    $elevationHelperPath = Join-Path $PSScriptRoot 'Invoke-NvidiaNipElevatedReadOnlyProbeHelper.ps1'
     $nextStep = if ($exportSucceeded) {
         'Use this runner layer for export-before-import validation; keep -importProfile behind future explicit approval.'
     } elseif (-not $toolExists) {
         'Provide a valid NVIDIA Profile Inspector executable path and rerun the read-only probe.'
-    } elseif (@($startErrors | Where-Object { $_ -match 'requires elevation|elevation|access is denied' }).Count -gt 0) {
-        'Run the read-only NVPI capability probe from an elevated backend helper or adjust the NVPI executable manifest/ACL so help/export probes can start without UI focus.'
+    } elseif ($elevationRequired) {
+        "Run the read-only NVPI capability probe through the elevated helper path: $elevationHelperPath"
+    } elseif ($cliUnsupported) {
+        'The NVPI executable started but the CLI probe did not support the expected help/export flags; inspect captured stdout/stderr/exit codes and update the CLI adapter.'
     } else {
         'Inspect captured help/export stdout, stderr, exit code, and timeout evidence; update NVPI CLI arguments if this NVPI build uses different flags.'
     }
@@ -134,6 +143,10 @@ try {
             realNvpiExportSucceeded = $exportSucceeded
             realNvpiImportImplementedButGated = $true
             realNvpiImportAttempted = $false
+            elevationHelperPath = $elevationHelperPath
+            elevationHelperExists = (Test-Path -LiteralPath $elevationHelperPath -PathType Leaf)
+            elevationRequired = $elevationRequired
+            cliUnsupported = $cliUnsupported
         }
         summary = [pscustomobject]@{
             processRunnerInvoked = ($runArray.Count -gt 0)

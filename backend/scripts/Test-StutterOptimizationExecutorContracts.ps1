@@ -140,12 +140,12 @@ try {
         Add-Failure 'Stutter executor fixture rollback did not restore disposable shader cache files'
     }
 
-    $blockedReal = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationExecutor.ps1') -OptimizationId standby-memory -ExecutorMode Real -ConfirmApply -UserApproved -BackupCompleted -AllowRealSystemExecution)
-    $realGate = @($blockedReal.gates | Where-Object { $_.gateId -eq 'real-system-runner-implemented' }) | Select-Object -First 1
-    if ($blockedReal.status -eq 'blocked' -and $realGate.blocking -eq $true -and $blockedReal.capabilities.realSystemRunnerImplemented -eq $false -and $blockedReal.summary.willRunRealSystemAction -eq $false) {
-        Add-Pass 'Stutter executor real system actions remain blocked by design even with explicit flag'
+    $realRun = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationExecutor.ps1') -OptimizationId standby-memory -ExecutorMode Real -ConfirmApply -UserApproved -BackupCompleted -AllowRealSystemExecution)
+    $realGate = @($realRun.gates | Where-Object { $_.gateId -eq 'real-system-runner-implemented' }) | Select-Object -First 1
+    if ($realRun.status -ne 'blocked' -and $realGate.satisfied -eq $true -and $realRun.capabilities.realSystemRunnerImplemented -eq $true -and $realRun.summary.willRunRealSystemAction -eq $true) {
+        Add-Pass 'Stutter executor real mode delegates to implemented per-action real executor'
     } else {
-        Add-Failure 'Stutter executor real system action was not blocked by design'
+        Add-Failure 'Stutter executor real mode did not delegate to implemented per-action executor'
     }
 
     $mockEntries = Read-MockLog $mockLog

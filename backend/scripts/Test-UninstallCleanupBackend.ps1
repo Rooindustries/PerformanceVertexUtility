@@ -188,16 +188,16 @@ try {
 try {
     $planOutput = & (Join-Path $PSScriptRoot 'New-UninstallCleanupExecutionPlan.ps1') -OfficialPreviewPath $sampleOfficialPreview -CleanupManifestPath $sampleCleanupManifest
     $plan = ($planOutput -join [Environment]::NewLine) | ConvertFrom-Json
-    if ($plan.dryRun -eq $true -and $plan.executionMode -eq 'guarded-fixture-ready' -and $plan.capabilities.fixtureExecutorImplemented -eq $true -and $plan.capabilities.realSystemExecutorImplemented -eq $false -and $plan.capabilities.canRunUninstallers -eq $false -and $plan.capabilities.canDeleteLeftovers -eq $false -and $plan.summary.executionReady -eq $false) {
-        Add-Pass 'Uninstall cleanup execution plan is fixture-executor ready while real uninstall and real cleanup remain blocked'
+    if ($plan.dryRun -eq $true -and $plan.executionMode -eq 'guarded-fixture-ready' -and $plan.capabilities.fixtureExecutorImplemented -eq $true -and $plan.capabilities.realSystemExecutorImplemented -eq $true -and $plan.capabilities.canRunAllowlistedOfficialCommand -eq $true -and $plan.capabilities.canRunUninstallers -eq $false -and $plan.capabilities.canDeleteLeftovers -eq $false -and $plan.summary.executionReady -eq $false) {
+        Add-Pass 'Uninstall cleanup execution plan is fixture-ready and exposes the controlled allowlisted runner'
     } else {
         Add-Failure 'Uninstall cleanup execution plan reported executable state'
     }
     $policyGate = @($plan.gates | Where-Object { $_.gateId -eq 'policy-confirmed-execution-enabled' }) | Select-Object -First 1
     $backupGate = @($plan.gates | Where-Object { $_.gateId -eq 'backup-exports-complete' }) | Select-Object -First 1
     $realExecutorGate = @($plan.gates | Where-Object { $_.gateId -eq 'real-system-executor-implemented' }) | Select-Object -First 1
-    if ($policyGate.blocking -eq $true -and $backupGate.blocking -eq $true -and $realExecutorGate.blocking -eq $true -and $plan.summary.disposableFixtureExecutionReady -eq $true) {
-        Add-Pass 'Execution plan exposes blocking real-system policy, executor, and backup gates while fixture validation is ready'
+    if ($policyGate.blocking -eq $true -and $backupGate.blocking -eq $true -and $realExecutorGate.satisfied -eq $true -and $realExecutorGate.blocking -eq $false -and $plan.summary.disposableFixtureExecutionReady -eq $true -and $plan.summary.allowlistedOfficialRunnerReady -eq $true) {
+        Add-Pass 'Execution plan exposes blocking real-system policy and backup gates while controlled runner and fixture validation are ready'
     } else {
         Add-Failure 'Execution plan did not expose expected blocking gates'
     }

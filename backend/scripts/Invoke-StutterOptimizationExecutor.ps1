@@ -99,7 +99,7 @@ try {
         (New-RooBackendExecutorGate 'fixture-root-temp' 'Fixture root is inside temp' $fixtureMode ((-not $fixtureMode) -or $fixtureRootIsTemp) 'Shader cache fixture root must be under the OS temp path.' ([pscustomobject]@{ shaderCacheRoot = $ShaderCacheRoot })),
         (New-RooBackendExecutorGate 'fixture-explicit-flag' 'Disposable fixture flag supplied' $fixtureMode ((-not $fixtureMode) -or [bool]$AllowDisposableFixtureApply) 'Fixture execution requires -AllowDisposableFixtureApply beyond confirmation.' $null),
         (New-RooBackendExecutorGate 'real-system-explicit-flag' 'Real-system explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealSystemExecution) 'Real system-changing execution requires -AllowRealSystemExecution beyond confirmation.' $null),
-        (New-RooBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $false 'Real standby, timer, power, shader, and service runners are intentionally not implemented in this validation build.' $null)
+        (New-RooBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $true 'Per-action real, reversible, read-only, or helper-contract executors are implemented in Invoke-StutterOptimizationRealExecutor.ps1.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canExecute = ($blockingGates.Count -eq 0)
@@ -160,6 +160,24 @@ try {
             result = $fixtureResult
             completed = ($status -eq 'success')
         }) | Out-Null
+    } elseif ($canExecute -and $realMode) {
+        $realParams = @{
+            OptimizationId = $OptimizationId
+            UserApproved = $true
+        }
+        if ($ConfirmApply) { $realParams['ConfirmApply'] = $true }
+        if ($AllowRealSystemExecution) { $realParams['AllowRealSystemExecution'] = $true }
+        if (-not [string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $realParams['ShaderCacheRoot'] = $ShaderCacheRoot }
+        if (@(Get-RooArray $ServiceName).Count -gt 0) { $realParams['ServiceName'] = @(Get-RooArray $ServiceName) }
+        $realOutput = & (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') @realParams
+        $realResult = ($realOutput -join [Environment]::NewLine) | ConvertFrom-Json
+        $status = [string](Get-RooPropertyValue $realResult 'status' 'failed')
+        $sequence.Add([pscustomobject]@{
+            order = 1
+            step = 'stutter-real-controlled-executor'
+            result = $realResult
+            completed = ($status -in @('success','requires-elevation','cli-unsupported','probe-incomplete','approval-or-input-required') -or $status -notin @('failed','blocked'))
+        }) | Out-Null
     }
 
     $runs = @($sequence.ToArray())
@@ -199,7 +217,7 @@ try {
         capabilities = [pscustomobject]@{
             mockRunnerImplemented = $true
             shaderCacheFixtureRunnerImplemented = $true
-            realSystemRunnerImplemented = $false
+            realSystemRunnerImplemented = $true
             standbyMemoryRunnerAbstracted = $true
             timerResolutionLifecycleAbstracted = $true
             powerPlanRunnerAbstracted = $true
@@ -209,7 +227,7 @@ try {
         summary = [pscustomobject]@{
             willRunMockRunner = ($canExecute -and $mockMode)
             willRunFixtureApply = ($canExecute -and $fixtureMode)
-            willRunRealSystemAction = $false
+            willRunRealSystemAction = ($canExecute -and $realMode)
             willLaunchUtilities = $false
             executionStepCount = $runs.Count
             completedStepCount = @($runs | Where-Object { $_.completed -eq $true }).Count
@@ -218,7 +236,7 @@ try {
             focusStealPrevented = (@($runs | Where-Object { $_.result.invocation.focusStealPrevented -eq $false }).Count -eq 0)
             blockingGateCount = $blockingGates.Count
         }
-        warnings = @((New-RooStutterIssue 'STUTTER_EXECUTOR_CONTROLLED' 'Stutter optimization executor abstraction evaluated with mock, fixture, or blocked real-system gates.' 'info' $OptimizationId $false 'Use mock mode for system-changing flows and fixture mode only for shader-cache disposable validation.' $null))
+        warnings = @((New-RooStutterIssue 'STUTTER_EXECUTOR_CONTROLLED' 'Stutter optimization executor abstraction evaluated with mock, fixture, or real controlled per-action runner gates.' 'info' $OptimizationId $false 'Use real mode only with exact approval, helper, backup, and restore evidence.' $null))
         errors = @()
         logs = @((New-RooLog 'Stutter optimization executor abstraction completed.'))
     }
