@@ -1,0 +1,278 @@
+{
+  "schemaVersion": 1,
+  "family": "system-optimizations",
+  "routes": [
+    {
+      "capabilityId": "system-optimizations.standby-memory",
+      "preview": {
+        "script": "backend/scripts/Preview-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "standby-memory"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "helper packaging pending",
+        "nextRequiredStep": "Run Build-StandbyMemoryHelper.ps1, then package the helper with an elevated launch manifest."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "transient memory-list operation",
+        "nextRequiredStep": "Use Preview-StutterOptimization.ps1 for before/after counters; standby-list purge is transient and has no restore path."
+      },
+      "notes": "Live purge is intentionally not routed until the owned helper is packaged and launched through an elevated manifest."
+    },
+    {
+      "capabilityId": "system-optimizations.timer-resolution",
+      "preview": {
+        "script": "backend/scripts/Preview-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "timer-resolution"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "args": [
+          "-OptimizationId",
+          "timer-resolution",
+          "-ConfirmApply",
+          "-AllowRealSystemExecution",
+          "-UserApproved",
+          "-TimerDurationMilliseconds",
+          "50",
+          "-TimeoutSeconds",
+          "10"
+        ],
+        "timeoutSeconds": 20,
+        "changedEvidencePath": "capabilities.timerRestoreProved",
+        "restorableEvidencePath": "capabilities.timerRestoreProved"
+      },
+      "restore": {
+        "script": "backend/scripts/Invoke-TimerResolutionSession.ps1",
+        "args": [
+          "-PeriodMilliseconds",
+          "1",
+          "-DurationMilliseconds",
+          "1"
+        ],
+        "timeoutSeconds": 10,
+        "changedEvidencePath": "summary.restoreCalledOnExit",
+        "restorableEvidencePath": "summary.restoreCalledOnExit"
+      },
+      "notes": "Apply uses the same bounded reversible real executor flags as Test-StutterOptimizationRealExecutors.ps1."
+    },
+    {
+      "capabilityId": "system-optimizations.power-plan",
+      "preview": {
+        "script": "backend/scripts/Preview-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "power-plan"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "args": [
+          "-OptimizationId",
+          "power-plan",
+          "-ConfirmApply",
+          "-AllowRealSystemExecution",
+          "-UserApproved",
+          "-TimeoutSeconds",
+          "15"
+        ],
+        "timeoutSeconds": 30,
+        "changedEvidencePath": "capabilities.cleanupAttempted",
+        "restorableEvidencePath": "capabilities.restoreAttempted"
+      },
+      "restore": {
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "args": [
+          "-OptimizationId",
+          "power-plan",
+          "-ConfirmApply",
+          "-AllowRealSystemExecution",
+          "-UserApproved",
+          "-TimeoutSeconds",
+          "15"
+        ],
+        "timeoutSeconds": 30,
+        "changedEvidencePath": "capabilities.cleanupAttempted",
+        "restorableEvidencePath": "capabilities.restoreAttempted"
+      },
+      "notes": "The executor exports, imports, selects, restores the original scheme, and deletes the temporary scheme in a bounded session."
+    },
+    {
+      "capabilityId": "system-optimizations.shader-cache",
+      "preview": {
+        "script": "backend/scripts/Preview-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "shader-cache-cleanup"
+        ],
+        "fixtureRootParam": "-ShaderCacheRoot",
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "shader-cache-cleanup",
+          "-ConfirmApply",
+          "-AllowDisposableFixtureApply"
+        ],
+        "fixtureRootParam": "-ShaderCacheRoot",
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "summary.deletedCount",
+        "restorableEvidencePath": "rollback.restoreSupported"
+      },
+      "restore": {
+        "script": "backend/scripts/Restore-StutterOptimization.ps1",
+        "args": [
+          "-ConfirmApply",
+          "-AllowDisposableFixtureApply"
+        ],
+        "fixtureRootParam": "-RollbackManifestPath",
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "summary.restoredCount",
+        "restorableEvidencePath": "summary.willRestoreFixtureFiles"
+      },
+      "notes": "Apply and restore are fixture-only; the router requires the supplied fixture/rollback path to be under the OS temp directory."
+    },
+    {
+      "capabilityId": "system-optimizations.service-trim",
+      "preview": {
+        "script": "backend/scripts/Preview-StutterOptimization.ps1",
+        "args": [
+          "-OptimizationId",
+          "service-pause-preview"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "args": [
+          "-OptimizationId",
+          "service-pause-preview",
+          "-ServiceName",
+          "FixtureService",
+          "-ConfirmApply",
+          "-AllowRealSystemExecution",
+          "-UserApproved",
+          "-TimeoutSeconds",
+          "10"
+        ],
+        "fixtureRootParam": "-ServiceShimPath",
+        "timeoutSeconds": 20,
+        "changedEvidencePath": "capabilities.serviceShimRunnerExecuted",
+        "restorableEvidencePath": "capabilities.realPauseRunnerLayerReady"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "service trim restore manifest not live",
+        "nextRequiredStep": "Build an exact service allowlist with dependency review and startup-state backup before enabling real service restore."
+      },
+      "notes": "Confirmed apply can only run the real executor's analysis/shim runner with a temp shim supplied through -FixtureRoot; it does not pause real services."
+    },
+    {
+      "capabilityId": "system-optimizations.network-tweaks",
+      "preview": {
+        "script": "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "adapter and DNS snapshot required",
+        "nextRequiredStep": "Build read-only adapter inventory, DNS backup, advanced-property snapshot, latency validation, and a rollback manifest before enabling network tweaks."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "network rollback manifest not built",
+        "nextRequiredStep": "Build a network-property rollback manifest from backed-up adapter, DNS, and registry values before enabling restore."
+      },
+      "notes": "No network registry, DNS, or adapter mutation is routed."
+    },
+    {
+      "capabilityId": "system-optimizations.game-registry-tweaks",
+      "preview": {
+        "script": "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "registry export and restore manifest required",
+        "nextRequiredStep": "Build an exact GameDVR/GameBar registry export and restore manifest before enabling Set-ItemProperty."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "registry restore manifest not built",
+        "nextRequiredStep": "Build the GameDVR/GameBar registry restore manifest before enabling restore."
+      },
+      "notes": "Read-only registry facts can be previewed; registry mutation is not routed."
+    },
+    {
+      "capabilityId": "system-optimizations.svchost-grouping-registry",
+      "preview": {
+        "script": "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "advanced registry target preview only",
+        "nextRequiredStep": "Build a registry export/restore manifest, reboot-required tracking, and service-isolation warning before enabling svchost grouping."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "registry restore manifest not built",
+        "nextRequiredStep": "Build the SvcHostSplitThresholdInKB registry restore manifest before enabling restore."
+      },
+      "notes": "This high-risk registry capability remains preview-only."
+    },
+    {
+      "capabilityId": "system-optimizations.windows-features-fixes",
+      "preview": {
+        "script": "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "requires administrators-group token and DISM runner contract",
+        "nextRequiredStep": "Requires an administrators-group token: launch via an elevated helper before DISM feature queries can run"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "requires administrators-group token and feature restore manifest",
+        "nextRequiredStep": "Requires an administrators-group token: launch via an elevated helper before DISM feature restore can run."
+      },
+      "notes": "No DISM or SFC action is routed; status/explain report the admin-token availability gate."
+    },
+    {
+      "capabilityId": "system-optimizations.windows-toggle-library",
+      "preview": {
+        "script": "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "toggle-specific contracts not built",
+        "nextRequiredStep": "Split each Windows toggle into its own detector, snapshot, protected-feature gate, restore plan, and reboot requirement before apply."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "toggle restore manifest not built",
+        "nextRequiredStep": "Build per-toggle restore manifests and reboot tracking before enabling Windows toggle restore."
+      },
+      "notes": "No bcdedit, powercfg hibernate, policy registry, or security toggle mutation is routed."
+    }
+  ]
+}
