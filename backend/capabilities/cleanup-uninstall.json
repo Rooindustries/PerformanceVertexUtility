@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "cleanup-uninstall",
   "capabilities": [
@@ -430,7 +430,7 @@
           "exact-target-allowlist",
           "backup-completed"
         ],
-        "notes": "Next step: implement a hidden autoruns.exe autorunsc-style CSV export allowlist runner and parse startup entries read-only before any startup mutation is considered."
+        "notes": "Next step: add a read-only Autoruns CSV export runner (autorunsc.exe) and parse startup entries read-only before any startup change is considered."
       },
       "restore": {
         "status": "not-implemented",

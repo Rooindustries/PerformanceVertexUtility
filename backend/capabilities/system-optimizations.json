@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "system-optimizations",
   "capabilities": [
@@ -50,7 +50,7 @@
         "detection": [
           { "method": "builtin", "target": "winmm!timeBeginPeriod/timeEndPeriod" }
         ],
-        "notes": "Newer stutter executor reality supersedes older {source} catalog labels: this is a bounded reversible session, not a persistent scheduled task."
+        "notes": "This is a bounded, reversible session, not a persistent scheduled task."
       },
       "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
       "apply": {
@@ -233,7 +233,7 @@
       "technicalName": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SvcHostSplitThresholdInKB=0xffffffff",
       "source": "winutil",
       "implementedBy": "roo-script",
-      "frontendLabel": "Game Registry Tweaks",
+      "frontendLabel": "Svchost Grouping (Registry)",
       "frontendTab": "Live Feel",
       "riskLevel": "high",
       "approvalRequired": true,
@@ -294,7 +294,7 @@
       "technicalName": "powercfg /hibernate; bcdedit /set; HKLM/HKCU Windows policy registry toggles for Game Mode, HAGS, MemoryCompression, FullscreenOptimizations, Hibernation, Telemetry, ActivityHistory, SmartScreen, VBS",
       "source": "gaming-toggles",
       "implementedBy": "not-implemented",
-      "frontendLabel": "Windows Features",
+      "frontendLabel": "Windows Toggle Library",
       "frontendTab": "Live Feel",
       "riskLevel": "high",
       "approvalRequired": true,
