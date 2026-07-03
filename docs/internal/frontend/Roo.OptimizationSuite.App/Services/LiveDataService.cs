@@ -35,14 +35,38 @@ public sealed class LiveDataService
     public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
         => RunAsync<ProcessClassification>("Get-ProcessClassification.ps1", ct);
 
+    public Task<ProcessProfileEnvelope?> GetProcessProfilePreviewAsync(CancellationToken ct = default)
+        => RunAsync<ProcessProfileEnvelope>("Preview-ProcessProfile.ps1", ct);
+
+    public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
+        => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct);
+
+    public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken ct = default)
+        => RunAsync<ProcessGovernorSessionStatus>("Get-ProcessGovernorSessionStatus.ps1", ct);
+
     public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default)
         => RunAsync<DriverHardwareSummary>("Get-DriverHardwareSummary.ps1", ct);
 
     public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default)
         => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct);
 
+    public Task<AppClassificationResult?> GetAppClassificationAsync(CancellationToken ct = default)
+        => RunAsync<AppClassificationResult>("Get-AppClassification.ps1", ct);
+
+    public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken ct = default)
+    {
+        var arg = string.IsNullOrWhiteSpace(appId) ? string.Empty : "-AppId '" + appId.Replace("'", "''") + "'";
+        return RunAsync<OfficialUninstallPreview>("Preview-OfficialUninstall.ps1", ct, arg);
+    }
+
     public Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken ct = default)
         => RunAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId '" + appId.Replace("'", "''") + "'");
+
+    public Task<NvidiaNipPreview?> GetNvidiaNipPreviewAsync(CancellationToken ct = default)
+        => RunAsync<NvidiaNipPreview>("Preview-NvidiaNipProfile.ps1", ct);
+
+    public Task<StutterOptimizationPreview?> GetStutterOptimizationPreviewAsync(CancellationToken ct = default)
+        => RunAsync<StutterOptimizationPreview>("Preview-StutterOptimization.ps1", ct);
 
     private async Task<T?> RunAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
     {
