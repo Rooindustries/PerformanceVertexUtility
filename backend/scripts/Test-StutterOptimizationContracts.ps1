@@ -31,6 +31,7 @@ $requiredFiles = @(
     'backend\scripts\StutterOptimization.Common.ps1',
     'backend\scripts\Preview-StutterOptimization.ps1',
     'backend\scripts\Invoke-StutterOptimization.ps1',
+    'backend\scripts\Invoke-StutterOptimizationRealExecutor.ps1',
     'backend\scripts\Restore-StutterOptimization.ps1'
 )
 foreach ($relative in $requiredFiles) {
@@ -70,8 +71,8 @@ try {
     } | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $servicePath -Encoding UTF8
 
     $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Preview-StutterOptimization.ps1') -MemorySnapshotPath $memoryPath -TimerSnapshotPath $timerPath -PowerPlanSnapshotPath $powerPath -ShaderCacheRoot $shaderRoot -ServiceInventoryPath $servicePath)
-    if ($preview.status -eq 'preview' -and $preview.summary.contractCount -eq 5 -and $preview.summary.realApplyAllowedCount -eq 0 -and $preview.summary.fixtureApplyReadyCount -eq 1) {
-        Add-Pass 'Stutter optimization preview returns five backend contracts with only shader-cache fixture apply ready'
+    if ($preview.status -eq 'preview' -and $preview.summary.contractCount -eq 5 -and $preview.summary.realApplyAllowedCount -eq 0 -and $preview.summary.fixtureApplyReadyCount -eq 1 -and $preview.summary.controlledExecutorReadyCount -eq 4 -and $preview.summary.helperContractReadyCount -eq 1) {
+        Add-Pass 'Stutter optimization preview returns five backend contracts with controlled executor readiness metadata'
     } else {
         Add-Failure 'Stutter optimization preview returned an unexpected contract summary'
     }
@@ -79,17 +80,25 @@ try {
     $timer = @($preview.contracts | Where-Object { $_.optimizationId -eq 'timer-resolution' }) | Select-Object -First 1
     $power = @($preview.contracts | Where-Object { $_.optimizationId -eq 'power-plan' }) | Select-Object -First 1
     $service = @($preview.contracts | Where-Object { $_.optimizationId -eq 'service-pause-preview' }) | Select-Object -First 1
-    if ($standby.proposedAction.applyAllowedNow -eq $false -and $timer.proposedAction.applyAllowedNow -eq $false -and $power.proposedAction.applyAllowedNow -eq $false -and $service.proposedAction.applyAllowedNow -eq $false) {
-        Add-Pass 'Standby memory, timer resolution, power plan, and service pause contracts are preview-only'
+    if ($standby.backendStatus -eq 'helper-contract-ready' -and $timer.backendStatus -eq 'real-executor-ready' -and $power.backendStatus -eq 'real-executor-ready' -and $service.backendStatus -eq 'service-runner-layer-ready' -and $standby.proposedAction.applyAllowedNow -eq $false -and $timer.proposedAction.applyAllowedNow -eq $false -and $power.proposedAction.applyAllowedNow -eq $false -and $service.proposedAction.applyAllowedNow -eq $false) {
+        Add-Pass 'Stutter preview distinguishes controlled executor readiness from product approval gates'
     } else {
-        Add-Failure 'One or more real system-changing stutter contracts reported apply-ready'
+        Add-Failure 'Stutter preview did not expose expected executor readiness and approval gates'
     }
 
-    $blocked = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId standby-memory -ConfirmApply -AllowDisposableFixtureApply)
-    if ($blocked.status -eq 'blocked' -and $blocked.summary.willChangeSystem -eq $false) {
-        Add-Pass 'Non-fixture stutter apply remains blocked even with confirmation switches'
+    $approvalGated = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId standby-memory -ConfirmApply -AllowDisposableFixtureApply)
+    $approvalGate = @($approvalGated.gates | Where-Object { $_.gateId -eq 'explicit-user-approval' }) | Select-Object -First 1
+    if ($approvalGated.actionId -eq 'performance.stutterOptimization.realExecutor' -and $approvalGated.status -eq 'blocked' -and $approvalGate.blocking -eq $true -and $approvalGated.summary.willPersist -eq $false) {
+        Add-Pass 'Legacy stutter apply entrypoint routes non-fixture actions to the controlled real executor and approval gate'
     } else {
-        Add-Failure 'Non-fixture stutter apply was not blocked'
+        Add-Failure 'Legacy stutter apply entrypoint did not route non-fixture action to controlled real executor'
+    }
+
+    $standbyRoute = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId standby-memory -UserApproved)
+    if ($standbyRoute.actionId -eq 'performance.stutterOptimization.realExecutor' -and $standbyRoute.status -eq 'helper-required' -and $standbyRoute.capabilities.helperBuildScriptExists -eq $true -and $standbyRoute.capabilities.helperElevationCommand) {
+        Add-Pass 'Legacy stutter apply entrypoint exposes standby helper build and elevation plan through real executor'
+    } else {
+        Add-Failure 'Legacy stutter apply entrypoint did not expose standby helper plan'
     }
 
     $applyBlocked = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply)
@@ -135,7 +144,7 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
     Add-Failure "backend/state is not empty or changed during stutter validation: before=$stateBefore after=$stateAfter"
 }
 
-Add-Pass 'Stutter optimization validation did not launch FSOS, WinUtil, timer, power, service, or cleanup utilities'
+Add-Pass 'Stutter optimization validation did not launch FSOS, WinUtil, power, service, cleanup, registry, driver, or forbidden tweak utilities'
 
 Write-Host ''
 if ($failures.Count -eq 0) {
@@ -145,4 +154,3 @@ if ($failures.Count -eq 0) {
 
 Write-Host "FAIL Stutter optimization contract validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
 exit 1
-

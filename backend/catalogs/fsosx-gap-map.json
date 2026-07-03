@@ -142,7 +142,7 @@
           "backend/scripts/Preview-StutterOptimization.ps1"
         ],
         "rollbackOrBackupRules": [
-          "Power plan import/selection remains blocked; preview captures active scheme restore requirements."
+          "Controlled temporary power-plan export/import/select/restore/delete is implemented; preview captures active scheme restore requirements and product apply remains approval-gated."
         ],
         "validationEvidence": [
           "backend/scripts/Test-StutterOptimizationContracts.ps1"
@@ -276,7 +276,7 @@
           "backend/scripts/Preview-StutterOptimization.ps1"
         ],
         "rollbackOrBackupRules": [
-          "Timer resolution apply remains blocked until an owned lifecycle and stop/cleanup path are implemented."
+          "Controlled bounded timer-resolution lifecycle is implemented; preview captures status and product apply remains approval-gated."
         ],
         "validationEvidence": [
           "backend/scripts/Test-StutterOptimizationContracts.ps1"
@@ -415,7 +415,7 @@
           "backend/scripts/Restore-StutterOptimization.ps1"
         ],
         "rollbackOrBackupRules": [
-          "Real shader cache deletion remains blocked.",
+          "Real shader-cache deletion is approval-gated and uses the controlled real-path planning plus backup/delete/restore contract.",
           "Disposable fixture shader-cache deletion writes a backup manifest and Restore-StutterOptimization.ps1 restores files from that manifest."
         ],
         "validationEvidence": [

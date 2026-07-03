@@ -92,7 +92,7 @@
       "sourceRefs": [
         "dash-clear-standby-memory"
       ],
-      "currentBackendCoverage": "preview-only",
+      "currentBackendCoverage": "helper-contract-ready",
       "whyForTarget": "Dash explicitly targets standby-memory flushing for memory-heavy game stutter. On a 16 GB machine with Overwatch, OBS, and Discord, available memory, commit pressure, and standby-list size are the most direct suspects before riskier OS changes.",
       "safeBackendNeeded": [
         "read-only memory, commit, working-set, and standby-list evidence",
@@ -101,7 +101,7 @@
         "before/after validation without persistent state writes",
         "no service, registry, driver, cleanup, or security mutation"
       ],
-      "firstSlice": "Implemented a backend memory-pressure preview contract; standby-list clear remains blocked because it is transient and cannot be rolled back.",
+      "firstSlice": "Implemented memory-pressure preview plus an owned standby-memory helper source/build/elevation plan; the actual purge is product approval-gated because it is transient and cannot be rolled back.",
       "risk": "medium",
       "riskReason": "Clearing standby memory can hide the root cause and may increase later disk/shader reloads if used blindly."
     },
@@ -142,7 +142,7 @@
         "playbook-timer-resolution-scheduled-task",
         "dash-timer-resolution-toggle"
       ],
-      "currentBackendCoverage": "preview-only",
+      "currentBackendCoverage": "real-executor-ready",
       "whyForTarget": "Timer resolution can affect input responsiveness and frame pacing. FSOS APBX bundles SetTimerResolution and Dash exposes a toggle, but the app needs its own measured session lifecycle rather than a persistent scheduled task clone.",
       "safeBackendNeeded": [
         "read current, minimum, and maximum timer resolution",
@@ -152,7 +152,7 @@
         "validate resolution before and after",
         "record power and battery caveats"
       ],
-      "firstSlice": "Implemented a timer-resolution preview contract; no timer helper or persistent scheduled task is launched.",
+      "firstSlice": "Implemented a bounded timer-resolution helper through the controlled real executor; preview still launches nothing and product apply requires explicit approval.",
       "risk": "medium",
       "riskReason": "Persistent low timer resolution can increase power use and interact poorly with other apps if cleanup fails."
     },
@@ -170,7 +170,7 @@
         "dash-power-plan-and-power-state-controls",
         "winutil-config-tweaks-performance-plans"
       ],
-      "currentBackendCoverage": "preview-only",
+      "currentBackendCoverage": "real-executor-ready",
       "whyForTarget": "CPU clock residency and power-state transitions can show up as frame-time variance while streaming. FSOS and WinUtil both expose performance-plan concepts, but laptop and thermal risk make restore and validation mandatory.",
       "safeBackendNeeded": [
         "capture active power scheme and relevant processor settings",
@@ -179,7 +179,7 @@
         "session-scoped restore to previous GUID/settings",
         "validate active scheme and monitor thermals/power"
       ],
-      "firstSlice": "Implemented a power-plan preview contract with restore requirements; import/selection remains blocked.",
+      "firstSlice": "Implemented temporary power-plan export/import/select/restore/delete through the controlled real executor; product apply remains approval-gated.",
       "risk": "medium",
       "riskReason": "Aggressive plans can increase heat, fan noise, laptop drain, or throttling, which can make lows worse."
     },
@@ -224,7 +224,7 @@
         "nvidia-profile-inspector",
         "framesync.nip"
       ],
-      "currentBackendCoverage": "preview-plus-disposable-fixture-apply",
+      "currentBackendCoverage": "real-planner-and-disposable-fixture-apply",
       "whyForTarget": "Shader cache problems and driver/profile changes can present as Overwatch stutter, especially after driver updates. Dash names shader caches and Utilities includes NVIDIA Profile Inspector plus a seed profile, but both need game-aware validation.",
       "safeBackendNeeded": [
         "detect GPU vendor and installed driver",
@@ -234,7 +234,7 @@
         "benchmark profile changes by 1% lows and frame-time spikes before recommendation",
         "manual NVIDIA-only profile import/export gate"
       ],
-      "firstSlice": "Implemented shader-cache preview plus disposable-fixture backup/delete/restore validation; real cache cleanup and NIP import remain blocked.",
+      "firstSlice": "Implemented shader-cache preview, real-path backup/delete/restore planning, and disposable-fixture backup/delete/restore validation; real user-cache cleanup and NIP import remain explicit approval actions.",
       "risk": "medium",
       "riskReason": "Cache deletion can cause temporary shader rebuild stutter, and untested driver profiles can reduce stability."
     },
@@ -368,7 +368,7 @@
         "time-boxed session restore",
         "hard protection for OBS, Discord, audio, network, input, anti-cheat, GPU, security, Store, WebView2, Windows Update, Samsung, Tailscale, and Wispr services"
       ],
-      "firstSlice": "Implemented service pause candidate preview; apply remains blocked until restore tests cover dependency failures.",
+      "firstSlice": "Implemented service pause candidate preview plus shim-validated backup/pause/restore sequencing; real service control is approval-gated by exact service allowlist and restore evidence.",
       "risk": "high",
       "riskReason": "Stopping the wrong service can cause audio dropouts, network loss, game launch failures, update issues, or broken devices."
     },

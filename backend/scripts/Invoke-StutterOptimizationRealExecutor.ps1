@@ -72,6 +72,29 @@ function Get-ServiceReadiness {
     return @($records.ToArray())
 }
 
+function Get-StandbyHelperBuildPlan {
+    param([string]$HelperSourcePath)
+    $buildScriptPath = Join-Path $PSScriptRoot 'Build-StandbyMemoryHelper.ps1'
+    if (-not (Test-Path -LiteralPath $buildScriptPath -PathType Leaf)) {
+        return [pscustomobject]@{
+            buildScriptPath = $buildScriptPath
+            buildScriptExists = $false
+            status = 'build-script-missing'
+        }
+    }
+    try {
+        $output = & $buildScriptPath -SourcePath $HelperSourcePath
+        return ($output -join [Environment]::NewLine) | ConvertFrom-Json
+    } catch {
+        return [pscustomobject]@{
+            buildScriptPath = $buildScriptPath
+            buildScriptExists = $true
+            status = 'probe-failed'
+            error = $_.Exception.Message
+        }
+    }
+}
+
 try {
     $realRequested = [bool]$AllowRealSystemExecution
     $requiresRealFlag = ($OptimizationId -in @('timer-resolution','power-plan') -or (-not [string]::IsNullOrWhiteSpace($ServiceShimPath)) -or ($OptimizationId -eq 'shader-cache-cleanup' -and [bool]$ConfirmApply))
@@ -82,6 +105,7 @@ try {
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canRunReal = ($blockingGates.Count -eq 0)
+    $hasBlockingGates = ($blockingGates.Count -gt 0)
     $sequence = New-Object System.Collections.Generic.List[object]
     $capability = [ordered]@{}
     $status = if ($canRunReal) { 'success' } elseif ($ConfirmApply -or $AllowRealSystemExecution) { 'blocked' } else { 'preview' }
@@ -96,6 +120,18 @@ try {
                 $sequence.Add([pscustomobject]@{ order = 1; step = 'timer-resolution-bounded-session'; result = $timerResult; parsedResult = $timerJson; completed = ($timerResult.exitCode -eq 0 -and $timerResult.timedOut -ne $true) }) | Out-Null
                 if ($timerResult.exitCode -ne 0 -or $timerResult.timedOut) { $status = 'capability-limited' }
                 $capability.timerRestoreProved = [bool](Get-RooPropertyValue (Get-RooPropertyValue $timerJson 'summary' $null) 'restoreCalledOnExit' $false)
+                if ($status -eq 'capability-limited') {
+                    $capability.timerApiFailure = [pscustomobject]@{
+                        processExitCode = Get-RooPropertyValue $timerResult 'exitCode' $null
+                        timedOut = [bool](Get-RooPropertyValue $timerResult 'timedOut' $false)
+                        startError = Get-RooPropertyValue $timerResult 'startError' $null
+                        helperStatus = Get-RooPropertyValue $timerJson 'status' $null
+                        beginResult = Get-RooPropertyValue (Get-RooPropertyValue $timerJson 'summary' $null) 'beginResult' $null
+                        endResult = Get-RooPropertyValue (Get-RooPropertyValue $timerJson 'summary' $null) 'endResult' $null
+                        stdout = Get-RooPropertyValue $timerResult 'stdout' ''
+                        stderr = Get-RooPropertyValue $timerResult 'stderr' ''
+                    }
+                }
                 $nextStep = 'Use the bounded helper for session-scoped timer requests only; never persist timer resolution outside the owned helper process.'
             }
         }
@@ -151,12 +187,17 @@ try {
             $before = Get-StandbyMemorySnapshot
             $after = Get-StandbyMemorySnapshot
             $helperSourcePath = Resolve-RooPath '' (Join-Path $PSScriptRoot '..\native\StandbyMemoryHelper\RooStandbyMemoryHelper.cs')
+            $helperBuildPlan = Get-StandbyHelperBuildPlan $helperSourcePath
             $sequence.Add([pscustomobject]@{ order = 1; step = 'standby-memory-readonly-counters'; before = $before; after = $after; completed = $true }) | Out-Null
-            $status = 'helper-required'
+            if (-not $hasBlockingGates) { $status = 'helper-required' }
             $capability.readOnlyCountersImplemented = $true
             $capability.oneShotClearRunnerScaffolded = $true
             $capability.helperSourcePath = $helperSourcePath
             $capability.helperSourceExists = (Test-Path -LiteralPath $helperSourcePath -PathType Leaf)
+            $capability.helperBuildPlan = $helperBuildPlan
+            $capability.helperBuildScriptExists = [bool](Get-RooPropertyValue $helperBuildPlan 'buildScriptExists' $false)
+            $capability.helperToolchainDetected = [bool](Get-RooPropertyValue (Get-RooPropertyValue $helperBuildPlan 'capabilities' $null) 'toolchainDetected' $false)
+            $capability.helperElevationCommand = Get-RooPropertyValue (Get-RooPropertyValue $helperBuildPlan 'elevation' $null) 'commandLine' $null
             $capability.executionRequires = 'Build this helper source as an elevated/admin executable, then launch it behind exact path, approval, and before/after counter gates.'
             $nextStep = "Build and sign the native helper source at $helperSourcePath, then run the executable elevated behind approval and before/after counter capture."
         }
@@ -189,7 +230,7 @@ try {
                     }
                 })
                 $sequence.Add([pscustomobject]@{ order = 1; step = 'shader-cache-real-path-readiness-plan'; root = $root; itemCount = $items.Count; plan = $plan; completed = $true }) | Out-Null
-                $status = 'success'
+                if (-not $hasBlockingGates) { $status = 'success' }
                 $capability.approvalGatedDeletePathExecuted = $false
                 $nextStep = 'Require exact target allowlist, approved backup root, and rollback manifest before enabling real shader-cache deletion.'
             }
@@ -213,7 +254,7 @@ try {
                     }
                 }
             }
-            $status = if ($serviceRunnerOk) { 'success' } else { 'failed' }
+            $status = if ($hasBlockingGates) { $status } elseif ($serviceRunnerOk) { 'success' } else { 'failed' }
             $capability.serviceAnalyzerImplemented = $true
             $capability.realPauseRunnerLayerReady = $true
             $capability.realPauseAttempted = $false
@@ -223,6 +264,28 @@ try {
     }
 
     $runs = @($sequence.ToArray())
+    if ($OptimizationId -eq 'power-plan' -and $status -eq 'capability-limited') {
+        $failedSteps = @($runs | Where-Object {
+            ($_.PSObject.Properties['result'] -and ($_.result.timedOut -eq $true -or ($null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0) -or -not [string]::IsNullOrWhiteSpace([string]$_.result.startError))) -or
+            ($_.PSObject.Properties['error'] -and -not [string]::IsNullOrWhiteSpace([string]$_.error))
+        })
+        $capability.powerCommandFailure = [pscustomobject]@{
+            failedStepCount = $failedSteps.Count
+            failedSteps = @($failedSteps | ForEach-Object {
+                [pscustomobject]@{
+                    step = [string]$_.step
+                    error = Get-RooPropertyValue $_ 'error' $null
+                    filePath = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'filePath' $null
+                    arguments = @(Get-RooPropertyArray (Get-RooPropertyValue $_ 'result' $null) 'arguments')
+                    exitCode = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'exitCode' $null
+                    timedOut = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'timedOut' $null
+                    startError = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'startError' $null
+                    stdout = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'stdout' ''
+                    stderr = Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'stderr' ''
+                }
+            })
+        }
+    }
     $result = [pscustomobject]@{
         actionId = 'performance.stutterOptimization.realExecutor'
         schemaVersion = 1

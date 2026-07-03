@@ -189,6 +189,26 @@ if ($playbook -and $dash -and $gap) {
             Add-Failure "$context is missing validation evidence"
         }
     }
+
+    $catalogText = @(
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-playbook-capabilities.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-dash-capabilities.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-gap-map.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\stutter-optimization-ranking.json') -Raw)
+    ) -join [Environment]::NewLine
+    $staleExecutorText = @(
+        ('real standby-list clearing ' + 'remains ' + 'blocked'),
+        ('import/selection ' + 'remains ' + 'blocked'),
+        ('Timer resolution apply ' + 'remains ' + 'blocked'),
+        ('Real shader cache deletion ' + 'remains ' + 'blocked'),
+        ('real cache deletion ' + 'remains ' + 'blocked')
+    )
+    $staleHits = @($staleExecutorText | Where-Object { $catalogText -match [regex]::Escape($_) })
+    if ($staleHits.Count -eq 0) {
+        Add-Pass 'FSOS-X catalogs contain no stale blocked metadata for implemented executor paths'
+    } else {
+        Add-Failure "FSOS-X catalogs still contain stale executor text: $($staleHits -join '; ')"
+    }
 }
 
 $stateEntries = Get-StateEntryCount

@@ -1,38 +1,41 @@
 param(
+    [ValidateSet('standby-memory','timer-resolution','power-plan','shader-cache-cleanup','service-pause-preview')]
     [string]$OptimizationId = 'shader-cache-cleanup',
     [string]$ShaderCacheRoot = '',
     [string]$BackupRoot = '',
+    [string[]]$ServiceName = @(),
+    [string]$ServiceShimPath = '',
+    [uint32]$TimerPeriodMilliseconds = 1,
+    [int]$TimerDurationMilliseconds = 250,
+    [int]$TimeoutSeconds = 15,
     [string]$OutputPath = '',
     [switch]$ConfirmApply,
-    [switch]$AllowDisposableFixtureApply
+    [switch]$AllowDisposableFixtureApply,
+    [switch]$AllowRealSystemExecution,
+    [switch]$UserApproved
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'StutterOptimization.Common.ps1')
 
 try {
-    if ($OptimizationId -ne 'shader-cache-cleanup') {
-        $result = [pscustomobject]@{
-            actionId = 'performance.stutterOptimization.apply'
-            schemaVersion = 1
-            productName = $script:RooStutterProductName
-            capturedAtUtc = Get-RooUtcStamp
-            optimizationId = $OptimizationId
-            dryRun = (-not $ConfirmApply)
-            status = 'blocked'
-            executionMode = 'blocked'
-            gates = @(
-                (New-RooStutterGate 'real-system-action-blocked' 'Real system-changing action blocked' $true $false 'Only shader-cache disposable fixture apply is implemented in this backend slice.' $null)
-            )
-            changedItems = @()
-            rollback = $null
-            summary = [pscustomobject]@{ willChangeSystem = $false; willLaunchUtilities = $false; deletedCount = 0; backupCount = 0 }
-            warnings = @((New-RooStutterIssue 'STUTTER_APPLY_BLOCKED' 'This optimization is preview-only in the current backend.' 'warning' $OptimizationId $true 'Use Preview-StutterOptimization.ps1 for this contract.' $null))
-            errors = @()
-            logs = @((New-RooLog 'Stutter optimization apply blocked without system changes.'))
+    if ($OptimizationId -ne 'shader-cache-cleanup' -or [bool]$AllowRealSystemExecution) {
+        $realParams = @{
+            OptimizationId = $OptimizationId
+            TimerPeriodMilliseconds = $TimerPeriodMilliseconds
+            TimerDurationMilliseconds = $TimerDurationMilliseconds
+            TimeoutSeconds = $TimeoutSeconds
         }
-        Write-RooJsonOutput $result $OutputPath
-        exit 0
+        if (-not [string]::IsNullOrWhiteSpace($OutputPath)) { $realParams['OutputPath'] = $OutputPath }
+        if (-not [string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $realParams['ShaderCacheRoot'] = $ShaderCacheRoot }
+        if (-not [string]::IsNullOrWhiteSpace($BackupRoot)) { $realParams['BackupRoot'] = $BackupRoot }
+        if (@(Get-RooArray $ServiceName).Count -gt 0) { $realParams['ServiceName'] = @(Get-RooArray $ServiceName) }
+        if (-not [string]::IsNullOrWhiteSpace($ServiceShimPath)) { $realParams['ServiceShimPath'] = $ServiceShimPath }
+        if ($ConfirmApply) { $realParams['ConfirmApply'] = $true }
+        if ($AllowRealSystemExecution) { $realParams['AllowRealSystemExecution'] = $true }
+        if ($UserApproved) { $realParams['UserApproved'] = $true }
+        & (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') @realParams
+        return
     }
 
     $resolvedRoot = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $null } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
@@ -155,4 +158,3 @@ try {
     Write-RooJsonOutput $errorResult $OutputPath
     exit 1
 }
-
