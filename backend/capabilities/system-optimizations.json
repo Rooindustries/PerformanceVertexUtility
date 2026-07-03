@@ -1,0 +1,323 @@
+{
+  "schemaVersion": 1,
+  "family": "system-optimizations",
+  "capabilities": [
+    {
+      "capabilityId": "system-optimizations.standby-memory",
+      "family": "system-optimizations",
+      "displayName": "Standby Memory",
+      "technicalName": "NtSetSystemInformation(SystemMemoryListInformation=80, MemoryPurgeStandbyList)",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Standby Memory",
+      "frontendTab": "Live Feel",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "builtin", "target": "ntdll!NtSetSystemInformation(MemoryPurgeStandbyList)" },
+          { "method": "file-exists", "target": "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs" }
+        ],
+        "notes": "FSOS-X Dash exposes Clear Standby Memory; Roo has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
+      "apply": {
+        "status": "helper-contract",
+        "mode": "standby-helper-build-and-packaging-contract",
+        "script": "backend/scripts/Build-StandbyMemoryHelper.ps1",
+        "gates": ["requires-helper-manifest", "explicit-user-approval", "helper-packaging-pending"],
+        "notes": "Next step: package and sign the owned helper, then run a one-shot purge only through before/after counter gates."
+      },
+      "restore": { "status": "not-applicable", "mode": "transient-memory-list-operation", "notes": "Standby-list purge is transient and has no rollback; current backend does not purge." },
+      "unavailableReason": "helper-packaging-pending",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-StutterOptimizationRealExecutors.ps1", "proves": "standby memory reports read-only counters, helper source, build plan, and elevation command without live purge" },
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "registry status keeps standby memory as helper-contract with helper-packaging-pending" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.timer-resolution",
+      "family": "system-optimizations",
+      "displayName": "Timer Resolution",
+      "technicalName": "timeBeginPeriod/timeEndPeriod via Invoke-TimerResolutionSession.ps1",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Timer Resolution",
+      "frontendTab": "Live Feel",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "builtin", "target": "winmm!timeBeginPeriod/timeEndPeriod" }
+        ],
+        "notes": "Newer stutter executor reality supersedes older FSOS-X catalog labels: this is a bounded reversible session, not a persistent scheduled task."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "gates": ["confirm-apply", "explicit-user-approval", "real-system-explicit-flag"],
+        "notes": "Runs only as a bounded helper session and restores timer resolution on exit."
+      },
+      "restore": { "status": "live", "mode": "session-restore", "script": "backend/scripts/Invoke-TimerResolutionSession.ps1" },
+      "unavailableReason": null,
+      "testEvidence": [
+        { "test": "backend/scripts/Test-StutterOptimizationRealExecutors.ps1", "proves": "confirmed timer session calls begin/end and records restore or exact API failure evidence" },
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "timer resolution is one of the only allowed live system-optimization apply entries" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.power-plan",
+      "family": "system-optimizations",
+      "displayName": "Power Plan",
+      "technicalName": "powercfg /getactivescheme, /export, /import, /setactive, /delete",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Power Plan",
+      "frontendTab": "Live Feel",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "command-on-path", "target": "powercfg.exe" }
+        ],
+        "notes": "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo's temporary export/import/select/restore/delete executor."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-temp-session",
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "gates": ["confirm-apply", "explicit-user-approval", "backup-completed", "real-system-explicit-flag"],
+        "notes": "Uses a temporary plan and restores the original active scheme before deleting the temp scheme."
+      },
+      "restore": { "status": "live", "mode": "temp-session-restore", "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1" },
+      "unavailableReason": null,
+      "testEvidence": [
+        { "test": "backend/scripts/Test-StutterOptimizationRealExecutors.ps1", "proves": "confirmed power-plan temp session exports, imports, selects, restores, deletes, or records exact powercfg failure evidence" },
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "power plan is one of the only allowed live system-optimization apply entries" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.shader-cache",
+      "family": "system-optimizations",
+      "displayName": "Shader Cache",
+      "technicalName": "%LOCALAPPDATA%\\D3DSCache; %LOCALAPPDATA%\\NVIDIA\\DXCache; %LOCALAPPDATA%\\AMD\\DxCache; Steam shader cache directories",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Shader Cache",
+      "frontendTab": "Live Feel",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "file-exists", "target": "%LOCALAPPDATA%\\D3DSCache" },
+          { "method": "file-exists", "target": "%LOCALAPPDATA%\\NVIDIA" }
+        ],
+        "notes": "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo proves only disposable fixture backup/delete/restore."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
+      "apply": {
+        "status": "fixture-proven",
+        "mode": "disposable-fixture-backup-delete-restore",
+        "script": "backend/scripts/Invoke-StutterOptimization.ps1",
+        "gates": ["confirm-apply", "fixture-explicit-flag", "fixture-root-temp", "exact-target-allowlist"],
+        "notes": "Real user cache deletion remains approval-gated planning only; fixture apply is proven under temp roots."
+      },
+      "restore": { "status": "fixture-proven", "mode": "fixture-rollback-manifest", "script": "backend/scripts/Restore-StutterOptimization.ps1" },
+      "unavailableReason": null,
+      "testEvidence": [
+        { "test": "backend/scripts/Test-StutterOptimizationContracts.ps1", "proves": "shader cache fixture apply backs up, deletes, and restores disposable temp files only" },
+        { "test": "backend/scripts/Test-StutterOptimizationRealExecutors.ps1", "proves": "real-path shader planning preserves files while fixture delete and restore are validated" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.service-trim",
+      "family": "system-optimizations",
+      "displayName": "Service Trim",
+      "technicalName": "sc.exe query/config/stop/start allowlist workflow for WerSvc, PcaSvc, TrkWks, InventorySvc, MapsBroker, diagsvc",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Service Trim",
+      "frontendTab": "Live Feel",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "service-exists", "target": "WerSvc" },
+          { "method": "service-exists", "target": "PcaSvc" }
+        ],
+        "notes": "Combines FSOS-X Dash service pause with M3/M4/M5 service-trim manifest concepts; real service mutation is not enabled."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Preview-StutterOptimization.ps1", "actionId": "performance.stutterOptimization.preview" },
+      "apply": {
+        "status": "allowlist-shim",
+        "mode": "service-analysis-and-harmless-backup-pause-restore-shim",
+        "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+        "gates": ["confirm-apply", "explicit-user-approval", "exact-target-allowlist", "backup-completed"],
+        "notes": "Next step: build exact service allowlist with dependency graph and startup-state manifest before any real service control."
+      },
+      "restore": { "status": "manifest-ready", "mode": "shim-validated-backup-pause-restore-sequence", "script": "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-StutterOptimizationRealExecutors.ps1", "proves": "service pause analyzes real service status/dependencies and validates backup/pause/restore through a harmless shim without pausing real services" },
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "service trim is not marked live and only references preview or allowlist-shim execution" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.network-tweaks",
+      "family": "system-optimizations",
+      "displayName": "Network Tweaks",
+      "technicalName": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\NetworkThrottlingIndex; HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\*\\TcpAckFrequency/TCPNoDelay; Set-NetAdapterAdvancedProperty; Set-DnsClientServerAddress",
+      "source": "fsosx-dash",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Network Tweaks",
+      "frontendTab": "Live Feel",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "registry-value", "target": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile|NetworkThrottlingIndex" },
+          { "method": "service-exists", "target": "Dnscache" }
+        ],
+        "notes": "FSOS-X marks this family unsafe; WinUtil DNS ideas require adapter/DNS snapshot, tests, and rollback before any mutation."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Get-SystemOptimizationFacts.ps1", "actionId": "systemOptimizations.facts" },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "adapter-and-dns-snapshot-required",
+        "gates": ["exact-target-allowlist", "backup-completed", "explicit-user-approval"],
+        "notes": "Next step: read-only adapter inventory, DNS backup, current advanced-property snapshot, latency/packet-loss validation, and one-click rollback manifest."
+      },
+      "restore": { "status": "not-implemented", "mode": "network-property-rollback-not-built" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "network tweaks are high risk, not implemented for apply, and only use read-only detection" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.game-registry-tweaks",
+      "family": "system-optimizations",
+      "displayName": "Game Registry Tweaks",
+      "technicalName": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR\\AppCaptureEnabled/AudioCaptureEnabled/CursorCaptureEnabled/MicrophoneCaptureEnabled; HKCU\\System\\GameConfigStore\\GameDVR_Enabled; HKCU\\Software\\Microsoft\\GameBar\\ShowStartupPanel/UseNexusForGameBarEnabled",
+      "source": "winutil",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Game Registry Tweaks",
+      "frontendTab": "Live Feel",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "registry-value", "target": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR|AppCaptureEnabled" },
+          { "method": "registry-value", "target": "HKCU:\\System\\GameConfigStore|GameDVR_Enabled" }
+        ],
+        "notes": "Maps the M2-safe-registry GameDVR/GameBar subset from modules/tweak_manifest.json plus WinUtil tweak normalization guidance."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Get-SystemOptimizationFacts.ps1", "actionId": "systemOptimizations.facts" },
+      "apply": {
+        "status": "preview-only",
+        "mode": "registry-target-preview",
+        "gates": ["confirm-apply", "explicit-user-approval", "backup-completed"],
+        "notes": "Next step: exact registry export/restore manifest for each M2-safe-registry target before any Set-ItemProperty path exists."
+      },
+      "restore": { "status": "not-implemented", "mode": "registry-restore-manifest-not-built" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "game registry tweaks expose real registry targets while apply remains preview-only" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.svchost-grouping-registry",
+      "family": "system-optimizations",
+      "displayName": "Svchost Process Grouping",
+      "technicalName": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SvcHostSplitThresholdInKB=0xffffffff",
+      "source": "winutil",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Game Registry Tweaks",
+      "frontendTab": "Live Feel",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "registry-value", "target": "HKLM:\\SYSTEM\\CurrentControlSet\\Control|SvcHostSplitThresholdInKB" }
+        ],
+        "notes": "Maps M6-svchost-grouping from modules/tweak_manifest.json; it reduces service isolation and requires reboot."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Get-SystemOptimizationFacts.ps1", "actionId": "systemOptimizations.facts" },
+      "apply": {
+        "status": "preview-only",
+        "mode": "advanced-registry-target-preview",
+        "gates": ["confirm-apply", "explicit-user-approval", "backup-completed"],
+        "notes": "Next step: registry export/restore manifest, reboot-required tracking, and service-isolation warning before apply."
+      },
+      "restore": { "status": "not-implemented", "mode": "registry-restore-manifest-not-built" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "advanced svchost grouping is preview-only and high risk with exact registry target detection" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.windows-features-fixes",
+      "family": "system-optimizations",
+      "displayName": "Windows Features and Fixes",
+      "technicalName": "DISM /Online /Enable-Feature|/Disable-Feature /FeatureName:<feature>; DISM /Online /Cleanup-Image /RestoreHealth; sfc /scannow",
+      "source": "winutil",
+      "implementedBy": "not-implemented",
+      "frontendLabel": "Windows Features",
+      "frontendTab": "Live Feel",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "command-on-path", "target": "dism.exe" },
+          { "method": "windows-feature", "target": "Microsoft-Hyper-V-All" }
+        ],
+        "notes": "Maps WinUtil feature/fix groups and the FSOS-X Dash Windows toggle library only as catalog targets; no DISM or SFC runner exists here."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Get-SystemOptimizationFacts.ps1", "actionId": "systemOptimizations.facts" },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "dism-feature-and-repair-runner-not-built",
+        "gates": ["restore-point-before-apply", "backup-completed", "explicit-user-approval"],
+        "notes": "Next step: build read-only DISM feature inventory, restore-point or equivalent backup requirement, offline/source handling, and reversible feature-state manifest."
+      },
+      "restore": { "status": "not-implemented", "mode": "dism-feature-restore-not-built" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "Windows feature/fix entries are DISM-based catalog targets with not-implemented apply status" }
+      ]
+    },
+    {
+      "capabilityId": "system-optimizations.windows-toggle-library",
+      "family": "system-optimizations",
+      "displayName": "Windows Toggle Library",
+      "technicalName": "powercfg /hibernate; bcdedit /set; HKLM/HKCU Windows policy registry toggles for Game Mode, HAGS, MemoryCompression, FullscreenOptimizations, Hibernation, Telemetry, ActivityHistory, SmartScreen, VBS",
+      "source": "fsosx-dash",
+      "implementedBy": "not-implemented",
+      "frontendLabel": "Windows Features",
+      "frontendTab": "Live Feel",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          { "method": "registry-key", "target": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows" },
+          { "method": "command-on-path", "target": "bcdedit.exe" }
+        ],
+        "notes": "Represents the FSOS-X Dash Windows toggle library as source evidence only; security, update, network, Store, WebView2, and device-continuity toggles remain protected."
+      },
+      "preview": { "status": "implemented", "script": "backend/scripts/Get-SystemOptimizationFacts.ps1", "actionId": "systemOptimizations.facts" },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "toggle-specific-contracts-not-built",
+        "gates": ["exact-target-allowlist", "backup-completed", "explicit-user-approval"],
+        "notes": "Next step: split each toggle into its own detector, registry/command snapshot, protected-feature gate, restore plan, and reboot requirement."
+      },
+      "restore": { "status": "not-implemented", "mode": "toggle-restore-not-built" },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        { "test": "backend/scripts/Test-SystemOptimizationCapabilities.ps1", "proves": "FSOS-X Dash Windows toggle library is cataloged without live registry, command, service, or security mutation" }
+      ]
+    }
+  ]
+}
