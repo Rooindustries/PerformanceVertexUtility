@@ -4633,6 +4633,565 @@
         }
       }
     },
+    "capabilityEntry": {
+      "title": "Capability Entry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "family",
+        "displayName",
+        "technicalName",
+        "source",
+        "implementedBy",
+        "frontendLabel",
+        "frontendTab",
+        "riskLevel",
+        "approvalRequired",
+        "availability",
+        "preview",
+        "apply",
+        "restore",
+        "unavailableReason",
+        "testEvidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "type": "string"
+        },
+        "family": {
+          "type": "string",
+          "enum": [
+            "process-controls",
+            "cleanup-uninstall",
+            "drivers-gpu-tools",
+            "system-optimizations"
+          ]
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "technicalName": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "process-lasso",
+            "revo",
+            "nvpi",
+            "fsosx-dash",
+            "winutil",
+            "utilities-folder",
+            "roo-native"
+          ]
+        },
+        "implementedBy": {
+          "type": "string",
+          "enum": [
+            "roo-native",
+            "roo-script",
+            "external-tool",
+            "not-implemented"
+          ]
+        },
+        "frontendLabel": {
+          "type": "string"
+        },
+        "frontendTab": {
+          "type": "string",
+          "enum": [
+            "Game Tune",
+            "Clean Junk",
+            "Drivers & Settings",
+            "Live Feel"
+          ]
+        },
+        "riskLevel": {
+          "type": "string",
+          "enum": [
+            "safe",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "approvalRequired": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "detection"
+          ],
+          "properties": {
+            "detection": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "method",
+                  "target"
+                ],
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "builtin",
+                      "file-exists",
+                      "registry-key",
+                      "registry-value",
+                      "service-exists",
+                      "command-on-path",
+                      "hardware-gpu-vendor",
+                      "windows-feature"
+                    ]
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        },
+        "preview": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "implemented",
+                "not-implemented"
+              ]
+            },
+            "script": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actionId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "apply": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "live",
+                "fixture-proven",
+                "allowlist-shim",
+                "helper-contract",
+                "preview-only",
+                "not-implemented"
+              ]
+            },
+            "mode": {
+              "type": "string"
+            },
+            "script": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actionId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "gates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        },
+        "restore": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "live",
+                "fixture-proven",
+                "manifest-ready",
+                "not-applicable",
+                "not-implemented"
+              ]
+            },
+            "mode": {
+              "type": "string"
+            },
+            "script": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actionId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        },
+        "unavailableReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "tool-not-present",
+            "hardware-not-present",
+            "requires-admin-token",
+            "requires-helper-manifest",
+            "helper-packaging-pending",
+            "blocked-by-acl",
+            "cli-unsupported",
+            "not-safely-executable-yet",
+            null
+          ]
+        },
+        "testEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "test",
+              "proves"
+            ],
+            "properties": {
+              "test": {
+                "type": "string"
+              },
+              "proves": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "resolvedAvailability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "checkedRules",
+            "unavailableReason"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "checkedRules": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "method",
+                  "target",
+                  "resolvedTarget",
+                  "passed",
+                  "evidence"
+                ],
+                "properties": {
+                  "method": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "resolvedTarget": {
+                    "type": "string"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "evidence": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "unavailableReason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "capabilityRegistry": {
+      "title": "Capability Registry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "productName",
+        "dryRun",
+        "status",
+        "generatedAtUtc",
+        "utilitiesRoot",
+        "families",
+        "capabilities",
+        "summary"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "backend.capabilityRegistry.get"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "productName": {
+          "const": "Roo Industries Optimization Suite"
+        },
+        "dryRun": {
+          "const": true
+        },
+        "risk": {
+          "type": "string",
+          "enum": [
+            "safe",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "requiresElevation": {
+          "type": "boolean"
+        },
+        "status": {
+          "const": "completed"
+        },
+        "correlationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generatedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "utilitiesRoot": {
+          "type": "string"
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "capabilityCount"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "capabilityCount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityEntry"
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "totalCapabilities",
+            "byFamily",
+            "byApplyStatus",
+            "availableCount",
+            "unavailableCount"
+          ],
+          "properties": {
+            "totalCapabilities": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "byFamily": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "byApplyStatus": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "availableCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unavailableCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "frontendLabelMap": {
+      "title": "Frontend Label Map",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedFrom",
+        "tabs"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "generatedFrom": {
+          "const": "backend/capabilities"
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tab",
+              "capabilities"
+            ],
+            "properties": {
+              "tab": {
+                "type": "string",
+                "enum": [
+                  "Game Tune",
+                  "Clean Junk",
+                  "Drivers & Settings",
+                  "Live Feel"
+                ]
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "capabilityId",
+                    "frontendLabel",
+                    "displayName",
+                    "riskLevel",
+                    "applyStatus",
+                    "approvalRequired"
+                  ],
+                  "properties": {
+                    "capabilityId": {
+                      "type": "string"
+                    },
+                    "frontendLabel": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "riskLevel": {
+                      "type": "string",
+                      "enum": [
+                        "safe",
+                        "low",
+                        "medium",
+                        "high",
+                        "critical"
+                      ]
+                    },
+                    "applyStatus": {
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "fixture-proven",
+                        "allowlist-shim",
+                        "helper-contract",
+                        "preview-only",
+                        "not-implemented"
+                      ]
+                    },
+                    "approvalRequired": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "telemetrySnapshot": {
       "title": "Telemetry Snapshot",
       "type": "object",

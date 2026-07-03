@@ -112,8 +112,7 @@
       "approvalRequired": true,
       "availability": {
         "detection": [
-          { "method": "file-exists", "target": "%LOCALAPPDATA%\\D3DSCache" },
-          { "method": "file-exists", "target": "%LOCALAPPDATA%\\NVIDIA" }
+          { "method": "file-exists", "target": "%LOCALAPPDATA%\\D3DSCache" }
         ],
         "notes": "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo proves only disposable fixture backup/delete/restore."
       },

@@ -388,6 +388,34 @@
       "status": "draft"
     },
     {
+      "name": "capability entry",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityEntry",
+      "workflow": "unified control plane",
+      "summary": "Single static optimization capability with preview, apply, restore, detection metadata, test evidence, and optional resolved availability.",
+      "status": "draft"
+    },
+    {
+      "name": "capability registry",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRegistry",
+      "workflow": "unified control plane",
+      "summary": "Read-only unified registry envelope combining all capability fragments with current-machine availability resolution and summary counts.",
+      "status": "draft"
+    },
+    {
+      "name": "frontend label map",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/frontendLabelMap",
+      "workflow": "unified control plane",
+      "summary": "Derived tab and label mapping for all backend capabilities using frontend-facing names without duplicating capability logic.",
+      "status": "draft"
+    },
+    {
+      "name": "utilities inventory detector",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "unified control plane",
+      "summary": "Read-only utilities-folder detector envelope for external optimization tools, packages, and prerequisite installers.",
+      "status": "draft"
+    },
+    {
       "name": "validation temp artifact audit",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "backend validation hygiene",
