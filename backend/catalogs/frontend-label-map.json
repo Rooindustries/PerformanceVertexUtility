@@ -1,0 +1,450 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedFrom":  "backend/capabilities",
+    "tabs":  [
+                 {
+                     "tab":  "Game Tune",
+                     "capabilities":  [
+                                          {
+                                              "capabilityId":  "process-controls.cpu-priority",
+                                              "frontendLabel":  "CPU Priority",
+                                              "displayName":  "CPU Priority",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.io-priority",
+                                              "frontendLabel":  "I/O Priority",
+                                              "displayName":  "I/O Priority",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.gpu-priority",
+                                              "frontendLabel":  "GPU Priority",
+                                              "displayName":  "GPU Priority",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.cpu-affinity",
+                                              "frontendLabel":  "CPU Affinity",
+                                              "displayName":  "CPU Affinity",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.probalance-restraint",
+                                              "frontendLabel":  "ProBalance Restraint",
+                                              "displayName":  "ProBalance Restraint",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.per-game-rules",
+                                              "frontendLabel":  "Per-Game Rules",
+                                              "displayName":  "Per-Game Rules",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.session-restore",
+                                              "frontendLabel":  "Process Control Restore",
+                                              "displayName":  "Process Control Restore",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.lightweight-governor-budget",
+                                              "frontendLabel":  "ProBalance Restraint",
+                                              "displayName":  "Lightweight Governor Budget",
+                                              "riskLevel":  "safe",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "process-controls.afftool-affinity-policy",
+                                              "frontendLabel":  "CPU Affinity",
+                                              "displayName":  "AffTool Affinity Policy",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          }
+                                      ]
+                 },
+                 {
+                     "tab":  "Clean Junk",
+                     "capabilities":  [
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.installed-app-inventory",
+                                              "frontendLabel":  "Installed App Inventory",
+                                              "displayName":  "Installed App Inventory",
+                                              "riskLevel":  "safe",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.app-classification",
+                                              "frontendLabel":  "App Classification",
+                                              "displayName":  "App Classification",
+                                              "riskLevel":  "safe",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.uninstall-queue",
+                                              "frontendLabel":  "Uninstall Queue",
+                                              "displayName":  "Uninstall Queue",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.official-uninstall",
+                                              "frontendLabel":  "Official Uninstall",
+                                              "displayName":  "Official Uninstall",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "allowlist-shim",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.leftover-scan",
+                                              "frontendLabel":  "Leftover Scan",
+                                              "displayName":  "Leftover Scan",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.cleanup-deletion-plan",
+                                              "frontendLabel":  "Cleanup Deletion Plan",
+                                              "displayName":  "Cleanup Deletion Plan",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "fixture-proven",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.cleanup-rollback",
+                                              "frontendLabel":  "Cleanup Rollback",
+                                              "displayName":  "Cleanup Rollback",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "fixture-proven",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.startup-entries-autoruns",
+                                              "frontendLabel":  "Startup Entries (Autoruns)",
+                                              "displayName":  "Startup Entries (Autoruns)",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "cleanup-uninstall.device-cleanup",
+                                              "frontendLabel":  "Device Cleanup",
+                                              "displayName":  "Device Cleanup",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          }
+                                      ]
+                 },
+                 {
+                     "tab":  "Drivers \u0026 Settings",
+                     "capabilities":  [
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvidia-nip-profile-preview",
+                                              "frontendLabel":  "NVIDIA Profile",
+                                              "displayName":  "NVIDIA Profile Preview",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvidia-nip-export-probe",
+                                              "frontendLabel":  "Profile Export",
+                                              "displayName":  "NVIDIA Profile Export Probe",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvidia-nip-gated-import",
+                                              "frontendLabel":  "NVIDIA Profile",
+                                              "displayName":  "NVIDIA Profile Gated Import",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvidia-nip-restore-manifest",
+                                              "frontendLabel":  "Profile Export",
+                                              "displayName":  "NVIDIA Profile Restore Manifest",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvidia-nip-base-catalog",
+                                              "frontendLabel":  "NVIDIA Profile",
+                                              "displayName":  "Base NIP Profile Catalog",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-nvidia-59579-no-app",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "NVIDIA 595.79 Driver Package (No NVIDIA App)",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-nvidia-59579-with-app",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "NVIDIA 595.79 Driver Package (With NVIDIA App)",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-amd-26-2-2",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "AMD Graphics Driver Package 26.2.2",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-amd-chipset-8-02-18-557",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "AMD Chipset Driver Package 8.02.18.557",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-intel-chipset",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "Intel Chipset Driver Package",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-intel-network",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "Intel Network Driver Package",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-package-realtek-network",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "Realtek Network Driver Package",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-booster-package",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "Driver Booster Package",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.driver-cleanup-ddu",
+                                              "frontendLabel":  "Driver Cleanup (DDU)",
+                                              "displayName":  "Display Driver Uninstaller",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.nvcleanstall",
+                                              "frontendLabel":  "Driver Package",
+                                              "displayName":  "NVCleanstall",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.hwinfo-installer",
+                                              "frontendLabel":  "Sensor Monitoring (HWiNFO)",
+                                              "displayName":  "HWiNFO Installer",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.hwinfo-installed-sensor-monitoring",
+                                              "frontendLabel":  "Sensor Monitoring (HWiNFO)",
+                                              "displayName":  "HWiNFO Installed Sensor Monitoring",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  false
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.cpu-z-diagnostics",
+                                              "frontendLabel":  "CPU-Z Diagnostics",
+                                              "displayName":  "CPU-Z Diagnostics",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.gpu-z-diagnostics",
+                                              "frontendLabel":  "GPU-Z Diagnostics",
+                                              "displayName":  "GPU-Z Diagnostics",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.msi-afterburner",
+                                              "frontendLabel":  "MSI Afterburner",
+                                              "displayName":  "MSI Afterburner",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.msi-kombustor",
+                                              "frontendLabel":  "MSI Kombustor",
+                                              "displayName":  "MSI Kombustor",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.latencymon",
+                                              "frontendLabel":  "LatencyMon Diagnostics",
+                                              "displayName":  "LatencyMon",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.scewin",
+                                              "frontendLabel":  "SCEWIN Firmware Utility",
+                                              "displayName":  "SCEWIN",
+                                              "riskLevel":  "critical",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.prerequisite-dotnetfx35",
+                                              "frontendLabel":  "Prerequisites",
+                                              "displayName":  ".NET Framework 3.5 Prerequisite",
+                                              "riskLevel":  "safe",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "drivers-gpu-tools.prerequisite-directx-june2010",
+                                              "frontendLabel":  "Prerequisites",
+                                              "displayName":  "DirectX Runtime Prerequisite",
+                                              "riskLevel":  "safe",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          }
+                                      ]
+                 },
+                 {
+                     "tab":  "Live Feel",
+                     "capabilities":  [
+                                          {
+                                              "capabilityId":  "system-optimizations.standby-memory",
+                                              "frontendLabel":  "Standby Memory",
+                                              "displayName":  "Standby Memory",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "helper-contract",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.timer-resolution",
+                                              "frontendLabel":  "Timer Resolution",
+                                              "displayName":  "Timer Resolution",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.power-plan",
+                                              "frontendLabel":  "Power Plan",
+                                              "displayName":  "Power Plan",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "live",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.shader-cache",
+                                              "frontendLabel":  "Shader Cache",
+                                              "displayName":  "Shader Cache",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "fixture-proven",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.service-trim",
+                                              "frontendLabel":  "Service Trim",
+                                              "displayName":  "Service Trim",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "allowlist-shim",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.network-tweaks",
+                                              "frontendLabel":  "Network Tweaks",
+                                              "displayName":  "Network Tweaks",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.game-registry-tweaks",
+                                              "frontendLabel":  "Game Registry Tweaks",
+                                              "displayName":  "Game Registry Tweaks",
+                                              "riskLevel":  "low",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.svchost-grouping-registry",
+                                              "frontendLabel":  "Game Registry Tweaks",
+                                              "displayName":  "Svchost Process Grouping",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "preview-only",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.windows-features-fixes",
+                                              "frontendLabel":  "Windows Features",
+                                              "displayName":  "Windows Features and Fixes",
+                                              "riskLevel":  "medium",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          },
+                                          {
+                                              "capabilityId":  "system-optimizations.windows-toggle-library",
+                                              "frontendLabel":  "Windows Features",
+                                              "displayName":  "Windows Toggle Library",
+                                              "riskLevel":  "high",
+                                              "applyStatus":  "not-implemented",
+                                              "approvalRequired":  true
+                                          }
+                                      ]
+                 }
+             ]
+}
