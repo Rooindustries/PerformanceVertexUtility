@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "family": "cleanup-uninstall",
+  "routes": [
+    {
+      "capabilityId": "cleanup-uninstall.installed-app-inventory",
+      "preview": {
+        "script": "backend/scripts/Get-InstalledAppInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 90
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "read-only installed app inventory",
+        "nextRequiredStep": "Use preview to run Get-InstalledAppInventory.ps1; installed app inventory has no mutating apply path."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "read-only installed app inventory",
+        "nextRequiredStep": "Use preview to run Get-InstalledAppInventory.ps1; read-only installed app inventory has no restore path."
+      },
+      "notes": "Inventory is a detector route only; winget is intentionally not included."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.app-classification",
+      "preview": {
+        "script": "backend/scripts/Get-AppClassification.ps1",
+        "args": [
+          "-InventoryPath",
+          "backend/samples/installed-app-inventory.sample.json"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "read-only app classification",
+        "nextRequiredStep": "Use preview to run Get-AppClassification.ps1 against an inventory; app classification has no mutating apply path."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "read-only app classification",
+        "nextRequiredStep": "Use preview to run Get-AppClassification.ps1; read-only app classification has no restore path."
+      },
+      "notes": "Preview uses the repository sample inventory so no per-call AppId is required."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.uninstall-queue",
+      "preview": {
+        "script": "backend/scripts/Preview-UninstallQueue.ps1",
+        "args": [
+          "-InventoryPath",
+          "backend/samples/installed-app-inventory.sample.json",
+          "-AppId",
+          "registry:overwolf"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "queue preview only",
+        "nextRequiredStep": "Use preview to run Preview-UninstallQueue.ps1; uninstall queue execution is not routed by this backend."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "queue preview writes no state",
+        "nextRequiredStep": "Use preview to run Preview-UninstallQueue.ps1; uninstall queue preview writes no state to restore."
+      },
+      "notes": "Preview passes one normal sample app because the router literal arg list cannot safely bind multiple string-array AppId values."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.official-uninstall",
+      "preview": {
+        "script": "backend/scripts/Preview-OfficialUninstall.ps1",
+        "args": [
+          "-InventoryPath",
+          "backend/samples/installed-app-inventory.sample.json",
+          "-AppId",
+          "registry:overwolf"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-OfficialUninstallCommandRunner.ps1",
+        "args": [
+          "-OfficialPreviewPath",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/official-runner/official-preview.json",
+          "-AllowedExecutablePath",
+          "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          "-WorkingDirectory",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/official-runner",
+          "-TimeoutSeconds",
+          "5",
+          "-ConfirmApply",
+          "-AllowHarmlessShimExecution",
+          "-UserApproved"
+        ],
+        "timeoutSeconds": 30,
+        "changedEvidencePath": "summary.processStarted"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "vendor uninstall rollback is not guaranteed",
+        "nextRequiredStep": "Use Preview-OfficialUninstall.ps1 for metadata; real app uninstall restore needs app-specific recovery evidence before a restore route can be added."
+      },
+      "notes": "Apply is an allowlist-shim proof only: the test fixture command executable must exactly match powershell.exe and run a harmless temp shim script."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.leftover-scan",
+      "preview": {
+        "script": "backend/scripts/Preview-LeftoverScan.ps1",
+        "args": [
+          "-InventoryPath",
+          "backend/samples/installed-app-inventory.sample.json",
+          "-AppId",
+          "registry:overwolf"
+        ],
+        "timeoutSeconds": 90
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "leftover candidate preview only",
+        "nextRequiredStep": "Use preview to run Preview-LeftoverScan.ps1; deletion must route through the fixture-only cleanup deletion plan."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "leftover scan is read-only",
+        "nextRequiredStep": "Use preview to run Preview-LeftoverScan.ps1; read-only leftover scans have no restore path."
+      },
+      "notes": "Preview declares a safe sample AppId because Preview-LeftoverScan.ps1 requires -AppId."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.cleanup-deletion-plan",
+      "preview": {
+        "script": "backend/scripts/New-CleanupDeletionManifest.ps1",
+        "args": [
+          "-ScanPath",
+          "backend/samples/leftover-scan-preview.sample.json"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-UninstallCleanupExecution.ps1",
+        "args": [
+          "-OfficialPreviewPath",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/official-preview.json",
+          "-CleanupManifestPath",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/cleanup-manifest.json",
+          "-ConfirmApply",
+          "-AllowDisposableFixtureApply",
+          "-OfficialUninstallCommandApproved",
+          "-CleanupDeletionManifestApproved"
+        ],
+        "fixtureRootParam": "-FixtureRoot",
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "summary.deletedCount",
+        "restorableEvidencePath": "rollback.rollbackSupported"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "cleanup rollback is a separate fixture-proven capability",
+        "nextRequiredStep": "Use cleanup-uninstall.cleanup-rollback apply with -ConfirmApply after Invoke-UninstallCleanupExecution.ps1 writes rollback-manifest.json."
+      },
+      "notes": "Confirmed apply is limited to test-created files under the OS temp fixture root passed through -FixtureRoot."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.cleanup-rollback",
+      "preview": {
+        "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
+        "args": [
+          "-RollbackManifestPath",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json"
+        ],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
+        "args": [
+          "-RollbackManifestPath",
+          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json",
+          "-ConfirmApply",
+          "-AllowDisposableFixtureApply"
+        ],
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "summary.restoredCount"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "cleanup rollback is itself the restore action",
+        "nextRequiredStep": "Use cleanup-uninstall.cleanup-rollback apply with -ConfirmApply to restore files from a rollback manifest."
+      },
+      "notes": "Rollback consumes the manifest written by the fixture deletion route and restores only paths inside that temp fixture root."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.startup-entries-autoruns",
+      "preview": {
+        "statusOnly": true,
+        "reason": "external Autoruns detector is file-facts only and must not launch autoruns.exe",
+        "nextRequiredStep": "Implement a hidden autoruns.exe autorunsc-style CSV export allowlist runner, then route preview to that read-only export script."
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "startup entry mutation is not safely executable yet",
+        "nextRequiredStep": "Implement a hidden autoruns.exe autorunsc-style CSV export allowlist runner and backup/export parser before any startup mutation route."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "startup entry restore evidence is not available",
+        "nextRequiredStep": "Implement startup registry and scheduled-task export restore evidence before adding a startup restore route."
+      },
+      "notes": "All actions are status-only; Autoruns is never launched by the router."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.device-cleanup",
+      "preview": {
+        "statusOnly": true,
+        "reason": "external DeviceCleanup detector is file-facts only and must not launch DeviceCleanup.exe",
+        "nextRequiredStep": "Implement a read-only device enumeration/export helper contract before routing DeviceCleanup preview."
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "device cleanup mutation is not safely executable yet",
+        "nextRequiredStep": "Implement an exact device-instance allowlist runner with rollback evidence before any DeviceCleanup apply route."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "device cleanup restore evidence is not available",
+        "nextRequiredStep": "Implement device-instance export and reinstall or restore evidence before adding a DeviceCleanup restore route."
+      },
+      "notes": "All actions are status-only; DeviceCleanup.exe is never launched by the router."
+    }
+  ]
+}
