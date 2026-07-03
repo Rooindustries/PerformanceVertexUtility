@@ -3,6 +3,235 @@
   "family": "process-controls",
   "routes": [
     {
+      "capabilityId": "process-controls.cpu-priority",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessProfile.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-GameTuneSession.ps1",
+        "args": [
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "1",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes CPU priority through the reversible Game Tune session executor."
+    },
+    {
+      "capabilityId": "process-controls.io-priority",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "args": [
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "2",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes I/O priority through the bounded persistent policy session executor."
+    },
+    {
+      "capabilityId": "process-controls.gpu-priority",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "args": [
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "2",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes GPU priority through the bounded persistent policy session executor."
+    },
+    {
+      "capabilityId": "process-controls.cpu-affinity",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "args": [
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "2",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes CPU affinity through the bounded persistent policy session executor."
+    },
+    {
+      "capabilityId": "process-controls.probalance-restraint",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessGovernor.ps1",
+        "args": [
+          "-SampleIntervalMilliseconds",
+          "200"
+        ],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-ProcessGovernorSession.ps1",
+        "args": [
+          "-SampleIntervalMilliseconds",
+          "200",
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "14",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "disposableProbeParam": "-ForegroundProcessId",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-ProcessGovernorSession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes ProBalance restraint through the native process governor; TargetProcessId maps to the script's ForegroundProcessId exclusion parameter."
+    },
+    {
+      "capabilityId": "process-controls.per-game-rules",
+      "preview": {
+        "script": "backend/scripts/Preview-ProcessProfile.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Start-GameTuneSession.ps1",
+        "args": [
+          "-PollIntervalSeconds",
+          "1",
+          "-MaxDurationSeconds",
+          "1",
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changedItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Routes per-game process rules through the reversible Game Tune session executor."
+    },
+    {
+      "capabilityId": "process-controls.session-restore",
+      "preview": {
+        "script": "backend/scripts/Get-GameTuneSessionStatus.ps1",
+        "args": [],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "restore preview only",
+        "nextRequiredStep": "Use restore with -ConfirmApply after Stop-GameTuneSession.ps1 can find a session backup."
+      },
+      "restore": {
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "args": [
+          "-ConfirmApply"
+        ],
+        "fixtureRootParam": "-StateRoot",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "restoredItems",
+        "restorableEvidencePath": "restorable"
+      },
+      "notes": "Session restore preview reports the latest Game Tune session status without changing process controls."
+    },
+    {
       "capabilityId": "process-controls.lightweight-governor-budget",
       "preview": {
         "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
@@ -25,6 +254,25 @@
         "nextRequiredStep": "Use preview to run Measure-RooBackendFootprint.ps1; read-only budget measurement has no restore path."
       },
       "notes": "Worked example route for read-only backend footprint budget measurement."
+    },
+    {
+      "capabilityId": "process-controls.afftool-affinity-policy",
+      "preview": {
+        "statusOnly": true,
+        "reason": "external affinity policy tool must not be launched by the router",
+        "nextRequiredStep": "Use status to inspect AffTool availability; add an allowlist runner and rollback manifest before routing AffTool preview."
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "external affinity policy runner not safely implemented",
+        "nextRequiredStep": "Add an allowlist runner and rollback manifest for AffTool policies before routing apply."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "external affinity policy restore not safely implemented",
+        "nextRequiredStep": "Add an allowlist runner and rollback manifest for AffTool policies before routing restore."
+      },
+      "notes": "AffTool is inventoried only; this manifest never launches the external executable."
     }
   ]
 }
