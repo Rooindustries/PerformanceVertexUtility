@@ -63,7 +63,7 @@
                                           },
                                           {
                                               "capabilityId":  "process-controls.lightweight-governor-budget",
-                                              "frontendLabel":  "ProBalance Restraint",
+                                              "frontendLabel":  "Governor Budget (read-only)",
                                               "displayName":  "Lightweight Governor Budget",
                                               "riskLevel":  "safe",
                                               "applyStatus":  "preview-only",
@@ -71,7 +71,7 @@
                                           },
                                           {
                                               "capabilityId":  "process-controls.afftool-affinity-policy",
-                                              "frontendLabel":  "CPU Affinity",
+                                              "frontendLabel":  "CPU Affinity (AffTool)",
                                               "displayName":  "AffTool Affinity Policy",
                                               "riskLevel":  "medium",
                                               "applyStatus":  "not-implemented",
@@ -161,7 +161,7 @@
                      "capabilities":  [
                                           {
                                               "capabilityId":  "drivers-gpu-tools.nvidia-nip-profile-preview",
-                                              "frontendLabel":  "NVIDIA Profile",
+                                              "frontendLabel":  "NVIDIA Profile Preview",
                                               "displayName":  "NVIDIA Profile Preview",
                                               "riskLevel":  "medium",
                                               "applyStatus":  "preview-only",
@@ -177,7 +177,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.nvidia-nip-gated-import",
-                                              "frontendLabel":  "NVIDIA Profile",
+                                              "frontendLabel":  "NVIDIA Profile Import",
                                               "displayName":  "NVIDIA Profile Gated Import",
                                               "riskLevel":  "medium",
                                               "applyStatus":  "preview-only",
@@ -185,7 +185,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.nvidia-nip-restore-manifest",
-                                              "frontendLabel":  "Profile Export",
+                                              "frontendLabel":  "Profile Restore Manifest",
                                               "displayName":  "NVIDIA Profile Restore Manifest",
                                               "riskLevel":  "medium",
                                               "applyStatus":  "preview-only",
@@ -193,7 +193,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.nvidia-nip-framesync-catalog",
-                                              "frontendLabel":  "NVIDIA Profile",
+                                              "frontendLabel":  "NVIDIA Profile Catalog (FrameSync)",
                                               "displayName":  "FrameSync NIP Profile Catalog",
                                               "riskLevel":  "medium",
                                               "applyStatus":  "preview-only",
@@ -201,7 +201,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-nvidia-59579-no-app",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "NVIDIA 595.79 (No App)",
                                               "displayName":  "NVIDIA 595.79 Driver Package (No NVIDIA App)",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -209,7 +209,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-nvidia-59579-with-app",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "NVIDIA 595.79 (With App)",
                                               "displayName":  "NVIDIA 595.79 Driver Package (With NVIDIA App)",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -217,7 +217,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-amd-26-2-2",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "AMD Graphics 26.2.2",
                                               "displayName":  "AMD Graphics Driver Package 26.2.2",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -225,7 +225,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-amd-chipset-8-02-18-557",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "AMD Chipset 8.02.18.557",
                                               "displayName":  "AMD Chipset Driver Package 8.02.18.557",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -233,7 +233,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-intel-chipset",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "Intel Chipset Driver",
                                               "displayName":  "Intel Chipset Driver Package",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -241,7 +241,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-intel-network",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "Intel Network Driver",
                                               "displayName":  "Intel Network Driver Package",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -249,7 +249,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-package-realtek-network",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "Realtek Network Driver",
                                               "displayName":  "Realtek Network Driver Package",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -257,7 +257,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.driver-booster-package",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "Driver Booster",
                                               "displayName":  "Driver Booster Package",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -273,7 +273,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.nvcleanstall",
-                                              "frontendLabel":  "Driver Package",
+                                              "frontendLabel":  "NVCleanstall",
                                               "displayName":  "NVCleanstall",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",
@@ -281,7 +281,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.hwinfo-installer",
-                                              "frontendLabel":  "Sensor Monitoring (HWiNFO)",
+                                              "frontendLabel":  "HWiNFO Installer",
                                               "displayName":  "HWiNFO Installer",
                                               "riskLevel":  "low",
                                               "applyStatus":  "not-implemented",
@@ -289,7 +289,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.hwinfo-installed-sensor-monitoring",
-                                              "frontendLabel":  "Sensor Monitoring (HWiNFO)",
+                                              "frontendLabel":  "HWiNFO Sensor Monitoring (Installed)",
                                               "displayName":  "HWiNFO Installed Sensor Monitoring",
                                               "riskLevel":  "low",
                                               "applyStatus":  "not-implemented",
@@ -345,7 +345,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.prerequisite-dotnetfx35",
-                                              "frontendLabel":  "Prerequisites",
+                                              "frontendLabel":  ".NET Framework 3.5",
                                               "displayName":  ".NET Framework 3.5 Prerequisite",
                                               "riskLevel":  "safe",
                                               "applyStatus":  "not-implemented",
@@ -353,7 +353,7 @@
                                           },
                                           {
                                               "capabilityId":  "drivers-gpu-tools.prerequisite-directx-june2010",
-                                              "frontendLabel":  "Prerequisites",
+                                              "frontendLabel":  "DirectX Runtime",
                                               "displayName":  "DirectX Runtime Prerequisite",
                                               "riskLevel":  "safe",
                                               "applyStatus":  "not-implemented",
@@ -422,7 +422,7 @@
                                           },
                                           {
                                               "capabilityId":  "system-optimizations.svchost-grouping-registry",
-                                              "frontendLabel":  "Game Registry Tweaks",
+                                              "frontendLabel":  "Svchost Grouping (Registry)",
                                               "displayName":  "Svchost Process Grouping",
                                               "riskLevel":  "high",
                                               "applyStatus":  "preview-only",
@@ -438,7 +438,7 @@
                                           },
                                           {
                                               "capabilityId":  "system-optimizations.windows-toggle-library",
-                                              "frontendLabel":  "Windows Features",
+                                              "frontendLabel":  "Windows Toggle Library",
                                               "displayName":  "Windows Toggle Library",
                                               "riskLevel":  "high",
                                               "applyStatus":  "not-implemented",

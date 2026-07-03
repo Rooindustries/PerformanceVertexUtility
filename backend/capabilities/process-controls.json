@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "process-controls",
   "capabilities": [
@@ -415,7 +415,7 @@
       "technicalName": "Measure-RooBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
       "source": "roo-native",
       "implementedBy": "roo-script",
-      "frontendLabel": "ProBalance Restraint",
+      "frontendLabel": "Governor Budget (read-only)",
       "frontendTab": "Game Tune",
       "riskLevel": "safe",
       "approvalRequired": false,
@@ -465,7 +465,7 @@
       "technicalName": "AffTool\\intPolicy_x64.exe external affinity policy tool",
       "source": "utilities-folder",
       "implementedBy": "external-tool",
-      "frontendLabel": "CPU Affinity",
+      "frontendLabel": "CPU Affinity (AffTool)",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",
       "approvalRequired": true,

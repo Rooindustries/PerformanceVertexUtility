@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "drivers-gpu-tools",
   "routes": [
@@ -277,12 +277,12 @@
       },
       "apply": {
         "statusOnly": true,
-        "reason": "tool not present",
+        "reason": "NVCleanstall is not present",
         "nextRequiredStep": "Add an explicit local tool reference and a manual NVIDIA-only builder handoff contract; no builder automation is implemented."
       },
       "restore": {
         "statusOnly": true,
-        "reason": "not available",
+        "reason": "NVCleanstall is not present at the expected path",
         "nextRequiredStep": "Add NVCleanstall at the expected path before defining a restore route; no restore automation is implemented."
       },
       "notes": "Inventory detector records the expected path; NVCleanstall is not launched."

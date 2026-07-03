@@ -402,6 +402,20 @@
       "status": "draft"
     },
     {
+      "name": "capability router response",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRouterResponse",
+      "workflow": "unified control plane",
+      "summary": "Complete response envelope returned by Invoke-RooCapability.ps1 for status, explain, preview, apply, and restore actions.",
+      "status": "draft"
+    },
+    {
+      "name": "capability route manifest",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRouteManifest",
+      "workflow": "unified control plane",
+      "summary": "Per-family router manifest mapping capability IDs to dispatch or status-only preview, apply, and restore sections.",
+      "status": "draft"
+    },
+    {
       "name": "frontend label map",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/frontendLabelMap",
       "workflow": "unified control plane",

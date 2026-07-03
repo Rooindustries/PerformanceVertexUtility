@@ -1,0 +1,88 @@
+﻿{
+    "actionId":  "backend.capability.invoke",
+    "schemaVersion":  1,
+    "correlationId":  "sample-capability-router-approval-20260703-180000",
+    "startedAtUtc":  "2026-07-03T12:50:12.0633445Z",
+    "completedAtUtc":  "2026-07-03T12:50:12.2664675Z",
+    "capabilityId":  "system-optimizations.timer-resolution",
+    "family":  "system-optimizations",
+    "displayName":  "Timer Resolution",
+    "frontendLabel":  "Timer Resolution",
+    "frontendTab":  "Live Feel",
+    "action":  "apply",
+    "dryRun":  true,
+    "status":  "approval-required",
+    "requiresApproval":  true,
+    "approvalSatisfied":  false,
+    "machineAvailable":  true,
+    "unavailableReason":  null,
+    "applyStatus":  "live",
+    "restoreStatus":  "live",
+    "routedScript":  null,
+    "wouldChange":  false,
+    "changed":  false,
+    "restoreAvailable":  true,
+    "evidence":  {
+                     "capability":  {
+                                        "capabilityId":  "system-optimizations.timer-resolution",
+                                        "previewStatus":  "implemented",
+                                        "applyStatus":  "live",
+                                        "restoreStatus":  "live",
+                                        "gates":  [
+                                                      "confirm-apply",
+                                                      "explicit-user-approval",
+                                                      "real-system-explicit-flag"
+                                                  ]
+                                    },
+                     "availability":  {
+                                          "available":  true,
+                                          "checkedRules":  [
+                                                               {
+                                                                   "method":  "builtin",
+                                                                   "target":  "winmm!timeBeginPeriod/timeEndPeriod",
+                                                                   "resolvedTarget":  "winmm!timeBeginPeriod/timeEndPeriod",
+                                                                   "passed":  true,
+                                                                   "evidence":  {
+                                                                                    "target":  "winmm!timeBeginPeriod/timeEndPeriod",
+                                                                                    "assumedPresent":  true
+                                                                                },
+                                                                   "reason":  null
+                                                               }
+                                                           ],
+                                          "unavailableReason":  null
+                                      },
+                     "routing":  {
+                                     "manifestPath":  "backend/capabilities/routing/system-optimizations.routes.json",
+                                     "manifestExists":  true,
+                                     "routePresent":  true,
+                                     "preview":  {
+                                                     "present":  true,
+                                                     "statusOnly":  false,
+                                                     "script":  "backend/scripts/Preview-StutterOptimization.ps1",
+                                                     "timeoutSeconds":  60,
+                                                     "reason":  null,
+                                                     "nextRequiredStep":  null
+                                                 },
+                                     "apply":  {
+                                                   "present":  true,
+                                                   "statusOnly":  false,
+                                                   "script":  "backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1",
+                                                   "timeoutSeconds":  20,
+                                                   "reason":  null,
+                                                   "nextRequiredStep":  null
+                                               },
+                                     "restore":  {
+                                                     "present":  true,
+                                                     "statusOnly":  false,
+                                                     "script":  "backend/scripts/Invoke-TimerResolutionSession.ps1",
+                                                     "timeoutSeconds":  10,
+                                                     "reason":  null,
+                                                     "nextRequiredStep":  null
+                                                 }
+                                 }
+                 },
+    "errors":  [
+
+               ],
+    "nextRequiredStep":  "Re-run with -ConfirmApply to route to Invoke-StutterOptimizationRealExecutor.ps1 (its own confirmation gates still apply)"
+}

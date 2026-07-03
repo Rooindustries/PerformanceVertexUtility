@@ -5102,6 +5102,340 @@
         }
       }
     },
+    "capabilityRouterError": {
+      "title": "Capability Router Error",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "blocking"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "blocking": {
+          "type": "boolean"
+        }
+      }
+    },
+    "capabilityRouterResponse": {
+      "title": "Capability Router Response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "schemaVersion",
+        "correlationId",
+        "startedAtUtc",
+        "completedAtUtc",
+        "capabilityId",
+        "family",
+        "displayName",
+        "frontendLabel",
+        "frontendTab",
+        "action",
+        "dryRun",
+        "status",
+        "requiresApproval",
+        "approvalSatisfied",
+        "machineAvailable",
+        "unavailableReason",
+        "applyStatus",
+        "restoreStatus",
+        "routedScript",
+        "wouldChange",
+        "changed",
+        "restoreAvailable",
+        "evidence",
+        "errors",
+        "nextRequiredStep"
+      ],
+      "properties": {
+        "actionId": {
+          "const": "backend.capability.invoke"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "startedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capabilityId": {
+          "type": "string"
+        },
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "process-controls",
+            "cleanup-uninstall",
+            "drivers-gpu-tools",
+            "system-optimizations",
+            null
+          ]
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frontendLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frontendTab": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Game Tune",
+            "Clean Junk",
+            "Drivers & Settings",
+            "Live Feel",
+            null
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "status",
+            "explain",
+            "apply",
+            "restore"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "approval-required",
+            "not-executable",
+            "unavailable",
+            "failed"
+          ]
+        },
+        "requiresApproval": {
+          "type": "boolean"
+        },
+        "approvalSatisfied": {
+          "type": "boolean"
+        },
+        "machineAvailable": {
+          "type": "boolean"
+        },
+        "unavailableReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "applyStatus": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "live",
+            "fixture-proven",
+            "allowlist-shim",
+            "helper-contract",
+            "preview-only",
+            "not-implemented",
+            null
+          ]
+        },
+        "restoreStatus": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "live",
+            "fixture-proven",
+            "manifest-ready",
+            "not-applicable",
+            "not-implemented",
+            null
+          ]
+        },
+        "routedScript": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wouldChange": {
+          "type": "boolean"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "restoreAvailable": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityRouterError"
+          }
+        },
+        "nextRequiredStep": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "capabilityRouteDispatchSection": {
+      "title": "Capability Route Dispatch Section",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script",
+        "args",
+        "timeoutSeconds"
+      ],
+      "properties": {
+        "script": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fixtureRootParam": {
+          "type": "string"
+        },
+        "disposableProbeParam": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "changedEvidencePath": {
+          "type": "string"
+        },
+        "restorableEvidencePath": {
+          "type": "string"
+        }
+      }
+    },
+    "capabilityRouteStatusOnlySection": {
+      "title": "Capability Route Status-Only Section",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statusOnly",
+        "reason",
+        "nextRequiredStep"
+      ],
+      "properties": {
+        "statusOnly": {
+          "const": true
+        },
+        "reason": {
+          "type": "string"
+        },
+        "nextRequiredStep": {
+          "type": "string"
+        }
+      }
+    },
+    "capabilityRouteSection": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/capabilityRouteDispatchSection"
+        },
+        {
+          "$ref": "#/$defs/capabilityRouteStatusOnlySection"
+        }
+      ]
+    },
+    "capabilityRouteManifest": {
+      "title": "Capability Route Manifest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "family",
+        "routes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "family": {
+          "type": "string",
+          "enum": [
+            "process-controls",
+            "cleanup-uninstall",
+            "drivers-gpu-tools",
+            "system-optimizations"
+          ]
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "capabilityId",
+              "preview",
+              "apply",
+              "restore"
+            ],
+            "properties": {
+              "capabilityId": {
+                "type": "string"
+              },
+              "preview": {
+                "$ref": "#/$defs/capabilityRouteSection"
+              },
+              "apply": {
+                "$ref": "#/$defs/capabilityRouteSection"
+              },
+              "restore": {
+                "$ref": "#/$defs/capabilityRouteSection"
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
     "frontendLabelMap": {
       "title": "Frontend Label Map",
       "type": "object",

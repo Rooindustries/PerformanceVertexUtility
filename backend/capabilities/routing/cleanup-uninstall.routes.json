@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "cleanup-uninstall",
   "routes": [
@@ -57,12 +57,12 @@
       },
       "apply": {
         "statusOnly": true,
-        "reason": "queue preview only",
+        "reason": "uninstall queue is preview-only; execution is not routed here",
         "nextRequiredStep": "Use preview to run Preview-UninstallQueue.ps1; uninstall queue execution is not routed by this backend."
       },
       "restore": {
         "statusOnly": true,
-        "reason": "queue preview writes no state",
+        "reason": "queue preview changes nothing, so there is nothing to restore",
         "nextRequiredStep": "Use preview to run Preview-UninstallQueue.ps1; uninstall queue preview writes no state to restore."
       },
       "notes": "Preview passes one normal sample app because the router literal arg list cannot safely bind multiple string-array AppId values."
@@ -195,12 +195,12 @@
       "preview": {
         "statusOnly": true,
         "reason": "external Autoruns detector is file-facts only and must not launch autoruns.exe",
-        "nextRequiredStep": "Implement a hidden autoruns.exe autorunsc-style CSV export allowlist runner, then route preview to that read-only export script."
+        "nextRequiredStep": "Add a read-only Autoruns CSV export runner (autorunsc.exe), then route preview to that export script."
       },
       "apply": {
         "statusOnly": true,
         "reason": "startup entry mutation is not safely executable yet",
-        "nextRequiredStep": "Implement a hidden autoruns.exe autorunsc-style CSV export allowlist runner and backup/export parser before any startup mutation route."
+        "nextRequiredStep": "Add a read-only Autoruns CSV export runner (autorunsc.exe) and a backup/export parser before any startup change is routed."
       },
       "restore": {
         "statusOnly": true,

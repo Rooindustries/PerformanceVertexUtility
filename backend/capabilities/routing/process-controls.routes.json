@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "family": "process-controls",
   "routes": [
@@ -171,7 +171,7 @@
         "changedEvidencePath": "restoredItems",
         "restorableEvidencePath": "restorable"
       },
-      "notes": "Routes ProBalance restraint through the native process governor; TargetProcessId maps to the script's ForegroundProcessId exclusion parameter."
+      "notes": "Routes ProBalance restraint through the native process governor. The foreground game process is excluded from restraint."
     },
     {
       "capabilityId": "process-controls.per-game-rules",
@@ -216,7 +216,7 @@
       },
       "apply": {
         "statusOnly": true,
-        "reason": "restore preview only",
+        "reason": "restore is preview-only until a session backup exists",
         "nextRequiredStep": "Use restore with -ConfirmApply after Stop-GameTuneSession.ps1 can find a session backup."
       },
       "restore": {
