@@ -9,7 +9,7 @@
 
     <Grid Padding="{StaticResource RooPageMargin}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="18" MaxWidth="860" HorizontalAlignment="Left">
+            <StackPanel Spacing="18" MaxWidth="700" HorizontalAlignment="Stretch">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
@@ -40,6 +40,7 @@
                             <TextBlock Text="Theme" FontWeight="SemiBold" TextWrapping="Wrap"
                                        Foreground="{StaticResource RooTextPrimaryBrush}" />
                             <TextBlock Text="Blackout Gold is the only theme in this build." Style="{StaticResource CaptionTextBlockStyle}"
+                                       TextWrapping="Wrap"
                                        Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
                         <Grid ColumnSpacing="16">
@@ -52,6 +53,7 @@
                                            Foreground="{StaticResource RooTextPrimaryBrush}" />
                                 <TextBlock Text="Turns down glow and blur while keeping the Blackout Gold palette."
                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                           TextWrapping="Wrap"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" IsOn="{x:Bind ViewModel.ReducedEffects, Mode=TwoWay}" />
@@ -123,8 +125,10 @@
                         <TextBlock Text="{x:Bind ViewModel.Tagline}" TextWrapping="Wrap"
                                    Foreground="{StaticResource RooTextSecondaryBrush}" />
                         <TextBlock Text="{x:Bind ViewModel.VersionText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                   TextWrapping="Wrap"
                                    Foreground="{StaticResource RooTextMutedBrush}" />
                         <TextBlock Text="Roo Industries / rooindustries.com" Style="{StaticResource CaptionTextBlockStyle}"
+                                   TextWrapping="Wrap"
                                    Foreground="{StaticResource RooTextMutedBrush}" />
                     </StackPanel>
                 </Border>
