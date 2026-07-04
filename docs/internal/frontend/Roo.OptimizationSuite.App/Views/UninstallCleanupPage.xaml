@@ -9,19 +9,65 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
     <Page.Resources>
+        <DataTemplate x:Key="CleanupCapabilityItemTemplate" x:DataType="vm:CleanupCapabilityItem">
+            <StackPanel Padding="10,5,10,7" Spacing="0">
+                <ContentControl Content="{x:Bind Row}"
+                                ContentTemplate="{StaticResource CapabilityRowTemplate}"
+                                HorizontalContentAlignment="Stretch" />
+                <TextBlock Text="{x:Bind MetaText}"
+                           Margin="17,-2,0,0"
+                           FontSize="11"
+                           LineHeight="16"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource RooTextMutedBrush}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CleanupCapabilityGateTemplate" x:DataType="vm:CleanupCapabilityGateLine">
+            <Grid Padding="0,5" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0"
+                         Width="7"
+                         Height="7"
+                         Margin="0,5,0,0"
+                         VerticalAlignment="Top"
+                         Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind Label}"
+                           FontSize="12"
+                           LineHeight="17"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource RooTextSecondaryBrush}" />
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="AppItemTemplate" x:DataType="models:InstalledApp">
-            <StackPanel Padding="4,11" Spacing="3">
+            <StackPanel Padding="12,10" Spacing="4">
                 <Grid ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{x:Bind FriendlyName}" FontWeight="SemiBold" FontSize="14" LineHeight="20"
-                               Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                    <TextBlock Grid.Column="0"
+                               Text="{x:Bind FriendlyName}"
+                               FontWeight="SemiBold"
+                               FontSize="14"
+                               LineHeight="20"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                VerticalAlignment="Center"
                                 Visibility="{x:Bind Protected, Converter={StaticResource BoolToVisibility}}">
                         <Ellipse Width="6" Height="6" VerticalAlignment="Center" Fill="{StaticResource RiskProtectedBrush}" />
-                        <TextBlock Text="Protected — kept" FontSize="11" LineHeight="16" VerticalAlignment="Center"
+                        <TextBlock Text="Protected"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   VerticalAlignment="Center"
                                    Foreground="{StaticResource RiskProtectedBrush}" />
                     </StackPanel>
                 </Grid>
@@ -30,10 +76,19 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{x:Bind SecondaryLabel}" FontSize="11" LineHeight="16"
-                               VerticalAlignment="Center" Foreground="{StaticResource RooTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Text="{x:Bind EstimatedSizeBytes, Converter={StaticResource BytesToReadable}}" FontSize="12" LineHeight="17"
-                               VerticalAlignment="Center" Foreground="{StaticResource RooTextDisplayBrush}" />
+                    <TextBlock Grid.Column="0"
+                               Text="{x:Bind SecondaryLabel}"
+                               FontSize="11"
+                               LineHeight="16"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextMutedBrush}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Bind EstimatedSizeBytes, Converter={StaticResource BytesToReadable}}"
+                               FontSize="12"
+                               LineHeight="17"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource RooTextDisplayBrush}" />
                 </Grid>
             </StackPanel>
         </DataTemplate>
@@ -45,22 +100,44 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Top" Margin="0,6,0,0"
+                <Ellipse Grid.Column="0"
+                         Width="7"
+                         Height="7"
+                         VerticalAlignment="Top"
+                         Margin="0,6,0,0"
                          Fill="{x:Bind Risk, Converter={StaticResource RiskToBrush}}" />
                 <StackPanel Grid.Column="1" Spacing="3">
-                    <TextBlock Text="{x:Bind Type}" FontSize="13" LineHeight="18" FontWeight="SemiBold"
-                               Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{x:Bind Reason}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                    <TextBlock Text="{x:Bind Type}"
+                               FontSize="13"
+                               LineHeight="18"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind Reason}"
+                               FontSize="12"
+                               LineHeight="17"
+                               TextWrapping="Wrap"
                                Foreground="{StaticResource RooTextMutedBrush}" />
-                    <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent">
+                    <Expander HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Left"
+                              Background="Transparent">
                         <Expander.Header>
                             <TextBlock Text="Details" FontSize="11" Foreground="{StaticResource RooTextMutedBrush}" />
                         </Expander.Header>
-                        <TextBlock Text="{x:Bind Target}" FontSize="11" LineHeight="16" FontFamily="Consolas, monospace"
-                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind Target}"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   FontFamily="Consolas, monospace"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
                     </Expander>
                 </StackPanel>
-                <TextBlock Grid.Column="2" Text="{x:Bind Confidence}" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"
+                <TextBlock Grid.Column="2"
+                           Text="{x:Bind Confidence}"
+                           FontSize="11"
+                           VerticalAlignment="Top"
+                           Margin="0,3,0,0"
+                           TextWrapping="Wrap"
                            Foreground="{StaticResource RooTextMutedBrush}" />
             </Grid>
         </DataTemplate>
@@ -71,224 +148,507 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Top" Margin="0,5,0,0"
+                <Ellipse Grid.Column="0"
+                         Width="7"
+                         Height="7"
+                         VerticalAlignment="Top"
+                         Margin="0,5,0,0"
                          Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
                 <StackPanel Grid.Column="1" Spacing="2">
-                    <TextBlock Text="{x:Bind Label}" FontSize="13" FontWeight="SemiBold" LineHeight="18"
+                    <TextBlock Text="{x:Bind Label}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               LineHeight="18"
+                               TextWrapping="Wrap"
                                Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <TextBlock Text="{x:Bind Value}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                    <TextBlock Text="{x:Bind Value}"
+                               FontSize="12"
+                               LineHeight="17"
+                               TextWrapping="Wrap"
                                Foreground="{StaticResource RooTextMutedBrush}" />
                 </StackPanel>
             </Grid>
         </DataTemplate>
 
         <DataTemplate x:Key="GateRowTemplate" x:DataType="vm:GateRow">
-            <StackPanel Orientation="Horizontal" Padding="0,6" Spacing="8">
-                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                <TextBlock Text="{x:Bind Label}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"
-                           Foreground="{StaticResource RooTextSecondaryBrush}" />
-            </StackPanel>
+            <Grid Padding="0,6" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0"
+                         Width="7"
+                         Height="7"
+                         VerticalAlignment="Top"
+                         Margin="0,5,0,0"
+                         Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{x:Bind Label}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind Detail}"
+                               FontSize="12"
+                               LineHeight="17"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextMutedBrush}" />
+                </StackPanel>
+            </Grid>
         </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="{StaticResource RooPageMargin}">
 
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading your installed apps" Foreground="{StaticResource RooTextMutedBrush}" />
+            <TextBlock Text="Reading cleanup capabilities" Foreground="{StaticResource RooTextMutedBrush}" />
         </StackPanel>
 
-        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
+        <Border MaxWidth="520"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Style="{StaticResource PanelBorderStyle}"
+                Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read installed apps yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                <TextBlock Text="Can't read cleanup capabilities"
+                           Style="{StaticResource SectionHeaderTextBlockStyle}"
                            Foreground="{StaticResource RooTextPrimaryBrush}" />
-                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                           TextWrapping="Wrap"
                            Foreground="{StaticResource RooTextSecondaryBrush}" />
             </StackPanel>
         </Border>
 
-        <Grid Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" RowSpacing="18">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
-            <Border Grid.Row="0" Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
-                <Grid ColumnSpacing="20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0" ColumnSpacing="14">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
-                        <StackPanel Grid.Column="1" Spacing="12">
-                            <StackPanel Spacing="7">
-                                <TextBlock Text="Clean Junk" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Remove leftover apps the safe way — official uninstall first, then a reviewed leftover scan with a full backup plan. Nothing deletes until you say so."
-                                           FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="680" />
+                        <Grid Grid.Column="0" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="12">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="Clean Junk"
+                                               FontSize="22"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                    <TextBlock Text="Review installed app inventory, official uninstall readiness, leftover preview, deletion plan, rollback, startup entries, and device cleanup status. Mutating cleanup still requires the routed approval path."
+                                               FontSize="13"
+                                               LineHeight="19"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource RooTextMutedBrush}"
+                                               MaxWidth="760" />
+                                </StackPanel>
+                                <Grid ColumnSpacing="22">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="{x:Bind ViewModel.AppCount, Mode=OneWay}"
+                                                   Style="{StaticResource MetricValueTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                        <TextBlock Text="Apps"
+                                                   Style="{StaticResource MetricLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock Text="{x:Bind ViewModel.StartupHeavyCount, Mode=OneWay}"
+                                                   Style="{StaticResource MetricValueTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                        <TextBlock Text="Startup-heavy"
+                                                   Style="{StaticResource MetricLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="{x:Bind ViewModel.ReclaimableText, Mode=OneWay}"
+                                                   Style="{StaticResource MetricValueTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextDisplayBrush}" />
+                                        <TextBlock Text="Recorded size"
+                                                   Style="{StaticResource MetricLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4">
+                                        <TextBlock Text="{x:Bind ViewModel.ProtectedCount, Mode=OneWay}"
+                                                   Style="{StaticResource MetricValueTextBlockStyle}"
+                                                   Foreground="{StaticResource RiskProtectedBrush}" />
+                                        <TextBlock Text="Protected"
+                                                   Style="{StaticResource MetricLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="34">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ViewModel.AppCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="Apps" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ViewModel.StartupHeavyCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="Startup-heavy" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ViewModel.ReclaimableText, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RooTextDisplayBrush}" />
-                                    <TextBlock Text="Reclaimable" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind ViewModel.ProtectedCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RiskProtectedBrush}" />
-                                    <TextBlock Text="Protected" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Grid>
-                </Grid>
-            </Border>
+                </Border>
 
-            <Grid Grid.Row="1" x:Name="MasterDetail" ColumnSpacing="18" RowSpacing="16" SizeChanged="MasterDetail_SizeChanged">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="ListColumn" Width="1.1*" />
-                    <ColumnDefinition x:Name="DetailColumn" Width="1.8*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition x:Name="TopRow" Height="*" />
-                    <RowDefinition x:Name="DetailRow" Height="0" />
-                </Grid.RowDefinitions>
+                <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="14">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5">
+                                <TextBlock Text="CAPABILITIES"
+                                           Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="Cleanup rows come from the capability registry and explain route. Official Uninstall, Leftover Scan, and Device Cleanup show their real route status."
+                                           FontSize="13"
+                                           LineHeight="19"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4" MinWidth="82">
+                                <TextBlock Text="{x:Bind ViewModel.CapabilityCount, Mode=OneWay}"
+                                           Style="{StaticResource MetricValueTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Rows"
+                                           Style="{StaticResource MetricLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="4" MinWidth="100">
+                                <TextBlock Text="{x:Bind ViewModel.AvailableCapabilityCount, Mode=OneWay}"
+                                           Style="{StaticResource MetricValueTextBlockStyle}"
+                                           Foreground="{StaticResource RiskSafeBrush}" />
+                                <TextBlock Text="Available"
+                                           Style="{StaticResource MetricLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
 
-                <Grid x:Name="ListPane" Grid.Row="0" Grid.Column="0" RowSpacing="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <TextBox Grid.Row="0" PlaceholderText="Search installed apps"
-                             Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
-                        <StackPanel>
-                            <TextBlock Text="INSTALLED APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" Padding="20,16,20,8" />
-                            <ListView ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Single"
+                        <Grid ColumnSpacing="18" RowSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.18*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+
+                            <ListView Grid.Column="0"
+                                      ItemsSource="{x:Bind ViewModel.Capabilities}"
+                                      SelectionMode="Single"
+                                      SelectionChanged="OnCapabilitySelectionChanged"
+                                      ItemTemplate="{StaticResource CleanupCapabilityItemTemplate}"
+                                      Background="Transparent"
+                                      Padding="0"
+                                      MaxHeight="560" />
+
+                            <StackPanel Grid.Column="1" Spacing="12">
+                                <StackPanel Spacing="8"
+                                            Visibility="{x:Bind ViewModel.HasSelectedCapability, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <TextBlock Text="Select a capability"
+                                               FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                    <TextBlock Text="The selected row shows its family, availability, apply status, approval, restore status, exact registry reason, router next step, and gates."
+                                               FontSize="13"
+                                               LineHeight="19"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource RooTextMutedBrush}" />
+                                </StackPanel>
+
+                                <StackPanel Spacing="12"
+                                            Visibility="{x:Bind ViewModel.HasSelectedCapability, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0"
+                                                 Width="8"
+                                                 Height="8"
+                                                 Margin="0,7,0,0"
+                                                 VerticalAlignment="Top"
+                                                 Fill="{x:Bind ViewModel.SelectedCapabilityDotState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                        <StackPanel Grid.Column="1" Spacing="4">
+                                            <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityLabel, Mode=OneWay}"
+                                                       FontSize="18"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                            <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityFamily, Mode=OneWay}"
+                                                       FontSize="12"
+                                                       LineHeight="17"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextMutedBrush}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnSpacing="14" RowSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="0.55*" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Availability" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityAvailability, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Apply" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityApply, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Approval" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityApproval, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Restore" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityRestore, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Registry reason" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityReason, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    </Grid>
+
+                                    <StackPanel Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <ProgressRing IsActive="{x:Bind ViewModel.ExplainBusy, Mode=OneWay}"
+                                                          Width="16"
+                                                          Height="16"
+                                                          VerticalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityStatus, Mode=OneWay}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextMutedBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityNextStep, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   LineHeight="19"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="GATES"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.SelectedGateRows}"
+                                                       ItemTemplate="{StaticResource CleanupCapabilityGateTemplate}" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityErrors, Mode=OneWay}"
+                                               FontSize="12"
+                                               LineHeight="17"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource RiskHighBrush}"
+                                               Visibility="{x:Bind ViewModel.SelectedCapabilityErrors, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5">
+                                <TextBlock Text="INSTALLED APP INVENTORY"
+                                           Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.Sources, Mode=OneWay}"
+                                           FontSize="12"
+                                           LineHeight="17"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextMutedBrush}"
+                                           Visibility="{x:Bind ViewModel.Sources, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                <TextBlock Text="{x:Bind ViewModel.InventoryMessage, Mode=OneWay}"
+                                           FontSize="13"
+                                           LineHeight="19"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextMutedBrush}"
+                                           Visibility="{x:Bind ViewModel.InventoryMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     PlaceholderText="Search installed apps"
+                                     MinWidth="280"
+                                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="18" RowSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="1.65*" />
+                            </Grid.ColumnDefinitions>
+
+                            <ListView Grid.Column="0"
+                                      ItemsSource="{x:Bind ViewModel.Apps}"
+                                      SelectionMode="Single"
                                       SelectedItem="{x:Bind ViewModel.SelectedApp, Mode=TwoWay}"
                                       ItemTemplate="{StaticResource AppItemTemplate}"
-                                      Background="Transparent" Padding="6,0,6,6" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
+                                      Background="Transparent"
+                                      Padding="0"
+                                      MaxHeight="520" />
 
-                <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
-                  <Grid>
+                            <StackPanel Grid.Column="1" Spacing="18">
+                                <StackPanel Spacing="8"
+                                            Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <TextBlock Text="Pick an app to review"
+                                               FontSize="20"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                    <TextBlock Text="This panel shows the registered uninstaller, protected state, leftover preview, and rollback prerequisites. Cleanup capability status remains above."
+                                               FontSize="13"
+                                               LineHeight="19"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                </StackPanel>
 
-                    <StackPanel VerticalAlignment="Top" Padding="24,18,24,28" Spacing="12"
-                                Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                        <StackPanel Spacing="5">
-                            <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                            <TextBlock Text="Pick an app to review" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                            <TextBlock Text="Select an app to walk through removing it cleanly. Nothing is removed until you approve it."
-                                       FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                        </StackPanel>
-                        <StackPanel Spacing="9">
-                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Official uninstall" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Run its own uninstaller first." Foreground="{StaticResource RooTextMutedBrush}" />
-                            </TextBlock>
-                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Leftover scan" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Find what it leaves behind." Foreground="{StaticResource RooTextMutedBrush}" />
-                            </TextBlock>
-                            <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Cleanup list" FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" /><Run Text="  —  Approve removals, backed up first." Foreground="{StaticResource RooTextMutedBrush}" />
-                            </TextBlock>
-                        </StackPanel>
+                                <StackPanel Spacing="20"
+                                            Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+
+                                    <StackPanel Spacing="7">
+                                        <TextBlock Text="APP REVIEW"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}"
+                                                       FontSize="20"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="7"
+                                                        VerticalAlignment="Top"
+                                                        Visibility="{x:Bind ViewModel.SelectedProtected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskProtectedBrush}" />
+                                                <TextBlock Text="{x:Bind ViewModel.SelectedProtectionState, Mode=OneWay}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource RiskProtectedBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="{x:Bind ViewModel.SelectedSummary, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   LineHeight="19"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="OFFICIAL UNINSTALL"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   LineHeight="19"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Ellipse Width="7"
+                                                     Height="7"
+                                                     VerticalAlignment="Center"
+                                                     Fill="{x:Bind ViewModel.OfficialPreviewState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                            <TextBlock Text="{x:Bind ViewModel.OfficialPreviewText, Mode=OneWay}"
+                                                       FontSize="12"
+                                                       LineHeight="17"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextMutedBrush}" />
+                                        </StackPanel>
+                                        <Expander HorizontalAlignment="Stretch"
+                                                  HorizontalContentAlignment="Left"
+                                                  Background="Transparent">
+                                            <Expander.Header>
+                                                <TextBlock Text="Install location" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
+                                            </Expander.Header>
+                                            <TextBlock Text="{x:Bind ViewModel.InstallLocation, Mode=OneWay}"
+                                                       FontSize="12"
+                                                       LineHeight="19"
+                                                       FontFamily="Consolas, monospace"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                        </Expander>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="LEFTOVER PREVIEW"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <Button Content="Preview leftovers"
+                                                    Command="{x:Bind ViewModel.ScanLeftoversCommand}"
+                                                    IsEnabled="{x:Bind ViewModel.CanScan, Mode=OneWay}"
+                                                    Padding="12,7" />
+                                            <ProgressRing IsActive="{x:Bind ViewModel.ScanBusy, Mode=OneWay}"
+                                                          Width="20"
+                                                          Height="20"
+                                                          VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind ViewModel.LeftoverState, Mode=OneWay}"
+                                                   FontSize="12"
+                                                   LineHeight="17"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextMutedBrush}"
+                                                   Visibility="{x:Bind ViewModel.LeftoverState, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                        <TextBlock Text="{x:Bind ViewModel.LeftoverSummary, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   LineHeight="19"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextDisplayBrush}"
+                                                   Visibility="{x:Bind ViewModel.LeftoverSummary, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Leftovers}"
+                                                       ItemTemplate="{StaticResource LeftoverTemplate}" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="12"
+                                                Visibility="{x:Bind ViewModel.BackupLines.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
+                                        <TextBlock Text="BACKUP AND ROLLBACK"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackupLines}"
+                                                       ItemTemplate="{StaticResource BackupLineTemplate}" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="12"
+                                                Visibility="{x:Bind ViewModel.GateRows.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
+                                        <TextBlock Text="WHAT IS LEFT BEFORE CLEANUP"
+                                                   Style="{StaticResource PanelLabelTextBlockStyle}"
+                                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.GateRows}"
+                                                       ItemTemplate="{StaticResource GateRowTemplate}" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="{x:Bind ViewModel.CleanupPlanNote, Mode=OneWay}"
+                                               FontSize="12"
+                                               LineHeight="17"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource RooTextMutedBrush}" />
+
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
-
-                    <ScrollViewer Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
-                                  VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
-                                  Padding="0,0,4,0">
-                        <StackPanel Padding="24,22,24,24" Spacing="26">
-
-                            <StackPanel Spacing="7">
-                                <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <TextBlock Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold"
-                                               Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
-                                                Visibility="{x:Bind ViewModel.SelectedProtected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                                        <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskProtectedBrush}" />
-                                        <TextBlock Text="{x:Bind ViewModel.SelectedProtectionState, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource RiskProtectedBrush}" />
-                                    </StackPanel>
-                                </StackPanel>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSummary, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap"
-                                           Foreground="{StaticResource RooTextSecondaryBrush}" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="12">
-                                <TextBlock Text="OFFICIAL UNINSTALL FIRST" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap"
-                                           Foreground="{StaticResource RooTextSecondaryBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                                             Fill="{x:Bind ViewModel.OfficialPreviewState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                    <TextBlock Text="{x:Bind ViewModel.OfficialPreviewState, Mode=OneWay}" FontSize="12" FontWeight="SemiBold"
-                                               Foreground="{x:Bind ViewModel.OfficialPreviewState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                    <TextBlock Text="We won't run this until you approve." FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
-                                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent">
-                                    <Expander.Header>
-                                        <TextBlock Text="Details" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                    </Expander.Header>
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="Installed at" FontSize="11" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
-                                        <TextBlock Text="{x:Bind ViewModel.InstallLocation, Mode=OneWay}" FontSize="12" LineHeight="19" FontFamily="Consolas, monospace"
-                                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                                    </StackPanel>
-                                </Expander>
-                            </StackPanel>
-
-                            <StackPanel Spacing="12">
-                                <TextBlock Text="LEFTOVER SCAN + BACKUP PLAN" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <Button Content="Scan for leftovers" Command="{x:Bind ViewModel.ScanLeftoversCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CanScan, Mode=OneWay}" Padding="12,7" />
-                                    <ProgressRing IsActive="{x:Bind ViewModel.ScanBusy, Mode=OneWay}" Width="20" Height="20" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <TextBlock Text="{x:Bind ViewModel.LeftoverState, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
-                                           Foreground="{StaticResource RooTextMutedBrush}"
-                                           Visibility="{x:Bind ViewModel.LeftoverState, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
-                                <TextBlock Text="{x:Bind ViewModel.LeftoverSummary, Mode=OneWay}" FontSize="13" LineHeight="19" FontWeight="SemiBold"
-                                           Foreground="{StaticResource RooTextDisplayBrush}"
-                                           Visibility="{x:Bind ViewModel.LeftoverSummary, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.Leftovers}" ItemTemplate="{StaticResource LeftoverTemplate}" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.BackupLines.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
-                                <TextBlock Text="BACKUP AND ROLLBACK" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackupLines}" ItemTemplate="{StaticResource BackupLineTemplate}" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.GateRows.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
-                                <TextBlock Text="WHAT'S LEFT BEFORE CLEANUP" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.GateRows}" ItemTemplate="{StaticResource GateRowTemplate}" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="12">
-                                <TextBlock Text="{x:Bind ViewModel.CleanupPlanNote, Mode=OneWay}"
-                                           FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
-                                <Button Content="Build Cleanup Plan" IsEnabled="False" Padding="14,7" HorizontalAlignment="Left" />
-                            </StackPanel>
-
-                        </StackPanel>
-                    </ScrollViewer>
-                  </Grid>
                 </Border>
-            </Grid>
-        </Grid>
+
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Page>
