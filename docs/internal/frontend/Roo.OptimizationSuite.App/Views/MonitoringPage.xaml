@@ -10,56 +10,13 @@
     <Page.Resources>
         <DataTemplate x:Key="LiveTileTemplate" x:DataType="vm:MetricTile">
             <StackPanel Spacing="6" Padding="0,0,18,0">
-                <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" LineHeight="26" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" LineHeight="26"
+                           TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19"
+                           TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}"
+                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
             </StackPanel>
-        </DataTemplate>
-
-        <DataTemplate x:Key="PendingTileTemplate" x:DataType="vm:MetricTile">
-            <StackPanel Spacing="6" Padding="0,0,18,0">
-                <TextBlock Text="{x:Bind Value}" FontSize="16" FontWeight="SemiBold" LineHeight="22" Foreground="{StaticResource RooTextMutedBrush}" />
-                <TextBlock Text="{x:Bind Label}" FontSize="13" LineHeight="19" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-            </StackPanel>
-        </DataTemplate>
-
-        <DataTemplate x:Key="StutterToolTemplate" x:DataType="vm:StutterToolRow">
-            <Grid Padding="0,11" ColumnSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" LineHeight="20"
-                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                    <TextBlock Text="{x:Bind Why}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
-                               Foreground="{StaticResource RooTextMutedBrush}" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                        <TextBlock Text="{x:Bind StateLine}" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                        <TextBlock Text="{x:Bind Caption}" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}"
-                                   Visibility="{x:Bind Caption, Converter={StaticResource StringToVisibility}}" />
-                    </StackPanel>
-                </StackPanel>
-                <Button Grid.Column="2" Content="{x:Bind ActionLabel}" IsEnabled="False" Padding="14,6" VerticalAlignment="Center" />
-            </Grid>
-        </DataTemplate>
-
-        <DataTemplate x:Key="SensorTemplate" x:DataType="vm:StatusLine">
-            <Grid Padding="0,10" ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                </StackPanel>
-            </Grid>
         </DataTemplate>
     </Page.Resources>
 
@@ -68,15 +25,17 @@
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading this PC" Foreground="{StaticResource RooTextMutedBrush}" />
+            <TextBlock Text="Reading system tweak capabilities" Foreground="{StaticResource RooTextMutedBrush}" />
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
                 Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                <TextBlock Text="Can't read system tweak capabilities yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
+                           Foreground="{StaticResource RooTextSecondaryBrush}" />
             </StackPanel>
         </Border>
 
@@ -97,63 +56,129 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <TextBlock Text="Live Feel" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="System Tweaks" FontSize="22" FontWeight="SemiBold"
+                                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="760" />
                             </StackPanel>
                         </Grid>
-                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReadFramePacingClick"
+                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnRefreshClick"
                                 Style="{StaticResource NavCtaButtonStyle}"
                                 Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE9D2;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
-                                <TextBlock Text="Read Frame Pacing" />
+                                <FontIcon Glyph="&#xE72C;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
+                                <TextBlock Text="Refresh" />
                             </StackPanel>
                         </Button>
                     </Grid>
                 </Border>
 
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                <Grid ColumnSpacing="18" RowSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                        <StackPanel>
+                            <StackPanel Padding="20,16,20,8" Spacing="5">
+                                <TextBlock Text="CAPABILITIES" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.CapabilityCountLine, Mode=OneWay}" FontSize="13"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            </StackPanel>
+                            <ListView ItemsSource="{x:Bind ViewModel.Capabilities}" SelectionMode="Single"
+                                      SelectedItem="{x:Bind ViewModel.SelectedCapability, Mode=TwoWay}"
+                                      ItemTemplate="{StaticResource CapabilityRowTemplate}"
+                                      Background="Transparent" Padding="14,0,14,14" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <StackPanel Spacing="14">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="CAPABILITY DETAIL" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                             Fill="{x:Bind ViewModel.SelectedCapabilityState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityLabel, Mode=OneWay}" FontSize="18"
+                                               LineHeight="24" FontWeight="SemiBold" TextWrapping="Wrap"
+                                               Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityId, Mode=OneWay}" FontSize="11"
+                                           LineHeight="16" TextWrapping="Wrap" FontFamily="Consolas, monospace"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="8">
+                                <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="19">
+                                    <Run Text="Family/page: " FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <Run Text="{x:Bind ViewModel.SelectedFamilyPage, Mode=OneWay}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="19">
+                                    <Run Text="Machine availability: " FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <Run Text="{x:Bind ViewModel.SelectedMachineAvailability, Mode=OneWay}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="19">
+                                    <Run Text="Apply status: " FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <Run Text="{x:Bind ViewModel.SelectedApplyStatus, Mode=OneWay}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="19">
+                                    <Run Text="Approval: " FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <Run Text="{x:Bind ViewModel.SelectedApproval, Mode=OneWay}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="19">
+                                    <Run Text="Rollback: " FontWeight="SemiBold" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <Run Text="{x:Bind ViewModel.SelectedRestore, Mode=OneWay}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </TextBlock>
+                            </StackPanel>
+
+                            <StackPanel Spacing="7"
+                                        Visibility="{x:Bind ViewModel.SelectedReasonOrNextStep, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+                                <TextBlock Text="REASON OR NEXT STEP" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.SelectedReasonOrNextStep, Mode=OneWay}" FontSize="13"
+                                           LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="9">
+                                    <ProgressRing IsActive="{x:Bind ViewModel.IsExplaining, Mode=OneWay}"
+                                                  Width="18" Height="18"
+                                                  Visibility="{x:Bind ViewModel.IsExplaining, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedExplainStatus, Mode=OneWay}" FontSize="12"
+                                               LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedRouterNextStep, Mode=OneWay}" FontSize="13"
+                                           LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}"
+                                           Visibility="{x:Bind ViewModel.SelectedRouterNextStep, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                <TextBlock Text="{x:Bind ViewModel.SelectedGates, Mode=OneWay}" FontSize="12"
+                                           LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
+                                           Visibility="{x:Bind ViewModel.SelectedGates, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                                <TextBlock Text="{x:Bind ViewModel.SelectedErrors, Mode=OneWay}" FontSize="12"
+                                           LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RiskProtectedBrush}"
+                                           Visibility="{x:Bind ViewModel.SelectedErrors, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
+                        Visibility="{x:Bind ViewModel.HasLiveSnapshot, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Spacing="10">
-                        <TextBlock Text="RIGHT NOW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="THIS PC RIGHT NOW" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                   Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.LiveTiles}" ItemTemplate="{StaticResource LiveTileTemplate}">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
                             </ItemsRepeater.Layout>
                         </ItemsRepeater>
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="FRAME PACING" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.PendingTiles}" ItemTemplate="{StaticResource PendingTileTemplate}">
-                            <ItemsRepeater.Layout>
-                                <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
-                            </ItemsRepeater.Layout>
-                        </ItemsRepeater>
-                        <StackPanel Orientation="Horizontal" Spacing="8"
-                                    Visibility="{x:Bind ViewModel.IsSampleCapture, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskNeutralBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.SampleCaptureLine, Mode=OneWay}" FontSize="12" LineHeight="17"
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskSafeBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.LiveSnapshotLine, Mode=OneWay}" FontSize="12" LineHeight="17"
                                        TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="STUTTER TOOLS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.StutterTools}" ItemTemplate="{StaticResource StutterToolTemplate}" />
-                        <TextBlock Text="{x:Bind ViewModel.StutterFooterLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
-                                   Foreground="{StaticResource RooTextMutedBrush}"
-                                   Visibility="{x:Bind ViewModel.StutterFooterLine, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MaxWidth="560" HorizontalAlignment="Left">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Sensors}" ItemTemplate="{StaticResource SensorTemplate}" />
                     </StackPanel>
                 </Border>
 

@@ -14,7 +14,7 @@ public sealed partial class MonitoringPage : Page
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
-    private async void OnReadFramePacingClick(object sender, RoutedEventArgs e)
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         await ViewModel.ReloadAsync();
     }
