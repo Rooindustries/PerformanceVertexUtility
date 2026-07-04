@@ -8,6 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
     <Page.Resources>
+        <Style x:Key="StretchListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+
         <DataTemplate x:Key="LiveTileTemplate" x:DataType="vm:MetricTile">
             <StackPanel Spacing="6" Padding="0,0,18,0">
                 <TextBlock Text="{x:Bind Value}" FontSize="22" FontWeight="SemiBold" LineHeight="26"
@@ -57,9 +61,9 @@
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
                                 <TextBlock Text="System Tweaks" FontSize="22" FontWeight="SemiBold"
-                                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19"
-                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="760" />
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="500" />
                             </StackPanel>
                         </Grid>
                         <Button Grid.Column="1" VerticalAlignment="Center" Click="OnRefreshClick"
@@ -75,7 +79,7 @@
 
                 <Grid ColumnSpacing="18" RowSpacing="18">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="1*" />
                     </Grid.ColumnDefinitions>
 
@@ -90,22 +94,27 @@
                             <ListView ItemsSource="{x:Bind ViewModel.Capabilities}" SelectionMode="Single"
                                       SelectedItem="{x:Bind ViewModel.SelectedCapability, Mode=TwoWay}"
                                       ItemTemplate="{StaticResource CapabilityRowTemplate}"
+                                      ItemContainerStyle="{StaticResource StretchListViewItemStyle}"
                                       Background="Transparent" Padding="14,0,14,14" />
                         </StackPanel>
                     </Border>
 
                     <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                        <StackPanel Spacing="14">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="CAPABILITY DETAIL" Style="{StaticResource PanelLabelTextBlockStyle}"
-                                           Foreground="{StaticResource RooTextMutedBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                                             Fill="{x:Bind ViewModel.SelectedCapabilityState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                    <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityLabel, Mode=OneWay}" FontSize="18"
-                                               LineHeight="24" FontWeight="SemiBold" TextWrapping="Wrap"
-                                               Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                </StackPanel>
+                            <StackPanel Spacing="14">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="CAPABILITY DETAIL" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                               Foreground="{StaticResource RooTextMutedBrush}" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Center"
+                                                 Fill="{x:Bind ViewModel.SelectedCapabilityState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SelectedCapabilityLabel, Mode=OneWay}" FontSize="18"
+                                                   LineHeight="24" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                    </Grid>
                                 <TextBlock Text="{x:Bind ViewModel.SelectedCapabilityId, Mode=OneWay}" FontSize="11"
                                            LineHeight="16" TextWrapping="Wrap" FontFamily="Consolas, monospace"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
@@ -143,13 +152,19 @@
                             </StackPanel>
 
                             <StackPanel Spacing="8">
-                                <StackPanel Orientation="Horizontal" Spacing="9">
-                                    <ProgressRing IsActive="{x:Bind ViewModel.IsExplaining, Mode=OneWay}"
+                                <Grid ColumnSpacing="9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ProgressRing Grid.Column="0"
+                                                  IsActive="{x:Bind ViewModel.IsExplaining, Mode=OneWay}"
                                                   Width="18" Height="18"
                                                   Visibility="{x:Bind ViewModel.IsExplaining, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                                    <TextBlock Text="{x:Bind ViewModel.SelectedExplainStatus, Mode=OneWay}" FontSize="12"
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.SelectedExplainStatus, Mode=OneWay}" FontSize="12"
                                                LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
-                                </StackPanel>
+                                </Grid>
                                 <TextBlock Text="{x:Bind ViewModel.SelectedRouterNextStep, Mode=OneWay}" FontSize="13"
                                            LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}"
                                            Visibility="{x:Bind ViewModel.SelectedRouterNextStep, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
@@ -174,11 +189,15 @@
                                 <UniformGridLayout MinItemWidth="160" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
                             </ItemsRepeater.Layout>
                         </ItemsRepeater>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskSafeBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.LiveSnapshotLine, Mode=OneWay}" FontSize="12" LineHeight="17"
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Center" Fill="{StaticResource RiskSafeBrush}" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.LiveSnapshotLine, Mode=OneWay}" FontSize="12" LineHeight="17"
                                        TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
-                        </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
