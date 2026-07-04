@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +18,8 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string? _engineStatus;
     [ObservableProperty] private string? _dataSourceStatus;
     [ObservableProperty] private string _dataSourceState = "protected";
+    [ObservableProperty] private string? _capabilitySourceStatus;
+    [ObservableProperty] private string _capabilitySourceState = "protected";
 
     public string Tagline => "Precision Performance Engineering";
     public IReadOnlyList<ThemeOption> Themes { get; } = new[] { ThemeService.BlackoutGold };
@@ -35,11 +38,15 @@ public partial class SettingsViewModel : PageViewModelBase
         var product = await Data.GetProductStatusAsync();
         var dashboard = await Data.GetDashboardAsync();
         var telemetry = await Data.GetTelemetryAsync();
+        var capabilities = await TryLoadCapabilitiesAsync();
+
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
         VersionText = "Build " + ContractVersion(product.BackendPackageVersion);
-        EngineStatus = "Roo works in quick bursts and gets out of the way. Every action previews first — nothing changes until you confirm.";
-        DataSourceStatus = App.Live.ScriptsAvailable ? "Reading this PC" : "Showing sample data (backend not found).";
+        EngineStatus = "Capability readiness comes from the router registry. Review, approval, and restore state stay visible before any action.";
+        DataSourceStatus = App.Live.ScriptsAvailable ? "Live scripts available on this PC" : "Bundled sample data because backend scripts were not found";
         DataSourceState = App.Live.ScriptsAvailable ? "safe" : "protected";
+
+        SetCapabilitySourceStatus(capabilities?.Count);
         BuildSafetyRows(product.Safety);
         BuildProviderRows(dashboard.ProviderStatus, telemetry.Providers);
     }
@@ -48,10 +55,16 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         EngineRows.Clear();
         SensorRows.Clear();
-        EngineRows.Add(new StatusLine("Data source", DataSourceStatus ?? "Showing sample data (backend not found).", DataSourceState));
+        EngineRows.Add(new StatusLine("Capability registry", CapabilitySourceStatus ?? "Capability registry not loaded", CapabilitySourceState));
+        EngineRows.Add(new StatusLine("Capability labels", "From the capability label map", "protected"));
+        EngineRows.Add(new StatusLine("Live data", DataSourceStatus ?? "Bundled sample data because backend scripts were not found", DataSourceState));
 
         var providers = new List<ProviderStatus>();
-        if (dashboardProviders is not null) providers.AddRange(dashboardProviders);
+        if (dashboardProviders is not null)
+        {
+            providers.AddRange(dashboardProviders);
+        }
+
         if (telemetryProviders is not null)
         {
             foreach (var provider in telemetryProviders.Where(p => providers.All(existing => existing.ProviderId != p.ProviderId)))
@@ -79,10 +92,34 @@ public partial class SettingsViewModel : PageViewModelBase
         SafetyRows.Add(new SafetyRow("Default mode", "Review first", "protected"));
         SafetyRows.Add(new SafetyRow("Ask before changes", safety.RequiresExplicitConfirmation ? "On" : "Off", safety.RequiresExplicitConfirmation ? "protected" : "high"));
         SafetyRows.Add(new SafetyRow("Back up before changes", safety.BackupRequiredBeforeApply ? "On" : "Off", safety.BackupRequiredBeforeApply ? "protected" : "high"));
-        SafetyRows.Add(new SafetyRow("One-click undo", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
+        SafetyRows.Add(new SafetyRow("Restore shown per capability", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
         SafetyRows.Add(new SafetyRow("Remote actions", safety.RemoteScriptExecutionAllowed ? "Allowed" : "Off", safety.RemoteScriptExecutionAllowed ? "high" : "safe"));
         SafetyRows.Add(new SafetyRow("Driver changes", safety.DriverAutomationAllowed ? "Automatic" : "Manual", safety.DriverAutomationAllowed ? "high" : "protected"));
         SafetyRows.Add(new SafetyRow("Leftover removal", safety.LeftoverDeletionAllowedByDefault ? "On" : "Off by default", safety.LeftoverDeletionAllowedByDefault ? "high" : "safe"));
+    }
+
+    private void SetCapabilitySourceStatus(int? capabilityCount)
+    {
+        var countText = capabilityCount.HasValue
+            ? capabilityCount.Value.ToString(CultureInfo.InvariantCulture) + " capabilities"
+            : "registry not loaded";
+
+        if (App.Live.ScriptsAvailable && string.IsNullOrWhiteSpace(App.Capabilities.LastError))
+        {
+            CapabilitySourceStatus = "Live from this PC - " + countText;
+            CapabilitySourceState = capabilityCount.HasValue ? "safe" : "high";
+            return;
+        }
+
+        if (App.Live.ScriptsAvailable)
+        {
+            CapabilitySourceStatus = "Bundled sample data - live registry unavailable";
+            CapabilitySourceState = capabilityCount.HasValue ? "protected" : "high";
+            return;
+        }
+
+        CapabilitySourceStatus = "Bundled sample data - " + countText;
+        CapabilitySourceState = capabilityCount.HasValue ? "protected" : "high";
     }
 
     private static string ProviderState(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
@@ -103,6 +140,18 @@ public partial class SettingsViewModel : PageViewModelBase
 
     private static string ContractVersion(string? version)
         => string.IsNullOrWhiteSpace(version) ? "0.1.0" : version!.Replace("-contracts", string.Empty);
+
+    private static async Task<IReadOnlyList<CapabilityRow>?> TryLoadCapabilitiesAsync()
+    {
+        try
+        {
+            return await App.Capabilities.GetCapabilitiesAsync();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);
 
