@@ -75,8 +75,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        await LoadCapabilitiesAsync().ConfigureAwait(false);
-        await LoadInventoryContextAsync().ConfigureAwait(false);
+        await LoadCapabilitiesAsync();
+        await LoadInventoryContextAsync();
         IsEmpty = Capabilities.Count == 0;
     }
 
@@ -95,7 +95,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         try
         {
-            var response = await App.Capabilities.ExplainAsync(item.Row.CapabilityId).ConfigureAwait(false);
+            var response = await App.Capabilities.ExplainAsync(item.Row.CapabilityId);
             if (requestId != _explainRequestId)
             {
                 return;
@@ -122,7 +122,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private async Task LoadCapabilitiesAsync()
     {
-        var all = await App.Capabilities.GetCapabilitiesAsync().ConfigureAwait(false);
+        var all = await App.Capabilities.GetCapabilitiesAsync();
         var rows = App.Capabilities.ForPage(PageName, all);
 
         Capabilities.Clear();
@@ -138,13 +138,13 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private async Task LoadInventoryContextAsync()
     {
-        var inventory = await App.Live.GetInstalledAppsAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetInstalledAppsAsync).ConfigureAwait(false);
-        var classification = await App.Live.GetAppClassificationAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetAppClassificationAsync).ConfigureAwait(false);
-        var officialPreview = await TryLoadSample(Data.GetOfficialUninstallPreviewAsync).ConfigureAwait(false);
-        var cleanupManifest = await TryLoadSample(Data.GetCleanupManifestAsync).ConfigureAwait(false);
-        var executionPlan = await TryLoadSample(Data.GetUninstallCleanupExecutionPlanAsync).ConfigureAwait(false);
+        var inventory = await App.Live.GetInstalledAppsAsync()
+            ?? await TryLoadSample(Data.GetInstalledAppsAsync);
+        var classification = await App.Live.GetAppClassificationAsync()
+            ?? await TryLoadSample(Data.GetAppClassificationAsync);
+        var officialPreview = await TryLoadSample(Data.GetOfficialUninstallPreviewAsync);
+        var cleanupManifest = await TryLoadSample(Data.GetCleanupManifestAsync);
+        var executionPlan = await TryLoadSample(Data.GetUninstallCleanupExecutionPlanAsync);
         var apps = inventory?.Apps;
 
         _allApps.Clear();
@@ -281,10 +281,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         LeftoverState = "Reading leftover preview...";
         try
         {
-            var scan = await App.Live.GetLeftoverScanAsync(app.AppId!).ConfigureAwait(false);
+            var scan = await App.Live.GetLeftoverScanAsync(app.AppId!);
             if (scan is null)
             {
-                var sampleScan = await TryLoadSample(Data.GetLeftoverScanAsync).ConfigureAwait(false);
+                var sampleScan = await TryLoadSample(Data.GetLeftoverScanAsync);
                 if (sampleScan?.AppId == app.AppId)
                 {
                     scan = sampleScan;
@@ -409,7 +409,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     {
         try
         {
-            return await load().ConfigureAwait(false);
+            return await load();
         }
         catch
         {

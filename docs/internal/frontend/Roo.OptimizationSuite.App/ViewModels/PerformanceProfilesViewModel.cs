@@ -62,8 +62,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        await LoadCapabilitiesAsync().ConfigureAwait(false);
-        await LoadProcessContextAsync().ConfigureAwait(false);
+        await LoadCapabilitiesAsync();
+        await LoadProcessContextAsync();
         IsEmpty = Capabilities.Count == 0;
     }
 
@@ -82,7 +82,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         try
         {
-            var response = await App.Capabilities.ExplainAsync(item.Row.CapabilityId).ConfigureAwait(false);
+            var response = await App.Capabilities.ExplainAsync(item.Row.CapabilityId);
             if (requestId != _explainRequestId)
             {
                 return;
@@ -109,7 +109,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private async Task LoadCapabilitiesAsync()
     {
-        var all = await App.Capabilities.GetCapabilitiesAsync().ConfigureAwait(false);
+        var all = await App.Capabilities.GetCapabilitiesAsync();
         var rows = App.Capabilities.ForPage(PageName, all);
 
         Capabilities.Clear();
@@ -125,15 +125,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private async Task LoadProcessContextAsync()
     {
-        var classification = await App.Live.GetProcessClassificationAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetProcessClassificationAsync).ConfigureAwait(false);
-        var preview = await App.Live.GetProcessProfilePreviewAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetProcessProfilePreviewAsync).ConfigureAwait(false);
-        var session = await App.Live.GetGameTuneSessionStatusAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetGameTuneSessionStatusAsync).ConfigureAwait(false);
-        var restorePreview = await TryLoadSample(Data.GetGameTuneRestorePreviewAsync).ConfigureAwait(false);
-        var governor = await App.Live.GetProcessGovernorSessionStatusAsync().ConfigureAwait(false)
-            ?? await TryLoadSample(Data.GetProcessGovernorSessionStatusAsync).ConfigureAwait(false);
+        var classification = await App.Live.GetProcessClassificationAsync()
+            ?? await TryLoadSample(Data.GetProcessClassificationAsync);
+        var preview = await App.Live.GetProcessProfilePreviewAsync()
+            ?? await TryLoadSample(Data.GetProcessProfilePreviewAsync);
+        var session = await App.Live.GetGameTuneSessionStatusAsync()
+            ?? await TryLoadSample(Data.GetGameTuneSessionStatusAsync);
+        var restorePreview = await TryLoadSample(Data.GetGameTuneRestorePreviewAsync);
+        var governor = await App.Live.GetProcessGovernorSessionStatusAsync()
+            ?? await TryLoadSample(Data.GetProcessGovernorSessionStatusAsync);
         var processes = classification?.Processes;
 
         _all.Clear();
@@ -316,7 +316,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         try
         {
-            return await load().ConfigureAwait(false);
+            return await load();
         }
         catch
         {
