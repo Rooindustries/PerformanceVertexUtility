@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -192,5 +193,7 @@ public sealed record CapabilityRow(
     string ReasonOrNextStep,
     string DotState)
 {
-    public string StatusLine => $"{ApplyStatusText} · {ApprovalText} · {RestoreText}";
+    public string StatusLine => string.Join(
+        " · ",
+        new[] { ApplyStatusText, ApprovalText, RestoreText }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

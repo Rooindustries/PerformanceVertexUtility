@@ -32,7 +32,7 @@ public sealed class CapabilityService
         ["allowlist-shim"] = "Runs the app's own tool",
         ["helper-contract"] = "Helper packaging pending",
         ["preview-only"] = "Review only — no changes yet",
-        ["not-implemented"] = "Not available yet",
+        ["not-implemented"] = "Not wired up yet",
     };
 
     private static readonly Dictionary<string, string> ApplyDotState = new(StringComparer.OrdinalIgnoreCase)
@@ -59,6 +59,7 @@ public sealed class CapabilityService
         ["hardware-not-present"] = "Not available here — no matching hardware on this PC",
         ["tool-not-present"] = "Tool not installed at the expected path",
         ["not-safely-executable-yet"] = "Not routed yet — see next step",
+        ["helper-packaging-pending"] = "Helper packaging pending",
     };
 
     public CapabilityService(BackendLocator locator)
@@ -233,7 +234,7 @@ public sealed class CapabilityService
         var machineAvailable = capability.ResolvedAvailability?.Available ?? false;
         var applyStatus = FirstNonBlank(capability.Apply?.Status, "not-implemented").ToLowerInvariant();
         var applyText = machineAvailable ? TextForApplyStatus(applyStatus) : "Not available here";
-        var approvalText = capability.ApprovalRequired ? "Needs your go-ahead" : "No approval needed";
+        var approvalText = capability.ApprovalRequired ? "Needs your go-ahead" : string.Empty;
         var restoreText = TextForRestoreStatus(capability.Restore?.Status);
         var reason = ReasonFor(capability, machineAvailable, applyStatus);
         var dotState = machineAvailable ? DotStateFor(applyStatus) : "neutral";
