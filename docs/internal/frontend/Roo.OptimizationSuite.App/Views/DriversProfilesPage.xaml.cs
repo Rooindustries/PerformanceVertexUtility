@@ -14,12 +14,7 @@ public sealed partial class DriversProfilesPage : Page
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
-    private async void OnCheckDriverPathClick(object sender, RoutedEventArgs e)
-    {
-        await ViewModel.ReloadAsync();
-    }
-
-    private async void OnExportProfileClick(object sender, RoutedEventArgs e)
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         await ViewModel.ReloadAsync();
     }
