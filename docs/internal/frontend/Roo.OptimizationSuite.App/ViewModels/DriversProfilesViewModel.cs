@@ -18,16 +18,31 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _hasRecommendations;
     [ObservableProperty] private bool _hasNvidia;
     [ObservableProperty] private string? _gpuNote;
+    [ObservableProperty] private string _nvidiaReadyState = "Ready — needs your go-ahead";
+    [ObservableProperty] private string _nvidiaReadyStateLevel = "protected";
+    [ObservableProperty] private bool _exportRequiredFirst;
+    [ObservableProperty] private bool _nvidiaGpuDetected;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(ApplyEnabled))] private bool _exportCompleted;
+    [ObservableProperty] private string? _nvidiaHardwareLine;
+    [ObservableProperty] private string _exportStepLabel = "Export current settings first";
+    [ObservableProperty] private string _applyStepLabel = "Apply FrameSync profile";
+    [ObservableProperty] private string? _applyCaption;
+    [ObservableProperty] private string? _driverPathNote;
+
+    private bool _importLaunchAllowed;
 
     public ObservableCollection<GpuInfo> Gpus { get; } = new();
     public ObservableCollection<NetworkAdapterInfo> NetworkAdapters { get; } = new();
     public ObservableCollection<DriverRecommendation> Recommendations { get; } = new();
     public ObservableCollection<string> ManualGateWarnings { get; } = new();
     public ObservableCollection<NvidiaProfileEntry> NvidiaProfiles { get; } = new();
+    public bool ApplyEnabled => ExportCompleted && _importLaunchAllowed;
 
     protected override async Task LoadCoreAsync()
     {
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var liveHardware = await App.Live.GetDriverHardwareAsync();
+        var hardware = liveHardware ?? await TryLoadSample(Data.GetDriverHardwareAsync);
+        var usingSampleHardware = liveHardware is null;
         if (hardware?.Machine is null)
         {
             ErrorMessage = "We couldn't read your hardware yet. Close and reopen to try again.";
@@ -62,8 +77,10 @@ public partial class DriversProfilesViewModel : PageViewModelBase
 
         ManualGateWarnings.Clear();
         foreach (var w in catalog.ManualInstallGate?.Warnings ?? Enumerable.Empty<string>()) ManualGateWarnings.Add(w);
+        DriverPathNote = "No driver installs on its own. DDU and NVCleanstall stay guided and manual.";
 
         NvidiaProfiles.Clear();
+        var nvidiaPreview = await App.Live.GetNvidiaNipPreviewAsync() ?? await TryLoadSample(Data.GetNvidiaNipPreviewAsync);
         if (HasNvidia)
         {
             var profiles = await Data.GetNvidiaProfilesAsync();
@@ -76,6 +93,34 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 ? "GPU profile tools apply to NVIDIA graphics only."
                 : "Your graphics is " + PrimaryGpuName + ". NVIDIA profile tools don't apply here.";
         }
+
+        BuildNvidiaReadiness(nvidiaPreview, usingSampleHardware);
+    }
+
+    private void BuildNvidiaReadiness(NvidiaNipPreview? preview, bool usingSampleHardware)
+    {
+        var previewDetected = preview?.HardwareGate?.NvidiaGpuPresent == true;
+        NvidiaGpuDetected = HasNvidia || (usingSampleHardware && previewDetected);
+        ExportRequiredFirst = preview?.Summary?.ExportBeforeImportRequired == true;
+        _importLaunchAllowed = preview?.Commands?.ImportCandidateProfile?.LaunchAllowedNow == true;
+        OnPropertyChanged(nameof(ApplyEnabled));
+
+        NvidiaHardwareLine = NvidiaGpuDetected ? "NVIDIA GPU detected" : "NVIDIA GPU not detected";
+        if (preview?.Summary is { AutoApplyAllowed: false, BlockingGateCount: > 0 })
+        {
+            NvidiaReadyState = "Ready — needs your go-ahead";
+            NvidiaReadyStateLevel = "protected";
+        }
+        else
+        {
+            NvidiaReadyState = "Ready to review";
+            NvidiaReadyStateLevel = "low";
+        }
+
+        ExportStepLabel = "Export current settings first";
+        var profileName = preview?.Profile?.Name;
+        ApplyStepLabel = string.IsNullOrWhiteSpace(profileName) ? "Apply FrameSync profile" : "Apply " + profileName + " profile";
+        ApplyCaption = "Available after export and your approval. Benchmark check recommended.";
     }
 
     private static bool IsNvidia(GpuInfo g)
@@ -86,5 +131,17 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         return name.Replace("(R)", string.Empty).Replace("(TM)", string.Empty).Replace("  ", " ").Trim();
+    }
+
+    private static async Task<T?> TryLoadSample<T>(System.Func<Task<T>> load) where T : class
+    {
+        try
+        {
+            return await load().ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
