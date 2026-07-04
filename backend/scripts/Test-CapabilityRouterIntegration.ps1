@@ -183,10 +183,44 @@ $sampleExpectations = @(
     [pscustomobject]@{ Kind = 'unavailable'; File = 'capability-router-unavailable.sample.json'; CapabilityId = 'drivers-gpu-tools.nvidia-nip-profile-preview'; Action = 'explain'; CorrelationId = 'sample-capability-router-unavailable-20260703-180000' }
 )
 
+$bannedSampleTraceTerms = @(
+    ('cla' + 'ude'),
+    ('co' + 'dex'),
+    ('chat' + 'gpt'),
+    ('open' + 'ai'),
+    ('anthro' + 'pic'),
+    ('ai-gene' + 'rated'),
+    ('assist' + 'ant')
+)
+if (-not [string]::IsNullOrWhiteSpace($env:USERNAME)) {
+    $bannedSampleTraceTerms += $env:USERNAME
+}
+
+function Test-SamplePathHygiene {
+    param(
+        [string]$Raw,
+        [string]$Label
+    )
+
+    Add-Check (-not ($Raw -match ('C:[\\/]+Users|\.' + 'cla' + 'ude'))) "$Label has no absolute local user path" "$Label contains an absolute local user path"
+}
+
+function Test-SampleTraceHygiene {
+    param(
+        [string]$Raw,
+        [string]$Label
+    )
+
+    Test-SamplePathHygiene $Raw $Label
+    foreach ($term in $bannedSampleTraceTerms) {
+        Add-Check ($Raw.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) "$Label has no trace term '$term'" "$Label contains banned trace term '$term'"
+    }
+}
+
 foreach ($sample in $sampleExpectations) {
     $path = Join-Path $samplesRoot $sample.File
     $raw = if (Test-Path -LiteralPath $path -PathType Leaf) { Get-Content -LiteralPath $path -Raw } else { '' }
-    Add-Check (-not ($raw -match 'C:[\\/]+Users|\.claude')) "$($sample.Kind) sample has no absolute local user path" "$($sample.Kind) sample contains an absolute local user path"
+    Test-SampleTraceHygiene $raw "$($sample.Kind) sample"
 
     $json = Read-JsonFile $path "$($sample.Kind) sample"
     Test-CompleteRouterEnvelope $json "$($sample.Kind) sample"
@@ -196,6 +230,10 @@ foreach ($sample in $sampleExpectations) {
     Add-Check ([string](Get-PropertyValue $json 'action' '') -eq $sample.Action) "$($sample.Kind) sample action matches" "$($sample.Kind) sample action mismatch"
     Add-Check ([string](Get-PropertyValue $json 'correlationId' '') -eq $sample.CorrelationId) "$($sample.Kind) sample correlationId is normalized" "$($sample.Kind) sample correlationId is not normalized"
 }
+
+$registrySamplePath = Join-Path $samplesRoot 'capability-registry.sample.json'
+$registrySampleRaw = if (Test-Path -LiteralPath $registrySamplePath -PathType Leaf) { Get-Content -LiteralPath $registrySamplePath -Raw } else { '' }
+Test-SamplePathHygiene $registrySampleRaw 'registry sample'
 
 $schema = Read-JsonFile $schemaPath 'backend contract schema'
 if ($null -ne $schema) {

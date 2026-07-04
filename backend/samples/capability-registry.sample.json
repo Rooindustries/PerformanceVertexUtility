@@ -10,7 +10,7 @@
     "startedAtUtc":  "2026-07-03T12:50:08.4252510Z",
     "completedAtUtc":  "2026-07-03T12:50:09.0203623Z",
     "generatedAtUtc":  "2026-07-03T12:50:09.0203623Z",
-    "utilitiesRoot":  "C:\\Users\\serviroo\\Desktop\\Utilities",
+    "utilitiesRoot":  "%ROO_UTILITIES_ROOT%",
     "families":  [
                      {
                          "name":  "cleanup-uninstall",
@@ -701,10 +701,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\autoruns.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\autoruns.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\autoruns.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\autoruns.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\autoruns.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1758240,
@@ -775,10 +775,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\DeviceCleanup.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\DeviceCleanup.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\DeviceCleanup.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  76832,
@@ -851,10 +851,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -870,10 +870,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -965,10 +965,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1068,10 +1068,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1087,10 +1087,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1178,10 +1178,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1272,10 +1272,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1291,10 +1291,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\Reference.xml",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\Reference.xml",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\NVPI\\Reference.xml",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  255585,
@@ -1381,10 +1381,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  782079095,
@@ -1471,10 +1471,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1007022314,
@@ -1561,10 +1561,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\AMD 26.2.2.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\AMD 26.2.2.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Graphics\\AMD 26.2.2.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  952645264,
@@ -1647,10 +1647,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  78491296,
@@ -1714,10 +1714,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Chipset\\Intel Chipset.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Chipset\\Intel Chipset.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Chipset\\Intel Chipset.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  3250272,
@@ -1781,10 +1781,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Network\\Intel Network\\SetupBD.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Network\\Intel Network\\SetupBD.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Network\\Intel Network\\SetupBD.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  592400,
@@ -1848,10 +1848,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  5520328,
@@ -1915,10 +1915,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\driver_booster_setup.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\driver_booster_setup.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Drivers\\driver_booster_setup.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  33267856,
@@ -1982,10 +1982,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1662648,
@@ -2053,10 +2053,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\NVCleanstall.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\NVCleanstall.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\NVCleanstall.exe",
                                                                                    "passed":  false,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\NVCleanstall.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\NVCleanstall.exe",
                                                                                                     "exists":  false,
                                                                                                     "pathType":  "missing",
                                                                                                     "sizeBytes":  null,
@@ -2139,10 +2139,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\hwi_834x.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\hwi_834x.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\hwi_834x.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\hwi_834x.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\hwi_834x.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  18761768,
@@ -2273,10 +2273,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\cpu-z_2.17-en.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\cpu-z_2.17-en.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\cpu-z_2.17-en.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  4740096,
@@ -2340,10 +2340,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\GPU-Z.2.68.0.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\GPU-Z.2.68.0.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\GPU-Z.2.68.0.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  11405088,
@@ -2407,10 +2407,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\MSIAfterburnerInstaller466.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\MSIAfterburnerInstaller466.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\MSIAfterburnerInstaller466.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  44529816,
@@ -2474,10 +2474,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  97206463,
@@ -2541,10 +2541,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\LatencyMon.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\LatencyMon.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\LatencyMon.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\LatencyMon.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\LatencyMon.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  3478312,
@@ -2608,10 +2608,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\DL_SCEWIN.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\DL_SCEWIN.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\DL_SCEWIN.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\DL_SCEWIN.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\DL_SCEWIN.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  9364610,
@@ -2679,10 +2679,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\dotNetFx35setup.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\dotNetFx35setup.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\dotNetFx35setup.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  2869264,
@@ -2764,10 +2764,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\DX\\DXSETUP.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\DX\\DXSETUP.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\DX\\DXSETUP.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  517976,
@@ -2783,10 +2783,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  937246,
@@ -3582,10 +3582,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\AffTool\\intPolicy_x64.exe",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\Desktop\\Utilities\\AffTool\\intPolicy_x64.exe",
+                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\Desktop\\Utilities\\AffTool\\intPolicy_x64.exe",
+                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  32848,
@@ -3899,10 +3899,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "%LOCALAPPDATA%\\D3DSCache",
-                                                                                   "resolvedTarget":  "C:\\Users\\serviroo\\AppData\\Local\\D3DSCache",
+                                                                                   "resolvedTarget":  "%LOCALAPPDATA%\\D3DSCache",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "C:\\Users\\serviroo\\AppData\\Local\\D3DSCache",
+                                                                                                    "path":  "%LOCALAPPDATA%\\D3DSCache",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "container",
                                                                                                     "sizeBytes":  null,
