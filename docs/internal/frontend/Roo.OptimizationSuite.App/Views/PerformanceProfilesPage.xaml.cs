@@ -1,4 +1,3 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Roo.OptimizationSuite.ViewModels;
 
@@ -14,14 +13,11 @@ public sealed partial class PerformanceProfilesPage : Page
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
-    private async void OnPrimaryActionClick(object sender, RoutedEventArgs e)
+    private async void OnCapabilitySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ViewModel.CanUndoTune)
+        if (sender is ListView { SelectedItem: ProcessCapabilityItem item })
         {
-            ViewModel.UndoTuneCommand.Execute(null);
-            return;
+            await ViewModel.SelectCapabilityAsync(item);
         }
-
-        await ViewModel.ReloadAsync();
     }
 }
