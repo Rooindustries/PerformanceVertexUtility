@@ -10,27 +10,36 @@
     <Page.Resources>
         <DataTemplate x:Key="StatusLineTemplate" x:DataType="vm:StatusLine">
             <StackPanel Padding="0,7" Spacing="3">
-                <TextBlock Text="{x:Bind Label}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
-                               Foreground="{StaticResource RooTextPrimaryBrush}" />
-                </StackPanel>
+                <TextBlock Text="{x:Bind Label}" FontSize="11" LineHeight="15"
+                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Center"
+                             Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <TextBlock Grid.Column="1" Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                </Grid>
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate x:Key="UsageLineTemplate" x:DataType="vm:UsageLine">
             <Grid Padding="0,7" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="1*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Spacing="2">
-                    <TextBlock Text="{x:Bind Name}" FontSize="13" LineHeight="18" Foreground="{StaticResource RooTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{x:Bind Detail}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooTextMutedBrush}" />
+                    <TextBlock Text="{x:Bind Name}" FontSize="13" LineHeight="18"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind Detail}" FontSize="11" LineHeight="15"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{x:Bind Value}" FontSize="13" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Foreground="{StaticResource RooTextDisplayBrush}" />
+                           VerticalAlignment="Center" TextAlignment="Right" TextWrapping="WrapWholeWords"
+                           Foreground="{StaticResource RooTextDisplayBrush}" />
             </Grid>
         </DataTemplate>
 
@@ -38,9 +47,10 @@
             <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MinHeight="146">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
                         <TextBlock Text="{x:Bind Title}" Style="{StaticResource PanelLabelTextBlockStyle}"
-                                   Foreground="{StaticResource RooTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                   Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock Text="{x:Bind PrimaryMetric}" FontSize="20" FontWeight="SemiBold" LineHeight="26"
                                TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
@@ -49,6 +59,52 @@
                 </StackPanel>
             </Border>
         </DataTemplate>
+
+        <DataTemplate x:Key="CapabilityPageTemplate" x:DataType="vm:CapabilityPageSummary">
+            <Grid Padding="0,9" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0" Width="7" Height="7" Margin="0,7,0,0" VerticalAlignment="Top"
+                         Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                <Grid Grid.Column="1" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="3">
+                        <TextBlock Text="{x:Bind Page}" FontSize="14" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                        <TextBlock Text="{x:Bind Detail}" FontSize="12" LineHeight="17"
+                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{x:Bind Count}" FontSize="18" FontWeight="SemiBold"
+                               TextAlignment="Right" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooTextDisplayBrush}" />
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CapabilityActionTemplate" x:DataType="vm:CapabilityActionRow">
+            <Grid Padding="0,9" ColumnSpacing="10" HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0" Width="7" Height="7" Margin="0,7,0,0" VerticalAlignment="Top"
+                         Fill="{x:Bind DotState, Converter={StaticResource RiskToBrush}}" />
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Text="{x:Bind Label}" FontSize="14" FontWeight="SemiBold" LineHeight="20"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind StatusLine}" FontSize="12" LineHeight="17"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                    <TextBlock Text="{x:Bind ReasonOrNextStep}" FontSize="12" LineHeight="17"
+                               TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
+                               Visibility="{x:Bind ReasonOrNextStep, Converter={StaticResource StringToVisibility}}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="{StaticResource RooPageMargin}">
@@ -56,14 +112,14 @@
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading this PC" Foreground="{StaticResource RooTextMutedBrush}" />
+            <TextBlock Text="Reading capability registry" Foreground="{StaticResource RooTextMutedBrush}" />
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
                 Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                <TextBlock Text="Can't read the capability registry yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
                            Foreground="{StaticResource RooTextPrimaryBrush}" />
                 <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
                            Foreground="{StaticResource RooTextSecondaryBrush}" />
@@ -77,8 +133,8 @@
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
@@ -96,17 +152,18 @@
                                     </Grid.ColumnDefinitions>
                                     <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
                                              Fill="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.VerdictSummary, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
-                                               VerticalAlignment="Center" Foreground="{StaticResource RooTextMutedBrush}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.VerdictSummary, Mode=OneWay}" FontSize="13"
+                                               TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Foreground="{StaticResource RooTextMutedBrush}" />
                                 </Grid>
                             </StackPanel>
                         </Grid>
-                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReviewProcessPlanClick"
+                        <Button Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Click="OnReviewProcessPlanClick"
                                 Style="{StaticResource NavCtaButtonStyle}"
                                 Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
-                                <TextBlock Text="Tune My PC" />
+                                <TextBlock Text="Process Controls" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
                     </Grid>
@@ -118,36 +175,89 @@
                     </ItemsRepeater.Layout>
                 </ItemsRepeater>
 
+                <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="READY NOW" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                       Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.NextActionsCountText, Mode=OneWay}"
+                                       FontSize="12" FontWeight="SemiBold" TextAlignment="Right" TextWrapping="Wrap"
+                                       Foreground="{StaticResource RiskSafeBrush}" />
+                        </Grid>
+                        <TextBlock Text="{x:Bind ViewModel.NextActionsSummary, Mode=OneWay}" FontSize="13" LineHeight="19"
+                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextActions}" ItemTemplate="{StaticResource CapabilityActionTemplate}" />
+                        <TextBlock Text="No live apply capabilities are ready on this PC yet." FontSize="13" LineHeight="19"
+                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
+                                   Visibility="{x:Bind ViewModel.HasNextActions, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" />
+                    </StackPanel>
+                </Border>
+
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.5*" />
+                        <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="1*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="CAPABILITIES BY PAGE" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                       Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.CapabilityPages}" ItemTemplate="{StaticResource CapabilityPageTemplate}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="STATUS BY AVAILABILITY" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                       Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.CapabilityStatusLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,28">
                         <StackPanel Spacing="18">
                             <StackPanel Spacing="10">
-                                <TextBlock Text="MEMORY PRESSURE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="MEMORY PRESSURE" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="1*" />
+                                        <ColumnDefinition Width="1*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="RAM in use" FontSize="14" VerticalAlignment="Bottom" Foreground="{StaticResource RooTextSecondaryBrush}" />
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                    <TextBlock Grid.Column="0" Text="RAM in use" FontSize="14" VerticalAlignment="Bottom"
+                                               TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom" HorizontalAlignment="Right">
                                         <TextBlock Text="{x:Bind ViewModel.MemoryPressureLabel, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
-                                                   VerticalAlignment="Bottom" Margin="0,0,0,4"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,4" TextWrapping="Wrap"
                                                    Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
-                                        <TextBlock VerticalAlignment="Bottom" Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"><Run Text="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" FontSize="30" FontWeight="SemiBold" /><Run Text="%" FontSize="16" FontWeight="SemiBold" /></TextBlock>
+                                        <TextBlock VerticalAlignment="Bottom"
+                                                   Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}">
+                                            <Run Text="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" FontSize="30" FontWeight="SemiBold" />
+                                            <Run Text="%" FontSize="16" FontWeight="SemiBold" />
+                                        </TextBlock>
                                     </StackPanel>
                                 </Grid>
                                 <ProgressBar Value="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" Maximum="100" Height="10" CornerRadius="5"
                                              Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"
                                              Background="{StaticResource RooSurfaceInputBrush}" />
-                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                             <StackPanel Spacing="6">
-                                <TextBlock Text="TOP CONSUMERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="TOP CONSUMERS" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.TopMemoryUsers}" ItemTemplate="{StaticResource UsageLineTemplate}" />
                             </StackPanel>
                         </StackPanel>
@@ -156,13 +266,15 @@
                     <StackPanel Grid.Column="1" Spacing="16">
                         <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                             <StackPanel Spacing="10">
-                                <TextBlock Text="THIS SESSION" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="THIS SESSION" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.SessionLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                             <StackPanel Spacing="10">
-                                <TextBlock Text="STUTTER RISK" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                                <TextBlock Text="READINESS SIGNAL" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                           Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                              Fill="{x:Bind ViewModel.StutterRiskLine.State, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
@@ -181,14 +293,17 @@
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="BACKGROUND APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                            <TextBlock Text="Most you can push back to free memory" FontSize="12" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="BACKGROUND APPS" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                       Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
+                            <TextBlock Text="Largest non-protected processes by memory use." FontSize="12" LineHeight="16"
+                                       TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundOffenders}" ItemTemplate="{StaticResource UsageLineTemplate}" />
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="DRIVERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="HARDWARE READINESS" Style="{StaticResource PanelLabelTextBlockStyle}"
+                                       Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.DriverLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
                             <TextBlock Text="{x:Bind ViewModel.DriverNote, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                        Foreground="{StaticResource RooTextMutedBrush}" />
