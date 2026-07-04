@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -11,7 +12,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class DashboardViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _verdictHeadline = "Reading this PC";
+    [ObservableProperty] private string _verdictHeadline = "Reading capability registry";
     [ObservableProperty] private string _verdictLevel = "medium";
     [ObservableProperty] private string? _verdictSummary;
     [ObservableProperty] private string? _driverNote;
@@ -19,28 +20,46 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private string _memoryPressureLabel = "Reading";
     [ObservableProperty] private string? _memoryPressureLine;
     [ObservableProperty] private StatusLine? _stutterRiskLine;
+    [ObservableProperty] private int _totalCapabilityCount;
+    [ObservableProperty] private int _availableCapabilityCount;
+    [ObservableProperty] private int _unavailableCapabilityCount;
+    [ObservableProperty] private int _readyLiveCount;
+    [ObservableProperty] private int _reviewOnlyCount;
+    [ObservableProperty] private string _nextActionsSummary = "Reading the capability registry.";
+    [ObservableProperty] private string _nextActionsCountText = "0 ready";
+    [ObservableProperty] private bool _hasNextActions;
 
     public ObservableCollection<DashboardCard> ReadinessCards { get; } = new();
+    public ObservableCollection<CapabilityPageSummary> CapabilityPages { get; } = new();
+    public ObservableCollection<StatusLine> CapabilityStatusLines { get; } = new();
+    public ObservableCollection<CapabilityActionRow> NextActions { get; } = new();
     public ObservableCollection<StatusLine> SessionLines { get; } = new();
-    public ObservableCollection<MetricTile> MemoryStats { get; } = new();
     public ObservableCollection<UsageLine> TopMemoryUsers { get; } = new();
-    public ObservableCollection<MetricTile> BackgroundStats { get; } = new();
     public ObservableCollection<UsageLine> BackgroundOffenders { get; } = new();
-    public ObservableCollection<StatusLine> ProtectedApps { get; } = new();
     public ObservableCollection<StatusLine> DriverLines { get; } = new();
-    public ObservableCollection<StatusLine> SensorLines { get; } = new();
+
+    private static readonly string[] PageOrder =
+    {
+        "Process Controls",
+        "Clean Junk",
+        "Drivers & NVIDIA",
+        "System Tweaks",
+    };
 
     protected override async Task LoadCoreAsync()
     {
-        var dashboard = await TryLoadSample(Data.GetDashboardAsync);
-        var telemetry = await TryLoadSample(Data.GetTelemetryAsync);
-        var inventory = await App.Live.GetProcessInventoryAsync() ?? await TryLoadSample(Data.GetProcessInventoryAsync);
-        var hardware = await App.Live.GetDriverHardwareAsync() ?? await TryLoadSample(Data.GetDriverHardwareAsync);
+        var capabilities = await App.Capabilities.GetCapabilitiesAsync();
+        BuildCapabilityOverview(capabilities);
+
+        var inventory = await App.Live.GetProcessInventoryAsync()
+            ?? await TryLoadSample(Data.GetProcessInventoryAsync);
+        var hardware = await App.Live.GetDriverHardwareAsync()
+            ?? await TryLoadSample(Data.GetDriverHardwareAsync);
 
         if (inventory?.Summary is null)
         {
             WriteDiag(inventory);
-            ErrorMessage = "We couldn't read this PC yet. Close and reopen to try again.";
+            BuildUnavailableLiveReadiness(hardware);
             return;
         }
 
@@ -48,67 +67,206 @@ public partial class DashboardViewModel : PageViewModelBase
         var processes = inventory.Processes ?? new List<ProcessItem>();
 
         var totalRam = hardware?.Memory?.TotalPhysicalBytes ?? 0;
-        var ramGb = totalRam > 0 ? (int)System.Math.Round(totalRam / 1073741824d) : 0;
+        var ramGb = totalRam > 0 ? (int)Math.Round(totalRam / 1073741824d) : 0;
         var freeRam = summary.AvailableMemoryBytes;
         var usedRam = totalRam > freeRam ? totalRam - freeRam : 0;
         double? freeRatio = totalRam > 0 ? (double)freeRam / totalRam : null;
 
         BuildVerdict(freeRatio, summary, hardware, ramGb);
-        BuildReadinessCards(dashboard?.Cards, summary, hardware);
         BuildSession(processes);
-        BuildMemory(summary, usedRam, totalRam, ramGb, hardware);
+        BuildMemory(summary, usedRam, totalRam, ramGb);
         BuildTopUsers(processes);
         BuildBackground(summary, processes);
-        BuildProtected(processes);
         BuildDriver(hardware);
-        BuildStutterRisk(dashboard?.SystemSummary, telemetry?.Metrics);
-        BuildSensors(dashboard?.ProviderStatus, telemetry?.Providers);
+        BuildStutterRisk(summary, freeRatio);
+    }
+
+    private void BuildCapabilityOverview(IReadOnlyList<CapabilityRow> capabilities)
+    {
+        TotalCapabilityCount = capabilities.Count;
+        AvailableCapabilityCount = capabilities.Count(row => row.MachineAvailable);
+        UnavailableCapabilityCount = capabilities.Count(row => !row.MachineAvailable);
+        ReadyLiveCount = CountStatus(capabilities, "live");
+        ReviewOnlyCount = CountStatus(capabilities, "preview-only");
+
+        BuildReadinessCards();
+        BuildCapabilityPages(capabilities);
+        BuildCapabilityStatuses(capabilities);
+        BuildNextActions(capabilities);
+    }
+
+    private void BuildReadinessCards()
+    {
+        ReadinessCards.Clear();
+        ReadinessCards.Add(new DashboardCard(
+            "capability-registry",
+            "Capability registry",
+            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities",
+            "Counts come from the router registry across the four optimizer pages.",
+            TotalCapabilityCount > 0 ? "safe" : "neutral"));
+        ReadinessCards.Add(new DashboardCard(
+            "ready-live",
+            "Ready/live",
+            ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " ready",
+            "Available on this PC with apply and restore paths marked live.",
+            ReadyLiveCount > 0 ? "safe" : "neutral"));
+        ReadinessCards.Add(new DashboardCard(
+            "review-only",
+            "Review only",
+            ReviewOnlyCount.ToString(CultureInfo.InvariantCulture) + " review-only",
+            "Preview surfaces that do not change this PC yet.",
+            ReviewOnlyCount > 0 ? "protected" : "neutral"));
+        ReadinessCards.Add(new DashboardCard(
+            "unavailable-here",
+            "Unavailable here",
+            UnavailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " gated",
+            "Blocked by this machine, missing tools, or an admin-token requirement.",
+            UnavailableCapabilityCount > 0 ? "neutral" : "safe"));
+    }
+
+    private void BuildCapabilityPages(IReadOnlyList<CapabilityRow> capabilities)
+    {
+        CapabilityPages.Clear();
+        foreach (var page in PageOrder)
+        {
+            var rows = capabilities
+                .Where(row => string.Equals(row.Page, page, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var available = rows.Count(row => row.MachineAvailable);
+            var live = rows.Count(row => IsApplyState(row, "live"));
+            var review = rows.Count(row => IsApplyState(row, "preview-only"));
+            var unavailable = rows.Count(row => !row.MachineAvailable);
+            var detail = available.ToString(CultureInfo.InvariantCulture) + " available, "
+                + live.ToString(CultureInfo.InvariantCulture) + " ready/live, "
+                + review.ToString(CultureInfo.InvariantCulture) + " review-only, "
+                + unavailable.ToString(CultureInfo.InvariantCulture) + " unavailable here";
+
+            CapabilityPages.Add(new CapabilityPageSummary(
+                page,
+                rows.Count.ToString(CultureInfo.InvariantCulture),
+                detail,
+                PageState(rows.Count, available, live)));
+        }
+    }
+
+    private void BuildCapabilityStatuses(IReadOnlyList<CapabilityRow> capabilities)
+    {
+        CapabilityStatusLines.Clear();
+        AddStatus("Available on this PC", AvailableCapabilityCount + " of " + TotalCapabilityCount, AvailableCapabilityCount > 0 ? "safe" : "neutral");
+        AddStatus("Ready/live", ReadyLiveCount + " capabilities", ReadyLiveCount > 0 ? "safe" : "neutral");
+        AddStatus("Review-only", ReviewOnlyCount + " capabilities", ReviewOnlyCount > 0 ? "protected" : "neutral");
+
+        var fixtureProven = CountStatus(capabilities, "fixture-proven");
+        if (fixtureProven > 0)
+        {
+            AddStatus("Tested on a safe copy", fixtureProven + " capabilities", "low");
+        }
+
+        var allowlistShim = CountStatus(capabilities, "allowlist-shim");
+        if (allowlistShim > 0)
+        {
+            AddStatus("Runs app tool", allowlistShim + " capabilities", "low");
+        }
+
+        var helperContract = CountStatus(capabilities, "helper-contract");
+        if (helperContract > 0)
+        {
+            AddStatus("Helper packaging pending", helperContract + " capability", "protected");
+        }
+
+        var notImplemented = CountStatus(capabilities, "not-implemented");
+        if (notImplemented > 0)
+        {
+            AddStatus("Not available yet", notImplemented + " capabilities", "neutral");
+        }
+
+        AddStatus("Unavailable here", UnavailableCapabilityCount + " capabilities", UnavailableCapabilityCount > 0 ? "neutral" : "safe");
+    }
+
+    private void BuildNextActions(IReadOnlyList<CapabilityRow> capabilities)
+    {
+        NextActions.Clear();
+        foreach (var row in capabilities
+            .Where(row => row.MachineAvailable && IsApplyState(row, "live"))
+            .OrderBy(row => PageRank(row.Page))
+            .ThenBy(row => row.Label, StringComparer.OrdinalIgnoreCase)
+            .Take(8))
+        {
+            NextActions.Add(CapabilityActionRow.From(row));
+        }
+
+        HasNextActions = NextActions.Count > 0;
+        NextActionsCountText = NextActions.Count.ToString(CultureInfo.InvariantCulture)
+            + (NextActions.Count == 1 ? " ready" : " ready");
+        NextActionsSummary = HasNextActions
+            ? "Live and available on this PC. Open the matching page to review the exact action before anything changes."
+            : "No live apply capabilities are available on this PC yet; review-only and gated capabilities stay visible by page.";
     }
 
     private void BuildVerdict(double? freeRatio, ProcessInventorySummary summary, DriverHardwareSummary? hw, int ramGb)
     {
-        (VerdictHeadline, VerdictLevel) = freeRatio switch
+        VerdictHeadline = ReadyLiveCount > 0
+            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live capabilities are ready on this PC."
+            : AvailableCapabilityCount > 0
+                ? AvailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities are available for review."
+                : "Capability availability is gated on this PC.";
+
+        VerdictLevel = freeRatio switch
         {
-            >= 0.30 => ("Your PC has memory to spare.", "safe"),
-            >= 0.15 => ("Memory is getting tight. A tune will free up room.", "medium"),
-            < 0.15 and >= 0 => ("Memory is under pressure. Clear room before you play.", "high"),
-            _ => ("Checking memory pressure on this PC.", "medium"),
+            < 0.15 and >= 0 => "high",
+            < 0.30 and >= 0 => "medium",
+            _ when ReadyLiveCount > 0 => "safe",
+            _ when AvailableCapabilityCount > 0 => "protected",
+            _ => "neutral",
         };
 
         var gpu = CleanDevice(hw?.Gpus?.FirstOrDefault()?.Name);
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(gpu)) parts.Add(gpu);
-        if (ramGb > 0) parts.Add(ramGb + " GB RAM");
-        parts.Add(summary.ProcessCount + " apps open, " + summary.BackgroundProcessCount + " in the background");
-        VerdictSummary = string.Join("  ·  ", parts);
+        var parts = new List<string>
+        {
+            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " registry capabilities across four pages",
+            AvailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " available",
+            ReviewOnlyCount.ToString(CultureInfo.InvariantCulture) + " review-only",
+            UnavailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " unavailable here",
+        };
+        if (!string.IsNullOrWhiteSpace(gpu))
+        {
+            parts.Add(gpu);
+        }
+
+        if (ramGb > 0)
+        {
+            parts.Add(ramGb.ToString(CultureInfo.InvariantCulture) + " GB RAM");
+        }
+
+        parts.Add(summary.ProcessCount.ToString(CultureInfo.InvariantCulture) + " apps open, "
+            + summary.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture) + " in the background");
+        VerdictSummary = string.Join(" - ", parts);
     }
 
-    private void BuildReadinessCards(IReadOnlyList<Roo.OptimizationSuite.Models.DashboardCard>? cards, ProcessInventorySummary summary, DriverHardwareSummary? hw)
+    private void BuildUnavailableLiveReadiness(DriverHardwareSummary? hardware)
     {
-        ReadinessCards.Clear();
-        foreach (var card in cards ?? new List<Roo.OptimizationSuite.Models.DashboardCard>())
-        {
-            var metric = card.PrimaryMetric ?? string.Empty;
-            if (card.CardId == "processPressure")
-            {
-                metric = summary.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture) + " running";
-            }
-            else if (card.CardId == "memoryPressure" && summary.AvailableMemoryBytes > 0)
-            {
-                metric = Format.Bytes(summary.AvailableMemoryBytes) + " available";
-            }
-            else if (card.CardId == "driverProfiles" && hw?.Gpus?.Count > 0)
-            {
-                metric = "Manual only";
-            }
+        VerdictHeadline = ReadyLiveCount > 0
+            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live capabilities are ready on this PC."
+            : "Capability registry is loaded.";
+        VerdictLevel = ReadyLiveCount > 0 ? "safe" : "protected";
+        VerdictSummary = TotalCapabilityCount.ToString(CultureInfo.InvariantCulture)
+            + " registry capabilities loaded. Process and memory inventory did not return data.";
 
-            ReadinessCards.Add(new DashboardCard(
-                card.CardId,
-                card.Title ?? "Readiness",
-                metric,
-                card.Detail ?? string.Empty,
-                card.State ?? "neutral"));
-        }
+        MemoryUsedPercent = 0;
+        MemoryPressureLabel = "Not measured";
+        MemoryPressureLine = "Process inventory is unavailable, so memory pressure is not estimated here.";
+
+        SessionLines.Clear();
+        SessionLines.Add(new StatusLine("Process inventory", "Not available", "neutral"));
+
+        TopMemoryUsers.Clear();
+        TopMemoryUsers.Add(new UsageLine("Process inventory", "Not available", "-"));
+
+        BackgroundOffenders.Clear();
+        BackgroundOffenders.Add(new UsageLine("Background apps", "Not measured", "-"));
+
+        StutterRiskLine = new StatusLine("Readiness signal", "Not measured without process inventory.", "neutral");
+        BuildDriver(hardware);
     }
 
     private void BuildSession(IReadOnlyList<ProcessItem> processes)
@@ -129,12 +287,12 @@ public partial class DashboardViewModel : PageViewModelBase
             ? new StatusLine("Companion apps", string.Join(" + ", companions) + " protected", "safe")
             : new StatusLine("Companion apps", "None running", "neutral"));
 
-        SessionLines.Add(new StatusLine("Session plan", "No tune applied yet", "neutral"));
+        SessionLines.Add(new StatusLine("Capability action", "Open a page to review details", "neutral"));
     }
 
-    private void BuildMemory(ProcessInventorySummary s, long usedRam, long totalRam, int ramGb, DriverHardwareSummary? hw)
+    private void BuildMemory(ProcessInventorySummary s, long usedRam, long totalRam, int ramGb)
     {
-        MemoryUsedPercent = totalRam > 0 ? (int)System.Math.Round((double)usedRam / totalRam * 100) : 0;
+        MemoryUsedPercent = totalRam > 0 ? (int)Math.Round((double)usedRam / totalRam * 100) : 0;
         MemoryPressureLabel = MemoryUsedPercent switch
         {
             >= 85 => "Heavy",
@@ -142,9 +300,9 @@ public partial class DashboardViewModel : PageViewModelBase
             _ => "Light",
         };
 
-        var totalText = ramGb > 0 ? ramGb + " GB" : Format.Bytes(totalRam);
+        var totalText = ramGb > 0 ? ramGb.ToString(CultureInfo.InvariantCulture) + " GB" : Format.Bytes(totalRam);
         MemoryPressureLine = Format.Bytes(s.AvailableMemoryBytes) + " free of " + totalText
-            + "  ·  Windows memory " + Format.Bytes(s.CommitUsedBytes);
+            + " - Windows memory " + Format.Bytes(s.CommitUsedBytes);
     }
 
     private void BuildTopUsers(IReadOnlyList<ProcessItem> processes)
@@ -161,15 +319,15 @@ public partial class DashboardViewModel : PageViewModelBase
             TopMemoryUsers.Add(new UsageLine(Naming.FriendlyName(p.Name), Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes)));
         }
+
+        if (TopMemoryUsers.Count == 0)
+        {
+            TopMemoryUsers.Add(new UsageLine("Process inventory", "No user apps reported", "-"));
+        }
     }
 
     private void BuildBackground(ProcessInventorySummary s, IReadOnlyList<ProcessItem> processes)
     {
-        BackgroundStats.Clear();
-        BackgroundStats.Add(new MetricTile("Apps Running", s.ProcessCount.ToString(CultureInfo.InvariantCulture), "total processes"));
-        BackgroundStats.Add(new MetricTile("Background", s.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture), "not in focus"));
-        BackgroundStats.Add(new MetricTile("Browser / Web", s.BrowserWebViewProcessCount.ToString(CultureInfo.InvariantCulture), "tabs and helpers"));
-
         BackgroundOffenders.Clear();
         var rows = processes
             .Where(p => p.Protection != "protected" && p.Category != "windowsCore" && !Naming.IsNonActionable(p.Name)
@@ -182,24 +340,10 @@ public partial class DashboardViewModel : PageViewModelBase
             BackgroundOffenders.Add(new UsageLine(Naming.FriendlyName(p.Name), Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes)));
         }
-    }
 
-    private void BuildProtected(IReadOnlyList<ProcessItem> processes)
-    {
-        ProtectedApps.Clear();
-        var present = processes.Where(p => p.Protection == "protected").Select(p => p.Category).ToHashSet();
-
-        foreach (var category in new[] { "voiceChat", "captureStreaming", "audioInput", "network", "security" })
+        if (BackgroundOffenders.Count == 0)
         {
-            if (present.Contains(category))
-            {
-                ProtectedApps.Add(new StatusLine(Naming.CategoryLabel(category), "Kept safe", "protected"));
-            }
-        }
-
-        if (ProtectedApps.Count == 0)
-        {
-            ProtectedApps.Add(new StatusLine("Voice, audio, network, security", "Kept safe", "protected"));
+            BackgroundOffenders.Add(new UsageLine("Background apps", s.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture) + " reported", "-"));
         }
     }
 
@@ -229,77 +373,78 @@ public partial class DashboardViewModel : PageViewModelBase
             var gpuText = CleanDevice(gpu.Name);
             if (!string.IsNullOrWhiteSpace(gpu.DriverVersion))
             {
-                gpuText += "  ·  Driver " + gpu.DriverVersion;
+                gpuText += " - Driver " + gpu.DriverVersion;
             }
             DriverLines.Add(new StatusLine("Graphics", gpuText ?? "Unknown", "neutral"));
         }
 
-        DriverNote = "Driver and GPU changes stay manual. Nothing installs until you approve it.";
+        if (DriverLines.Count == 0)
+        {
+            DriverLines.Add(new StatusLine("Hardware", "Not read yet", "neutral"));
+        }
+
+        DriverNote = "Driver and GPU capabilities show their own availability, approval, and restore status before any change.";
     }
 
-    private void BuildStutterRisk(SystemSummary? systemSummary, TelemetryMetrics? metrics)
+    private void BuildStutterRisk(ProcessInventorySummary summary, double? freeRatio)
     {
-        var riskSignal = systemSummary?.RiskSignal ?? string.Empty;
-        var level = riskSignal.Contains("high", System.StringComparison.OrdinalIgnoreCase)
-            ? "high"
-            : riskSignal.Contains("medium", System.StringComparison.OrdinalIgnoreCase)
-                ? "medium"
-                : "low";
-        var label = riskSignal.Contains("memory", System.StringComparison.OrdinalIgnoreCase)
-            ? (level == "medium" ? "Medium — memory pressure" : "Memory pressure")
-            : "Low — steady";
-        var spikeText = metrics is { FrameTimeSpikesOver16ms: > 0 }
-            ? " " + metrics.FrameTimeSpikesOver16ms.ToString(CultureInfo.InvariantCulture) + " spikes over 16 ms in the sample capture."
-            : string.Empty;
+        var level = freeRatio switch
+        {
+            < 0.15 and >= 0 => "high",
+            < 0.30 and >= 0 => "medium",
+            _ when summary.BackgroundProcessCount >= 90 => "medium",
+            _ => "low",
+        };
+        var label = level switch
+        {
+            "high" => "High - memory pressure",
+            "medium" => "Medium - background load",
+            _ => "Low - inventory looks steady",
+        };
 
         StutterRiskLine = new StatusLine(
-            "Stutter risk",
-            label + ". Some spikes likely while streaming. Quieting background apps and freeing RAM helps most." + spikeText,
+            "Readiness signal",
+            label + ". Based on " + summary.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture)
+            + " background apps and " + Format.Bytes(summary.AvailableMemoryBytes) + " available memory.",
             level);
     }
 
-    private void BuildSensors(IReadOnlyList<ProviderStatus>? dashboardProviders, IReadOnlyList<ProviderStatus>? telemetryProviders)
+    private void AddStatus(string label, string value, string state)
+        => CapabilityStatusLines.Add(new StatusLine(label, value, state));
+
+    private static int CountStatus(IReadOnlyList<CapabilityRow> capabilities, string status)
+        => capabilities.Count(row => row.MachineAvailable && IsApplyState(row, status));
+
+    private static bool IsApplyState(CapabilityRow row, string status)
+        => string.Equals(row.ApplyState, status, StringComparison.OrdinalIgnoreCase);
+
+    private static string PageState(int total, int available, int live)
     {
-        SensorLines.Clear();
-        var providers = new List<ProviderStatus>();
-        if (dashboardProviders is not null) providers.AddRange(dashboardProviders);
-        if (telemetryProviders is not null)
+        if (total == 0)
         {
-            foreach (var provider in telemetryProviders.Where(p => providers.All(existing => existing.ProviderId != p.ProviderId)))
+            return "neutral";
+        }
+
+        if (live > 0)
+        {
+            return "safe";
+        }
+
+        return available > 0 ? "protected" : "neutral";
+    }
+
+    private static int PageRank(string page)
+    {
+        for (var i = 0; i < PageOrder.Length; i++)
+        {
+            if (string.Equals(PageOrder[i], page, StringComparison.OrdinalIgnoreCase))
             {
-                providers.Add(provider);
+                return i;
             }
         }
 
-        foreach (var provider in providers)
-        {
-            SensorLines.Add(new StatusLine(provider.DisplayName, ProviderState(provider), ProviderRisk(provider.State)));
-        }
-
-        if (SensorLines.Count == 0)
-        {
-            SensorLines.Add(new StatusLine("Windows Sensors", "Connected", "safe"));
-            SensorLines.Add(new StatusLine("HWiNFO64 Sensors", "Not connected", "neutral"));
-            SensorLines.Add(new StatusLine("PresentMon", "Not measured yet", "neutral"));
-        }
+        return PageOrder.Length;
     }
-
-    private static string ProviderState(ProviderStatus provider) => (provider.State ?? string.Empty).ToLowerInvariant() switch
-    {
-        "available" => "Connected",
-        "sample" => "Sample capture",
-        "optional-not-detected" or "missing" => "Not connected",
-        "" => "Unknown",
-        _ => provider.State!.Replace('-', ' '),
-    };
-
-    private static string ProviderRisk(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
-    {
-        "available" => "safe",
-        "sample" => "neutral",
-        "optional-not-detected" or "missing" => "neutral",
-        _ => "neutral",
-    };
 
     private static void WriteDiag(ProcessInventory? inventory)
     {
@@ -337,15 +482,43 @@ public partial class DashboardViewModel : PageViewModelBase
     private static string DisplayName(ProcessItem process)
         => string.IsNullOrWhiteSpace(process.DisplayName) ? Naming.FriendlyName(process.Name) : process.DisplayName!;
 
-    private static async Task<T?> TryLoadSample<T>(System.Func<Task<T>> load) where T : class
+    private static async Task<T?> TryLoadSample<T>(Func<Task<T>> load) where T : class
     {
         try
         {
-            return await load().ConfigureAwait(false);
+            return await load();
         }
         catch
         {
             return null;
         }
     }
+}
+
+public sealed record CapabilityPageSummary(string Page, string Count, string Detail, string State);
+
+public sealed record CapabilityActionRow(
+    string CapabilityId,
+    string Label,
+    string Page,
+    string AvailabilityText,
+    string ApplyStatusText,
+    string ApprovalText,
+    string RestoreText,
+    string ReasonOrNextStep,
+    string DotState)
+{
+    public string StatusLine => Page + " - " + AvailabilityText + " - " + ApplyStatusText + " - " + ApprovalText + " - " + RestoreText;
+
+    public static CapabilityActionRow From(CapabilityRow row)
+        => new(
+            row.CapabilityId,
+            row.Label,
+            row.Page,
+            row.MachineAvailable ? "Available on this PC" : "Not available here",
+            row.ApplyStatusText,
+            row.ApprovalText,
+            row.RestoreText,
+            row.ReasonOrNextStep,
+            row.DotState);
 }
