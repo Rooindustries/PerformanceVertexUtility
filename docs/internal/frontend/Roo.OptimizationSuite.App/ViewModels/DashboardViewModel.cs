@@ -18,7 +18,9 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private int _memoryUsedPercent;
     [ObservableProperty] private string _memoryPressureLabel = "Reading";
     [ObservableProperty] private string? _memoryPressureLine;
+    [ObservableProperty] private StatusLine? _stutterRiskLine;
 
+    public ObservableCollection<DashboardCard> ReadinessCards { get; } = new();
     public ObservableCollection<StatusLine> SessionLines { get; } = new();
     public ObservableCollection<MetricTile> MemoryStats { get; } = new();
     public ObservableCollection<UsageLine> TopMemoryUsers { get; } = new();
@@ -30,8 +32,10 @@ public partial class DashboardViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync();
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var dashboard = await TryLoadSample(Data.GetDashboardAsync);
+        var telemetry = await TryLoadSample(Data.GetTelemetryAsync);
+        var inventory = await App.Live.GetProcessInventoryAsync() ?? await TryLoadSample(Data.GetProcessInventoryAsync);
+        var hardware = await App.Live.GetDriverHardwareAsync() ?? await TryLoadSample(Data.GetDriverHardwareAsync);
 
         if (inventory?.Summary is null)
         {
@@ -50,13 +54,15 @@ public partial class DashboardViewModel : PageViewModelBase
         double? freeRatio = totalRam > 0 ? (double)freeRam / totalRam : null;
 
         BuildVerdict(freeRatio, summary, hardware, ramGb);
+        BuildReadinessCards(dashboard?.Cards, summary, hardware);
         BuildSession(processes);
         BuildMemory(summary, usedRam, totalRam, ramGb, hardware);
         BuildTopUsers(processes);
         BuildBackground(summary, processes);
         BuildProtected(processes);
         BuildDriver(hardware);
-        BuildSensors();
+        BuildStutterRisk(dashboard?.SystemSummary, telemetry?.Metrics);
+        BuildSensors(dashboard?.ProviderStatus, telemetry?.Providers);
     }
 
     private void BuildVerdict(double? freeRatio, ProcessInventorySummary summary, DriverHardwareSummary? hw, int ramGb)
@@ -77,18 +83,46 @@ public partial class DashboardViewModel : PageViewModelBase
         VerdictSummary = string.Join("  ·  ", parts);
     }
 
+    private void BuildReadinessCards(IReadOnlyList<Roo.OptimizationSuite.Models.DashboardCard>? cards, ProcessInventorySummary summary, DriverHardwareSummary? hw)
+    {
+        ReadinessCards.Clear();
+        foreach (var card in cards ?? new List<Roo.OptimizationSuite.Models.DashboardCard>())
+        {
+            var metric = card.PrimaryMetric ?? string.Empty;
+            if (card.CardId == "processPressure")
+            {
+                metric = summary.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture) + " running";
+            }
+            else if (card.CardId == "memoryPressure" && summary.AvailableMemoryBytes > 0)
+            {
+                metric = Format.Bytes(summary.AvailableMemoryBytes) + " available";
+            }
+            else if (card.CardId == "driverProfiles" && hw?.Gpus?.Count > 0)
+            {
+                metric = "Manual only";
+            }
+
+            ReadinessCards.Add(new DashboardCard(
+                card.CardId,
+                card.Title ?? "Readiness",
+                metric,
+                card.Detail ?? string.Empty,
+                card.State ?? "neutral"));
+        }
+    }
+
     private void BuildSession(IReadOnlyList<ProcessItem> processes)
     {
         SessionLines.Clear();
 
         var game = processes.FirstOrDefault(p => p.Category == "foregroundGame");
         SessionLines.Add(game is not null
-            ? new StatusLine("Game", Naming.FriendlyName(game.Name), "safe")
+            ? new StatusLine("Game", DisplayName(game) + " running", "safe")
             : new StatusLine("Game", "No game detected", "neutral"));
 
         var companions = processes
             .Where(p => p.Protection == "protected" && (p.Category is "voiceChat" or "captureStreaming"))
-            .Select(p => Naming.FriendlyName(p.Name))
+            .Select(DisplayName)
             .Distinct()
             .ToList();
         SessionLines.Add(companions.Count > 0
@@ -203,13 +237,69 @@ public partial class DashboardViewModel : PageViewModelBase
         DriverNote = "Driver and GPU changes stay manual. Nothing installs until you approve it.";
     }
 
-    private void BuildSensors()
+    private void BuildStutterRisk(SystemSummary? systemSummary, TelemetryMetrics? metrics)
+    {
+        var riskSignal = systemSummary?.RiskSignal ?? string.Empty;
+        var level = riskSignal.Contains("high", System.StringComparison.OrdinalIgnoreCase)
+            ? "high"
+            : riskSignal.Contains("medium", System.StringComparison.OrdinalIgnoreCase)
+                ? "medium"
+                : "low";
+        var label = riskSignal.Contains("memory", System.StringComparison.OrdinalIgnoreCase)
+            ? (level == "medium" ? "Medium — memory pressure" : "Memory pressure")
+            : "Low — steady";
+        var spikeText = metrics is { FrameTimeSpikesOver16ms: > 0 }
+            ? " " + metrics.FrameTimeSpikesOver16ms.ToString(CultureInfo.InvariantCulture) + " spikes over 16 ms in the sample capture."
+            : string.Empty;
+
+        StutterRiskLine = new StatusLine(
+            "Stutter risk",
+            label + ". Some spikes likely while streaming. Quieting background apps and freeing RAM helps most." + spikeText,
+            level);
+    }
+
+    private void BuildSensors(IReadOnlyList<ProviderStatus>? dashboardProviders, IReadOnlyList<ProviderStatus>? telemetryProviders)
     {
         SensorLines.Clear();
-        SensorLines.Add(new StatusLine("Windows Sensors", "Connected", "safe"));
-        SensorLines.Add(new StatusLine("HWiNFO64 Sensors", "Not connected", "neutral"));
-        SensorLines.Add(new StatusLine("FPS & 1% Lows", "Not measured yet", "neutral"));
+        var providers = new List<ProviderStatus>();
+        if (dashboardProviders is not null) providers.AddRange(dashboardProviders);
+        if (telemetryProviders is not null)
+        {
+            foreach (var provider in telemetryProviders.Where(p => providers.All(existing => existing.ProviderId != p.ProviderId)))
+            {
+                providers.Add(provider);
+            }
+        }
+
+        foreach (var provider in providers)
+        {
+            SensorLines.Add(new StatusLine(provider.DisplayName, ProviderState(provider), ProviderRisk(provider.State)));
+        }
+
+        if (SensorLines.Count == 0)
+        {
+            SensorLines.Add(new StatusLine("Windows Sensors", "Connected", "safe"));
+            SensorLines.Add(new StatusLine("HWiNFO64 Sensors", "Not connected", "neutral"));
+            SensorLines.Add(new StatusLine("PresentMon", "Not measured yet", "neutral"));
+        }
     }
+
+    private static string ProviderState(ProviderStatus provider) => (provider.State ?? string.Empty).ToLowerInvariant() switch
+    {
+        "available" => "Connected",
+        "sample" => "Sample capture",
+        "optional-not-detected" or "missing" => "Not connected",
+        "" => "Unknown",
+        _ => provider.State!.Replace('-', ' '),
+    };
+
+    private static string ProviderRisk(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
+    {
+        "available" => "safe",
+        "sample" => "neutral",
+        "optional-not-detected" or "missing" => "neutral",
+        _ => "neutral",
+    };
 
     private static void WriteDiag(ProcessInventory? inventory)
     {
@@ -242,5 +332,20 @@ public partial class DashboardViewModel : PageViewModelBase
 
         return name.Replace("(R)", string.Empty).Replace("(TM)", string.Empty).Replace("(C)", string.Empty)
             .Replace("  ", " ").Trim();
+    }
+
+    private static string DisplayName(ProcessItem process)
+        => string.IsNullOrWhiteSpace(process.DisplayName) ? Naming.FriendlyName(process.Name) : process.DisplayName!;
+
+    private static async Task<T?> TryLoadSample<T>(System.Func<Task<T>> load) where T : class
+    {
+        try
+        {
+            return await load().ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace Roo.OptimizationSuite.Models;
@@ -285,6 +286,7 @@ public sealed class CleanupManifest
     public bool DryRun { get; set; }
     public string? ExecutionMode { get; set; }
     public List<LeftoverItem>? Items { get; set; }
+    [JsonPropertyName("rollback")] public CleanupRollback? Rollback { get; set; }
     public CleanupManifestSummary? Summary { get; set; }
 }
 
@@ -298,4 +300,36 @@ public sealed class CleanupManifestSummary
     public bool WillDeleteOnApply { get; set; }
     public bool WillEditRegistry { get; set; }
     public bool DryRunWritesState { get; set; }
+}
+
+public sealed class CleanupRollback
+{
+    [JsonPropertyName("backupRoot")] public string? BackupRoot { get; set; }
+    [JsonPropertyName("rollbackActionId")] public string? RollbackActionId { get; set; }
+    [JsonPropertyName("rollbackSupported")] public bool RollbackSupported { get; set; }
+    [JsonPropertyName("restorePoint")] public CleanupRestorePoint? RestorePoint { get; set; }
+    [JsonPropertyName("fileBackupRequirements")] public List<CleanupBackupRequirement>? FileBackupRequirements { get; set; }
+    [JsonPropertyName("registryExportRequirements")] public List<CleanupBackupRequirement>? RegistryExportRequirements { get; set; }
+    [JsonPropertyName("serviceStateBackupRequirements")] public List<CleanupBackupRequirement>? ServiceStateBackupRequirements { get; set; }
+    [JsonPropertyName("scheduledTaskBackupRequirements")] public List<CleanupBackupRequirement>? ScheduledTaskBackupRequirements { get; set; }
+    [JsonPropertyName("startupEntryBackupRequirements")] public List<CleanupBackupRequirement>? StartupEntryBackupRequirements { get; set; }
+    [JsonPropertyName("manifestExportRequired")] public bool ManifestExportRequired { get; set; }
+}
+
+public sealed class CleanupRestorePoint
+{
+    [JsonPropertyName("requiredBeforeFutureApply")] public bool RequiredBeforeFutureApply { get; set; }
+    [JsonPropertyName("created")] public bool Created { get; set; }
+    [JsonPropertyName("previewOnly")] public bool PreviewOnly { get; set; }
+}
+
+public sealed class CleanupBackupRequirement
+{
+    [JsonPropertyName("itemId")] public string? ItemId { get; set; }
+    [JsonPropertyName("type")] public string? Type { get; set; }
+    [JsonPropertyName("target")] public string? Target { get; set; }
+    [JsonPropertyName("mode")] public string? Mode { get; set; }
+    [JsonPropertyName("required")] public bool Required { get; set; }
+    [JsonPropertyName("completed")] public bool Completed { get; set; }
+    [JsonPropertyName("previewOnly")] public bool PreviewOnly { get; set; }
 }

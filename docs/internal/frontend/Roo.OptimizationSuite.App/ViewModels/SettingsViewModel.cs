@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Roo.OptimizationSuite.Models;
@@ -14,75 +15,58 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string? _productName;
     [ObservableProperty] private string? _versionText;
     [ObservableProperty] private string? _engineStatus;
+    [ObservableProperty] private string? _dataSourceStatus;
+    [ObservableProperty] private string _dataSourceState = "protected";
 
     public string Tagline => "Precision Performance Engineering";
-    public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
+    public IReadOnlyList<ThemeOption> Themes { get; } = new[] { ThemeService.BlackoutGold };
     public ObservableCollection<SafetyRow> SafetyRows { get; } = new();
     public ObservableCollection<StatusLine> EngineRows { get; } = new();
+    public ObservableCollection<StatusLine> SensorRows { get; } = new();
 
     public SettingsViewModel()
     {
-        _selectedThemeId = App.Theme.CurrentThemeId;
+        _selectedThemeId = ThemeService.BlackoutGold.Id;
         _reducedEffects = App.Theme.ReducedEffects;
     }
 
     protected override async Task LoadCoreAsync()
     {
         var product = await Data.GetProductStatusAsync();
+        var dashboard = await Data.GetDashboardAsync();
+        var telemetry = await Data.GetTelemetryAsync();
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
-        VersionText = "Version " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
-        EngineStatus = ReadyLabel(product.Status) + "  ·  Engine " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
+        VersionText = "Build " + ContractVersion(product.BackendPackageVersion);
+        EngineStatus = "Roo works in quick bursts and gets out of the way. Every action previews first — nothing changes until you confirm.";
+        DataSourceStatus = App.Live.ScriptsAvailable ? "Reading this PC" : "Showing sample data (backend not found).";
+        DataSourceState = App.Live.ScriptsAvailable ? "safe" : "protected";
         BuildSafetyRows(product.Safety);
-        BuildEngineRows(product.WorkflowReadiness);
+        BuildProviderRows(dashboard.ProviderStatus, telemetry.Providers);
     }
 
-    private void BuildEngineRows(System.Collections.Generic.IReadOnlyList<WorkflowReadiness>? readiness)
+    private void BuildProviderRows(IReadOnlyList<ProviderStatus>? dashboardProviders, IReadOnlyList<ProviderStatus>? telemetryProviders)
     {
         EngineRows.Clear();
-        if (readiness is null)
+        SensorRows.Clear();
+        EngineRows.Add(new StatusLine("Data source", DataSourceStatus ?? "Showing sample data (backend not found).", DataSourceState));
+
+        var providers = new List<ProviderStatus>();
+        if (dashboardProviders is not null) providers.AddRange(dashboardProviders);
+        if (telemetryProviders is not null)
         {
-            return;
+            foreach (var provider in telemetryProviders.Where(p => providers.All(existing => existing.ProviderId != p.ProviderId)))
+            {
+                providers.Add(provider);
+            }
         }
 
-        foreach (var workflow in readiness)
+        foreach (var provider in providers)
         {
-            var (label, value, state) = DescribeWorkflow(workflow);
-            EngineRows.Add(new StatusLine(label, value, state));
+            var row = new StatusLine(provider.DisplayName, ProviderState(provider.State), ProviderRisk(provider.State));
+            EngineRows.Add(row);
+            SensorRows.Add(row);
         }
     }
-
-    private static (string label, string value, string state) DescribeWorkflow(WorkflowReadiness workflow)
-    {
-        var label = (workflow.WorkflowId ?? string.Empty) switch
-        {
-            "performanceProfiles" => "Game Tune",
-            "processGovernor" => "Background governor",
-            "persistentProcessPolicy" => "Process policy",
-            "uninstallCleanup" => "Clean Junk",
-            "driversProfiles" => "Drivers & hardware",
-            _ => string.IsNullOrWhiteSpace(workflow.Name) ? "Workflow" : workflow.Name!,
-        };
-
-        var (value, state) = (workflow.ImplementationStatus ?? string.Empty) switch
-        {
-            "preview-dry-run-confirmed-process-controls-and-live-restore" => ("Preview, apply, and live restore", "safe"),
-            "bounded-session-preview-confirmed-restraint-status-and-restore" => ("Session preview and restore", "safe"),
-            "bounded-session-preview-confirmed-launch-watcher-status-and-restore" => ("Session preview and restore", "safe"),
-            "sample-and-read-only-inventory" => ("Read-only preview", "low"),
-            "sample-and-read-only-hardware-inventory" => ("Read-only hardware read", "low"),
-            _ => ("In development", "low"),
-        };
-
-        return (label, value, state);
-    }
-
-    private static string ReadyLabel(string? status) => (status ?? string.Empty) switch
-    {
-        "preview-ready" => "Preview ready",
-        "ready" => "Ready",
-        "" => "Status unavailable",
-        _ => status!,
-    };
 
     private void BuildSafetyRows(SafetyStatus? safety)
     {
@@ -96,10 +80,29 @@ public partial class SettingsViewModel : PageViewModelBase
         SafetyRows.Add(new SafetyRow("Ask before changes", safety.RequiresExplicitConfirmation ? "On" : "Off", safety.RequiresExplicitConfirmation ? "protected" : "high"));
         SafetyRows.Add(new SafetyRow("Back up before changes", safety.BackupRequiredBeforeApply ? "On" : "Off", safety.BackupRequiredBeforeApply ? "protected" : "high"));
         SafetyRows.Add(new SafetyRow("One-click undo", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
-        SafetyRows.Add(new SafetyRow("Remote scripts", safety.RemoteScriptExecutionAllowed ? "Allowed" : "Blocked", safety.RemoteScriptExecutionAllowed ? "high" : "safe"));
-        SafetyRows.Add(new SafetyRow("Automatic driver changes", safety.DriverAutomationAllowed ? "Allowed" : "Blocked", safety.DriverAutomationAllowed ? "high" : "safe"));
+        SafetyRows.Add(new SafetyRow("Remote actions", safety.RemoteScriptExecutionAllowed ? "Allowed" : "Off", safety.RemoteScriptExecutionAllowed ? "high" : "safe"));
+        SafetyRows.Add(new SafetyRow("Driver changes", safety.DriverAutomationAllowed ? "Automatic" : "Manual", safety.DriverAutomationAllowed ? "high" : "protected"));
         SafetyRows.Add(new SafetyRow("Leftover removal", safety.LeftoverDeletionAllowedByDefault ? "On" : "Off by default", safety.LeftoverDeletionAllowedByDefault ? "high" : "safe"));
     }
+
+    private static string ProviderState(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
+    {
+        "available" => "Connected",
+        "sample" => "Sample capture",
+        "optional-not-detected" or "missing" => "Not connected",
+        _ => string.IsNullOrWhiteSpace(state) ? "Unknown" : state!.Replace('-', ' '),
+    };
+
+    private static string ProviderRisk(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
+    {
+        "available" => "safe",
+        "sample" => "neutral",
+        "optional-not-detected" or "missing" => "neutral",
+        _ => "neutral",
+    };
+
+    private static string ContractVersion(string? version)
+        => string.IsNullOrWhiteSpace(version) ? "0.1.0" : version!.Replace("-contracts", string.Empty);
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);
 
