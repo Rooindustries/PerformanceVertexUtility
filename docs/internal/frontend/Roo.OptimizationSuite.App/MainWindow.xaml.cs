@@ -18,7 +18,6 @@ public sealed partial class MainWindow : Window
         ["uninstall"] = typeof(UninstallCleanupPage),
         ["drivers"] = typeof(DriversProfilesPage),
         ["monitoring"] = typeof(MonitoringPage),
-        ["reports"] = typeof(ReportsPage),
     };
 
     private string _currentTag;

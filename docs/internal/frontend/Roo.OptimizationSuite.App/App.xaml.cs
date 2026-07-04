@@ -12,6 +12,7 @@ public partial class App : Application
 
     public static SampleDataService Data { get; } = new SampleDataService(Locator);
     public static LiveDataService Live { get; } = new LiveDataService(Locator);
+    public static CapabilityService Capabilities { get; } = new CapabilityService(Locator);
     public static ThemeService Theme { get; } = new ThemeService(new SettingsStore());
 
     private static readonly string[] AccentKeys =
