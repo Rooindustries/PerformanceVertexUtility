@@ -49,7 +49,7 @@
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Game Tune" Tag="profiles">
+                <NavigationViewItem Content="Process Controls" Tag="profiles">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
@@ -59,19 +59,14 @@
                         <FontIcon Glyph="&#xE74D;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Drivers &amp; Settings" Tag="drivers">
+                <NavigationViewItem Content="Drivers &amp; NVIDIA" Tag="drivers">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE950;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Live Feel" Tag="monitoring">
+                <NavigationViewItem Content="System Tweaks" Tag="monitoring">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Before &amp; After" Tag="reports">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8A5;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
