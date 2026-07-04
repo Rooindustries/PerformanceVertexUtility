@@ -26,6 +26,13 @@
         <Setter Property="FontFamily" Value="{StaticResource RooFontFamily}" />
     </Style>
 
+    <Style x:Key="StretchListViewItemStyle" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
     <Style x:Key="PageTitleTextBlockStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource RooFontFamily}" />
         <Setter Property="FontSize" Value="28" />
