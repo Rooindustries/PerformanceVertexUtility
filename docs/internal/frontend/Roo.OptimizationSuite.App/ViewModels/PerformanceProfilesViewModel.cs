@@ -42,7 +42,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty][NotifyPropertyChangedFor(nameof(RestoreEnabled))] private bool _actionBusy;
     [ObservableProperty] private string? _actionStatus;
     [ObservableProperty] private string _proBalanceCaption =
-        "Background restraint eases greedy apps only while the game needs the CPU.";
+        "Background restraint eases heavy apps only while the game needs the CPU.";
     [ObservableProperty] private string _appRulesSummary = "No saved app rules yet.";
     [ObservableProperty] private int _processCount;
     [ObservableProperty] private int _protectedCount;
@@ -135,7 +135,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         TuningControls.Add(MakeControl(
             CapProBalance,
             "Restrict background load",
-            "ProBalance eases greedy background apps while the game runs.",
+            "ProBalance eases heavy background apps while the game runs.",
             restraintActive ? "On" : "Ready",
             restraintActive ? "Restraint on" : "Idle",
             restraintActive ? "safe" : null));
@@ -327,7 +327,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (History.Count == 0)
         {
             History.Add(new AuditRow("—", "Ready", "neutral", "No tuning applied yet",
-                "History appears after your first apply", "—", "neutral"));
+                "History appears after you apply your first change", "—", "neutral"));
         }
     }
 
@@ -478,7 +478,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         if (response.Changed)
         {
-            return isRestore ? "Restored — everything is back to its original values." : "Applied — the game boost is live and reversible.";
+            return isRestore ? "Restored — every process is back to its original value." : "Applied — the game priority boost is live and one-click reversible.";
         }
 
         return isRestore
@@ -533,7 +533,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             return ("Restrained", "medium");
         }
 
-        return ("Watched", "neutral");
+        return ("Unchanged", "neutral");
     }
 
     private static string RoleFor(ProcessPreviewRow row) => row.Classification switch
