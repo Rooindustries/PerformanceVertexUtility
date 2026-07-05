@@ -430,6 +430,13 @@
       "status": "draft"
     },
     {
+      "name": "utilities bundle catalog",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "workflow": "unified control plane",
+      "summary": "Read-only Utilities.zip metadata catalog covering executable, script, configuration, driver payload, and prerequisite entries without archive extraction or utility execution.",
+      "status": "draft"
+    },
+    {
       "name": "validation temp artifact audit",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "backend validation hygiene",
