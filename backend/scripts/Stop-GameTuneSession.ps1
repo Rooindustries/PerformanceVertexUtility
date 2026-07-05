@@ -39,7 +39,13 @@ function New-GameTuneRestorePreview {
             $controlChanges.Add((New-RooControlChange 'ioPriority' $Candidate.currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
         if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooGpuPriorityAllowed $originalGpuPriority) -and [string]$Candidate.currentGpuPriority -ne [string]$originalGpuPriority) {
-            $controlChanges.Add((New-RooControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU priority.')) | Out-Null
+            if ([bool](Get-RooPropertyValue (Get-RooPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false)) {
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU priority.')) | Out-Null
+            } else {
+                $blocked = $true
+                $reason = 'GPU scheduling priority is unavailable for this restore target.'
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
+            }
         }
         if ($controlChanges.Count -eq 0) {
             $reason = 'Process already matches the Game Tune backup.'
@@ -63,6 +69,8 @@ function New-GameTuneRestorePreview {
         proposedIoPriority = if ($blocked) { $Candidate.currentIoPriority } else { $originalIoPriority }
         currentGpuPriority = $Candidate.currentGpuPriority
         proposedGpuPriority = if ($blocked) { $Candidate.currentGpuPriority } else { $originalGpuPriority }
+        gpuPriorityAvailable = Get-RooPropertyValue (Get-RooPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false
+        gpuPriorityStatus = Get-RooPropertyValue (Get-RooPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
         ruleId = [string](Get-RooPropertyValue $Snapshot 'ruleId' '')
@@ -74,8 +82,8 @@ function New-GameTuneRestorePreview {
         risk = 'low'
         confidence = 'medium'
         protected = $false
-        requiresConfirmation = ($controlChanges.Count -gt 0)
-        rollbackSupported = ($controlChanges.Count -gt 0)
+        requiresConfirmation = ($controlChanges.Count -gt 0 -and -not $blocked)
+        rollbackSupported = ($controlChanges.Count -gt 0 -and -not $blocked)
         currentState = [pscustomobject]@{
             priorityClass = $Candidate.currentPriorityClass
             affinityMask = $Candidate.currentAffinityMask

@@ -37,6 +37,14 @@ public sealed class RooProcessGovernor
         {
             return RunProbe(args);
         }
+        if (args.Length > 0 && StringEquals(args[0], "--status"))
+        {
+            return RunStatusCommand(args);
+        }
+        if (args.Length > 0 && StringEquals(args[0], "--restore"))
+        {
+            return RunRestoreCommand(args);
+        }
 
         string policyPath = GetArg(args, "--policy");
         string outputPath = GetArg(args, "--output");
@@ -96,6 +104,173 @@ public sealed class RooProcessGovernor
         return 0;
     }
 
+    private static int RunStatusCommand(string[] args)
+    {
+        string sessionPath = args.Length > 1 ? args[1] : GetArg(args, "--session");
+        string outputPath = GetArg(args, "--output");
+        int exitCode = 0;
+        Dictionary<string, object> result;
+        try
+        {
+            if (String.IsNullOrWhiteSpace(sessionPath))
+            {
+                throw new InvalidOperationException("Missing --status <session path> argument.");
+            }
+            string resolvedSessionPath = ResolveSessionJsonPath(sessionPath);
+            Dictionary<string, object> session = ReadJsonDictionary(resolvedSessionPath);
+            string rawStatus = AsString(session, "sessionStatus");
+            if (String.IsNullOrWhiteSpace(rawStatus))
+            {
+                rawStatus = AsString(session, "status");
+            }
+            if (String.IsNullOrWhiteSpace(rawStatus))
+            {
+                rawStatus = "completed";
+            }
+            bool restorable = AsBool(session, "restorable", false);
+            string status = StringEquals(rawStatus, "running") ? "active" : (StringEquals(rawStatus, "failed") ? "failed" : (restorable ? "restorable" : "completed"));
+            result = Dict(
+                "actionId", "performance.nativeGovernor.status",
+                "schemaVersion", 1,
+                "productName", ProductName,
+                "capturedAtUtc", UtcNow(),
+                "status", status,
+                "sessionStatus", status,
+                "rawSessionStatus", rawStatus,
+                "sessionId", AsString(session, "sessionId"),
+                "policyId", AsString(session, "policyId"),
+                "stateRoot", AsValue(session, "stateRoot"),
+                "sessionPath", resolvedSessionPath,
+                "backupManifestPath", AsValue(session, "backupManifestPath"),
+                "restorable", restorable,
+                "active", StringEquals(status, "active"),
+                "completed", StringEquals(status, "completed"),
+                "failed", StringEquals(status, "failed"),
+                "startedAtUtc", AsValue(session, "startedAtUtc"),
+                "completedAtUtc", AsValue(session, "completedAtUtc"),
+                "summary", Dict(
+                    "changedItemCount", CountObjects(AsValue(session, "changedItems")),
+                    "skippedItemCount", CountObjects(AsValue(session, "skippedItems")),
+                    "restoredItemCount", CountObjects(AsValue(session, "restoredItems")),
+                    "activeRestraintCount", CountObjects(AsValue(session, "activeRestraints")),
+                    "pollCount", AsInt(session, "pollCount", 0)
+                ),
+                "changedItems", AsListObject(AsValue(session, "changedItems")),
+                "skippedItems", AsListObject(AsValue(session, "skippedItems")),
+                "restoredItems", AsListObject(AsValue(session, "restoredItems")),
+                "activeRestraints", AsListObject(AsValue(session, "activeRestraints")),
+                "statusContract", BuildStatusContract(resolvedSessionPath, Convert.ToString(AsValue(session, "backupManifestPath"))),
+                "restoreContract", BuildRestoreContract(Convert.ToString(AsValue(session, "backupManifestPath")), restorable),
+                "warnings", new List<Dictionary<string, object>>(),
+                "errors", new List<Dictionary<string, object>>()
+            );
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            result = Dict(
+                "actionId", "performance.nativeGovernor.status",
+                "schemaVersion", 1,
+                "productName", ProductName,
+                "capturedAtUtc", UtcNow(),
+                "status", "failed",
+                "sessionStatus", "failed",
+                "sessionPath", sessionPath,
+                "restorable", false,
+                "errors", new List<Dictionary<string, object>> { NewIssue("NATIVE_GOVERNOR_STATUS_FAILED", ex.Message, "error", true) },
+                "warnings", new List<Dictionary<string, object>>()
+            );
+        }
+        WriteJson(result, outputPath);
+        return exitCode;
+    }
+
+    private static int RunRestoreCommand(string[] args)
+    {
+        string backupPath = args.Length > 1 ? args[1] : GetArg(args, "--backup");
+        string outputPath = GetArg(args, "--output");
+        int exitCode = 0;
+        Dictionary<string, object> result;
+        try
+        {
+            if (String.IsNullOrWhiteSpace(backupPath))
+            {
+                throw new InvalidOperationException("Missing --restore <backup path> argument.");
+            }
+            string resolvedBackupPath = Path.GetFullPath(backupPath);
+            Dictionary<string, object> backup = ReadJsonDictionary(resolvedBackupPath);
+            List<BackupSnapshot> snapshots = BackupSnapshotsFromDictionary(backup);
+            List<Dictionary<string, object>> restoredItems = new List<Dictionary<string, object>>();
+            List<Dictionary<string, object>> skippedItems = new List<Dictionary<string, object>>();
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                Dictionary<string, object> restored = RestoreSnapshot(snapshots[i], i + 1);
+                if (AsBool(restored, "blocked", false))
+                {
+                    skippedItems.Add(restored);
+                }
+                else
+                {
+                    restoredItems.Add(restored);
+                }
+            }
+            string status = skippedItems.Count > 0 && restoredItems.Count > 0 ? "partial" : (skippedItems.Count > 0 ? "failed" : "completed");
+            if (StringEquals(status, "failed"))
+            {
+                exitCode = 1;
+            }
+            result = Dict(
+                "actionId", "performance.nativeGovernor.restore",
+                "schemaVersion", 1,
+                "productName", ProductName,
+                "status", status,
+                "sessionStatus", status,
+                "completedAtUtc", UtcNow(),
+                "sessionId", AsString(backup, "sessionId"),
+                "policyId", PolicyIdFromBackup(backup),
+                "backupManifestPath", resolvedBackupPath,
+                "restorable", status == "partial",
+                "changedItems", restoredItems,
+                "skippedItems", skippedItems,
+                "restoredItems", restoredItems,
+                "backup", backup,
+                "result", Dict(
+                    "resultId", "native-process-governor-restore-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss"),
+                    "status", status == "completed" ? "rolledBack" : status,
+                    "completedAtUtc", UtcNow(),
+                    "summary", "Native process governor restore completed with " + restoredItems.Count.ToString() + " restored item(s) and " + skippedItems.Count.ToString() + " skipped item(s).",
+                    "changedItems", restoredItems,
+                    "skippedItems", skippedItems,
+                    "restoredItems", restoredItems
+                ),
+                "warnings", new List<Dictionary<string, object>>(),
+                "errors", new List<Dictionary<string, object>>(),
+                "logs", new List<Dictionary<string, object>> { NewLog("Native process governor restore command completed.", "info") }
+            );
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            result = Dict(
+                "actionId", "performance.nativeGovernor.restore",
+                "schemaVersion", 1,
+                "productName", ProductName,
+                "status", "failed",
+                "sessionStatus", "failed",
+                "completedAtUtc", UtcNow(),
+                "backupManifestPath", backupPath,
+                "restorable", false,
+                "changedItems", new List<Dictionary<string, object>>(),
+                "skippedItems", new List<Dictionary<string, object>>(),
+                "restoredItems", new List<Dictionary<string, object>>(),
+                "errors", new List<Dictionary<string, object>> { NewIssue("NATIVE_GOVERNOR_RESTORE_FAILED", ex.Message, "error", true) },
+                "warnings", new List<Dictionary<string, object>>()
+            );
+        }
+        WriteJson(result, outputPath);
+        return exitCode;
+    }
+
     private static Dictionary<string, object> RunPolicy(string policyPath, MeasurementStart measurement)
     {
         JavaScriptSerializer serializer = NewSerializer();
@@ -149,7 +324,7 @@ public sealed class RooProcessGovernor
         List<Dictionary<string, object>> restoredItems = new List<Dictionary<string, object>>();
         List<Dictionary<string, object>> polls = new List<Dictionary<string, object>>();
         List<BackupSnapshot> snapshots = new List<BackupSnapshot>();
-        Dictionary<int, BackupSnapshot> active = new Dictionary<int, BackupSnapshot>();
+        Dictionary<string, BackupSnapshot> active = new Dictionary<string, BackupSnapshot>(StringComparer.OrdinalIgnoreCase);
         HashSet<string> appliedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         HashSet<string> skipKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         HashSet<string> previewKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -195,7 +370,7 @@ public sealed class RooProcessGovernor
                 List<Dictionary<string, object>> changes = BuildControlChanges(process, restraint);
                 List<Dictionary<string, object>> applicableChanges = ApplicableControlChanges(changes);
                 Dictionary<string, object> entry = NewPreviewEntry(process, decision, changes);
-                string itemKey = process.pid.ToString() + "|" + process.processName;
+                string itemKey = ProcessKey(process);
                 bool newlyDetected = !observedProcessKeys.Contains(itemKey);
                 if (newlyDetected)
                 {
@@ -228,7 +403,7 @@ public sealed class RooProcessGovernor
                         AddSkipOnce(skippedItems, pollSkipped, skipKeys, process, BlockedControlReason(changes), new string[] { "NATIVE_GOVERNOR_CONTROL_UNSUPPORTED" }, pollIndex, "unsupported-control");
                         continue;
                     }
-                    if (appliedKeys.Contains(itemKey) || active.ContainsKey(process.pid))
+                    if (appliedKeys.Contains(itemKey) || active.ContainsKey(itemKey))
                     {
                         pollDuplicateSuppressed++;
                         duplicateApplySuppressedCount++;
@@ -274,7 +449,7 @@ public sealed class RooProcessGovernor
                     ApplyChanges(live, applicableChanges);
                     ProcessSnapshot after = SnapshotProcess(live);
                     snapshots.Add(snapshot);
-                    active[process.pid] = snapshot;
+                    active[itemKey] = snapshot;
                     appliedKeys.Add(itemKey);
 
                     Dictionary<string, object> changed = Dict(
@@ -289,6 +464,7 @@ public sealed class RooProcessGovernor
                         "appliedIoPriority", after.ioPriority,
                         "originalGpuPriority", snapshot.originalGpuPriority,
                         "appliedGpuPriority", after.gpuPriority,
+                        "processStartTimeUtc", snapshot.processStartTimeUtc,
                         "appliedControls", applicableChanges,
                         "ruleId", decision.ruleId,
                         "reason", decision.reason,
@@ -419,6 +595,8 @@ public sealed class RooProcessGovernor
                 "restoreLifecycle", restoreOnExit ? "calm-restore-on-session-exit" : "leave-restorable-backup",
                 "protectedRuleCategories", new string[] { "foregroundGame", "captureStreaming", "voiceChat", "antiCheat", "network", "audioInput", "gpuDriver", "security", "windowsCore" }
             ),
+            "statusContract", BuildStatusContract(sessionPath, backupPath),
+            "restoreContract", BuildRestoreContract(backupPath, confirmApply && active.Count > 0),
             "engineCapabilities", BuildEngineCapabilities(selectorPlan),
             "host", Dict(
                 "processId", Process.GetCurrentProcess().Id,
@@ -843,6 +1021,11 @@ public sealed class RooProcessGovernor
                 blocked = true;
                 blockedReason = "Live process name no longer matches backup snapshot.";
             }
+            else if (!String.IsNullOrWhiteSpace(snapshot.processStartTimeUtc) && !StringEquals(current.startTimeUtc, snapshot.processStartTimeUtc))
+            {
+                blocked = true;
+                blockedReason = "Live process start time no longer matches backup snapshot.";
+            }
             else
             {
                 if (!String.IsNullOrWhiteSpace(snapshot.originalPriorityClass) && !StringEquals(current.priorityClass, snapshot.originalPriorityClass))
@@ -881,6 +1064,7 @@ public sealed class RooProcessGovernor
             "originalAffinityMask", snapshot.originalAffinityMask,
             "originalIoPriority", snapshot.originalIoPriority,
             "originalGpuPriority", snapshot.originalGpuPriority,
+            "processStartTimeUtc", snapshot.processStartTimeUtc,
             "restoredControls", restoredControls,
             "restoreIndex", restoreIndex,
             "restoredAtUtc", UtcNow(),
@@ -968,12 +1152,22 @@ public sealed class RooProcessGovernor
         snap.priorityClass = SafePriority(process);
         snap.affinityMask = SafeAffinity(process);
         snap.ioPriority = SafeIoPriority(process);
+        snap.startTimeUtc = SafeStartTimeUtc(process);
         GpuPriorityState gpu = SafeGpuPriority(process);
         snap.gpuPriority = gpu.name;
         snap.gpuPriorityAvailable = gpu.available;
         snap.gpuPriorityStatus = gpu.status;
         snap.category = CategoryForName(snap.processName);
         return snap;
+    }
+
+    private static string ProcessKey(ProcessSnapshot process)
+    {
+        if (process == null)
+        {
+            return "";
+        }
+        return process.pid.ToString() + "|" + process.processName + "|" + process.executablePath + "|" + process.startTimeUtc;
     }
 
     private static string CategoryForName(string processName)
@@ -1379,7 +1573,7 @@ public sealed class RooProcessGovernor
         );
     }
 
-    private static void WriteSession(string sessionPath, GovernorPolicy policy, string sessionId, string status, DateTime startedAtUtc, string completedAtUtc, int pollCount, string stateRoot, string sessionStatePath, string backupPath, List<Dictionary<string, object>> changedItems, List<Dictionary<string, object>> skippedItems, List<Dictionary<string, object>> restoredItems, Dictionary<int, BackupSnapshot> active, List<Dictionary<string, object>> polls)
+    private static void WriteSession(string sessionPath, GovernorPolicy policy, string sessionId, string status, DateTime startedAtUtc, string completedAtUtc, int pollCount, string stateRoot, string sessionStatePath, string backupPath, List<Dictionary<string, object>> changedItems, List<Dictionary<string, object>> skippedItems, List<Dictionary<string, object>> restoredItems, Dictionary<string, BackupSnapshot> active, List<Dictionary<string, object>> polls)
     {
         if (String.IsNullOrWhiteSpace(sessionPath))
         {
@@ -1404,7 +1598,9 @@ public sealed class RooProcessGovernor
             "changedItems", changedItems,
             "skippedItems", skippedItems,
             "restoredItems", restoredItems,
-            "polls", polls
+            "polls", polls,
+            "statusContract", BuildStatusContract(sessionStatePath, backupPath),
+            "restoreContract", BuildRestoreContract(backupPath, active.Count > 0)
         );
         WriteJsonFile(session, sessionPath);
     }
@@ -1570,6 +1766,188 @@ public sealed class RooProcessGovernor
         );
     }
 
+    private static Dictionary<string, object> BuildStatusContract(string sessionPath, string backupPath)
+    {
+        return Dict(
+            "available", !String.IsNullOrWhiteSpace(sessionPath),
+            "workerCommand", "--status",
+            "sessionPath", sessionPath,
+            "backupManifestPath", String.IsNullOrWhiteSpace(backupPath) ? null : backupPath
+        );
+    }
+
+    private static Dictionary<string, object> BuildRestoreContract(string backupPath, bool restorable)
+    {
+        return Dict(
+            "available", !String.IsNullOrWhiteSpace(backupPath),
+            "workerCommand", "--restore",
+            "backupManifestPath", String.IsNullOrWhiteSpace(backupPath) ? null : backupPath,
+            "restorable", restorable
+        );
+    }
+
+    private static string ResolveSessionJsonPath(string sessionPath)
+    {
+        string full = Path.GetFullPath(sessionPath);
+        if (Directory.Exists(full))
+        {
+            full = Path.Combine(full, "session.json");
+        }
+        if (!File.Exists(full))
+        {
+            throw new FileNotFoundException("Native governor session state was not found.", full);
+        }
+        return full;
+    }
+
+    private static Dictionary<string, object> ReadJsonDictionary(string path)
+    {
+        object value = NewSerializer().DeserializeObject(File.ReadAllText(Path.GetFullPath(path)));
+        Dictionary<string, object> dict = AsDictionary(value);
+        if (dict == null)
+        {
+            throw new InvalidOperationException("JSON file did not contain an object: " + path);
+        }
+        return dict;
+    }
+
+    private static object AsValue(Dictionary<string, object> dict, string name)
+    {
+        if (dict == null || !dict.ContainsKey(name))
+        {
+            return null;
+        }
+        return dict[name];
+    }
+
+    private static bool AsBool(Dictionary<string, object> dict, string name, bool defaultValue)
+    {
+        object value = AsValue(dict, name);
+        if (value == null)
+        {
+            return defaultValue;
+        }
+        try
+        {
+            return Convert.ToBoolean(value);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private static int AsInt(Dictionary<string, object> dict, string name, int defaultValue)
+    {
+        object value = AsValue(dict, name);
+        if (value == null)
+        {
+            return defaultValue;
+        }
+        try
+        {
+            return Convert.ToInt32(value);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private static long AsLong(Dictionary<string, object> dict, string name, long defaultValue)
+    {
+        object value = AsValue(dict, name);
+        if (value == null)
+        {
+            return defaultValue;
+        }
+        try
+        {
+            return Convert.ToInt64(value);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private static Dictionary<string, object> AsDictionary(object value)
+    {
+        return value as Dictionary<string, object>;
+    }
+
+    private static List<object> AsListObject(object value)
+    {
+        List<object> list = new List<object>();
+        if (value == null || value is string)
+        {
+            return list;
+        }
+        System.Collections.IEnumerable enumerable = value as System.Collections.IEnumerable;
+        if (enumerable == null)
+        {
+            list.Add(value);
+            return list;
+        }
+        foreach (object item in enumerable)
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+
+    private static int CountObjects(object value)
+    {
+        return AsListObject(value).Count;
+    }
+
+    private static string PolicyIdFromBackup(Dictionary<string, object> backup)
+    {
+        string profileId = AsString(backup, "profileId");
+        if (!String.IsNullOrWhiteSpace(profileId))
+        {
+            return profileId;
+        }
+        string backupId = AsString(backup, "backupId");
+        return String.IsNullOrWhiteSpace(backupId) ? null : backupId;
+    }
+
+    private static List<BackupSnapshot> BackupSnapshotsFromDictionary(Dictionary<string, object> backup)
+    {
+        List<BackupSnapshot> snapshots = new List<BackupSnapshot>();
+        foreach (object item in AsListObject(AsValue(backup, "snapshots")))
+        {
+            Dictionary<string, object> snap = AsDictionary(item);
+            if (snap == null)
+            {
+                continue;
+            }
+            BackupSnapshot snapshot = new BackupSnapshot();
+            snapshot.processId = AsInt(snap, "processId", 0);
+            snapshot.processName = AsString(snap, "processName");
+            snapshot.executablePath = AsString(snap, "executablePath");
+            snapshot.originalPriorityClass = AsString(snap, "originalPriorityClass");
+            snapshot.originalAffinityMask = AsLong(snap, "originalAffinityMask", 0);
+            snapshot.originalIoPriority = AsString(snap, "originalIoPriority");
+            snapshot.originalGpuPriority = AsString(snap, "originalGpuPriority");
+            snapshot.processStartTimeUtc = AsString(snap, "processStartTimeUtc");
+            snapshot.appliedControls = new List<Dictionary<string, object>>();
+            foreach (object controlItem in AsListObject(AsValue(snap, "appliedControls")))
+            {
+                Dictionary<string, object> control = AsDictionary(controlItem);
+                if (control != null)
+                {
+                    snapshot.appliedControls.Add(control);
+                }
+            }
+            snapshot.capturedAtUtc = AsString(snap, "capturedAtUtc");
+            snapshot.policyId = AsString(snap, "policyId");
+            snapshot.sessionId = AsString(snap, "sessionId");
+            snapshots.Add(snapshot);
+        }
+        return snapshots;
+    }
+
     private static List<Dictionary<string, object>> SnapshotsToDictionaries(IEnumerable<BackupSnapshot> snapshots)
     {
         List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
@@ -1587,6 +1965,7 @@ public sealed class RooProcessGovernor
                 "originalAffinityMask", snapshot.originalAffinityMask,
                 "originalIoPriority", snapshot.originalIoPriority,
                 "originalGpuPriority", snapshot.originalGpuPriority,
+                "processStartTimeUtc", snapshot.processStartTimeUtc,
                 "appliedControls", snapshot.appliedControls,
                 "capturedAtUtc", snapshot.capturedAtUtc,
                 "policyId", snapshot.policyId,
@@ -1902,6 +2281,18 @@ public sealed class RooProcessGovernor
         }
     }
 
+    private static string SafeStartTimeUtc(Process process)
+    {
+        try
+        {
+            return process.StartTime.ToUniversalTime().ToString("o");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static int SafeHandleCount(Process process)
     {
         try
@@ -2022,6 +2413,7 @@ public sealed class RooProcessGovernor
         public string priorityClass;
         public long affinityMask;
         public string ioPriority;
+        public string startTimeUtc;
         public string gpuPriority;
         public bool gpuPriorityAvailable;
         public int gpuPriorityStatus;
@@ -2061,6 +2453,7 @@ public sealed class RooProcessGovernor
         public long originalAffinityMask;
         public string originalIoPriority;
         public string originalGpuPriority;
+        public string processStartTimeUtc;
         public List<Dictionary<string, object>> appliedControls;
         public string capturedAtUtc;
         public string policyId;
@@ -2077,6 +2470,7 @@ public sealed class RooProcessGovernor
             backup.originalAffinityMask = original.affinityMask;
             backup.originalIoPriority = original.ioPriority;
             backup.originalGpuPriority = original.gpuPriority;
+            backup.processStartTimeUtc = original.startTimeUtc;
             backup.appliedControls = changes;
             backup.capturedAtUtc = UtcNow();
             backup.policyId = policyId;

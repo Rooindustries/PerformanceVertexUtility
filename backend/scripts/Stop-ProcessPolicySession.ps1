@@ -9,6 +9,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessPolicy.Common.ps1')
+. (Join-Path $PSScriptRoot 'ProcessPolicyRules.Common.ps1')
+
+function Resolve-PolicyRestoreAuditStateRoot {
+    param(
+        [string]$ProvidedStateRoot,
+        [object]$Session
+    )
+    if (-not [string]::IsNullOrWhiteSpace($ProvidedStateRoot)) { return $ProvidedStateRoot }
+    $sessionStateRoot = [string](Get-RooPropertyValue $Session 'stateRoot' '')
+    if ([string]::IsNullOrWhiteSpace($sessionStateRoot)) { return $ProvidedStateRoot }
+    $leaf = Split-Path $sessionStateRoot -Leaf
+    if ($leaf -eq $script:RooProcessPolicyStateFolderName) {
+        return Split-Path $sessionStateRoot -Parent
+    }
+    return $sessionStateRoot
+}
 
 function New-PolicyRestorePreview {
     param(
@@ -130,6 +146,8 @@ try {
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
     $restored = New-Object System.Collections.Generic.List[object]
+    $auditRows = New-Object System.Collections.Generic.List[object]
+    $auditStateRoot = Resolve-PolicyRestoreAuditStateRoot $StateRoot $session
     if ($ConfirmApply) {
         foreach ($entry in @($preview.ToArray())) {
             if ([bool](Get-RooPropertyValue $entry 'blocked' $false)) {
@@ -140,6 +158,7 @@ try {
                     skippedAtUtc = Get-RooUtcStamp
                 }
                 $skipped.Add($skip) | Out-Null
+                $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionRestore' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionIdValue -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ([string](Get-RooPropertyValue $entry 'blockedReason' 'Restore entry is blocked.')) -ProtectionCategory 'rollbackCandidate' -RestorePath $resolvedBackupPath -RestoreAvailable $true -Outcome 'skipped' -DryRun $false -Source 'processPolicySession')) | Out-Null
                 continue
             }
             $processId = [int](Get-RooPropertyValue $entry 'processId' 0)
@@ -151,6 +170,7 @@ try {
                     reason = 'Process exited before persistent policy restore.'
                     skippedAtUtc = Get-RooUtcStamp
                 }) | Out-Null
+                $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionRestore' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionIdValue -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason 'Process exited before persistent policy restore.' -ProtectionCategory 'rollbackCandidate' -RestorePath $resolvedBackupPath -RestoreAvailable $true -Outcome 'skipped' -DryRun $false -Source 'processPolicySession')) | Out-Null
                 continue
             }
             $entryControlChanges = @(Get-RooPreviewControlChanges $entry)
@@ -180,6 +200,9 @@ try {
                 }
                 $restored.Add($restoreItem) | Out-Null
                 $changed.Add($restoreItem) | Out-Null
+                foreach ($appliedControl in @($appliedControls.ToArray())) {
+                    $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionRestore' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionIdValue -Target $entry -Control ([string](Get-RooPropertyValue $appliedControl 'control' 'processControls')) -BeforeValue (Get-RooPropertyValue $appliedControl 'currentValue' $null) -AfterValue (Get-RooPropertyValue $appliedControl 'proposedValue' $null) -Reason ([string](Get-RooPropertyValue $appliedControl 'reason' 'Restore original process controls.')) -ProtectionCategory 'rollbackCandidate' -RestorePath $resolvedBackupPath -RestoreAvailable $true -Outcome 'restored' -DryRun $false -Source 'processPolicySession')) | Out-Null
+                }
             }
             if ($failedControls.Count -gt 0) {
                 $skipped.Add([pscustomobject]@{
@@ -188,6 +211,7 @@ try {
                     reason = $failedControls -join '; '
                     skippedAtUtc = Get-RooUtcStamp
                 }) | Out-Null
+                $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionRestore' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionIdValue -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ($failedControls -join '; ') -ProtectionCategory 'rollbackCandidate' -RestorePath $resolvedBackupPath -RestoreAvailable $true -Outcome 'failed' -DryRun $false -Source 'processPolicySession')) | Out-Null
             }
         }
     } else {
@@ -222,6 +246,7 @@ try {
         'Persistent policy restore preview completed. No process changes were applied.'
     }
     $backupMetadata = New-RooProcessPolicyBackupMetadata $backup $resolvedBackupPath
+    $auditPath = Add-RooProcessPolicyAuditRows -StateRoot $auditStateRoot -Rows @($auditRows.ToArray())
     $result = [pscustomobject]@{
         resultId = "process-policy-restore-$(Get-RooFileStamp)"
         status = if ($status -eq 'completed' -and $ConfirmApply) { 'rolledBack' } elseif ($status -eq 'preview') { 'preview' } else { $status }
@@ -247,6 +272,7 @@ try {
         completedAtUtc = Get-RooUtcStamp
         sessionPath = $resolvedSessionPath
         backupManifestPath = $resolvedBackupPath
+        auditPath = $auditPath
         restorable = (-not $ConfirmApply)
         preview = @($preview.ToArray())
         changedItems = @($changed.ToArray())

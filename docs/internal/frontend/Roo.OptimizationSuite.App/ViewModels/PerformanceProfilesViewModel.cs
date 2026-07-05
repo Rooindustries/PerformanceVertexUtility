@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Roo.OptimizationSuite.Helpers;
 using Roo.OptimizationSuite.Models;
 
@@ -15,249 +15,552 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 {
     private const string PageName = "Process Controls";
 
-    [ObservableProperty] private string _foregroundStatus = "No foreground target";
-    [ObservableProperty] private string _foregroundStatusLevel = "neutral";
-    [ObservableProperty] private string _ruleSummary =
-        "Priority, affinity, restraint, and restore readiness are shown from the capability registry. Changes require the routed approval path.";
-    [ObservableProperty] private int _capabilityCount;
-    [ObservableProperty] private int _availableCapabilityCount;
-    [ObservableProperty] private int _approvalCapabilityCount;
-    [ObservableProperty] private int _appsCount;
-    [ObservableProperty] private int _keepCount;
-    [ObservableProperty] private int _candidateCount;
-    [ObservableProperty] private string _searchText = string.Empty;
-    [ObservableProperty] private string _sessionSummary = "No active process-control session is recorded.";
-    [ObservableProperty] private string? _processContextMessage;
-    [ObservableProperty] private string? _governorCaption;
+    private const string CapCpuPriority = "process-controls.cpu-priority";
+    private const string CapProBalance = "process-controls.probalance-restraint";
+    private const string CapGpu = "process-controls.gpu-priority";
+    private const string CapIo = "process-controls.io-priority";
+    private const string CapAffinity = "process-controls.cpu-affinity";
+    private const string CapRules = "process-controls.per-game-rules";
+    private const string CapRestore = "process-controls.session-restore";
 
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasSelectedCapability))]
-    private ProcessCapabilityItem? _selectedCapability;
+    private static readonly string[] CandidateCategories =
+        { "browserWebView", "launcher", "vendorUtility", "backgroundApp" };
 
-    [ObservableProperty] private bool _explainBusy;
-    [ObservableProperty] private string _selectedCapabilityLabel = "Select a capability";
-    [ObservableProperty] private string _selectedCapabilityFamily = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityAvailability = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityApply = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityApproval = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityRestore = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityReason = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityNextStep = "Select a capability to read its explain details.";
-    [ObservableProperty] private string _selectedCapabilityStatus = string.Empty;
-    [ObservableProperty] private string _selectedCapabilityDotState = "neutral";
-    [ObservableProperty] private string? _selectedCapabilityErrors;
+    [ObservableProperty] private string _headerStatus = "No active tuning — ready";
+    [ObservableProperty] private string _headerStatusState = "neutral";
+    [ObservableProperty] private string _foregroundTarget = "No game detected in the foreground yet.";
+    [ObservableProperty] private string _lede =
+        "Boost the game you're playing, ease background load, and keep capture and voice protected. Every change is previewed and one-click reversible.";
 
-    private readonly List<GameAppRow> _all = new();
-    private int _explainRequestId;
+    [ObservableProperty] private bool _hasActiveSession;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(RestoreEnabled))] private bool _canRestore;
+    [ObservableProperty] private string _sessionTitle = "No active session";
+    [ObservableProperty] private string _sessionState = "neutral";
+    [ObservableProperty] private string _sessionCaption =
+        "Preview to see exactly what changes before anything is applied.";
 
-    public ObservableCollection<ProcessCapabilityItem> Capabilities { get; } = new();
-    public ObservableCollection<ProcessCapabilityGateLine> SelectedGateRows { get; } = new();
-    public ObservableCollection<GameAppRow> Rows { get; } = new();
-    public ObservableCollection<GameAppRow> ForegroundRows { get; } = new();
-    public ObservableCollection<GameAppRow> ProtectedRows { get; } = new();
-    public ObservableCollection<GameAppRow> CandidateRows { get; } = new();
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(RestoreEnabled))] private bool _actionBusy;
+    [ObservableProperty] private string? _actionStatus;
+    [ObservableProperty] private string _proBalanceCaption =
+        "Background restraint eases greedy apps only while the game needs the CPU.";
+    [ObservableProperty] private string _appRulesSummary = "No saved app rules yet.";
+    [ObservableProperty] private int _processCount;
+    [ObservableProperty] private int _protectedCount;
+    [ObservableProperty] private int _restrainedCount;
 
-    public bool HasSelectedCapability => SelectedCapability is not null;
+    [ObservableProperty] private bool _isConfirmOpen;
+    [ObservableProperty] private string _confirmKind = "apply";
+    [ObservableProperty] private string _confirmTitle = string.Empty;
+    [ObservableProperty] private string _confirmSubtitle = string.Empty;
+    [ObservableProperty] private string _confirmProtected = string.Empty;
+    [ObservableProperty] private string _confirmRestore = string.Empty;
+    [ObservableProperty] private string _confirmTarget = string.Empty;
+    [ObservableProperty] private string _confirmPrimaryLabel = "Apply changes";
+    [ObservableProperty] private bool _confirmBusy;
 
-    private static readonly string[] CandidateCategories = { "browserWebView", "launcher", "vendorUtility", "backgroundApp" };
+    public bool RestoreEnabled => CanRestore && !ActionBusy;
+
+    public ObservableCollection<TuningControl> TuningControls { get; } = new();
+    public ObservableCollection<SessionDetail> SessionDetails { get; } = new();
+    public ObservableCollection<ChangeRow> AppliedChanges { get; } = new();
+    public ObservableCollection<CompanionRow> ProtectedCompanions { get; } = new();
+    public ObservableCollection<AuditRow> History { get; } = new();
+    public ObservableCollection<ChangeRow> ConfirmChanges { get; } = new();
+
+    private IReadOnlyList<CapabilityRow> _capabilities = Array.Empty<CapabilityRow>();
+    private string _targetGameName = "the foreground game";
 
     protected override async Task LoadCoreAsync()
     {
-        await LoadCapabilitiesAsync();
-        await LoadProcessContextAsync();
-        IsEmpty = Capabilities.Count == 0;
-    }
-
-    public async Task SelectCapabilityAsync(ProcessCapabilityItem? item)
-    {
-        if (item is null)
-        {
-            return;
-        }
-
-        var requestId = ++_explainRequestId;
-        SelectedCapability = item;
-        ApplyRegistryDetail(item.Row);
-        ExplainBusy = true;
-        SelectedCapabilityErrors = null;
-
-        try
-        {
-            var response = await App.Capabilities.ExplainAsync(item.Row.CapabilityId);
-            if (requestId != _explainRequestId)
-            {
-                return;
-            }
-
-            ApplyExplainDetail(item.Row, response);
-        }
-        catch (Exception ex)
-        {
-            if (requestId == _explainRequestId)
-            {
-                SelectedCapabilityErrors = ex.Message;
-                SelectedCapabilityStatus = "Explain failed";
-            }
-        }
-        finally
-        {
-            if (requestId == _explainRequestId)
-            {
-                ExplainBusy = false;
-            }
-        }
-    }
-
-    private async Task LoadCapabilitiesAsync()
-    {
         var all = await App.Capabilities.GetCapabilitiesAsync();
-        var rows = App.Capabilities.ForPage(PageName, all);
+        _capabilities = App.Capabilities.ForPage(PageName, all);
 
-        Capabilities.Clear();
-        foreach (var row in rows)
-        {
-            Capabilities.Add(new ProcessCapabilityItem(row));
-        }
-
-        CapabilityCount = rows.Count;
-        AvailableCapabilityCount = rows.Count(row => row.MachineAvailable);
-        ApprovalCapabilityCount = rows.Count(row => row.ApprovalText.Contains("go-ahead", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private async Task LoadProcessContextAsync()
-    {
         var classification = await App.Live.GetProcessClassificationAsync()
             ?? await TryLoadSample(Data.GetProcessClassificationAsync);
         var preview = await App.Live.GetProcessProfilePreviewAsync()
             ?? await TryLoadSample(Data.GetProcessProfilePreviewAsync);
         var session = await App.Live.GetGameTuneSessionStatusAsync()
             ?? await TryLoadSample(Data.GetGameTuneSessionStatusAsync);
-        var restorePreview = await TryLoadSample(Data.GetGameTuneRestorePreviewAsync);
         var governor = await App.Live.GetProcessGovernorSessionStatusAsync()
             ?? await TryLoadSample(Data.GetProcessGovernorSessionStatusAsync);
-        var processes = classification?.Processes;
 
-        _all.Clear();
-        Rows.Clear();
-        ForegroundRows.Clear();
-        ProtectedRows.Clear();
-        CandidateRows.Clear();
+        BuildForeground(classification, preview);
+        BuildTuningControls(preview, governor);
+        BuildProtectedCompanions(classification);
+        BuildAppliedChanges(preview, classification);
+        BuildSession(session, governor);
+        BuildHistory(session, governor);
+        BuildAppRules();
 
-        if (processes is null || processes.Count == 0)
+        IsEmpty = false;
+    }
+
+    private CapabilityRow? Capability(string id)
+        => _capabilities.FirstOrDefault(c => string.Equals(c.CapabilityId, id, StringComparison.OrdinalIgnoreCase));
+
+    private void BuildForeground(ProcessClassification? classification, ProcessProfileEnvelope? preview)
+    {
+        var game = classification?.Processes?.FirstOrDefault(p => p.Category == "foregroundGame" || p.Classification == "gameTarget");
+        var name = game is not null ? Naming.FriendlyName(game.Name) : null;
+        name ??= preview?.Preview?.FirstOrDefault(p => p.Classification == "gameTarget")?.DisplayName;
+
+        if (!string.IsNullOrWhiteSpace(name))
         {
-            ForegroundStatus = "Process inventory unavailable";
-            ForegroundStatusLevel = "neutral";
-            ProcessContextMessage = "Process inventory was not returned. Capability status is still available from the registry.";
-            BuildSessionState(session, restorePreview);
-            BuildGovernorCaption(governor);
-            return;
-        }
-
-        ProcessContextMessage = null;
-        var game = processes.FirstOrDefault(p => p.Category == "foregroundGame");
-        if (game is not null)
-        {
-            ForegroundStatus = Naming.FriendlyName(game.Name) + " detected";
-            ForegroundStatusLevel = "safe";
+            _targetGameName = name!;
+            ForegroundTarget = name + " is in the foreground.";
         }
         else
         {
-            ForegroundStatus = "No foreground target";
-            ForegroundStatusLevel = "neutral";
+            _targetGameName = "the foreground game";
+            ForegroundTarget = "No game detected in the foreground yet.";
+        }
+    }
+
+    private void BuildTuningControls(ProcessProfileEnvelope? preview, ProcessGovernorSessionStatus? governor)
+    {
+        TuningControls.Clear();
+
+        var gameRow = preview?.Preview?.FirstOrDefault(p => p.Classification == "gameTarget" && p.ProposedAction == "setPriority");
+        var priorityValue = gameRow is null
+            ? "Ready"
+            : FriendlyPriority(gameRow.ProposedPriorityClass);
+        TuningControls.Add(MakeControl(
+            CapCpuPriority,
+            "Boost game priority",
+            "More CPU headroom for the foreground game.",
+            priorityValue,
+            gameRow is null ? "Preview to see" : "Proposed"));
+
+        var restraintActive = governor is { Active: true } || (governor?.Summary?.ActiveRestraintCount ?? 0) > 0;
+        TuningControls.Add(MakeControl(
+            CapProBalance,
+            "Restrict background load",
+            "ProBalance eases greedy background apps while the game runs.",
+            restraintActive ? "On" : "Ready",
+            restraintActive ? "Restraint on" : "Idle",
+            restraintActive ? "safe" : null));
+
+        TuningControls.Add(MakeControl(
+            CapGpu,
+            "GPU scheduling",
+            "Prefer the game for GPU work.",
+            null,
+            "Game preference"));
+
+        TuningControls.Add(MakeControl(
+            CapIo,
+            "I/O priority",
+            "Hold back background disk activity.",
+            null,
+            "Background hold"));
+
+        TuningControls.Add(MakeControl(
+            CapAffinity,
+            "CPU affinity",
+            "Reserve cores for the game.",
+            "All cores",
+            "Core layout"));
+    }
+
+    private TuningControl MakeControl(string capabilityId, string title, string description,
+        string? valueOverride, string caption, string? stateOverride = null)
+    {
+        var cap = Capability(capabilityId);
+        var available = cap?.MachineAvailable ?? true;
+
+        string value;
+        string state;
+        string availability;
+
+        if (cap is not null && !available)
+        {
+            value = "Not on this PC";
+            state = "neutral";
+            availability = string.IsNullOrWhiteSpace(cap.ReasonOrNextStep) ? "Unavailable here" : cap.ReasonOrNextStep;
+        }
+        else
+        {
+            value = valueOverride ?? "Ready";
+            state = stateOverride ?? (valueOverride is null ? "low" : "low");
+            availability = caption;
         }
 
-        var previewByProcess = (preview?.Preview ?? new List<ProcessPreviewRow>())
-            .GroupBy(p => (p.ProcessName ?? string.Empty).ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => g.First());
+        return new TuningControl(title, description, value, state, availability, available && cap is not null);
+    }
 
-        foreach (var p in processes
-            .Where(p => p.Category != "windowsCore" && !Naming.IsNonActionable(p.Name)
-                        && !LocalDisplayFilter.Default.IsHidden(Naming.FriendlyName(p.Name), p.Name, null))
-            .OrderByDescending(p => p.WorkingSetBytes))
+    private void BuildProtectedCompanions(ProcessClassification? classification)
+    {
+        ProtectedCompanions.Clear();
+        var protectedProcesses = (classification?.Processes ?? new List<ProcessItem>())
+            .Where(p => p.Protected || p.Protection == "protected"
+                || p.Classification is "protected" or "protectedCompanion")
+            .Where(p => !Naming.IsNonActionable(p.Name))
+            .GroupBy(p => Naming.FriendlyName(p.Name))
+            .Select(g => g.First())
+            .Take(6)
+            .ToList();
+
+        foreach (var p in protectedProcesses)
         {
-            var previewRow = previewByProcess.TryGetValue((p.Name ?? string.Empty).ToLowerInvariant(), out var row) ? row : null;
-            var (plan, state) = PlanFor(p);
-            _all.Add(new GameAppRow(
-                DisplayName(p),
-                Naming.CategoryLabel(p.Category),
-                PriorityText(p.PriorityClass, previewRow?.ProposedPriorityClass),
-                p.CpuPercent.ToString("0.#", CultureInfo.InvariantCulture) + "%",
-                Format.Bytes(p.WorkingSetBytes),
-                plan,
+            ProtectedCompanions.Add(new CompanionRow(DisplayName(p), CompanionRole(p)));
+        }
+
+        if (ProtectedCompanions.Count == 0)
+        {
+            ProtectedCompanions.Add(new CompanionRow("OBS Studio", "Capture"));
+            ProtectedCompanions.Add(new CompanionRow("Discord", "Voice"));
+        }
+    }
+
+    private void BuildAppliedChanges(ProcessProfileEnvelope? preview, ProcessClassification? classification)
+    {
+        AppliedChanges.Clear();
+        var rows = preview?.Preview ?? new List<ProcessPreviewRow>();
+
+        foreach (var row in rows.Where(r => !r.Blocked).Take(8))
+        {
+            var (chip, state) = ChipFor(row);
+            var before = FriendlyPriority(row.CurrentPriorityClass);
+            var after = row.Protected
+                ? "Untouched"
+                : row.ProposedAction == "noChange" || row.CurrentPriorityClass == row.ProposedPriorityClass
+                    ? before
+                    : FriendlyPriority(row.ProposedPriorityClass);
+
+            AppliedChanges.Add(new ChangeRow(
+                string.IsNullOrWhiteSpace(row.DisplayName) ? Naming.FriendlyName(row.ProcessName) : row.DisplayName!,
+                RoleFor(row),
+                row.Protected ? "—" : before,
+                after,
+                chip,
                 state));
         }
 
-        AppsCount = _all.Count;
-        KeepCount = _all.Count(r => r.Plan == "Protected");
-        CandidateCount = _all.Count(r => r.Plan == "Candidate");
-
-        BuildSessionState(session, restorePreview);
-        BuildGovernorCaption(governor);
-        ApplyFilter();
+        ProcessCount = classification?.Processes?.Count ?? rows.Count;
+        ProtectedCount = rows.Count(r => r.Protected);
+        RestrainedCount = rows.Count(r => r.Classification == "demotionCandidate" && !r.Protected);
     }
 
-    private void ApplyRegistryDetail(CapabilityRow row)
+    private void BuildSession(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor)
     {
-        SelectedCapabilityLabel = row.Label;
-        SelectedCapabilityFamily = ProcessCapabilityText.FamilyText(row);
-        SelectedCapabilityAvailability = ProcessCapabilityText.AvailabilityText(row);
-        SelectedCapabilityApply = row.ApplyStatusText;
-        SelectedCapabilityApproval = row.ApprovalText;
-        SelectedCapabilityRestore = row.RestoreText;
-        SelectedCapabilityReason = string.IsNullOrWhiteSpace(row.ReasonOrNextStep)
-            ? "No registry reason reported."
-            : row.ReasonOrNextStep;
-        SelectedCapabilityNextStep = string.IsNullOrWhiteSpace(row.ReasonOrNextStep)
-            ? "Live explain has not returned a next step yet."
-            : row.ReasonOrNextStep;
-        SelectedCapabilityStatus = "Reading explain details";
-        SelectedCapabilityDotState = row.DotState;
-        SelectedGateRows.Clear();
-        SelectedGateRows.Add(new ProcessCapabilityGateLine("Reading gates from explain", "neutral"));
-    }
+        SessionDetails.Clear();
 
-    private void ApplyExplainDetail(CapabilityRow row, CapabilityRouterResponse? response)
-    {
-        SelectedCapabilityStatus = ProcessCapabilityText.StatusText(response);
-        SelectedCapabilityNextStep = ProcessCapabilityText.NextStepText(row, response);
-        SelectedCapabilityErrors = ProcessCapabilityText.ErrorText(response);
+        var restorable = session is { Restorable: true } && session.SessionStatus is "restorable" or "active";
+        var active = session is { Active: true } || governor is { Active: true };
+        HasActiveSession = active || restorable;
+        CanRestore = restorable || (governor is { Restorable: true });
 
-        SelectedGateRows.Clear();
-        foreach (var gate in ProcessCapabilityText.GateLines(response))
+        if (!HasActiveSession)
         {
-            SelectedGateRows.Add(gate);
-        }
-    }
-
-    private static (string plan, string state) PlanFor(ProcessItem p)
-    {
-        if (p.Classification == "gameTarget" || p.Category == "foregroundGame") return ("Foreground", "safe");
-        if (p.Protected || p.Protection == "protected" || p.Classification is "protected" or "protectedCompanion") return ("Protected", "protected");
-        if (p.Classification == "demotionCandidate" || CandidateCategories.Contains(p.Category ?? string.Empty)) return ("Candidate", "low");
-        return ("Watch", "neutral");
-    }
-
-    private void BuildSessionState(GameTuneSessionStatus? session, GameTuneRestorePreview? restorePreview)
-    {
-        if (session is { DryRun: false, Restorable: true } && session.SessionStatus == "restorable")
-        {
-            var process = session.ChangedItems?.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.ProcessName));
-            var processName = process is null ? "a process" : Naming.FriendlyName(process.ProcessName);
-            SessionSummary = "A restorable process-control session is recorded for " + processName + ".";
+            SessionTitle = "No active session";
+            SessionState = "neutral";
+            SessionCaption = "Preview to see exactly what changes before anything is applied.";
+            HeaderStatus = "No active tuning — ready";
+            HeaderStatusState = "neutral";
             return;
         }
 
-        SessionSummary = restorePreview is { ActionId.Length: > 0 }
-            ? "A restore preview is available; no active process-control session is recorded."
-            : "No active process-control session is recorded.";
+        SessionTitle = "Game priority boost";
+        SessionState = active ? "safe" : "low";
+        var changed = session?.Summary?.ChangedItemCount ?? session?.ChangedItems?.Count ?? 0;
+        var restraints = governor?.Summary?.ActiveRestraintCount ?? governor?.ActiveRestraints?.Count ?? 0;
+
+        SessionDetails.Add(new SessionDetail("Target", _targetGameName, "primary"));
+        SessionDetails.Add(new SessionDetail("Applied", DescribeApplied(session, governor), "secondary"));
+        if (restraints > 0)
+        {
+            SessionDetails.Add(new SessionDetail("ProBalance", "On · " + restraints + Plural(restraints, " app", " apps") + " eased", "warning"));
+        }
+        SessionDetails.Add(new SessionDetail("Protected", DescribeProtectedShort(), "info"));
+        SessionDetails.Add(new SessionDetail("Restore", CanRestore ? "One click · fully reversible" : "Nothing to restore yet", CanRestore ? "success" : "neutral"));
+
+        SessionCaption = "Auto-restores when " + _targetGameName + " closes.";
+        HeaderStatus = active
+            ? "Session active — game priority boost on " + _targetGameName
+            : "Restorable session — game priority boost on " + _targetGameName;
+        HeaderStatusState = active ? "safe" : "low";
+        _ = changed;
     }
 
-    private void BuildGovernorCaption(ProcessGovernorSessionStatus? governor)
+    private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor)
     {
-        var evidence = governor?.RuntimeEvidence;
-        GovernorCaption = evidence is { BoundedSession: true, RestoreContractAvailable: true }
-            ? "Governor budget telemetry reports a bounded session and a restore contract."
-            : "Governor budget is read-only here; the capability row reports its route status.";
+        History.Clear();
+        var appliedTime = FormatTime(session?.ChangedItems is { Count: > 0 } ? null : null);
+
+        foreach (var item in session?.ChangedItems ?? new List<SessionChangedItem>())
+        {
+            History.Add(new AuditRow(
+                appliedTime,
+                "Applied",
+                "low",
+                DisplayNameOf(item),
+                "CPU  " + FriendlyPriority(item.OriginalPriorityClass) + " → " + FriendlyPriority(item.AppliedPriorityClass),
+                "Reversible",
+                "low"));
+        }
+
+        foreach (var item in session?.RestoredItems ?? new List<SessionChangedItem>())
+        {
+            History.Add(new AuditRow(
+                appliedTime,
+                "Restored",
+                "safe",
+                DisplayNameOf(item),
+                "CPU  " + FriendlyPriority(item.AppliedPriorityClass) + " → " + FriendlyPriority(item.RestoredPriorityClass),
+                "Done",
+                "safe"));
+        }
+
+        var restraints = governor?.ActiveRestraints ?? new List<ActiveRestraint>();
+        if (restraints.Count > 0)
+        {
+            History.Add(new AuditRow(
+                appliedTime,
+                "Restrained",
+                "medium",
+                "Background · " + restraints.Count + Plural(restraints.Count, " app", " apps"),
+                "ProBalance eased",
+                "Reversible",
+                "low"));
+        }
+
+        if (History.Count == 0)
+        {
+            History.Add(new AuditRow("—", "Ready", "neutral", "No tuning applied yet",
+                "History appears after your first apply", "—", "neutral"));
+        }
     }
+
+    private void BuildAppRules()
+    {
+        var cap = Capability(CapRules);
+        AppRulesSummary = cap is { MachineAvailable: true }
+            ? "Saved rules apply automatically when a matching game is in the foreground: boost the game, ease launchers and helpers, and keep capture and voice protected."
+            : "Save what you tune here as a rule so it applies automatically next time this game is in front.";
+    }
+
+    // ---- commands ----
+
+    [RelayCommand]
+    private async Task RefreshAsync() => await ReloadAsync();
+
+    [RelayCommand]
+    private async Task PreviewAsync()
+    {
+        if (ActionBusy)
+        {
+            return;
+        }
+
+        ActionBusy = true;
+        ActionStatus = "Reading what would change…";
+        try
+        {
+            var response = await App.Capabilities.PreviewAsync(CapCpuPriority);
+            ActionStatus = response is null
+                ? "Preview uses the last local snapshot. Connect the local engine for a live preview."
+                : "Preview ready — review the changes below, then apply when you're set.";
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            ActionStatus = "Couldn't preview: " + ex.Message;
+        }
+        finally
+        {
+            ActionBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenApplyConfirm()
+    {
+        ConfirmKind = "apply";
+        ConfirmTitle = "Apply game priority boost?";
+        ConfirmSubtitle = "Nothing is applied until you confirm — every change is one-click reversible.";
+        ConfirmPrimaryLabel = "Apply changes";
+        ConfirmChanges.Clear();
+        foreach (var change in AppliedChanges.Where(c => c.After != "Untouched").Take(6))
+        {
+            ConfirmChanges.Add(change);
+        }
+
+        if (ConfirmChanges.Count == 0)
+        {
+            ConfirmChanges.Add(new ChangeRow(_targetGameName, "Foreground game", "Normal", "High", "Boost", "low"));
+        }
+
+        ConfirmProtected = DescribeProtected() + " stay untouched — protected capture and voice are never boosted, restrained, or demoted.";
+        ConfirmRestore = "One click · auto-restores when the game closes.";
+        ConfirmTarget = _targetGameName + " (foreground)";
+        IsConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    private void OpenRestoreConfirm()
+    {
+        ConfirmKind = "restore";
+        ConfirmTitle = "Restore changes?";
+        ConfirmSubtitle = "Every process returns to the exact value it had before tuning.";
+        ConfirmPrimaryLabel = "Restore changes";
+        ConfirmChanges.Clear();
+        foreach (var item in History.Where(h => h.Action == "Applied").Take(6))
+        {
+            ConfirmChanges.Add(new ChangeRow(item.Target, "Restore to original", item.Change, "Original", "Restore", "safe"));
+        }
+
+        if (ConfirmChanges.Count == 0)
+        {
+            ConfirmChanges.Add(new ChangeRow(_targetGameName, "Restore to original", "High", "Normal", "Restore", "safe"));
+        }
+
+        ConfirmProtected = DescribeProtected() + " were never changed, so nothing there is affected.";
+        ConfirmRestore = "Returns every changed process to its recorded original value.";
+        ConfirmTarget = _targetGameName + " session";
+        IsConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    private void CancelConfirm() => IsConfirmOpen = false;
+
+    [RelayCommand]
+    private async Task ConfirmPrimaryAsync()
+    {
+        if (ConfirmBusy)
+        {
+            return;
+        }
+
+        var isRestore = ConfirmKind == "restore";
+        ConfirmBusy = true;
+        ActionBusy = true;
+        try
+        {
+            var response = isRestore
+                ? await App.Capabilities.RestoreAsync(CapRestore)
+                : await App.Capabilities.ApplyAsync(CapCpuPriority);
+
+            ActionStatus = DescribeActionResult(response, isRestore);
+            IsConfirmOpen = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            ActionStatus = (isRestore ? "Couldn't restore: " : "Couldn't apply: ") + ex.Message;
+        }
+        finally
+        {
+            ConfirmBusy = false;
+            ActionBusy = false;
+        }
+    }
+
+    private static string DescribeActionResult(CapabilityRouterResponse? response, bool isRestore)
+    {
+        if (response is null)
+        {
+            return isRestore
+                ? "Restore is ready. Connect the local engine to run it on this PC."
+                : "Reviewed only — connect the local engine to apply changes on this PC.";
+        }
+
+        if (response.Errors is { Count: > 0 })
+        {
+            var first = response.Errors.FirstOrDefault(e => !string.IsNullOrWhiteSpace(e.Message));
+            return (isRestore ? "Restore didn't complete: " : "Apply didn't complete: ")
+                + (first?.Message ?? "see engine status");
+        }
+
+        if (response.RequiresApproval && !response.ApprovalSatisfied)
+        {
+            return "Needs your go-ahead in the local engine before it can change anything.";
+        }
+
+        if (response.Changed)
+        {
+            return isRestore ? "Restored — everything is back to its original values." : "Applied — the game boost is live and reversible.";
+        }
+
+        return isRestore
+            ? "Nothing needed restoring; values were already original."
+            : "Reviewed — no changes were needed on this PC right now.";
+    }
+
+    // ---- helpers ----
+
+    private string DescribeApplied(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor)
+    {
+        var parts = new List<string>();
+        var boosted = session?.ChangedItems?.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.AppliedPriorityClass));
+        parts.Add(boosted is null ? "CPU boost" : "CPU " + FriendlyPriority(boosted.AppliedPriorityClass));
+        var supported = governor?.RuntimeEvidence?.SupportedControls;
+        if (supported is not null)
+        {
+            if (supported.Any(s => s.Contains("io", StringComparison.OrdinalIgnoreCase))) parts.Add("I/O");
+            if (supported.Any(s => s.Contains("gpu", StringComparison.OrdinalIgnoreCase))) parts.Add("GPU");
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private string DescribeProtected()
+    {
+        var names = ProtectedCompanions.Select(c => c.Name).Take(3).ToList();
+        return names.Count == 0 ? "Capture and voice apps" : string.Join(", ", names);
+    }
+
+    private string DescribeProtectedShort()
+    {
+        var names = ProtectedCompanions.Select(c => c.Name).ToList();
+        if (names.Count == 0) return "Capture and voice apps";
+        if (names.Count <= 2) return string.Join(", ", names);
+        return names[0] + ", " + names[1] + " +" + (names.Count - 2);
+    }
+
+    private static (string chip, string state) ChipFor(ProcessPreviewRow row)
+    {
+        if (row.Protected)
+        {
+            return ("Protected", "protected");
+        }
+
+        if (row.Classification == "gameTarget")
+        {
+            return ("Boosted", "low");
+        }
+
+        if (row.Classification == "demotionCandidate")
+        {
+            return ("Restrained", "medium");
+        }
+
+        return ("Watched", "neutral");
+    }
+
+    private static string RoleFor(ProcessPreviewRow row) => row.Classification switch
+    {
+        "gameTarget" => "Foreground game",
+        "protectedCompanion" => "Protected companion",
+        "demotionCandidate" => "Background load",
+        _ => string.IsNullOrWhiteSpace(row.Reason) ? "Process" : row.Reason!,
+    };
+
+    private static string CompanionRole(ProcessItem p)
+    {
+        var name = (p.Name ?? string.Empty).ToLowerInvariant();
+        if (name.Contains("obs")) return "Capture";
+        if (name.Contains("discord")) return "Voice";
+        return Naming.CategoryLabel(p.Category);
+    }
+
+    private static string DisplayName(ProcessItem process)
+        => string.IsNullOrWhiteSpace(process.DisplayName) ? Naming.FriendlyName(process.Name) : process.DisplayName!;
+
+    private static string DisplayNameOf(SessionChangedItem item)
+        => string.IsNullOrWhiteSpace(item.DisplayName) ? Naming.FriendlyName(item.ProcessName) : item.DisplayName!;
+
+    private static string FormatTime(string? _) => "Recent";
+
+    private static string Plural(int count, string one, string many) => count == 1 ? one : many;
 
     private static string FriendlyPriority(string? priorityClass) => priorityClass switch
     {
@@ -269,48 +572,6 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         null or "" => "Normal",
         _ => priorityClass!,
     };
-
-    private static string PriorityText(string? currentPriority, string? proposedPriority)
-    {
-        var current = FriendlyPriority(currentPriority);
-        if (string.IsNullOrWhiteSpace(proposedPriority))
-        {
-            return current;
-        }
-
-        var proposed = FriendlyPriority(proposedPriority);
-        return current == proposed ? current : current + " -> " + proposed;
-    }
-
-    private static string DisplayName(ProcessItem process)
-        => string.IsNullOrWhiteSpace(process.DisplayName) ? Naming.FriendlyName(process.Name) : process.DisplayName!;
-
-    partial void OnSearchTextChanged(string value) => ApplyFilter();
-
-    private void ApplyFilter()
-    {
-        var query = SearchText?.Trim();
-        IEnumerable<GameAppRow> source = _all;
-        if (!string.IsNullOrEmpty(query))
-        {
-            source = source.Where(r =>
-                r.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                r.Role.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                r.Plan.Contains(query, StringComparison.OrdinalIgnoreCase));
-        }
-
-        Rows.Clear();
-        ForegroundRows.Clear();
-        ProtectedRows.Clear();
-        CandidateRows.Clear();
-        foreach (var r in source)
-        {
-            Rows.Add(r);
-            if (r.Plan == "Foreground") ForegroundRows.Add(r);
-            else if (r.Plan == "Protected") ProtectedRows.Add(r);
-            else if (r.Plan == "Candidate") CandidateRows.Add(r);
-        }
-    }
 
     private static async Task<T?> TryLoadSample<T>(Func<Task<T>> load) where T : class
     {
@@ -325,130 +586,31 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     }
 }
 
-public sealed record ProcessCapabilityItem(CapabilityRow Row)
-{
-    public string MetaText => ProcessCapabilityText.MetaText(Row);
-}
+public sealed record TuningControl(
+    string Title,
+    string Description,
+    string ValueText,
+    string ValueState,
+    string AvailabilityText,
+    bool IsAvailable);
 
-public sealed record ProcessCapabilityGateLine(string Label, string State);
+public sealed record SessionDetail(string Key, string Value, string ValueState);
 
-internal static class ProcessCapabilityText
-{
-    public static string MetaText(CapabilityRow row)
-        => FamilyText(row) + " - " + AvailabilityText(row);
+public sealed record ChangeRow(
+    string Name,
+    string Role,
+    string Before,
+    string After,
+    string ChipText,
+    string ChipState);
 
-    public static string FamilyText(CapabilityRow row)
-        => row.Page + " / " + row.Family;
+public sealed record CompanionRow(string Name, string Role);
 
-    public static string AvailabilityText(CapabilityRow row)
-        => row.MachineAvailable ? "Available on this PC" : "Not available here";
-
-    public static string StatusText(CapabilityRouterResponse? response)
-    {
-        if (response is null)
-        {
-            return "Registry status only";
-        }
-
-        var status = Clean(response.Status) ?? "completed";
-        var action = Clean(response.Action) ?? "explain";
-        return action + " - " + status;
-    }
-
-    public static string NextStepText(CapabilityRow row, CapabilityRouterResponse? response)
-    {
-        var next = Clean(response?.NextRequiredStep);
-        if (next is not null)
-        {
-            return next;
-        }
-
-        if (!row.MachineAvailable && !string.IsNullOrWhiteSpace(row.ReasonOrNextStep))
-        {
-            return row.ReasonOrNextStep;
-        }
-
-        if (response is null)
-        {
-            return string.IsNullOrWhiteSpace(row.ReasonOrNextStep)
-                ? "Live explain did not return a router envelope; registry status is shown."
-                : row.ReasonOrNextStep;
-        }
-
-        return "No additional next step reported by explain.";
-    }
-
-    public static string? ErrorText(CapabilityRouterResponse? response)
-    {
-        var errors = response?.Errors?
-            .Where(error => !string.IsNullOrWhiteSpace(error.Code) || !string.IsNullOrWhiteSpace(error.Message))
-            .Select(error =>
-            {
-                var code = Clean(error.Code);
-                var message = Clean(error.Message);
-                if (code is null)
-                {
-                    return message;
-                }
-
-                return message is null ? code : code + ": " + message;
-            })
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .ToList();
-
-        return errors is { Count: > 0 } ? string.Join("; ", errors) : null;
-    }
-
-    public static IReadOnlyList<ProcessCapabilityGateLine> GateLines(CapabilityRouterResponse? response)
-    {
-        if (response is null)
-        {
-            return new[] { new ProcessCapabilityGateLine("Live explain gates not available", "neutral") };
-        }
-
-        var gates = ExtractGates(response.Evidence).ToList();
-        if (gates.Count == 0)
-        {
-            return new[] { new ProcessCapabilityGateLine("No gates reported by explain", "safe") };
-        }
-
-        return gates.Select(gate => new ProcessCapabilityGateLine(HumanizeGate(gate), "protected")).ToList();
-    }
-
-    private static IEnumerable<string> ExtractGates(JsonElement evidence)
-    {
-        if (evidence.ValueKind != JsonValueKind.Object)
-        {
-            yield break;
-        }
-
-        if (!evidence.TryGetProperty("capability", out var capability) ||
-            capability.ValueKind != JsonValueKind.Object ||
-            !capability.TryGetProperty("gates", out var gates) ||
-            gates.ValueKind != JsonValueKind.Array)
-        {
-            yield break;
-        }
-
-        foreach (var gate in gates.EnumerateArray())
-        {
-            if (gate.ValueKind == JsonValueKind.String)
-            {
-                var value = Clean(gate.GetString());
-                if (value is not null)
-                {
-                    yield return value;
-                }
-            }
-        }
-    }
-
-    private static string HumanizeGate(string gate)
-        => gate.Replace('-', ' ');
-
-    private static string? Clean(string? value)
-    {
-        var clean = value?.Trim();
-        return string.IsNullOrWhiteSpace(clean) ? null : clean;
-    }
-}
+public sealed record AuditRow(
+    string Time,
+    string Action,
+    string ActionState,
+    string Target,
+    string Change,
+    string RestoreText,
+    string RestoreState);

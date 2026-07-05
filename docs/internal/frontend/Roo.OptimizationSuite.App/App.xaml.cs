@@ -87,7 +87,11 @@ public partial class App : Application
     {
         Theme.ApplyPersistedTheme();
         ApplyAccentResourceOverrides();
-        MainWindow = new MainWindow();
+
+        var initialNav = System.Environment.GetEnvironmentVariable("ROO_INITIAL_NAV");
+        MainWindow = string.IsNullOrWhiteSpace(initialNav)
+            ? new MainWindow()
+            : new MainWindow(initialNav.Trim(), false);
         MainWindow.Activate();
     }
 

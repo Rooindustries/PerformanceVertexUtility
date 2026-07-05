@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "sampleKind": "processPolicyRuleLifecycle",
+  "rule": {
+    "id": "rule-contoso-launcher-helper-balanced",
+    "match": {
+      "processNames": [
+        "ContosoLauncherHelper.exe"
+      ],
+      "pathPatterns": [
+        "C:\\Program Files\\Contoso Game\\Launcher\\*.exe"
+      ],
+      "publisherNames": [
+        "Contoso Game Studios"
+      ],
+      "processCategories": [
+        "backgroundApp"
+      ]
+    },
+    "requestedControls": {
+      "priorityClass": "BelowNormal",
+      "affinityMask": null,
+      "ioPriority": "Low",
+      "gpuPriority": null,
+      "restraint": {
+        "mode": "background",
+        "cpuBurstPercent": 25,
+        "reason": "Keep the launcher helper responsive without competing with the foreground game."
+      }
+    },
+    "protectionCategory": "backgroundApp",
+    "createdBy": "performance-operator",
+    "status": "previewed",
+    "timestamps": {
+      "createdAtUtc": "2026-06-15T18:42:10.0000000Z",
+      "updatedAtUtc": "2026-06-15T18:42:10.0000000Z",
+      "previewedAtUtc": "2026-06-15T18:42:10.0000000Z",
+      "approvedAtUtc": null,
+      "appliedAtUtc": null,
+      "restoredAtUtc": null,
+      "removedAtUtc": null
+    },
+    "approval": null,
+    "allowConfirmedApply": false,
+    "reason": "Launcher helper can be demoted during a bounded game session after explicit approval and path-root confirmation.",
+    "reasonCodes": [
+      "PERSISTENT_POLICY_BACKGROUND_HELPER"
+    ],
+    "tags": [
+      "launcher",
+      "game"
+    ],
+    "risk": "low",
+    "lastPreview": {
+      "capturedAtUtc": "2026-06-15T18:42:10.0000000Z",
+      "processCount": 96,
+      "matchedProcessCount": 1,
+      "changeCount": 2
+    },
+    "activeEffects": [],
+    "backupManifestPaths": [],
+    "removed": false
+  },
+  "lifecycle": {
+    "actions": [
+      "preview",
+      "approve",
+      "apply",
+      "status",
+      "restore",
+      "remove"
+    ],
+    "applyGate": {
+      "requiresApproval": true,
+      "requiresConfirmApply": true,
+      "requiresAllowedPathRoot": true
+    }
+  }
+}

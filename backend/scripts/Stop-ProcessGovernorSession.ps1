@@ -137,6 +137,7 @@ try {
             processId = Get-RooPropertyValue $snapshot 'processId' 0
             processName = Get-RooPropertyValue $snapshot 'processName' ''
             executablePath = Get-RooPropertyValue $snapshot 'executablePath' $null
+            processStartTimeUtc = Get-RooPropertyValue $snapshot 'processStartTimeUtc' $null
         })
         $preview.Add((New-GovernorRestorePreview $snapshot $candidate)) | Out-Null
     }

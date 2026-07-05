@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessPolicy.Common.ps1')
+. (Join-Path $PSScriptRoot 'ProcessPolicyRules.Common.ps1')
 
 function Write-PolicySessionState {
     param(
@@ -111,6 +112,7 @@ try {
     $errors = New-Object System.Collections.Generic.List[object]
     $logs = New-Object System.Collections.Generic.List[object]
     $polls = New-Object System.Collections.Generic.List[object]
+    $auditRows = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
     $snapshotKeys = New-Object 'System.Collections.Generic.HashSet[string]'
     $skipKeys = New-Object 'System.Collections.Generic.HashSet[string]'
@@ -187,6 +189,7 @@ try {
                     $skipped.Add($skip) | Out-Null
                     $pollSkipped.Add($skip) | Out-Null
                     $skipKeys.Add($skipKey) | Out-Null
+                    $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionApply' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionId -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ([string](Get-RooPropertyValue $entry 'blockedReason' 'Process is protected from persistent policy control.')) -ProtectionCategory ([string](Get-RooPropertyValue (Get-RooPropertyValue $entry 'currentState' $null) 'category' 'unknown')) -Outcome 'skipped' -DryRun $false -Source 'processPolicySession')) | Out-Null
                 }
                 continue
             }
@@ -207,6 +210,7 @@ try {
                     $skipped.Add($skip) | Out-Null
                     $pollSkipped.Add($skip) | Out-Null
                     $skipKeys.Add($skipKey) | Out-Null
+                    $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionApply' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionId -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ([string]$safety.reason) -ProtectionCategory ([string](Get-RooPropertyValue (Get-RooPropertyValue $entry 'currentState' $null) 'category' 'unknown')) -Outcome 'skipped' -DryRun $false -Source 'processPolicySession')) | Out-Null
                 }
                 continue
             }
@@ -219,6 +223,7 @@ try {
                     $skipped.Add($skip) | Out-Null
                     $pollSkipped.Add($skip) | Out-Null
                     $skipKeys.Add($skipKey) | Out-Null
+                    $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionApply' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionId -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ([string]$identity.reason) -ProtectionCategory ([string](Get-RooPropertyValue (Get-RooPropertyValue $entry 'currentState' $null) 'category' 'unknown')) -Outcome 'skipped' -DryRun $false -Source 'processPolicySession')) | Out-Null
                 }
                 continue
             }
@@ -272,6 +277,10 @@ try {
                 $changedItem = New-RooProcessPolicyChangedItem $entry $originalState $appliedState @($appliedControls.ToArray()) $pollIndex
                 $changed.Add($changedItem) | Out-Null
                 $pollChanged.Add($changedItem) | Out-Null
+                foreach ($appliedControl in @($appliedControls.ToArray())) {
+                    $controlName = [string](Get-RooPropertyValue $appliedControl 'control' 'processControls')
+                    $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionApply' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionId -Target $entry -Control $controlName -BeforeValue (Get-RooPropertyValue $appliedControl 'currentValue' $null) -AfterValue (Get-RooPropertyValue $appliedControl 'proposedValue' $null) -Reason ([string](Get-RooPropertyValue $appliedControl 'reason' (Get-RooPropertyValue $entry 'reason' 'Apply process controls.'))) -ProtectionCategory ([string](Get-RooPropertyValue (Get-RooPropertyValue $entry 'currentState' $null) 'category' 'unknown')) -RestorePath $backupPath -RestoreAvailable $true -Outcome 'applied' -DryRun $false -Source 'processPolicySession')) | Out-Null
+                }
                 $activeApplications[$entryKey] = [pscustomobject]@{
                     processId = $processId
                     processName = $processName
@@ -286,6 +295,7 @@ try {
                 $skip = New-RooProcessPolicySkippedItem $entry ($failedControls -join '; ') $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
+                $auditRows.Add((New-RooProcessPolicyAuditRow -Action 'sessionApply' -RuleId ([string](Get-RooPropertyValue $entry 'ruleId' '')) -SessionId $sessionId -Target $entry -Control 'processControls' -BeforeValue $null -AfterValue $null -Reason ($failedControls -join '; ') -ProtectionCategory ([string](Get-RooPropertyValue (Get-RooPropertyValue $entry 'currentState' $null) 'category' 'unknown')) -RestorePath $backupPath -RestoreAvailable $true -Outcome 'failed' -DryRun $false -Source 'processPolicySession')) | Out-Null
             }
         }
 
@@ -342,6 +352,7 @@ try {
     }
 
     $completedAtUtc = Get-RooUtcStamp
+    $auditPath = Add-RooProcessPolicyAuditRows -StateRoot $StateRoot -Rows @($auditRows.ToArray())
     $sessionStatus = if ($errors.Count -gt 0) { 'failed' } else { 'completed' }
     $resultStatus = if ($errors.Count -gt 0) { 'partial' } else { 'success' }
     $backupMetadata = if (Test-Path -LiteralPath $backupPath) { New-RooProcessPolicyBackupMetadata $backupManifest $backupPath } else { $null }
@@ -379,6 +390,7 @@ try {
         stateRoot = $resolvedPolicyStateRoot
         sessionPath = $sessionStatePath
         backupManifestPath = if ($backupMetadata) { $backupPath } else { $null }
+        auditPath = $auditPath
         restorable = ($activeApplications.Count -gt 0)
         activeApplications = @($activeApplications.Values | ForEach-Object { $_ })
         changedItems = @($changed.ToArray())

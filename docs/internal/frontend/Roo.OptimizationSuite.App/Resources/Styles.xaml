@@ -8,6 +8,7 @@
     <conv:BytesToReadableConverter x:Key="BytesToReadable" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    <conv:InverseBoolConverter x:Key="InverseBool" />
     <conv:StringToVisibilityConverter x:Key="StringToVisibility" />
     <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
     <conv:CountToInverseVisibilityConverter x:Key="CountToInverseVisibility" />

@@ -674,6 +674,15 @@ function Set-RooProcessGpuPriority {
     if ($status -ne 0) { throw "Failed to set GPU priority '$Priority' (status $status)." }
 }
 
+function Get-RooProcessStartTimeUtc {
+    param([System.Diagnostics.Process]$Process)
+    try {
+        return $Process.StartTime.ToUniversalTime().ToString('o')
+    } catch {
+        return $null
+    }
+}
+
 function Get-RooProcessControlState {
     param(
         [int]$ProcessId,
@@ -688,6 +697,7 @@ function Get-RooProcessControlState {
             affinityMask = $null
             ioPriority = $null
             gpuPriority = $null
+            startTimeUtc = $null
         }
     }
 
@@ -707,6 +717,7 @@ function Get-RooProcessControlState {
         affinityMask = $affinity
         ioPriority = if ($io.available) { $io.name } else { $null }
         gpuPriority = if ($gpu.available) { $gpu.name } else { $null }
+        startTimeUtc = Get-RooProcessStartTimeUtc $live
         ioPriorityAvailable = [bool]$io.available
         gpuPriorityAvailable = [bool]$gpu.available
         ioPriorityStatus = $io.status
@@ -748,6 +759,100 @@ function Get-RooPreviewControlChanges {
             -Reason (Get-RooPropertyValue $PreviewEntry 'reason' 'Set process priority.')))
     }
     return @()
+}
+
+function Get-RooControlStateValue {
+    param(
+        [object]$State,
+        [string]$Control
+    )
+    switch ($Control) {
+        'priorityClass' { return Get-RooPropertyValue $State 'priorityClass' $null }
+        'affinityMask' { return Get-RooPropertyValue $State 'affinityMask' $null }
+        'ioPriority' { return Get-RooPropertyValue $State 'ioPriority' $null }
+        'gpuPriority' { return Get-RooPropertyValue $State 'gpuPriority' $null }
+        default { return $null }
+    }
+}
+
+function Test-RooControlValueEqual {
+    param(
+        [string]$Control,
+        [object]$Left,
+        [object]$Right
+    )
+    if ($Control -eq 'affinityMask') {
+        if ($null -eq $Left -or $null -eq $Right) { return $false }
+        try { return [int64]$Left -eq [int64]$Right } catch { return $false }
+    }
+    return [string]$Left -eq [string]$Right
+}
+
+function Get-RooControlChangeValidationReason {
+    param(
+        [object]$Change,
+        [object]$CurrentState
+    )
+    $control = [string](Get-RooPropertyValue $Change 'control' '')
+    $value = Get-RooPropertyValue $Change 'proposedValue' $null
+    switch ($control) {
+        'priorityClass' {
+            if (-not (Test-RooPriorityAllowed ([string]$value))) { return "Priority class '$value' is outside the allow-list." }
+            if ([string]::IsNullOrWhiteSpace([string](Get-RooControlStateValue $CurrentState $control))) { return 'Current priority class could not be read, so no priority change is proposed.' }
+        }
+        'affinityMask' {
+            if (-not (Test-RooAffinityMaskAllowed $value)) { return "Affinity mask '$value' is invalid." }
+            if ($null -eq (Get-RooControlStateValue $CurrentState $control)) { return 'Current CPU affinity could not be read, so no affinity change is proposed.' }
+        }
+        'ioPriority' {
+            if (-not (Test-RooIoPriorityAllowed ([string]$value))) { return "I/O priority '$value' is outside the allow-list." }
+            if ([string]::IsNullOrWhiteSpace([string](Get-RooControlStateValue $CurrentState $control))) { return 'Current I/O priority could not be read, so no I/O priority change is proposed.' }
+        }
+        'gpuPriority' {
+            if (-not (Test-RooGpuPriorityAllowed ([string]$value))) { return "GPU priority '$value' is outside the allow-list." }
+            if (-not [bool](Get-RooPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) { return 'GPU scheduling priority is unavailable for this process.' }
+        }
+        default {
+            return "Unsupported process control '$control'."
+        }
+    }
+    return $null
+}
+
+function Get-RooApplicableProcessControlChanges {
+    param(
+        [object[]]$ControlChanges,
+        [object]$CurrentState
+    )
+    $applicable = New-Object System.Collections.Generic.List[object]
+    $skipped = New-Object System.Collections.Generic.List[object]
+    foreach ($change in @(Get-RooArray $ControlChanges)) {
+        $control = [string](Get-RooPropertyValue $change 'control' '')
+        if ([bool](Get-RooPropertyValue $change 'blocked' $false)) {
+            $reason = [string](Get-RooPropertyValue $change 'blockedReason' (Get-RooPropertyValue $change 'reason' 'Requested process control is blocked.'))
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $reason; currentValue = Get-RooPropertyValue $change 'currentValue' $null; proposedValue = Get-RooPropertyValue $change 'proposedValue' $null; category = 'blocked' }) | Out-Null
+            continue
+        }
+
+        $validationReason = Get-RooControlChangeValidationReason $change $CurrentState
+        if (-not [string]::IsNullOrWhiteSpace($validationReason)) {
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $validationReason; currentValue = Get-RooControlStateValue $CurrentState $control; proposedValue = Get-RooPropertyValue $change 'proposedValue' $null; category = 'unavailable' }) | Out-Null
+            continue
+        }
+
+        $currentValue = Get-RooControlStateValue $CurrentState $control
+        $proposedValue = Get-RooPropertyValue $change 'proposedValue' $null
+        if (Test-RooControlValueEqual $control $currentValue $proposedValue) {
+            $skipped.Add([pscustomobject]@{ control = $control; reason = "Process already has requested $control value."; currentValue = $currentValue; proposedValue = $proposedValue; category = 'no-change' }) | Out-Null
+            continue
+        }
+
+        $applicable.Add($change) | Out-Null
+    }
+    return [pscustomobject]@{
+        changes = @($applicable.ToArray())
+        skippedControls = @($skipped.ToArray())
+    }
 }
 
 function Invoke-RooProcessControlChange {

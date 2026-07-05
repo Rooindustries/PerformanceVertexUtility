@@ -91,13 +91,33 @@ public sealed class CapabilityService
         => all.Where(row => string.Equals(row.Page, page, StringComparison.OrdinalIgnoreCase)).ToList();
 
     public Task<CapabilityRouterResponse?> ExplainAsync(string capabilityId)
+        => RouteAsync(capabilityId, "explain", confirm: false);
+
+    public Task<CapabilityRouterResponse?> PreviewAsync(string capabilityId)
+        => RouteAsync(capabilityId, "preview", confirm: false);
+
+    public Task<CapabilityRouterResponse?> StatusAsync(string capabilityId)
+        => RouteAsync(capabilityId, "status", confirm: false);
+
+    public Task<CapabilityRouterResponse?> ApplyAsync(string capabilityId)
+        => RouteAsync(capabilityId, "apply", confirm: true);
+
+    public Task<CapabilityRouterResponse?> RestoreAsync(string capabilityId)
+        => RouteAsync(capabilityId, "restore", confirm: true);
+
+    private Task<CapabilityRouterResponse?> RouteAsync(string capabilityId, string action, bool confirm)
     {
         if (string.IsNullOrWhiteSpace(capabilityId) || !_locator.ScriptsAvailable)
         {
             return Task.FromResult<CapabilityRouterResponse?>(null);
         }
 
-        var args = "-CapabilityId " + QuotePowerShellString(capabilityId) + " -Action explain";
+        var args = "-CapabilityId " + QuotePowerShellString(capabilityId) + " -Action " + action;
+        if (confirm)
+        {
+            args += " -ConfirmApply";
+        }
+
         return RunAsync<CapabilityRouterResponse>("Invoke-RooCapability.ps1", args, CancellationToken.None);
     }
 
