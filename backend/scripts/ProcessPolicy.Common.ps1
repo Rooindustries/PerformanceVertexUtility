@@ -42,6 +42,96 @@ $script:RooProcessPolicyProtectedNames = @(
     'wsappx.exe'
 )
 
+function Ensure-RooProcessPolicyCommandLineReader {
+    if ('RooProcessPolicyCommandLineReader' -as [type]) { return }
+    Add-Type -TypeDefinition @"
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class RooProcessPolicyCommandLineReader {
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass, ref PROCESS_BASIC_INFORMATION processInformation, int processInformationLength, out int returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ReadProcessMemory(IntPtr processHandle, IntPtr baseAddress, byte[] buffer, int size, out IntPtr bytesRead);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_BASIC_INFORMATION {
+        public IntPtr Reserved1;
+        public IntPtr PebBaseAddress;
+        public IntPtr Reserved2_0;
+        public IntPtr Reserved2_1;
+        public IntPtr UniqueProcessId;
+        public IntPtr Reserved3;
+    }
+
+    private static IntPtr ReadPointer(IntPtr processHandle, IntPtr address) {
+        byte[] buffer = new byte[IntPtr.Size];
+        IntPtr bytesRead;
+        if (!ReadProcessMemory(processHandle, address, buffer, buffer.Length, out bytesRead)) {
+            return IntPtr.Zero;
+        }
+        return IntPtr.Size == 8 ? (IntPtr)BitConverter.ToInt64(buffer, 0) : (IntPtr)BitConverter.ToInt32(buffer, 0);
+    }
+
+    private static ushort ReadUInt16(IntPtr processHandle, IntPtr address) {
+        byte[] buffer = new byte[2];
+        IntPtr bytesRead;
+        if (!ReadProcessMemory(processHandle, address, buffer, buffer.Length, out bytesRead)) {
+            return 0;
+        }
+        return BitConverter.ToUInt16(buffer, 0);
+    }
+
+    public static string TryGetCommandLine(int processId) {
+        try {
+            Process process = Process.GetProcessById(processId);
+            PROCESS_BASIC_INFORMATION info = new PROCESS_BASIC_INFORMATION();
+            int returnLength;
+            int status = NtQueryInformationProcess(process.Handle, 0, ref info, Marshal.SizeOf(typeof(PROCESS_BASIC_INFORMATION)), out returnLength);
+            if (status != 0 || info.PebBaseAddress == IntPtr.Zero) {
+                return null;
+            }
+
+            int processParametersOffset = IntPtr.Size == 8 ? 0x20 : 0x10;
+            int commandLineOffset = IntPtr.Size == 8 ? 0x70 : 0x40;
+            IntPtr processParameters = ReadPointer(process.Handle, IntPtr.Add(info.PebBaseAddress, processParametersOffset));
+            if (processParameters == IntPtr.Zero) {
+                return null;
+            }
+
+            ushort byteLength = ReadUInt16(process.Handle, IntPtr.Add(processParameters, commandLineOffset));
+            IntPtr bufferAddress = ReadPointer(process.Handle, IntPtr.Add(processParameters, commandLineOffset + (IntPtr.Size == 8 ? 8 : 4)));
+            if (byteLength == 0 || bufferAddress == IntPtr.Zero) {
+                return null;
+            }
+
+            byte[] commandLineBytes = new byte[byteLength];
+            IntPtr bytesRead;
+            if (!ReadProcessMemory(process.Handle, bufferAddress, commandLineBytes, commandLineBytes.Length, out bytesRead)) {
+                return null;
+            }
+            return Encoding.Unicode.GetString(commandLineBytes);
+        } catch {
+            return null;
+        }
+    }
+}
+"@
+}
+
+function Get-RooProcessPolicyCommandLineFallback {
+    param([int]$ProcessId)
+    try {
+        Ensure-RooProcessPolicyCommandLineReader
+        return [RooProcessPolicyCommandLineReader]::TryGetCommandLine($ProcessId)
+    } catch {
+        return $null
+    }
+}
+
 function Resolve-RooProcessPolicyStateRoot {
     param([string]$StateRoot)
     $defaultStateRoot = Join-Path $PSScriptRoot '..\state'
@@ -196,6 +286,13 @@ function Get-RooProcessPolicySnapshot {
         try { $sessionId = [int]$live.SessionId } catch { $sessionId = $null }
         $startTimeUtc = $null
         try { $startTimeUtc = $live.StartTime.ToUniversalTime().ToString('o') } catch { $startTimeUtc = $null }
+        $commandLineValue = $null
+        if ($IncludeCommandLine) {
+            if ($cim) { $commandLineValue = $cim.CommandLine }
+            if ([string]::IsNullOrWhiteSpace([string]$commandLineValue)) {
+                $commandLineValue = Get-RooProcessPolicyCommandLineFallback $processIdValue
+            }
+        }
         $category = Get-RooProcessPolicyCategory $name
         $items.Add([pscustomobject]@{
             pid = $processIdValue
@@ -203,7 +300,7 @@ function Get-RooProcessPolicySnapshot {
             displayName = $null
             executablePath = $path
             publisher = $null
-            commandLine = if ($IncludeCommandLine -and $cim) { $cim.CommandLine } else { $null }
+            commandLine = $commandLineValue
             category = $category
             sessionId = $sessionId
             startTimeUtc = $startTimeUtc
@@ -236,6 +333,7 @@ function Test-RooProcessPolicyRuleMatch {
     $hasSelector = $false
     $processName = [string](Get-RooPropertyValue $Process 'name' '')
     $processPath = [string](Get-RooPropertyValue $Process 'executablePath' '')
+    $publisher = [string](Get-RooPropertyValue $Process 'publisher' '')
     $commandLine = [string](Get-RooPropertyValue $Process 'commandLine' '')
     $category = [string](Get-RooPropertyValue $Process 'category' '')
 
@@ -257,6 +355,24 @@ function Test-RooProcessPolicyRuleMatch {
     if ($pathPatterns.Count -gt 0) {
         $hasSelector = $true
         if (-not (Test-RooProcessPolicyAnyWildcard $processPath $pathPatterns)) { return $false }
+    }
+
+    $publishers = @()
+    $publishers += Get-RooPropertyArray $Match 'publishers'
+    $publishers += Get-RooPropertyArray $Match 'publisherNames'
+    if ($publishers.Count -gt 0) {
+        $hasSelector = $true
+        $matchedPublisher = $false
+        foreach ($candidate in $publishers) {
+            if ($publisher -eq [string]$candidate) { $matchedPublisher = $true }
+        }
+        if (-not $matchedPublisher) { return $false }
+    }
+
+    $publisherPatterns = Get-RooPropertyArray $Match 'publisherPatterns'
+    if ($publisherPatterns.Count -gt 0) {
+        $hasSelector = $true
+        if (-not (Test-RooProcessPolicyAnyWildcard $publisher $publisherPatterns)) { return $false }
     }
 
     $commandLinePatterns = Get-RooPropertyArray $Match 'commandLinePatterns'
@@ -289,6 +405,14 @@ function Test-RooProcessPolicyRuleMatch {
 
     $excludePathPatterns = Get-RooPropertyArray $Match 'excludePathPatterns'
     if ($excludePathPatterns.Count -gt 0 -and (Test-RooProcessPolicyAnyWildcard $processPath $excludePathPatterns)) { return $false }
+
+    $excludePublishers = Get-RooPropertyArray $Match 'excludePublisherNames'
+    foreach ($candidate in $excludePublishers) {
+        if ($publisher -eq [string]$candidate) { return $false }
+    }
+
+    $excludePublisherPatterns = Get-RooPropertyArray $Match 'excludePublisherPatterns'
+    if ($excludePublisherPatterns.Count -gt 0 -and (Test-RooProcessPolicyAnyWildcard $publisher $excludePublisherPatterns)) { return $false }
 
     $excludeCommandLinePatterns = Get-RooPropertyArray $Match 'excludeCommandLinePatterns'
     if ($excludeCommandLinePatterns.Count -gt 0 -and (Test-RooProcessPolicyAnyWildcard $commandLine $excludeCommandLinePatterns)) { return $false }
@@ -438,6 +562,7 @@ function Get-RooProcessPolicyControls {
         affinityMask = Get-RooPropertyValue $controls 'affinityMask' $null
         ioPriority = Get-RooPropertyValue $controls 'ioPriority' $null
         gpuPriority = Get-RooPropertyValue $controls 'gpuPriority' $null
+        restraint = Get-RooPropertyValue $controls 'restraint' $null
     }
 }
 

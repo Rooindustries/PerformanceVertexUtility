@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Roo.OptimizationSuite.ViewModels;
 
@@ -13,11 +14,19 @@ public sealed partial class PerformanceProfilesPage : Page
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
-    private async void OnCapabilitySelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnScrollerSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (sender is ListView { SelectedItem: ProcessCapabilityItem item })
+        // Constrain the scrolling content to the viewport width so proportional
+        // (star) columns resolve against a bounded width instead of collapsing.
+        var width = PcScroller.ViewportWidth;
+        if (width <= 0)
         {
-            await ViewModel.SelectCapabilityAsync(item);
+            width = e.NewSize.Width - 16;
+        }
+
+        if (width > 0)
+        {
+            PcContent.Width = width;
         }
     }
 }

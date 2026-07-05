@@ -26,7 +26,10 @@ function Get-StateEntryCount {
 function Get-ReliabilityProbeProcesses {
     return @(
         Get-Process -ErrorAction SilentlyContinue |
-            Where-Object { [string]$_.ProcessName -like 'RooGovernorReliabilityProbe*' }
+            Where-Object {
+                [string]$_.ProcessName -like 'RooGovernorReliabilityProbe*' -or
+                [string]$_.ProcessName -like 'RooGovernorRelaunchProbe*'
+            }
     )
 }
 
@@ -134,6 +137,51 @@ function Write-ReliabilityGovernorProfile {
     ($profile | ConvertTo-Json -Depth 18) | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+function Wait-ReliabilitySessionChanged {
+    param(
+        [string]$StateRoot,
+        [int]$ProcessId,
+        [int]$TimeoutSeconds = 20
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $StateRoot) {
+            $sessionFile = Get-ChildItem -LiteralPath $StateRoot -Filter 'session.json' -Recurse -File -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTimeUtc -Descending |
+                Select-Object -First 1
+            if ($sessionFile) {
+                try {
+                    $session = Get-Content -LiteralPath $sessionFile.FullName -Raw | ConvertFrom-Json
+                    $changed = @($session.changedItems | Where-Object { [int]$_.processId -eq $ProcessId }) | Select-Object -First 1
+                    if ($changed) {
+                        return [pscustomobject]@{
+                            found = $true
+                            sessionPath = $sessionFile.FullName
+                            session = $session
+                            changedItem = $changed
+                        }
+                    }
+                } catch { }
+            }
+        }
+        Start-Sleep -Milliseconds 300
+    }
+
+    return [pscustomobject]@{
+        found = $false
+        sessionPath = $null
+        session = $null
+        changedItem = $null
+    }
+}
+
+function Get-ReliabilityBackupFileCount {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) { return 0 }
+    return @(Get-ChildItem -LiteralPath $Path -Filter 'backup.json' -Recurse -File -ErrorAction SilentlyContinue).Count
+}
+
 $initialStateCount = Get-StateEntryCount
 if ($initialStateCount -eq 0) {
     Add-Pass 'backend/state is empty before repeated governor reliability validation'
@@ -236,6 +284,126 @@ if ($runResults.Count -eq 3 -and @($runResults | Where-Object { $_.changed -and 
     Add-Pass 'Repeated governor reliability completed 3 consecutive live disposable apply/restore runs'
 } else {
     Add-Failure "Repeated governor reliability did not complete 3 successful runs: successes=$(@($runResults | Where-Object { $_.changed -and $_.restored -and $_.activeRestraintCount -eq 0 }).Count)"
+}
+
+$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-governor-relaunch-$([guid]::NewGuid().ToString('N'))"
+$relaunchFirst = $null
+$relaunchSecond = $null
+$relaunchSessionProc = $null
+$relaunchCleanupDone = $false
+try {
+    New-Item -ItemType Directory -Path $relaunchRoot -Force | Out-Null
+    $probeName = 'RooGovernorRelaunchProbe.exe'
+    $probeExe = Join-Path $relaunchRoot $probeName
+    Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
+    $profilePath = Join-Path $relaunchRoot 'governor-relaunch-profile.json'
+    $stateRoot = Join-Path $relaunchRoot 'state'
+    Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
+
+    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }' -WindowStyle Hidden -PassThru
+    Start-Sleep -Milliseconds 800
+    $beforeFirst = Get-RooProcessControlState $relaunchFirst.Id $null
+    $sessionOutput = Join-Path $relaunchRoot 'governor-relaunch-session-output.json'
+    $sessionError = Join-Path $relaunchRoot 'governor-relaunch-session-error.txt'
+    $sessionArgs = @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1'),
+        '-ProfilePath',
+        $profilePath,
+        '-SampleIntervalMilliseconds',
+        '400',
+        '-MaxDurationSeconds',
+        '18',
+        '-StateRoot',
+        $stateRoot,
+        '-ConfirmApply'
+    )
+    $relaunchSessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $sessionArgs -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
+
+    $firstChange = Wait-ReliabilitySessionChanged -StateRoot $stateRoot -ProcessId $relaunchFirst.Id -TimeoutSeconds 20
+    $afterFirstApply = Get-RooProcessControlState $relaunchFirst.Id $null
+    if ($firstChange.found -and $afterFirstApply.priorityClass -eq 'BelowNormal') {
+        Add-Pass "Relaunch scenario restrained first same-name probe before exit: pid=$($relaunchFirst.Id) original=$($beforeFirst.priorityClass) applied=$($afterFirstApply.priorityClass)"
+    } else {
+        Add-Failure "Relaunch scenario did not restrain first same-name probe before timeout: pid=$($relaunchFirst.Id) current=$($afterFirstApply.priorityClass)"
+    }
+
+    Stop-ReliabilityProbe -Process $relaunchFirst
+    $relaunchFirst = $null
+    Start-Sleep -Milliseconds 700
+
+    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
+    Start-Sleep -Milliseconds 800
+    $beforeSecond = Get-RooProcessControlState $relaunchSecond.Id $null
+
+    Wait-Process -Id $relaunchSessionProc.Id -Timeout 35 -ErrorAction Stop
+    $relaunchSessionProc.Refresh()
+    $sessionExitCode = $relaunchSessionProc.ExitCode
+    $relaunchSessionProc = $null
+    if ($null -ne $sessionExitCode -and $sessionExitCode -ne 0) {
+        $errorText = if (Test-Path -LiteralPath $sessionError) { Get-Content -LiteralPath $sessionError -Raw } else { '' }
+        Add-Failure "Relaunch governor session exited with code $sessionExitCode :: $errorText"
+    }
+
+    $session = Get-Content -LiteralPath $sessionOutput -Raw | ConvertFrom-Json
+    $firstExitSkip = @($session.skippedItems | Where-Object { [int]$_.processId -eq [int]$firstChange.changedItem.processId -and [string]$_.reason -like '*exited*' }) | Select-Object -First 1
+    $secondChanged = @($session.changedItems | Where-Object { [int]$_.processId -eq $relaunchSecond.Id }) | Select-Object -First 1
+    $backupBeforeRestoreCount = Get-ReliabilityBackupFileCount -Path $relaunchRoot
+    if ($firstExitSkip -and -not $secondChanged -and $backupBeforeRestoreCount -eq 1) {
+        Add-Pass "Relaunch session tracked exited first PID without applying to same-name replacement: firstPid=$($firstChange.changedItem.processId) secondPid=$($relaunchSecond.Id) backups=$backupBeforeRestoreCount"
+    } else {
+        Add-Failure "Relaunch session did not prove exited-PID isolation: firstSkip=$([bool]$firstExitSkip), secondChanged=$([bool]$secondChanged), backups=$backupBeforeRestoreCount"
+    }
+
+    $restore = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $session.backupManifestPath -ConfirmApply | ConvertFrom-Json
+    $afterRestoreSecond = Get-RooProcessControlState $relaunchSecond.Id $null
+    $secondRestored = @($restore.restoredItems | Where-Object { [int]$_.processId -eq $relaunchSecond.Id }) | Select-Object -First 1
+    $firstRestoreSkip = @($restore.skippedItems | Where-Object { [int]$_.processId -eq [int]$firstChange.changedItem.processId }) | Select-Object -First 1
+    if (-not $secondRestored -and $firstRestoreSkip -and $afterRestoreSecond.priorityClass -eq $beforeSecond.priorityClass) {
+        Add-Pass "Relaunch restore skipped exited PID and did not restore onto same-name replacement: secondPid=$($relaunchSecond.Id) priority=$($afterRestoreSecond.priorityClass)"
+    } else {
+        Add-Failure "Relaunch restore touched the wrong process or missed the exited-PID skip: secondRestored=$([bool]$secondRestored), firstSkip=$([bool]$firstRestoreSkip), secondPriority=$($afterRestoreSecond.priorityClass), expected=$($beforeSecond.priorityClass)"
+    }
+
+    Stop-ReliabilityProbe -Process $relaunchSecond
+    $relaunchSecond = $null
+    $fullRelaunchRoot = [System.IO.Path]::GetFullPath($relaunchRoot)
+    $removedRelaunchRoot = Remove-ReliabilityTempRoot -Path $relaunchRoot
+    $relaunchCleanupDone = $true
+    if ($removedRelaunchRoot -and -not (Test-Path -LiteralPath $fullRelaunchRoot)) {
+        Add-Pass 'Relaunch scenario temp state root and backup were cleaned up'
+    } else {
+        Add-Failure "Relaunch scenario temp root remained: $fullRelaunchRoot"
+    }
+
+    $leftoverRelaunchProbes = @(Get-ReliabilityProbeProcesses)
+    if ($leftoverRelaunchProbes.Count -eq 0) {
+        Add-Pass 'Relaunch scenario left no disposable probe process behind'
+    } else {
+        Add-Failure "Relaunch scenario left disposable probe process(es): $(@($leftoverRelaunchProbes | ForEach-Object { $_.Id }) -join ', ')"
+    }
+
+    $stateAfterRelaunch = Get-StateEntryCount
+    if ($stateAfterRelaunch -eq 0) {
+        Add-Pass 'backend/state is empty after relaunch reliability validation'
+    } else {
+        Add-Failure "backend/state is not empty after relaunch reliability validation: count=$stateAfterRelaunch"
+    }
+} catch {
+    Add-Failure "Relaunch reliability validation failed: $($_.Exception.Message)"
+} finally {
+    if ($relaunchSessionProc -and -not $relaunchSessionProc.HasExited) {
+        Stop-Process -Id $relaunchSessionProc.Id -Force -ErrorAction SilentlyContinue
+        Wait-Process -Id $relaunchSessionProc.Id -Timeout 5 -ErrorAction SilentlyContinue
+    }
+    Stop-ReliabilityProbe -Process $relaunchFirst
+    Stop-ReliabilityProbe -Process $relaunchSecond
+    if (-not $relaunchCleanupDone) {
+        Remove-ReliabilityTempRoot -Path $relaunchRoot | Out-Null
+    }
 }
 
 Write-Host ''

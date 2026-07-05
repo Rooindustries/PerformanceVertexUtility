@@ -702,12 +702,28 @@ function Get-RooProcessGovernorLiveIdentity {
             if (-not $pathMatches) { $pathReason = 'Live process path does not match the session entry.' }
         }
     }
-    $matches = ($nameMatches -and $pathMatches)
-    $reason = if ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the session entry.' } else { $pathReason }
+    $controlState = Get-RooProcessControlState $processId $null
+    $expectedStartTimeUtc = [string](Get-RooPropertyValue $Entry 'processStartTimeUtc' (Get-RooPropertyValue $Entry 'startTimeUtc' ''))
+    $currentStartTimeUtc = [string](Get-RooPropertyValue $controlState 'startTimeUtc' '')
+    $startTimeMatches = $true
+    $startTimeReason = $null
+    if (-not [string]::IsNullOrWhiteSpace($expectedStartTimeUtc)) {
+        if ([string]::IsNullOrWhiteSpace($currentStartTimeUtc)) {
+            $startTimeMatches = $false
+            $startTimeReason = 'Live process start time could not be verified.'
+        } elseif ($currentStartTimeUtc -ne $expectedStartTimeUtc) {
+            $startTimeMatches = $false
+            $startTimeReason = 'Live process start time does not match the session entry.'
+        }
+    }
+    $matches = ($nameMatches -and $pathMatches -and $startTimeMatches)
+    $reason = if ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the session entry.' } elseif (-not $pathMatches) { $pathReason } else { $startTimeReason }
     return [pscustomobject]@{
         exists = $true
         matches = $matches
         process = $live
+        currentControlState = $controlState
+        processStartTimeUtc = $controlState.startTimeUtc
         currentPath = $currentPath
         reason = $reason
     }

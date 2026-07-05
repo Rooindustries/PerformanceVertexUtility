@@ -160,27 +160,39 @@ try {
                 continue
             }
 
-            $snapshotKey = "$([int](Get-RooPropertyValue $entry 'processId' 0))|$([string](Get-RooPropertyValue $entry 'processName' ''))|$([string](Get-RooPropertyValue $entry 'executablePath' ''))"
+            $livePlan = Get-RooApplicableProcessControlChanges $entryControlChanges $identity.currentControlState
+            foreach ($skippedControl in @(Get-RooPropertyArray $livePlan 'skippedControls')) {
+                $skip = New-RooGameTuneSkippedItem $entry ([string](Get-RooPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
+                $skipped.Add($skip) | Out-Null
+                $pollSkipped.Add($skip) | Out-Null
+            }
+            $entryControlChanges = @(Get-RooPropertyArray $livePlan 'changes')
+            if ($entryControlChanges.Count -eq 0) {
+                continue
+            }
+
+            $snapshotKey = "$([int](Get-RooPropertyValue $entry 'processId' 0))|$([string](Get-RooPropertyValue $entry 'processName' ''))|$([string](Get-RooPropertyValue $entry 'executablePath' ''))|$([string]$identity.processStartTimeUtc)"
             $originalState = [pscustomobject]@{
-                priorityClass = [string]$identity.currentPriorityClass
-                affinityMask = $identity.currentAffinityMask
-                ioPriority = $identity.currentIoPriority
-                gpuPriority = $identity.currentGpuPriority
+                priorityClass = Get-RooPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
+                affinityMask = Get-RooPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
+                ioPriority = Get-RooPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
+                gpuPriority = Get-RooPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
             }
             if (-not $snapshotKeys.Contains($snapshotKey)) {
                 $snapshot = [pscustomobject]@{
                     processId = [int](Get-RooPropertyValue $entry 'processId' 0)
                     processName = [string](Get-RooPropertyValue $entry 'processName' '')
                     executablePath = Get-RooPropertyValue $entry 'executablePath' $identity.currentPath
-                    originalPriorityClass = [string]$identity.currentPriorityClass
+                    originalPriorityClass = Get-RooPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
                     proposedPriorityClass = Get-RooPropertyValue $entry 'proposedPriorityClass' $null
-                    originalAffinityMask = $identity.currentAffinityMask
+                    originalAffinityMask = Get-RooPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
                     proposedAffinityMask = Get-RooPropertyValue $entry 'proposedAffinityMask' $null
-                    originalIoPriority = $identity.currentIoPriority
+                    originalIoPriority = Get-RooPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
                     proposedIoPriority = Get-RooPropertyValue $entry 'proposedIoPriority' $null
-                    originalGpuPriority = $identity.currentGpuPriority
+                    originalGpuPriority = Get-RooPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
                     proposedGpuPriority = Get-RooPropertyValue $entry 'proposedGpuPriority' $null
                     controlChanges = @($entryControlChanges)
+                    processStartTimeUtc = $identity.processStartTimeUtc
                     capturedAtUtc = Get-RooUtcStamp
                     profileId = $profileId
                     ruleId = [string](Get-RooPropertyValue $entry 'ruleId' '')

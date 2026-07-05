@@ -1,0 +1,163 @@
+{
+  "actionId": "performance.policy.auditHistory",
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "capturedAtUtc": "2026-06-15T18:47:55.0000000Z",
+  "status": "completed",
+  "stateRoot": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy",
+  "auditPath": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-audit\\audit.jsonl",
+  "filters": {
+    "process": "ContosoLauncherHelper.exe",
+    "action": null,
+    "since": "2026-06-15T18:40:00.0000000Z"
+  },
+  "summary": {
+    "rowCount": 4,
+    "totalRowCount": 7,
+    "processIdentityCount": 1,
+    "actions": [
+      {
+        "action": "apply",
+        "count": 2
+      },
+      {
+        "action": "preview",
+        "count": 1
+      },
+      {
+        "action": "restore",
+        "count": 1
+      }
+    ],
+    "outcomes": [
+      {
+        "outcome": "applied",
+        "count": 2
+      },
+      {
+        "outcome": "previewed",
+        "count": 1
+      },
+      {
+        "outcome": "restored",
+        "count": 1
+      }
+    ]
+  },
+  "auditRows": [
+    {
+      "schemaVersion": 1,
+      "auditId": "process-policy-audit-7f1e5b5d4d564449a0e59d05cda1a101",
+      "timestampUtc": "2026-06-15T18:42:10.0000000Z",
+      "action": "preview",
+      "source": "processPolicyRuleLifecycle",
+      "ruleId": "rule-contoso-launcher-helper-balanced",
+      "sessionId": null,
+      "targetProcessIdentity": "ContosoLauncherHelper.exe:4280",
+      "targetProcess": {
+        "identity": "ContosoLauncherHelper.exe:4280",
+        "processId": 4280,
+        "processName": "ContosoLauncherHelper.exe",
+        "executablePath": "C:\\Program Files\\Contoso Game\\Launcher\\ContosoLauncherHelper.exe",
+        "publisher": "Contoso Game Studios"
+      },
+      "control": "priorityClass",
+      "beforeValue": "Normal",
+      "afterValue": "BelowNormal",
+      "reason": "Apply saved process policy priority class.",
+      "protectionCategory": "backgroundApp",
+      "restore": {
+        "available": false,
+        "path": null
+      },
+      "outcome": "previewed",
+      "dryRun": true
+    },
+    {
+      "schemaVersion": 1,
+      "auditId": "process-policy-audit-3d58fb99f9a44d1bb3ed8244a46fa8d5",
+      "timestampUtc": "2026-06-15T18:44:21.0000000Z",
+      "action": "apply",
+      "source": "processPolicyRuleLifecycle",
+      "ruleId": "rule-contoso-launcher-helper-balanced",
+      "sessionId": null,
+      "targetProcessIdentity": "ContosoLauncherHelper.exe:4280",
+      "targetProcess": {
+        "identity": "ContosoLauncherHelper.exe:4280",
+        "processId": 4280,
+        "processName": "ContosoLauncherHelper.exe",
+        "executablePath": "C:\\Program Files\\Contoso Game\\Launcher\\ContosoLauncherHelper.exe",
+        "publisher": "Contoso Game Studios"
+      },
+      "control": "priorityClass",
+      "beforeValue": "Normal",
+      "afterValue": "BelowNormal",
+      "reason": "Apply saved process policy priority class.",
+      "protectionCategory": "backgroundApp",
+      "restore": {
+        "available": true,
+        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+      },
+      "outcome": "applied",
+      "dryRun": false
+    },
+    {
+      "schemaVersion": 1,
+      "auditId": "process-policy-audit-f9d2a12ccdf1418c83d0f475fc852f94",
+      "timestampUtc": "2026-06-15T18:44:21.0000000Z",
+      "action": "apply",
+      "source": "processPolicyRuleLifecycle",
+      "ruleId": "rule-contoso-launcher-helper-balanced",
+      "sessionId": null,
+      "targetProcessIdentity": "ContosoLauncherHelper.exe:4280",
+      "targetProcess": {
+        "identity": "ContosoLauncherHelper.exe:4280",
+        "processId": 4280,
+        "processName": "ContosoLauncherHelper.exe",
+        "executablePath": "C:\\Program Files\\Contoso Game\\Launcher\\ContosoLauncherHelper.exe",
+        "publisher": "Contoso Game Studios"
+      },
+      "control": "ioPriority",
+      "beforeValue": "Normal",
+      "afterValue": "Low",
+      "reason": "Apply saved process policy I/O priority.",
+      "protectionCategory": "backgroundApp",
+      "restore": {
+        "available": true,
+        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+      },
+      "outcome": "applied",
+      "dryRun": false
+    },
+    {
+      "schemaVersion": 1,
+      "auditId": "process-policy-audit-89ec454f89dc4e21a4eb85d92239d4b0",
+      "timestampUtc": "2026-06-15T18:47:03.0000000Z",
+      "action": "restore",
+      "source": "processPolicyRuleLifecycle",
+      "ruleId": "rule-contoso-launcher-helper-balanced",
+      "sessionId": null,
+      "targetProcessIdentity": "ContosoLauncherHelper.exe:4280",
+      "targetProcess": {
+        "identity": "ContosoLauncherHelper.exe:4280",
+        "processId": 4280,
+        "processName": "ContosoLauncherHelper.exe",
+        "executablePath": "C:\\Program Files\\Contoso Game\\Launcher\\ContosoLauncherHelper.exe",
+        "publisher": "Contoso Game Studios"
+      },
+      "control": "priorityClass",
+      "beforeValue": "BelowNormal",
+      "afterValue": "Normal",
+      "reason": "Restore original process priority after policy session.",
+      "protectionCategory": "backgroundApp",
+      "restore": {
+        "available": true,
+        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+      },
+      "outcome": "restored",
+      "dryRun": false
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

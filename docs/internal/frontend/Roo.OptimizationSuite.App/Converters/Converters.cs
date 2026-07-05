@@ -44,6 +44,15 @@ public sealed class RiskToBrushConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
 }
 
+public sealed class InverseBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => !(value is bool b && b);
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => !(value is bool b && b);
+}
+
 public sealed class RiskToDisplayConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)

@@ -10,6 +10,80 @@ function Convert-ToUInt64 {
     try { return [uint64]$Value } catch { return [uint64]0 }
 }
 
+function Convert-ToHResultHex {
+    param([object]$Value)
+    if ($null -eq $Value) { return $null }
+    try {
+        $signed = [int]$Value
+        return ('0x{0:X8}' -f [System.BitConverter]::ToUInt32([System.BitConverter]::GetBytes($signed), 0))
+    } catch { return $null }
+}
+
+function Get-ProcessExecutablePath {
+    param([System.Diagnostics.Process]$Process)
+    try {
+        if (-not [string]::IsNullOrWhiteSpace([string]$Process.Path)) {
+            return [string]$Process.Path
+        }
+    } catch { }
+
+    try {
+        if ($null -ne $Process.MainModule -and -not [string]::IsNullOrWhiteSpace([string]$Process.MainModule.FileName)) {
+            return [string]$Process.MainModule.FileName
+        }
+    } catch { }
+
+    return $null
+}
+
+function Get-ProcessInventoryName {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$ExecutablePath
+    )
+
+    try {
+        if ($null -ne $Process.MainModule -and -not [string]::IsNullOrWhiteSpace([string]$Process.MainModule.ModuleName)) {
+            return [string]$Process.MainModule.ModuleName
+        }
+    } catch { }
+
+    if (-not [string]::IsNullOrWhiteSpace($ExecutablePath)) {
+        $fileName = [System.IO.Path]::GetFileName($ExecutablePath)
+        if (-not [string]::IsNullOrWhiteSpace($fileName)) { return $fileName }
+    }
+
+    $name = [string]$Process.ProcessName
+    if ([string]::IsNullOrWhiteSpace($name)) { return '' }
+    if ($Process.Id -eq 0 -and $name -eq 'Idle') { return 'System Idle Process' }
+    if (@('System', 'Registry', 'Secure System', 'Memory Compression') -contains $name) { return $name }
+    if ($name.EndsWith('.exe', [System.StringComparison]::OrdinalIgnoreCase)) { return $name }
+    return "$name.exe"
+}
+
+function Get-ProcessSessionIdSafe {
+    param([System.Diagnostics.Process]$Process)
+    try { return [int]$Process.SessionId } catch { return $null }
+}
+
+function Get-ProcessInventoryFromGetProcess {
+    $items = New-Object System.Collections.Generic.List[object]
+    foreach ($proc in @(Get-Process -ErrorAction Stop)) {
+        $path = Get-ProcessExecutablePath $proc
+        $name = Get-ProcessInventoryName $proc $path
+        $items.Add([pscustomobject]@{
+            ProcessId = [int]$proc.Id
+            Name = $name
+            ExecutablePath = $path
+            CommandLine = $null
+            SessionId = Get-ProcessSessionIdSafe $proc
+            WorkingSetSize = Convert-ToUInt64 $proc.WorkingSet64
+            PrivatePageCount = Convert-ToUInt64 $proc.PrivateMemorySize64
+        }) | Out-Null
+    }
+    return @($items.ToArray())
+}
+
 function Get-ProcessCategory {
     param([string]$Name)
     $n = $Name.ToLowerInvariant()
@@ -63,7 +137,31 @@ function Get-Risk {
     return 'low'
 }
 
-$rawProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+$warnings = New-Object System.Collections.Generic.List[object]
+try {
+    $rawProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+} catch {
+    $rawProcesses = @(Get-ProcessInventoryFromGetProcess)
+    $cimHResult = Convert-ToHResultHex $_.Exception.HResult
+    if ($_.FullyQualifiedErrorId -match '(0x[0-9A-Fa-f]{8})') {
+        $cimHResult = '0x' + $Matches[1].Substring(2).ToUpperInvariant()
+    }
+    $warnings.Add([pscustomobject]@{
+        code = 'PROCESS_INVENTORY_DEGRADED'
+        message = 'Win32_Process CIM enumeration failed; process inventory used Get-Process fallback with commandLine unavailable and executablePath populated only when accessible.'
+        severity = 'warning'
+        source = 'performance.processInventory'
+        target = 'Win32_Process'
+        blocking = $false
+        recommendedAction = 'Run elevated or adjust WMI permissions if command-line inventory is required.'
+        details = [pscustomobject]@{
+            errorId = $_.FullyQualifiedErrorId
+            exceptionType = $_.Exception.GetType().FullName
+            hresult = $cimHResult
+            message = $_.Exception.Message
+        }
+    }) | Out-Null
+}
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
 $processes = New-Object System.Collections.Generic.List[object]
 
@@ -116,12 +214,18 @@ $summary = [pscustomobject]@{
     commitUsedBytes = if ($os) { ([uint64]($os.TotalVirtualMemorySize - $os.FreeVirtualMemory) * 1KB) } else { $null }
 }
 
-[pscustomobject]@{
+$result = [pscustomobject]@{
     schemaVersion = 1
     productName = 'Roo Industries Optimization Suite'
     capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     source = 'local-read-only'
     summary = $summary
     processes = $processArray
-} | ConvertTo-Json -Depth 8
+}
+
+if ($warnings.Count -gt 0) {
+    $result | Add-Member -MemberType NoteProperty -Name warnings -Value @($warnings.ToArray())
+}
+
+$result | ConvertTo-Json -Depth 8
 

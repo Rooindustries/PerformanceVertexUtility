@@ -139,13 +139,19 @@
   "rollbackPolicy": {
     "supported": true,
     "scope": "persistent-process-policy-controls",
-    "stateRoot": "backend\\state",
+    "stateRoot": "runtimeStateRoot",
     "restoreOriginalPriorityClass": true,
     "restoreOriginalAffinityMask": true,
     "restoreOriginalIoPriority": true,
     "restoreOriginalGpuPriority": true,
     "keepLatestCount": 10,
     "minimumDays": 14
+  },
+  "ruleLifecycle": {
+    "ruleStore": "process-policy-rules\\rules.json",
+    "auditHistory": "process-policy-audit\\audit.jsonl",
+    "backupManifests": "process-policy-rule-backups",
+    "allowConfirmedApply": false
   },
   "safety": {
     "confirmedApplyChanges": [
