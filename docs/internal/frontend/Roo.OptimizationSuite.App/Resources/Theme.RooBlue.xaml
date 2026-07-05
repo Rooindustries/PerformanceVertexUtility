@@ -2,14 +2,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Color x:Key="SystemAccentColor">#22D3EE</Color>
-    <Color x:Key="SystemAccentColorLight1">#67E8F9</Color>
-    <Color x:Key="SystemAccentColorLight2">#A5F3FC</Color>
-    <Color x:Key="SystemAccentColorLight3">#CFFAFE</Color>
-    <Color x:Key="SystemAccentColorDark1">#0891B2</Color>
-    <Color x:Key="SystemAccentColorDark2">#0E7490</Color>
-    <Color x:Key="SystemAccentColorDark3">#155E75</Color>
-
     <SolidColorBrush x:Key="RooCanvasBrush" Color="#020617" />
     <SolidColorBrush x:Key="RooCanvasDeepBrush" Color="#000040" />
     <LinearGradientBrush x:Key="RooAppBackgroundBrush" StartPoint="0,1" EndPoint="0,0">
