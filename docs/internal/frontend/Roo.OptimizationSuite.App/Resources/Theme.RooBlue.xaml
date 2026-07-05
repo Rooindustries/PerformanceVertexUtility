@@ -1,0 +1,135 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="SystemAccentColor">#22D3EE</Color>
+    <Color x:Key="SystemAccentColorLight1">#67E8F9</Color>
+    <Color x:Key="SystemAccentColorLight2">#A5F3FC</Color>
+    <Color x:Key="SystemAccentColorLight3">#CFFAFE</Color>
+    <Color x:Key="SystemAccentColorDark1">#0891B2</Color>
+    <Color x:Key="SystemAccentColorDark2">#0E7490</Color>
+    <Color x:Key="SystemAccentColorDark3">#155E75</Color>
+
+    <SolidColorBrush x:Key="RooCanvasBrush" Color="#020617" />
+    <SolidColorBrush x:Key="RooCanvasDeepBrush" Color="#000040" />
+    <LinearGradientBrush x:Key="RooAppBackgroundBrush" StartPoint="0,1" EndPoint="0,0">
+        <GradientStop Offset="0.0" Color="#00B7C0" />
+        <GradientStop Offset="0.3" Color="#006185" />
+        <GradientStop Offset="0.65" Color="#001F5A" />
+        <GradientStop Offset="1.0" Color="#000040" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="RooSurfaceBrush" Color="#07162D" />
+    <SolidColorBrush x:Key="RooSurfaceElevatedBrush" Color="#061226" />
+    <SolidColorBrush x:Key="RooSurfaceInputBrush" Color="#0C162A" />
+    <SolidColorBrush x:Key="RooSurfaceHoverBrush" Color="#0DFFFFFF" />
+
+    <LinearGradientBrush x:Key="RooSurfaceCardBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#E007162D" />
+        <GradientStop Offset="1.0" Color="#B8061226" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RooGlassBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#E007162D" />
+        <GradientStop Offset="1.0" Color="#B8061226" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RooGlassMenuBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#F2061226" />
+        <GradientStop Offset="1.0" Color="#E0061226" />
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="RooGlassHighlightBrush" Color="#14BAE6FD" />
+
+    <SolidColorBrush x:Key="RooBorderBrush" Color="#1AFFFFFF" />
+    <SolidColorBrush x:Key="RooBorderStrongBrush" Color="#7394A3B8" />
+    <SolidColorBrush x:Key="RooBorderAccentBrush" Color="#4C67E8F9" />
+
+    <SolidColorBrush x:Key="RooTextPrimaryBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="RooTextSecondaryBrush" Color="#D9FFFFFF" />
+    <SolidColorBrush x:Key="RooTextMutedBrush" Color="#8CFFFFFF" />
+    <SolidColorBrush x:Key="RooTextDisplayBrush" Color="#22D3EE" />
+    <SolidColorBrush x:Key="RooTextAccentBrush" Color="#67E8F9" />
+
+    <SolidColorBrush x:Key="RooAccentBrush" Color="#22D3EE" />
+    <SolidColorBrush x:Key="RooAccentStrongBrush" Color="#0284C7" />
+    <SolidColorBrush x:Key="RooAccentGlowBrush" Color="#03E9F4" />
+    <SolidColorBrush x:Key="RooAccentSoftBrush" Color="#8067E8F9" />
+    <SolidColorBrush x:Key="RooOnAccentBrush" Color="#000000" />
+    <SolidColorBrush x:Key="RooOnCtaBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="RooControlBorderBrush" Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="RooFocusVisualBrush" Color="#B367E8F9" />
+    <LinearGradientBrush x:Key="RooPrimaryButtonBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#38BDF8" />
+        <GradientStop Offset="0.38" Color="#0284C7" />
+        <GradientStop Offset="1.0" Color="#1D4ED8" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="RooSuccessBrush" Color="#34D399" />
+    <SolidColorBrush x:Key="RooWarningBrush" Color="#FBBF24" />
+    <SolidColorBrush x:Key="RooDangerBrush" Color="#F87171" />
+    <SolidColorBrush x:Key="RooInfoBrush" Color="#38BDF8" />
+
+    <SolidColorBrush x:Key="RiskSafeBrush" Color="#34D399" />
+    <SolidColorBrush x:Key="RiskSafeSoftBrush" Color="#1A10B981" />
+    <SolidColorBrush x:Key="RiskSafeBorderBrush" Color="#7310B981" />
+
+    <SolidColorBrush x:Key="RiskLowBrush" Color="#38BDF8" />
+    <SolidColorBrush x:Key="RiskLowSoftBrush" Color="#1A0EA5E9" />
+    <SolidColorBrush x:Key="RiskLowBorderBrush" Color="#6622D3EE" />
+
+    <SolidColorBrush x:Key="RiskMediumBrush" Color="#FBBF24" />
+    <SolidColorBrush x:Key="RiskMediumSoftBrush" Color="#24FBBF24" />
+    <SolidColorBrush x:Key="RiskMediumBorderBrush" Color="#66FBBF24" />
+
+    <SolidColorBrush x:Key="RiskHighBrush" Color="#F87171" />
+    <SolidColorBrush x:Key="RiskHighSoftBrush" Color="#1AEF4444" />
+    <SolidColorBrush x:Key="RiskHighBorderBrush" Color="#73EF4444" />
+
+    <SolidColorBrush x:Key="RiskProtectedBrush" Color="#22D3EE" />
+    <SolidColorBrush x:Key="RiskProtectedSoftBrush" Color="#1A22D3EE" />
+    <SolidColorBrush x:Key="RiskProtectedBorderBrush" Color="#4C67E8F9" />
+
+    <SolidColorBrush x:Key="RiskBlockedBrush" Color="#F87171" />
+    <SolidColorBrush x:Key="RiskBlockedSoftBrush" Color="#1AEF4444" />
+    <SolidColorBrush x:Key="RiskBlockedBorderBrush" Color="#73EF4444" />
+
+    <SolidColorBrush x:Key="RiskNeutralBrush" Color="#8CFFFFFF" />
+    <SolidColorBrush x:Key="RiskNeutralSoftBrush" Color="#0DFFFFFF" />
+    <SolidColorBrush x:Key="RiskNeutralBorderBrush" Color="#7394A3B8" />
+
+    <LinearGradientBrush x:Key="RooNavCtaBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#06B6D4" />
+        <GradientStop Offset="1.0" Color="#3B82F6" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RooNavCtaHoverBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#22D3EE" />
+        <GradientStop Offset="1.0" Color="#60A5FA" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="RooTopHairlineBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#00000000" />
+        <GradientStop Offset="0.5" Color="#8067E8F9" />
+        <GradientStop Offset="1.0" Color="#00000000" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="RooDisplayTextBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#38BDF8" />
+        <GradientStop Offset="1.0" Color="#3B82F6" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RooMetalDisplayBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#FFFFFF" />
+        <GradientStop Offset="1.0" Color="#D7E6F7" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RooGoldFlairBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#FDE68A" />
+        <GradientStop Offset="0.5" Color="#FDBA74" />
+        <GradientStop Offset="1.0" Color="#FDE68A" />
+    </LinearGradientBrush>
+
+    <RadialGradientBrush x:Key="RooAppRadialBrush" Center="0.5,0.0" GradientOrigin="0.5,0.0" RadiusX="1.1" RadiusY="0.85">
+        <GradientStop Offset="0.0" Color="#400EA5E9" />
+        <GradientStop Offset="1.0" Color="#000EA5E9" />
+    </RadialGradientBrush>
+
+    <SolidColorBrush x:Key="RooNavbarBorderRestBrush" Color="#0DFFFFFF" />
+    <SolidColorBrush x:Key="RooNavbarBorderScrolledBrush" Color="#1A67E8F9" />
+
+</ResourceDictionary>

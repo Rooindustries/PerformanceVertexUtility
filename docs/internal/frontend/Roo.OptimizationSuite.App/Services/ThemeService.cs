@@ -15,11 +15,12 @@ public sealed class ThemeService
     private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
     private const string StylesProbeKey = "PanelBorderStyle";
 
+    public static readonly ThemeOption RooBlue = new("roo-blue", "Roo Blue", "ms-appx:///Resources/Theme.RooBlue.xaml");
     public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
 
     private readonly SettingsStore _settings;
 
-    public IReadOnlyList<ThemeOption> Options { get; } = new[] { BlackoutGold };
+    public IReadOnlyList<ThemeOption> Options { get; } = new[] { RooBlue, BlackoutGold };
     public string CurrentThemeId { get; private set; } = BlackoutGold.Id;
     public bool ReducedEffects { get; private set; }
 

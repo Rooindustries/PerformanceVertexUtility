@@ -25,7 +25,7 @@
                             <StackPanel Grid.Column="1" Spacing="7">
                                 <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Blackout Gold, capability sources, and safety gates." FontSize="13" LineHeight="19"
+                                <TextBlock Text="Theme, capability sources, and safety gates." FontSize="13" LineHeight="19"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
@@ -36,13 +36,22 @@
                     <StackPanel Spacing="14">
                         <TextBlock Text="APPEARANCE" Style="{StaticResource PanelLabelTextBlockStyle}"
                                    Foreground="{StaticResource RooTextMutedBrush}" TextWrapping="Wrap" />
-                        <StackPanel Spacing="5">
-                            <TextBlock Text="Theme" FontWeight="SemiBold" TextWrapping="Wrap"
-                                       Foreground="{StaticResource RooTextPrimaryBrush}" />
-                            <TextBlock Text="Blackout Gold is the only theme in this build." Style="{StaticResource CaptionTextBlockStyle}"
-                                       TextWrapping="Wrap"
-                                       Foreground="{StaticResource RooTextMutedBrush}" />
-                        </StackPanel>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="Theme" FontWeight="SemiBold" TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="Roo Blue or Blackout Gold. Applies right away — no restart." Style="{StaticResource CaptionTextBlockStyle}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" MinWidth="200" VerticalAlignment="Center"
+                                      ItemsSource="{x:Bind ViewModel.Themes}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                      SelectedValue="{x:Bind ViewModel.SelectedThemeId, Mode=TwoWay}" />
+                        </Grid>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -51,7 +60,7 @@
                             <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
                                 <TextBlock Text="Reduced effects" FontWeight="SemiBold" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Turns down glow and blur while keeping the Blackout Gold palette."
+                                <TextBlock Text="Turns down glow and blur while keeping your theme's palette."
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            TextWrapping="Wrap"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
