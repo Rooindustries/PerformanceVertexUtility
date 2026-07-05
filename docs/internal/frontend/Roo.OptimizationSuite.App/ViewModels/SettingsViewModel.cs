@@ -22,14 +22,14 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string _capabilitySourceState = "protected";
 
     public string Tagline => "Precision Performance Engineering";
-    public IReadOnlyList<ThemeOption> Themes { get; } = new[] { ThemeService.BlackoutGold };
+    public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
     public ObservableCollection<SafetyRow> SafetyRows { get; } = new();
     public ObservableCollection<StatusLine> EngineRows { get; } = new();
     public ObservableCollection<StatusLine> SensorRows { get; } = new();
 
     public SettingsViewModel()
     {
-        _selectedThemeId = ThemeService.BlackoutGold.Id;
+        _selectedThemeId = App.Theme.CurrentThemeId;
         _reducedEffects = App.Theme.ReducedEffects;
     }
 
