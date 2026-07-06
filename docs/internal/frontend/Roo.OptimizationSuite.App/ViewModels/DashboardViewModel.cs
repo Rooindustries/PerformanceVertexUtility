@@ -12,7 +12,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class DashboardViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _verdictHeadline = "Reading capability registry";
+    [ObservableProperty] private string _verdictHeadline = "Reading what this PC supports";
     [ObservableProperty] private string _verdictLevel = "medium";
     [ObservableProperty] private string? _verdictSummary;
     [ObservableProperty] private string? _driverNote;
@@ -25,7 +25,7 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private int _unavailableCapabilityCount;
     [ObservableProperty] private int _readyLiveCount;
     [ObservableProperty] private int _reviewOnlyCount;
-    [ObservableProperty] private string _nextActionsSummary = "Reading the capability registry.";
+    [ObservableProperty] private string _nextActionsSummary = "Reading what this PC supports.";
     [ObservableProperty] private string _nextActionsCountText = "0 ready";
     [ObservableProperty] private bool _hasNextActions;
 
@@ -100,9 +100,9 @@ public partial class DashboardViewModel : PageViewModelBase
         ReadinessCards.Clear();
         ReadinessCards.Add(new DashboardCard(
             "capability-registry",
-            "Capability registry",
+            "Optimization catalog",
             TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities",
-            "Counts come from the router registry across the four optimizer pages.",
+            "Counts cover every optimizer page on this PC.",
             TotalCapabilityCount > 0 ? "safe" : "neutral"));
         ReadinessCards.Add(new DashboardCard(
             "ready-live",
@@ -223,7 +223,7 @@ public partial class DashboardViewModel : PageViewModelBase
         var gpu = CleanDevice(hw?.Gpus?.FirstOrDefault()?.Name);
         var parts = new List<string>
         {
-            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " registry capabilities across four pages",
+            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " optimizations cataloged across the optimizer pages",
             AvailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " available",
             ReviewOnlyCount.ToString(CultureInfo.InvariantCulture) + " review-only",
             UnavailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " unavailable here",
@@ -247,10 +247,10 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         VerdictHeadline = ReadyLiveCount > 0
             ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live capabilities are ready on this PC."
-            : "Capability registry is loaded.";
+            : "Optimization catalog is loaded.";
         VerdictLevel = ReadyLiveCount > 0 ? "safe" : "protected";
         VerdictSummary = TotalCapabilityCount.ToString(CultureInfo.InvariantCulture)
-            + " registry capabilities loaded. Process and memory inventory did not return data.";
+            + " optimizations cataloged. Process and memory inventory did not return data.";
 
         MemoryUsedPercent = 0;
         MemoryPressureLabel = "Not measured";

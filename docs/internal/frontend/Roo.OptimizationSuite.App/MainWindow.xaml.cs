@@ -16,8 +16,12 @@ public sealed partial class MainWindow : Window
         ["dashboard"] = typeof(DashboardPage),
         ["profiles"] = typeof(PerformanceProfilesPage),
         ["uninstall"] = typeof(UninstallCleanupPage),
+        ["startup"] = typeof(StartupServicesPage),
         ["drivers"] = typeof(DriversProfilesPage),
+        ["memory"] = typeof(MemoryLatencyPage),
         ["monitoring"] = typeof(MonitoringPage),
+        ["tools"] = typeof(ToolsDiagnosticsPage),
+        ["restore"] = typeof(RestoreLogsPage),
     };
 
     private string _currentTag;
