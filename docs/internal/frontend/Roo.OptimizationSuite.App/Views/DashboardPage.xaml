@@ -116,14 +116,14 @@
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading capability registry" Foreground="{StaticResource RooTextMutedBrush}" />
+            <TextBlock Text="Reading what this PC supports" Foreground="{StaticResource RooTextMutedBrush}" />
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
                 Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read the capability registry yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                <TextBlock Text="Can't read optimization status yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
                            Foreground="{StaticResource RooTextPrimaryBrush}" />
                 <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
                            Foreground="{StaticResource RooTextSecondaryBrush}" />

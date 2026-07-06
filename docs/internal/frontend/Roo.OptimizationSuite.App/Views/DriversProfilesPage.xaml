@@ -48,7 +48,7 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <TextBlock Text="Drivers &amp; NVIDIA" FontSize="22" FontWeight="SemiBold"
+                                <TextBlock Text="Drivers &amp; GPU" FontSize="22" FontWeight="SemiBold"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" MaxWidth="500" />

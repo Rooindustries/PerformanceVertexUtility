@@ -42,7 +42,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
         VersionText = "Build " + ContractVersion(product.BackendPackageVersion);
-        EngineStatus = "Capability readiness comes from the router registry. Review, approval, and restore state stay visible before any action.";
+        EngineStatus = "Roo checks what this PC supports before showing an action. Review, approval, and restore state stay visible before anything changes.";
         DataSourceStatus = App.Live.ScriptsAvailable ? "Live scripts available on this PC" : "Bundled sample data because backend scripts were not found";
         DataSourceState = App.Live.ScriptsAvailable ? "safe" : "protected";
 
@@ -55,8 +55,8 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         EngineRows.Clear();
         SensorRows.Clear();
-        EngineRows.Add(new StatusLine("Capability registry", CapabilitySourceStatus ?? "Capability registry not loaded", CapabilitySourceState));
-        EngineRows.Add(new StatusLine("Capability labels", "From the capability label map", "protected"));
+        EngineRows.Add(new StatusLine("Optimization catalog", CapabilitySourceStatus ?? "Optimization catalog not loaded", CapabilitySourceState));
+        EngineRows.Add(new StatusLine("Action names", "Plain-language names for every optimization", "protected"));
         EngineRows.Add(new StatusLine("Live data", DataSourceStatus ?? "Bundled sample data because backend scripts were not found", DataSourceState));
 
         var providers = new List<ProviderStatus>();

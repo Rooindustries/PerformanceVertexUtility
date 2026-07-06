@@ -248,7 +248,7 @@
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="12">
                                 <StackPanel Spacing="7">
-                                    <TextBlock Text="Clean Junk"
+                                    <TextBlock Text="Apps &amp; Cleanup"
                                                FontSize="22"
                                                FontWeight="SemiBold"
                                                TextWrapping="Wrap"
@@ -325,7 +325,7 @@
                                 <TextBlock Text="CAPABILITIES"
                                            Style="{StaticResource PanelLabelTextBlockStyle}"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
-                                <TextBlock Text="Cleanup rows come from the capability registry and explain route. Official Uninstall, Leftover Scan, and Device Cleanup show their real route status."
+                                <TextBlock Text="Official Uninstall, Leftover Scan, and Device Cleanup are listed with their live readiness on this PC."
                                            FontSize="13"
                                            LineHeight="19"
                                            TextWrapping="Wrap"

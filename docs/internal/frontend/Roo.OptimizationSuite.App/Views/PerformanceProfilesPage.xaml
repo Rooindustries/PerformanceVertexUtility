@@ -179,7 +179,7 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <TextBlock Text="Process Controls" FontSize="22" FontWeight="SemiBold"
+                                <TextBlock Text="Process Control" FontSize="22" FontWeight="SemiBold"
                                            Foreground="{StaticResource RooTextPrimaryBrush}" />
                                 <Grid ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
