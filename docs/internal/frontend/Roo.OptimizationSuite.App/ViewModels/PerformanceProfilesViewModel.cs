@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -26,7 +26,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private static readonly string[] CandidateCategories =
         { "browserWebView", "launcher", "vendorUtility", "backgroundApp" };
 
-    [ObservableProperty] private string _headerStatus = "No active tuning — ready";
+    [ObservableProperty] private string _headerStatus = "No active tuning â€” ready";
     [ObservableProperty] private string _headerStatusState = "neutral";
     [ObservableProperty] private string _foregroundTarget = "No game detected in the foreground yet.";
     [ObservableProperty] private string _lede =
@@ -75,14 +75,10 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         var all = await App.Capabilities.GetCapabilitiesAsync();
         _capabilities = App.Capabilities.ForPage(PageName, all);
 
-        var classification = await App.Live.GetProcessClassificationAsync()
-            ?? await TryLoadSample(Data.GetProcessClassificationAsync);
-        var preview = await App.Live.GetProcessProfilePreviewAsync()
-            ?? await TryLoadSample(Data.GetProcessProfilePreviewAsync);
-        var session = await App.Live.GetGameTuneSessionStatusAsync()
-            ?? await TryLoadSample(Data.GetGameTuneSessionStatusAsync);
-        var governor = await App.Live.GetProcessGovernorSessionStatusAsync()
-            ?? await TryLoadSample(Data.GetProcessGovernorSessionStatusAsync);
+        var classification = await App.Live.GetProcessClassificationAsync();
+        var preview = await App.Live.GetProcessProfilePreviewAsync();
+        var session = await App.Live.GetGameTuneSessionStatusAsync();
+        var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
 
         BuildForeground(classification, preview);
         BuildTuningControls(preview, governor);
@@ -230,7 +226,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             AppliedChanges.Add(new ChangeRow(
                 string.IsNullOrWhiteSpace(row.DisplayName) ? Naming.FriendlyName(row.ProcessName) : row.DisplayName!,
                 RoleFor(row),
-                row.Protected ? "—" : before,
+                row.Protected ? "â€”" : before,
                 after,
                 chip,
                 state));
@@ -255,7 +251,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             SessionTitle = "No active session";
             SessionState = "neutral";
             SessionCaption = "Preview to see exactly what changes before anything is applied.";
-            HeaderStatus = "No active tuning — ready";
+            HeaderStatus = "No active tuning â€” ready";
             HeaderStatusState = "neutral";
             return;
         }
@@ -269,15 +265,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         SessionDetails.Add(new SessionDetail("Applied", DescribeApplied(session, governor), "secondary"));
         if (restraints > 0)
         {
-            SessionDetails.Add(new SessionDetail("ProBalance", "On · " + restraints + Plural(restraints, " app", " apps") + " eased", "warning"));
+            SessionDetails.Add(new SessionDetail("ProBalance", "On Â· " + restraints + Plural(restraints, " app", " apps") + " eased", "warning"));
         }
         SessionDetails.Add(new SessionDetail("Protected", DescribeProtectedShort(), "info"));
-        SessionDetails.Add(new SessionDetail("Restore", CanRestore ? "One click · fully reversible" : "Nothing to restore yet", CanRestore ? "success" : "neutral"));
+        SessionDetails.Add(new SessionDetail("Restore", CanRestore ? "One click Â· fully reversible" : "Nothing to restore yet", CanRestore ? "success" : "neutral"));
 
         SessionCaption = "Auto-restores when " + _targetGameName + " closes.";
         HeaderStatus = active
-            ? "Session active — game priority boost on " + _targetGameName
-            : "Restorable session — game priority boost on " + _targetGameName;
+            ? "Session active â€” game priority boost on " + _targetGameName
+            : "Restorable session â€” game priority boost on " + _targetGameName;
         HeaderStatusState = active ? "safe" : "low";
         _ = changed;
     }
@@ -294,7 +290,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 "Applied",
                 "low",
                 DisplayNameOf(item),
-                "CPU  " + FriendlyPriority(item.OriginalPriorityClass) + " → " + FriendlyPriority(item.AppliedPriorityClass),
+                "CPU  " + FriendlyPriority(item.OriginalPriorityClass) + " â†’ " + FriendlyPriority(item.AppliedPriorityClass),
                 "Reversible",
                 "low"));
         }
@@ -306,7 +302,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 "Restored",
                 "safe",
                 DisplayNameOf(item),
-                "CPU  " + FriendlyPriority(item.AppliedPriorityClass) + " → " + FriendlyPriority(item.RestoredPriorityClass),
+                "CPU  " + FriendlyPriority(item.AppliedPriorityClass) + " â†’ " + FriendlyPriority(item.RestoredPriorityClass),
                 "Done",
                 "safe"));
         }
@@ -318,7 +314,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 appliedTime,
                 "Restrained",
                 "medium",
-                "Background · " + restraints.Count + Plural(restraints.Count, " app", " apps"),
+                "Background Â· " + restraints.Count + Plural(restraints.Count, " app", " apps"),
                 "ProBalance eased",
                 "Reversible",
                 "low"));
@@ -326,8 +322,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         if (History.Count == 0)
         {
-            History.Add(new AuditRow("—", "Ready", "neutral", "No tuning applied yet",
-                "History appears after you apply your first change", "—", "neutral"));
+            History.Add(new AuditRow("â€”", "Ready", "neutral", "No tuning applied yet",
+                "History appears after you apply your first change", "â€”", "neutral"));
         }
     }
 
@@ -353,13 +349,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         ActionBusy = true;
-        ActionStatus = "Reading what would change…";
+        ActionStatus = "Reading what would changeâ€¦";
         try
         {
             var response = await App.Capabilities.PreviewAsync(CapCpuPriority);
             ActionStatus = response is null
                 ? "Preview uses the last local snapshot. Connect the local engine for a live preview."
-                : "Preview ready — review the changes below, then apply when you're set.";
+                : "Preview ready â€” review the changes below, then apply when you're set.";
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -377,7 +373,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         ConfirmKind = "apply";
         ConfirmTitle = "Apply game priority boost?";
-        ConfirmSubtitle = "Nothing is applied until you confirm — every change is one-click reversible.";
+        ConfirmSubtitle = "Nothing is applied until you confirm â€” every change is one-click reversible.";
         ConfirmPrimaryLabel = "Apply changes";
         ConfirmChanges.Clear();
         foreach (var change in AppliedChanges.Where(c => c.After != "Untouched").Take(6))
@@ -390,8 +386,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             ConfirmChanges.Add(new ChangeRow(_targetGameName, "Foreground game", "Normal", "High", "Boost", "low"));
         }
 
-        ConfirmProtected = DescribeProtected() + " stay untouched — protected capture and voice are never boosted, restrained, or demoted.";
-        ConfirmRestore = "One click · auto-restores when the game closes.";
+        ConfirmProtected = DescribeProtected() + " stay untouched â€” protected capture and voice are never boosted, restrained, or demoted.";
+        ConfirmRestore = "One click Â· auto-restores when the game closes.";
         ConfirmTarget = _targetGameName + " (foreground)";
         IsConfirmOpen = true;
     }
@@ -461,7 +457,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         {
             return isRestore
                 ? "Restore is ready. Connect the local engine to run it on this PC."
-                : "Reviewed only — connect the local engine to apply changes on this PC.";
+                : "Reviewed only â€” connect the local engine to apply changes on this PC.";
         }
 
         if (response.Errors is { Count: > 0 })
@@ -478,12 +474,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         if (response.Changed)
         {
-            return isRestore ? "Restored — every process is back to its original value." : "Applied — the game priority boost is live and one-click reversible.";
+            return isRestore ? "Restored â€” every process is back to its original value." : "Applied â€” the game priority boost is live and one-click reversible.";
         }
 
         return isRestore
             ? "Nothing needed restoring; values were already original."
-            : "Reviewed — no changes were needed on this PC right now.";
+            : "Reviewed â€” no changes were needed on this PC right now.";
     }
 
     // ---- helpers ----
@@ -499,7 +495,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (supported.Any(s => s.Contains("io", StringComparison.OrdinalIgnoreCase))) parts.Add("I/O");
             if (supported.Any(s => s.Contains("gpu", StringComparison.OrdinalIgnoreCase))) parts.Add("GPU");
         }
-        return string.Join(" · ", parts);
+        return string.Join(" Â· ", parts);
     }
 
     private string DescribeProtected()

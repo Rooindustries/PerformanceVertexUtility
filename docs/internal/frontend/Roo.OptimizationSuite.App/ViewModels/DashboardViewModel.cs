@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -51,10 +51,8 @@ public partial class DashboardViewModel : PageViewModelBase
         var capabilities = await App.Capabilities.GetCapabilitiesAsync();
         BuildCapabilityOverview(capabilities);
 
-        var inventory = await App.Live.GetProcessInventoryAsync()
-            ?? await TryLoadSample(Data.GetProcessInventoryAsync);
-        var hardware = await App.Live.GetDriverHardwareAsync()
-            ?? await TryLoadSample(Data.GetDriverHardwareAsync);
+        var inventory = await App.Live.GetProcessInventoryAsync();
+        var hardware = await App.Live.GetDriverHardwareAsync();
 
         if (inventory?.Summary is null)
         {
@@ -101,7 +99,7 @@ public partial class DashboardViewModel : PageViewModelBase
         ReadinessCards.Add(new DashboardCard(
             "capability-registry",
             "Optimization catalog",
-            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities",
+            TotalCapabilityCount.ToString(CultureInfo.InvariantCulture) + " optimizations",
             "Counts cover every optimizer page on this PC.",
             TotalCapabilityCount > 0 ? "safe" : "neutral"));
         ReadinessCards.Add(new DashboardCard(
@@ -120,7 +118,7 @@ public partial class DashboardViewModel : PageViewModelBase
             "unavailable-here",
             "Unavailable here",
             UnavailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " gated",
-            "Blocked by this machine, missing tools, or an admin-token requirement.",
+            "Blocked by this machine, missing tools, or a permissions requirement.",
             UnavailableCapabilityCount > 0 ? "neutral" : "safe"));
     }
 
@@ -153,34 +151,34 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         CapabilityStatusLines.Clear();
         AddStatus("Available on this PC", AvailableCapabilityCount + " of " + TotalCapabilityCount, AvailableCapabilityCount > 0 ? "safe" : "neutral");
-        AddStatus("Ready/live", ReadyLiveCount + " capabilities", ReadyLiveCount > 0 ? "safe" : "neutral");
-        AddStatus("Review-only", ReviewOnlyCount + " capabilities", ReviewOnlyCount > 0 ? "protected" : "neutral");
+        AddStatus("Ready/live", ReadyLiveCount + " optimizations", ReadyLiveCount > 0 ? "safe" : "neutral");
+        AddStatus("Review-only", ReviewOnlyCount + " optimizations", ReviewOnlyCount > 0 ? "protected" : "neutral");
 
         var fixtureProven = CountStatus(capabilities, "fixture-proven");
         if (fixtureProven > 0)
         {
-            AddStatus("Tested on a safe copy", fixtureProven + " capabilities", "low");
+            AddStatus("Tested on a safe copy", fixtureProven + " optimizations", "low");
         }
 
         var allowlistShim = CountStatus(capabilities, "allowlist-shim");
         if (allowlistShim > 0)
         {
-            AddStatus("Runs app tool", allowlistShim + " capabilities", "low");
+            AddStatus("Runs app tool", allowlistShim + " optimizations", "low");
         }
 
         var helperContract = CountStatus(capabilities, "helper-contract");
         if (helperContract > 0)
         {
-            AddStatus("Helper packaging pending", helperContract + " capability", "protected");
+            AddStatus("Helper packaging pending", helperContract + " pending helper", "protected");
         }
 
         var notImplemented = CountStatus(capabilities, "not-implemented");
         if (notImplemented > 0)
         {
-            AddStatus("Not available yet", notImplemented + " capabilities", "neutral");
+            AddStatus("Not available yet", notImplemented + " optimizations", "neutral");
         }
 
-        AddStatus("Unavailable here", UnavailableCapabilityCount + " capabilities", UnavailableCapabilityCount > 0 ? "neutral" : "safe");
+        AddStatus("Unavailable here", UnavailableCapabilityCount + " optimizations", UnavailableCapabilityCount > 0 ? "neutral" : "safe");
     }
 
     private void BuildNextActions(IReadOnlyList<CapabilityRow> capabilities)
@@ -200,16 +198,16 @@ public partial class DashboardViewModel : PageViewModelBase
             + (NextActions.Count == 1 ? " ready" : " ready");
         NextActionsSummary = HasNextActions
             ? "Live and available on this PC. Open the matching page to review the exact action before anything changes."
-            : "No live apply capabilities are available on this PC yet; review-only and gated capabilities stay visible by page.";
+            : "No live actions are available on this PC yet; review-only and gated items stay visible by page.";
     }
 
     private void BuildVerdict(double? freeRatio, ProcessInventorySummary summary, DriverHardwareSummary? hw, int ramGb)
     {
         VerdictHeadline = ReadyLiveCount > 0
-            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live capabilities are ready on this PC."
+            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live optimizations are ready on this PC."
             : AvailableCapabilityCount > 0
-                ? AvailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities are available for review."
-                : "Capability availability is gated on this PC.";
+                ? AvailableCapabilityCount.ToString(CultureInfo.InvariantCulture) + " optimizations are available for review."
+                : "Some optimizations are gated on this PC.";
 
         VerdictLevel = freeRatio switch
         {
@@ -246,7 +244,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private void BuildUnavailableLiveReadiness(DriverHardwareSummary? hardware)
     {
         VerdictHeadline = ReadyLiveCount > 0
-            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live capabilities are ready on this PC."
+            ? ReadyLiveCount.ToString(CultureInfo.InvariantCulture) + " live optimizations are ready on this PC."
             : "Optimization catalog is loaded.";
         VerdictLevel = ReadyLiveCount > 0 ? "safe" : "protected";
         VerdictSummary = TotalCapabilityCount.ToString(CultureInfo.InvariantCulture)
@@ -287,7 +285,7 @@ public partial class DashboardViewModel : PageViewModelBase
             ? new StatusLine("Companion apps", string.Join(" + ", companions) + " protected", "safe")
             : new StatusLine("Companion apps", "None running", "neutral"));
 
-        SessionLines.Add(new StatusLine("Capability action", "Open a page to review details", "neutral"));
+        SessionLines.Add(new StatusLine("Next action", "Open a page to review details", "neutral"));
     }
 
     private void BuildMemory(ProcessInventorySummary s, long usedRam, long totalRam, int ramGb)
@@ -383,7 +381,7 @@ public partial class DashboardViewModel : PageViewModelBase
             DriverLines.Add(new StatusLine("Hardware", "Not read yet", "neutral"));
         }
 
-        DriverNote = "Driver and GPU capabilities show their own availability, approval, and restore status before any change.";
+        DriverNote = "Driver and GPU actions show their own availability, approval, and restore status before any change.";
     }
 
     private void BuildStutterRisk(ProcessInventorySummary summary, double? freeRatio)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -14,14 +14,13 @@ public partial class StartupServicesViewModel : PageViewModelBase
     [ObservableProperty] private int _backgroundCount;
     [ObservableProperty] private int _launcherCount;
     [ObservableProperty] private int _protectedCount;
-    [ObservableProperty] private string _loadSummary = "Reading background load…";
+    [ObservableProperty] private string _loadSummary = "Reading background loadâ€¦";
 
     public ObservableCollection<BackgroundRow> BackgroundRows { get; } = new();
 
     protected override async Task LoadCoreAsync()
     {
-        var classification = await App.Live.GetProcessClassificationAsync()
-            ?? await TrySample(Data.GetProcessClassificationAsync);
+        var classification = await App.Live.GetProcessClassificationAsync();
         var processes = classification?.Processes ?? new List<ProcessItem>();
 
         var background = processes
@@ -34,11 +33,11 @@ public partial class StartupServicesViewModel : PageViewModelBase
         LauncherCount = background.Count(p => p.Category is "launcher" or "vendorUtility");
         ProtectedCount = processes.Count(p => p.Protected || p.Protection == "protected");
         LoadSummary = background.Count == 0
-            ? "No background load recorded yet — connect the local engine for a live view."
+            ? "No background load recorded yet â€” connect the local engine for a live view."
             : background.Count + " background apps and helpers are running that don't need to load with Windows.";
 
         BackgroundRows.Clear();
-        foreach (var p in background.OrderByDescending(p => p.WorkingSetBytes).Take(8))
+        foreach (var p in background.OrderByDescending(p => p.WorkingSetBytes).Take(6))
         {
             BackgroundRows.Add(new BackgroundRow(
                 string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -12,7 +12,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class ToolsDiagnosticsViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _bundleSummary = "Reading the utilities review…";
+    [ObservableProperty] private string _bundleSummary = "Reading the utilities reviewâ€¦";
     [ObservableProperty] private int _toolCount;
     [ObservableProperty] private int _nativeCount;
     [ObservableProperty] private int _manualCount;
@@ -30,8 +30,8 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
         ManualCount = tools.Count(t => t.ExecutionClass is "manual-launcher" or "dangerous-manual-only");
         BundleSummary = counts is null
             ? tools.Count + " bundled tools reviewed and classified. Nothing on this page launches anything."
-            : counts.Value.entries + " files in the utilities bundle · " + counts.Value.executables
-              + " executables and scripts · every one reviewed and classified. Nothing on this page launches anything.";
+            : counts.Value.entries + " files in the utilities bundle Â· " + counts.Value.executables
+              + " executables and scripts Â· every one reviewed and classified. Nothing on this page launches anything.";
 
         ToolRows.Clear();
         foreach (var tool in tools
@@ -40,7 +40,7 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
         {
             ToolRows.Add(new ToolRow(
                 string.IsNullOrWhiteSpace(tool.Name) ? tool.Id ?? "Tool" : tool.Name!,
-                string.IsNullOrWhiteSpace(tool.IntegrationPlan) ? "Reviewed for this bundle." : tool.IntegrationPlan!,
+                PlanText(tool.ExecutionClass),
                 ClassLabel(tool.ExecutionClass),
                 ClassState(tool.ExecutionClass)));
         }
@@ -48,13 +48,24 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
         IsEmpty = ToolRows.Count == 0;
     }
 
+    private static string PlanText(string? cls) => cls switch
+    {
+        "native-replacement" => "Roo covers this with its own reversible controls — the tool stays in the bundle as reference.",
+        "read-only-detector" => "Used to measure and report only. It never changes your system.",
+        "controlled-reversible-executor" => "Runs only through Roo''s preview-and-restore gates.",
+        "manual-launcher" => "Run it yourself when you need it. Roo links it but never starts it.",
+        "dangerous-manual-only" => "Can cause real damage if misused. Manual use only, outside the optimizer.",
+        "excluded" => "Left out on purpose — not part of the recommended setup.",
+        _ => "Reviewed for this bundle.",
+    };
+
     private static string ClassLabel(string? cls) => cls switch
     {
         "native-replacement" => "Roo does this natively",
         "read-only-detector" => "Read-only detector",
-        "controlled-reversible-executor" => "Controlled · reversible",
+        "controlled-reversible-executor" => "Controlled Â· reversible",
         "manual-launcher" => "Manual tool",
-        "dangerous-manual-only" => "Dangerous — manual only",
+        "dangerous-manual-only" => "Dangerous â€” manual only",
         "excluded" => "Excluded",
         _ => "Reviewed",
     };

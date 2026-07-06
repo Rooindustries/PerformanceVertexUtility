@@ -27,7 +27,7 @@ public sealed class CapabilityService
 
     private static readonly Dictionary<string, string> ApplyStatusText = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["live"] = "Ready — applies and reverts",
+        ["live"] = "Ready — can be applied and restored",
         ["fixture-proven"] = "Tested on a safe copy",
         ["allowlist-shim"] = "Runs the app's own tool",
         ["helper-contract"] = "Helper packaging pending",
@@ -49,7 +49,7 @@ public sealed class CapabilityService
     {
         ["live"] = "Reversible",
         ["fixture-proven"] = "Reversible",
-        ["manifest-ready"] = "Rollback plan ready",
+        ["manifest-ready"] = "Restore plan ready",
         ["not-applicable"] = "No undo needed",
         ["not-implemented"] = "—",
     };
@@ -334,7 +334,7 @@ public sealed class CapabilityService
         var clean = FirstNonBlank(reason, "not-available");
         if (clean.StartsWith("requires-admin-token", StringComparison.OrdinalIgnoreCase))
         {
-            return "Needs an administrator token";
+            return "Needs administrator permission";
         }
 
         return ReasonText.TryGetValue(clean, out var text) ? text : clean.Replace('-', ' ');

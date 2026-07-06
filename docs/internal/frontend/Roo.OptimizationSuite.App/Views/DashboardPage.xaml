@@ -195,7 +195,7 @@
                         <TextBlock Text="{x:Bind ViewModel.NextActionsSummary, Mode=OneWay}" FontSize="13" LineHeight="19"
                                    TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextActions}" ItemTemplate="{StaticResource CapabilityActionTemplate}" />
-                        <TextBlock Text="No live apply capabilities are ready on this PC yet." FontSize="13" LineHeight="19"
+                        <TextBlock Text="No live actions are ready on this PC yet." FontSize="13" LineHeight="19"
                                    TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
                                    Visibility="{x:Bind ViewModel.HasNextActions, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" />
                     </StackPanel>

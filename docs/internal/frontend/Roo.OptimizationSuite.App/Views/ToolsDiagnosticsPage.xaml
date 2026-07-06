@@ -70,8 +70,8 @@
                         <TextBlock Text="BUNDLED TOOLS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ItemContainerStyle="{StaticResource StretchListViewItemStyle}"
-                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
-                                  ItemsSource="{x:Bind ViewModel.ToolRows}">
+                                  ScrollViewer.HorizontalScrollMode="Disabled"
+                                  MaxHeight="430" ScrollViewer.VerticalScrollMode="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" ItemsSource="{x:Bind ViewModel.ToolRows}">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ToolRow">
                                     <Grid ColumnSpacing="14" Padding="0,9" VerticalAlignment="Center">

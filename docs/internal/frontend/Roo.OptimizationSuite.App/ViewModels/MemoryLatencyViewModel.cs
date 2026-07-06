@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -11,7 +11,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class MemoryLatencyViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _memoryHeadline = "Reading memory pressure…";
+    [ObservableProperty] private string _memoryHeadline = "Reading memory pressureâ€¦";
     [ObservableProperty] private string _memoryDetail = string.Empty;
     [ObservableProperty] private double _memoryUsedPercent;
     [ObservableProperty] private string _pressureState = "neutral";
@@ -22,15 +22,12 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync()
-            ?? await TrySample(Data.GetProcessInventoryAsync);
-        var classification = await App.Live.GetProcessClassificationAsync()
-            ?? await TrySample(Data.GetProcessClassificationAsync);
-        var telemetry = await TrySample(Data.GetTelemetryAsync);
-
+        var inventory = await App.Live.GetProcessInventoryAsync();
+        var classification = await App.Live.GetProcessClassificationAsync();
+        
         BuildMemory(inventory?.Summary);
         BuildTopUsers(classification?.Processes);
-        BuildSensors(telemetry?.Providers);
+        BuildSensors(null);
         BuildDiagnostics();
         IsEmpty = false;
     }
@@ -51,9 +48,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         var percent = total > 0 ? Math.Round(100.0 * used / total) : 0;
         MemoryUsedPercent = percent;
         PressureState = percent >= 85 ? "high" : percent >= 65 ? "medium" : "safe";
-        MemoryHeadline = percent + "% of memory in use — " + (percent >= 85 ? "heavy" : percent >= 65 ? "moderate" : "light") + " pressure";
-        MemoryDetail = Format.Bytes(summary.AvailableMemoryBytes) + " free · "
-            + summary.ProcessCount + " processes · "
+        MemoryHeadline = percent + "% of memory in use â€” " + (percent >= 85 ? "heavy" : percent >= 65 ? "moderate" : "light") + " pressure";
+        MemoryDetail = Format.Bytes(summary.AvailableMemoryBytes) + " free Â· "
+            + summary.ProcessCount + " processes Â· "
             + summary.BackgroundProcessCount + " in the background";
     }
 
@@ -64,7 +61,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
             .Where(p => !Naming.IsNonActionable(p.Name)
                         && !LocalDisplayFilter.Default.IsHidden(Naming.FriendlyName(p.Name), p.Name, null))
             .OrderByDescending(p => p.WorkingSetBytes)
-            .Take(6))
+            .Take(4))
         {
             TopMemoryRows.Add(new BackgroundRow(
                 string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
@@ -78,6 +75,11 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     private void BuildSensors(IReadOnlyList<ProviderStatus>? providers)
     {
         SensorRows.Clear();
+        if (providers is null || providers.Count == 0)
+        {
+            SensorRows.Add(new StatusLine("Sensors", "Not connected", "neutral"));
+            return;
+        }
         foreach (var provider in providers ?? Array.Empty<ProviderStatus>())
         {
             SensorRows.Add(new StatusLine(provider.DisplayName, provider.DisplayState,
@@ -90,7 +92,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         DiagnosticRows.Clear();
         DiagnosticRows.Add(new DiagnosticRow(
             "DPC and driver latency",
-            "LatencyMon-class diagnostics find the drivers behind stutter and audio dropouts. Read-only — it measures, it doesn't change anything.",
+            "LatencyMon-class diagnostics find the drivers behind stutter and audio dropouts. Read-only â€” it measures, it doesn't change anything.",
             "Read-only", "low"));
         DiagnosticRows.Add(new DiagnosticRow(
             "Core parking",

@@ -43,7 +43,7 @@ public partial class SettingsViewModel : PageViewModelBase
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
         VersionText = "Build " + ContractVersion(product.BackendPackageVersion);
         EngineStatus = "Roo checks what this PC supports before showing an action. Review, approval, and restore state stay visible before anything changes.";
-        DataSourceStatus = App.Live.ScriptsAvailable ? "Live scripts available on this PC" : "Bundled sample data because backend scripts were not found";
+        DataSourceStatus = App.Live.ScriptsAvailable ? "Live scripts available on this PC" : "Demo data — the live engine was not found on this PC";
         DataSourceState = App.Live.ScriptsAvailable ? "safe" : "protected";
 
         SetCapabilitySourceStatus(capabilities?.Count);
@@ -57,7 +57,7 @@ public partial class SettingsViewModel : PageViewModelBase
         SensorRows.Clear();
         EngineRows.Add(new StatusLine("Optimization catalog", CapabilitySourceStatus ?? "Optimization catalog not loaded", CapabilitySourceState));
         EngineRows.Add(new StatusLine("Action names", "Plain-language names for every optimization", "protected"));
-        EngineRows.Add(new StatusLine("Live data", DataSourceStatus ?? "Bundled sample data because backend scripts were not found", DataSourceState));
+        EngineRows.Add(new StatusLine("Live data", DataSourceStatus ?? "Demo data — the live engine was not found on this PC", DataSourceState));
 
         var providers = new List<ProviderStatus>();
         if (dashboardProviders is not null)
@@ -92,7 +92,7 @@ public partial class SettingsViewModel : PageViewModelBase
         SafetyRows.Add(new SafetyRow("Default mode", "Review first", "protected"));
         SafetyRows.Add(new SafetyRow("Ask before changes", safety.RequiresExplicitConfirmation ? "On" : "Off", safety.RequiresExplicitConfirmation ? "protected" : "high"));
         SafetyRows.Add(new SafetyRow("Back up before changes", safety.BackupRequiredBeforeApply ? "On" : "Off", safety.BackupRequiredBeforeApply ? "protected" : "high"));
-        SafetyRows.Add(new SafetyRow("Restore shown per capability", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
+        SafetyRows.Add(new SafetyRow("Restore shown per action", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
         SafetyRows.Add(new SafetyRow("Remote actions", safety.RemoteScriptExecutionAllowed ? "Allowed" : "Off", safety.RemoteScriptExecutionAllowed ? "high" : "safe"));
         SafetyRows.Add(new SafetyRow("Driver changes", safety.DriverAutomationAllowed ? "Automatic" : "Manual", safety.DriverAutomationAllowed ? "high" : "protected"));
         SafetyRows.Add(new SafetyRow("Leftover removal", safety.LeftoverDeletionAllowedByDefault ? "On" : "Off by default", safety.LeftoverDeletionAllowedByDefault ? "high" : "safe"));
@@ -101,8 +101,8 @@ public partial class SettingsViewModel : PageViewModelBase
     private void SetCapabilitySourceStatus(int? capabilityCount)
     {
         var countText = capabilityCount.HasValue
-            ? capabilityCount.Value.ToString(CultureInfo.InvariantCulture) + " capabilities"
-            : "registry not loaded";
+            ? capabilityCount.Value.ToString(CultureInfo.InvariantCulture) + " optimizations"
+            : "catalog not loaded";
 
         if (App.Live.ScriptsAvailable && string.IsNullOrWhiteSpace(App.Capabilities.LastError))
         {
@@ -113,12 +113,12 @@ public partial class SettingsViewModel : PageViewModelBase
 
         if (App.Live.ScriptsAvailable)
         {
-            CapabilitySourceStatus = "Bundled sample data - live registry unavailable";
+            CapabilitySourceStatus = "Demo catalog — live check unavailable";
             CapabilitySourceState = capabilityCount.HasValue ? "protected" : "high";
             return;
         }
 
-        CapabilitySourceStatus = "Bundled sample data - " + countText;
+        CapabilitySourceStatus = "Demo catalog - " + countText;
         CapabilitySourceState = capabilityCount.HasValue ? "protected" : "high";
     }
 
