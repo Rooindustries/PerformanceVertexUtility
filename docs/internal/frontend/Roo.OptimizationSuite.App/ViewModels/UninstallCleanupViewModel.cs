@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -41,13 +41,13 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [ObservableProperty] private string _leftoverState = "Pick an app to review its uninstall command and leftover preview.";
     [ObservableProperty] private string? _leftoverSummary;
     [ObservableProperty] private string _cleanupPlanNote =
-        "Cleanup plan and rollback readiness are reported by the capability rows above. This app review does not dispatch deletion.";
+        "Each action above shows its own readiness and restore state. Nothing is deleted from this review.";
 
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasSelectedCapability))]
     private CleanupCapabilityItem? _selectedCapability;
 
     [ObservableProperty] private bool _explainBusy;
-    [ObservableProperty] private string _selectedCapabilityLabel = "Select a capability";
+    [ObservableProperty] private string _selectedCapabilityLabel = "Select an action";
     [ObservableProperty] private string _selectedCapabilityFamily = string.Empty;
     [ObservableProperty] private string _selectedCapabilityAvailability = string.Empty;
     [ObservableProperty] private string _selectedCapabilityApply = string.Empty;
@@ -138,10 +138,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private async Task LoadInventoryContextAsync()
     {
-        var inventory = await App.Live.GetInstalledAppsAsync()
-            ?? await TryLoadSample(Data.GetInstalledAppsAsync);
-        var classification = await App.Live.GetAppClassificationAsync()
-            ?? await TryLoadSample(Data.GetAppClassificationAsync);
+        var inventory = await App.Live.GetInstalledAppsAsync();
+        var classification = await App.Live.GetAppClassificationAsync();
         var officialPreview = await TryLoadSample(Data.GetOfficialUninstallPreviewAsync);
         var cleanupManifest = await TryLoadSample(Data.GetCleanupManifestAsync);
         var executionPlan = await TryLoadSample(Data.GetUninstallCleanupExecutionPlanAsync);
@@ -464,7 +462,7 @@ internal static class CleanupCapabilityText
         if (response is null)
         {
             return string.IsNullOrWhiteSpace(row.ReasonOrNextStep)
-                ? "Live explain did not return a router envelope; registry status is shown."
+                ? "Live check did not respond; the last known status is shown."
                 : row.ReasonOrNextStep;
         }
 

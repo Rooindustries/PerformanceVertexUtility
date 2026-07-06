@@ -25,7 +25,7 @@
                             <StackPanel Grid.Column="1" Spacing="7">
                                 <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Theme, capability sources, and safety gates." FontSize="13" LineHeight="19"
+                                <TextBlock Text="Theme, data sources, and safety." FontSize="13" LineHeight="19"
                                            TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
@@ -95,7 +95,7 @@
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
-                        <TextBlock Text="When a capability can act, it previews first. Approval and restore status are shown per capability."
+                        <TextBlock Text="When an optimization can act, it previews first. Approval and restore status are shown for each one."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}"
                                    Padding="20,10,20,18" TextWrapping="Wrap" />
                     </StackPanel>

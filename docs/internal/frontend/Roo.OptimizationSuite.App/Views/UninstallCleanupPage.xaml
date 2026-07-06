@@ -210,7 +210,7 @@
                     Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading cleanup capabilities" Foreground="{StaticResource RooTextMutedBrush}" />
+            <TextBlock Text="Reading cleanup status" Foreground="{StaticResource RooTextMutedBrush}" />
         </StackPanel>
 
         <Border MaxWidth="520"
@@ -220,7 +220,7 @@
                 Translation="0,0,16"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read cleanup capabilities"
+                <TextBlock Text="Can't read cleanup status"
                            Style="{StaticResource SectionHeaderTextBlockStyle}"
                            Foreground="{StaticResource RooTextPrimaryBrush}" />
                 <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
@@ -370,11 +370,11 @@
                             <StackPanel Grid.Column="1" Spacing="12">
                                 <StackPanel Spacing="8"
                                             Visibility="{x:Bind ViewModel.HasSelectedCapability, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
-                                    <TextBlock Text="Select a capability"
+                                    <TextBlock Text="Select an action"
                                                FontSize="18"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="The selected row shows its family, availability, apply status, approval, restore status, exact registry reason, router next step, and gates."
+                                    <TextBlock Text="The selected row shows what it does, whether it can run on this PC, approval, and restore status."
                                                FontSize="13"
                                                LineHeight="19"
                                                TextWrapping="Wrap"
@@ -530,7 +530,7 @@
                                                FontSize="20"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                    <TextBlock Text="This panel shows the registered uninstaller, protected state, leftover preview, and rollback prerequisites. Cleanup capability status remains above."
+                                    <TextBlock Text="This panel shows the registered uninstaller, protected state, leftover preview, and restore requirements."
                                                FontSize="13"
                                                LineHeight="19"
                                                TextWrapping="Wrap"

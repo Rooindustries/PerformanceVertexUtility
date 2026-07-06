@@ -13,7 +13,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 public partial class MonitoringViewModel : PageViewModelBase
 {
     [ObservableProperty] private string _subtitle =
-        "System optimization capabilities, readiness, rollback state, admin gates, and next steps from the router.";
+        "Windows optimizations with their readiness, approval, and restore state on this PC.";
     [ObservableProperty] private int _capabilityCount;
     [ObservableProperty] private int _availableCapabilityCount;
     [ObservableProperty] private int _notAvailableCapabilityCount;
@@ -47,7 +47,7 @@ public partial class MonitoringViewModel : PageViewModelBase
     public bool HasSelectedCapability => SelectedCapability is not null;
 
     public string CapabilityCountLine =>
-        CapabilityCount.ToString(CultureInfo.InvariantCulture) + " capabilities";
+        CapabilityCount.ToString(CultureInfo.InvariantCulture) + " optimizations";
 
     protected override async Task LoadCoreAsync()
     {
@@ -129,7 +129,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         SelectedApproval = row.ApprovalText;
         SelectedRestore = row.RestoreText;
         SelectedReasonOrNextStep = row.ReasonOrNextStep;
-        SelectedExplainStatus = "Reading router explain...";
+        SelectedExplainStatus = "Checking live status...";
         SelectedRouterNextStep = null;
         SelectedGates = null;
         SelectedErrors = null;
@@ -145,7 +145,7 @@ public partial class MonitoringViewModel : PageViewModelBase
 
             if (explain is null)
             {
-                SelectedExplainStatus = "Router explain did not return a live response.";
+                SelectedExplainStatus = "Live check did not respond.";
                 return;
             }
 
@@ -186,7 +186,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         var status = FirstNonBlank(response.Status, "responded");
         var availability = response.MachineAvailable ? "available on this PC" : "not available here";
         var change = response.WouldChange ? "would change only after approval" : "no changes dispatched";
-        return "Router " + status.Replace('-', ' ') + " | " + availability + " | " + change;
+        return "Check " + status.Replace('-', ' ') + " | " + availability + " | " + change;
     }
 
     private static string? ExtractGates(JsonElement evidence)
@@ -216,7 +216,7 @@ public partial class MonitoringViewModel : PageViewModelBase
     {
         var errors = response.Errors?
             .Where(error => !string.IsNullOrWhiteSpace(error.Message) || !string.IsNullOrWhiteSpace(error.Code))
-            .Select(error => FirstNonBlank(error.Code, "error") + ": " + FirstNonBlank(error.Message, "reported by router"))
+            .Select(error => FirstNonBlank(error.Code, "error") + ": " + FirstNonBlank(error.Message, "reported by the live check"))
             .ToList();
 
         return errors is { Count: > 0 } ? string.Join("; ", errors) : null;

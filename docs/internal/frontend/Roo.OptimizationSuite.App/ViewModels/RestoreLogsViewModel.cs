@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -11,7 +11,7 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class RestoreLogsViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _restoreHeadline = "Reading restore state…";
+    [ObservableProperty] private string _restoreHeadline = "Reading restore stateâ€¦";
     [ObservableProperty] private string _restoreState = "neutral";
 
     public ObservableCollection<StatusLine> RestoreRows { get; } = new();
@@ -19,11 +19,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var session = await App.Live.GetGameTuneSessionStatusAsync()
-            ?? await TrySample(Data.GetGameTuneSessionStatusAsync);
-        var restore = await TrySample(Data.GetGameTuneRestorePreviewAsync);
-        var governor = await App.Live.GetProcessGovernorSessionStatusAsync()
-            ?? await TrySample(Data.GetProcessGovernorSessionStatusAsync);
+        var session = await App.Live.GetGameTuneSessionStatusAsync();
+        GameTuneRestorePreview? restore = null;
+                var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
 
         BuildRestore(session, restore, governor);
         BuildHistory(session, governor);
@@ -36,21 +34,21 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var restorable = session is { Restorable: true } || restore is { Restorable: true };
 
         RestoreHeadline = restorable
-            ? "A restorable session is saved — one click puts everything back."
+            ? "A restorable session is saved â€” one click puts everything back."
             : "Nothing to restore right now. Backups appear here the moment a change is applied.";
         RestoreState = restorable ? "safe" : "neutral";
 
         RestoreRows.Add(new StatusLine(
             "Game priority session",
-            session is { Restorable: true } ? "Backed up · restorable" : "No session backup recorded",
+            session is { Restorable: true } ? "Backed up Â· restorable" : "No session backup recorded",
             session is { Restorable: true } ? "safe" : "neutral"));
         RestoreRows.Add(new StatusLine(
             "Background restraint",
-            governor is { Restorable: true } ? "Backed up · restorable" : "No restraint backup recorded",
+            governor is { Restorable: true } ? "Backed up Â· restorable" : "No restraint backup recorded",
             governor is { Restorable: true } ? "safe" : "neutral"));
         RestoreRows.Add(new StatusLine(
             "Backup before changes",
-            "Always on — every apply writes a backup first",
+            "Always on â€” every apply writes a backup first",
             "protected"));
     }
 
@@ -61,14 +59,14 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         foreach (var item in session?.ChangedItems ?? new List<SessionChangedItem>())
         {
             HistoryRows.Add(new AuditRow("Recent", "Applied", "low", DisplayName(item),
-                "CPU  " + Priority(item.OriginalPriorityClass) + " → " + Priority(item.AppliedPriorityClass),
+                "CPU  " + Priority(item.OriginalPriorityClass) + " â†’ " + Priority(item.AppliedPriorityClass),
                 "Reversible", "low"));
         }
 
         foreach (var item in session?.RestoredItems ?? new List<SessionChangedItem>())
         {
             HistoryRows.Add(new AuditRow("Recent", "Restored", "safe", DisplayName(item),
-                "CPU  " + Priority(item.AppliedPriorityClass) + " → " + Priority(item.RestoredPriorityClass),
+                "CPU  " + Priority(item.AppliedPriorityClass) + " â†’ " + Priority(item.RestoredPriorityClass),
                 "Done", "safe"));
         }
 
@@ -76,14 +74,14 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         if (restraints > 0)
         {
             HistoryRows.Add(new AuditRow("Recent", "Restrained", "medium",
-                "Background · " + restraints + (restraints == 1 ? " app" : " apps"),
+                "Background Â· " + restraints + (restraints == 1 ? " app" : " apps"),
                 "Eased while the game runs", "Reversible", "low"));
         }
 
         if (HistoryRows.Count == 0)
         {
-            HistoryRows.Add(new AuditRow("—", "Ready", "neutral", "No changes recorded yet",
-                "History appears after you apply your first change", "—", "neutral"));
+            HistoryRows.Add(new AuditRow("â€”", "Ready", "neutral", "No changes recorded yet",
+                "History appears after you apply your first change", "â€”", "neutral"));
         }
     }
 
