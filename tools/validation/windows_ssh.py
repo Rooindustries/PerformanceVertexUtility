@@ -46,14 +46,14 @@ def inspect(host: str, machine: str):
     return json.loads(invoke(host, machine, script).stdout)
 
 
-def upload(host: str, machine: str, directory: str):
+def upload(host: str, machine: str, directory: str, include_frontend: bool = False):
     if not re.fullmatch(r'roo-[a-z0-9-]{1,70}', directory):
         raise ValueError('The staging directory must be a roo- prefixed name beneath Windows Temp.')
     identity = inspect(host, machine)  # Confirm the target before creating or copying anything.
     remote_root = identity['temp'].rstrip('\\/') + '\\' + directory
     root = Path(__file__).resolve().parents[2]
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
-    files = sorted(name for name in tracked if name and not name.startswith('docs/internal/frontend/') and (root / name).is_file())
+    files = sorted(name for name in tracked if name and (include_frontend or not name.startswith('docs/internal/frontend/')) and (root / name).is_file())
     manifest = {
         'protocol': 'roo-source-snapshot/v1', 'machine': identity['machine'],
         'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root).decode().strip(),
@@ -79,7 +79,7 @@ def upload(host: str, machine: str, directory: str):
         invoke(host, machine, f"Set-Location -LiteralPath {path}; tar.exe -xzf source.tar.gz; "
                "if($LASTEXITCODE -ne 0){throw 'Source extraction failed'}; Remove-Item -LiteralPath source.tar.gz")
     return {'machine': identity['machine'], 'stagingPath': remote_root,
-            'sourceCommit': manifest['commit'], 'sourceFileCount': len(files), 'frontendIncluded': False}
+            'sourceCommit': manifest['commit'], 'sourceFileCount': len(files), 'frontendIncluded': include_frontend}
 
 
 def main():
@@ -90,6 +90,7 @@ def main():
     commands.add_parser('inspect')
     stage = commands.add_parser('upload')
     stage.add_argument('--directory', default='roo-backend-validation')
+    stage.add_argument('--include-frontend', action='store_true', help='Include desktop sources for an authorized UI validation run')
     run = commands.add_parser('run')
     run.add_argument('script', type=Path, help='A trusted local PowerShell validation script')
     args = parser.parse_args()
@@ -99,7 +100,7 @@ def main():
         if args.action == 'inspect':
             print(json.dumps(inspect(args.host, args.expected_machine), indent=2))
         elif args.action == 'upload':
-            print(json.dumps(upload(args.host, args.expected_machine, args.directory), indent=2))
+            print(json.dumps(upload(args.host, args.expected_machine, args.directory, args.include_frontend), indent=2))
         else:
             invoke(args.host, args.expected_machine, args.script.read_text(encoding='utf-8-sig'), capture=False)
     except subprocess.CalledProcessError as error:

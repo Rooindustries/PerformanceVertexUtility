@@ -1,6 +1,14 @@
 # Optimization controls
 
-The backend adds supported process-default CPU Sets, a durable bulk removal queue, and a queryable research catalog. These are command interfaces for the desktop to consume. They do not establish UI completion, better frame times, or compatibility with a particular protected game.
+The desktop provides process-default CPU selection and a durable bulk removal queue with separate leftover cleanup. The backend also exposes these operations as commands and provides a queryable research catalog. Assignment readback does not establish better frame times or compatibility with a particular protected game.
+
+## Desktop workflows
+
+In **Process Control**, choose a running application, keep Windows default or select preferred CPUs, and preview the original and requested assignments. Apply records a recovery ticket; Restore verifies the saved assignment. Restore remains available after restarting the desktop. If the original process has exited, the desktop releases that session's ticket without changing a replacement process. A new process requires a new preview.
+
+In **Apps & Cleanup → Remove apps**, select applications and review each program and its arguments. Removal runs sequentially. Stop queue lets the active remover finish; Resume runs only untouched entries. Uncertain outcomes require Check state before continuation. Completed entries remain available for a fresh leftover scan, explicit path selection, preview, deletion and file recovery.
+
+Desktop operation files are stored under `%LOCALAPPDATA%\RooOptimizationSuite\operations`. The latest removal queue and file recovery ticket survive desktop restarts. File restoration does not reinstall an application. Keep these records and their backups until recovery is no longer needed.
 
 ## CPU Sets
 
@@ -94,6 +102,23 @@ Reconciliation checks that the recorded process is no longer running and whether
 
 The queue ends with `cleanup-review-required` and never deletes leftovers. Run a new leftover scan, review shared ownership and current contents, and build a separate cleanup manifest. The same separation now applies to `Invoke-UninstallCleanupApplyPackage.ps1`: after running a vendor command, it returns fresh target content hashes and leaves the earlier cleanup list unapplied. A repeated call returns that recorded result without relaunching the vendor or deleting files.
 
+`Invoke-RemovalLeftovers.ps1` scans the saved app metadata from a completed queue against the current filesystem. It checks queue ownership, the exact app identity, and current registration absence. A reinstalled app cannot reuse the old queue's cleanup approval. Older queues without saved app metadata cannot use this scan.
+
+```powershell
+.\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Scan `
+    -QueueJournalPath $journal -AppId $appId
+$cleanupPreview = 'C:\RooOperations\leftover-review.json'
+.\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Preview `
+    -QueueJournalPath $journal -AppId $appId -ItemId $selectedLeftoverIds -OutputPath $cleanupPreview
+$cleanupHash = (Get-FileHash -LiteralPath $cleanupPreview -Algorithm SHA256).Hash
+.\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Apply `
+    -QueueJournalPath $journal -AppId $appId -ReviewPath $cleanupPreview `
+    -ReviewSha256 $cleanupHash -ConfirmApply -ManualReviewApproved
+.\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Restore `
+    -QueueJournalPath $journal -AppId $appId -ReviewPath $cleanupPreview `
+    -ReviewSha256 $cleanupHash -ConfirmApply
+```
+
 File-only cleanup continues through the existing exact-target allowlist, backup and recovery journal. File restoration recovers backed-up leftovers; it cannot reinstall an application or reverse vendor registry/service changes. Path-based copying/deletion still has a filesystem race window against a concurrent hostile writer. A native file-handle ownership layer, broader dependency analysis, registry/service leftover mutation and install-time tracing remain separate work.
 
 ## Capability router requests
@@ -128,5 +153,7 @@ The inventory contains 376 setting/control records, 267 application/package reco
 ## Verification
 
 New reusable checks are `Test-ProcessCpuSets.ps1`, `Test-BulkUninstall.ps1`, `Test-InstalledAppIdentity.ps1`, `Test-NativeGovernorRestoreOwnership.ps1` and `Test-UpstreamSettingsCatalog.ps1`. The combined cleanup regression now includes a vendor fixture that changes an existing file and creates a new file. Tests use disposable processes, registrations represented by fixture markers, and isolated journals; actual installed applications are inventoried read-only.
+
+The bulk tests also cover post-removal scan, reviewed file deletion, exact restoration, stale review hashes, reinstallation and cross-app rejection. `Test-ClientCleanupBoundary.ps1` compiles the desktop services into a disposable command-line test and checks recovery-ticket handling for live, ended, replaced and incomplete process identities.
 
 Windows PowerShell 5.1 and the Windows APIs are the execution surfaces. Linux parsing and schema checks establish source/contract properties only. Vendor MSI/Appx removal, protected games, hardware performance, reboot behavior and UI journeys require separate Windows validation. Current task evidence and any pending machine access are kept in the development handoff rather than represented as product guarantees.

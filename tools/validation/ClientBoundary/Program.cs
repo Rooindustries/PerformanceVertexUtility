@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Diagnostics;
+using Roo.OptimizationSuite.Models;
 using Roo.OptimizationSuite.Services;
 
 var repo = Path.GetFullPath(args[0]);
@@ -16,7 +18,7 @@ try
     var scripts = Path.Combine(fixture, "backend", "scripts");
     Directory.CreateDirectory(scripts);
     Directory.CreateDirectory(Path.Combine(fixture, "backend", "samples"));
-    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BackendExecutor.Common.ps1", "ProcessProfile.Common.ps1" })
+    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "UninstallOutcome.Common.ps1", "BackendExecutor.Common.ps1", "ProcessProfile.Common.ps1" })
         File.Copy(Path.Combine(repo, "backend", "scripts", name), Path.Combine(scripts, name));
     File.WriteAllText(Path.Combine(scripts, "Preview-OfficialUninstall.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'official.json') -Raw -Encoding UTF8\n");
     File.WriteAllText(Path.Combine(scripts, "New-CleanupDeletionManifest.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'cleanup.json') -Raw -Encoding UTF8\n");
@@ -50,6 +52,47 @@ try
     Check(restore.RootElement.GetProperty("status").GetString() == "success" && File.ReadAllText(original) == "reviewed original", "Client restores the original bytes through the real restore command");
     service.DiscardCleanupReview();
     Check(await service.RequestUninstallCleanupApplyTextAsync(appId, true, true, true) is null && File.Exists(later), "Discarded approval cannot be reused to remove newly discovered files");
+
+    var operationsRoot = Path.Combine(fixture, "operations");
+    Directory.CreateDirectory(operationsRoot);
+    var operations = new OptimizerService(new BackendLocator(), operationsRoot);
+    var cpuJournal = Path.Combine(operationsRoot, "cpu.json");
+    var cpuPointer = Path.Combine(operationsRoot, "cpu-active.txt");
+    using var currentProcess = Process.GetCurrentProcess();
+    var savedCpu = new CpuSetJournal { Status = "applied", Preview = new CpuSetPlan { Identity = new CpuProcessIdentity
+    {
+        ProcessId = currentProcess.Id,
+        CreationTimeFileTimeUtc = currentProcess.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(),
+    } } };
+    void SaveCpu()
+    {
+        File.WriteAllText(cpuJournal, JsonSerializer.Serialize(savedCpu));
+        File.WriteAllText(cpuPointer, cpuJournal);
+    }
+    SaveCpu();
+    Check(!await operations.ReleaseEndedCpuSessionAsync(cpuJournal) && File.Exists(cpuPointer), "A live process keeps its CPU recovery ticket");
+    savedCpu.Preview.Identity.CreationTimeFileTimeUtc = "1";
+    SaveCpu();
+    Check(await operations.ReleaseEndedCpuSessionAsync(cpuJournal) && !File.Exists(cpuPointer) && File.Exists(cpuJournal), "A different creation identity releases only the old ticket and retains its history");
+    savedCpu.Preview.Identity.CreationTimeFileTimeUtc = "";
+    SaveCpu();
+    var incompleteRejected = false;
+    try { await operations.ReleaseEndedCpuSessionAsync(cpuJournal); }
+    catch (InvalidDataException) { incompleteRejected = true; }
+    Check(incompleteRejected && File.Exists(cpuPointer), "Incomplete process identity cannot discard recovery");
+    var sleeperStart = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")) { UseShellExecute = false, CreateNoWindow = true };
+    foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30" }) sleeperStart.ArgumentList.Add(argument);
+    using var sleeper = Process.Start(sleeperStart)!;
+    try
+    {
+        savedCpu.Preview.Identity.ProcessId = sleeper.Id;
+        savedCpu.Preview.Identity.CreationTimeFileTimeUtc = sleeper.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();
+        SaveCpu();
+        sleeper.Kill();
+        await sleeper.WaitForExitAsync();
+        Check(await operations.ReleaseEndedCpuSessionAsync(cpuJournal) && !File.Exists(cpuPointer), "Verified process shutdown releases its CPU recovery ticket");
+    }
+    finally { if (!sleeper.HasExited) { sleeper.Kill(); await sleeper.WaitForExitAsync(); } }
 }
 finally
 {
