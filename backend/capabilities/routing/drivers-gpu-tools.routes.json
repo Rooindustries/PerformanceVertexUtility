@@ -1,0 +1,481 @@
+﻿{
+  "schemaVersion": 1,
+  "family": "drivers-gpu-tools",
+  "routes": [
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-profile-preview",
+      "preview": {
+        "script": "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "preview-only command metadata",
+        "nextRequiredStep": "Use Invoke-NvidiaNipExecutor.ps1 in Preview mode to collect export-before-import gate evidence; no NVIDIA settings are changed by this preview."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "rollback command metadata only",
+        "nextRequiredStep": "Use Restore-NvidiaNipProfile.ps1 to review rollback command metadata; real NVPI restore is not dispatched by the router."
+      },
+      "notes": "Preview builds NVPI export/import metadata without launching NVIDIA Profile Inspector; router availability may block dispatch on non-NVIDIA hardware."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-export-probe",
+      "preview": {
+        "script": "backend/scripts/Invoke-NvidiaNipCapabilityProbe.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "read-only probe flag is never passed by default",
+        "nextRequiredStep": "Run Invoke-NvidiaNipCapabilityProbe.ps1 with -AllowReadOnlyNvpiProbe only for an explicit temp-path read-only probe; import remains disabled."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "read-only probe has no restore path",
+        "nextRequiredStep": "Use Invoke-NvidiaNipCapabilityProbe.ps1 preview evidence only; read-only probes have no restore path."
+      },
+      "notes": "The preview route intentionally passes no -AllowReadOnlyNvpiProbe flag, so the probe script evaluates gates without launching NVPI."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-gated-import",
+      "preview": {
+        "script": "backend/scripts/Invoke-NvidiaNipExecutor.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "real NVPI import is not enabled",
+        "nextRequiredStep": "Use Invoke-NvidiaNipExecutor.ps1 -ExecutorMode Mock with -ConfirmApply -UserApproved -BenchmarkEvidenceAttached for validation; real NVPI import is not enabled."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "rollback import is manifest metadata only",
+        "nextRequiredStep": "Use Invoke-NvidiaNipExecutor.ps1 in Preview mode for rollback manifest review; real restore import is not dispatched by the router."
+      },
+      "notes": "The preview route uses the executor's default Preview mode and never dispatches Real mode."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-restore-manifest",
+      "preview": {
+        "script": "backend/scripts/Restore-NvidiaNipProfile.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "restore command metadata only",
+        "nextRequiredStep": "Use Restore-NvidiaNipProfile.ps1 to review rollback command metadata; restore imports remain behind controlled executor gates."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "prior export required before restore",
+        "nextRequiredStep": "Use Restore-NvidiaNipProfile.ps1 to review prior-export rollback metadata; real restore import is not dispatched by the router."
+      },
+      "notes": "Restore preview builds rollback import metadata without launching NVIDIA Profile Inspector."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-base-catalog",
+      "preview": {
+        "script": "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "catalog metadata is not applied state",
+        "nextRequiredStep": "Use Preview-NvidiaNipProfile.ps1 to review catalog command metadata; do not treat catalog metadata as applied desired state."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "catalog-only metadata",
+        "nextRequiredStep": "Use Preview-NvidiaNipProfile.ps1 for catalog review; catalog-only metadata has no restore path."
+      },
+      "notes": "Base profile catalog preview is command metadata only."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-no-app",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual install package",
+        "nextRequiredStep": "Create a restore-point-gated package selection contract with hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-with-app",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual install package",
+        "nextRequiredStep": "Create a restore-point-gated package selection contract with hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-amd-26-2-2",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual install package",
+        "nextRequiredStep": "Create a restore-point-gated package selection contract with AMD hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-amd-chipset-8-02-18-557",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual chipset install package",
+        "nextRequiredStep": "Create chipset hardware matching plus restore-point-gated explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-intel-chipset",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual chipset install package",
+        "nextRequiredStep": "Create chipset hardware matching plus restore-point-gated explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-intel-network",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual network install package",
+        "nextRequiredStep": "Create network adapter hardware matching, connectivity rollback guidance, and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the network installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-realtek-network",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual network install package",
+        "nextRequiredStep": "Create network adapter hardware matching, connectivity rollback guidance, and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the network installer package without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-booster-package",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual recommendation only",
+        "nextRequiredStep": "Create an allowlisted recommendation-only workflow; no third-party update tool launch or automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "driver rollback plan needed",
+        "nextRequiredStep": "Create a driver rollback plan before adding a restore route; no driver rollback script is implemented."
+      },
+      "notes": "Inventory detector reports the package without launching the updater."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-cleanup-ddu",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual clean-room guide needed",
+        "nextRequiredStep": "Create a guided DDU plan with restore point, safe-mode/network guidance, and explicit manual handoff; no DDU automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "restore point and driver reinstall plan needed",
+        "nextRequiredStep": "Create a restore-point and driver reinstall plan before adding a restore route; no DDU restore automation is implemented."
+      },
+      "notes": "Inventory detector reports the DDU binary without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvcleanstall",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "NVCleanstall is not present",
+        "nextRequiredStep": "Add an explicit local tool reference and a manual NVIDIA-only builder handoff contract; no builder automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "NVCleanstall is not present at the expected path",
+        "nextRequiredStep": "Add NVCleanstall at the expected path before defining a restore route; no restore automation is implemented."
+      },
+      "notes": "Inventory detector records the expected path; NVCleanstall is not launched."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.hwinfo-installer",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual install package",
+        "nextRequiredStep": "Create an install/launch consent contract or shared-memory sensor reader; no installer launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "uninstall contract needed",
+        "nextRequiredStep": "Create an uninstall contract before adding a restore route; no HWiNFO uninstall automation is implemented."
+      },
+      "notes": "Inventory detector reports the HWiNFO installer without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.hwinfo-installed-sensor-monitoring",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "shared-memory reader needed",
+        "nextRequiredStep": "Create a read-only HWiNFO shared-memory or exported-sensors adapter; no process launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "read-only monitoring",
+        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for read-only monitoring inventory; installed sensor monitoring has no restore path."
+      },
+      "notes": "Inventory detector inspects the installed binary metadata only."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.cpu-z-diagnostics",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual diagnostics launch needed",
+        "nextRequiredStep": "Create a manual-launch or exported-report parsing contract; no tool launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "diagnostics only",
+        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+      },
+      "notes": "Inventory detector reports CPU-Z metadata without launching CPU-Z."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.gpu-z-diagnostics",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual diagnostics launch needed",
+        "nextRequiredStep": "Create a manual-launch or exported-report parsing contract; no tool launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "diagnostics only",
+        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+      },
+      "notes": "Inventory detector reports GPU-Z metadata without launching GPU-Z."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.msi-afterburner",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "gpu profile helper contract needed",
+        "nextRequiredStep": "Create a helper contract for explicit user-approved profile import/export; no Afterburner automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "gpu profile rollback needed",
+        "nextRequiredStep": "Create a GPU profile rollback contract before adding a restore route; no Afterburner automation is implemented."
+      },
+      "notes": "Inventory detector reports the Afterburner installer without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.msi-kombustor",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "benchmark provider contract needed",
+        "nextRequiredStep": "Create an explicit benchmark-provider contract with thermal safety gates; no Kombustor automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "benchmark only",
+        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for benchmark package inventory; benchmark-only capability has no restore path."
+      },
+      "notes": "Inventory detector reports the Kombustor installer without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.latencymon",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "diagnostic runner contract needed",
+        "nextRequiredStep": "Create a read-only diagnostic report ingestion contract; no tool launch is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "diagnostics only",
+        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+      },
+      "notes": "Inventory detector reports LatencyMon metadata without launching LatencyMon."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.scewin",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "firmware helper manifest needed",
+        "nextRequiredStep": "Create an explicit helper manifest, platform allowlist, and backup/export contract; no SCEWIN automation is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "firmware restore manifest needed",
+        "nextRequiredStep": "Create a firmware restore manifest before adding a restore route; no SCEWIN automation is implemented."
+      },
+      "notes": "Inventory detector reports SCEWIN metadata without launching it."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.prerequisite-dotnetfx35",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual prerequisite install",
+        "nextRequiredStep": "Create a Windows-feature/package prerequisite plan; no DISM or installer execution is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "feature restore plan needed",
+        "nextRequiredStep": "Create a feature restore plan before adding a restore route; no DISM or installer execution is implemented."
+      },
+      "notes": "Inventory detector reports prerequisite package metadata without launching installers."
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.prerequisite-directx-june2010",
+      "preview": {
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "args": [],
+        "timeoutSeconds": 30
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "manual prerequisite install",
+        "nextRequiredStep": "Create a prerequisite install plan with explicit user approval; no DXSETUP execution is implemented."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "feature restore plan needed",
+        "nextRequiredStep": "Create a feature restore plan before adding a restore route; no DXSETUP execution is implemented."
+      },
+      "notes": "Inventory detector reports DirectX prerequisite package metadata without launching DXSETUP."
+    }
+  ]
+}

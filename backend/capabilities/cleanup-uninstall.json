@@ -1,0 +1,498 @@
+﻿{
+  "schemaVersion": 1,
+  "family": "cleanup-uninstall",
+  "capabilities": [
+    {
+      "capabilityId": "cleanup-uninstall.installed-app-inventory",
+      "family": "cleanup-uninstall",
+      "displayName": "Installed App Inventory",
+      "technicalName": "HKLM/HKCU Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall registry inventory, Get-AppxPackage inventory, optional winget list",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Installed App Inventory",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "safe",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Read-only inventory over installed app metadata; no uninstallers or cleanup tools are launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-InstalledAppInventory.ps1",
+        "actionId": "apps.installedAppInventory"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "read-only-inventory",
+        "script": "backend/scripts/Get-InstalledAppInventory.ps1",
+        "gates": [],
+        "notes": "Inventory is a detector surface only; there is no mutation path."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupBackend.ps1",
+          "proves": "installed app inventory script and sample contract exist for read-only uninstall cleanup workflows"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment references the installed app inventory script without claiming live apply"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.app-classification",
+      "family": "cleanup-uninstall",
+      "displayName": "App Classification",
+      "technicalName": "protected-apps.json rules, uninstall-policy.json policy gates, sourceType/packageId/publisher/displayName classification",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "App Classification",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "safe",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Read-only classification of inventory entries against protected app rules and uninstall policy."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-AppClassification.ps1",
+        "actionId": "apps.classifyInstalledApps"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "read-only-classification",
+        "script": "backend/scripts/Get-AppClassification.ps1",
+        "gates": [],
+        "notes": "Classification produces risk and protection metadata only; it does not queue, uninstall, or delete anything."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupBackend.ps1",
+          "proves": "classification protects WebView2-style dependencies and blocks protected apps by default using sample inventory"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment keeps app classification preview-only"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.uninstall-queue",
+      "family": "cleanup-uninstall",
+      "displayName": "Uninstall Queue",
+      "technicalName": "Preview-UninstallQueue selected app list with protected-app block policy and no command execution",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Uninstall Queue",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Queue preview selects eligible apps and blocks protected apps; current policy disables real execution."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-UninstallQueue.ps1",
+        "actionId": "apps.previewUninstallQueue"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "queue-preview-only",
+        "script": "backend/scripts/Preview-UninstallQueue.ps1",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval"
+        ],
+        "notes": "Queue preview never runs uninstallers and never deletes leftovers."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "no-state-written"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupBackend.ps1",
+          "proves": "uninstall queue preview selects a normal app, blocks a protected app, and reports no uninstall or leftover deletion"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment marks uninstall queue apply as preview-only"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.official-uninstall",
+      "family": "cleanup-uninstall",
+      "displayName": "Official Uninstall",
+      "technicalName": "registry UninstallString/QuietUninstallString, Remove-AppxPackage preview, winget uninstall preview, exact executable allowlist harmless runner",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Official Uninstall",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Official command metadata preview is implemented; real app uninstall is not enabled. The runner only executes exact allowlisted harmless shims."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-OfficialUninstall.ps1",
+        "actionId": "apps.previewOfficialUninstall"
+      },
+      "apply": {
+        "status": "allowlist-shim",
+        "mode": "harmless-shim-real-process",
+        "script": "backend/scripts/Invoke-OfficialUninstallCommandRunner.ps1",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "exact-target-allowlist",
+          "executor-mode-selected"
+        ],
+        "notes": "Only the harmless shim runner is proven. Real app uninstall remains disabled until exact executable allowlists, restore point, backup evidence, and policy gates are implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "real-app-uninstall-rollback-not-guaranteed",
+        "notes": "Vendor uninstall rollback is not guaranteed by this backend; future real execution needs restore point and app-specific recovery evidence."
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-OfficialUninstallCommandRunner.ps1",
+          "proves": "official uninstall runner executes only harmless allowlisted commands and blocks non-allowlisted executables"
+        },
+        {
+          "test": "backend/scripts/Test-UninstallCleanupRunnerContracts.ps1",
+          "proves": "controlled runner separates allowlisted official command execution from real leftover deletion"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment uses allowlist-shim instead of live official uninstall"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.leftover-scan",
+      "family": "cleanup-uninstall",
+      "displayName": "Leftover Scan",
+      "technicalName": "metadata-derived leftover scan over installLocation, knownAppDataPaths, vendorRegistryKeys, services, scheduled tasks, and Run-key startup entries",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Leftover Scan",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Read-only leftover candidate generation. Registry, service, task, startup, file, and folder candidates are not removed by this preview."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-LeftoverScan.ps1",
+        "actionId": "apps.previewLeftoverScan"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "leftover-candidate-preview",
+        "script": "backend/scripts/Preview-LeftoverScan.ps1",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed"
+        ],
+        "notes": "Leftover scan only reports candidates and backup requirements; deletion is handled separately and only fixture-proven."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupBackend.ps1",
+          "proves": "leftover scan preview returns candidates without deletion and does not default-select fuzzy shared paths"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment keeps leftover scan deletion preview-only"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.cleanup-deletion-plan",
+      "family": "cleanup-uninstall",
+      "displayName": "Cleanup Deletion Plan",
+      "technicalName": "New-CleanupDeletionManifest backup/export requirements plus Invoke-UninstallCleanupExecution disposable temp file/folder fixture backup-delete runner",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Cleanup Deletion Plan",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "registry-key",
+            "target": "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          },
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Real leftover deletion is not enabled. Fixture deletion is limited to file and folder targets under the OS temp root."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/New-CleanupDeletionManifest.ps1",
+        "actionId": "apps.cleanupDeletionManifest"
+      },
+      "apply": {
+        "status": "fixture-proven",
+        "mode": "disposable-fixture-apply",
+        "script": "backend/scripts/Invoke-UninstallCleanupExecution.ps1",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "fixture-explicit-flag",
+          "fixture-root-temp",
+          "backup-completed"
+        ],
+        "notes": "Backup/delete mechanics are proven only for disposable temp fixtures. Real file, registry, service, task, and startup deletion remain disabled."
+      },
+      "restore": {
+        "status": "manifest-ready",
+        "mode": "rollback-manifest-produced",
+        "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
+        "notes": "Fixture apply writes a rollback manifest consumed by the cleanup rollback capability."
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupBackend.ps1",
+          "proves": "cleanup manifest is preview-only for real targets and fixture execution backs up and deletes only disposable temp leftovers"
+        },
+        {
+          "test": "backend/scripts/Test-UninstallCleanupRestore.ps1",
+          "proves": "cleanup fixture apply creates backup records and a rollback manifest for disposable file and folder targets"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment marks cleanup deletion plan fixture-proven instead of live"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.cleanup-rollback",
+      "family": "cleanup-uninstall",
+      "displayName": "Cleanup Rollback",
+      "technicalName": "Restore-UninstallCleanupExecution rollback-manifest file/folder copy restore inside disposable temp fixture root",
+      "source": "revo",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Cleanup Rollback",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "command-on-path",
+            "target": "powershell.exe"
+          }
+        ],
+        "notes": "Rollback is proven for disposable fixture file/folder backups only; no real system cleanup rollback is enabled."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
+        "actionId": "apps.restoreUninstallCleanupExecution"
+      },
+      "apply": {
+        "status": "fixture-proven",
+        "mode": "disposable-fixture-restore",
+        "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
+        "gates": [
+          "confirm-restore",
+          "explicit-user-approval",
+          "fixture-explicit-flag",
+          "fixture-root-temp"
+        ],
+        "notes": "Rollback restores copied file and folder backups only inside the disposable fixture root."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "rollback-action"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-UninstallCleanupRestore.ps1",
+          "proves": "cleanup fixture rollback restores copied file and folder backups without touching real system paths"
+        },
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "capability fragment marks cleanup rollback fixture-proven instead of live"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.startup-entries-autoruns",
+      "family": "cleanup-uninstall",
+      "displayName": "Startup Entries (Autoruns)",
+      "technicalName": "Sysinternals Autoruns autoruns.exe CSV export candidate; current detector reads file/version metadata only",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Startup Entries (Autoruns)",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\autoruns.exe"
+          }
+        ],
+        "notes": "Detector inspects autoruns.exe file metadata only and does not launch the tool."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-CleanupToolFacts.ps1",
+        "actionId": "apps.cleanupToolFacts"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "read-only-detector-only",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "exact-target-allowlist",
+          "backup-completed"
+        ],
+        "notes": "Next step: add a read-only Autoruns CSV export runner (autorunsc.exe) and parse startup entries read-only before any startup change is considered."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "startup-export-restore-not-available",
+        "notes": "Startup entry restore needs exported registry/task evidence before any future mutation path."
+      },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "Autoruns utility detection resolves through the Utilities root and Get-CleanupToolFacts reports file/version facts without launching the tool"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.device-cleanup",
+      "family": "cleanup-uninstall",
+      "displayName": "Device Cleanup",
+      "technicalName": "DeviceCleanup.exe unused-device cleanup utility; current detector reads file/version metadata only",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Device Cleanup",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\DeviceCleanup.exe"
+          }
+        ],
+        "notes": "Detector inspects DeviceCleanup.exe file metadata only and does not launch the tool."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-CleanupToolFacts.ps1",
+        "actionId": "apps.cleanupToolFacts"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "read-only-detector-only",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "exact-target-allowlist",
+          "backup-completed"
+        ],
+        "notes": "Next step: implement a read-only device enumeration/export helper contract, then an exact device-instance allowlist runner with rollback evidence. DeviceCleanup.exe is not launched by this backend."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "device-restore-not-available",
+        "notes": "Device cleanup restore needs device-instance export and reinstall/restore evidence before any future apply path."
+      },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
+          "proves": "DeviceCleanup utility detection resolves through the Utilities root and Get-CleanupToolFacts reports file/version facts without launching the tool"
+        }
+      ]
+    }
+  ]
+}

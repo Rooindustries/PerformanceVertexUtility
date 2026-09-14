@@ -8,6 +8,7 @@
     <conv:BytesToReadableConverter x:Key="BytesToReadable" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    <conv:InverseBoolConverter x:Key="InverseBool" />
     <conv:StringToVisibilityConverter x:Key="StringToVisibility" />
     <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
     <conv:CountToInverseVisibilityConverter x:Key="CountToInverseVisibility" />
@@ -24,6 +25,13 @@
 
     <Style TargetType="TextBox">
         <Setter Property="FontFamily" Value="{StaticResource RooFontFamily}" />
+    </Style>
+
+    <Style x:Key="StretchListViewItemStyle" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
     </Style>
 
     <Style x:Key="PageTitleTextBlockStyle" TargetType="TextBlock">

@@ -40,8 +40,31 @@ function Get-LiveProcessIdentity {
         matches = ($nameMatches -and $pathMatches)
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
+        currentControlState = Get-RooProcessControlState $processId $null
         currentPath = $currentPath
         reason = if ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the preview entry.' }
+    }
+}
+
+function New-ApplySkippedItem {
+    param(
+        [object]$Entry,
+        [string]$Reason,
+        [object[]]$ControlChanges = @(),
+        [object[]]$SkippedControls = @(),
+        [string]$Category = 'skipped'
+    )
+    return [pscustomobject]@{
+        processId = Get-RooPropertyValue $Entry 'processId' 0
+        processName = Get-RooPropertyValue $Entry 'processName' ''
+        proposedPriorityClass = Get-RooPropertyValue $Entry 'proposedPriorityClass' $null
+        proposedAffinityMask = Get-RooPropertyValue $Entry 'proposedAffinityMask' $null
+        proposedIoPriority = Get-RooPropertyValue $Entry 'proposedIoPriority' $null
+        proposedGpuPriority = Get-RooPropertyValue $Entry 'proposedGpuPriority' $null
+        controlChanges = @(Get-RooArray $ControlChanges)
+        skippedControls = @(Get-RooArray $SkippedControls)
+        category = $Category
+        reason = $Reason
     }
 }
 
@@ -53,10 +76,13 @@ function New-BackupMetadata {
     $snapshots = New-Object System.Collections.Generic.List[object]
     foreach ($snap in @(Get-RooPropertyArray $BackupManifest 'snapshots')) {
         $snapshots.Add([pscustomobject]@{
-            type = 'processPriority'
+            type = 'processControls'
             target = "$([string](Get-RooPropertyValue $snap 'processName' ''))`:$([int](Get-RooPropertyValue $snap 'processId' 0))"
             originalState = [pscustomobject]@{
                 priorityClass = Get-RooPropertyValue $snap 'originalPriorityClass' $null
+                affinityMask = Get-RooPropertyValue $snap 'originalAffinityMask' $null
+                ioPriority = Get-RooPropertyValue $snap 'originalIoPriority' $null
+                gpuPriority = Get-RooPropertyValue $snap 'originalGpuPriority' $null
                 executablePath = Get-RooPropertyValue $snap 'executablePath' $null
             }
         }) | Out-Null
@@ -64,12 +90,12 @@ function New-BackupMetadata {
 
     return [pscustomobject]@{
         backupId = [string](Get-RooPropertyValue $BackupManifest 'backupId' '')
-        scope = 'process-priority-profile'
+        scope = 'process-profile-process-controls'
         createdAtUtc = [string](Get-RooPropertyValue $BackupManifest 'createdAtUtc' '')
         location = $BackupPath
         restorePoint = [pscustomobject]@{
             requested = $false
-            status = 'not-required-for-process-priority'
+            status = 'not-required-for-process-controls'
             id = $null
         }
         snapshots = @($snapshots.ToArray())
@@ -96,20 +122,21 @@ try {
     if (-not $ConfirmApply) {
         $skipped = New-Object System.Collections.Generic.List[object]
         foreach ($entry in @(Get-RooPropertyArray $previewEnvelope 'preview')) {
-            if ([string](Get-RooPropertyValue $entry 'proposedAction' '') -eq 'setPriority') {
-                $skipped.Add([pscustomobject]@{
-                    processId = Get-RooPropertyValue $entry 'processId' 0
-                    processName = Get-RooPropertyValue $entry 'processName' ''
-                    proposedPriorityClass = Get-RooPropertyValue $entry 'proposedPriorityClass' $null
-                    reason = 'Dry-run apply; -ConfirmApply was not provided.'
-                }) | Out-Null
+            $entryChanges = @(Get-RooPreviewControlChanges $entry)
+            if ($entryChanges.Count -eq 0) { continue }
+            $reason = if ([bool](Get-RooPropertyValue $entry 'blocked' $false) -or [bool](Get-RooPropertyValue $entry 'protected' $false)) {
+                [string](Get-RooPropertyValue $entry 'blockedReason' (Get-RooPropertyValue $entry 'reason' 'Preview entry is protected or blocked.'))
+            } else {
+                'Dry-run apply; -ConfirmApply was not provided.'
             }
+            $category = if ([bool](Get-RooPropertyValue $entry 'blocked' $false) -or [bool](Get-RooPropertyValue $entry 'protected' $false)) { 'blocked' } else { 'dry-run' }
+            $skipped.Add((New-ApplySkippedItem $entry $reason $entryChanges @() $category)) | Out-Null
         }
 
         $result = New-RooActionResult `
             -ResultId ("dry-run-apply-" + (Get-RooFileStamp)) `
             -Status 'preview' `
-            -Summary 'Dry-run only. No process priority changes were applied.' `
+            -Summary 'Dry-run only. No process control changes were applied.' `
             -ChangedItems @() `
             -SkippedItems @($skipped.ToArray()) `
             -Artifacts @()
@@ -129,51 +156,44 @@ try {
             -Result $result `
             -Warnings @($warnings.ToArray()) `
             -Errors @(Get-RooPropertyArray $previewEnvelope 'errors') `
-            -Logs @((New-RooLog 'Dry-run apply completed without changing process priorities.'))
+            -Logs @((New-RooLog 'Dry-run apply completed without changing process controls.'))
 
         Write-RooJsonOutput $dryRunEnvelope $OutputPath
         exit 0
     }
 
+    $skipped = New-Object System.Collections.Generic.List[object]
     $candidateEntries = New-Object System.Collections.Generic.List[object]
     foreach ($entry in @(Get-RooPropertyArray $previewEnvelope 'preview')) {
-        $isChange = ([string](Get-RooPropertyValue $entry 'proposedAction' '') -eq 'setPriority')
+        $entryChanges = @(Get-RooPreviewControlChanges $entry)
+        $applicablePreviewChanges = @($entryChanges | Where-Object { -not [bool](Get-RooPropertyValue $_ 'blocked' $false) })
+        $isChange = ($applicablePreviewChanges.Count -gt 0)
         $isBlocked = [bool](Get-RooPropertyValue $entry 'blocked' $false)
         $isProtected = [bool](Get-RooPropertyValue $entry 'protected' $false)
         if ($isChange -and -not $isBlocked -and -not $isProtected) {
             $candidateEntries.Add($entry) | Out-Null
+        } elseif ($entryChanges.Count -gt 0 -and ($isBlocked -or $isProtected)) {
+            $skippedReason = [string](Get-RooPropertyValue $entry 'blockedReason' (Get-RooPropertyValue $entry 'reason' 'Preview entry is protected or blocked.'))
+            $skipped.Add((New-ApplySkippedItem $entry $skippedReason $entryChanges @() 'blocked')) | Out-Null
         }
     }
 
-    $skipped = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
     foreach ($entry in @($candidateEntries.ToArray())) {
-        $targetPriority = [string](Get-RooPropertyValue $entry 'proposedPriorityClass' '')
-        if (-not (Test-RooPriorityAllowed $targetPriority)) {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $entry 'processId' 0
-                processName = Get-RooPropertyValue $entry 'processName' ''
-                reason = "Priority class '$targetPriority' is outside the allow-list."
-            }) | Out-Null
-            continue
-        }
+        $entryChanges = @(Get-RooPreviewControlChanges $entry | Where-Object { -not [bool](Get-RooPropertyValue $_ 'blocked' $false) })
 
         $identity = Get-LiveProcessIdentity $entry
         if (-not $identity.exists -or -not $identity.matches) {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $entry 'processId' 0
-                processName = Get-RooPropertyValue $entry 'processName' ''
-                reason = $identity.reason
-            }) | Out-Null
+            $skipped.Add((New-ApplySkippedItem $entry $identity.reason $entryChanges @() 'identity-mismatch')) | Out-Null
             continue
         }
 
-        if ([string]$identity.currentPriorityClass -eq $targetPriority) {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $entry 'processId' 0
-                processName = Get-RooPropertyValue $entry 'processName' ''
-                reason = "Process is already at $targetPriority priority."
-            }) | Out-Null
+        $livePlan = Get-RooApplicableProcessControlChanges $entryChanges $identity.currentControlState
+        foreach ($skippedControl in @(Get-RooPropertyArray $livePlan 'skippedControls')) {
+            $skipped.Add((New-ApplySkippedItem $entry ([string](Get-RooPropertyValue $skippedControl 'reason' 'Process control was skipped.')) @() @($skippedControl) ([string](Get-RooPropertyValue $skippedControl 'category' 'skipped')))) | Out-Null
+        }
+        $liveChanges = @(Get-RooPropertyArray $livePlan 'changes')
+        if ($liveChanges.Count -eq 0) {
             continue
         }
 
@@ -181,8 +201,16 @@ try {
             processId = [int](Get-RooPropertyValue $entry 'processId' 0)
             processName = [string](Get-RooPropertyValue $entry 'processName' '')
             executablePath = Get-RooPropertyValue $entry 'executablePath' $identity.currentPath
-            originalPriorityClass = [string]$identity.currentPriorityClass
-            proposedPriorityClass = $targetPriority
+            originalPriorityClass = Get-RooPropertyValue $identity.currentControlState 'priorityClass' $null
+            proposedPriorityClass = Get-RooPropertyValue $entry 'proposedPriorityClass' $null
+            originalAffinityMask = Get-RooPropertyValue $identity.currentControlState 'affinityMask' $null
+            proposedAffinityMask = Get-RooPropertyValue $entry 'proposedAffinityMask' $null
+            originalIoPriority = Get-RooPropertyValue $identity.currentControlState 'ioPriority' $null
+            proposedIoPriority = Get-RooPropertyValue $entry 'proposedIoPriority' $null
+            originalGpuPriority = Get-RooPropertyValue $identity.currentControlState 'gpuPriority' $null
+            proposedGpuPriority = Get-RooPropertyValue $entry 'proposedGpuPriority' $null
+            controlChanges = @($liveChanges)
+            processStartTimeUtc = Get-RooPropertyValue $identity.currentControlState 'startTimeUtc' $null
             capturedAtUtc = Get-RooUtcStamp
             profileId = [string](Get-RooPropertyValue $profile 'profileId' '')
             ruleId = [string](Get-RooPropertyValue $entry 'ruleId' '')
@@ -219,49 +247,60 @@ try {
     foreach ($snapshot in @($snapshots.ToArray())) {
         $live = Get-Process -Id ([int](Get-RooPropertyValue $snapshot 'processId' 0)) -ErrorAction SilentlyContinue
         if ($null -eq $live) {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $snapshot 'processId' 0
-                processName = Get-RooPropertyValue $snapshot 'processName' ''
-                reason = 'Process exited before apply.'
-            }) | Out-Null
+            $skipped.Add((New-ApplySkippedItem $snapshot 'Process exited before apply.' @(Get-RooPropertyArray $snapshot 'controlChanges') @() 'exited')) | Out-Null
             continue
         }
         if (-not (Test-RooProcessNameEquals $live.ProcessName ([string](Get-RooPropertyValue $snapshot 'processName' '')))) {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $snapshot 'processId' 0
-                processName = Get-RooPropertyValue $snapshot 'processName' ''
-                reason = 'Process identity changed before apply.'
-            }) | Out-Null
+            $skipped.Add((New-ApplySkippedItem $snapshot 'Process identity changed before apply.' @(Get-RooPropertyArray $snapshot 'controlChanges') @() 'identity-mismatch')) | Out-Null
             continue
         }
 
-        $desiredPriority = [string](Get-RooPropertyValue $snapshot 'proposedPriorityClass' '')
+        $controlChanges = @(Get-RooPropertyArray $snapshot 'controlChanges')
+        $appliedControls = New-Object System.Collections.Generic.List[object]
+        $failedControls = New-Object System.Collections.Generic.List[string]
         try {
-            $live.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$desiredPriority
-            $changed.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $snapshot 'processId' 0
-                processName = Get-RooPropertyValue $snapshot 'processName' ''
-                originalPriorityClass = Get-RooPropertyValue $snapshot 'originalPriorityClass' $null
-                appliedPriorityClass = $desiredPriority
-                ruleId = Get-RooPropertyValue $snapshot 'ruleId' ''
-            }) | Out-Null
+            foreach ($change in $controlChanges) {
+                try {
+                    Invoke-RooProcessControlChange $live $change
+                    $appliedControls.Add($change) | Out-Null
+                } catch {
+                    $failedControls.Add("$([string](Get-RooPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                }
+            }
+            $afterControls = Get-RooProcessControlState ([int](Get-RooPropertyValue $snapshot 'processId' 0)) $null
+            if ($appliedControls.Count -gt 0) {
+                $changed.Add([pscustomobject]@{
+                    processId = Get-RooPropertyValue $snapshot 'processId' 0
+                    processName = Get-RooPropertyValue $snapshot 'processName' ''
+                    originalPriorityClass = Get-RooPropertyValue $snapshot 'originalPriorityClass' $null
+                    appliedPriorityClass = $afterControls.priorityClass
+                    originalAffinityMask = Get-RooPropertyValue $snapshot 'originalAffinityMask' $null
+                    appliedAffinityMask = $afterControls.affinityMask
+                    originalIoPriority = Get-RooPropertyValue $snapshot 'originalIoPriority' $null
+                    appliedIoPriority = $afterControls.ioPriority
+                    originalGpuPriority = Get-RooPropertyValue $snapshot 'originalGpuPriority' $null
+                    appliedGpuPriority = $afterControls.gpuPriority
+                    appliedControls = @($appliedControls.ToArray())
+                    ruleId = Get-RooPropertyValue $snapshot 'ruleId' ''
+                }) | Out-Null
+            }
+            if ($failedControls.Count -gt 0) {
+                $skipped.Add((New-ApplySkippedItem $snapshot ($failedControls -join '; ') $controlChanges @() 'apply-failed')) | Out-Null
+            }
         } catch {
-            $skipped.Add([pscustomobject]@{
-                processId = Get-RooPropertyValue $snapshot 'processId' 0
-                processName = Get-RooPropertyValue $snapshot 'processName' ''
-                reason = $_.Exception.Message
-            }) | Out-Null
+            $skipped.Add((New-ApplySkippedItem $snapshot $_.Exception.Message $controlChanges @() 'apply-failed')) | Out-Null
         }
     }
 
     $status = 'success'
-    if ($changed.Count -eq 0 -and ($candidateEntries.Count -gt 0 -or $skipped.Count -gt 0)) { $status = 'failed' }
-    if ($changed.Count -gt 0 -and $skipped.Count -gt 0) { $status = 'partial' }
+    $nonNoopSkipped = @($skipped.ToArray() | Where-Object { [string](Get-RooPropertyValue $_ 'category' '') -ne 'no-change' })
+    if ($changed.Count -eq 0 -and ($candidateEntries.Count -gt 0 -or $nonNoopSkipped.Count -gt 0)) { $status = if ($nonNoopSkipped.Count -eq 0) { 'success' } else { 'failed' } }
+    if ($changed.Count -gt 0 -and $nonNoopSkipped.Count -gt 0) { $status = 'partial' }
 
     $result = New-RooActionResult `
         -ResultId ("apply-" + (Get-RooFileStamp)) `
         -Status $status `
-        -Summary "Confirmed apply completed with $($changed.Count) priority change(s) and $($skipped.Count) skipped item(s)." `
+        -Summary "Confirmed apply completed with $($changed.Count) process control change item(s) and $($skipped.Count) skipped item(s)." `
         -ChangedItems @($changed.ToArray()) `
         -SkippedItems @($skipped.ToArray()) `
         -Artifacts $(if ($backupPath) { @([pscustomobject]@{ type = 'processProfileBackup'; path = $backupPath }) } else { @() })

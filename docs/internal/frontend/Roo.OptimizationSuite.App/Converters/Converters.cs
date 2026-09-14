@@ -12,13 +12,17 @@ public sealed class RiskToBrushConverter : IValueConverter
     {
         var prefix = (value as string ?? string.Empty).Trim().ToLowerInvariant() switch
         {
-            "safe" or "ready" or "ready-for-preview" or "available" or "complete" or "boosted" or "tested"
-                or "recommended" => "RiskSafe",
-            "low" or "info" or "demoted" or "candidate" or "preview-ready" => "RiskLow",
+            "safe" or "available" or "complete" or "completed" or "restorable" or "boosted"
+                or "recommended" or "connected" => "RiskSafe",
+            "low" or "info" or "demoted" or "candidate" or "preview-ready" or "ready-for-preview"
+                or "fixture-apply-ready" or "tested" or "tested on a safe copy" => "RiskLow",
             "medium" or "watch" or "warning" or "needs-local-benchmark" or "seed-profile" or "advanced" => "RiskMedium",
-            "high" => "RiskHigh",
-            "protected" or "manual" or "manual gated" or "preview-only" => "RiskProtected",
-            "blocked" => "RiskBlocked",
+            "high" or "critical" => "RiskHigh",
+            "protected" or "protected companion" or "manual" or "manual gated" or "manual install"
+                or "preview-only" or "review mode" or "guarded-fixture-ready" or "pending" or "ready"
+                or "go-ahead" or "ready needs your go-ahead" or "ready — needs your go-ahead"
+                or "helper packaging pending" or "not done yet" or "blocked" => "RiskProtected",
+            "sample" or "sample capture" or "optional-not-detected" or "not connected" => "RiskNeutral",
             _ => "RiskNeutral",
         };
 
@@ -38,6 +42,15 @@ public sealed class RiskToBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
+}
+
+public sealed class InverseBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => !(value is bool b && b);
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => !(value is bool b && b);
 }
 
 public sealed class RiskToDisplayConverter : IValueConverter

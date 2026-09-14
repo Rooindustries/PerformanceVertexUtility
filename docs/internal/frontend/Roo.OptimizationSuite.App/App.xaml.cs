@@ -12,6 +12,7 @@ public partial class App : Application
 
     public static SampleDataService Data { get; } = new SampleDataService(Locator);
     public static LiveDataService Live { get; } = new LiveDataService(Locator);
+    public static CapabilityService Capabilities { get; } = new CapabilityService(Locator);
     public static ThemeService Theme { get; } = new ThemeService(new SettingsStore());
 
     private static readonly string[] AccentKeys =
@@ -86,7 +87,11 @@ public partial class App : Application
     {
         Theme.ApplyPersistedTheme();
         ApplyAccentResourceOverrides();
-        MainWindow = new MainWindow();
+
+        var initialNav = System.Environment.GetEnvironmentVariable("ROO_INITIAL_NAV");
+        MainWindow = string.IsNullOrWhiteSpace(initialNav)
+            ? new MainWindow()
+            : new MainWindow(initialNav.Trim(), false);
         MainWindow.Activate();
         if (MainWindow.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {

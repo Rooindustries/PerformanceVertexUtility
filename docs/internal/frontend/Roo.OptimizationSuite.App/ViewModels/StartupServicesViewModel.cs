@@ -20,8 +20,7 @@ public partial class StartupServicesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var classification = await App.Live.GetProcessClassificationAsync()
-            ?? await TrySample(Data.GetProcessClassificationAsync);
+        var classification = await App.Live.GetProcessClassificationAsync();
         var processes = classification?.Processes ?? new List<ProcessItem>();
 
         var background = processes

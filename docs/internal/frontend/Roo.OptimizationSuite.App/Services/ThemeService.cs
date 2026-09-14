@@ -21,7 +21,7 @@ public sealed class ThemeService
     private readonly SettingsStore _settings;
 
     public IReadOnlyList<ThemeOption> Options { get; } = new[] { RooBlue, BlackoutGold };
-    public string CurrentThemeId { get; private set; } = RooBlue.Id;
+    public string CurrentThemeId { get; private set; } = BlackoutGold.Id;
     public bool ReducedEffects { get; private set; }
 
     public event Action? ThemeChanged;
@@ -35,10 +35,10 @@ public sealed class ThemeService
     public void ApplyPersistedTheme()
     {
         var stored = _settings.Get(ThemeKey);
-        var option = Options.FirstOrDefault(o => o.Id == stored) ?? RooBlue;
+        var option = Options.FirstOrDefault(o => o.Id == stored) ?? BlackoutGold;
         CurrentThemeId = option.Id;
         ReducedEffects = _settings.Get(EffectsKey) == "1";
-        if (option.Id != RooBlue.Id)
+        if (option.Id != BlackoutGold.Id)
         {
             SwapDictionary(option);
         }

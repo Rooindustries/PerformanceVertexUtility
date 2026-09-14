@@ -5,6 +5,8 @@ This document records which tools from `Utilities.zip` should become app feature
 ## Boundaries
 
 - The app may bundle tools in release builds, but development should reference the local utilities archive to avoid making the source repository huge.
+- `backend/catalogs/utilities-bundle-catalog.json` is generated from `vendor\Utilities.zip` metadata only; do not extract the full archive for catalog validation.
+- `backend/scripts/Get-UtilitiesBundleInventory.ps1` reads zip entry metadata only. It must not launch bundled utilities or mutate the system.
 - Do not bypass or remove licenses from Process Lasso, Revo Uninstaller, or any other third-party tool.
 - If a licensed tool is undesirable, build a native replacement module that uses Windows-supported APIs and normal uninstall mechanisms.
 - Risky tools require manual confirmation and restore-point/backups.
@@ -26,6 +28,16 @@ This document records which tools from `Utilities.zip` should become app feature
 | DeviceCleanup | Used | Native dead-device cleanup module plus optional launcher. |
 | UserDiag | Used; wants sales CTA | Separate diagnostics section with rooindustries.com plan recommendation. |
 | Autoruns | Not used; user wants explanation | Advanced startup inspector, education, manual launch only. |
+| AffTool / intPolicy | Research only | Read-only interrupt/affinity policy status first; no blind apply. |
+| MSI Utility v3 | Used for MSI mode awareness | Read-only MSI mode/status detector first; apply later only with restore/export proof. |
+| InSpectre | Mitigation awareness only | Security mitigation detector first; disabling Spectre/Meltdown mitigations is high-risk manual-only and never silent. |
+| UnparkCPU | Reference only | Prefer native power-plan/core-parking controls with export/rollback; bundled tool stays manual/reference. |
+| LatencyMon | Diagnostics | DPC/ISR latency diagnostics workflow, not an optimizer action. |
+| MSI Kombustor | Optional benchmark | Separate stress/benchmark workflow only, with thermal safety gates and no auto-run. |
+| DL_SCEWIN | Firmware utility | Dangerous manual-only firmware reference; no optimizer automation. |
+| Driver Booster | Avoided | Excluded from default driver strategy. |
+| AMD/Intel/NVIDIA/Realtek driver installers | Package sources | Hardware-gated recommendations only, manual confirmation required. |
+| DirectX/.NET/VC++ prerequisites | Dependency repair | Repair/install workflow only, explicit confirmation required. |
 | Thorium | Avoided | Excluded by default. |
 | Vesktop | Avoided | Excluded by default. |
 

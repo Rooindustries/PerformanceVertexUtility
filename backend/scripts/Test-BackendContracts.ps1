@@ -160,7 +160,12 @@ $requiredFiles = @(
     'backend\catalogs\gaming-playbook-capabilities.json',
     'backend\catalogs\gaming-toggles-capabilities.json',
     'backend\catalogs\gaming-gap-map.json',
-    'backend\scripts\Test-GamingCatalogs.ps1'
+    'backend\scripts\Test-GamingCatalogs.ps1',
+    'backend\catalogs\utilities-bundle-catalog.json',
+    'backend\samples\utilities-bundle-inventory.sample.json',
+    'backend\samples\utilities-bundle-catalog.sample.json',
+    'backend\scripts\Get-UtilitiesBundleInventory.ps1',
+    'backend\scripts\Test-UtilitiesBundleCatalog.ps1'
 )
 
 foreach ($relative in $requiredFiles) {
@@ -200,6 +205,19 @@ try {
     }
 } catch {
     Add-Failure "{source} catalog guardrails failed: $($_.Exception.Message)"
+}
+
+try {
+    $utilitiesCatalogTestOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-UtilitiesBundleCatalog.ps1') 2>&1
+    $utilitiesCatalogTestExitCode = $LASTEXITCODE
+    $utilitiesCatalogTestOutput | ForEach-Object { Write-Host $_ }
+    if ($utilitiesCatalogTestExitCode -eq 0) {
+        Add-Pass 'Utilities bundle catalog guardrails passed'
+    } else {
+        Add-Failure "Utilities bundle catalog guardrails failed with exit code $utilitiesCatalogTestExitCode"
+    }
+} catch {
+    Add-Failure "Utilities bundle catalog guardrails failed: $($_.Exception.Message)"
 }
 
 try {
