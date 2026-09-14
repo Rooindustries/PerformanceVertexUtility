@@ -110,10 +110,10 @@ try {
         Add-Failure 'App classification returned an unexpected shape'
     }
     $webview = @($classification.apps | Where-Object { $_.appId -eq 'registry:microsoft-edge-webview2-runtime' }) | Select-Object -First 1
-    if ($webview.protected -eq $true -and $webview.blockByDefault -eq $true) {
-        Add-Pass 'WebView2 runtime is protected and blocked by default'
+    if ($webview.protected -eq $false -and $webview.blockByDefault -eq $false -and $webview.risk -eq 'advanced' -and ($webview.reasonCodes -contains 'MANUAL_REVIEW_CATALOG_MATCH')) {
+        Add-Pass 'WebView2 runtime is manual-review and queue-visible by default'
     } else {
-        Add-Failure 'WebView2 runtime was not protected by classification'
+        Add-Failure 'WebView2 runtime classification did not use manual-review queue-visible behavior'
     }
 } catch {
     Add-Failure "App classification failed: $($_.Exception.Message)"
@@ -127,10 +127,10 @@ try {
     } else {
         Add-Failure 'Uninstall queue preview reported unsafe execution state'
     }
-    if (@($queue.selectedApps).Count -eq 1 -and @($queue.blockedApps).Count -eq 1) {
-        Add-Pass 'Uninstall queue selected normal app and blocked protected app'
+    if (@($queue.selectedApps).Count -eq 2 -and @($queue.blockedApps).Count -eq 0) {
+        Add-Pass 'Uninstall queue keeps manual-review apps visible instead of hiding them'
     } else {
-        Add-Failure 'Uninstall queue did not block protected app by default'
+        Add-Failure 'Uninstall queue did not keep manual-review apps visible by default'
     }
 } catch {
     Add-Failure "Uninstall queue preview failed: $($_.Exception.Message)"

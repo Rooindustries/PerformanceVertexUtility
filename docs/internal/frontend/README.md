@@ -1,6 +1,6 @@
 # Roo Industries Optimization Suite - WinUI Frontend
 
-Internal WinUI 3 frontend for the local Roo Optimization Suite. The project is kept
+Internal WinUI 3 frontend for the local Roo Industries Optimization Suite. The project is kept
 under `docs/internal/frontend` while the backend contracts and runtime scripts are
 still being hardened. It should stay a frontend shell: no risky Windows behavior is
 implemented directly in the UI layer.
@@ -63,7 +63,7 @@ Roo.OptimizationSuite.App/
   App.xaml(.cs)             App entry, shared services, persisted theme, crash log hook.
   MainWindow.xaml(.cs)      Settings-style NavigationView shell and page routing.
   Resources/
-    Theme.RooBlue.xaml      Default Roo Blue resource dictionary.
+    Theme.RooBlue.xaml      Default Roo Industries Blue resource dictionary.
     Theme.BlackoutGold.xaml Alternate Blackout Gold resource dictionary.
     Brand.xaml              Font family and shared sizing tokens.
     Styles.xaml             Converters, typography, card, chip, and layout styles.
@@ -87,12 +87,12 @@ Roo.OptimizationSuite.App/
     SettingsPage.xaml
 ```
 
-Navigation labels in the shell are Dashboard, Game Tune, Clean Junk, Drivers &
+Navigation labels in the shell are Dashboard, Game Tune, Apps & Cleanup, Drivers &
 Settings, Live Feel, Before & After, and Settings.
 
 ## Theme and assets
 
-- The app ships two dark theme dictionaries: Roo Blue and Blackout Gold.
+- The app ships two dark theme dictionaries: Roo Industries Blue and Blackout Gold.
 - `ThemeService` persists the selected theme and swaps the active resource
   dictionary at runtime.
 - `Brand.xaml` currently points to the checked-in Roboto Flex TTF asset under

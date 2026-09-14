@@ -44,7 +44,7 @@
       "pnpDeviceId": "PCI\\VEN_8086&DEV_51F1&SUBSYS_00948086&REV_01",
       "driverVersion": "23.150.0.4",
       "protected": true,
-      "reason": "Wi-Fi is protected by default"
+      "reason": "Wi-Fi requires manual review by default"
     },
     {
       "name": "Tailscale Tunnel",
@@ -52,7 +52,7 @@
       "pnpDeviceId": "ROOT\\NET\\0001",
       "driverVersion": "1.68.2.0",
       "protected": true,
-      "reason": "Tailscale is protected by default"
+      "reason": "Tailscale requires manual review by default"
     }
   ]
 }

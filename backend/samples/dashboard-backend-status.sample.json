@@ -21,7 +21,7 @@
   "cards": [
     {
       "cardId": "safety",
-      "title": "Protected by default",
+      "title": "Review first",
       "state": "protected",
       "primaryMetric": "Review first",
       "detail": "No app gets touched until you approve the tune."
@@ -53,7 +53,7 @@
       "actionId": "performance.previewProcessPlan",
       "label": "Tune My PC",
       "risk": "medium",
-      "reason": "Give Overwatch more room while OBS and Discord stay protected.",
+      "reason": "Give Overwatch more room while OBS and Discord stay steady.",
       "requiresElevation": false,
       "dryRun": true
     },

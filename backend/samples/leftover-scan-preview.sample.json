@@ -155,7 +155,7 @@
       "risk": "protected",
       "defaultSelected": false,
       "protected": true,
-      "reason": "Shared runtime. Keep it protected."
+      "reason": "Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup."
     }
   ],
   "warnings": [

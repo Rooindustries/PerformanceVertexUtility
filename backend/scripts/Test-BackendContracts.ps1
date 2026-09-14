@@ -126,6 +126,8 @@ $requiredFiles = @(
     'backend\scripts\Invoke-UninstallCleanupExecution.ps1',
     'backend\scripts\Restore-UninstallCleanupExecution.ps1',
     'backend\scripts\Test-UninstallCleanupRestore.ps1',
+    'backend\scripts\Invoke-UninstallCleanupApplyPackage.ps1',
+    'backend\scripts\Test-UninstallCleanupApplyPackage.ps1',
     'backend\scripts\Invoke-UninstallCleanupRunners.ps1',
     'backend\scripts\Test-UninstallCleanupRunnerContracts.ps1',
     'backend\scripts\Invoke-OfficialUninstallCommandRunner.ps1',

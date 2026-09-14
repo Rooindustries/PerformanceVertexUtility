@@ -3,7 +3,7 @@
   "productName": "Roo Industries Optimization Suite",
   "rulesetId": "conservative-leftover-scan-rules",
   "name": "Conservative Leftover Scan Rules",
-  "description": "Metadata-only leftover candidates. Shared paths and fuzzy matches are protected by default.",
+  "description": "Metadata-only leftover candidates. Shared paths and fuzzy matches require manual review by default.",
   "protectedPaths": [
     {
       "pathPattern": "C:\\Windows*",

@@ -20,7 +20,7 @@ function Convert-EstimatedSizeBytes {
 function Get-AppRisk {
     param([string]$Name, [string]$Publisher)
     $text = (($Name + ' ' + $Publisher) -as [string]).ToLowerInvariant()
-    if ($text -match 'visual c\+\+|redistributable|\.net|directx|webview2|windows desktop runtime|microsoft store|windows app runtime|graphics driver|audio driver|network driver|defender|security') { return 'protected' }
+    if ($text -match 'visual c\+\+|redistributable|\.net|directx|webview2|windows desktop runtime|microsoft store|windows app runtime|graphics driver|audio driver|network driver|defender|security') { return 'advanced' }
     if ($text -match 'driver|nvidia|amd|intel|realtek|tailscale|vpn|anticheat|anti-cheat|battleye|easy anti-cheat|vanguard') { return 'medium' }
     if ($text -match 'overlay|overwolf|afterburner|rtss|uninstaller|cleanup') { return 'medium' }
     return 'low'
@@ -54,7 +54,6 @@ function New-AppRecord {
     $name = [string]$Item.DisplayName
     $publisher = if ($Item.Publisher) { [string]$Item.Publisher } else { $null }
     $risk = Get-AppRisk $name $publisher
-    $protected = ($risk -eq 'protected')
     $stableId = Convert-ToStableId ($SourceType + ':' + $name + ':' + $Item.PSChildName)
     [pscustomobject]@{
         appId = "$SourceType`:$stableId"
@@ -70,8 +69,8 @@ function New-AppRecord {
         installDate = if ($Item.InstallDate) { [string]$Item.InstallDate } else { $null }
         categories = @(Get-AppCategories $name $publisher)
         risk = $risk
-        protected = $protected
-        protectionReasons = if ($protected) { @('Shared runtime, driver-adjacent component, security component, or protected Windows dependency') } else { @() }
+        protected = $false
+        protectionReasons = if ($risk -eq 'advanced') { @('Shared runtime, driver-adjacent component, security component, or Windows dependency requiring manual review') } else { @() }
         startupImpact = Get-StartupImpact $name $publisher
     }
 }
@@ -98,7 +97,7 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
     foreach ($pkg in $appxItems) {
         $risk = Get-AppRisk $pkg.Name $pkg.Publisher
-        $protected = ($risk -eq 'protected' -or $pkg.Publisher -match 'Microsoft')
+        $reviewRequired = ($risk -eq 'advanced' -or $pkg.Publisher -match 'Microsoft')
         $apps.Add([pscustomobject]@{
             appId = 'appx:' + (Convert-ToStableId $pkg.PackageFullName)
             displayName = [string]$pkg.Name
@@ -112,9 +111,9 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
             estimatedSizeBytes = $null
             installDate = $null
             categories = @(Get-AppCategories $pkg.Name $pkg.Publisher)
-            risk = if ($protected) { 'protected' } else { $risk }
-            protected = $protected
-            protectionReasons = if ($protected) { @('Appx package is protected by default until dependency impact is known') } else { @() }
+            risk = if ($reviewRequired -and $risk -eq 'low') { 'advanced' } else { $risk }
+            protected = $false
+            protectionReasons = if ($reviewRequired) { @('Appx package requires dependency review before removal') } else { @() }
             startupImpact = Get-StartupImpact $pkg.Name $pkg.Publisher
         }) | Out-Null
     }
@@ -151,8 +150,8 @@ if ($IncludeWinget) {
                     installDate = $null
                     categories = @(Get-AppCategories $name '')
                     risk = $risk
-                    protected = ($risk -eq 'protected')
-                    protectionReasons = if ($risk -eq 'protected') { @('Protected by runtime or driver classification') } else { @() }
+                    protected = $false
+                    protectionReasons = if ($risk -eq 'advanced') { @('Runtime or driver classification needs manual review') } else { @() }
                     startupImpact = Get-StartupImpact $name ''
                 }) | Out-Null
             }
@@ -169,7 +168,7 @@ $summary = [pscustomobject]@{
     launcherCount = @($appArray | Where-Object { $_.categories -contains 'launcher' }).Count
     overlayCount = @($appArray | Where-Object { $_.categories -contains 'overlay' }).Count
     vendorToolCount = @($appArray | Where-Object { $_.categories -contains 'vendor-tool' }).Count
-    protectedRuntimeCount = @($appArray | Where-Object { $_.protected }).Count
+    protectedRuntimeCount = 0
     startupHeavyCount = @($appArray | Where-Object { $_.startupImpact -eq 'high' }).Count
     estimatedSizeBytes = [uint64](($appArray | Where-Object { $null -ne $_.estimatedSizeBytes } | Measure-Object estimatedSizeBytes -Sum).Sum)
 }

@@ -9,8 +9,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
     <Grid Padding="{StaticResource RooPageMargin}">
-        <ScrollViewer>
-            <StackPanel Spacing="18" MaxWidth="860" HorizontalAlignment="Left">
+        <ScrollViewer x:Name="SettingsScroller">
+            <StackPanel x:Name="SettingsContent" Spacing="18" MaxWidth="1320" HorizontalAlignment="Center">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
@@ -25,7 +25,7 @@
                             <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                             <StackPanel Grid.Column="1" Spacing="7">
                                 <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Theme, safety, and the Roo identity." FontSize="13" LineHeight="19" TextWrapping="Wrap"
+                                <TextBlock Text="Theme, safety, and the Roo Industries identity." FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
@@ -42,7 +42,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center">
                                 <TextBlock Text="Theme" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Roo Blue is the default. Blackout is the darker match-night setup." Style="{StaticResource CaptionTextBlockStyle}"
+                                <TextBlock Text="Roo Industries Blue is the default. Blackout Gold is the darker match-night setup." Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                             <ComboBox Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
@@ -87,7 +87,7 @@
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
-                        <TextBlock Text="Roo's backend runs in short, bounded sessions and exits. Apply actions stay preview-first — nothing changes until you confirm it."
+                        <TextBlock Text="Roo Industries checks the plan first, applies only what you approve, and keeps a restore path beside risky changes."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" Padding="20,10,20,18" />
                     </StackPanel>
                 </Border>

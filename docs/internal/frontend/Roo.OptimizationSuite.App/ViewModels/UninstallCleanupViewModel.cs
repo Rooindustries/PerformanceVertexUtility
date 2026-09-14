@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,18 +21,113 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [ObservableProperty] private InstalledApp? _selectedApp;
     [ObservableProperty] private string? _selectedName;
     [ObservableProperty] private string? _selectedSummary;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanScan))] private bool _selectedProtected;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    [NotifyPropertyChangedFor(nameof(CanReviewRemoval))]
+    [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(CanRestoreCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    [NotifyPropertyChangedFor(nameof(RemovalPanelLabel))]
+    [NotifyPropertyChangedFor(nameof(RemovalPathHeadline))]
+    [NotifyPropertyChangedFor(nameof(RemovalPathHelp))]
+    private bool _selectedProtected;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RemovalPanelLabel))]
+    [NotifyPropertyChangedFor(nameof(RemovalPathHeadline))]
+    [NotifyPropertyChangedFor(nameof(RemovalPathHelp))]
+    private bool _selectedHasOfficialRemover;
     [ObservableProperty] private string? _officialCommand;
     [ObservableProperty] private string? _installLocation;
 
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanScan))] private bool _hasSelection;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanScan))] private bool _scanBusy;
-    [ObservableProperty] private string _leftoverState = "Pick an app on the left to review its uninstall and leftovers.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    [NotifyPropertyChangedFor(nameof(CanReviewRemoval))]
+    [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    private bool _hasSelection;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanScan))]
+    [NotifyPropertyChangedFor(nameof(CanReviewRemoval))]
+    [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(CanRestoreCleanup))]
+    private bool _scanBusy;
+    [ObservableProperty] private string _leftoverState = "Pick an app, then scan what it leaves behind.";
     [ObservableProperty] private string? _leftoverSummary;
+    [ObservableProperty] private string _officialPreviewState = "Pick an app to choose the removal route.";
+    [ObservableProperty] private string _cleanupPlanState = "Scan first, then build the removal list.";
+    [ObservableProperty] private string _primaryRemovalButtonLabel = "Check path";
+    [ObservableProperty] private string _removalPlanState = "Build the removal list to see the full run.";
+    [ObservableProperty] private string? _removalPlanDetail;
+    [ObservableProperty] private string _cleanupExecutionState = "Apply unlocks after the route and cleanup list are reviewed.";
+    [ObservableProperty] private string? _cleanupExecutionDetail;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRestoreCleanup))]
+    private bool _cleanupRestoreAvailable;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    private bool _removalPathReviewed;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    private bool _leftoverScanCompleted;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    private bool _cleanupPlanReady;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    private bool _removerPathApproved;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    private bool _cleanupListApproved;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
+    private bool _realCleanupApproved;
+    [ObservableProperty] private bool _canReviewRemovalAction;
+    [ObservableProperty] private bool _canScanAction;
+    [ObservableProperty] private bool _canBuildCleanupListAction;
+    [ObservableProperty] private bool _canRunFinalCheckAction;
+    [ObservableProperty] private bool _canApplyCleanupAction;
+    [ObservableProperty] private bool _canRestoreCleanupAction;
 
-    public bool CanScan => HasSelection && !SelectedProtected && !ScanBusy;
+    public bool CanScan => HasSelection && !ScanBusy;
+    public bool CanReviewRemoval => HasSelection && !ScanBusy;
+    public bool CanBuildCleanupList => HasSelection && !ScanBusy && RemovalPathReviewed && LeftoverScanCompleted;
+    public bool CanRunFinalCheck => HasSelection && !ScanBusy && CleanupPlanReady && RemoverPathApproved && CleanupListApproved;
+    public bool CanApplyCleanup => CanRunFinalCheck && RealCleanupApproved;
+    public bool CanRestoreCleanup => HasSelection && !ScanBusy && CleanupRestoreAvailable;
+    public string ApplyApprovalSummary => !HasSelection
+        ? "Pick an app first."
+        : !RemovalPathReviewed
+                ? "Start with the removal route."
+                : !LeftoverScanCompleted
+                    ? "Scan leftovers next."
+                    : !CleanupPlanReady
+                        ? "Build the removal list."
+                        : RemoverPathApproved && CleanupListApproved && RealCleanupApproved
+                            ? "Ready to apply the reviewed cleanup."
+                            : RemoverPathApproved && CleanupListApproved
+                                ? "Final check is ready. Tick final approval when you want files removed."
+                            : "Check both review boxes to unlock apply.";
+    public string RemovalPanelLabel => "ROO INDUSTRIES REMOVER";
+    public string RemovalPathHeadline => SelectedHasOfficialRemover
+        ? "Use the app path first"
+        : "Use the Roo Industries removal route";
+    public string RemovalPathHelp => SelectedHasOfficialRemover
+        ? "Roo Industries checks the app's own remover, then scans what it leaves behind."
+        : "Some apps do not publish a Windows removal command. Roo Industries can still build the run from traces and leftovers.";
 
     private readonly List<InstalledApp> _allApps = new();
+    private string? _lastCleanupRollbackPath;
     public ObservableCollection<InstalledApp> Apps { get; } = new();
     public ObservableCollection<LeftoverItem> Leftovers { get; } = new();
 
@@ -59,6 +155,17 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
+    partial void OnHasSelectionChanged(bool value) => RefreshActionState();
+    partial void OnSelectedProtectedChanged(bool value) => RefreshActionState();
+    partial void OnScanBusyChanged(bool value) => RefreshActionState();
+    partial void OnRemovalPathReviewedChanged(bool value) => RefreshActionState();
+    partial void OnLeftoverScanCompletedChanged(bool value) => RefreshActionState();
+    partial void OnCleanupPlanReadyChanged(bool value) => RefreshActionState();
+    partial void OnCleanupRestoreAvailableChanged(bool value) => RefreshActionState();
+    partial void OnRemoverPathApprovedChanged(bool value) => RefreshActionState();
+    partial void OnCleanupListApprovedChanged(bool value) => RefreshActionState();
+    partial void OnRealCleanupApprovedChanged(bool value) => RefreshActionState();
+
     partial void OnSelectedAppChanged(InstalledApp? value)
     {
         Leftovers.Clear();
@@ -67,32 +174,119 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         if (value is null)
         {
-            LeftoverState = "Pick an app on the left to review its uninstall and leftovers.";
+            LeftoverState = "Pick an app, then scan what it leaves behind.";
+            OfficialPreviewState = "Pick an app to choose the removal route.";
+            CleanupPlanState = "Scan first, then build the removal list.";
+            PrimaryRemovalButtonLabel = "Check path";
+            RemovalPlanState = "Build the removal list to see the full run.";
+            RemovalPlanDetail = null;
+            CleanupExecutionState = "Apply unlocks after the route and cleanup list are reviewed.";
+            CleanupExecutionDetail = null;
+            CleanupRestoreAvailable = false;
+            RemovalPathReviewed = false;
+            LeftoverScanCompleted = false;
+            CleanupPlanReady = false;
+            RemoverPathApproved = false;
+            CleanupListApproved = false;
+            RealCleanupApproved = false;
+            _lastCleanupRollbackPath = null;
+            RefreshActionState();
             return;
         }
 
         SelectedName = value.FriendlyName;
-        SelectedProtected = value.Protected;
+        SelectedProtected = false;
+        SelectedHasOfficialRemover = HasVendorRemover(value);
         var bits = new List<string>();
         if (!string.IsNullOrWhiteSpace(value.SecondaryLabel)) bits.Add(value.SecondaryLabel!);
         if (value.EstimatedSizeBytes is > 0) bits.Add(Format.Bytes(value.EstimatedSizeBytes!.Value));
-        SelectedSummary = string.Join("  ·  ", bits);
+        SelectedSummary = string.Join(" / ", bits);
 
         InstallLocation = string.IsNullOrWhiteSpace(value.InstallLocation) ? "Not recorded" : value.InstallLocation;
         OfficialCommand = string.IsNullOrWhiteSpace(value.UninstallString)
-            ? "No standard uninstaller is registered for this app."
+            ? "Roo Industries route. The app did not publish its own remover, so the cleanup run starts from traces and leftovers."
             : value.UninstallString;
 
-        LeftoverState = value.Protected
-            ? "This is a protected component. It stays out of cleanup."
-            : "Run a leftover scan when you're ready. Nothing is removed.";
+        LeftoverState = "Run a leftover scan. Nothing is removed.";
+        OfficialPreviewState = SelectedHasOfficialRemover
+            ? "Ready to check the app's own remover."
+            : "Roo Industries route selected. Scan leftovers next.";
+        CleanupPlanState = "Scan leftovers, then build the removal list.";
+        RemovalPlanState = "Build the list to see exactly what Roo Industries will ask to remove.";
+        RemovalPlanDetail = null;
+        CleanupExecutionState = "Apply is locked until review is done.";
+        CleanupExecutionDetail = "Check the route, scan leftovers, build the list, then approve the exact run.";
+        CleanupRestoreAvailable = false;
+        RemovalPathReviewed = false;
+        LeftoverScanCompleted = false;
+        CleanupPlanReady = false;
+        RemoverPathApproved = false;
+        CleanupListApproved = false;
+        RealCleanupApproved = false;
+        _lastCleanupRollbackPath = null;
+        PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
+        RefreshActionState();
+    }
+
+    [RelayCommand]
+    private async Task PreviewRemovalAsync()
+    {
+        var app = SelectedApp;
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy)
+        {
+            return;
+        }
+
+        ScanBusy = true;
+        OfficialPreviewState = "Checking app path...";
+        RemovalPathReviewed = false;
+        CleanupPlanReady = false;
+        RemoverPathApproved = false;
+        CleanupListApproved = false;
+        RealCleanupApproved = false;
+        try
+        {
+            var preview = await App.Live.GetOfficialUninstallPreviewAsync(app.AppId!);
+            var command = preview?.Commands?.FirstOrDefault(c => c.AppId == app.AppId) ?? preview?.Commands?.FirstOrDefault();
+            if (command is null)
+            {
+                OfficialPreviewState = "Roo Industries route selected. No app remover is needed to keep building the plan.";
+                SelectedHasOfficialRemover = false;
+                OfficialCommand = "Roo Industries route. The cleanup run starts from app traces and leftovers.";
+                PrimaryRemovalButtonLabel = "Plan removal";
+                RemovalPathReviewed = true;
+                return;
+            }
+
+            SelectedHasOfficialRemover = IsVendorRemover(command);
+            OfficialCommand = string.IsNullOrWhiteSpace(command.RawCommand)
+                ? "Roo Industries route. The cleanup run starts from app traces and leftovers."
+                : command.RawCommand;
+            PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
+            OfficialPreviewState = command.Blocked
+                ? "This route needs review, but it does not stop the cleanup plan."
+                : SelectedHasOfficialRemover
+                    ? "Path checked. Roo Industries has not run it."
+                    : "Roo Industries route checked. Nothing has run.";
+            RemovalPathReviewed = true;
+        }
+        catch
+        {
+            OfficialPreviewState = "Couldn't check this path right now.";
+            RemovalPathReviewed = false;
+        }
+        finally
+        {
+            ScanBusy = false;
+            RefreshActionState();
+        }
     }
 
     [RelayCommand]
     private async Task ScanLeftoversAsync()
     {
         var app = SelectedApp;
-        if (app is null || app.Protected || string.IsNullOrWhiteSpace(app.AppId))
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId))
         {
             return;
         }
@@ -100,7 +294,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         ScanBusy = true;
         Leftovers.Clear();
         LeftoverSummary = null;
-        LeftoverState = "Scanning for leftovers…";
+        LeftoverState = "Scanning for leftovers...";
+        LeftoverScanCompleted = false;
+        CleanupPlanReady = false;
+        CleanupListApproved = false;
+        RealCleanupApproved = false;
         try
         {
             var scan = await App.Live.GetLeftoverScanAsync(app.AppId!);
@@ -112,24 +310,171 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
             if (items.Count == 0)
             {
-                LeftoverState = "No leftovers found for this app.";
+                LeftoverState = "No leftover targets found for this app.";
             }
             else
             {
-                LeftoverState = string.Empty;
                 var recoverable = scan?.Summary?.EstimatedRecoverableBytes ?? 0;
                 LeftoverSummary = items.Count + " item" + (items.Count == 1 ? "" : "s")
-                    + (recoverable > 0 ? "  ·  " + Format.Bytes(recoverable) + " recoverable" : string.Empty);
+                    + (recoverable > 0 ? " / " + Format.Bytes(recoverable) + " recoverable" : string.Empty);
+                LeftoverState = "Scan found " + LeftoverSummary + ".";
             }
+            LeftoverScanCompleted = true;
         }
         catch
         {
             LeftoverState = "Couldn't scan this app right now.";
+            LeftoverScanCompleted = false;
         }
         finally
         {
             ScanBusy = false;
+            RefreshActionState();
         }
+    }
+
+    [RelayCommand]
+    private async Task BuildCleanupListAsync()
+    {
+        var app = SelectedApp;
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy || !CanBuildCleanupList)
+        {
+            return;
+        }
+
+        ScanBusy = true;
+        CleanupPlanState = "Building the removal list...";
+        CleanupPlanReady = false;
+        RemoverPathApproved = false;
+        CleanupListApproved = false;
+        try
+        {
+            var manifest = await App.Live.GetCleanupManifestAsync(app.AppId!);
+            var itemCount = manifest?.Summary?.ItemCount ?? 0;
+            var excludedCount = manifest?.Summary?.ExcludedCount ?? 0;
+            CleanupPlanState = itemCount == 0
+                ? "Removal list built. Nothing was selected."
+                : "Removal list built: " + itemCount.ToString(CultureInfo.InvariantCulture) + " selected, " + excludedCount.ToString(CultureInfo.InvariantCulture) + " not selected. Nothing removed.";
+
+            var plan = await App.Live.GetUninstallCleanupExecutionPlanAsync(app.AppId!);
+            SummarizeExecutionPlan(plan, itemCount);
+            CleanupPlanReady = true;
+        }
+        catch
+        {
+            CleanupPlanState = "Couldn't build the removal list right now.";
+            RemovalPlanState = "Couldn't build the run right now.";
+            RemovalPlanDetail = "Refresh the app list and try again.";
+            CleanupPlanReady = false;
+        }
+        finally
+        {
+            ScanBusy = false;
+            RefreshActionState();
+        }
+    }
+
+    [RelayCommand]
+    private async Task RunFinalCheckAsync()
+    {
+        var app = SelectedApp;
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy || !CanRunFinalCheck)
+        {
+            return;
+        }
+
+        ScanBusy = true;
+        CleanupExecutionState = "Running final check...";
+        CleanupExecutionDetail = "Roo Industries is checking the reviewed route and removal list. Nothing will be removed.";
+        try
+        {
+            var json = await App.Live.RequestUninstallCleanupApplyTextAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, false);
+            SummarizeCleanupExecution(json);
+        }
+        catch
+        {
+            CleanupExecutionState = "Final check failed.";
+            CleanupExecutionDetail = "Nothing was removed. Refresh the app list and try again.";
+            CleanupRestoreAvailable = false;
+            _lastCleanupRollbackPath = null;
+        }
+        finally
+        {
+            ScanBusy = false;
+            RefreshActionState();
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyCleanupAsync()
+    {
+        var app = SelectedApp;
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy || !CanApplyCleanup)
+        {
+            return;
+        }
+
+        ScanBusy = true;
+        CleanupExecutionState = "Applying reviewed cleanup...";
+        CleanupExecutionDetail = ApplyApprovalSummary;
+        try
+        {
+            var json = await App.Live.RequestUninstallCleanupApplyTextAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, true);
+            SummarizeCleanupExecution(json);
+        }
+        catch
+        {
+            CleanupExecutionState = "Apply check failed.";
+            CleanupExecutionDetail = "Refresh the app list and try again.";
+            CleanupRestoreAvailable = false;
+            _lastCleanupRollbackPath = null;
+        }
+        finally
+        {
+            ScanBusy = false;
+            RefreshActionState();
+        }
+    }
+
+    [RelayCommand]
+    private async Task RestoreCleanupAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_lastCleanupRollbackPath) || ScanBusy)
+        {
+            CleanupExecutionState = "Nothing to restore yet.";
+            CleanupExecutionDetail = "Restore appears after an apply run writes rollback data.";
+            CleanupRestoreAvailable = false;
+            return;
+        }
+
+        ScanBusy = true;
+        CleanupExecutionState = "Restoring cleanup...";
+        CleanupExecutionDetail = "Reading the rollback file and putting cleanup targets back.";
+        try
+        {
+            var json = await App.Live.RestoreUninstallCleanupTextAsync(_lastCleanupRollbackPath);
+            SummarizeCleanupRestore(json);
+        }
+        catch
+        {
+            CleanupExecutionState = "Restore failed.";
+            CleanupExecutionDetail = "Check the rollback file and try again.";
+        }
+        finally
+        {
+            ScanBusy = false;
+            RefreshActionState();
+        }
+    }
+
+    private void RefreshActionState()
+    {
+        CanReviewRemovalAction = CanReviewRemoval;
+        CanScanAction = CanScan;
+        CanBuildCleanupListAction = CanBuildCleanupList;
+        CanRunFinalCheckAction = CanRunFinalCheck;
+        CanApplyCleanupAction = CanApplyCleanup;
+        CanRestoreCleanupAction = CanRestoreCleanup;
     }
 
     private void ApplyFilter()
@@ -152,6 +497,185 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private static bool Contains(string? haystack, string needle)
         => haystack is not null && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    private void SummarizeExecutionPlan(UninstallCleanupExecutionPlan? plan, int manifestItemCount)
+    {
+        var summary = plan?.Summary;
+        if (summary is null)
+        {
+            RemovalPlanState = "Removal plan could not be read.";
+            RemovalPlanDetail = "The cleanup list was built, but the final plan summary was not returned.";
+            return;
+        }
+
+        var commandCount = summary.CommandPreviewCount;
+        var cleanupCount = summary.CleanupItemCount > 0 ? summary.CleanupItemCount : manifestItemCount;
+        var gateCount = summary.BlockingGateCount;
+        var runnerReady = summary.AllowlistedOfficialRunnerReady || summary.DisposableFixtureExecutionReady;
+
+        RemovalPlanState = commandCount > 0
+            ? "Run ready: app remover first, then " + cleanupCount.ToString(CultureInfo.InvariantCulture) + " cleanup item" + (cleanupCount == 1 ? "" : "s") + "."
+            : "Run ready: Roo Industries cleanup route with " + cleanupCount.ToString(CultureInfo.InvariantCulture) + " item" + (cleanupCount == 1 ? "" : "s") + ".";
+
+        var runnerLine = runnerReady ? "Roo Industries has a runner for this route." : "This route needs one more engine check.";
+        var gateLine = gateCount > 0
+            ? gateCount.ToString(CultureInfo.InvariantCulture) + " safety check" + (gateCount == 1 ? "" : "s") + " still need proof before real cleanup."
+            : "No safety checks are blocking this run.";
+        RemovalPlanDetail = runnerLine + " " + gateLine + " Nothing has been removed.";
+    }
+
+    private void SummarizeCleanupExecution(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            CleanupExecutionState = "Apply check did not return a result.";
+            CleanupExecutionDetail = "Nothing was removed.";
+            CleanupRestoreAvailable = false;
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var status = ExtractString(root, "status") ?? "preview";
+            var mode = ExtractString(root, "executionMode") ?? "preview";
+            var blocking = ExtractInt(root, "summary", "blockingGateCount");
+            var deleted = ExtractInt(root, "summary", "deletedCount");
+            var cleanupItems = ExtractInt(root, "summary", "cleanupItemCount");
+            var rollback = ExtractString(root, "rollback", "rollbackManifestPath") ?? ExtractString(root, "rollbackManifestPath");
+            var restoreReady = ExtractBool(root, "summary", "restoreReady");
+            var rooRoute = ExtractBool(root, "summary", "rooIndustriesRouteUsed");
+
+            if (status == "success")
+            {
+                CleanupExecutionState = deleted > 0
+                    ? "Cleanup applied: " + deleted.ToString(CultureInfo.InvariantCulture) + " item" + (deleted == 1 ? "" : "s") + " removed."
+                    : "Cleanup applied. Nothing needed removal.";
+                CleanupExecutionDetail = string.IsNullOrWhiteSpace(rollback)
+                    ? "No rollback file was returned."
+                    : "Restore is ready from the backup.";
+                _lastCleanupRollbackPath = rollback;
+                CleanupRestoreAvailable = !string.IsNullOrWhiteSpace(rollback);
+                return;
+            }
+
+            if (status == "preview")
+            {
+                CleanupExecutionState = "Final check passed.";
+                CleanupExecutionDetail = (rooRoute ? "Roo Industries can use its own route for this app. " : string.Empty)
+                    + cleanupItems.ToString(CultureInfo.InvariantCulture) + " file/folder target" + (cleanupItems == 1 ? "" : "s") + " checked. Nothing was removed.";
+                CleanupRestoreAvailable = false;
+                _lastCleanupRollbackPath = null;
+                return;
+            }
+
+            CleanupExecutionState = status == "blocked"
+                ? "Apply is still held."
+                : "Apply check ready.";
+            CleanupExecutionDetail = blocking > 0
+                ? blocking.ToString(CultureInfo.InvariantCulture) + " approval check" + (blocking == 1 ? "" : "s") + " still need to clear. " + cleanupItems.ToString(CultureInfo.InvariantCulture) + " item" + (cleanupItems == 1 ? "" : "s") + " in the run. Nothing was removed."
+                : "Executor mode: " + mode + ". Nothing was removed.";
+            CleanupRestoreAvailable = restoreReady && !string.IsNullOrWhiteSpace(rollback);
+            _lastCleanupRollbackPath = CleanupRestoreAvailable ? rollback : null;
+        }
+        catch
+        {
+            CleanupExecutionState = "Apply result could not be read.";
+            CleanupExecutionDetail = "Nothing was removed.";
+            CleanupRestoreAvailable = false;
+            _lastCleanupRollbackPath = null;
+        }
+    }
+
+    private void SummarizeCleanupRestore(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            CleanupExecutionState = "Restore did not return a result.";
+            CleanupExecutionDetail = "No cleanup targets were changed.";
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var status = ExtractString(root, "status") ?? "preview";
+            var restored = ExtractInt(root, "summary", "restoredCount");
+            var blocking = ExtractInt(root, "summary", "blockingGateCount");
+            if (status == "success")
+            {
+                CleanupExecutionState = "Restore complete: " + restored.ToString(CultureInfo.InvariantCulture) + " item" + (restored == 1 ? "" : "s") + " put back.";
+                CleanupExecutionDetail = "Rollback stayed inside the approved cleanup path.";
+            }
+            else
+            {
+                CleanupExecutionState = "Restore held for approval.";
+                CleanupExecutionDetail = blocking.ToString(CultureInfo.InvariantCulture) + " restore approval" + (blocking == 1 ? "" : "s") + " still need to clear.";
+            }
+        }
+        catch
+        {
+            CleanupExecutionState = "Restore result could not be read.";
+            CleanupExecutionDetail = "No cleanup targets were changed.";
+        }
+    }
+
+    private static bool HasVendorRemover(InstalledApp app)
+        => !string.IsNullOrWhiteSpace(app.UninstallString);
+
+    private static bool IsVendorRemover(UninstallCommand command)
+    {
+        if (command.Blocked || string.IsNullOrWhiteSpace(command.RawCommand))
+        {
+            return false;
+        }
+
+        return command.CommandType is "msi-uninstall-string" or "registry-uninstall-string";
+    }
+
+    private static string? ExtractString(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return null;
+            }
+        }
+
+        return current.ValueKind == JsonValueKind.String ? current.GetString() : current.ToString();
+    }
+
+    private static int ExtractInt(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return 0;
+            }
+        }
+
+        return current.ValueKind == JsonValueKind.Number && current.TryGetInt32(out var value) ? value : 0;
+    }
+
+    private static bool ExtractBool(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return false;
+            }
+        }
+
+        return current.ValueKind == JsonValueKind.True || (current.ValueKind == JsonValueKind.String && bool.TryParse(current.GetString(), out var value) && value);
+    }
 
     private static string FriendlySource(string? source) => source switch
     {

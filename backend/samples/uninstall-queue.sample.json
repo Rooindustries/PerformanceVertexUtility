@@ -34,35 +34,43 @@
       "risk": "low",
       "requiresElevation": true,
       "warnings": []
-    }
-  ],
-  "blockedApps": [
+    },
     {
       "appId": "registry:microsoft-edge-webview2-runtime",
       "displayName": "Microsoft Edge WebView2 Runtime",
-      "primaryClassification": "store-webview2",
-      "risk": "protected",
-      "protected": true,
-      "reason": "Shared Windows runtime. Store, Xbox, Gaming Services, WebView2, and desktop apps can depend on it.",
-      "matchedProtectedRuleIds": [
-        "store-webview2-components"
+      "officialUninstallFirst": true,
+      "leftoverScan": true,
+      "risk": "advanced",
+      "requiresElevation": true,
+      "warnings": [
+        {
+          "code": "MANUAL_REVIEW_CATALOG_MATCH",
+          "message": "This app can be shared by Windows or desktop apps.",
+          "severity": "warning",
+          "source": "apps.uninstallQueue",
+          "target": "registry:microsoft-edge-webview2-runtime",
+          "blocking": false,
+          "recommendedAction": "Review the exact route and cleanup list before applying it.",
+          "details": null
+        }
       ]
     }
   ],
+  "blockedApps": [],
   "missingApps": [],
   "policy": {
     "confirmationRequired": true,
     "restorePointRequired": true,
     "leftoverDeletionDefault": "preview-only",
-    "protectedAppsBlocked": true,
+    "protectedAppsBlocked": false,
     "officialUninstallOnlyUntilConfirmed": true,
     "confirmedExecutionEnabled": false,
     "dryRunWritesState": false
   },
   "summary": {
     "requestedCount": 3,
-    "selectedCount": 2,
-    "blockedCount": 1,
+    "selectedCount": 3,
+    "blockedCount": 0,
     "missingCount": 0,
     "willRunUninstallers": false,
     "willDeleteLeftovers": false

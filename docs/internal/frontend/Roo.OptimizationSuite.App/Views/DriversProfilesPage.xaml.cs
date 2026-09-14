@@ -10,6 +10,14 @@ public sealed partial class DriversProfilesPage : Page
     public DriversProfilesPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await ViewModel.InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            ResizeContent();
+            await ViewModel.InitializeAsync();
+            ResizeContent();
+        };
+        SizeChanged += (_, _) => ResizeContent();
     }
+
+    private void ResizeContent() => ResponsiveContentSizer.Apply(this, DriversContent);
 }

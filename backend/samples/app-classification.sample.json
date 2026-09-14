@@ -19,8 +19,8 @@
     "antiCheatCount": 0,
     "obsDiscordDependencyCount": 1,
     "protectedWindowsComponentCount": 0,
-    "protectedCount": 2,
-    "blockedByDefaultCount": 2
+    "protectedCount": 0,
+    "blockedByDefaultCount": 0
   },
   "apps": [
     {
@@ -62,23 +62,23 @@
         "windows-app-dependency"
       ],
       "primaryClassification": "store-webview2",
-      "risk": "protected",
-      "protected": true,
-      "blockByDefault": true,
+      "risk": "advanced",
+      "protected": false,
+      "blockByDefault": false,
       "matchedProtectedRuleIds": [
         "store-webview2-components"
       ],
       "reasonCodes": [
-        "PROTECTED_CATALOG_MATCH"
+        "MANUAL_REVIEW_CATALOG_MATCH"
       ],
       "protectionReasons": [
-        "Shared runtime required by multiple Windows and desktop apps",
+        "Shared runtime used by multiple Windows and desktop apps; review before removal.",
         "Store, Xbox, Gaming Services, and WebView2 packages can be shared Windows app dependencies."
       ],
-      "recommendedAction": "Blocked by preview policy. Keep protected components out of the bulk uninstall queue.",
+      "recommendedAction": "Needs manual review before apply. Queue preview can still show the route and cleanup list.",
       "uninstallSafety": {
         "officialUninstallPreviewOnly": true,
-        "queueAllowedByDefault": false,
+        "queueAllowedByDefault": true,
         "leftoverDeletionPreviewOnly": true,
         "confirmedExecutionEnabled": false
       }
@@ -95,23 +95,23 @@
         "target-scenario"
       ],
       "primaryClassification": "obs-discord-dependency",
-      "risk": "protected",
-      "protected": true,
-      "blockByDefault": true,
+      "risk": "advanced",
+      "protected": false,
+      "blockByDefault": false,
       "matchedProtectedRuleIds": [
         "stream-companions"
       ],
       "reasonCodes": [
-        "PROTECTED_CATALOG_MATCH"
+        "MANUAL_REVIEW_CATALOG_MATCH"
       ],
       "protectionReasons": [
-        "Protected companion app for Overwatch streaming scenario",
-        "OBS and Discord are protected for the Overwatch streaming target scenario."
+        "Companion app for the Overwatch streaming scenario",
+        "OBS and Discord are part of the active streaming setup and need manual review before removal."
       ],
-      "recommendedAction": "Blocked by preview policy. Keep protected components out of the bulk uninstall queue.",
+      "recommendedAction": "Needs manual review before apply. Queue preview can still show the route and cleanup list.",
       "uninstallSafety": {
         "officialUninstallPreviewOnly": true,
-        "queueAllowedByDefault": false,
+        "queueAllowedByDefault": true,
         "leftoverDeletionPreviewOnly": true,
         "confirmedExecutionEnabled": false
       }

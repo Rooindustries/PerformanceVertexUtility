@@ -303,12 +303,12 @@ try {
         Add-Failure 'Preview did not propose busy-probe restraint or changed priority unexpectedly'
     }
     if ($previewProtected.blocked -eq $true -and ($previewProtected.reasonCodes -contains 'LIVE_VALIDATION_PROTECTED_PROBE') -and ($previewProtected.reasonCodes -contains 'FOREGROUND_PROCESS_EXCLUDED')) {
-        Add-Pass "Protected foreground-style probe skipped with reason codes: $($previewProtected.reasonCodes -join ',')"
+        Add-Pass "Manual-review foreground-style probe skipped with reason codes: $($previewProtected.reasonCodes -join ',')"
     } else {
-        Add-Failure 'Protected foreground-style probe was not skipped with protected and foreground proof'
+        Add-Failure 'Manual-review foreground-style probe was not skipped with review and foreground proof'
     }
     if ($beforeProtected.priorityClass -eq (Get-RooProcessControlState $protectedProbe.Id $null).priorityClass) {
-        Add-Pass "Protected probe priority stayed unchanged during preview: $($beforeProtected.priorityClass)"
+        Add-Pass "Manual-review probe priority stayed unchanged during preview: $($beforeProtected.priorityClass)"
     } else {
         Add-Failure 'Protected probe priority changed during preview'
     }

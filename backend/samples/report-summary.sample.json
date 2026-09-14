@@ -31,7 +31,7 @@
       "findingId": "stream-companions-protected",
       "severity": "info",
       "title": "OBS setup stays safe",
-      "detail": "Capture, voice, and stream stability stay protected while the game gets more room.",
+      "detail": "Capture, voice, and stream stability stay steady while the game gets more room.",
       "evidence": [
         "obs64.exe protected",
         "Discord.exe protected"
@@ -57,7 +57,7 @@
       "actionId": "performance.previewProcessPlan",
       "label": "Tune My PC",
       "risk": "medium",
-      "reason": "Give the game more room while OBS and Discord stay protected."
+      "reason": "Give the game more room while OBS and Discord stay steady."
     },
     {
       "actionId": "apps.reviewStartupHeavy",

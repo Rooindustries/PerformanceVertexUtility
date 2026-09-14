@@ -22,7 +22,7 @@
     "notes": [
       "Do not run the public irm/iex launcher from inside the app.",
       "Import or mirror audited feature definitions, then route actions through the app safety model.",
-      "Chris Titus WinUtil is an inspiration and source catalog; the Roo app should use Roo branding, navigation, backup, rollback, and telemetry rules."
+      "Chris Titus WinUtil is an inspiration and source catalog; the Roo Industries app should use Roo Industries branding, navigation, backup, rollback, and telemetry rules."
     ]
   },
   "configFiles": [
@@ -109,14 +109,14 @@
       "path": "config/appnavigation.json",
       "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/appnavigation.json",
       "appPlacement": "Install catalog grouping reference",
-      "implementationPlan": "Use only as package catalog grouping inspiration; keep the Roo app shell aligned with Windows Settings-style navigation."
+      "implementationPlan": "Use only as package catalog grouping inspiration; keep the Roo Industries app shell aligned with Windows Settings-style navigation."
     },
     {
       "id": "themes",
       "path": "config/themes.json",
       "url": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/main/config/themes.json",
       "appPlacement": "Not used for branding",
-      "implementationPlan": "Do not import WinUtil visual themes into the product. Roo Blue and Blackout Gold remain the app themes."
+      "implementationPlan": "Do not import WinUtil visual themes into the product. Roo Industries Blue and Blackout Gold remain the app themes."
     }
   ],
   "preserveByDefault": [

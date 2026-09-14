@@ -26,9 +26,9 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+        <ScrollViewer x:Name="DriversScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel x:Name="DriversContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
@@ -48,6 +48,96 @@
                             </StackPanel>
                         </Grid>
                     </Grid>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="14">
+                        <TextBlock Text="GPU PROFILE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.GpuNote, Mode=OneWay}" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
+                                   Visibility="{x:Bind ViewModel.HasNvidia, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" />
+                        <Border CornerRadius="8" BorderThickness="1" Padding="16"
+                                Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                            <StackPanel Spacing="14">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="5">
+                                        <TextBlock Text="{x:Bind ViewModel.NvidiaActionTitle, Mode=OneWay}" FontSize="16" LineHeight="22"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.NvidiaActionDetail, Mode=OneWay}" FontSize="13" LineHeight="18"
+                                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                    </StackPanel>
+                                    <ProgressRing Grid.Column="1" Width="20" Height="20" IsActive="{x:Bind ViewModel.NvidiaBusy, Mode=OneWay}"
+                                                  VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="Check tool" Command="{x:Bind ViewModel.CheckNvidiaToolCommand}"
+                                            AutomationProperties.Name="Check NVIDIA tool"
+                                            IsEnabled="{x:Bind ViewModel.CanCheckNvidiaAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="12,7" />
+                                    <Button Grid.Column="1" Content="Preview" Command="{x:Bind ViewModel.PreviewNvidiaProfileCommand}"
+                                            AutomationProperties.Name="Preview NVIDIA profile"
+                                            IsEnabled="{x:Bind ViewModel.CanCheckNvidiaAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="12,7" />
+                                    <Button Grid.Column="2" Content="Apply" Command="{x:Bind ViewModel.ApplyNvidiaProfileCommand}"
+                                            AutomationProperties.Name="Apply NVIDIA profile"
+                                            IsEnabled="{x:Bind ViewModel.CanApplyNvidiaProfile, Mode=OneWay}"
+                                            Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}" HorizontalAlignment="Stretch" Padding="12,7" />
+                                    <Button Grid.Column="3" Content="Restore" Command="{x:Bind ViewModel.RestoreNvidiaProfileCommand}"
+                                            AutomationProperties.Name="Restore NVIDIA profile"
+                                            IsEnabled="{x:Bind ViewModel.CanRestoreNvidiaProfile, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="12,7" />
+                                </Grid>
+                                <Grid ColumnSpacing="14" RowSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" Content="Export reviewed"
+                                              IsChecked="{x:Bind ViewModel.NvidiaExportReviewed, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.CanApproveNvidiaProfile, Mode=OneWay}"
+                                              Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <CheckBox Grid.Column="1" Content="Exact profile approved"
+                                              IsChecked="{x:Bind ViewModel.NvidiaProfileApproved, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.CanApproveNvidiaProfile, Mode=OneWay}"
+                                              Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                    <CheckBox Grid.Column="2" Content="Benchmark proof ready"
+                                              IsChecked="{x:Bind ViewModel.NvidiaBenchmarkReady, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.CanApproveNvidiaProfile, Mode=OneWay}"
+                                              Foreground="{StaticResource RooTextSecondaryBrush}" />
+                                </Grid>
+                                <TextBlock Text="{x:Bind ViewModel.NvidiaGateSummary, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.NvidiaProfiles}">
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:NvidiaProfileEntry">
+                                    <Border CornerRadius="8" BorderThickness="1" Padding="14"
+                                            Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
+                                                <TextBlock Text="{x:Bind Name}" FontSize="15" LineHeight="21" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                                <TextBlock Text="{x:Bind Notes}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{x:Bind StatusText}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource RooTextAccentBrush}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
@@ -103,7 +193,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{x:Bind Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooTextPrimaryBrush}" />
                                         <TextBlock Grid.Column="1" Text="{x:Bind DriverVersion}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                        <TextBlock Grid.Column="2" Text="Protected" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"
+                                        <TextBlock Grid.Column="2" Text="Manual" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"
                                                    Foreground="{StaticResource RooTextMutedBrush}"
                                                    Visibility="{x:Bind Protected, Converter={StaticResource BoolToVisibility}}" />
                                     </Grid>
@@ -124,7 +214,7 @@
                             <FontIcon Grid.Column="0" Glyph="&#xE73E;" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{StaticResource RiskSafeBrush}" />
                             <StackPanel Grid.Column="1" Spacing="6">
                                 <TextBlock Text="No driver updates to review right now." FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                <TextBlock Text="Roo checks your hardware against the driver path and surfaces only matched updates here. Driver changes stay locked until you approve them."
+                                <TextBlock Text="Roo Industries checks your hardware against the driver path and surfaces only matched updates here. Driver changes stay locked until you approve them."
                                            FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
@@ -151,55 +241,8 @@
                                             </Grid>
                                             <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
                                             <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Review before install" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                                <Button Grid.Column="1" Content="Install" IsEnabled="False" Padding="14,6" />
-                                            </Grid>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="GPU SETTINGS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                        <TextBlock Text="{x:Bind ViewModel.GpuNote, Mode=OneWay}" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}"
-                                   Visibility="{x:Bind ViewModel.HasNvidia, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" />
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.NvidiaProfiles}">
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate x:DataType="models:NvidiaProfileEntry">
-                                    <Border CornerRadius="8" BorderThickness="1" Padding="16"
-                                            Background="{StaticResource RooSurfaceInputBrush}" BorderBrush="{StaticResource RooBorderBrush}">
-                                        <StackPanel Spacing="10">
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="5">
-                                                    <TextBlock Text="{x:Bind Name}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                                    <TextBlock Text="{x:Bind SourceFile}" FontSize="11" LineHeight="16" FontFamily="Consolas, monospace" Foreground="{StaticResource RooTextMutedBrush}" />
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Top" FontSize="12" FontWeight="SemiBold"
-                                                           Foreground="{x:Bind Status, Converter={StaticResource RiskToBrush}}" />
-                                            </Grid>
-                                            <TextBlock Text="{x:Bind GameTagsText}" FontSize="12" Foreground="{StaticResource RooTextAccentBrush}" />
-                                            <TextBlock Text="{x:Bind Notes}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Export your profile first" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooTextMutedBrush}" />
-                                                <Button Grid.Column="1" Content="Apply Setting" IsEnabled="False" Padding="14,6" />
-                                            </Grid>
+                                            <TextBlock Text="Manual install only. Roo Industries keeps driver packages locked until a local package and restore point are ready."
+                                                       VerticalAlignment="Center" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>

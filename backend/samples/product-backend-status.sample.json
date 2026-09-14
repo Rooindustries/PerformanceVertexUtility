@@ -5,7 +5,7 @@
   "status": "preview-ready",
   "backendPackageVersion": "0.1.0-contracts",
   "harness": {
-    "name": "Roo backend harness",
+    "name": "Roo Industries backend harness",
     "role": "legacy harness boundary",
     "supportedReadOnlyActions": [
       "ListModules",

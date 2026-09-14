@@ -52,10 +52,10 @@
       "status": "draft"
     },
     {
-      "name": "protected app catalog",
+      "name": "manual review app catalog",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/protectedAppCatalog",
       "workflow": "uninstall cleanup",
-      "summary": "Protected app and dependency rules blocked by bulk uninstall previews.",
+      "summary": "App and dependency rules that require manual review in bulk uninstall previews.",
       "status": "draft"
     },
     {
@@ -230,7 +230,7 @@
       "name": "app classification result",
       "definitionRef": "roo-backend-contracts.schema.json#/$defs/appClassificationResult",
       "workflow": "uninstall cleanup",
-      "summary": "Read-only classification of installed apps into normal, launcher, overlay, vendor, runtime, driver, security, Store/WebView2, anti-cheat, OBS/Discord dependency, and protected Windows buckets.",
+      "summary": "Read-only classification of installed apps into normal, launcher, overlay, vendor, runtime, driver, security, Store/WebView2, anti-cheat, OBS/Discord dependency, and Windows review buckets.",
       "status": "draft"
     },
     {

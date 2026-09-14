@@ -47,13 +47,13 @@
   },
   "warnings": [
     {
-      "code": "OFFICIAL_UNINSTALL_PREVIEW_ONLY",
-      "message": "Official uninstall command metadata was returned without executing commands.",
+      "code": "REMOVAL_PATH_PREVIEW_ONLY",
+      "message": "Removal path metadata was returned without executing commands.",
       "severity": "info",
       "source": "apps.officialUninstall",
       "target": null,
       "blocking": false,
-      "recommendedAction": "Use this output for review before any uninstall command is allowed.",
+      "recommendedAction": "Review the route, scan leftovers, and build the Roo Industries removal run before apply.",
       "details": null
     }
   ],
@@ -62,7 +62,7 @@
     {
       "timestampUtc": "2026-06-28T10:00:00Z",
       "level": "info",
-      "message": "Official uninstall command preview completed without command execution."
+      "message": "Removal path preview completed without command execution."
     }
   ]
 }

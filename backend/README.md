@@ -11,7 +11,7 @@ The current PowerShell optimizer harness remains internal. These contracts defin
 | `contracts` | Versioned JSON Schema definitions for backend responses and workflow models. |
 | `samples` | Realistic fixtures for dashboard, process profiles, uninstall cleanup, drivers, telemetry, and reports. |
 | `scripts` | Discovery, preview, controlled real/read-only/mock/fixture executors, gated apply/rollback helpers, and validation. |
-| `uninstall` | Protected app catalog, leftover scan rules, and guarded uninstall cleanup policy. |
+| `uninstall` | Manual-review app catalog, leftover scan rules, and guarded uninstall cleanup policy. |
 
 ## Safety Boundary
 

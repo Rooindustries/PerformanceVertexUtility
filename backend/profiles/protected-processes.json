@@ -260,7 +260,7 @@
         "SamsungCloud.exe",
         "PhoneExperienceHost.exe"
       ],
-      "reason": "Samsung phone continuity and cross-device processes are protected by default.",
+      "reason": "Samsung phone continuity and cross-device processes stay steady by default.",
       "reasonCodes": [
         "SAMSUNG_CONTINUITY_PROTECTED"
       ],

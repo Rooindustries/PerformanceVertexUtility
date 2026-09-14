@@ -33,6 +33,35 @@
                            VerticalAlignment="Center" Foreground="{StaticResource RooTextDisplayBrush}" />
             </Grid>
         </DataTemplate>
+
+        <DataTemplate x:Key="ActionRowTemplate" x:DataType="vm:DashboardActionRow">
+            <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MinHeight="96"
+                    HorizontalAlignment="Stretch">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="3" CornerRadius="1.5"
+                            Background="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <Grid Grid.Column="1" ColumnSpacing="20" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{x:Bind Title}" FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{StaticResource RooTextPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Detail}" FontSize="13" LineHeight="18" TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooTextMutedBrush}" />
+                    </Grid>
+                    <Button Grid.Column="2" Content="{x:Bind ButtonLabel}" Tag="{x:Bind NavTag}"
+                            Click="OnDashboardActionClick"
+                            AutomationProperties.Name="{x:Bind ButtonLabel}"
+                            VerticalAlignment="Center" MinWidth="142" Padding="12,7" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="{StaticResource RooPageMargin}">
@@ -56,7 +85,7 @@
 
         <ScrollViewer x:Name="DashScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel x:Name="DashContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
@@ -90,19 +119,26 @@
                                 Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{StaticResource RooOnCtaBrush}" />
-                                <TextBlock Text="See What To Tune" />
+                                <TextBlock Text="Tune" />
                             </StackPanel>
                         </Button>
                     </Grid>
                 </Border>
 
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.5*" />
-                        <ColumnDefinition Width="1*" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel Spacing="16">
+                    <ContentControl x:Name="TuneActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.TuneAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                    <ContentControl x:Name="CleanupActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.CleanupAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                    <ContentControl x:Name="DriverActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.DriverAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                </StackPanel>
 
-                    <Border Grid.Column="0" Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28" HorizontalAlignment="Stretch">
                         <StackPanel Spacing="18">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="MEMORY PRESSURE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
@@ -131,35 +167,31 @@
                         </StackPanel>
                     </Border>
 
-                    <StackPanel Grid.Column="1" Spacing="16">
-                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="16">
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="THIS SESSION" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.SessionLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
                             </StackPanel>
                         </Border>
-                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.SensorLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                </Grid>
+                </StackPanel>
 
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
                         <StackPanel Spacing="10">
                             <TextBlock Text="BACKGROUND APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                             <TextBlock Text="Most you can push back to free memory" FontSize="12" LineHeight="16" Foreground="{StaticResource RooTextMutedBrush}" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundOffenders}" ItemTemplate="{StaticResource UsageLineTemplate}" />
                         </StackPanel>
                     </Border>
-                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
                         <StackPanel Spacing="10">
                             <TextBlock Text="DRIVERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.DriverLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
@@ -167,7 +199,7 @@
                                        Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
                     </Border>
-                </Grid>
+                </StackPanel>
 
             </StackPanel>
         </ScrollViewer>
