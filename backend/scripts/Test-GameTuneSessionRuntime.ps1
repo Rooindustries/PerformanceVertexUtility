@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
@@ -252,12 +253,14 @@ try {
             Add-Failure "Live probe restore mismatch: priority $($afterRestore.priorityClass)/$($before.priorityClass), affinity $($afterRestore.affinityMask)/$($before.affinityMask), I/O $($afterRestore.ioPriority)/$($before.ioPriority), GPU $($afterRestore.gpuPriority)/$($before.gpuPriority)"
         }
     } finally {
-        if ($probe -and -not $probe.HasExited) { Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue }
+        if ($probe) { Stop-RooValidationProcess $probe }
         $tempRoot = [System.IO.Path]::GetTempPath()
         $fullLiveRoot = [System.IO.Path]::GetFullPath($liveRoot)
         if ($fullLiveRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullLiveRoot)) {
-            Remove-Item -LiteralPath $fullLiveRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $fullLiveRoot -Recurse -Force -ErrorAction Stop
         }
+        if (Test-Path -LiteralPath $fullLiveRoot) { throw "Game Tune validation left its fixture directory: $fullLiveRoot" }
+        Add-Pass 'Game Tune probe exited and its fixture directory was removed'
     }
 } catch {
     Add-Failure "Live Game Tune process-control validation failed: $($_.Exception.Message)"
