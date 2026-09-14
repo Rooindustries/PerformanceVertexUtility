@@ -63,6 +63,68 @@ namespace Roo.Optimization.CpuSets
         internal static extern bool SetProcessDefaultCpuSets(ProcessHandle process, uint[] ids, uint count);
         [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool GetSystemCpuSetInformation(IntPtr buffer, uint length, out uint returned, IntPtr process, uint flags);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool OpenThreadToken(IntPtr thread, uint access, bool openAsSelf, out IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool CreateRestrictedToken(IntPtr token, uint flags, uint disabledCount, IntPtr disabled,
+            uint deletedCount, IntPtr deleted, uint restrictedCount, IntPtr restricted, out IntPtr result);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool ImpersonateLoggedOnUser(IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool SetThreadToken(IntPtr thread, IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool RevertToSelf();
+
+        internal static ProcessHandle OpenWithoutPrivileges(uint access, int processId)
+        {
+            IntPtr previous = IntPtr.Zero, primary = IntPtr.Zero, restricted = IntPtr.Zero;
+            ProcessHandle result = null;
+            bool impersonating = false;
+            try
+            {
+                // Preserve a caller's existing impersonation instead of substituting
+                // the host process identity. Pseudo-handles -2/-1 are current thread/process.
+                if (!OpenThreadToken(new IntPtr(-2), 0x000e, true, out previous))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error != 1008) throw new NativeFailure("OpenThreadToken", error, 0x000e);
+                    if (!OpenProcessToken(new IntPtr(-1), 0x000a, out primary))
+                        throw new NativeFailure("OpenProcessToken", Marshal.GetLastWin32Error(), 0x000a);
+                }
+                IntPtr source = previous != IntPtr.Zero ? previous : primary;
+                // DISABLE_MAX_PRIVILEGE removes ambient debug/ownership privileges
+                // from this access check. No restricting SID or policy-bypass flag is used.
+                if (!CreateRestrictedToken(source, 0x1, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, IntPtr.Zero, out restricted))
+                    throw new NativeFailure("CreateRestrictedToken", Marshal.GetLastWin32Error(), 0x000a);
+                if (!ImpersonateLoggedOnUser(restricted))
+                    throw new NativeFailure("ImpersonateLoggedOnUser", Marshal.GetLastWin32Error(), 0x000a);
+                impersonating = true;
+                IntPtr raw = OpenProcess(access, false, processId);
+                if (raw == IntPtr.Zero) throw new NativeFailure("OpenProcess", Marshal.GetLastWin32Error(), access);
+                result = new ProcessHandle(raw);
+            }
+            finally
+            {
+                try
+                {
+                    if (impersonating && !(previous == IntPtr.Zero ? RevertToSelf() : SetThreadToken(IntPtr.Zero, previous)))
+                    {
+                        int error = Marshal.GetLastWin32Error();
+                        if (result != null) result.Dispose();
+                        throw new NativeFailure("RestoreThreadToken", error, 0x0004);
+                    }
+                }
+                finally
+                {
+                    if (restricted != IntPtr.Zero) CloseHandle(restricted);
+                    if (primary != IntPtr.Zero) CloseHandle(primary);
+                    if (previous != IntPtr.Zero) CloseHandle(previous);
+                }
+            }
+            return result;
+        }
     }
 
     // Retain one minimally privileged handle from identity verification through read/write/readback.
@@ -78,9 +140,7 @@ namespace Roo.Optimization.CpuSets
         {
             if (processId <= 0) throw new ArgumentOutOfRangeException("processId");
             access = writable ? ChangeAccess : QueryAccess;
-            IntPtr raw = Native.OpenProcess(access, false, processId);
-            if (raw == IntPtr.Zero) throw new NativeFailure("OpenProcess", Marshal.GetLastWin32Error(), access);
-            handle = new ProcessHandle(raw);
+            handle = Native.OpenWithoutPrivileges(access, processId);
             pid = processId;
         }
 
