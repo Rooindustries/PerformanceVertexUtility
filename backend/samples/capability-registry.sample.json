@@ -1,4 +1,4 @@
-﻿{
+{
     "actionId":  "backend.capabilityRegistry.get",
     "schemaVersion":  1,
     "productName":  "Roo Industries Optimization Suite",
@@ -12,23 +12,23 @@
     "generatedAtUtc":  "2026-07-03T12:50:09.0203623Z",
     "utilitiesRoot":  "%ROO_UTILITIES_ROOT%",
     "families":  [
-                     {
-                         "name":  "cleanup-uninstall",
-                         "capabilityCount":  9
-                     },
-                     {
-                         "name":  "drivers-gpu-tools",
-                         "capabilityCount":  25
-                     },
-                     {
-                         "name":  "process-controls",
-                         "capabilityCount":  9
-                     },
-                     {
-                         "name":  "system-optimizations",
-                         "capabilityCount":  10
-                     }
-                 ],
+        {
+            "name": "cleanup-uninstall",
+            "capabilityCount": 10
+        },
+        {
+            "name": "drivers-gpu-tools",
+            "capabilityCount": 25
+        },
+        {
+            "name": "process-controls",
+            "capabilityCount": 10
+        },
+        {
+            "name": "system-optimizations",
+            "capabilityCount": 11
+        }
+    ],
     "capabilities":  [
                          {
                              "capabilityId":  "cleanup-uninstall.installed-app-inventory",
@@ -4421,25 +4421,222 @@
                                                                            ],
                                                           "unavailableReason":  null
                                                       }
+                         },
+                         {
+                             "capabilityId": "cleanup-uninstall.bulk-removal",
+                             "family": "cleanup-uninstall",
+                             "displayName": "Bulk App Removal",
+                             "technicalName": "Durable sequential official removal with registration verification and reconciliation",
+                             "source": "roo-native",
+                             "implementedBy": "roo-script",
+                             "frontendLabel": "Bulk App Removal",
+                             "frontendTab": "Clean Junk",
+                             "riskLevel": "medium",
+                             "approvalRequired": true,
+                             "availability": {
+                                 "detection": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Invoke-OptimizerRequest.ps1"
+                                     }
+                                 ],
+                                 "notes": "Backend command interface; UI integration and protected-game compatibility are separately verified."
+                             },
+                             "preview": {
+                                 "status": "implemented",
+                                 "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                 "actionId": "apps.bulkUninstall.preview"
+                             },
+                             "apply": {
+                                 "status": "live",
+                                 "mode": "reviewed-execution",
+                                 "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                 "actionId": "apps.bulkUninstall.apply",
+                                 "gates": [
+                                     "confirm-apply",
+                                     "reviewed-input-hash",
+                                     "exact-identity"
+                                 ]
+                             },
+                             "restore": {
+                                 "status": "not-applicable",
+                                 "mode": "not-reversible",
+                                 "script": null,
+                                 "actionId": null
+                             },
+                             "unavailableReason": null,
+                             "testEvidence": [
+                                 {
+                                     "test": "backend/scripts/Test-BulkUninstall.ps1",
+                                     "proves": "Durable sequential official removal with registration verification and reconciliation"
+                                 }
+                             ],
+                             "resolvedAvailability": {
+                                 "available": true,
+                                 "checkedRules": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                         "resolvedTarget": "%REPO_ROOT%\\backend\\scripts\\Invoke-OptimizerRequest.ps1",
+                                         "passed": true,
+                                         "evidence": {
+                                             "exists": true,
+                                             "error": null
+                                         },
+                                         "reason": null
+                                     }
+                                 ],
+                                 "unavailableReason": null
+                             }
+                         },
+                         {
+                             "capabilityId": "process-controls.cpu-sets",
+                             "family": "process-controls",
+                             "displayName": "CPU Sets",
+                             "technicalName": "Minimal-rights CPU Set apply/readback/restore on disposable processes",
+                             "source": "roo-native",
+                             "implementedBy": "roo-script",
+                             "frontendLabel": "CPU Sets",
+                             "frontendTab": "Game Tune",
+                             "riskLevel": "medium",
+                             "approvalRequired": true,
+                             "availability": {
+                                 "detection": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Invoke-OptimizerRequest.ps1"
+                                     }
+                                 ],
+                                 "notes": "Backend command interface; UI integration and protected-game compatibility are separately verified."
+                             },
+                             "preview": {
+                                 "status": "implemented",
+                                 "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                 "actionId": "performance.cpuSets.preview"
+                             },
+                             "apply": {
+                                 "status": "live",
+                                 "mode": "reviewed-execution",
+                                 "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                 "actionId": "performance.cpuSets.apply",
+                                 "gates": [
+                                     "confirm-apply",
+                                     "reviewed-input-hash",
+                                     "exact-identity"
+                                 ]
+                             },
+                             "restore": {
+                                 "status": "live",
+                                 "mode": "conflict-aware-restore",
+                                 "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                 "actionId": "performance.cpuSets.restore"
+                             },
+                             "unavailableReason": null,
+                             "testEvidence": [
+                                 {
+                                     "test": "backend/scripts/Test-ProcessCpuSets.ps1",
+                                     "proves": "Minimal-rights CPU Set apply/readback/restore on disposable processes"
+                                 }
+                             ],
+                             "resolvedAvailability": {
+                                 "available": true,
+                                 "checkedRules": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Invoke-OptimizerRequest.ps1",
+                                         "resolvedTarget": "%REPO_ROOT%\\backend\\scripts\\Invoke-OptimizerRequest.ps1",
+                                         "passed": true,
+                                         "evidence": {
+                                             "exists": true,
+                                             "error": null
+                                         },
+                                         "reason": null
+                                     }
+                                 ],
+                                 "unavailableReason": null
+                             }
+                         },
+                         {
+                             "capabilityId": "system-optimizations.upstream-settings-inventory",
+                             "family": "system-optimizations",
+                             "displayName": "Settings Research Catalog",
+                             "technicalName": "Primary-source setting inventory and paginated read-only lookup",
+                             "source": "roo-native",
+                             "implementedBy": "roo-script",
+                             "frontendLabel": "Settings Research Catalog",
+                             "frontendTab": "Live Feel",
+                             "riskLevel": "safe",
+                             "approvalRequired": false,
+                             "availability": {
+                                 "detection": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Get-UpstreamSettingsCatalog.ps1"
+                                     }
+                                 ],
+                                 "notes": "Read-only primary-source inventory; symbols inferred from Dash are labeled."
+                             },
+                             "preview": {
+                                 "status": "implemented",
+                                 "script": "backend/scripts/Get-UpstreamSettingsCatalog.ps1",
+                                 "actionId": "settings.upstreamCatalog"
+                             },
+                             "apply": {
+                                 "status": "preview-only",
+                                 "mode": "read-only",
+                                 "script": "backend/scripts/Get-UpstreamSettingsCatalog.ps1",
+                                 "actionId": "settings.upstreamCatalog",
+                                 "gates": []
+                             },
+                             "restore": {
+                                 "status": "not-applicable",
+                                 "mode": "not-reversible",
+                                 "script": null,
+                                 "actionId": null
+                             },
+                             "unavailableReason": null,
+                             "testEvidence": [
+                                 {
+                                     "test": "backend/scripts/Test-UpstreamSettingsCatalog.ps1",
+                                     "proves": "Primary-source setting inventory and paginated read-only lookup"
+                                 }
+                             ],
+                             "resolvedAvailability": {
+                                 "available": true,
+                                 "checkedRules": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/scripts/Get-UpstreamSettingsCatalog.ps1",
+                                         "resolvedTarget": "%REPO_ROOT%\\backend\\scripts\\Get-UpstreamSettingsCatalog.ps1",
+                                         "passed": true,
+                                         "evidence": {
+                                             "exists": true,
+                                             "error": null
+                                         },
+                                         "reason": null
+                                     }
+                                 ],
+                                 "unavailableReason": null
+                             }
                          }
                      ],
     "summary":  {
-                    "totalCapabilities":  53,
-                    "byFamily":  {
-                                     "cleanup-uninstall":  9,
-                                     "drivers-gpu-tools":  25,
-                                     "process-controls":  9,
-                                     "system-optimizations":  10
-                                 },
-                    "byApplyStatus":  {
-                                          "allowlist-shim":  2,
-                                          "fixture-proven":  3,
-                                          "helper-contract":  1,
-                                          "live":  8,
-                                          "not-implemented":  26,
-                                          "preview-only":  13
-                                      },
-                    "availableCount":  41,
-                    "unavailableCount":  12
-                }
+        "totalCapabilities": 56,
+        "byFamily": {
+            "cleanup-uninstall": 10,
+            "drivers-gpu-tools": 25,
+            "process-controls": 10,
+            "system-optimizations": 11
+        },
+        "byApplyStatus": {
+            "allowlist-shim": 2,
+            "fixture-proven": 3,
+            "helper-contract": 1,
+            "live": 10,
+            "not-implemented": 26,
+            "preview-only": 14
+        },
+        "availableCount": 44,
+        "unavailableCount": 12
+    }
 }

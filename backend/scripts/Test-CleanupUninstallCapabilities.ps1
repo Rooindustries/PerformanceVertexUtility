@@ -86,8 +86,7 @@ function Invoke-DetectionRule {
         'file-exists' {
             $resolved = $target.Replace('{utilitiesRoot}', $UtilitiesRoot)
             if (-not [System.IO.Path]::IsPathRooted($resolved)) {
-                Add-Failure "$CapabilityId file-exists target did not resolve to an absolute path: $target"
-                return
+                $resolved = Join-Path $repoRoot $resolved
             }
             $fullPath = [System.IO.Path]::GetFullPath($resolved)
             $exists = Test-Path -LiteralPath $fullPath -PathType Leaf
