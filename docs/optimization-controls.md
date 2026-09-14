@@ -4,7 +4,7 @@ The backend adds supported process-default CPU Sets, a durable bulk removal queu
 
 ## CPU Sets
 
-`Invoke-ProcessCpuSets.ps1` uses Windows' documented CPU Set APIs. Detection opens the target with `PROCESS_QUERY_LIMITED_INFORMATION` (`0x1000`); changes request that right plus `PROCESS_SET_LIMITED_INFORMATION` (`0x3000` combined). One process handle covers identity checks, mutation and readback. There is no debug-privilege retry, process-memory access, injection, driver, or anti-cheat modification in this path.
+`Invoke-ProcessCpuSets.ps1` uses Windows' documented CPU Set APIs. Detection opens the target with `PROCESS_QUERY_LIMITED_INFORMATION` (`0x1000`); changes request that right plus `PROCESS_SET_LIMITED_INFORMATION` (`0x3000` combined). One process handle covers identity checks, mutation and readback. The handle is opened under a temporary copy of the caller token with maximum privileges disabled, so an already enabled debug privilege cannot override the target access check. The original thread security context is restored even when the open fails. This uses Microsoft's [restricted-token API](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken) and preserves existing impersonation. There is no debug-privilege retry, process-memory access, injection, driver, or anti-cheat modification in this path.
 
 CPU Set IDs are opaque identifiers returned by the operating system. They are not CPU indexes or bits in an affinity mask. The topology result includes processor group, logical processor index, core, cache and NUMA indexes, efficiency class, scheduling class, parking and allocation flags. Sets reserved for another process are rejected.
 

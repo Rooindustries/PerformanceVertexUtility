@@ -31,6 +31,7 @@ function Get-RooCpuSetProtection {
         catalogMatch=if ($match.matched) { $match.item.itemId } else { $null }
         protectionLevel=$NativeProtection
         queryAccess='0x1000'; changeAccess='0x3000'
+        targetOpenUsesRestrictedPrivileges=$true
         setAccessVerified=$false
         gameCompatibility='unverified'
         limits=@('Windows may deny access; no privileged fallback is attempted.',

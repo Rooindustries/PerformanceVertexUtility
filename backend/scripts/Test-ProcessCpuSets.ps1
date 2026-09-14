@@ -118,9 +118,19 @@ public static class CpuSetOracle {
     $invalidRequest=Read-Result (& $router -CapabilityId 'process-controls.cpu-sets' -Action preview -RequestPath $requestPath)
     Assert ($invalidRequest.status -eq 'failed' -and $invalidRequest.dryRun -and $invalidRequest.evidence.errors[0].code -eq 'INVALID_OPTIMIZER_REQUEST') 'Invalid request types retain structured rejection evidence at the router boundary'
     [CpuSetOracle]::DenySetLimitedOnFixture($probe.Handle)
+    $contextBefore=[Security.Principal.WindowsIdentity]::GetCurrent().ImpersonationLevel
+    $privilegesBefore=(@(& whoami.exe /priv /fo csv) -join "`n")
     $deniedJournal=Join-Path $root 'denied.json'
     $deniedApply=Read-Result (& $scriptPath -Action Apply -InputPath $previewPath -ReviewSha256 (Get-FileHash $previewPath).Hash -JournalPath $deniedJournal -ConfirmApply)
+    if ($deniedApply.status -ne 'failed' -or $deniedApply.errors[0].win32Error -ne 5) { Write-Host ($deniedApply|ConvertTo-Json -Depth 16); & whoami.exe /priv /fo csv | Where-Object {$_ -match 'SeDebugPrivilege'} | Write-Host }
     Assert ($deniedApply.status -eq 'failed' -and $deniedApply.errors[0].api -eq 'OpenProcess' -and $deniedApply.errors[0].win32Error -eq 5 -and $deniedApply.errors[0].requestedAccess -eq '0x3000' -and -not(Test-Path $deniedJournal)) 'A disposable process denying SET_LIMITED_INFORMATION is respected without escalation or mutation'
+    Assert ([Security.Principal.WindowsIdentity]::GetCurrent().ImpersonationLevel -eq $contextBefore -and (@(& whoami.exe /priv /fo csv) -join "`n") -ceq $privilegesBefore) 'A denied target open restores the caller context and preserves process-token privileges'
+    $caller=[Security.Principal.WindowsIdentity]::GetCurrent();$nested=$caller.Impersonate()
+    try {
+        $nestedBefore=[Security.Principal.WindowsIdentity]::GetCurrent().ImpersonationLevel
+        $nestedDenied=Read-Result (& $scriptPath -Action Apply -InputPath $previewPath -ReviewSha256 (Get-FileHash $previewPath).Hash -JournalPath $deniedJournal -ConfirmApply)
+        Assert ($nestedDenied.errors[0].win32Error -eq 5 -and [Security.Principal.WindowsIdentity]::GetCurrent().ImpersonationLevel -eq $nestedBefore) 'A pre-existing impersonation context is retained after access denial'
+    } finally {$nested.Undo();$nested.Dispose();$caller.Dispose()}
     Assert (Test-RooCpuSetIdsEqual ([CpuSetOracle]::Read($probe.Id)) $original) 'The access-denied fixture retains its exact original CPU assignment'
 } finally {
     if ($null -ne $control) {$control.Dispose()}
