@@ -1,0 +1,38 @@
+name: Baseline
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tools/validation/requirements.txt
+      - run: python tools/validation/check_baseline.py
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: python -m pip install -r tools/validation/requirements.txt
+      - name: Backend regression suite and desktop compile
+        shell: powershell
+        run: .\tools\scripts\Test-Baseline.ps1 -BuildFrontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation
+          path: artifacts/validation/

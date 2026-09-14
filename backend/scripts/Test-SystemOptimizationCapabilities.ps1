@@ -64,7 +64,7 @@ function Convert-RegistryTarget {
 
 function Resolve-DetectionFilePath {
     param([string]$Target)
-    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { 'C:\Users\serviroo\Desktop\Utilities' } else { $env:ROO_UTILITIES_ROOT }
+    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_UTILITIES_ROOT }
     $expanded = $Target.Replace('{utilitiesRoot}', $utilitiesRoot)
     $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
     if (-not [System.IO.Path]::IsPathRooted($expanded)) {

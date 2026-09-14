@@ -265,7 +265,7 @@ if ($null -ne $fragment) {
         Add-Check ([string](Get-PropertyValue (Get-PropertyValue $nvcleanstall[0] 'apply' $null) 'status' '') -eq 'not-implemented') 'NVCleanstall apply is not implemented' 'NVCleanstall apply status is not correct'
     }
 
-    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { 'C:\Users\serviroo\Desktop\Utilities' } else { $env:ROO_UTILITIES_ROOT }
+    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_UTILITIES_ROOT }
     $utilitiesRoot = [System.IO.Path]::GetFullPath($utilitiesRoot)
     $videoControllers = @()
     try {

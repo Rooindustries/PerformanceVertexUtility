@@ -447,7 +447,10 @@ function Get-RooRouteArgumentList {
 
     $arguments = New-Object System.Collections.Generic.List[string]
     foreach ($arg in @((Get-PropertyValue $Section 'args' @()))) {
-        $arguments.Add([string]$arg) | Out-Null
+        $fixtureBase = $env:ROO_CLEANUP_FIXTURE_ROOT
+        if ([string]::IsNullOrWhiteSpace($fixtureBase)) { $fixtureBase = Join-Path ([IO.Path]::GetTempPath()) 'roo-capability-router-cleanup-fixture' }
+        if (-not (Test-RooPathUnderTemp $fixtureBase)) { throw 'Cleanup fixture storage must stay under the current user temp directory.' }
+        $arguments.Add(([string]$arg).Replace('{cleanupFixtureRoot}', $fixtureBase)) | Out-Null
     }
 
     $fixtureRootParam = Convert-ToCleanString (Get-PropertyValue $Section 'fixtureRootParam' $null)

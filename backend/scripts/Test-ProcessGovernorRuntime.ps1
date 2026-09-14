@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ProcessGovernor.Common.ps1')
@@ -283,8 +284,8 @@ try {
         -ProtectedName 'RooGovernorProtectedProbe.exe' `
         -MaxDurationSeconds 7
 
-    $busyProbe = Start-Process -FilePath $busyExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }' -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
+    $busyProbe = Start-Process -FilePath $busyExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeBusy = Get-RooProcessControlState $busyProbe.Id $null
     $beforeProtected = Get-RooProcessControlState $protectedProbe.Id $null
@@ -354,12 +355,11 @@ try {
     }
 
     if ($busyProbe -and -not $busyProbe.HasExited) {
-        Stop-Process -Id $busyProbe.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $busyProbe.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $busyProbe
     }
     $busyProbe = $null
 
-    $calmProbe = Start-Process -FilePath $calmExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 60' -WindowStyle Hidden -PassThru
+    $calmProbe = Start-Process -FilePath $calmExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 60')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeCalm = Get-RooProcessControlState $calmProbe.Id $null
     $calmSession = & (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1') `
@@ -390,12 +390,10 @@ try {
     }
 
     if ($protectedProbe -and -not $protectedProbe.HasExited) {
-        Stop-Process -Id $protectedProbe.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $protectedProbe.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $protectedProbe
     }
     if ($calmProbe -and -not $calmProbe.HasExited) {
-        Stop-Process -Id $calmProbe.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $calmProbe.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $calmProbe
     }
     $protectedProbe = $null
     $calmProbe = $null
@@ -414,8 +412,7 @@ try {
 } finally {
     foreach ($probe in @($busyProbe, $protectedProbe, $calmProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
-            Wait-Process -Id $probe.Id -Timeout 5 -ErrorAction SilentlyContinue
+            Stop-RooValidationProcess $probe
         }
     }
     if (-not $cleanupDone) {

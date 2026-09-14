@@ -75,6 +75,7 @@ function Get-OfficialCommandPreview {
         hasQuietCommand = (-not [string]::IsNullOrWhiteSpace([string]$quietCommand))
         requiresElevation = $true
         protected = $protected
+        reviewRequired = [bool](Get-RooUninstallPropertyValue $Classification 'reviewRequired' $true)
         blocked = $blocked
         risk = [string](Get-RooUninstallPropertyValue $Classification 'risk' 'medium')
         confidence = if ([string]::IsNullOrWhiteSpace([string]$rawCommand)) { 'low' } else { 'high' }

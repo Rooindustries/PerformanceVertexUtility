@@ -13,6 +13,19 @@ namespace Roo.OptimizationSuite.Services;
 public sealed class LiveDataService
 {
     private readonly BackendLocator _locator;
+    private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
+    private ReviewedCleanupInput? _officialReview;
+    private ReviewedCleanupInput? _cleanupReview;
+    private int _cleanupReviewGeneration;
+    public string? LastCleanupRollbackPath { get; private set; }
+
+    public void DiscardCleanupReview()
+    {
+        Interlocked.Increment(ref _cleanupReviewGeneration);
+        _officialReview = null;
+        _cleanupReview = null;
+        LastCleanupRollbackPath = null;
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
 
@@ -180,11 +193,25 @@ public sealed class LiveDataService
     public Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken ct = default)
         => RunAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
 
-    public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken ct = default)
-        => RunAsync<OfficialUninstallPreview>("Preview-OfficialUninstall.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public async Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken ct = default)
+    {
+        var generation = _cleanupReviewGeneration;
+        var json = await RunBackendScriptTextAsync("Preview-OfficialUninstall.ps1", ct, "-AppId " + QuotePowerShell(appId));
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        var result = JsonSerializer.Deserialize<OfficialUninstallPreview>(json, JsonOptions);
+        if (generation == _cleanupReviewGeneration) _officialReview = new(appId, json, generation);
+        return result;
+    }
 
-    public Task<CleanupManifest?> GetCleanupManifestAsync(string appId, CancellationToken ct = default)
-        => RunAsync<CleanupManifest>("New-CleanupDeletionManifest.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public async Task<CleanupManifest?> GetCleanupManifestAsync(string appId, CancellationToken ct = default)
+    {
+        var generation = _cleanupReviewGeneration;
+        var json = await RunBackendScriptTextAsync("New-CleanupDeletionManifest.ps1", ct, "-AppId " + QuotePowerShell(appId));
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        var result = JsonSerializer.Deserialize<CleanupManifest>(json, JsonOptions);
+        if (generation == _cleanupReviewGeneration) _cleanupReview = new(appId, json, generation);
+        return result;
+    }
 
     public Task<UninstallCleanupExecutionPlan?> GetUninstallCleanupExecutionPlanAsync(string appId, CancellationToken ct = default)
         => RunAsync<UninstallCleanupExecutionPlan>("New-UninstallCleanupExecutionPlan.ps1", ct, "-AppId " + QuotePowerShell(appId));
@@ -208,14 +235,20 @@ public sealed class LiveDataService
             var officialExecutable = ReadOfficialExecutable(inputs.Value.OfficialPreviewPath);
             var runRoot = realCleanupApproved
                 ? Path.Combine(
-                    Path.GetTempPath(),
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "RooOptimizationSuite",
                     "cleanup-runs",
                     Path.GetFileName(inputs.Value.DirectoryPath))
                 : Path.Combine(inputs.Value.DirectoryPath, "preview-run");
             Directory.CreateDirectory(runRoot);
 
-            var args = "-OfficialPreviewPath " + QuotePowerShell(inputs.Value.OfficialPreviewPath) +
+            if (realCleanupApproved) LastCleanupRollbackPath = Path.Combine(runRoot, "rollback-manifest.json");
+            var officialHash = inputs.Value.OfficialSha256;
+            var cleanupHash = inputs.Value.CleanupSha256;
+            var args = "-ApprovedAppId " + QuotePowerShell(appId) +
+                " -OfficialPreviewSha256 " + QuotePowerShell(officialHash) +
+                " -CleanupManifestSha256 " + QuotePowerShell(cleanupHash) +
+                " -OfficialPreviewPath " + QuotePowerShell(inputs.Value.OfficialPreviewPath) +
                 " -CleanupManifestPath " + QuotePowerShell(inputs.Value.CleanupManifestPath) +
                 " -ExecutorMode " + (realCleanupApproved ? "Real" : "Preview") +
                 " -ExactTargetAllowlist " + QuotePowerShellArray(cleanupTargets) +
@@ -230,7 +263,7 @@ public sealed class LiveDataService
 
             if (officialUninstallCommandApproved)
             {
-                args += " -OfficialUninstallCommandApproved";
+                args += " -OfficialUninstallCommandApproved -ManualReviewApproved";
             }
 
             if (cleanupDeletionManifestApproved)
@@ -426,46 +459,40 @@ public sealed class LiveDataService
         return null;
     }
 
-    private async Task<(string DirectoryPath, string OfficialPreviewPath, string CleanupManifestPath)?> PrepareUninstallCleanupInputsAsync(string appId, CancellationToken ct)
+    private async Task<(string DirectoryPath, string OfficialPreviewPath, string CleanupManifestPath, string OfficialSha256, string CleanupSha256)?> PrepareUninstallCleanupInputsAsync(string appId, CancellationToken ct)
     {
-        var safeId = new string(appId.Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
-        if (string.IsNullOrWhiteSpace(safeId))
+        var official = _officialReview;
+        var cleanup = _cleanupReview;
+        var generation = _cleanupReviewGeneration;
+        if (official?.AppId != appId || cleanup?.AppId != appId || official.Generation != generation || cleanup.Generation != generation)
         {
-            safeId = "app";
-        }
-
-        if (safeId.Length > 80)
-        {
-            safeId = safeId.Substring(0, 80);
-        }
-
-        var dir = Path.Combine(
-            Path.GetTempPath(),
-            "RooOptimizationSuite",
-            "cleanup-inputs",
-            safeId + "-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"));
-        Directory.CreateDirectory(dir);
-
-        var officialPath = Path.Combine(dir, "official-preview.json");
-        var manifestPath = Path.Combine(dir, "cleanup-manifest.json");
-
-        await RunBackendScriptTextAsync(
-            "Preview-OfficialUninstall.ps1",
-            ct,
-            "-AppId " + QuotePowerShell(appId) + " -OutputPath " + QuotePowerShell(officialPath)).ConfigureAwait(false);
-
-        await RunBackendScriptTextAsync(
-            "New-CleanupDeletionManifest.ps1",
-            ct,
-            "-AppId " + QuotePowerShell(appId) + " -OutputPath " + QuotePowerShell(manifestPath)).ConfigureAwait(false);
-
-        if (!File.Exists(officialPath) || !File.Exists(manifestPath))
-        {
-            LastError = "Cleanup input files were not created.";
+            LastError = "Review this app's removal route and cleanup list before applying.";
             return null;
         }
+        var dir = Path.Combine(Path.GetTempPath(), "RooOptimizationSuite", "cleanup-inputs", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var officialPath = Path.Combine(dir, "official-preview.json");
+        var manifestPath = Path.Combine(dir, "cleanup-manifest.json");
+        try
+        {
+            await File.WriteAllTextAsync(officialPath, official.Json, new UTF8Encoding(false), ct).ConfigureAwait(false);
+            await File.WriteAllTextAsync(manifestPath, cleanup.Json, new UTF8Encoding(false), ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            TryDeleteDirectory(dir);
+            throw;
+        }
 
-        return (dir, officialPath, manifestPath);
+        if (generation != _cleanupReviewGeneration)
+        {
+            TryDeleteDirectory(dir);
+            LastError = "The selected app changed; review its inputs again.";
+            return null;
+        }
+        var officialHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(official.Json)));
+        var cleanupHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(cleanup.Json)));
+        return (dir, officialPath, manifestPath, officialHash, cleanupHash);
     }
 
     private static void TryDeleteDirectory(string path)

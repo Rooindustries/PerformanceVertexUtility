@@ -98,7 +98,7 @@ try {
         Add-Failure 'NVIDIA capability probe did not prove real hidden help/export capability'
     }
 
-    $outsidePath = Join-Path $repoRoot 'not-temp-export.nip'
+    $outsidePath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('roo-rejected-export-' + [guid]::NewGuid().ToString('N') + '.nip')
     $blockedPath = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $outsidePath -AllowReadOnlyNvpiProbe)
     $tempGate = @($blockedPath.gates | Where-Object { $_.gateId -eq 'export-path-temp' }) | Select-Object -First 1
     if ($blockedPath.status -eq 'approval-or-input-required' -and $tempGate.blocking -eq $true -and $blockedPath.summary.processRunnerInvoked -eq $false) {

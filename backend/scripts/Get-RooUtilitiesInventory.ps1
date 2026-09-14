@@ -18,7 +18,7 @@ function Resolve-RooUtilitiesRoot {
         $candidate = $env:ROO_UTILITIES_ROOT
     }
     if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = 'C:\Users\serviroo\Desktop\Utilities'
+        $candidate = (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')
     }
 
     return [System.IO.Path]::GetFullPath($candidate)

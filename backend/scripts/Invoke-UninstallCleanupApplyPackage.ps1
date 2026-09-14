@@ -1,6 +1,10 @@
 param(
     [string]$OfficialPreviewPath = '',
     [string]$CleanupManifestPath = '',
+    [string]$ApprovedAppId = '',
+    [string]$OfficialPreviewSha256 = '',
+    [string]$CleanupManifestSha256 = '',
+    [switch]$ManualReviewApproved,
     [ValidateSet('Preview','Real')]
     [string]$ExecutorMode = 'Preview',
     [string]$AllowedOfficialExecutablePath = '',
@@ -21,15 +25,6 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'UninstallCleanup.Common.ps1')
 . (Join-Path $PSScriptRoot 'BackendExecutor.Common.ps1')
 
-function Resolve-ApplyPackageJsonInput {
-    param(
-        [string]$Path,
-        [string]$Label
-    )
-    if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path is required." }
-    return Read-RooUninstallJsonFile (Resolve-RooUninstallPath $Path $Path)
-}
-
 function Test-ApplyPackageTargetAllowlist {
     param(
         [object[]]$Items,
@@ -48,14 +43,6 @@ function Test-ApplyPackageTargetAllowlist {
         if (-not $allowed.ContainsKey($full)) { return $false }
     }
     return $true
-}
-
-function Get-ApplyPackageOfficialArguments {
-    param([object]$Command)
-    $value = Get-RooUninstallPropertyValue $Command 'arguments' $null
-    if ($null -eq $value) { return @() }
-    if ($value -is [System.Array]) { return @($value | ForEach-Object { [string]$_ }) }
-    return @([string]$value)
 }
 
 function New-ApplyPackageGate {
@@ -86,7 +73,7 @@ function Copy-ApplyPackageBackup {
     $itemId = [string](Get-RooUninstallPropertyValue $Item 'itemId' '')
     $source = [System.IO.Path]::GetFullPath([string](Get-RooUninstallPropertyValue $Item 'target' ''))
     $type = [string](Get-RooUninstallPropertyValue $Item 'type' '')
-    $destination = Join-Path $BackupRoot (ConvertTo-RooStableId $itemId)
+    $destination = Join-Path $BackupRoot ([guid]::NewGuid().ToString('N'))
     Ensure-RooUninstallDirectory (Split-Path $destination -Parent)
 
     if (-not (Test-Path -LiteralPath $source)) {
@@ -115,6 +102,8 @@ function Copy-ApplyPackageBackup {
         source = $source
         backupPath = $destination
         copied = $true
+        deleteAttempted = $false
+        deleted = $false
         reason = 'Copied before cleanup.'
     }
 }
@@ -129,197 +118,189 @@ function Remove-ApplyPackageTarget {
     return $false
 }
 
+function Read-ApprovalInput {
+    param([string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-RooUninstallPath $Path $Path))
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    return [pscustomobject]@{ data = ([System.Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF) | ConvertFrom-Json); sha256 = $hash }
+}
+
+$journal = $null
+$lock = $null
+$executionStarted = $false
+$resolvedRollbackManifestPath = $null
+$backupRecords = New-Object System.Collections.Generic.List[object]
+$sequence = New-Object System.Collections.Generic.List[object]
+$gates = @()
+$errors = @()
+$reused = $false
+$canApply = $false
+$appId = ''
+$status = 'preview'
+$officialInput = $null
+$cleanupInput = $null
+$items = @()
+$reviewRequired = $true
+$hasOfficialCommand = $false
 try {
-    $officialPreview = Resolve-ApplyPackageJsonInput $OfficialPreviewPath 'Official preview'
-    $cleanupManifest = Resolve-ApplyPackageJsonInput $CleanupManifestPath 'Cleanup manifest'
+    $officialInput = Read-ApprovalInput $OfficialPreviewPath
+    $cleanupInput = Read-ApprovalInput $CleanupManifestPath
+    $officialPreview = $officialInput.data
+    $cleanupManifest = $cleanupInput.data
+    $appId = [string](Get-RooUninstallPropertyValue $cleanupManifest 'appId' '')
     $commands = @(Get-RooUninstallPropertyArray $officialPreview 'commands')
-    $command = if ($commands.Count -gt 0) { $commands[0] } else { $null }
+    $command = if ($commands.Count -eq 1) { $commands[0] } else { $null }
     $items = @(Get-RooUninstallPropertyArray $cleanupManifest 'items')
     $fileFolderItems = @($items | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'type' '') -in @('file','folder') })
     $unsupportedItems = @($items | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'type' '') -notin @('file','folder') })
     $reviewItems = @($items | Where-Object { [bool](Get-RooUninstallPropertyValue $_ 'protected' $false) })
-    $realMode = ($ExecutorMode -eq 'Real')
-    $commandExecutable = if ($command) { Resolve-RooUninstallPath ([string](Get-RooUninstallPropertyValue $command 'executable' '')) ([string](Get-RooUninstallPropertyValue $command 'executable' '')) } else { '' }
-    $allowedOfficialExecutable = if ([string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath)) { '' } else { Resolve-RooUninstallPath $AllowedOfficialExecutablePath $AllowedOfficialExecutablePath }
-    $hasOfficialCommand = (-not [string]::IsNullOrWhiteSpace($commandExecutable))
-    $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($allowedOfficialExecutable) -and [System.IO.Path]::GetFullPath($commandExecutable).Equals([System.IO.Path]::GetFullPath($allowedOfficialExecutable), [System.StringComparison]::OrdinalIgnoreCase))
+    $reviewRequired = [bool](Get-RooUninstallPropertyValue $command 'reviewRequired' $true)
+    $commandExecutable = [string](Get-RooUninstallPropertyValue $command 'executable' '')
+    $hasOfficialCommand = -not [string]::IsNullOrWhiteSpace($commandExecutable)
+    if ($hasOfficialCommand) { $commandExecutable = Resolve-RooUninstallPath $commandExecutable $commandExecutable }
+    $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
-        Join-Path ([System.IO.Path]::GetTempPath()) ('RooOptimizationSuite\cleanup-backups\' + (ConvertTo-RooStableId ([string](Get-RooUninstallPropertyValue $cleanupManifest 'appId' 'app'))) + '-' + (Get-RooUninstallFileStamp))
-    } else {
-        [System.IO.Path]::GetFullPath($BackupRoot)
-    }
-    $resolvedRollbackManifestPath = if ([string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
-        Join-Path $resolvedBackupRoot 'rollback-manifest.json'
-    } else {
-        Resolve-RooUninstallPath $RollbackManifestPath $RollbackManifestPath
-    }
+        Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('RooOptimizationSuite\cleanup-backups\' + [guid]::NewGuid().ToString('N'))
+    } else { [System.IO.Path]::GetFullPath($BackupRoot) }
+    $resolvedRollbackManifestPath = if ([string]::IsNullOrWhiteSpace($RollbackManifestPath)) { Join-Path $resolvedBackupRoot 'rollback-manifest.json' } else { [System.IO.Path]::GetFullPath($RollbackManifestPath) }
 
+    $safeTargets = $true
+    $ids = @{}
+    $targets = @()
+    foreach ($item in $fileFolderItems) {
+        $id = [string](Get-RooUninstallPropertyValue $item 'itemId' '')
+        $target = [System.IO.Path]::GetFullPath([string](Get-RooUninstallPropertyValue $item 'target' ''))
+        if ([string]::IsNullOrWhiteSpace($id) -or $ids.ContainsKey($id)) { $safeTargets = $false }
+        $ids[$id] = $true
+        if ($target.TrimEnd('\','/') -eq [System.IO.Path]::GetPathRoot($target).TrimEnd('\','/')) { $safeTargets = $false }
+        if (Test-RooCleanupReparsePath $target -Recurse) { $safeTargets = $false }
+        if ((Test-RooCleanupPathWithin $resolvedBackupRoot $target) -or (Test-RooCleanupPathWithin $resolvedRollbackManifestPath $target)) { $safeTargets = $false }
+        foreach ($previous in $targets) {
+            if ((Test-RooCleanupPathWithin $target $previous) -or (Test-RooCleanupPathWithin $previous $target)) { $safeTargets = $false }
+        }
+        if (Test-Path -LiteralPath $target) {
+            $isFolder = (Get-Item -LiteralPath $target -Force).PSIsContainer
+            if ($isFolder -ne ([string]$item.type -eq 'folder')) { $safeTargets = $false }
+        }
+        $targets += $target
+    }
+    if ((Test-RooCleanupReparsePath $resolvedBackupRoot) -or (Test-RooCleanupReparsePath $resolvedRollbackManifestPath)) { $safeTargets = $false }
+    $inputErrors = @(Get-RooUninstallPropertyArray $officialPreview 'errors') + @(Get-RooUninstallPropertyArray $cleanupManifest 'errors')
+    $sameApp = (-not [string]::IsNullOrWhiteSpace($appId)) -and $commands.Count -eq 1 -and ([string](Get-RooUninstallPropertyValue $command 'appId' '') -ceq $appId) -and ($ApprovedAppId -ceq $appId)
     $gates = @(
         (New-ApplyPackageGate 'confirm-apply' 'Confirmed apply requested' $true ([bool]$ConfirmApply) 'Apply remains a dry run until confirmed.' $null),
-        (New-ApplyPackageGate 'real-mode-selected' 'Real cleanup mode selected' $true $realMode 'Preview mode prepares the run without removing anything.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
-        (New-ApplyPackageGate 'official-route-reviewed' 'Removal route reviewed' $true ([bool]$OfficialUninstallCommandApproved) 'The app route must be reviewed first.' ([pscustomobject]@{ commandCount = $commands.Count })),
-        (New-ApplyPackageGate 'cleanup-list-reviewed' 'Cleanup list reviewed' $true ([bool]$CleanupDeletionManifestApproved) 'The exact cleanup list must be reviewed first.' ([pscustomobject]@{ itemCount = $items.Count })),
-        (New-ApplyPackageGate 'explicit-user-approval' 'Final approval captured' $true ([bool]$UserApproved) 'The final apply action requires explicit approval for this app.' $null),
-        (New-ApplyPackageGate 'real-system-flag' 'Real-system execution flag supplied' $true ([bool]$AllowRealSystemExecution) 'Real cleanup requires the real-system execution flag.' $null),
-        (New-ApplyPackageGate 'official-executable-allowlisted' 'Official executable allowlisted or not needed' $true $officialExecutableAllowlisted 'If the app has a vendor remover, the executable must match the allowlist exactly.' ([pscustomobject]@{ hasOfficialCommand = $hasOfficialCommand; commandExecutable = $commandExecutable; allowedOfficialExecutablePath = $allowedOfficialExecutable })),
-        (New-ApplyPackageGate 'exact-target-allowlist' 'Exact cleanup targets approved' $true $exactTargetsApproved 'Every file and folder target must match the exact allowlist.' ([pscustomobject]@{ allowlistCount = @(Get-RooUninstallArray $ExactTargetAllowlist).Count; itemCount = $fileFolderItems.Count })),
-        (New-ApplyPackageGate 'manual-review-items-excluded' 'Manual-review items not selected' $true ($reviewItems.Count -eq 0) 'Manual-review items cannot be included in the apply package.' ([pscustomobject]@{ reviewItemCount = $reviewItems.Count })),
-        (New-ApplyPackageGate 'supported-cleanup-types' 'Cleanup item types supported' $true ($unsupportedItems.Count -eq 0) 'This apply package only removes files and folders; registry, service, task, and startup changes stay in review.' ([pscustomobject]@{ unsupportedItemCount = $unsupportedItems.Count }))
+        (New-ApplyPackageGate 'real-mode-selected' 'Real cleanup mode selected' $true ($ExecutorMode -eq 'Real') 'Preview mode removes nothing.' $null),
+        (New-ApplyPackageGate 'official-route-reviewed' 'Removal route reviewed' $true ([bool]$OfficialUninstallCommandApproved) 'Review the exact removal route.' $null),
+        (New-ApplyPackageGate 'cleanup-list-reviewed' 'Cleanup list reviewed' $true ([bool]$CleanupDeletionManifestApproved) 'Review the exact cleanup list.' $null),
+        (New-ApplyPackageGate 'explicit-user-approval' 'Final approval captured' $true ([bool]$UserApproved) 'Approve this specific app and operation.' $null),
+        (New-ApplyPackageGate 'real-system-flag' 'Real execution requested' $true ([bool]$AllowRealSystemExecution) 'Real execution requires its explicit flag.' $null),
+        (New-ApplyPackageGate 'same-approved-app' 'App identity matches throughout' $true $sameApp 'Supply exactly one removal route belonging to ApprovedAppId and the cleanup manifest.' $null),
+        (New-ApplyPackageGate 'reviewed-inputs-unchanged' 'Reviewed inputs are unchanged' $true ($OfficialPreviewSha256 -eq $officialInput.sha256 -and $CleanupManifestSha256 -eq $cleanupInput.sha256) 'Apply requires the SHA-256 hashes returned for the reviewed inputs.' $null),
+        (New-ApplyPackageGate 'manual-review-approved' 'Dependency review completed' $true ((-not $reviewRequired) -or $ManualReviewApproved) 'Apps marked for review require explicit dependency review approval.' $null),
+        (New-ApplyPackageGate 'valid-preview' 'Preview completed without errors' $true ($inputErrors.Count -eq 0 -and -not [bool](Get-RooUninstallPropertyValue $command 'blocked' $true) -and -not [bool](Get-RooUninstallPropertyValue $command 'protected' $true)) 'Failed, incomplete or protected routes cannot run.' $null),
+        (New-ApplyPackageGate 'official-executable-allowlisted' 'Official executable approved' $true $officialExecutableAllowlisted 'The executable must match the allowlist exactly.' $null),
+        (New-ApplyPackageGate 'exact-target-allowlist' 'Exact cleanup targets approved' $true $exactTargetsApproved 'Every cleanup target must be on the exact allowlist.' $null),
+        (New-ApplyPackageGate 'manual-review-items-excluded' 'Protected leftovers excluded' $true ($reviewItems.Count -eq 0) 'Protected leftovers require a separate workflow.' $null),
+        (New-ApplyPackageGate 'supported-cleanup-types' 'Only files and folders selected' $true ($unsupportedItems.Count -eq 0) 'Registry, services and tasks remain outside this executor.' $null),
+        (New-ApplyPackageGate 'safe-target-layout' 'Targets and recovery storage are separate' $true $safeTargets 'Reject duplicate IDs, overlapping targets, roots, reparse paths and backups inside deletion targets.' $null)
     )
-    $blockingGates = @($gates | Where-Object { $_.blocking })
-    $canApply = ($blockingGates.Count -eq 0)
-    $status = if ($canApply) { 'success' } elseif ($ConfirmApply -or $realMode) { 'blocked' } else { 'preview' }
-
-    $sequence = New-Object System.Collections.Generic.List[object]
-    $backupRecords = New-Object System.Collections.Generic.List[object]
-    $deletedRecords = New-Object System.Collections.Generic.List[object]
-    $officialCompleted = (-not $hasOfficialCommand)
-    $officialAttempted = $false
-
+    $canApply = @($gates | Where-Object { $_.blocking }).Count -eq 0
+    $status = if ($canApply) { 'success' } elseif ($ConfirmApply -or $ExecutorMode -eq 'Real') { 'blocked' } else { 'preview' }
     if ($canApply) {
-        Ensure-RooUninstallDirectory $resolvedBackupRoot
-        if ($hasOfficialCommand) {
-            $officialAttempted = $true
-            $officialArgs = Get-ApplyPackageOfficialArguments $command
-            $officialResult = Invoke-RooBackendHiddenProcess -FilePath $commandExecutable -Arguments $officialArgs -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $OfficialRunnerWorkingDirectory
-            $officialCompleted = ((-not [bool](Get-RooPropertyValue $officialResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $officialResult 'exitCode' -1) -eq 0)
-            if (-not $officialCompleted) { $status = 'failed' }
-            $sequence.Add([pscustomobject]@{
-                order = 1
-                runner = 'official-uninstaller'
-                executable = $commandExecutable
-                arguments = @($officialArgs)
-                result = $officialResult
-                completed = $officialCompleted
-            }) | Out-Null
-        } else {
-            $sequence.Add([pscustomobject]@{
-                order = 1
-                runner = 'roo-industries-route'
-                completed = $true
-                reason = 'The app did not publish a vendor remover; cleanup starts from exact leftovers.'
-            }) | Out-Null
-        }
-
-        if ($officialCompleted) {
-            $order = 2
-            foreach ($item in $fileFolderItems) {
-                $backup = Copy-ApplyPackageBackup $item $resolvedBackupRoot
-                $deleted = Remove-ApplyPackageTarget $item
-                $backupRecords.Add($backup) | Out-Null
-                $deletedRecords.Add([pscustomobject]@{
-                    itemId = [string](Get-RooUninstallPropertyValue $item 'itemId' '')
-                    type = [string](Get-RooUninstallPropertyValue $item 'type' '')
-                    target = [System.IO.Path]::GetFullPath([string](Get-RooUninstallPropertyValue $item 'target' ''))
-                    deleted = $deleted
-                }) | Out-Null
-                $sequence.Add([pscustomobject]@{
-                    order = $order
-                    runner = 'leftover-cleanup'
-                    itemId = [string](Get-RooUninstallPropertyValue $item 'itemId' '')
-                    target = [System.IO.Path]::GetFullPath([string](Get-RooUninstallPropertyValue $item 'target' ''))
-                    backupPath = [string](Get-RooUninstallPropertyValue $backup 'backupPath' '')
-                    completed = $deleted
-                }) | Out-Null
-                $order++
-            }
-        } else {
-            $sequence.Add([pscustomobject]@{
-                order = 2
-                runner = 'leftover-cleanup'
-                skipped = $true
-                reason = 'The vendor remover failed or timed out, so leftover cleanup did not run.'
-            }) | Out-Null
-        }
-    }
-
-    if ($canApply -and $status -eq 'success') {
-        $rollbackManifest = [pscustomobject]@{
-            manifestId = 'cleanup-rollback-' + (ConvertTo-RooStableId ([string](Get-RooUninstallPropertyValue $cleanupManifest 'appId' 'app'))) + '-' + (Get-RooUninstallFileStamp)
-            schemaVersion = 1
-            productName = $script:RooUninstallProductName
-            actionId = 'apps.rollbackCleanup'
-            sourceManifestId = Get-RooUninstallPropertyValue $cleanupManifest 'manifestId' $null
-            appId = Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null
-            displayName = Get-RooUninstallPropertyValue $cleanupManifest 'displayName' $null
-            createdAtUtc = Get-RooUninstallUtcStamp
-            fixtureRoot = ''
-            backupRoot = $resolvedBackupRoot
-            restoreSupported = $true
-            realSystemRollback = $true
-            exactTargetAllowlist = @(Get-RooUninstallArray $ExactTargetAllowlist)
-            fileBackups = @($backupRecords.ToArray())
-            deletedItems = @($deletedRecords.ToArray())
-            officialRunnerAttempted = $officialAttempted
-            officialRunnerCompleted = $officialCompleted
-        }
         Ensure-RooUninstallDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
-        ($rollbackManifest | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $resolvedRollbackManifestPath -Encoding UTF8
+        $lock = [System.IO.FileStream]::new($resolvedRollbackManifestPath + '.lock', [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::DeleteOnClose)
+        if (Test-Path -LiteralPath $resolvedRollbackManifestPath) {
+            $existing = Read-RooUninstallJsonFile $resolvedRollbackManifestPath
+            if ($existing.appId -cne $appId -or $existing.officialPreviewSha256 -ne $officialInput.sha256 -or $existing.cleanupManifestSha256 -ne $cleanupInput.sha256) { throw 'Recovery path already belongs to another operation.' }
+            $journal = $existing
+            $reused = $true
+            $status = if ($journal.status -eq 'success') { 'success' } else { 'partial' }
+            $executionStarted = [bool]$journal.executionStarted
+        } else {
+            $journal = [pscustomobject]@{
+                manifestId = 'cleanup-rollback-' + [guid]::NewGuid().ToString('N')
+                schemaVersion = 1; productName = $script:RooUninstallProductName; actionId = 'apps.rollbackCleanup'
+                sourceManifestId = Get-RooUninstallPropertyValue $cleanupManifest 'manifestId' $null
+                appId = $appId; displayName = Get-RooUninstallPropertyValue $cleanupManifest 'displayName' $null
+                createdAtUtc = Get-RooUninstallUtcStamp; fixtureRoot = ''; backupRoot = $resolvedBackupRoot
+                restoreSupported = $true; realSystemRollback = $true; exactTargetAllowlist = @($targets)
+                officialPreviewSha256 = $officialInput.sha256; cleanupManifestSha256 = $cleanupInput.sha256
+                status = 'preparing'; executionStarted = $false; fileBackups = @(); deletedItems = @()
+                officialRunnerAttempted = $false; officialRunnerCompleted = (-not $hasOfficialCommand)
+            }
+            Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+            foreach ($item in $fileFolderItems) {
+                if (Test-RooCleanupReparsePath ([string]$item.target) -Recurse) { throw 'A cleanup target changed to a reparse path.' }
+                $backup = Copy-ApplyPackageBackup $item $resolvedBackupRoot
+                if ($backup.copied) { $backupRecords.Add($backup) | Out-Null }
+                $journal.fileBackups = @($backupRecords.ToArray())
+                Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+            }
+            $journal.status = 'prepared'
+            Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+            if ($hasOfficialCommand) {
+                $journal.officialRunnerAttempted = $true
+                $journal.executionStarted = $true
+                Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+                $executionStarted = $true
+                $runner = @{ FilePath = $commandExecutable; TimeoutSeconds = $TimeoutSeconds; WorkingDirectory = $OfficialRunnerWorkingDirectory }
+                $arguments = Get-RooUninstallPropertyValue $command 'arguments' $null
+                if ($arguments -is [System.Array]) { $runner.Arguments = @($arguments) }
+                else { $runner.RawArguments = [string]$arguments }
+                $officialResult = Invoke-RooBackendHiddenProcess @runner
+                $sequence.Add([pscustomobject]@{ runner = 'official-uninstaller'; result = $officialResult }) | Out-Null
+                $journal.officialRunnerCompleted = ($officialResult.processStarted -and -not $officialResult.timedOut -and $officialResult.exitCode -eq 0)
+                Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+                if (-not $journal.officialRunnerCompleted) { throw 'The vendor remover failed or timed out; leftover cleanup was not started.' }
+            }
+            foreach ($backup in $backupRecords) {
+                if ((Test-RooCleanupReparsePath $backup.source -Recurse) -or (Test-RooCleanupReparsePath $backup.backupPath -Recurse)) { throw 'A cleanup or backup path changed to a reparse path.' }
+                $backup.deleteAttempted = $true
+                $journal.executionStarted = $true
+                Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+                $executionStarted = $true
+                $backup.deleted = Remove-ApplyPackageTarget ([pscustomobject]@{ target = $backup.source })
+                $journal.deletedItems = @($backupRecords.ToArray() | Where-Object { $_.deleted } | ForEach-Object { [pscustomobject]@{ itemId = $_.itemId; type = $_.type; target = $_.source; deleted = $true } })
+                Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+                $sequence.Add([pscustomobject]@{ runner = 'leftover-cleanup'; target = $backup.source; completed = $backup.deleted }) | Out-Null
+            }
+            $journal.status = 'success'
+            Write-RooCleanupJournal $journal $resolvedRollbackManifestPath
+        }
     }
-
-    $result = [pscustomobject]@{
-        actionId = 'apps.invokeUninstallCleanupApplyPackage'
-        schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
-        dryRun = (-not $canApply)
-        status = $status
-        executionMode = $ExecutorMode.ToLowerInvariant()
-        appId = Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null
-        displayName = Get-RooUninstallPropertyValue $cleanupManifest 'displayName' $null
-        gates = @($gates)
-        executionSequence = @($sequence.ToArray())
-        rollback = [pscustomobject]@{
-            rollbackManifestPath = if ($canApply -and $status -eq 'success') { $resolvedRollbackManifestPath } else { $null }
-            rollbackSupported = $true
-            backupRoot = $resolvedBackupRoot
-            fileBackups = @($backupRecords.ToArray())
-        }
-        capabilities = [pscustomobject]@{
-            rooIndustriesRouteWithoutVendorUninstaller = $true
-            officialUninstallerRunnerImplemented = $true
-            fileFolderCleanupImplemented = $true
-            rollbackRestoreImplemented = $true
-            registryCleanupReviewOnly = $true
-            serviceTaskCleanupReviewOnly = $true
-        }
-        summary = [pscustomobject]@{
-            hasOfficialCommand = $hasOfficialCommand
-            rooIndustriesRouteUsed = (-not $hasOfficialCommand)
-            officialRunnerAttempted = $officialAttempted
-            officialRunnerCompleted = $officialCompleted
-            cleanupItemCount = $fileFolderItems.Count
-            backupCount = $backupRecords.Count
-            deletedCount = @($deletedRecords.ToArray() | Where-Object { $_.deleted }).Count
-            blockingGateCount = $blockingGates.Count
-            restoreReady = ($canApply -and $status -eq 'success' -and (Test-Path -LiteralPath $resolvedRollbackManifestPath))
-            willDeleteLeftovers = $canApply
-            willChangeRegistry = $false
-            willChangeServices = $false
-            willChangeScheduledTasks = $false
-            focusStealPrevented = (@($sequence.ToArray() | Where-Object { $_.result.invocation.focusStealPrevented -eq $false }).Count -eq 0)
-        }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_APPLY_PACKAGE_CONTROLLED' 'Cleanup apply package evaluated through exact route, exact target allowlist, backup, and rollback gates.' 'info' 'apps.uninstallCleanupApplyPackage' (Get-RooUninstallPropertyValue $cleanupManifest 'appId' $null) $false 'Review registry, service, task, and startup cleanup separately before those item types are allowed.' $null))
-        errors = @()
-        logs = @((New-RooUninstallLog 'Uninstall cleanup apply package completed.'))
-    }
-    Write-RooUninstallJsonOutput $result $OutputPath
 } catch {
-    $errorResult = [pscustomobject]@{
-        actionId = 'apps.invokeUninstallCleanupApplyPackage'
-        schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
-        dryRun = $true
-        status = 'failed'
-        executionMode = $ExecutorMode.ToLowerInvariant()
-        executionSequence = @()
-        summary = [pscustomobject]@{ willDeleteLeftovers = $false; deletedCount = 0; restoreReady = $false }
-        warnings = @()
-        errors = @((New-RooUninstallIssue 'CLEANUP_APPLY_PACKAGE_FAILED' $_.Exception.Message 'error' 'apps.uninstallCleanupApplyPackage' $null $true 'Check official preview, cleanup manifest, allowlist, backup root, and approval gates.' $null))
-        logs = @((New-RooUninstallLog 'Uninstall cleanup apply package failed.' 'error'))
+    $status = if ($executionStarted) { 'partial' } else { 'failed' }
+    $errors = @((New-RooUninstallIssue 'CLEANUP_APPLY_PACKAGE_FAILED' $_.Exception.Message 'error' 'apps.uninstallCleanupApplyPackage' $appId $true 'Inspect the recovery journal before retrying or restoring.' $null))
+    if ($null -ne $journal -and -not $reused) {
+        $journal.status = $status
+        try { Write-RooCleanupJournal $journal $resolvedRollbackManifestPath } catch { }
     }
-    Write-RooUninstallJsonOutput $errorResult $OutputPath
-    exit 1
+} finally {
+    if ($null -ne $lock) { $lock.Dispose() }
 }
+$records = @(if ($null -ne $journal) { Get-RooUninstallPropertyArray $journal 'fileBackups' })
+$restoreReady = $executionStarted -and $null -ne $journal -and (Test-Path -LiteralPath $resolvedRollbackManifestPath) -and $records.Count -gt 0
+$result = [pscustomobject]@{
+    actionId = 'apps.invokeUninstallCleanupApplyPackage'; schemaVersion = 1; productName = $script:RooUninstallProductName
+    capturedAtUtc = Get-RooUninstallUtcStamp; dryRun = (-not $executionStarted); status = $status; executionMode = $ExecutorMode.ToLowerInvariant()
+    appId = $appId; gates = @($gates); executionSequence = @($sequence.ToArray()); executionReused = $reused
+    approval = [pscustomobject]@{ appId = $appId; officialPreviewSha256 = Get-RooUninstallPropertyValue $officialInput 'sha256' ''; cleanupManifestSha256 = Get-RooUninstallPropertyValue $cleanupInput 'sha256' ''; reviewRequired = $reviewRequired }
+    rollback = [pscustomobject]@{ rollbackManifestPath = if ($null -ne $journal) { $resolvedRollbackManifestPath } else { $null }; rollbackSupported = $restoreReady; fileBackups = @($records) }
+    summary = [pscustomobject]@{
+        hasOfficialCommand = $hasOfficialCommand; rooIndustriesRouteUsed = (-not $hasOfficialCommand)
+        officialRunnerAttempted = [bool](Get-RooUninstallPropertyValue $journal 'officialRunnerAttempted' $false)
+        officialRunnerCompleted = [bool](Get-RooUninstallPropertyValue $journal 'officialRunnerCompleted' $false)
+        cleanupItemCount = $items.Count; backupCount = $records.Count
+        deletedCount = @($records | Where-Object { $_.deleted }).Count
+        attemptedCleanupCount = @($records | Where-Object { $_.deleteAttempted }).Count
+        blockingGateCount = @($gates | Where-Object { $_.blocking }).Count; restoreReady = $restoreReady
+        approvalReady = @($gates | Where-Object { $_.blocking -and $_.gateId -notin @('confirm-apply','real-mode-selected','explicit-user-approval','real-system-flag') }).Count -eq 0
+        willDeleteLeftovers = $canApply -and -not $reused; willChangeRegistry = $false; willChangeServices = $false; willChangeScheduledTasks = $false
+    }
+    warnings = @(); errors = @($errors); logs = @((New-RooUninstallLog 'Cleanup operation evaluated.'))
+}
+Write-RooUninstallJsonOutput $result $OutputPath
+if ($status -in @('failed','partial')) { exit 1 }

@@ -16,6 +16,9 @@ packages/
 *.suo
 *.userosscache
 *.rsuser
+.venv/
+__pycache__/
+*.pyc
 
 # Runtime data and logs
 backend/state/

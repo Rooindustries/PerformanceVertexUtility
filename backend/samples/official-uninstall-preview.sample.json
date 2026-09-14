@@ -35,7 +35,8 @@
         "leftoverScanAfterUninstall": true
       },
       "metadata": {},
-      "warnings": []
+      "warnings": [],
+      "reviewRequired": false
     }
   ],
   "summary": {

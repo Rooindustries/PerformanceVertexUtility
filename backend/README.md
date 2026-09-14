@@ -1,48 +1,53 @@
-# Backend Contracts
+# Backend
 
-This folder contains backend contracts and read-only helper scripts for Roo Industries Optimization Suite.
-
-The current PowerShell optimizer harness remains internal. These contracts define the structured shapes that a future WinUI app can consume while backend implementation is added behind preview, confirmation, backup, and rollback gates.
+The backend provides Windows discovery, process controls, cleanup planning, driver and utility inventory, and structured preview/apply/restore results. The desktop consumes the same scripts and contracts.
 
 ## Layout
 
-| Folder | Purpose |
+| Location | Responsibility |
 |---|---|
-| `contracts` | Versioned JSON Schema definitions for backend responses and workflow models. |
-| `samples` | Realistic fixtures for dashboard, process profiles, uninstall cleanup, drivers, telemetry, and reports. |
-| `scripts` | Discovery, preview, controlled real/read-only/mock/fixture executors, gated apply/rollback helpers, and validation. |
-| `uninstall` | Manual-review app catalog, leftover scan rules, and guarded uninstall cleanup policy. |
+| `scripts` | Discovery, execution, recovery, and regression checks |
+| `native` | Process governor and standby-memory helpers |
+| `contracts` | JSON Schema definitions and explicit validation mappings |
+| `capabilities` | Capability descriptions and executor routes |
+| `catalogs` | Driver profiles, utility inventory, and optimization references |
+| `profiles` | Process policies and protected-process rules |
+| `uninstall` | Dependency-review policy and leftover selection rules |
+| `samples` | Curated examples; current-PC screens use live discovery |
 
-## Safety Boundary
+## Execution and recovery
 
-Discovery, classification, preview, and validation scripts read local state and return structured JSON. Process profile and Game Tune scripts default to dry-run behavior. Confirmed Game Tune sessions can apply and restore process priority, CPU affinity, I/O priority, and GPU scheduling priority against matched processes after writing session state and a backup manifest.
+Discovery and default previews do not change system settings. Process controls require confirmed apply, capture original state, bind targets to process identity, and provide restore commands. Runtime validation uses disposable processes and temporary state roots.
 
-The process governor backend adds bounded ProBalance-style restraint for sustained background CPU offenders. It previews by default, requires `-ConfirmApply` for live restraint, writes session state and backup snapshots before applying temporary priority or I/O priority changes, excludes protected and foreground processes, restores after calm periods, and supports status plus stop/restore commands.
+`Invoke-UninstallCleanupApplyPackage.ps1` can run an explicitly reviewed official uninstaller and remove allowlisted files or folders. It requires one matching app identity, hashes of the reviewed input files, explicit approvals, and separate dependency-review approval where required. Protected leftovers, unsupported item types, overlapping targets, and unsafe backup locations are rejected. The caller must retain the reviewed inputs; rebuilding them at apply time is not approval of the new contents.
 
-The persistent process policy backend adds saved-rule enforcement during bounded sessions. It previews by default, supports process-name, wildcard-name, path, category, and command-line selectors, applies priority, affinity, I/O priority, and GPU scheduling priority controls through existing process-control primitives, watches for newly launched or relaunched matching processes, writes session state plus backup snapshots under the selected state root, and supports status plus stop/restore commands. Confirmed application is gated by explicit rule approval and allowed executable path roots, and protected game, capture, voice, driver, security, network, input, Store, WebView2, and Windows Update processes are skipped.
+Cleanup copies originals and flushes a recovery journal before destructive work. Each attempted deletion is recorded before execution. Partial failures return the saved journal and actual completed-deletion count. Repeating the same saved operation does not run it again. Restore copies backup contents to their original paths and can be retried. This restores backed-up leftovers; it does not reinstall an application removed by its vendor uninstaller. Keep recovery storage outside temporary directories and deletion targets.
 
-The uninstall cleanup backend can inventory apps, classify protected components, build uninstall queue previews, show official uninstall command metadata, preview leftover candidates, create dry-run cleanup manifests with backup/export requirements, run mock uninstaller and leftover-deletion runners, run a real hidden process runner only for an exact harmless shim executable, delete only disposable fixture leftovers after explicit fixture flags, and restore copied fixture file/folder backups from rollback manifests. It does not run real app uninstallers, delete real files or folders, edit registry keys, remove services, remove scheduled tasks, run driver cleanup tools, or write state during dry-run validation.
+NVIDIA imports and hardware-specific utilities retain their explicit approval and tool requirements. Several catalog entries support discovery, preview, or a disposable fixture rather than unrestricted real execution. Timer-resolution and temporary power-plan validation exercise bounded reversible paths. Service, registry, and driver changes must not be inferred from a capability label or a successful preview.
 
-The NVIDIA NIP backend can preview NVPI export/import and restore commands, run a mock NVPI executor that proves export-before-import, rollback manifest writing, timeout handling, and hidden invocation, and run a real read-only NVPI process probe for file-version, help, and temp export capability checks. Real NVIDIA Profile Inspector import remains behind explicit future approval.
+## Validation
 
-The {source} and WinUtil parity backend can preview standby memory, timer resolution, power plan, shader cache, and service pause contracts. Mock runners cover system-changing flows; disposable fixture execution is limited to shader cache backup/delete/restore under the OS temp path. Real controlled paths cover bounded timer-resolution helper sessions, temporary power-plan duplicate/select/restore/delete sessions, standby-memory counter and missing-API reporting, real shader-cache readiness planning without deletion, and service status/dependency analysis without pausing services.
+Install Python 3.10+ and the development requirements:
 
-These backend scripts do not disable services, edit the registry, delete files, uninstall applications, install drivers, create scheduled tasks, create services, run remote scripts, or apply driver/profile tools.
+```console
+python -m pip install -r tools/validation/requirements.txt
+python tools/validation/check_baseline.py
+```
 
-Run validation:
+The static checker validates declared schemas, their mapped fixtures, route manifests, JSON syntax, XML structure, public-source hygiene, and empty runtime state. `validation-map.json` names the domain checks for curated examples without a dedicated schema; schema coverage is reported separately.
+
+On Windows, run the complete suite in an isolated source copy:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-BackendContracts.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-ProcessProfileBackend.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-GameTuneSessionRuntime.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-ProcessGovernorRuntime.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-ProcessPolicyRuntime.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-UninstallCleanupBackend.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-NvidiaNipExecutor.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-NvidiaNipCapabilityProbe.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-UninstallCleanupRunnerContracts.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-OfficialUninstallCommandRunner.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-UninstallCleanupRestore.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-StutterOptimizationExecutorContracts.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\Test-StutterOptimizationRealExecutors.ps1
+.\tools\scripts\Test-Baseline.ps1 -BuildFrontend
 ```
+
+Set `ROO_PYTHON_EXE` or `ROO_DOTNET_EXE` when the development interpreters are outside `PATH`. Desktop compilation needs the .NET 8 SDK. The suite invokes Windows PowerShell 5.1, captures one log per test and a JSON summary under ignored `artifacts/validation`, and checks that `backend/state` is empty. It does not launch the WinUI app.
+
+Run individual regressions with `-TestName`:
+
+```powershell
+.\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1,Test-UninstallCleanupApplyPackage.ps1
+```
+
+A green build or fixture suite does not establish real-provider operation, real uninstall success, a performance gain, or visual quality. Record those separately on the relevant Windows machine.

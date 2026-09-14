@@ -43,6 +43,11 @@ function Get-DotnetCandidatePaths {
     $candidates = New-Object System.Collections.Generic.List[object]
     $seen = @{}
 
+    Add-DotnetCandidatePath $candidates $seen $env:ROO_DOTNET_EXE 'configured'
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        Add-DotnetCandidatePath $candidates $seen (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe') 'user-local'
+    }
+
     foreach ($cmd in @(Get-Command dotnet.exe -All -ErrorAction SilentlyContinue)) {
         Add-DotnetCandidatePath $candidates $seen $cmd.Source 'get-command'
     }

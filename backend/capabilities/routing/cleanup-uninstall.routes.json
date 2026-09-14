@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
   "family": "cleanup-uninstall",
   "routes": [
@@ -83,11 +83,11 @@
         "script": "backend/scripts/Invoke-OfficialUninstallCommandRunner.ps1",
         "args": [
           "-OfficialPreviewPath",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/official-runner/official-preview.json",
+          "{cleanupFixtureRoot}/official-runner/official-preview.json",
           "-AllowedExecutablePath",
           "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
           "-WorkingDirectory",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/official-runner",
+          "{cleanupFixtureRoot}/official-runner",
           "-TimeoutSeconds",
           "5",
           "-ConfirmApply",
@@ -142,9 +142,9 @@
         "script": "backend/scripts/Invoke-UninstallCleanupExecution.ps1",
         "args": [
           "-OfficialPreviewPath",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/official-preview.json",
+          "{cleanupFixtureRoot}/deletion-fixture/official-preview.json",
           "-CleanupManifestPath",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/cleanup-manifest.json",
+          "{cleanupFixtureRoot}/deletion-fixture/cleanup-manifest.json",
           "-ConfirmApply",
           "-AllowDisposableFixtureApply",
           "-OfficialUninstallCommandApproved",
@@ -168,7 +168,7 @@
         "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
         "args": [
           "-RollbackManifestPath",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json"
+          "{cleanupFixtureRoot}/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json"
         ],
         "timeoutSeconds": 30
       },
@@ -176,7 +176,7 @@
         "script": "backend/scripts/Restore-UninstallCleanupExecution.ps1",
         "args": [
           "-RollbackManifestPath",
-          "C:/Users/serviroo/AppData/Local/Temp/roo-capability-router-cleanup-fixture/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json",
+          "{cleanupFixtureRoot}/deletion-fixture/_roo-cleanup-backup/rollback-manifest.json",
           "-ConfirmApply",
           "-AllowDisposableFixtureApply"
         ],

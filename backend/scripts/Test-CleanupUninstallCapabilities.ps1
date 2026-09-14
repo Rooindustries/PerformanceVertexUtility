@@ -71,7 +71,7 @@ function Resolve-UtilitiesRoot {
     if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) {
         return [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT)
     }
-    return [System.IO.Path]::GetFullPath('C:\Users\serviroo\Desktop\Utilities')
+    return [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities'))
 }
 
 function Invoke-DetectionRule {
