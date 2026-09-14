@@ -305,6 +305,18 @@ public sealed class LiveDataService
         }
     }
 
+    public Task<ProcessProfileEnvelope?> GetProcessProfilePreviewAsync(CancellationToken ct = default)
+        => RunAsync<ProcessProfileEnvelope>("Preview-ProcessProfile.ps1", ct);
+
+    public Task<AppClassificationResult?> GetAppClassificationAsync(CancellationToken ct = default)
+        => RunAsync<AppClassificationResult>("Get-AppClassification.ps1", ct);
+
+    public Task<NvidiaNipPreview?> GetNvidiaNipPreviewAsync(CancellationToken ct = default)
+        => RunAsync<NvidiaNipPreview>("Preview-NvidiaNipProfile.ps1", ct);
+
+    public Task<StutterOptimizationPreview?> GetStutterOptimizationPreviewAsync(CancellationToken ct = default)
+        => RunAsync<StutterOptimizationPreview>("Preview-StutterOptimization.ps1", ct);
+
     private async Task<T?> RunAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
     {
         var dir = ScriptsDirectory;

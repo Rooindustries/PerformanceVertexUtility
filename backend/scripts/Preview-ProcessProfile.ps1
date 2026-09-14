@@ -150,8 +150,14 @@ function New-ProcessPreviewEntry {
         if (-not [string]::IsNullOrWhiteSpace([string]$proposedGpuPriority)) {
             if (-not (Test-RooGpuPriorityAllowed $proposedGpuPriority)) {
                 $reason = "GPU priority '$proposedGpuPriority' is outside the allow-list."
-            } elseif ([string]::IsNullOrWhiteSpace([string]$currentGpuPriority)) {
-                $reason = 'Current GPU priority could not be read, so no GPU priority change is proposed.'
+                $blocked = $true
+                $rollbackSupported = $false
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Requested GPU scheduling priority is outside the allow-list.' $true $reason)) | Out-Null
+            } elseif (-not [bool](Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false)) {
+                $reason = 'GPU scheduling priority is unavailable for this process.'
+                $blocked = $true
+                $rollbackSupported = $false
+                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Native GPU scheduling priority is unavailable for this process.' $true $reason)) | Out-Null
             } elseif ([string]$currentGpuPriority -ne [string]$proposedGpuPriority) {
                 $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Set process GPU scheduling priority for the selected game profile.')) | Out-Null
             }
@@ -162,7 +168,10 @@ function New-ProcessPreviewEntry {
         $reason = 'Process is not safe to change from this profile pass.'
     }
 
-    if ($controlChanges.Count -gt 0) {
+    if ($blocked) {
+        $proposedAction = 'noChange'
+        $rollbackSupported = $false
+    } elseif ($controlChanges.Count -gt 0) {
         $proposedAction = if ($controlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $controlChanges[0] 'action' '') -eq 'setPriority') { 'setPriority' } else { 'setProcessControls' }
         $rollbackSupported = $true
         foreach ($change in @($controlChanges.ToArray())) {
@@ -200,6 +209,8 @@ function New-ProcessPreviewEntry {
         proposedIoPriority = $proposedIoPriority
         currentGpuPriority = $currentGpuPriority
         proposedGpuPriority = $proposedGpuPriority
+        gpuPriorityAvailable = Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false
+        gpuPriorityStatus = Get-RooPropertyValue $currentControls 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
         ruleId = $ruleId
@@ -211,7 +222,7 @@ function New-ProcessPreviewEntry {
         risk = $risk
         confidence = $confidence
         protected = $protected
-        requiresConfirmation = ($controlChanges.Count -gt 0)
+        requiresConfirmation = ($controlChanges.Count -gt 0 -and -not $blocked)
         rollbackSupported = $rollbackSupported
         currentState = [pscustomobject]@{
             priorityClass = $currentPriority

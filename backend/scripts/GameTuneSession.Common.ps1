@@ -118,9 +118,11 @@ function Get-RooGameTuneLiveProcessIdentity {
         matches = $matches
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
+        currentControlState = $controlState
         currentAffinityMask = $controlState.affinityMask
         currentIoPriority = $controlState.ioPriority
         currentGpuPriority = $controlState.gpuPriority
+        processStartTimeUtc = $controlState.startTimeUtc
         currentPath = $currentPath
         reason = $reason
     }

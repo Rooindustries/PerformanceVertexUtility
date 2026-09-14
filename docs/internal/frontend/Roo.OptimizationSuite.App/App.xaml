@@ -7,9 +7,10 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <muxc:XamlControlsResources />
-                <ResourceDictionary Source="ms-appx:///Resources/Theme.RooBlue.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Theme.BlackoutGold.xaml" />
                 <ResourceDictionary Source="ms-appx:///Resources/Brand.xaml" />
                 <ResourceDictionary Source="ms-appx:///Resources/Styles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/CapabilityTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />

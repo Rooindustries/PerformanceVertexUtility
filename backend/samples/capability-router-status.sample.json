@@ -1,0 +1,95 @@
+﻿{
+    "actionId":  "backend.capability.invoke",
+    "schemaVersion":  1,
+    "correlationId":  "sample-capability-router-status-20260703-180000",
+    "startedAtUtc":  "2026-07-03T12:50:09.2781799Z",
+    "completedAtUtc":  "2026-07-03T12:50:09.4838673Z",
+    "capabilityId":  "process-controls.cpu-priority",
+    "family":  "process-controls",
+    "displayName":  "CPU Priority",
+    "frontendLabel":  "CPU Priority",
+    "frontendTab":  "Game Tune",
+    "action":  "explain",
+    "dryRun":  true,
+    "status":  "completed",
+    "requiresApproval":  true,
+    "approvalSatisfied":  false,
+    "machineAvailable":  true,
+    "unavailableReason":  null,
+    "applyStatus":  "live",
+    "restoreStatus":  "live",
+    "routedScript":  null,
+    "wouldChange":  true,
+    "changed":  false,
+    "restoreAvailable":  true,
+    "evidence":  {
+                     "capability":  {
+                                        "capabilityId":  "process-controls.cpu-priority",
+                                        "previewStatus":  "implemented",
+                                        "applyStatus":  "live",
+                                        "restoreStatus":  "live",
+                                        "gates":  [
+                                                      "confirm-apply",
+                                                      "explicit-user-approval",
+                                                      "backup-completed"
+                                                  ]
+                                    },
+                     "availability":  {
+                                          "available":  true,
+                                          "checkedRules":  [
+                                                               {
+                                                                   "method":  "builtin",
+                                                                   "target":  "kernel32!SetPriorityClass",
+                                                                   "resolvedTarget":  "kernel32!SetPriorityClass",
+                                                                   "passed":  true,
+                                                                   "evidence":  {
+                                                                                    "target":  "kernel32!SetPriorityClass",
+                                                                                    "assumedPresent":  true
+                                                                                },
+                                                                   "reason":  null
+                                                               }
+                                                           ],
+                                          "unavailableReason":  null
+                                      },
+                     "routing":  {
+                                     "manifestPath":  "backend/capabilities/routing/process-controls.routes.json",
+                                     "manifestExists":  true,
+                                     "routePresent":  true,
+                                     "preview":  {
+                                                     "present":  true,
+                                                     "statusOnly":  false,
+                                                     "script":  "backend/scripts/Preview-ProcessProfile.ps1",
+                                                     "timeoutSeconds":  60,
+                                                     "reason":  null,
+                                                     "nextRequiredStep":  null
+                                                 },
+                                     "apply":  {
+                                                   "present":  true,
+                                                   "statusOnly":  false,
+                                                   "script":  "backend/scripts/Start-GameTuneSession.ps1",
+                                                   "timeoutSeconds":  120,
+                                                   "reason":  null,
+                                                   "nextRequiredStep":  null
+                                               },
+                                     "restore":  {
+                                                     "present":  true,
+                                                     "statusOnly":  false,
+                                                     "script":  "backend/scripts/Stop-GameTuneSession.ps1",
+                                                     "timeoutSeconds":  120,
+                                                     "reason":  null,
+                                                     "nextRequiredStep":  null
+                                                 }
+                                 },
+                     "explanation":  {
+                                         "applyMode":  "real-reversible-session",
+                                         "restoreMode":  "session-restore",
+                                         "applyNotes":  null,
+                                         "restoreNotes":  null,
+                                         "availabilityNotes":  "Windows process priority is available through the managed worker and PowerShell fallback paths."
+                                     }
+                 },
+    "errors":  [
+
+               ],
+    "nextRequiredStep":  null
+}

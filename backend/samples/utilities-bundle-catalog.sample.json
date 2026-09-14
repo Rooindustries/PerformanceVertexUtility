@@ -1,0 +1,241 @@
+﻿{
+    "schemaVersion":  1,
+    "sourceArchive":  "vendor\\Utilities.zip",
+    "generatedAtUtc":  "2026-07-06T00:00:00Z",
+    "policy":  {
+                   "archiveMetadataOnly":  true,
+                   "fullExtractionAllowed":  false,
+                   "utilityExecutionAllowed":  false,
+                   "systemMutationAllowed":  false
+               },
+    "requiredDecisionExamples":  [
+                                     {
+                                         "archivePath":  "Utilities\\AffTool\\intPolicy_ia64.exe",
+                                         "toolId":  "afftool-intpolicy",
+                                         "displayName":  "AffTool intPolicy",
+                                         "category":  "interrupt-affinity-policy",
+                                         "risk":  "high",
+                                         "executionClass":  "read-only-detector",
+                                         "allowedExecutionMode":  "metadata-only-read-only-detector",
+                                         "hardwareGates":  [
+                                                               "windows",
+                                                               "architecture-match-required"
+                                                           ],
+                                         "restoreBackupRequirement":  "Future apply would require exported interrupt policy state first.",
+                                         "integrationPlan":  "Research/status first for interrupt affinity policy. Do not blind-apply bundled intPolicy binaries."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\AffTool\\intPolicy_x64.exe",
+                                         "toolId":  "afftool-intpolicy",
+                                         "displayName":  "AffTool intPolicy",
+                                         "category":  "interrupt-affinity-policy",
+                                         "risk":  "high",
+                                         "executionClass":  "read-only-detector",
+                                         "allowedExecutionMode":  "metadata-only-read-only-detector",
+                                         "hardwareGates":  [
+                                                               "windows",
+                                                               "architecture-match-required"
+                                                           ],
+                                         "restoreBackupRequirement":  "Future apply would require exported interrupt policy state first.",
+                                         "integrationPlan":  "Research/status first for interrupt affinity policy. Do not blind-apply bundled intPolicy binaries."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\AffTool\\intPolicy_x86.exe",
+                                         "toolId":  "afftool-intpolicy",
+                                         "displayName":  "AffTool intPolicy",
+                                         "category":  "interrupt-affinity-policy",
+                                         "risk":  "high",
+                                         "executionClass":  "read-only-detector",
+                                         "allowedExecutionMode":  "metadata-only-read-only-detector",
+                                         "hardwareGates":  [
+                                                               "windows",
+                                                               "architecture-match-required"
+                                                           ],
+                                         "restoreBackupRequirement":  "Future apply would require exported interrupt policy state first.",
+                                         "integrationPlan":  "Research/status first for interrupt affinity policy. Do not blind-apply bundled intPolicy binaries."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\DL_SCEWIN.exe",
+                                         "toolId":  "scewin",
+                                         "displayName":  "DL_SCEWIN",
+                                         "category":  "firmware-configuration",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "never-auto-run",
+                                         "hardwareGates":  [
+                                                               "exact-platform-match-required",
+                                                               "firmware-support-required"
+                                                           ],
+                                         "restoreBackupRequirement":  "Exact firmware setting export and rollback plan required before any manual use.",
+                                         "integrationPlan":  "Do not integrate as optimizer action. Treat as dangerous manual-only firmware tooling."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\driver_booster_setup.exe",
+                                         "toolId":  "driver-booster",
+                                         "displayName":  "Driver Booster",
+                                         "category":  "third-party-driver-updater",
+                                         "risk":  "critical",
+                                         "executionClass":  "excluded",
+                                         "allowedExecutionMode":  "excluded-never-run",
+                                         "hardwareGates":  [
+                                                               "none"
+                                                           ],
+                                         "restoreBackupRequirement":  "Not applicable because this updater is excluded from default integration.",
+                                         "integrationPlan":  "Exclude from default driver strategy. Prefer Roo hardware-gated recommendations and manual driver packages."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PRO1000\\Winx64\\NDIS65\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PRO40GB\\Winx64\\NDIS65\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PROAVF\\Winx64\\NDIS65\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PROCGB\\Winx64\\NDIS65\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PROXGB\\Winx64\\NDIS65\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\Resource\\PROUnstl.exe",
+                                         "toolId":  "intel-proset-prounstl",
+                                         "displayName":  "Intel PROSet PROUnstl Helper",
+                                         "category":  "network-driver-uninstaller-helper",
+                                         "risk":  "critical",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "dangerous-manual-only",
+                                         "hardwareGates":  [
+                                                               "intel-network-adapter-detected"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point and export network adapter driver state before any manual use.",
+                                         "integrationPlan":  "Catalog only as a bundled helper executable. Do not expose as default cleanup or optimization action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\LatencyMon.exe",
+                                         "toolId":  "latencymon",
+                                         "displayName":  "LatencyMon",
+                                         "category":  "latency-diagnostics",
+                                         "risk":  "low",
+                                         "executionClass":  "read-only-detector",
+                                         "allowedExecutionMode":  "manual-diagnostics-only",
+                                         "hardwareGates":  [
+                                                               "windows"
+                                                           ],
+                                         "restoreBackupRequirement":  "Not required for metadata-only inventory.",
+                                         "integrationPlan":  "Diagnostics workflow for DPC/ISR latency evidence. Do not treat as optimizer action."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+                                         "toolId":  "msi-kombustor",
+                                         "displayName":  "MSI Kombustor",
+                                         "category":  "stress-benchmark",
+                                         "risk":  "high",
+                                         "executionClass":  "dangerous-manual-only",
+                                         "allowedExecutionMode":  "manual-confirmation-required-never-auto-run",
+                                         "hardwareGates":  [
+                                                               "discrete-gpu-recommended"
+                                                           ],
+                                         "restoreBackupRequirement":  "Confirm thermals, power, and user consent before any separate benchmark workflow.",
+                                         "integrationPlan":  "Keep separate from main optimizer. Never auto-run stress or benchmark workloads."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Prerequisites\\DX\\# install.bat",
+                                         "toolId":  "directx-runtime",
+                                         "displayName":  "DirectX Runtime Prerequisite",
+                                         "category":  "prerequisite-runtime",
+                                         "risk":  "medium",
+                                         "executionClass":  "manual-launcher",
+                                         "allowedExecutionMode":  "manual-confirmation-required",
+                                         "hardwareGates":  [
+                                                               "directx-legacy-runtime-missing"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point before dependency repair/install.",
+                                         "integrationPlan":  "Dependency repair/install workflow only, with explicit confirmation required."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Prerequisites\\DX\\Apr2005_d3dx9_25_x64.cab",
+                                         "toolId":  "directx-runtime",
+                                         "displayName":  "DirectX Runtime Prerequisite",
+                                         "category":  "prerequisite-runtime",
+                                         "risk":  "medium",
+                                         "executionClass":  "manual-launcher",
+                                         "allowedExecutionMode":  "metadata-only",
+                                         "hardwareGates":  [
+                                                               "directx-legacy-runtime-missing"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point before dependency repair/install.",
+                                         "integrationPlan":  "Dependency repair/install workflow only, with explicit confirmation required."
+                                     },
+                                     {
+                                         "archivePath":  "Utilities\\Prerequisites\\DX\\Apr2005_d3dx9_25_x86.cab",
+                                         "toolId":  "directx-runtime",
+                                         "displayName":  "DirectX Runtime Prerequisite",
+                                         "category":  "prerequisite-runtime",
+                                         "risk":  "medium",
+                                         "executionClass":  "manual-launcher",
+                                         "allowedExecutionMode":  "metadata-only",
+                                         "hardwareGates":  [
+                                                               "directx-legacy-runtime-missing"
+                                                           ],
+                                         "restoreBackupRequirement":  "Create restore point before dependency repair/install.",
+                                         "integrationPlan":  "Dependency repair/install workflow only, with explicit confirmation required."
+                                     }
+                                 ]
+}

@@ -22,11 +22,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync()
-            ?? await TrySample(Data.GetProcessInventoryAsync);
-        var classification = await App.Live.GetProcessClassificationAsync()
-            ?? await TrySample(Data.GetProcessClassificationAsync);
-        var telemetry = await TrySample(Data.GetTelemetryAsync);
+        var inventory = await App.Live.GetProcessInventoryAsync();
+        var classification = await App.Live.GetProcessClassificationAsync();
+        TelemetrySnapshot? telemetry = null;
 
         BuildMemory(inventory?.Summary);
         BuildTopUsers(classification?.Processes);

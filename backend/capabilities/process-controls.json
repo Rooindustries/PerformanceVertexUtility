@@ -1,0 +1,512 @@
+﻿{
+  "schemaVersion": 1,
+  "family": "process-controls",
+  "capabilities": [
+    {
+      "capabilityId": "process-controls.cpu-priority",
+      "family": "process-controls",
+      "displayName": "CPU Priority",
+      "technicalName": "SetPriorityClass / System.Diagnostics.Process.PriorityClass",
+      "source": "process-lasso",
+      "implementedBy": "roo-native",
+      "frontendLabel": "CPU Priority",
+      "frontendTab": "Game Tune",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "builtin",
+            "target": "kernel32!SetPriorityClass"
+          }
+        ],
+        "notes": "Windows process priority is available through the managed worker and PowerShell fallback paths."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessProfile.ps1",
+        "actionId": "performance.previewProfile"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Start-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "confirmed apply and restore of process priority on a disposable live process"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "proves": "persistent policy preview, apply, launch watcher, protected skip, and restore coverage for priority"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.io-priority",
+      "family": "process-controls",
+      "displayName": "I/O Priority",
+      "technicalName": "NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
+      "source": "process-lasso",
+      "implementedBy": "roo-native",
+      "frontendLabel": "I/O Priority",
+      "frontendTab": "Game Tune",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "builtin",
+            "target": "ntdll!NtSetInformationProcess(ProcessIoPriorityInformationClass=33)"
+          }
+        ],
+        "notes": "The engine allow-list covers VeryLow, Low, and Normal I/O priority values."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "actionId": "performance.policy.preview"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed",
+          "allowlisted-rule"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "confirmed apply and restore of I/O priority on a disposable live process"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "proves": "persistent policy all-control validation covers I/O priority as live-applied-restored or reports the OS unsupported status"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.gpu-priority",
+      "family": "process-controls",
+      "displayName": "GPU Priority",
+      "technicalName": "D3DKMTSetProcessSchedulingPriorityClass",
+      "source": "process-lasso",
+      "implementedBy": "roo-native",
+      "frontendLabel": "GPU Priority",
+      "frontendTab": "Game Tune",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "builtin",
+            "target": "gdi32!D3DKMTSetProcessSchedulingPriorityClass"
+          }
+        ],
+        "notes": "The API is probed per target process; Windows may return unsupported for a process even though the capability is represented."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "actionId": "performance.policy.preview"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session-when-api-accepts-target",
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed",
+          "allowlisted-rule"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore-when-original-state-readable",
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "confirmed apply and restore of GPU scheduling priority on a disposable live process when D3DKMT accepts the target"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "proves": "persistent policy all-control validation covers GPU priority and records unsupported OS/API status when D3DKMT rejects the target"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.cpu-affinity",
+      "family": "process-controls",
+      "displayName": "CPU Affinity",
+      "technicalName": "SetProcessAffinityMask / System.Diagnostics.Process.ProcessorAffinity",
+      "source": "process-lasso",
+      "implementedBy": "roo-native",
+      "frontendLabel": "CPU Affinity",
+      "frontendTab": "Game Tune",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "builtin",
+            "target": "kernel32!SetProcessAffinityMask"
+          }
+        ],
+        "notes": "Affinity masks are limited to positive masks inside the current processor-count allow-list."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessPolicy.ps1",
+        "actionId": "performance.policy.preview"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Start-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed",
+          "allowlisted-rule"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-ProcessPolicySession.ps1",
+        "actionId": "performance.policy.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "confirmed apply and restore of CPU affinity on a disposable live process"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "proves": "persistent policy all-control validation covers CPU affinity apply and restore"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.probalance-restraint",
+      "family": "process-controls",
+      "displayName": "ProBalance Restraint",
+      "technicalName": "SetPriorityClass + NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
+      "source": "process-lasso",
+      "implementedBy": "roo-native",
+      "frontendLabel": "ProBalance Restraint",
+      "frontendTab": "Game Tune",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "builtin",
+            "target": "kernel32!SetPriorityClass"
+          },
+          {
+            "method": "builtin",
+            "target": "ntdll!NtSetInformationProcess(ProcessIoPriorityInformationClass=33)"
+          },
+          {
+            "method": "file-exists",
+            "target": "backend/profiles/probalance-governor.profile.json"
+          }
+        ],
+        "notes": "Governor restraint temporarily demotes sustained background CPU offenders while preserving protected foreground, capture, voice, system, network, and driver workloads."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessGovernor.ps1",
+        "actionId": "performance.governor.preview"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Start-ProcessGovernorSession.ps1",
+        "actionId": "performance.governor.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed",
+          "protected-process-rules"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-ProcessGovernorSession.ps1",
+        "actionId": "performance.governor.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-ProcessGovernorRuntime.ps1",
+          "proves": "confirmed ProBalance-style restraint and stop-session restore against disposable live probes"
+        },
+        {
+          "test": "backend/scripts/Test-NativeProcessGovernorRuntime.ps1",
+          "proves": "managed compiled worker exposes native Windows process-control engine capabilities and restore-on-exit behavior"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.per-game-rules",
+      "family": "process-controls",
+      "displayName": "Per-Game Rules",
+      "technicalName": "profile rules -> SetPriorityClass / SetProcessAffinityMask / NtSetInformationProcess / D3DKMTSetProcessSchedulingPriorityClass",
+      "source": "process-lasso",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Per-Game Rules",
+      "frontendTab": "Game Tune",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "backend/profiles/game-session.profile.json"
+          },
+          {
+            "method": "file-exists",
+            "target": "backend/samples/game-session-profile-preview.sample.json"
+          }
+        ],
+        "notes": "The game-session profile includes foreground game boosts, protected companions, background demotion rules, and a disabled affinity profile slot."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-ProcessProfile.ps1",
+        "actionId": "performance.previewProfile"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "real-reversible-session",
+        "script": "backend/scripts/Start-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.startSession",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "backup-completed",
+          "protected-process-rules"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "per-game session apply and restore use protected rules and reversible process-control snapshots"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessProfileBackend.ps1",
+          "proves": "process profile preview and backup/rollback contract files parse and match the expected shape"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.session-restore",
+      "family": "process-controls",
+      "displayName": "Process Control Restore",
+      "technicalName": "Stop-GameTuneSession.ps1 / Stop-ProcessGovernorSession.ps1 / Stop-ProcessPolicySession.ps1 backup snapshot restore",
+      "source": "roo-native",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Process Control Restore",
+      "frontendTab": "Game Tune",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "backend/scripts/Stop-GameTuneSession.ps1"
+          },
+          {
+            "method": "file-exists",
+            "target": "backend/scripts/Stop-ProcessGovernorSession.ps1"
+          },
+          {
+            "method": "file-exists",
+            "target": "backend/scripts/Stop-ProcessPolicySession.ps1"
+          }
+        ],
+        "notes": "Restore depends on a live process identity match and can be partial if a target exits before restore."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.stopSession"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "restore-preview",
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.stopSession",
+        "gates": [
+          "backup-completed",
+          "session-artifact-present"
+        ]
+      },
+      "restore": {
+        "status": "live",
+        "mode": "session-restore",
+        "script": "backend/scripts/Stop-GameTuneSession.ps1",
+        "actionId": "performance.gameTune.stopSession"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-GameTuneSessionRuntime.ps1",
+          "proves": "Game Tune restore preview is non-mutating and confirmed restore returns the disposable probe to original controls"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessGovernorRuntime.ps1",
+          "proves": "process governor stop preview is non-mutating and confirmed stop restores a restrained disposable probe"
+        },
+        {
+          "test": "backend/scripts/Test-ProcessPolicyRuntime.ps1",
+          "proves": "persistent policy stop preview is non-mutating and confirmed stop restores live probe priority"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.lightweight-governor-budget",
+      "family": "process-controls",
+      "displayName": "Lightweight Governor Budget",
+      "technicalName": "Measure-RooBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
+      "source": "roo-native",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Governor Budget (read-only)",
+      "frontendTab": "Game Tune",
+      "riskLevel": "safe",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "backend/profiles/lightweight-governor-budget.profile.json"
+          },
+          {
+            "method": "file-exists",
+            "target": "backend/scripts/Measure-RooBackendFootprint.ps1"
+          }
+        ],
+        "notes": "Budget profile constrains resident/backend CPU, memory, state growth, frontend dependency, and session duration."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
+        "actionId": "backend.measureFootprint"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "read-only-budget-measurement",
+        "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
+        "actionId": "backend.measureFootprint",
+        "gates": []
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only-budget",
+        "script": null,
+        "actionId": null
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-RooResidentBackendRuntime.ps1",
+          "proves": "footprint measurement and bounded resident host stay within lightweight budget and leave backend/state empty"
+        }
+      ]
+    },
+    {
+      "capabilityId": "process-controls.afftool-affinity-policy",
+      "family": "process-controls",
+      "displayName": "AffTool Affinity Policy",
+      "technicalName": "AffTool\\intPolicy_x64.exe external affinity policy tool",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "CPU Affinity (AffTool)",
+      "frontendTab": "Game Tune",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\AffTool\\intPolicy_x64.exe"
+          }
+        ],
+        "notes": "This pass inventories AffTool by file/version metadata only. No external executable is launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-ProcessControlCapabilityFacts.ps1",
+        "actionId": "performance.processControls.facts"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "external-affinity-policy-runner-needed",
+        "script": null,
+        "actionId": null,
+        "gates": [
+          "requires-helper-manifest",
+          "explicit-user-approval"
+        ],
+        "notes": "Next step is an exact allowlist runner and rollback manifest for AffTool policies."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "external-affinity-policy-restore-needed",
+        "script": null,
+        "actionId": null
+      },
+      "unavailableReason": "not-safely-executable-yet",
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-ProcessControlCapabilities.ps1",
+          "proves": "read-only AffTool detection path resolves the utilities-root target and the external tool is not claimed as safely executable"
+        }
+      ]
+    }
+  ]
+}

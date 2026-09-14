@@ -7,6 +7,8 @@ public sealed class BackendLocator
 {
     public string? RepoRoot { get; }
     public string? SamplesDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "backend", "samples");
+    public string? CatalogsDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "backend", "catalogs");
+    public string? ScriptsDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "backend", "scripts");
     public string? BrandDirectory => RepoRoot is null ? null : Path.Combine(RepoRoot, "assets", "brand", "roo-industries");
 
     public BackendLocator()
@@ -15,6 +17,7 @@ public sealed class BackendLocator
     }
 
     public bool SamplesAvailable => SamplesDirectory is not null && Directory.Exists(SamplesDirectory);
+    public bool ScriptsAvailable => ScriptsDirectory is not null && Directory.Exists(ScriptsDirectory);
 
     private static string? ResolveRepoRoot()
     {

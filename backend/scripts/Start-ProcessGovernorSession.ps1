@@ -40,6 +40,27 @@ function New-GovernorSkippedItem {
     }
 }
 
+function New-GovernorSkippedProcessItem {
+    param(
+        [object]$Process,
+        [object]$Decision,
+        [string]$Reason,
+        [int]$PollIndex
+    )
+    $ruleId = [string](Get-RooPropertyValue $Decision 'matchedRuleId' '')
+    if ([string]::IsNullOrWhiteSpace($ruleId)) { $ruleId = 'governor-skip' }
+    return [pscustomobject]@{
+        processId = [int](Get-RooPropertyValue $Process 'pid' 0)
+        processName = [string](Get-RooPropertyValue $Process 'name' '')
+        cpuPercent = Get-RooPropertyValue $Process 'cpuPercent' $null
+        ruleId = $ruleId
+        reason = $Reason
+        reasonCodes = @(Get-RooPropertyArray $Decision 'reasonCodes')
+        pollIndex = $PollIndex
+        skippedAtUtc = Get-RooUtcStamp
+    }
+}
+
 function New-GovernorChangedItem {
     param(
         [object]$Entry,
@@ -151,7 +172,25 @@ function Invoke-GovernorActiveRestore {
     $restrainedAt = [datetime](Get-RooPropertyValue $Active 'restrainedAtLocal' $Now)
     $minimumElapsed = (($Now - $restrainedAt).TotalSeconds -ge [double]$Config.minimumRestraintSeconds)
     $cpuPercent = [double](Get-RooPropertyValue $Process 'cpuPercent' 0)
-    if (-not ($minimumElapsed -and $cpuPercent -le [double]$Config.restoreCpuThresholdPercent)) {
+    if (-not $minimumElapsed) {
+        return $false
+    }
+    if ($cpuPercent -gt [double]$Config.restoreCpuThresholdPercent) {
+        if ($Active.PSObject.Properties['lowCpuSampleCount']) {
+            $Active.lowCpuSampleCount = 0
+        } else {
+            $Active | Add-Member -NotePropertyName lowCpuSampleCount -NotePropertyValue 0
+        }
+        return $false
+    }
+
+    $lowSampleCount = [int](Get-RooPropertyValue $Active 'lowCpuSampleCount' 0) + 1
+    if ($Active.PSObject.Properties['lowCpuSampleCount']) {
+        $Active.lowCpuSampleCount = $lowSampleCount
+    } else {
+        $Active | Add-Member -NotePropertyName lowCpuSampleCount -NotePropertyValue $lowSampleCount
+    }
+    if ($lowSampleCount -lt 2) {
         return $false
     }
 
@@ -160,6 +199,7 @@ function Invoke-GovernorActiveRestore {
         processId = Get-RooPropertyValue $snapshot 'processId' 0
         processName = Get-RooPropertyValue $snapshot 'processName' ''
         executablePath = Get-RooPropertyValue $snapshot 'executablePath' $null
+        processStartTimeUtc = Get-RooPropertyValue $snapshot 'processStartTimeUtc' $null
     })
     if (-not ($candidate.exists -and $candidate.matches)) {
         return $false
@@ -346,6 +386,7 @@ try {
         $pollSkipped = New-Object System.Collections.Generic.List[object]
         $pollRestored = New-Object System.Collections.Generic.List[object]
         $seenKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+        $pollPressureCandidateSeen = $false
 
         foreach ($proc in @(Get-RooPropertyArray $sample 'processes')) {
             $processId = [int](Get-RooPropertyValue $proc 'pid' 0)
@@ -357,8 +398,9 @@ try {
             $pressureMet = ([double](Get-RooPropertyValue $sample 'totalCpuPercent' 0) -ge [double]$config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$config.perProcessCpuThresholdPercent)
 
             if ($decision.blocked -and ($decision.candidateMatched -or $decision.profileProtected -or $decision.foregroundMatched)) {
-                $entry = New-RooProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooPropertyValue $sample 'totalCpuPercent' 0)) 'skipped' 0
-                $skip = New-GovernorSkippedItem $entry (Get-RooPropertyValue $entry 'blockedReason' 'Process is protected from governor restraint.') $pollIndex
+                $skipReason = ($decision.skipReasons -join ' ')
+                if ([string]::IsNullOrWhiteSpace($skipReason)) { $skipReason = 'Process is protected from governor restraint.' }
+                $skip = New-GovernorSkippedProcessItem $proc $decision $skipReason $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
                 continue
@@ -368,6 +410,7 @@ try {
 
             $now = Get-Date
             if ($pressureMet) {
+                $pollPressureCandidateSeen = $true
                 if (-not $overThresholdSince.ContainsKey($key)) {
                     $sampleSeconds = [double](Get-RooPropertyValue $sample 'sampleIntervalSeconds' 0)
                     if ($sampleSeconds -lt 0) { $sampleSeconds = 0 }
@@ -421,7 +464,17 @@ try {
                 $pollSkipped.Add($skip) | Out-Null
                 continue
             }
-            $originalState = Get-RooProcessControlState $processId $null
+            $originalState = $identity.currentControlState
+            $livePlan = Get-RooApplicableProcessControlChanges $entryChanges $originalState
+            foreach ($skippedControl in @(Get-RooPropertyArray $livePlan 'skippedControls')) {
+                $skip = New-GovernorSkippedItem $entryToApply ([string](Get-RooPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
+                $skipped.Add($skip) | Out-Null
+                $pollSkipped.Add($skip) | Out-Null
+            }
+            $entryChanges = @(Get-RooPropertyArray $livePlan 'changes')
+            if ($entryChanges.Count -eq 0) {
+                continue
+            }
             $snapshot = [pscustomobject]@{
                 processId = $processId
                 processName = $processName
@@ -435,6 +488,7 @@ try {
                 originalGpuPriority = $originalState.gpuPriority
                 proposedGpuPriority = Get-RooPropertyValue $entryToApply 'proposedGpuPriority' $null
                 controlChanges = @($entryChanges)
+                processStartTimeUtc = $identity.processStartTimeUtc
                 capturedAtUtc = Get-RooUtcStamp
                 profileId = $profileId
                 ruleId = [string](Get-RooPropertyValue $entryToApply 'ruleId' '')
@@ -529,8 +583,10 @@ try {
         $state.logs = @($logs.ToArray())
         Write-GovernorSessionState $state $sessionDirectory
 
-        if ($stopwatch.Elapsed.TotalSeconds -ge [double]$config.maxSessionDurationSeconds) { break }
-        if (($stopwatch.Elapsed.TotalSeconds + [int]$config.pollIntervalSeconds) -gt [double]$config.maxSessionDurationSeconds) { break }
+        $elapsedAfterPoll = $stopwatch.Elapsed.TotalSeconds
+        $allowFollowUpApplyPoll = ($pollPressureCandidateSeen -and $changed.Count -eq 0 -and $activeRestraints.Count -eq 0 -and $pollIndex -lt 2)
+        if ($elapsedAfterPoll -ge [double]$config.maxSessionDurationSeconds -and -not $allowFollowUpApplyPoll) { break }
+        if (($elapsedAfterPoll + [int]$config.pollIntervalSeconds) -gt [double]$config.maxSessionDurationSeconds -and -not $allowFollowUpApplyPoll) { break }
         Start-Sleep -Seconds ([int]$config.pollIntervalSeconds)
     }
 

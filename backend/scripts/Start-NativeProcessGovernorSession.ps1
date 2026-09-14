@@ -1,5 +1,9 @@
 param(
     [string]$PolicyPath,
+    [ValidateSet('start','status','restore')]
+    [string]$Mode = 'start',
+    [string]$SessionPath = '',
+    [string]$BackupPath = '',
     [string]$WorkerPath = '',
     [string]$OutputPath = '',
     [switch]$ForceBuild
@@ -9,14 +13,17 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
 try {
-    if ([string]::IsNullOrWhiteSpace($PolicyPath)) {
+    if ($Mode -eq 'start' -and [string]::IsNullOrWhiteSpace($PolicyPath)) {
         throw 'PolicyPath is required.'
     }
 
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-    $resolvedPolicyPath = Resolve-RooPath $PolicyPath (Join-Path (Get-Location) $PolicyPath)
-    if (-not (Test-Path -LiteralPath $resolvedPolicyPath)) {
-        throw "Native governor policy JSON was not found: $resolvedPolicyPath"
+    $resolvedPolicyPath = $null
+    if ($Mode -eq 'start') {
+        $resolvedPolicyPath = Resolve-RooPath $PolicyPath (Join-Path (Get-Location) $PolicyPath)
+        if (-not (Test-Path -LiteralPath $resolvedPolicyPath)) {
+            throw "Native governor policy JSON was not found: $resolvedPolicyPath"
+        }
     }
 
     $defaultWorkerPath = Join-Path $repoRoot 'backend\bin\RooProcessGovernor.exe'
@@ -28,7 +35,16 @@ try {
         }
     }
 
-    $args = @('--policy', $resolvedPolicyPath)
+    $args = @()
+    if ($Mode -eq 'status') {
+        if ([string]::IsNullOrWhiteSpace($SessionPath)) { throw 'SessionPath is required for native governor status.' }
+        $args += @('--status', (Resolve-RooPath $SessionPath (Join-Path (Get-Location) $SessionPath)))
+    } elseif ($Mode -eq 'restore') {
+        if ([string]::IsNullOrWhiteSpace($BackupPath)) { throw 'BackupPath is required for native governor restore.' }
+        $args += @('--restore', (Resolve-RooPath $BackupPath (Join-Path (Get-Location) $BackupPath)))
+    } else {
+        $args += @('--policy', $resolvedPolicyPath)
+    }
     if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
         $resolvedOutputPath = Resolve-RooPath $OutputPath (Join-Path (Get-Location) $OutputPath)
         $args += @('--output', $resolvedOutputPath)

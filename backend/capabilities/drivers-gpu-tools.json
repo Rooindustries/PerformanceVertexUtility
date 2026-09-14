@@ -1,0 +1,1131 @@
+﻿{
+  "schemaVersion": 1,
+  "productName": "Roo Industries Optimization Suite",
+  "fragmentId": "drivers-gpu-tools",
+  "family": "drivers-gpu-tools",
+  "capturedAtUtc": "2026-07-03T00:00:00Z",
+  "capabilities": [
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-profile-preview",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA Profile Preview",
+      "technicalName": "Preview-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -exportProfile/-importProfile command metadata without process launch",
+      "source": "nvpi",
+      "implementedBy": "roo-script",
+      "frontendLabel": "NVIDIA Profile Preview",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "medium",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe"
+          },
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Runtime may block on non-NVIDIA hardware; preview still does not run NVPI."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "actionId": "drivers.nvidiaNip.previewProfile"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "command-metadata-only",
+        "notes": "No NVIDIA settings are changed by preview; next concrete step is export-before-import evidence through the controlled executor."
+      },
+      "restore": {
+        "status": "manifest-ready",
+        "mode": "rollback-command-metadata",
+        "script": "backend/scripts/Restore-NvidiaNipProfile.ps1"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-NvidiaNipExecutionContract.ps1",
+          "proves": "NVIDIA NIP preview/apply/restore contracts remain non-mutating and gated"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-export-probe",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA Profile Export Probe",
+      "technicalName": "nvidiaProfileInspector.exe -exportProfile read-only probe to a temp .nip path",
+      "source": "nvpi",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Profile Export",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Probe requires explicit read-only probe flag and temp export path."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Invoke-NvidiaNipCapabilityProbe.ps1",
+        "actionId": "drivers.nvidiaNip.capabilityProbe"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "real-readonly-probe",
+        "gates": [
+          "read-only-probe-flag",
+          "export-path-temp",
+          "real-import-forbidden"
+        ],
+        "notes": "This may run only help/export probes and never imports; import remains disabled."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only-probe"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-NvidiaNipCapabilityProbe.ps1",
+          "proves": "read-only NVPI help/export probe uses temp output, captures evidence, and never imports"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-gated-import",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA Profile Gated Import",
+      "technicalName": "nvidiaProfileInspector.exe -importProfile through Invoke-NvidiaNipExecutor.ps1 export-before-import gate",
+      "source": "nvpi",
+      "implementedBy": "roo-script",
+      "frontendLabel": "NVIDIA Profile Import",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe"
+          },
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Real import is not enabled as a live frontend action."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Invoke-NvidiaNipExecutor.ps1",
+        "actionId": "drivers.nvidiaNip.executor"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "approval-gated-controlled-runner",
+        "gates": [
+          "confirm-apply",
+          "explicit-user-approval",
+          "nvidia-hardware-present",
+          "export-before-import",
+          "benchmark-evidence",
+          "real-nvpi-explicit-flag"
+        ],
+        "notes": "Controlled executor exists and mock mode is tested; real import is not marked live because frontend real import is not enabled."
+      },
+      "restore": {
+        "status": "manifest-ready",
+        "mode": "export-before-import-rollback-manifest",
+        "script": "backend/scripts/Invoke-NvidiaNipExecutor.ps1"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-NvidiaNipExecutor.ps1",
+          "proves": "controlled NVPI executor enforces export-before-import, explicit approval gates, mock validation, and rollback manifest writing"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-restore-manifest",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA Profile Restore Manifest",
+      "technicalName": "Restore-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -importProfile rollback command metadata from prior export",
+      "source": "nvpi",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Profile Restore Manifest",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Rollback is meaningful only after a real export completed."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Restore-NvidiaNipProfile.ps1",
+        "actionId": "drivers.nvidiaNip.restoreProfile"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "restore-command-metadata-only",
+        "notes": "Restore imports are routed through the same controlled executor gates and are not a default enabled flow."
+      },
+      "restore": {
+        "status": "manifest-ready",
+        "mode": "prior-export-required",
+        "script": "backend/scripts/Restore-NvidiaNipProfile.ps1"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-NvidiaNipExecutor.ps1",
+          "proves": "restore path imports only through controlled mock/real executor gates and requires explicit approval"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-framesync-catalog",
+      "family": "drivers-gpu-tools",
+      "displayName": "FrameSync NIP Profile Catalog",
+      "technicalName": "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\framesync.nip",
+      "source": "nvpi",
+      "implementedBy": "roo-script",
+      "frontendLabel": "NVIDIA Profile Catalog (FrameSync)",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "medium",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+          },
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\NVPI\\Reference.xml"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Catalog is metadata-only and benchmark-gated before recommendation."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Preview-NvidiaNipProfile.ps1",
+        "actionId": "drivers.nvidiaNip.previewProfile"
+      },
+      "apply": {
+        "status": "preview-only",
+        "mode": "metadata-only-catalog",
+        "notes": "Profile catalog must not be treated as live desired state or an applied recommendation."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "catalog-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-NvidiaNipCatalog.ps1",
+          "proves": "framesync NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-no-app",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA 595.79 Driver Package (No NVIDIA App)",
+      "technicalName": "Utilities\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "NVIDIA 595.79 (No App)",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Inventory detector reports file version and path without launching the installer."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is a restore-point-gated package selection contract with hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-with-app",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVIDIA 595.79 Driver Package (With NVIDIA App)",
+      "technicalName": "Utilities\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "NVIDIA 595.79 (With App)",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Inventory detector reports file version and path without launching the installer."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is a restore-point-gated package selection contract with hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-amd-26-2-2",
+      "family": "drivers-gpu-tools",
+      "displayName": "AMD Graphics Driver Package 26.2.2",
+      "technicalName": "Utilities\\Drivers\\Graphics\\AMD 26.2.2.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "AMD Graphics 26.2.2",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Graphics\\AMD 26.2.2.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "AMD"
+          }
+        ],
+        "notes": "Inventory detector reports file version and path without launching the installer."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is a restore-point-gated package selection contract with AMD hardware match and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-amd-chipset-8-02-18-557",
+      "family": "drivers-gpu-tools",
+      "displayName": "AMD Chipset Driver Package 8.02.18.557",
+      "technicalName": "Utilities\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "AMD Chipset 8.02.18.557",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe"
+          }
+        ],
+        "notes": "Inventory detector reports file version and path without launching the installer."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is chipset hardware matching plus restore-point-gated explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-intel-chipset",
+      "family": "drivers-gpu-tools",
+      "displayName": "Intel Chipset Driver Package",
+      "technicalName": "Utilities\\Drivers\\Chipset\\Intel Chipset.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Intel Chipset Driver",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Chipset\\Intel Chipset.exe"
+          }
+        ],
+        "notes": "Inventory detector reports file version and path without launching the installer."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is chipset hardware matching plus restore-point-gated explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-intel-network",
+      "family": "drivers-gpu-tools",
+      "displayName": "Intel Network Driver Package",
+      "technicalName": "Utilities\\Drivers\\Network\\Intel Network\\SetupBD.exe network driver installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Intel Network Driver",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Network\\Intel Network\\SetupBD.exe"
+          }
+        ],
+        "notes": "Network driver mutation is high risk and protected by default."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is network adapter hardware matching, connectivity rollback guidance, and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "network driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-package-realtek-network",
+      "family": "drivers-gpu-tools",
+      "displayName": "Realtek Network Driver Package",
+      "technicalName": "Utilities\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Realtek Network Driver",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe"
+          }
+        ],
+        "notes": "Network driver mutation is high risk and protected by default."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is network adapter hardware matching, connectivity rollback guidance, and explicit user handoff; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "network driver package capability is cataloged as detected read-only inventory with no live installer execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-booster-package",
+      "family": "drivers-gpu-tools",
+      "displayName": "Driver Booster Package",
+      "technicalName": "Utilities\\Drivers\\driver_booster_setup.exe third-party driver update installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Driver Booster",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Drivers\\driver_booster_setup.exe"
+          }
+        ],
+        "notes": "Inventory only; automated third-party driver updates are not enabled."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-reference-only",
+        "notes": "Next step is an allowlisted recommendation-only workflow; no third-party update tool launch or automation is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "driver-rollback-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "Driver Booster package is cataloged as read-only inventory with no live automation"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.driver-cleanup-ddu",
+      "family": "drivers-gpu-tools",
+      "displayName": "Display Driver Uninstaller",
+      "technicalName": "Utilities\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe manual driver cleanup tool",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "Driver Cleanup (DDU)",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe"
+          }
+        ],
+        "notes": "Inventory detector reports version where the binary exposes it; no cleanup launch is allowed."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-clean-room-guide-needed",
+        "notes": "Next step is a guided DDU plan with restore point, safe-mode/network guidance, and explicit manual handoff; no DDU automation is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "restore-point-and-driver-reinstall-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "DDU is cataloged as read-only inventory with no cleanup execution"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.nvcleanstall",
+      "family": "drivers-gpu-tools",
+      "displayName": "NVCleanstall",
+      "technicalName": "NVCleanstall NVIDIA driver package builder executable",
+      "source": "utilities-folder",
+      "implementedBy": "not-implemented",
+      "frontendLabel": "NVCleanstall",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\NVCleanstall.exe"
+          },
+          {
+            "method": "hardware-gpu-vendor",
+            "target": "NVIDIA"
+          }
+        ],
+        "notes": "Lane spec marks NVCleanstall unavailable for this Utilities capability surface."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "tool-not-present",
+        "notes": "Next step is to add an explicit local tool reference and a manual NVIDIA-only builder handoff contract; no builder automation is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "not-available"
+      },
+      "unavailableReason": "tool-not-present",
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "NVCleanstall is represented as unavailable with no live automation"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.hwinfo-installer",
+      "family": "drivers-gpu-tools",
+      "displayName": "HWiNFO Installer",
+      "technicalName": "Utilities\\hwi_834x.exe HWiNFO installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "HWiNFO Installer",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\hwi_834x.exe"
+          }
+        ],
+        "notes": "Inventory only; installer is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-install-package",
+        "notes": "Next step is an install/launch consent contract or shared-memory sensor reader; no installer launch is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "uninstall-contract-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "HWiNFO installer is detected read-only with file version evidence where available"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.hwinfo-installed-sensor-monitoring",
+      "family": "drivers-gpu-tools",
+      "displayName": "HWiNFO Installed Sensor Monitoring",
+      "technicalName": "C:\\Program Files\\HWiNFO64\\HWiNFO64.EXE future shared-memory sensor provider",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "HWiNFO Sensor Monitoring (Installed)",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": false,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "C:\\Program Files\\HWiNFO64\\HWiNFO64.EXE"
+          }
+        ],
+        "notes": "Detector checks installed binary version only; it does not launch HWiNFO."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "shared-memory-reader-needed",
+        "notes": "Next step is a read-only HWiNFO shared-memory or exported-sensors adapter; no process launch is implemented."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "read-only-monitoring"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "installed HWiNFO binary is detected read-only with file version evidence where available"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.cpu-z-diagnostics",
+      "family": "drivers-gpu-tools",
+      "displayName": "CPU-Z Diagnostics",
+      "technicalName": "Utilities\\cpu-z_2.17-en.exe diagnostics executable",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "CPU-Z Diagnostics",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\cpu-z_2.17-en.exe"
+          }
+        ],
+        "notes": "Inventory only; CPU-Z is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-diagnostics-launch-needed",
+        "notes": "Next step is a manual-launch or exported-report parsing contract; no tool launch is implemented."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "diagnostics-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "CPU-Z is detected read-only with file version evidence where available"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.gpu-z-diagnostics",
+      "family": "drivers-gpu-tools",
+      "displayName": "GPU-Z Diagnostics",
+      "technicalName": "Utilities\\GPU-Z.2.68.0.exe diagnostics executable",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "GPU-Z Diagnostics",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\GPU-Z.2.68.0.exe"
+          }
+        ],
+        "notes": "Inventory only; GPU-Z is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-diagnostics-launch-needed",
+        "notes": "Next step is a manual-launch or exported-report parsing contract; no tool launch is implemented."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "diagnostics-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "GPU-Z is detected read-only with file version evidence where available"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.msi-afterburner",
+      "family": "drivers-gpu-tools",
+      "displayName": "MSI Afterburner",
+      "technicalName": "Utilities\\MSIAfterburnerInstaller466.exe GPU tuning installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "MSI Afterburner",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "high",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\MSIAfterburnerInstaller466.exe"
+          }
+        ],
+        "notes": "Inventory only; no installer launch, profile write, startup change, or overclock automation."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "gpu-profile-helper-contract-needed",
+        "notes": "Next step is a helper contract for explicit user-approved profile import/export; no Afterburner automation is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "gpu-profile-rollback-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "MSI Afterburner is detected read-only and not automated"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.msi-kombustor",
+      "family": "drivers-gpu-tools",
+      "displayName": "MSI Kombustor",
+      "technicalName": "Utilities\\MSI_Kombustor4_Setup_v4.1.36_x64.exe GPU stress-test installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "MSI Kombustor",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\MSI_Kombustor4_Setup_v4.1.36_x64.exe"
+          }
+        ],
+        "notes": "Inventory only; no installer launch or stress test automation."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "benchmark-provider-contract-needed",
+        "notes": "Next step is an explicit benchmark-provider contract with thermal safety gates; no Kombustor automation is implemented."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "benchmark-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "MSI Kombustor is detected read-only and not automated"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.latencymon",
+      "family": "drivers-gpu-tools",
+      "displayName": "LatencyMon",
+      "technicalName": "Utilities\\LatencyMon.exe DPC/ISR latency diagnostics executable",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "LatencyMon Diagnostics",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "low",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\LatencyMon.exe"
+          }
+        ],
+        "notes": "Inventory only; LatencyMon is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "diagnostic-runner-contract-needed",
+        "notes": "Next step is a read-only diagnostic report ingestion contract; no tool launch is implemented."
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "diagnostics-only"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "LatencyMon is detected read-only with no diagnostic launch"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.scewin",
+      "family": "drivers-gpu-tools",
+      "displayName": "SCEWIN",
+      "technicalName": "Utilities\\DL_SCEWIN.exe firmware/BIOS configuration utility package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "SCEWIN Firmware Utility",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "critical",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\DL_SCEWIN.exe"
+          }
+        ],
+        "notes": "Inventory only; firmware configuration utility is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "firmware-helper-manifest-needed",
+        "notes": "Next step would require an explicit helper manifest, platform allowlist, and backup/export contract; no SCEWIN automation is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "firmware-restore-manifest-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "SCEWIN is detected read-only and not automated"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.prerequisite-dotnetfx35",
+      "family": "drivers-gpu-tools",
+      "displayName": ".NET Framework 3.5 Prerequisite",
+      "technicalName": "Utilities\\Prerequisites\\dotNetFx35setup.exe installer package",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": ".NET Framework 3.5",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "safe",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Prerequisites\\dotNetFx35setup.exe"
+          },
+          {
+            "method": "windows-feature",
+            "target": "NetFx3"
+          }
+        ],
+        "notes": "Inventory only; package presence and optional Windows feature state can be resolved read-only."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-prerequisite-install",
+        "notes": "Next step is a Windows-feature/package prerequisite plan; no DISM or installer execution is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "feature-restore-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": ".NET prerequisite package is detected read-only and not installed automatically"
+        }
+      ]
+    },
+    {
+      "capabilityId": "drivers-gpu-tools.prerequisite-directx-june2010",
+      "family": "drivers-gpu-tools",
+      "displayName": "DirectX Runtime Prerequisite",
+      "technicalName": "Utilities\\Prerequisites\\DX\\DXSETUP.exe and DirectX redistributable CAB inventory",
+      "source": "utilities-folder",
+      "implementedBy": "external-tool",
+      "frontendLabel": "DirectX Runtime",
+      "frontendTab": "Drivers & Settings",
+      "riskLevel": "safe",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Prerequisites\\DX\\DXSETUP.exe"
+          },
+          {
+            "method": "file-exists",
+            "target": "{utilitiesRoot}\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab"
+          }
+        ],
+        "notes": "Inventory only; DirectX setup is not launched."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "actionId": "drivers.utilities.inventory"
+      },
+      "apply": {
+        "status": "not-implemented",
+        "mode": "manual-prerequisite-install",
+        "notes": "Next step is a prerequisite install plan with explicit user approval; no DXSETUP execution is implemented."
+      },
+      "restore": {
+        "status": "not-implemented",
+        "mode": "feature-restore-plan-needed"
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-DriversGpuToolsCapabilities.ps1",
+          "proves": "DirectX prerequisite package is detected read-only and not installed automatically"
+        }
+      ]
+    }
+  ]
+}

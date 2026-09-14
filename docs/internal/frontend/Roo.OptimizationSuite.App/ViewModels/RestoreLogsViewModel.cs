@@ -19,11 +19,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var session = await App.Live.GetGameTuneSessionStatusAsync()
-            ?? await TrySample(Data.GetGameTuneSessionStatusAsync);
+        var session = await App.Live.GetGameTuneSessionStatusAsync();
         var restore = await TrySample(Data.GetGameTuneRestorePreviewAsync);
-        var governor = await App.Live.GetProcessGovernorSessionStatusAsync()
-            ?? await TrySample(Data.GetProcessGovernorSessionStatusAsync);
+        var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
 
         BuildRestore(session, restore, governor);
         BuildHistory(session, governor);
