@@ -52,4 +52,14 @@ Run individual regressions with `-TestName`:
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1,Test-UninstallCleanupApplyPackage.ps1
 ```
 
+From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
+
+```console
+python3 tools/validation/windows_ssh.py --host windows-test --expected-machine TEST-PC inspect
+python3 tools/validation/windows_ssh.py --host windows-test --expected-machine TEST-PC upload
+python3 tools/validation/windows_ssh.py --host windows-test --expected-machine TEST-PC run validation.ps1
+```
+
+The helper disables SSH proxying, checks the Windows computer name before writes, and preserves argument boundaries through encoded PowerShell. Upload includes tracked working-tree source and a SHA-256 manifest under the current Windows user's Temp directory; it excludes frontend sources. Add new source files to Git before uploading them. The returned staging path can be used by a trusted validation script that runs `Test-Baseline.ps1` and verifies the manifest before and after testing. Retrieve results before removing the owned staging directory.
+
 A green build or fixture suite does not establish real-provider operation, real uninstall success, a performance gain, or visual quality. Record those separately on the relevant Windows machine.
