@@ -331,7 +331,6 @@ try {
     $logs = New-Object System.Collections.Generic.List[object]
     $polls = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
-    $snapshotKeys = New-Object 'System.Collections.Generic.HashSet[string]'
     $overThresholdSince = @{}
     $activeRestraints = @{}
     $lastRestoreAt = @{}
@@ -508,7 +507,6 @@ try {
                 if([int](Get-RooPropertyValue $snapshots[$index] 'processId' 0) -eq $processId){$snapshots.RemoveAt($index)}
             }
             $snapshots.Add($snapshot) | Out-Null
-            $snapshotKeys.Add($key) | Out-Null
             $backupManifest.snapshots = @($snapshots.ToArray())
             Write-RooProcessGovernorJsonFile $backupManifest $backupPath
             $state.backupManifestPath = $backupPath
