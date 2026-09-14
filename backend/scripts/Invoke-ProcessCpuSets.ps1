@@ -37,9 +37,6 @@ try {
         if ([string]::IsNullOrWhiteSpace($JournalPath)) { throw 'JournalPath is required for apply and restore.' }
         $JournalPath=[IO.Path]::GetFullPath($JournalPath)
         $result.journalPath=$JournalPath
-        foreach ($path in @($InputPath,$OutputPath)) {
-            if ($path -and [IO.Path]::GetFullPath($path) -ieq $JournalPath) { throw 'Journal, preview and output paths must be separate.' }
-        }
         if ($Action -eq 'Apply') {
             if (-not $InputPath -or $ReviewSha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Apply requires a reviewed preview and its SHA-256.' }
             $input=Read-RooOperationJson $InputPath $ReviewSha256

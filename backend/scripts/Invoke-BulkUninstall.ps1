@@ -17,7 +17,6 @@ try {
     if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -in @([IO.Path]::GetFullPath($JournalPath)+'.cancel',[IO.Path]::GetFullPath($JournalPath)+'.lock')){throw 'OutputPath cannot replace queue control files.'}
     $outputSafe=$true
     $JournalPath=[IO.Path]::GetFullPath($JournalPath)
-    foreach($path in @($InputPath,$OutputPath)){if($path -and [IO.Path]::GetFullPath($path) -ieq $JournalPath){throw 'Plan, journal and output paths must be separate.'}}
     $cancelPath=$JournalPath+'.cancel'
     if($Action -eq 'Apply') {
         if(-not $InputPath -or $ReviewSha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Apply requires the reviewed plan path and SHA-256.'}
