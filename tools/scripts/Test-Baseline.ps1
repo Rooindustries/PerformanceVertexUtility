@@ -9,6 +9,14 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'backend\scripts\ProcessProfile.Common.ps1')
 if ([string]::IsNullOrWhiteSpace($ResultsRoot)) { $ResultsRoot = Join-Path $repoRoot ('artifacts\validation\' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')) }
 New-Item -ItemType Directory -Path $ResultsRoot -Force | Out-Null
+function Get-ValidationTempPaths {
+    $paths = @()
+    foreach ($pattern in @('roo-*','RooBackend*','RooNvidia*','RooStutter*')) {
+        $paths += @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter $pattern -Force -ErrorAction Stop | Select-Object -ExpandProperty FullName)
+    }
+    return @($paths | Sort-Object -Unique)
+}
+$tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
 $testScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
 if ($TestName.Count -gt 0) {
@@ -57,7 +65,8 @@ if ($BuildFrontend) {
 }
 $stateRoot = Join-Path $repoRoot 'backend\state'
 $stateEntries = if (Test-Path $stateRoot) { @(Get-ChildItem $stateRoot -Force -Recurse).Count } else { 0 }
-$summary = [pscustomobject]@{ machine=$env:COMPUTERNAME; completedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); tests=@($results.ToArray()); failedCount=@($results.ToArray() | Where-Object {$_.exitCode -ne 0}).Count; buildExitCode=$buildExit; stateEntries=$stateEntries }
+$newTempArtifacts = @(Get-ValidationTempPaths | Where-Object { $_ -notin $tempBefore })
+$summary = [pscustomobject]@{ newTempArtifacts = $newTempArtifacts; machine=$env:COMPUTERNAME; completedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); tests=@($results.ToArray()); failedCount=@($results.ToArray() | Where-Object {$_.exitCode -ne 0}).Count; buildExitCode=$buildExit; stateEntries=$stateEntries }
 $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $ResultsRoot 'summary.json') -Encoding UTF8
 Write-Host "Summary: $ResultsRoot\summary.json"
-if ($summary.failedCount -gt 0 -or $stateEntries -ne 0 -or ($BuildFrontend -and $buildExit -ne 0)) { exit 1 }
+if ($summary.failedCount -gt 0 -or $newTempArtifacts.Count -ne 0 -or $stateEntries -ne 0 -or ($BuildFrontend -and $buildExit -ne 0)) { exit 1 }
