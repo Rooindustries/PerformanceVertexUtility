@@ -73,7 +73,7 @@ function New-AppRecord {
         categories = @(Get-AppCategories $name $publisher)
         risk = $risk
         protected = $false
-        protectionReasons = if ($risk -eq 'advanced') { @('Shared runtime, driver-adjacent component, security component, or Windows dependency requiring manual review') } else { @() }
+        protectionReasons = @(if ($risk -eq 'advanced') { 'Shared runtime, driver-adjacent component, security component, or Windows dependency requiring manual review' })
         startupImpact = Get-StartupImpact $name $publisher
     }
 }
@@ -131,7 +131,7 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
             categories = @(Get-AppCategories $pkg.Name $pkg.Publisher)
             risk = if ($reviewRequired -and $risk -eq 'low') { 'advanced' } else { $risk }
             protected = $false
-            protectionReasons = if ($reviewRequired) { @('Appx package requires dependency review before removal') } else { @() }
+            protectionReasons = @(if ($reviewRequired) { 'Appx package requires dependency review before removal' })
             startupImpact = Get-StartupImpact $pkg.Name $pkg.Publisher
         }) | Out-Null
     }
@@ -169,7 +169,7 @@ if ($IncludeWinget) {
                     categories = @(Get-AppCategories $name '')
                     risk = $risk
                     protected = $false
-                    protectionReasons = if ($risk -eq 'advanced') { @('Runtime or driver classification needs manual review') } else { @() }
+                    protectionReasons = @(if ($risk -eq 'advanced') { 'Runtime or driver classification needs manual review' })
                     startupImpact = Get-StartupImpact $name ''
                 }) | Out-Null
             }

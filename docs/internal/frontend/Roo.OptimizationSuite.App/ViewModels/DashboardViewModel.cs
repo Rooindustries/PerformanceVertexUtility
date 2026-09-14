@@ -69,7 +69,7 @@ public partial class DashboardViewModel : PageViewModelBase
         (VerdictHeadline, VerdictLevel) = freeRatio switch
         {
             >= 0.30 => ("Your PC has memory to spare.", "safe"),
-            >= 0.15 => ("Memory is getting tight. A tune will free up room.", "medium"),
+            >= 0.15 => ("Memory is getting tight. Review the largest consumers.", "medium"),
             < 0.15 and >= 0 => ("Memory is under pressure. Clear room before you play.", "high"),
             _ => ("Checking memory pressure on this PC.", "medium"),
         };
@@ -78,7 +78,7 @@ public partial class DashboardViewModel : PageViewModelBase
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(gpu)) parts.Add(gpu);
         if (ramGb > 0) parts.Add(ramGb + " GB RAM");
-        parts.Add(summary.ProcessCount + " apps open, " + summary.BackgroundProcessCount + " in the background");
+        parts.Add(summary.ProcessCount + " processes, " + summary.BackgroundProcessCount + " in the background");
         VerdictSummary = string.Join("  /  ", parts);
     }
 
@@ -115,7 +115,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
         var totalText = ramGb > 0 ? ramGb + " GB" : Format.Bytes(totalRam);
         MemoryPressureLine = Format.Bytes(s.AvailableMemoryBytes) + " free of " + totalText
-            + "  /  Windows memory " + Format.Bytes(s.CommitUsedBytes);
+            + "  /  Committed " + Format.Bytes(s.CommitUsedBytes);
     }
 
     private void BuildTopUsers(IReadOnlyList<ProcessItem> processes)
@@ -137,7 +137,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private void BuildBackground(ProcessInventorySummary s, IReadOnlyList<ProcessItem> processes)
     {
         BackgroundStats.Clear();
-        BackgroundStats.Add(new MetricTile("Apps Running", s.ProcessCount.ToString(CultureInfo.InvariantCulture), "total processes"));
+        BackgroundStats.Add(new MetricTile("Processes", s.ProcessCount.ToString(CultureInfo.InvariantCulture), "total processes"));
         BackgroundStats.Add(new MetricTile("Background", s.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture), "not in focus"));
         BackgroundStats.Add(new MetricTile("Browser / Web", s.BrowserWebViewProcessCount.ToString(CultureInfo.InvariantCulture), "tabs and helpers"));
 

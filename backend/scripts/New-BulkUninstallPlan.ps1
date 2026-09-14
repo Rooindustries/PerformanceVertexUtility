@@ -50,6 +50,7 @@ try {
         if ($FixtureRoot -and -not (Test-RooCleanupPathWithin $exe $FixtureRoot)) {throw 'Fixture executable is outside the fixture directory.'}
         $entries.Add([pscustomobject]@{
             entryId=[guid]::NewGuid().ToString('N'); appId=$id; displayName=$app.displayName; sourceType=$app.sourceType; identity=$identity
+            appSnapshot=$app
             registrationFingerprint=$registration.fingerprint
             executable=[IO.Path]::GetFullPath($exe); executableSha256=$hash; argumentMode=$mode; arguments=@($arguments); rawArguments=$rawArguments
             workingDirectory=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($exe)); exitCodePolicy=$exitPolicy

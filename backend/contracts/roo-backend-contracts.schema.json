@@ -6092,6 +6092,9 @@
         "registrationFingerprint": {
           "type": "string",
           "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "appSnapshot": {
+          "$ref": "#/$defs/uninstallApp"
         }
       }
     },

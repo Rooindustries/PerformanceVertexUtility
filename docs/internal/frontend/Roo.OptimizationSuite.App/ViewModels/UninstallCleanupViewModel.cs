@@ -552,6 +552,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             var restoreReady = ExtractBool(root, "summary", "restoreReady");
             var rooRoute = ExtractBool(root, "summary", "rooIndustriesRouteUsed");
 
+            if (status == "cleanup-review-required")
+            {
+                CleanupExecutionState = "App removal completed. Leftover cleanup needs a new review.";
+                CleanupExecutionDetail = "The old deletion list was not applied. Leftover files require a fresh scan and separate approval.";
+                CleanupRestoreAvailable = false;
+                FinalCheckPassed = false;
+                _lastCleanupRollbackPath = null;
+                return;
+            }
             if (status == "success")
             {
                 CleanupExecutionState = deleted > 0

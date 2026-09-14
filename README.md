@@ -97,3 +97,5 @@ This project is under active development. High-risk workflows remain preview, co
 Linux is the development host. Windows compilation and runtime checks run from isolated source copies on the NVIDIA and AMD test PCs. See [backend validation](backend/README.md#validation) for the repeatable commands and [development workflow](docs/development-workflow.md) for the baseline boundaries.
 
 The desktop project is under `docs/internal/frontend/Roo.OptimizationSuite.App`. Build it with `tools/scripts/Build-Frontend.ps1`; the .NET 8 SDK is required. Building does not launch the app. Capture and inspect screenshots whenever the app is launched for a UI check.
+
+See [desktop controls](docs/optimization-controls.md#desktop-workflows) for CPU selection, queued app removal, separate leftover cleanup, and recovery.

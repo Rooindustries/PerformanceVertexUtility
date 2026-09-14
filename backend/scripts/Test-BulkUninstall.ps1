@@ -15,8 +15,9 @@ function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0) {
         $marker=Join-Path $directory "installed $i.txt";[IO.File]::WriteAllText($marker,'installed');$markers+=@($marker)
         $mode=if($i -eq 1){$FirstMode}else{'remove'};$code=if($i -eq 1){$FirstExit}else{0}
         $arguments=@($marker,$counter,[string]$code,$mode,($journalPath+'.cancel'))
+        $install=Join-Path $directory ('app-'+$i);[IO.Directory]::CreateDirectory($install)|Out-Null;[IO.File]::WriteAllText((Join-Path $install 'settings.txt'),'original settings')
         $apps+=@([pscustomobject]@{appId="fixture:$Name-$i";displayName="Roo disposable app $i";publisher='Roo Fixture';sourceType='registry';
-            sourceIdentity=@{kind='fixture';presencePath=$marker};risk='low';protected=$false;categories=@('application');
+            sourceIdentity=@{kind='fixture';presencePath=$marker};installLocation=$install;risk='low';protected=$false;categories=@('application');
             uninstallString=((ConvertTo-RooWindowsArgument $exe)+' '+(Join-RooWindowsArguments $arguments))})
     }
     $inventory=Join-Path $directory 'inventory.json';Write-RooOperationJson @{schemaVersion=1;apps=$apps} $inventory
@@ -126,6 +127,33 @@ public class RooBulkFixture {
     Write-RooOperationJson @{schemaVersion=1;inputPath=$case.planPath;reviewSha256=$a.ReviewSha256;journalPath=$a.JournalPath;manualReviewApproved=$true;allowFixtureExecution=$true} $requestPath
     $routed=Read-Result (& (Join-Path $PSScriptRoot 'Invoke-RooCapability.ps1') -CapabilityId 'cleanup-uninstall.bulk-removal' -Action apply -RequestPath $requestPath -ConfirmApply)
     Assert ($routed.status -eq 'completed' -and $routed.changed -and $routed.evidence.status -eq 'cleanup-review-required' -and @(Get-Content $case.counter).Count -eq 2) 'Capability router executes the reviewed bulk request and reports actual dispatch evidence'
+    $leftoverScript=Join-Path $PSScriptRoot 'Invoke-RemovalLeftovers.ps1'
+    $appId=$case.plan.entries[0].appId
+    $scan=Read-Result (& $leftoverScript -Action Scan -QueueJournalPath $a.JournalPath -AppId $appId)
+    $target=Join-Path $case.directory 'app-1'
+    $item=@($scan.data.items|Where-Object {$_.target -ieq $target})
+    Assert ($scan.status -eq 'preview' -and $item.Count -eq 1 -and (Test-Path $target)) 'Post-removal scan uses saved app metadata and observes current leftovers'
+    $reviewPath=Join-Path $case.directory 'leftover-review.json'
+    $review=Read-Result (& $leftoverScript -Action Preview -QueueJournalPath $a.JournalPath -AppId $appId -ItemId $item[0].itemId -OutputPath $reviewPath)
+    $hash=(Get-FileHash $reviewPath).Hash
+    $previewOnly=Read-Result (& $leftoverScript -Action Apply -QueueJournalPath $a.JournalPath -AppId $appId -ReviewPath $reviewPath -ReviewSha256 $hash)
+    Assert ($previewOnly.status -eq 'preview' -and $previewOnly.dryRun -and (Test-Path $target) -and -not(Test-Path $review.data.rollbackPath)) 'Unconfirmed leftover cleanup creates no deletion or recovery files'
+    $changedReview=Read-Result (& $leftoverScript -Action Apply -QueueJournalPath $a.JournalPath -AppId $appId -ReviewPath $reviewPath -ReviewSha256 ('0'*64) -ConfirmApply -ManualReviewApproved)
+    Assert ($changedReview.status -eq 'failed' -and (Test-Path $target)) 'An altered leftover review hash is rejected before deletion'
+    [IO.File]::WriteAllText($case.markers[0],'reinstalled')
+    $reinstalled=Read-Result (& $leftoverScript -Action Apply -QueueJournalPath $a.JournalPath -AppId $appId -ReviewPath $reviewPath -ReviewSha256 $hash -ConfirmApply -ManualReviewApproved)
+    Assert ($reinstalled.status -eq 'failed' -and (Test-Path $target)) 'An app registered again cannot reuse the old removal approval for cleanup'
+    Remove-Item -LiteralPath $case.markers[0]
+    $journalHash=(Get-FileHash $a.JournalPath).Hash
+    $collision=Read-Result (& $leftoverScript -Action Scan -QueueJournalPath $a.JournalPath -AppId $appId -OutputPath $a.JournalPath)
+    Assert ($collision.status -eq 'failed' -and (Get-FileHash $a.JournalPath).Hash -eq $journalHash) 'Scan output cannot overwrite its removal journal'
+    $clean=Read-Result (& $leftoverScript -Action Apply -QueueJournalPath $a.JournalPath -AppId $appId -ReviewPath $reviewPath -ReviewSha256 $hash -ConfirmApply -ManualReviewApproved)
+    Assert ($clean.status -eq 'success' -and -not(Test-Path $target) -and $clean.data.summary.deletedCount -eq 1) 'A separately reviewed post-removal cleanup deletes only the selected fixture folder'
+    $restored=Read-Result (& $leftoverScript -Action Restore -QueueJournalPath $a.JournalPath -AppId $appId -ReviewPath $reviewPath -ReviewSha256 $hash -ConfirmApply)
+    Assert ($restored.status -eq 'success' -and [IO.File]::ReadAllText((Join-Path $target 'settings.txt')) -ceq 'original settings' -and [IO.File]::ReadAllText((Join-Path $case.directory 'app-2\settings.txt')) -ceq 'original settings') 'Post-removal file cleanup restores its backed-up contents and leaves the other app unchanged'
+    $wrong=Read-Result (& $leftoverScript -Action Apply -QueueJournalPath $a.JournalPath -AppId $case.plan.entries[1].appId -ReviewPath $reviewPath -ReviewSha256 $hash -ConfirmApply)
+    Assert ($wrong.status -eq 'failed' -and (Test-Path $target)) 'A cleanup review cannot be replayed against another app in the queue'
+
 } finally {
     foreach($process in $liveFixtures){if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){throw 'Bulk fixture process did not exit'};$process.Dispose()}
     if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}

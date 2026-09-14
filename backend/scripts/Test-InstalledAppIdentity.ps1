@@ -44,4 +44,15 @@ try {
     Assert ($live.apps.Count -gt 0 -and @($live.apps.appId|Select-Object -Unique).Count -eq $live.apps.Count) 'Read-only live inventory yields unique app selections'
     Assert (@($live.apps|Where-Object {$_.sourceType -eq 'appx' -and $_.packageId -cne $_.sourceIdentity.packageFullName}).Count -eq 0) 'Every live Appx record uses its full package name for removal'
     Assert (@($live.apps|Where-Object {$_.sourceType -in @('msi','registry') -and $null -eq $_.sourceIdentity}).Count -eq 0) 'Every live registry record retains hive, view and ownership evidence'
+    Assert (@($live.apps|Where-Object {$_.protectionReasons -isnot [array]}).Count -eq 0) 'Live inventory keeps protection reasons as JSON arrays'
+    $records=Read-Result (& {
+        . (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1') | Out-Null
+        $identity=New-RooRegistryAppIdentity CurrentUser Registry32 'RooArrayFixture' 'S-1-5-21-1'
+        @(
+            (New-AppRecord ([pscustomobject]@{DisplayName='Roo Note Editor';Publisher='Roo';PSChildName='RooArrayFixture'}) 'registry' $identity),
+            (New-AppRecord ([pscustomobject]@{DisplayName='Roo Windows Desktop Runtime';Publisher='Roo';PSChildName='RooArrayFixture'}) 'registry' $identity)
+        ) | ConvertTo-Json -Depth 12
+    })
+    Assert ($records[0].protectionReasons -is [array] -and $records[0].protectionReasons.Count -eq 0) 'An ordinary app round-trips with an empty protection-reason array'
+    Assert ($records[1].protectionReasons -is [array] -and $records[1].protectionReasons.Count -eq 1 -and $records[1].risk -eq 'advanced') 'A dependency round-trips with one review reason without becoming a scalar'
 } finally {if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}}
