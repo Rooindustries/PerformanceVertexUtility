@@ -32,7 +32,8 @@
       "queueAllowedByDefault": true,
       "leftoverDeletionPreviewOnly": true,
       "confirmedExecutionEnabled": false
-    }
+    },
+    "reviewRequired": false
   },
   "summary": {
     "itemCount": 8,

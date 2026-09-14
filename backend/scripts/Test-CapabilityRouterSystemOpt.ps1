@@ -552,12 +552,13 @@ foreach ($path in @($cleanupPaths.ToArray())) {
     Add-Check (-not (Test-Path -LiteralPath $path)) "Temporary fixture path cleaned: $path" "Temporary fixture path remains: $path"
 }
 
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $windowsFeaturesStatus = Invoke-Router @('-CapabilityId', 'system-optimizations.windows-features-fixes', '-Action', 'status')
 Add-Check ($windowsFeaturesStatus.exitCode -eq 0) 'Windows features status exits 0' "Windows features status exit code expected 0, got $($windowsFeaturesStatus.exitCode)"
 Test-CompleteEnvelope $windowsFeaturesStatus.json 'Windows features status'
 if ($null -ne $windowsFeaturesStatus.json) {
-    Add-Check ((Get-PropertyValue $windowsFeaturesStatus.json 'machineAvailable' $true) -eq $false) 'Windows features status reports machineAvailable false' 'Windows features status did not report machineAvailable false'
-    Add-Check ([string](Get-PropertyValue $windowsFeaturesStatus.json 'unavailableReason' '') -like 'requires-admin-token*') 'Windows features status reports requires-admin-token reason' "Windows features status unavailableReason mismatch: $([string](Get-PropertyValue $windowsFeaturesStatus.json 'unavailableReason' ''))"
+    Add-Check ([bool](Get-PropertyValue $windowsFeaturesStatus.json 'machineAvailable' $false) -eq $isAdmin) 'Windows features availability matches the measured process token' 'Windows features availability disagrees with process token'
+    if (-not $isAdmin) { Add-Check ([string](Get-PropertyValue $windowsFeaturesStatus.json 'unavailableReason' '') -like 'requires-admin-token*') 'Windows features status reports requires-admin-token reason' "Windows features status unavailableReason mismatch: $([string](Get-PropertyValue $windowsFeaturesStatus.json 'unavailableReason' ''))" }
     Add-Check ([string](Get-PathValue $windowsFeaturesStatus.json 'evidence.routing.apply.nextRequiredStep') -eq $adminFeatureStep) 'Windows features status routing evidence names exact admin-token next step' 'Windows features status routing evidence next step mismatch'
 }
 
@@ -565,7 +566,8 @@ $windowsFeaturesExplain = Invoke-Router @('-CapabilityId', 'system-optimizations
 Add-Check ($windowsFeaturesExplain.exitCode -eq 0) 'Windows features explain exits 0' "Windows features explain exit code expected 0, got $($windowsFeaturesExplain.exitCode)"
 Test-CompleteEnvelope $windowsFeaturesExplain.json 'Windows features explain'
 if ($null -ne $windowsFeaturesExplain.json) {
-    Add-Check ([string](Get-PropertyValue $windowsFeaturesExplain.json 'nextRequiredStep' '') -eq $adminFeatureStep) 'Windows features explain top-level next step names admin-token helper' 'Windows features explain nextRequiredStep mismatch'
+    if (-not $isAdmin) { Add-Check ([string](Get-PropertyValue $windowsFeaturesExplain.json 'nextRequiredStep' '') -eq $adminFeatureStep) 'Windows features explain names the missing admin token' 'Windows features explain nextRequiredStep mismatch' }
+    else { Add-Check ([string](Get-PropertyValue $windowsFeaturesExplain.json 'status' '') -eq 'completed') 'Admin Windows features explanation completes without suggesting elevation' 'Admin explanation did not complete' }
 }
 
 $stateAfter = Get-StateEntryCount $repoRoot

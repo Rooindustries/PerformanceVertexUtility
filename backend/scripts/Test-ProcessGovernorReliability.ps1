@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ProcessGovernor.Common.ps1')
@@ -40,8 +41,7 @@ function Stop-ReliabilityProbe {
 
     try { $Process.Refresh() } catch { }
     if (-not $Process.HasExited) {
-        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $Process.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $Process
     }
 
     for ($attempt = 1; $attempt -le 10; $attempt++) {
@@ -211,7 +211,7 @@ for ($runIndex = 1; $runIndex -le 3; $runIndex++) {
         $stateRoot = Join-Path $tempRoot 'state'
         Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-        $probe = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 90' -WindowStyle Hidden -PassThru
+        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 90')) -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 800
         $before = Get-RooProcessControlState $probe.Id $null
         $session = & (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1') `
@@ -300,7 +300,7 @@ try {
     $stateRoot = Join-Path $relaunchRoot 'state'
     Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }' -WindowStyle Hidden -PassThru
+    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeFirst = Get-RooProcessControlState $relaunchFirst.Id $null
     $sessionOutput = Join-Path $relaunchRoot 'governor-relaunch-session-output.json'
@@ -321,7 +321,7 @@ try {
         $stateRoot,
         '-ConfirmApply'
     )
-    $relaunchSessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $sessionArgs -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
+    $relaunchSessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
 
     $firstChange = Wait-ReliabilitySessionChanged -StateRoot $stateRoot -ProcessId $relaunchFirst.Id -TimeoutSeconds 20
     $afterFirstApply = Get-RooProcessControlState $relaunchFirst.Id $null
@@ -335,11 +335,11 @@ try {
     $relaunchFirst = $null
     Start-Sleep -Milliseconds 700
 
-    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
+    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeSecond = Get-RooProcessControlState $relaunchSecond.Id $null
 
-    Wait-Process -Id $relaunchSessionProc.Id -Timeout 35 -ErrorAction Stop
+    Wait-RooValidationProcess $relaunchSessionProc 35
     $relaunchSessionProc.Refresh()
     $sessionExitCode = $relaunchSessionProc.ExitCode
     $relaunchSessionProc = $null
@@ -396,8 +396,7 @@ try {
     Add-Failure "Relaunch reliability validation failed: $($_.Exception.Message)"
 } finally {
     if ($relaunchSessionProc -and -not $relaunchSessionProc.HasExited) {
-        Stop-Process -Id $relaunchSessionProc.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $relaunchSessionProc.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $relaunchSessionProc
     }
     Stop-ReliabilityProbe -Process $relaunchFirst
     Stop-ReliabilityProbe -Process $relaunchSecond

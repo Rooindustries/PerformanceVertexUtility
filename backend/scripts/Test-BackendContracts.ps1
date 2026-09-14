@@ -27,6 +27,9 @@ function Test-JsonFile {
 }
 
 $requiredFiles = @(
+    'backend\contracts\validation-map.json',
+    'backend\scripts\Test-JsonSchemaContracts.ps1',
+    'backend\scripts\Test-LegacyModuleRollback.ps1',
     'backend\contracts\roo-backend-contracts.schema.json',
     'backend\contracts\contract-catalog.json',
     'backend\samples\product-backend-status.sample.json',
@@ -192,6 +195,13 @@ foreach ($root in $jsonRoots) {
             Test-JsonFile $file.FullName
         }
     }
+}
+
+try {
+    & (Join-Path $PSScriptRoot 'Test-JsonSchemaContracts.ps1')
+    Add-Pass 'Declared JSON Schemas and negative control validated'
+} catch {
+    Add-Failure "JSON Schema validation failed: $($_.Exception.Message)"
 }
 
 try {

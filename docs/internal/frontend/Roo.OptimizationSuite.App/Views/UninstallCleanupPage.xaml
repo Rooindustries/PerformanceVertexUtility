@@ -222,7 +222,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <CheckBox Grid.Column="0" Content="I reviewed the route"
+                                        <CheckBox Grid.Column="0" Content="I reviewed the route and dependency risks"
                                                   AutomationProperties.AutomationId="AppsCleanupReviewedRouteCheckBox"
                                                   IsChecked="{x:Bind ViewModel.RemoverPathApproved, Mode=TwoWay}"
                                                   IsEnabled="{x:Bind ViewModel.CleanupPlanReady, Mode=OneWay}"

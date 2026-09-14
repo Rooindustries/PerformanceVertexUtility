@@ -3603,7 +3603,8 @@
         "risk",
         "protected",
         "blockByDefault",
-        "uninstallSafety"
+        "uninstallSafety",
+        "reviewRequired"
       ],
       "properties": {
         "appId": {
@@ -3682,6 +3683,9 @@
         "uninstallSafety": {
           "type": "object",
           "additionalProperties": true
+        },
+        "reviewRequired": {
+          "type": "boolean"
         }
       }
     },
@@ -3900,7 +3904,8 @@
         "sourceType",
         "commandType",
         "executionAllowed",
-        "executionMode"
+        "executionMode",
+        "reviewRequired"
       ],
       "properties": {
         "appId": {
@@ -4003,6 +4008,9 @@
           "items": {
             "$ref": "#/$defs/issueModel"
           }
+        },
+        "reviewRequired": {
+          "type": "boolean"
         }
       }
     },

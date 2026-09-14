@@ -3,6 +3,7 @@ param(
     [string]$Action = 'ListModules',
     [string]$ModuleId = '',
     [string]$ManifestPath = '',
+    [string]$BackupPath = '',
     [string]$DataRoot = 'C:\ProgramData\LeanClientOptimizer',
     [int]$WaitSeconds = 0,
     [switch]$ConfirmApply
@@ -15,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
 }
 
 function Get-NowStamp {
-    return (Get-Date).ToString('yyyyMMdd-HHmmss')
+    return (Get-Date).ToString('yyyyMMdd-HHmmssfff') + '-' + [guid]::NewGuid().ToString('N')
 }
 
 function Ensure-Dir {
@@ -330,6 +331,7 @@ function New-ModuleBackup {
         moduleId = $Module.id
         moduleName = $Module.name
         timestamp = (Get-Date).ToString('o')
+        applyRequested = $true
         registry = @($regSnapshots.ToArray())
         services = @($svcSnapshots.ToArray())
         baseline = Get-BenchmarkSnapshot ("pre-" + $Module.id)
@@ -343,7 +345,7 @@ function Invoke-ApplyModule {
     $manifest = Read-Manifest
     $module = Get-ModuleById $manifest $ModuleId
     Ensure-Dir $DataRoot
-    $backupPath = New-ModuleBackup $manifest $module
+    $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
     $actions = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($module.registryValues)) {
         $blocked = Test-ProtectedRegistryPath $rv.path $manifest
@@ -378,9 +380,32 @@ function Invoke-RollbackModule {
     [void]$manifest
     $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
     if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
-    $latest = Get-ChildItem -LiteralPath $backupRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-    $backupPath = Join-Path $latest.FullName 'backup.json'
+    $backupPath = $BackupPath
+    if ([string]::IsNullOrWhiteSpace($backupPath)) {
+        $appliedPaths = @{}
+        $runRoot = Join-Path $DataRoot 'runs'
+        if (Test-Path -LiteralPath $runRoot) {
+            foreach ($runFile in Get-ChildItem -LiteralPath $runRoot -Filter 'apply-*.json' -File) {
+                $run = Get-Content -LiteralPath $runFile.FullName -Raw | ConvertFrom-Json
+                if ($run.moduleId -eq $ModuleId -and $run.dryRun -eq $false -and $run.backupPath) {
+                    $appliedPaths[[System.IO.Path]::GetFullPath($run.backupPath)] = $true
+                }
+            }
+        }
+        $eligible = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
+            $candidatePath = Join-Path $directory.FullName 'backup.json'
+            if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
+            $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+            if ($candidate.moduleId -eq $ModuleId -and ($candidate.applyRequested -eq $true -or $appliedPaths.ContainsKey([System.IO.Path]::GetFullPath($candidatePath)))) {
+                [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp }
+            }
+        })
+        $latest = $eligible | Sort-Object timestamp -Descending | Select-Object -First 1
+        if ($null -eq $latest) { throw "No confirmed-apply backup found for $ModuleId. Select a reviewed legacy backup explicitly with -BackupPath." }
+        $backupPath = $latest.path
+    }
     $backup = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
+    if ($backup.moduleId -ne $ModuleId) { throw 'The selected backup belongs to a different module.' }
     if ($ConfirmApply) {
         foreach ($rv in @($backup.registry)) { Restore-RegistryValue $rv }
         foreach ($svc in @($backup.services)) { Restore-ServiceSnapshot $svc }

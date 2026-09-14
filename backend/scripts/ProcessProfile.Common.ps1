@@ -3,6 +3,18 @@ $script:RooAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNor
 $script:RooAllowedIoPriorities = @('VeryLow', 'Low', 'Normal')
 $script:RooAllowedGpuPriorities = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High', 'Realtime')
 
+function ConvertTo-RooWindowsArgument {
+    param([string]$Value)
+    $escaped = [regex]::Replace($Value, '(\\*)"', '$1$1\"')
+    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    return '"' + $escaped + '"'
+}
+
+function Join-RooWindowsArguments {
+    param([string[]]$Arguments)
+    return (@($Arguments | ForEach-Object { ConvertTo-RooWindowsArgument $_ }) -join ' ')
+}
+
 function Get-RooUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }

@@ -1,5 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$previousFixtureRoot = $env:ROO_CLEANUP_FIXTURE_ROOT
+$script:FixtureBase = Join-Path ([IO.Path]::GetTempPath()) ('roo-capability-router-cleanup-' + [guid]::NewGuid().ToString('N'))
+$env:ROO_CLEANUP_FIXTURE_ROOT = $script:FixtureBase
 
 $passes = New-Object System.Collections.Generic.List[string]
 $failures = New-Object System.Collections.Generic.List[string]
@@ -70,7 +73,7 @@ function Get-RouteArgValue {
     $args = @((Get-PropertyValue $Section 'args' @()))
     for ($i = 0; $i -lt $args.Count; $i++) {
         if ([string]$args[$i] -eq $Name -and ($i + 1) -lt $args.Count) {
-            return [string]$args[$i + 1]
+            return ([string]$args[$i + 1]).Replace('{cleanupFixtureRoot}', $script:FixtureBase)
         }
     }
     return ''
@@ -645,6 +648,7 @@ exit 0
 } catch {
     Add-Failure "Cleanup router validation threw: $($_.Exception.Message)"
 } finally {
+    $env:ROO_CLEANUP_FIXTURE_ROOT = $previousFixtureRoot
     if (-not [string]::IsNullOrWhiteSpace($tempBase)) {
         try {
             Remove-TempTree $tempBase

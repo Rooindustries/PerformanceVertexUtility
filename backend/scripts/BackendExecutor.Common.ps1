@@ -2,8 +2,7 @@
 
 function ConvertTo-RooBackendExecutorQuotedArgument {
     param([string]$Value)
-    if ($null -eq $Value) { return '""' }
-    return '"' + ([string]$Value).Replace('"', '\"') + '"'
+    return ConvertTo-RooWindowsArgument $Value
 }
 
 function Join-RooBackendExecutorCommandLine {
@@ -39,6 +38,7 @@ function Invoke-RooBackendHiddenProcess {
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
         [string[]]$Arguments = @(),
+        [string]$RawArguments,
         [int]$TimeoutSeconds = 30,
         [string]$WorkingDirectory = '',
         [hashtable]$Environment = @{}
@@ -49,7 +49,9 @@ function Invoke-RooBackendHiddenProcess {
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $FilePath
-    if ($null -ne $startInfo.ArgumentList) {
+    if ($PSBoundParameters.ContainsKey('RawArguments')) {
+        $startInfo.Arguments = $RawArguments
+    } elseif ($null -ne $startInfo.ArgumentList) {
         foreach ($arg in @(Get-RooArray $Arguments)) {
             [void]$startInfo.ArgumentList.Add([string]$arg)
         }
@@ -108,7 +110,8 @@ function Invoke-RooBackendHiddenProcess {
         durationMilliseconds = [int][math]::Round($watch.Elapsed.TotalMilliseconds)
         filePath = $FilePath
         arguments = @(Get-RooArray $Arguments)
-        commandLine = Join-RooBackendExecutorCommandLine $FilePath @(Get-RooArray $Arguments)
+        rawArguments = if ($PSBoundParameters.ContainsKey('RawArguments')) { $RawArguments } else { $null }
+        commandLine = if ($PSBoundParameters.ContainsKey('RawArguments')) { (ConvertTo-RooWindowsArgument $FilePath) + ' ' + $RawArguments } else { Join-RooBackendExecutorCommandLine $FilePath @(Get-RooArray $Arguments) }
         processStarted = $started
         startError = $startError
         exitCode = $exitCode

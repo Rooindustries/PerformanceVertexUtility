@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ResidentSessionHost.Common.ps1')
@@ -122,7 +123,7 @@ try {
         '-BudgetProfilePath',
         (Join-Path $repoRoot 'backend\profiles\lightweight-governor-budget.profile.json')
     )
-    $footprintProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $footprintArgs -WindowStyle Hidden -RedirectStandardOutput $footprintOut -RedirectStandardError $footprintErr -Wait -PassThru
+    $footprintProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $footprintArgs) -WindowStyle Hidden -RedirectStandardOutput $footprintOut -RedirectStandardError $footprintErr -Wait -PassThru
     if ($null -ne $footprintProc.ExitCode -and $footprintProc.ExitCode -ne 0) {
         $footprintErrorText = if (Test-Path -LiteralPath $footprintErr) { Get-Content -LiteralPath $footprintErr -Raw } else { '' }
         Add-Failure "Footprint measurement host exited with code $($footprintProc.ExitCode): $footprintErrorText"
@@ -155,7 +156,7 @@ try {
         '-BudgetProfilePath',
         (Join-Path $repoRoot 'backend\profiles\lightweight-governor-budget.profile.json')
     )
-    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $residentArgs -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
+    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $residentArgs) -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
     if ($null -eq $residentProc.ExitCode -or $residentProc.ExitCode -eq 0) {
         Add-Pass "Bounded resident host process exited cleanly: pid=$($residentProc.Id)"
     } else {

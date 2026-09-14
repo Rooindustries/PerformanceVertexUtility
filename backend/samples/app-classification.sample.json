@@ -49,7 +49,8 @@
         "queueAllowedByDefault": true,
         "leftoverDeletionPreviewOnly": true,
         "confirmedExecutionEnabled": false
-      }
+      },
+      "reviewRequired": false
     },
     {
       "appId": "registry:microsoft-edge-webview2-runtime",
@@ -81,7 +82,8 @@
         "queueAllowedByDefault": true,
         "leftoverDeletionPreviewOnly": true,
         "confirmedExecutionEnabled": false
-      }
+      },
+      "reviewRequired": true
     },
     {
       "appId": "registry:obs-studio",
@@ -114,7 +116,8 @@
         "queueAllowedByDefault": true,
         "leftoverDeletionPreviewOnly": true,
         "confirmedExecutionEnabled": false
-      }
+      },
+      "reviewRequired": true
     }
   ]
 }

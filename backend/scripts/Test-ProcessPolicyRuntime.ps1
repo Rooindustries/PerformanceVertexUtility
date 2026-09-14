@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ProcessPolicy.Common.ps1')
@@ -433,7 +434,7 @@ function Invoke-PolicySingleControlValidation {
     $probe = $null
     try {
         Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
-        $probe = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-all-control-$Control'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
+        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-all-control-$Control'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 700
         $before = Get-RooProcessControlState $probe.Id $null
         $originalValue = Get-PolicyControlValue $before $Control
@@ -509,8 +510,7 @@ function Invoke-PolicySingleControlValidation {
         return New-PolicyControlValidationResult $Control $status $null $null $null $null $null $message
     } finally {
         if ($probe -and -not $probe.HasExited) {
-            Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
-            Wait-Process -Id $probe.Id -Timeout 5 -ErrorAction SilentlyContinue
+            Stop-RooValidationProcess $probe
         }
     }
 }
@@ -610,9 +610,9 @@ try {
         Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $exe -Force
     }
 
-    $existingProbe = Start-Process -FilePath $existingExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-existing-marker'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-protected-marker'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
-    $relaunchProbeFirst = Start-Process -FilePath $relaunchExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-first'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
+    $existingProbe = Start-Process -FilePath $existingExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-existing-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-protected-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $relaunchProbeFirst = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-first'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeExisting = Get-RooProcessControlState $existingProbe.Id $null
     $beforeProtected = Get-RooProcessControlState $protectedProbe.Id $null
@@ -684,18 +684,17 @@ try {
         $stateRoot,
         '-ConfirmApply'
     )
-    $sessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $sessionArgs -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
+    $sessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
     $firstRelaunchApplied = Wait-PolicySessionChanged -StateRoot $stateRoot -ProcessId $relaunchProbeFirst.Id -TimeoutSeconds 25
     if ($relaunchProbeFirst -and -not $relaunchProbeFirst.HasExited) {
-        Stop-Process -Id $relaunchProbeFirst.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $relaunchProbeFirst.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $relaunchProbeFirst
     }
     Start-Sleep -Seconds 1
-    $launchProbe = Start-Process -FilePath $launchExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-launch-marker'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
+    $launchProbe = Start-Process -FilePath $launchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-launch-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds 2
-    $relaunchProbeSecond = Start-Process -FilePath $relaunchExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-second'; Start-Sleep -Seconds 120" -WindowStyle Hidden -PassThru
+    $relaunchProbeSecond = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-second'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Wait-PolicySessionChanged -StateRoot $stateRoot -ProcessId $relaunchProbeSecond.Id -TimeoutSeconds 15 | Out-Null
-    Wait-Process -Id $sessionProc.Id -Timeout 75 -ErrorAction Stop
+    Wait-RooValidationProcess $sessionProc 75
     $sessionProc.Refresh()
     $sessionExitCode = $sessionProc.ExitCode
     $sessionProc = $null
@@ -776,8 +775,7 @@ try {
 
     foreach ($probe in @($existingProbe, $launchProbe, $relaunchProbeSecond, $protectedProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
-            Wait-Process -Id $probe.Id -Timeout 5 -ErrorAction SilentlyContinue
+            Stop-RooValidationProcess $probe
         }
     }
     $existingProbe = $null
@@ -803,8 +801,7 @@ try {
     }
     foreach ($probe in @($existingProbe, $launchProbe, $relaunchProbeFirst, $relaunchProbeSecond, $protectedProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
-            Wait-Process -Id $probe.Id -Timeout 5 -ErrorAction SilentlyContinue
+            Stop-RooValidationProcess $probe
         }
     }
     if (-not $cleanupDone) {

@@ -34,7 +34,65 @@ function Read-RooUninstallJsonFile {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "JSON file not found: $Path"
     }
-    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+}
+
+function Write-RooCleanupJournal {
+    param([object]$Value, [string]$Path)
+    Ensure-RooUninstallDirectory (Split-Path $Path -Parent)
+    $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Depth 32))
+        $stream = [System.IO.File]::Open($temporary, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
+        if (Test-Path -LiteralPath $Path) { [System.IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value) }
+        else { [System.IO.File]::Move($temporary, $Path) }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
+}
+
+function Test-RooCleanupPathWithin {
+    param([string]$Path, [string]$Root)
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) { return $false }
+    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $parent = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    return ($full.Equals($parent, [System.StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($parent + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))
+}
+
+function Test-RooCleanupReparsePath {
+    param([string]$Path, [switch]$Recurse)
+    $current = [System.IO.Path]::GetFullPath($Path)
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $true }
+        $parent = Split-Path $current -Parent
+        if ($parent -eq $current) { break }
+        $current = $parent
+    }
+    if ($Recurse -and (Test-Path -LiteralPath $Path -PathType Container)) {
+        $pending = New-Object System.Collections.Generic.Stack[string]
+        $pending.Push($Path)
+        while ($pending.Count -gt 0) {
+            foreach ($child in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
+                if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return $true }
+                if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+            }
+        }
+    }
+    return $false
+}
+
+function Copy-RooCleanupRestoreTree {
+    param([string]$Source, [string]$Target)
+    if ((Test-RooCleanupReparsePath $Source) -or (Test-RooCleanupReparsePath $Target)) { throw 'Restore encountered a reparse path.' }
+    Ensure-RooUninstallDirectory $Target
+    foreach ($child in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Restore encountered a reparse path.' }
+        $destination = Join-Path $Target $child.Name
+        if ($child.PSIsContainer) { Copy-RooCleanupRestoreTree $child.FullName $destination }
+        else { Copy-Item -LiteralPath $child.FullName -Destination $destination -Force }
+    }
 }
 
 function Ensure-RooUninstallDirectory {
@@ -406,6 +464,7 @@ function Get-RooAppClassification {
         risk = $risk
         protected = $false
         blockByDefault = $blockByDefault
+        reviewRequired = $reviewRequired
         matchedProtectedRuleIds = @($matchedRuleIds.ToArray() | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
         reasonCodes = @($reasonCodes.ToArray() | Select-Object -Unique)
         protectionReasons = @($reasons.ToArray() | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)

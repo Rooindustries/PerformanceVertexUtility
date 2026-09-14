@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ResidentSessionHost.Common.ps1')
@@ -104,8 +105,7 @@ function Stop-ValidationProbe {
     if ($null -eq $Process) { return }
     try { $Process.Refresh() } catch { }
     if (-not $Process.HasExited) {
-        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-        Wait-Process -Id $Process.Id -Timeout 5 -ErrorAction SilentlyContinue
+        Stop-RooValidationProcess $Process
     }
 }
 
@@ -220,19 +220,18 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'backend\scrip
 
 try {
     $toolchain = & (Join-Path $PSScriptRoot 'Get-NativeProcessGovernorToolchain.ps1') | ConvertFrom-Json
-    $expectedUserLocalDotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
-    $userLocalCandidate = @($toolchain.dotnetCandidates | Where-Object { [string]$_.path -eq $expectedUserLocalDotnet }) | Select-Object -First 1
-    if ($userLocalCandidate -and $userLocalCandidate.exists -eq $true -and $userLocalCandidate.hasSdks -eq $true -and (@($userLocalCandidate.sdkVersions) -contains '8.0.422')) {
-        Add-Pass "Toolchain probe discovered user-local dotnet SDK host: $($userLocalCandidate.path) SDKs=$(@($userLocalCandidate.sdkVersions) -join ',')"
-    } else {
-        Add-Failure "Toolchain probe missed valid user-local dotnet SDK host: expected=$expectedUserLocalDotnet"
-    }
-    if ($toolchain.dotnetSdkAvailable -eq $true -and [string]$toolchain.selectedDotnetSdkHost.path -eq $expectedUserLocalDotnet -and [string]$toolchain.selectedDotnetSdkHost.highestSdkVersion -eq '8.0.422') {
-        Add-Pass "Toolchain probe selected best SDK host deterministically: $($toolchain.selectedDotnetSdkHost.path) SDK=$($toolchain.selectedDotnetSdkHost.highestSdkVersion)"
-    } else {
-        Add-Failure "Toolchain probe selected unexpected SDK host: selected=$($toolchain.selectedDotnetSdkHost.path) sdk=$($toolchain.selectedDotnetSdkHost.highestSdkVersion)"
-    }
-    if ($toolchain.dotnetNativeAotAvailable -eq $false -and $toolchain.cscFrameworkCompilerAvailable -eq $true -and $toolchain.workerClassification -eq 'managed-csc' -and $toolchain.workerIsTrueNative -eq $false -and $toolchain.selectedApproach -eq 'managed-csc-fallback') {
+    $expectedDotnet = $env:ROO_DOTNET_EXE
+    if ([string]::IsNullOrWhiteSpace($expectedDotnet)) { $expectedDotnet = (Get-Command dotnet.exe -ErrorAction Stop).Source }
+    $actualVersions = @(& $expectedDotnet --list-sdks | ForEach-Object { if ($_ -match '^([0-9]+\.[0-9]+\.[0-9]+)') { $Matches[1] } })
+    $candidate = @($toolchain.dotnetCandidates | Where-Object { [string]$_.path -eq $expectedDotnet }) | Select-Object -First 1
+    if ($candidate -and $candidate.exists -and $candidate.hasSdks -and @($actualVersions | Where-Object { $_ -notin $candidate.sdkVersions }).Count -eq 0) {
+        Add-Pass 'Toolchain probe discovers the configured SDK and reports independently measured versions'
+    } else { Add-Failure "Toolchain probe missed the configured SDK: $expectedDotnet" }
+    $expectedHighest = @($toolchain.dotnetCandidates | Where-Object { $_.hasSdks } | ForEach-Object { $_.sdkVersions } | Sort-Object { [version]$_ } -Descending)[0]
+    if ($toolchain.dotnetSdkAvailable -and $toolchain.selectedDotnetSdkHost.highestSdkVersion -eq $expectedHighest) {
+        Add-Pass 'Toolchain probe selects the highest installed SDK deterministically'
+    } else { Add-Failure 'Toolchain probe did not select the highest installed SDK' }
+    if ($toolchain.cscFrameworkCompilerAvailable -eq $true -and $toolchain.workerClassification -eq 'managed-csc' -and $toolchain.workerIsTrueNative -eq $false -and $toolchain.selectedApproach -eq 'managed-csc-fallback') {
         Add-Pass "Toolchain probe kept managed csc fallback; C++ Win32=$($toolchain.cxxWin32Available), NativeAOT=$($toolchain.dotnetNativeAotAvailable), worker=$($toolchain.workerClassification)"
     } else {
         Add-Failure "Toolchain probe had unexpected worker classification: approach=$($toolchain.selectedApproach), worker=$($toolchain.workerClassification), trueNative=$($toolchain.workerIsTrueNative), NativeAOT=$($toolchain.dotnetNativeAotAvailable), csc=$($toolchain.cscFrameworkCompilerAvailable)"
@@ -287,17 +286,17 @@ try {
         Copy-Item -LiteralPath $workerPath -Destination (Join-Path $tempRoot $name) -Force
     }
 
-    $busyProbe = Start-Process -FilePath (Join-Path $tempRoot $busyName) -ArgumentList '--probe','busy-then-sleep','8','120' -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath (Join-Path $tempRoot $protectedName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $obsProbe = Start-Process -FilePath (Join-Path $tempRoot $obsName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $discordProbe = Start-Process -FilePath (Join-Path $tempRoot $discordName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $gameProbe = Start-Process -FilePath (Join-Path $tempRoot $gameName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $antiCheatProbe = Start-Process -FilePath (Join-Path $tempRoot $antiCheatName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $networkProbe = Start-Process -FilePath (Join-Path $tempRoot $networkName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $audioProbe = Start-Process -FilePath (Join-Path $tempRoot $audioName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $inputProbe = Start-Process -FilePath (Join-Path $tempRoot $inputName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $securityProbe = Start-Process -FilePath (Join-Path $tempRoot $securityName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
-    $gpuDriverProbe = Start-Process -FilePath (Join-Path $tempRoot $gpuDriverName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
+    $busyProbe = Start-Process -FilePath (Join-Path $tempRoot $busyName) -ArgumentList (Join-RooWindowsArguments @('--probe','busy-then-sleep','8','120')) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath (Join-Path $tempRoot $protectedName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $obsProbe = Start-Process -FilePath (Join-Path $tempRoot $obsName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $discordProbe = Start-Process -FilePath (Join-Path $tempRoot $discordName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $gameProbe = Start-Process -FilePath (Join-Path $tempRoot $gameName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $antiCheatProbe = Start-Process -FilePath (Join-Path $tempRoot $antiCheatName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $networkProbe = Start-Process -FilePath (Join-Path $tempRoot $networkName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $audioProbe = Start-Process -FilePath (Join-Path $tempRoot $audioName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $inputProbe = Start-Process -FilePath (Join-Path $tempRoot $inputName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $securityProbe = Start-Process -FilePath (Join-Path $tempRoot $securityName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $gpuDriverProbe = Start-Process -FilePath (Join-Path $tempRoot $gpuDriverName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     foreach ($probe in @($busyProbe, $protectedProbe, $obsProbe, $discordProbe, $gameProbe, $antiCheatProbe, $networkProbe, $audioProbe, $inputProbe, $securityProbe, $gpuDriverProbe)) { $probes.Add($probe) | Out-Null }
     Start-Sleep -Milliseconds 800
 
@@ -411,7 +410,7 @@ try {
         Add-Failure 'Native confirmed session did not write session state and backup under the temp state root'
     }
 
-    $regularProbe = Start-Process -FilePath (Join-Path $tempRoot $regularName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
+    $regularProbe = Start-Process -FilePath (Join-Path $tempRoot $regularName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     $probes.Add($regularProbe) | Out-Null
     Start-Sleep -Milliseconds 500
     $beforeRegular = Get-RooProcessControlState $regularProbe.Id $null
@@ -445,11 +444,11 @@ try {
         -MaxDurationSeconds 5 `
         -PollIntervalMilliseconds 500 `
         -AffinityMask $affinityTarget
-    $launchSessionProc = Start-Process -FilePath $workerPath -ArgumentList '--policy', $launchPolicy, '--output', $launchOutput -WindowStyle Hidden -PassThru
+    $launchSessionProc = Start-Process -FilePath $workerPath -ArgumentList (Join-RooWindowsArguments @('--policy', $launchPolicy, '--output', $launchOutput)) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 1200
-    $launchProbe = Start-Process -FilePath (Join-Path $tempRoot $launchName) -ArgumentList '--probe','sleep','0','120' -WindowStyle Hidden -PassThru
+    $launchProbe = Start-Process -FilePath (Join-Path $tempRoot $launchName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     $probes.Add($launchProbe) | Out-Null
-    Wait-Process -Id $launchSessionProc.Id -Timeout 15 -ErrorAction Stop
+    Wait-RooValidationProcess $launchSessionProc 15
     $launchSessionProc.Refresh()
     $launchSessionExit = $launchSessionProc.ExitCode
     $launchSession = Get-Content -LiteralPath $launchOutput -Raw | ConvertFrom-Json
@@ -503,7 +502,7 @@ try {
         '-BudgetProfilePath',
         (Join-Path $repoRoot 'backend\profiles\lightweight-governor-budget.profile.json')
     )
-    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $residentArgs -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
+    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $residentArgs) -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
     $resident = Get-Content -LiteralPath $residentOut -Raw | ConvertFrom-Json
     if ($residentProc.ExitCode -eq 0 -and $resident.actionId -eq 'backend.residentHost.start' -and $resident.footprint.privateBytes -gt 0 -and $resident.footprint.workingSetBytes -gt 0 -and $resident.footprint.cpuTimeDeltaSeconds -ge 0 -and $resident.footprint.averageCpuPercent -ge 0 -and $resident.footprint.handleCount -ge 0 -and $resident.footprint.processCount.after -gt 0 -and $resident.footprint.elapsedRuntimeSeconds -gt 0) {
         Add-Pass "PowerShell resident host footprint measured private=$($resident.footprint.privateBytes), workingSet=$($resident.footprint.workingSetBytes), cpuDelta=$($resident.footprint.cpuTimeDeltaSeconds), avgCpu=$($resident.footprint.averageCpuPercent), handles=$($resident.footprint.handleCount), processCount=$($resident.footprint.processCount.after), elapsed=$($resident.footprint.elapsedRuntimeSeconds)"

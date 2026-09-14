@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/BackendLocator.cs" Link="BackendLocator.cs" />
+    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
+    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
+  </ItemGroup>
+</Project>

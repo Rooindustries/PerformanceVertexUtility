@@ -179,7 +179,7 @@ try {
             Add-Failure "$context has no availability detection rules"
         }
 
-        $utilitiesRoot = if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT) } else { [System.IO.Path]::GetFullPath('C:\Users\serviroo\Desktop\Utilities') }
+        $utilitiesRoot = if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT) } else { [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')) }
         foreach ($rule in $detections) {
             if ($enumDetectionMethod -notcontains [string]$rule.method) {
                 Add-Failure "$context has invalid detection method '$($rule.method)'"

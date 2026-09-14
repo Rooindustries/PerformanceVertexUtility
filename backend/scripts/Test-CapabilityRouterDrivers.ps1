@@ -215,6 +215,7 @@ function Stop-ToolProcessWatch {
         Stop-Job -Job $script:ToolWatchJob -ErrorAction SilentlyContinue
         $launched = @(Receive-Job -Job $script:ToolWatchJob -ErrorAction SilentlyContinue)
         Remove-Job -Job $script:ToolWatchJob -Force -ErrorAction SilentlyContinue
+        $script:ToolWatchJob = $null
     }
     return @($launched)
 }
@@ -334,6 +335,13 @@ $expectedRestoreSteps = @{
     'drivers-gpu-tools.prerequisite-directx-june2010' = 'Create a feature restore plan before adding a restore route; no DXSETUP execution is implemented.'
 }
 
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-driver-router-' + [guid]::NewGuid().ToString('N'))
+$previousUtilitiesRoot = $env:ROO_UTILITIES_ROOT
+$env:ROO_UTILITIES_ROOT = $fixtureRoot
+New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+Set-Content -LiteralPath (Join-Path $fixtureRoot 'cpu-z_2.17-en.exe') -Value 'Disposable detector data; never execute.' -Encoding UTF8
+$hasNvidia = @((Get-CimInstance Win32_VideoController).Name | Where-Object { $_ -match 'NVIDIA' }).Count -gt 0
+try {
 $stateBefore = Get-StateEntryCount $repoRoot
 Add-Check ($stateBefore -eq 0) 'backend/state is absent or empty before drivers router validation' "backend/state is not empty before drivers router validation: $stateBefore item(s)"
 
@@ -504,8 +512,10 @@ foreach ($capabilityId in $nvidiaCapabilityIds) {
     $status = $statusResults[$capabilityId].json
     Add-Check ($null -ne $status) "$capabilityId NVIDIA status envelope was captured" "$capabilityId NVIDIA status envelope missing"
     if ($null -eq $status) { continue }
-    Add-Check ([bool](Get-PropertyValue $status 'machineAvailable' $true) -eq $false) "$capabilityId machineAvailable is false on this Intel Arc machine" "$capabilityId machineAvailable was not false"
-    Add-Check ([string](Get-PropertyValue $status 'unavailableReason' '') -eq 'hardware-not-present') "$capabilityId unavailableReason is hardware-not-present" "$capabilityId unavailableReason mismatch"
+    $reason = [string](Get-PropertyValue $status 'unavailableReason' '')
+    Add-Check (-not [bool](Get-PropertyValue $status 'machineAvailable' $true)) "$capabilityId remains unavailable with its optional tool absent" "$capabilityId unexpectedly available"
+    $expectedReason = if ($hasNvidia) { 'tool-not-present' } else { 'hardware-not-present' }
+    Add-Check ($reason -eq $expectedReason) "$capabilityId reports the missing hardware or tool correctly" "$capabilityId unavailableReason mismatch: $reason"
 }
 
 $nvpiPreview = $previewResults['drivers-gpu-tools.nvidia-nip-profile-preview'].json
@@ -520,7 +530,7 @@ if ($null -ne $nvpiPreview) {
         Add-Check ([bool](Get-PropertyValue (Get-PropertyValue (Get-PropertyValue $nvpiPreview 'evidence' $null) 'summary' $null) 'willRunNvpi' $true) -eq $false) 'NVPI profile preview evidence reports no NVPI launch' 'NVPI profile preview evidence did not report no NVPI launch'
     } else {
         Add-Check ([string](Get-PropertyValue $nvpiPreview 'status' '') -eq 'unavailable') 'NVPI profile preview returns unavailable before dispatch on this machine' 'NVPI profile preview did not return unavailable before dispatch'
-        Add-Check ([string](Get-PropertyValue $nvpiPreview 'unavailableReason' '') -eq 'hardware-not-present') 'NVPI profile preview unavailableReason is hardware-not-present' 'NVPI profile preview unavailableReason mismatch'
+        Add-Check ([string](Get-PropertyValue $nvpiPreview 'unavailableReason' '') -eq $(if ($hasNvidia) { 'tool-not-present' } else { 'hardware-not-present' })) 'NVPI preview reports the actual missing dependency' 'NVPI profile preview unavailableReason mismatch'
         Add-Check ($null -eq (Get-PropertyValue $nvpiPreview 'routedScript' $null)) 'NVPI profile preview did not launch hardware-independent preview because router availability gates first' 'NVPI profile preview unexpectedly dispatched on unavailable hardware'
     }
 }
@@ -532,6 +542,12 @@ Add-Check ($launchedTools.Count -eq 0) 'no NVIDIA/DDU/CPU-Z/GPU-Z/Afterburner/Ko
 $stateAfter = Get-StateEntryCount $repoRoot
 Add-Check ($stateAfter -eq 0) 'backend/state is absent or empty after drivers router validation' "backend/state is not empty after drivers router validation: $stateAfter item(s)"
 Add-Check ($stateBefore -eq $stateAfter) "backend/state item count unchanged at $stateAfter" "backend/state item count changed: before=$stateBefore after=$stateAfter"
+
+} finally {
+    if ($null -ne $script:ToolWatchJob) { Stop-Job $script:ToolWatchJob -ErrorAction SilentlyContinue; Remove-Job $script:ToolWatchJob -Force -ErrorAction SilentlyContinue; $script:ToolWatchJob = $null }
+    $env:ROO_UTILITIES_ROOT = $previousUtilitiesRoot
+    if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
+}
 
 Write-Host ''
 if ($failures.Count -eq 0) {
