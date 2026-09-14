@@ -273,6 +273,24 @@
         "nextRequiredStep": "Build per-toggle restore manifests and reboot tracking before enabling Windows toggle restore."
       },
       "notes": "No bcdedit, powercfg hibernate, policy registry, or security toggle mutation is routed."
+    },
+    {
+      "capabilityId": "system-optimizations.upstream-settings-inventory",
+      "preview": {
+        "script": "backend/scripts/Get-UpstreamSettingsCatalog.ps1",
+        "args": [],
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "statusOnly": true,
+        "reason": "Read-only settings research inventory",
+        "nextRequiredStep": "Select an independently implemented Windows capability to preview changes."
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "Catalog detection changes no system state",
+        "nextRequiredStep": "No restore is needed."
+      }
     }
   ]
 }

@@ -24,18 +24,27 @@ function Get-OfficialCommandPreview {
     $quietCommand = $quietUninstallString
     $metadata = [pscustomobject]@{}
 
-    if (-not [string]::IsNullOrWhiteSpace([string]$uninstallString)) {
-        if ([string]$uninstallString -match 'msiexec') {
-            $commandType = 'msi-uninstall-string'
-        } else {
-            $commandType = 'registry-uninstall-string'
+    if ($sourceType -eq 'msi') {
+        $productCode = [guid]::Empty
+        if (-not [guid]::TryParseExact([string]$packageId, 'B', [ref]$productCode)) {
+            throw 'MSI removal requires the exact ProductCode in the installed app identity.'
         }
+        $commandType = 'msi-uninstall-string'
+        $msiexec = Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
+        $rawCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /norestart'
+        $quietCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /qn /norestart'
+        $metadata = [pscustomobject]@{ productCode=$productCode.ToString('B'); exitCodePolicy='windows-installer'; automaticRestartAllowed=$false }
+    } elseif (-not [string]::IsNullOrWhiteSpace([string]$uninstallString)) {
+        $commandType = 'registry-uninstall-string'
     } elseif ($sourceType -eq 'appx') {
+        if ([string]$packageId -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$') { throw 'Appx removal requires PackageFullName, not PackageFamilyName. Refresh inventory.' }
         $commandType = 'appx-package-removal-preview'
-        $rawCommand = "Remove-AppxPackage -Package $packageId"
+        $rawCommand = "Remove-AppxPackage -Package '" + ([string]$packageId).Replace("'","''") + "'"
         $metadata = [pscustomobject]@{
             previewExecution = 'disabled'
-            reason = 'Appx package removal is metadata-only until the user confirms an uninstall path.'
+            packageFullName = $packageId
+            scope = 'current-user'
+            reason = 'Review the exact full package name and its current-user dependencies before removal.'
         }
     } elseif ($sourceType -eq 'winget' -and -not [string]::IsNullOrWhiteSpace([string]$packageId)) {
         $commandType = 'winget-uninstall-preview'
@@ -64,6 +73,7 @@ function Get-OfficialCommandPreview {
         publisher = Get-RooUninstallPropertyValue $App 'publisher' $null
         sourceType = $sourceType
         packageId = $packageId
+        sourceIdentity = Get-RooUninstallPropertyValue $App 'sourceIdentity' $null
         primaryClassification = [string](Get-RooUninstallPropertyValue $Classification 'primaryClassification' '')
         commandType = $commandType
         rawCommand = $rawCommand

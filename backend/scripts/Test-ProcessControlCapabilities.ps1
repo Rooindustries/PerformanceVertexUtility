@@ -106,6 +106,7 @@ try {
 
     $ids = @{}
     $allowedLiveApplyIds = @(
+        'process-controls.cpu-sets',
         'process-controls.cpu-priority',
         'process-controls.io-priority',
         'process-controls.gpu-priority',

@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
   "family": "process-controls",
   "routes": [
@@ -273,6 +273,49 @@
         "nextRequiredStep": "Add an allowlist runner and rollback manifest for AffTool policies before routing restore."
       },
       "notes": "AffTool is inventoried only; this manifest never launches the external executable."
+    },
+    {
+      "capabilityId": "process-controls.cpu-sets",
+      "preview": {
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "args": [
+          "-Feature",
+          "CpuSets",
+          "-Action",
+          "Preview"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 120,
+        "disposableProbeParam": "-TargetProcessId"
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "args": [
+          "-Feature",
+          "CpuSets",
+          "-Action",
+          "Apply",
+          "-ConfirmApply"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changed",
+        "restorableEvidencePath": "restoreAvailable"
+      },
+      "restore": {
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "args": [
+          "-Feature",
+          "CpuSets",
+          "-Action",
+          "Restore",
+          "-ConfirmApply"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 120,
+        "changedEvidencePath": "changed",
+        "restorableEvidencePath": "restoreAvailable"
+      }
     }
   ]
 }

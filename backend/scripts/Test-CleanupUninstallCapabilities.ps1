@@ -148,7 +148,8 @@ $allowedRestoreStatuses = @('live', 'fixture-proven', 'manifest-ready', 'not-app
 $allowedDetectionMethods = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature')
 $allowedUnavailableReasons = @('tool-not-present', 'hardware-not-present', 'requires-admin-token', 'requires-helper-manifest', 'helper-packaging-pending', 'blocked-by-acl', 'cli-unsupported', 'not-safely-executable-yet')
 $allowedFrontendTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel')
-$allowedLiveCapabilityIds = @()
+$allowedLiveCapabilityIds = @(
+        'cleanup-uninstall.bulk-removal')
 
 try {
     $fragment = Get-Content -LiteralPath $fragmentPath -Raw | ConvertFrom-Json

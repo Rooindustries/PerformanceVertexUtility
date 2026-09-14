@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "actionId": "performance.cpuSets.preview",
+  "status": "preview",
+  "dryRun": true,
+  "capturedAtUtc": "2026-09-14T00:00:00Z",
+  "data": {
+    "schemaVersion": 1,
+    "kind": "cpu-set-preview",
+    "operationId": "0123456789abcdef0123456789abcdef",
+    "createdAtUtc": "2026-09-14T00:00:00Z",
+    "owner": {
+      "machine": "EXAMPLE-PC",
+      "userSid": "S-1-5-21-1000"
+    },
+    "identity": {
+      "processId": 4242,
+      "executablePath": "C:\\Fixture\\Example.exe",
+      "creationTimeFileTimeUtc": "133000000000000000",
+      "startTimeUtc": "2026-09-14T00:00:00Z"
+    },
+    "originalCpuSetIds": [],
+    "desiredCpuSetIds": [
+      256
+    ],
+    "topology": [
+      {
+        "id": 256,
+        "group": 0,
+        "logicalProcessorIndex": 0,
+        "coreIndex": 0,
+        "lastLevelCacheIndex": 0,
+        "numaNodeIndex": 0,
+        "efficiencyClass": 0,
+        "schedulingClass": 0,
+        "parked": false,
+        "allocated": false,
+        "allocatedToTargetProcess": false,
+        "realTime": false
+      }
+    ],
+    "compatibility": {
+      "gameCompatibility": "unverified",
+      "queryAccess": "0x1000",
+      "changeAccess": "0x3000"
+    }
+  },
+  "journalPath": null,
+  "errors": []
+}

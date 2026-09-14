@@ -29,6 +29,22 @@ def read_json(path):
     return json.loads(path.read_text(encoding='utf-8-sig'), object_pairs_hook=unique_object)
 
 
+def public_hygiene_text(relative: str, source: str):
+    if relative != 'backend/catalogs/upstream-settings-inventory.json':
+        return source
+    catalog = json.loads(source, object_pairs_hook=unique_object)
+    # Inventoried third-party application names, package IDs and publisher links
+    # are source facts. Keep authored explanations subject to the normal check.
+    for app in catalog.get('applications', []):
+        if app.get('sourceId') != 'winutil' or app.get('recordKind') != 'application-package':
+            continue
+        for key in ('id', 'sourceSettingId', 'displayName', 'packageIds', 'publisherWebsite'):
+            app.pop(key, None)
+        for reference in app.get('evidenceRefs', []):
+            reference.pop('symbol', None)
+    return json.dumps(catalog)
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     documents = {}
@@ -82,6 +98,16 @@ def validate(root: Path, contracts_only: bool = False):
     validator = Draft202012Validator({'$defs': schema['$defs'], '$ref': '#/$defs/uninstallAppInventory'})
     if not any(list(error.absolute_path) == ['apps'] and error.validator == 'type' for error in validator.iter_errors(invalid)):
         failures.append('Negative control failed: an invalid inventory apps field passed validation')
+    inventory_name = 'backend/catalogs/upstream-settings-inventory.json'
+    trace_pattern = r'Cod[e]x|Cl[a]ude|Chat[G]PT|generated b[y]|AI assist[a]nt'
+    if inventory_name in documents:
+        catalog_text = json.dumps(documents[inventory_name])
+        if re.search(trace_pattern, public_hygiene_text(inventory_name, catalog_text), re.I):
+            failures.append('Research inventory contains an authored public tool trace')
+        altered = json.loads(catalog_text)
+        altered['applications'][0]['nextAction'] = 'generated ' + 'by a validation probe'
+        if not re.search(trace_pattern, public_hygiene_text(inventory_name, json.dumps(altered)), re.I):
+            failures.append('Negative control failed: factual metadata exception hid an authored trace')
     xml_count = 0
     if not contracts_only:
         frontend = root / 'docs/internal/frontend'
@@ -104,7 +130,8 @@ def validate(root: Path, contracts_only: bool = False):
                 source = path.read_text(encoding='utf-8-sig')
                 if re.search(r'^(<{7}|={7}|>{7})(?: |$)', source, re.M):
                     failures.append(f'{relative}: unresolved merge marker')
-                if not relative.startswith('docs/internal/') and re.search(r'Cod[e]x|Cl[a]ude|Chat[G]PT|generated b[y]|AI assist[a]nt', source, re.I):
+                hygiene_source = public_hygiene_text(relative, source)
+                if not relative.startswith('docs/internal/') and re.search(trace_pattern, hygiene_source, re.I):
                     failures.append(f'{relative}: public tool trace requires review')
         if any((root / 'backend/state').rglob('*')):
             failures.append('backend/state is not empty')

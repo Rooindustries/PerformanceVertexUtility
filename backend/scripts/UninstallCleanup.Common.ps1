@@ -277,7 +277,8 @@ function Test-RooAppMatch {
     $packageIdPatterns = Get-RooUninstallPropertyArray $Match 'packageIdPatterns'
     if ($packageIdPatterns.Count -gt 0) {
         $hasPrimarySelector = $true
-        if (Test-RooAnyExactOrPatternMatch $packageId $packageIdPatterns) { $primaryMatched = $true }
+        if ((Test-RooAnyExactOrPatternMatch $packageId $packageIdPatterns) -or
+            (Test-RooAnyExactOrPatternMatch ([string](Get-RooUninstallPropertyValue $App 'packageFamilyName' '')) $packageIdPatterns)) { $primaryMatched = $true }
     }
 
     $sourceTypes = Get-RooUninstallPropertyArray $Match 'sourceTypes'
@@ -319,9 +320,9 @@ function Find-RooInstalledApp {
         [object]$Inventory,
         [string]$AppId
     )
-    foreach ($app in @(Get-RooUninstallPropertyArray $Inventory 'apps')) {
-        if ([string](Get-RooUninstallPropertyValue $app 'appId' '') -eq $AppId) { return $app }
-    }
+    $matches=@(Get-RooUninstallPropertyArray $Inventory 'apps' | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'appId' '') -eq $AppId })
+    if($matches.Count -gt 1){throw "Inventory contains multiple records for app ID $AppId. Refresh inventory before selecting a removal target."}
+    if($matches.Count -eq 1){return $matches[0]}
     return $null
 }
 

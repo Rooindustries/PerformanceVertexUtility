@@ -229,7 +229,7 @@ if ($null -ne $manifest) {
 $capabilities = @()
 if ($null -ne $capabilityFragment) {
     $capabilities = @($capabilityFragment.capabilities)
-    Add-Check ($capabilities.Count -eq 9) 'Registry exposes 9 process-controls capabilities' "Registry process-controls capability count expected 9, got $($capabilities.Count)"
+    Add-Check ($capabilities.Count -eq 10) 'Registry exposes 10 process-controls capabilities' "Registry process-controls capability count expected 10, got $($capabilities.Count)"
 }
 
 $routes = if ($null -ne $manifest) { @($manifest.routes) } else { @() }

@@ -202,8 +202,11 @@ public sealed class RooProcessGovernor
             List<BackupSnapshot> snapshots = BackupSnapshotsFromDictionary(backup);
             List<Dictionary<string, object>> restoredItems = new List<Dictionary<string, object>>();
             List<Dictionary<string, object>> skippedItems = new List<Dictionary<string, object>>();
-            for (int i = 0; i < snapshots.Count; i++)
+            HashSet<string> restoredIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = snapshots.Count - 1; i >= 0; i--)
             {
+                string identityKey = snapshots[i].processId + "|" + snapshots[i].processStartTimeUtc + "|" + snapshots[i].executablePath;
+                if (!restoredIdentities.Add(identityKey)) continue;
                 Dictionary<string, object> restored = RestoreSnapshot(snapshots[i], i + 1);
                 if (AsBool(restored, "blocked", false))
                 {
@@ -1014,39 +1017,43 @@ public sealed class RooProcessGovernor
 
         try
         {
-            Process live = Process.GetProcessById(snapshot.processId);
-            ProcessSnapshot current = SnapshotProcess(live);
-            if (!NameEquals(current.processName, snapshot.processName))
+            using (Process live = Process.GetProcessById(snapshot.processId))
             {
-                blocked = true;
-                blockedReason = "Live process name no longer matches backup snapshot.";
-            }
-            else if (!String.IsNullOrWhiteSpace(snapshot.processStartTimeUtc) && !StringEquals(current.startTimeUtc, snapshot.processStartTimeUtc))
-            {
-                blocked = true;
-                blockedReason = "Live process start time no longer matches backup snapshot.";
-            }
-            else
-            {
-                if (!String.IsNullOrWhiteSpace(snapshot.originalPriorityClass) && !StringEquals(current.priorityClass, snapshot.originalPriorityClass))
+                ProcessSnapshot current = SnapshotProcess(live);
+                if (!NameEquals(current.processName, snapshot.processName) ||
+                    String.IsNullOrWhiteSpace(snapshot.processStartTimeUtc) ||
+                    !StringEquals(current.startTimeUtc, snapshot.processStartTimeUtc) ||
+                    !StringEquals(current.executablePath, snapshot.executablePath))
                 {
-                    live.PriorityClass = (ProcessPriorityClass)Enum.Parse(typeof(ProcessPriorityClass), snapshot.originalPriorityClass, true);
-                    restoredControls.Add(Dict("control", "priorityClass", "restoredValue", snapshot.originalPriorityClass));
+                    blocked = true;
+                    blockedReason = "Live process identity no longer matches the backup snapshot.";
                 }
-                if (snapshot.originalAffinityMask > 0 && current.affinityMask != snapshot.originalAffinityMask)
+                else
                 {
-                    live.ProcessorAffinity = new IntPtr(snapshot.originalAffinityMask);
-                    restoredControls.Add(Dict("control", "affinityMask", "restoredValue", snapshot.originalAffinityMask));
-                }
-                if (!String.IsNullOrWhiteSpace(snapshot.originalIoPriority) && !StringEquals(current.ioPriority, snapshot.originalIoPriority))
-                {
-                    SetIoPriority(live, snapshot.originalIoPriority);
-                    restoredControls.Add(Dict("control", "ioPriority", "restoredValue", snapshot.originalIoPriority));
-                }
-                if (!String.IsNullOrWhiteSpace(snapshot.originalGpuPriority) && !StringEquals(current.gpuPriority, snapshot.originalGpuPriority))
-                {
-                    SetGpuPriority(live, snapshot.originalGpuPriority);
-                    restoredControls.Add(Dict("control", "gpuPriority", "restoredValue", snapshot.originalGpuPriority));
+                    foreach (Dictionary<string, object> change in snapshot.appliedControls)
+                    {
+                        if (IsBlockedChange(change)) continue;
+                        string control = AsString(change, "control");
+                        string original = null, observed = null;
+                        if (StringEquals(control, "priorityClass")) { original = snapshot.originalPriorityClass; observed = current.priorityClass; }
+                        else if (StringEquals(control, "affinityMask")) { original = snapshot.originalAffinityMask.ToString(); observed = current.affinityMask.ToString(); }
+                        else if (StringEquals(control, "ioPriority")) { original = snapshot.originalIoPriority; observed = current.ioPriority; }
+                        else if (StringEquals(control, "gpuPriority")) { original = snapshot.originalGpuPriority; observed = current.gpuPriority; }
+                        else continue;
+                        if (String.IsNullOrWhiteSpace(original) || StringEquals(observed, original)) continue;
+                        if (!StringEquals(observed, AsString(change, "proposedValue")))
+                        {
+                            blocked = true;
+                            blockedReason = "A process control changed externally; conflicting controls were preserved.";
+                            restoredControls.Add(Dict("control", control, "conflict", true, "observedValue", observed));
+                            continue;
+                        }
+                        if (StringEquals(control, "priorityClass")) live.PriorityClass = (ProcessPriorityClass)Enum.Parse(typeof(ProcessPriorityClass), original, true);
+                        else if (StringEquals(control, "affinityMask")) live.ProcessorAffinity = new IntPtr(snapshot.originalAffinityMask);
+                        else if (StringEquals(control, "ioPriority")) SetIoPriority(live, original);
+                        else if (StringEquals(control, "gpuPriority")) SetGpuPriority(live, original);
+                        restoredControls.Add(Dict("control", control, "restoredValue", original));
+                    }
                 }
             }
         }

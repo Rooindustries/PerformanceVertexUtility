@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "actionId": "apps.bulkUninstall.preview",
+  "status": "preview",
+  "dryRun": true,
+  "data": {
+    "schemaVersion": 1,
+    "kind": "bulk-uninstall-plan",
+    "queueId": "1123456789abcdef0123456789abcdef",
+    "owner": {
+      "machine": "EXAMPLE-PC",
+      "userSid": "S-1-5-21-1000"
+    },
+    "createdAtUtc": "2026-09-14T00:00:00Z",
+    "fixtureRoot": "",
+    "entries": [
+      {
+        "entryId": "0123456789abcdef0123456789abcdef",
+        "appId": "registry:sample",
+        "displayName": "Example App",
+        "sourceType": "registry",
+        "identity": {
+          "kind": "registry",
+          "hive": "CurrentUser",
+          "view": "Registry64",
+          "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Example",
+          "userSid": "S-1-5-21-1000"
+        },
+        "registrationFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "executable": "C:\\Fixture\\Example\\Uninstall.exe",
+        "executableSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "argumentMode": "raw",
+        "arguments": [],
+        "rawArguments": "/uninstall",
+        "workingDirectory": "C:\\Fixture\\Example",
+        "exitCodePolicy": "generic",
+        "protected": false,
+        "reviewRequired": false,
+        "risk": "low",
+        "dependencyReasons": []
+      }
+    ],
+    "cleanupMode": "fresh-review-after-removal",
+    "limits": [
+      "Vendor removal is not reversible; leftover cleanup needs fresh review."
+    ]
+  },
+  "errors": []
+}

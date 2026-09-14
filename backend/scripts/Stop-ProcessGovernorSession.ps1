@@ -56,6 +56,16 @@ function New-GovernorRestorePreview {
             $reason = 'Process already matches the process governor backup.'
         }
     }
+    $selectedChanges=@(Select-RooGovernorOwnedRestoreChanges $Snapshot @($controlChanges.ToArray()))
+    $controlChanges.Clear()
+    foreach($change in $selectedChanges){$controlChanges.Add($change)|Out-Null}
+    $blocked=(-not $Candidate.exists) -or (-not $Candidate.matches) -or @($selectedChanges|Where-Object {$_.blocked}).Count -gt 0
+    if(@($selectedChanges|Where-Object {$_.blocked}).Count -gt 0){$reason='A recorded control changed externally; its current value was preserved.'}
+    $selectedControls=@($selectedChanges|ForEach-Object {$_.control})
+    if($selectedControls -notcontains 'priorityClass'){$originalPriority=Get-RooPropertyValue $currentState 'priorityClass' $null}
+    if($selectedControls -notcontains 'affinityMask'){$originalAffinity=Get-RooPropertyValue $currentState 'affinityMask' $null}
+    if($selectedControls -notcontains 'ioPriority'){$originalIoPriority=Get-RooPropertyValue $currentState 'ioPriority' $null}
+    if($selectedControls -notcontains 'gpuPriority'){$originalGpuPriority=Get-RooPropertyValue $currentState 'gpuPriority' $null}
     $applicableControlChanges = @(Get-RooGovernorApplicableControlChanges @($controlChanges.ToArray()))
     $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
     return [pscustomobject]@{
@@ -132,7 +142,13 @@ try {
     $startedAtUtc = Get-RooUtcStamp
 
     $preview = New-Object System.Collections.Generic.List[object]
-    foreach ($snapshot in @(Get-RooPropertyArray $backup 'snapshots')) {
+    $snapshotList=@(Get-RooPropertyArray $backup 'snapshots')
+    $seenIdentities=@{}
+    for($snapshotIndex=$snapshotList.Count-1;$snapshotIndex -ge 0;$snapshotIndex--) {
+        $snapshot=$snapshotList[$snapshotIndex]
+        $identityKey=([string](Get-RooPropertyValue $snapshot 'processId' 0))+'|'+([string](Get-RooPropertyValue $snapshot 'processStartTimeUtc' ''))+'|'+([string](Get-RooPropertyValue $snapshot 'executablePath' ''))
+        if($seenIdentities.ContainsKey($identityKey)){continue}
+        $seenIdentities[$identityKey]=$true
         $candidate = Get-RooProcessGovernorLiveIdentity ([pscustomobject]@{
             processId = Get-RooPropertyValue $snapshot 'processId' 0
             processName = Get-RooPropertyValue $snapshot 'processName' ''

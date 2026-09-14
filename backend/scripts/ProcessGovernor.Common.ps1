@@ -673,6 +673,21 @@ function Get-RooProcessGovernorPreview {
     }
 }
 
+function Select-RooGovernorOwnedRestoreChanges {
+    param($Snapshot,[object[]]$Changes)
+    $recorded=if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooPropertyArray $Snapshot 'controlChanges')}
+    foreach($change in $Changes) {
+        $control=[string](Get-RooPropertyValue $change 'control' '')
+        $owned=@($recorded|Where-Object {[string](Get-RooPropertyValue $_ 'control' '') -eq $control -and -not [bool](Get-RooPropertyValue $_ 'blocked' $false)})
+        if($owned.Count -ne 1){continue}
+        if(-not(Test-RooControlValueEqual $control (Get-RooPropertyValue $change 'currentValue' $null) (Get-RooPropertyValue $owned[0] 'proposedValue' $null))) {
+            $change.blocked=$true
+            $change.blockedReason='The control changed externally; its current value was preserved.'
+        }
+        $change
+    }
+}
+
 function Get-RooProcessGovernorLiveIdentity {
     param([object]$Entry)
     $processId = [int](Get-RooPropertyValue $Entry 'processId' 0)

@@ -3,6 +3,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'InstalledAppIdentity.Common.ps1')
+$currentUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 
 function Convert-ToStableId {
     param([string]$Value)
@@ -50,20 +52,21 @@ function Get-StartupImpact {
 }
 
 function New-AppRecord {
-    param([object]$Item, [string]$SourceType)
+    param([object]$Item, [string]$SourceType, [object]$Identity)
     $name = [string]$Item.DisplayName
     $publisher = if ($Item.Publisher) { [string]$Item.Publisher } else { $null }
     $risk = Get-AppRisk $name $publisher
-    $stableId = Convert-ToStableId ($SourceType + ':' + $name + ':' + $Item.PSChildName)
+    $isMsi = ($Item.WindowsInstaller -eq 1 -and [string]$Item.PSChildName -match '^\{[0-9a-fA-F-]{36}\}$')
     [pscustomobject]@{
-        appId = "$SourceType`:$stableId"
+        appId = $Identity.stableId
+        sourceIdentity = $Identity
         displayName = $name
         publisher = $publisher
         version = if ($Item.DisplayVersion) { [string]$Item.DisplayVersion } else { $null }
         installLocation = if ($Item.InstallLocation) { [string]$Item.InstallLocation } else { $null }
         uninstallString = if ($Item.UninstallString) { [string]$Item.UninstallString } else { $null }
         quietUninstallString = if ($Item.QuietUninstallString) { [string]$Item.QuietUninstallString } else { $null }
-        sourceType = if ($SourceType -eq 'registry' -and (($Item.WindowsInstaller -eq 1) -or ([string]$Item.UninstallString -match 'MsiExec'))) { 'msi' } else { $SourceType }
+        sourceType = if ($isMsi) { 'msi' } else { $SourceType }
         packageId = if ($Item.PSChildName) { [string]$Item.PSChildName } else { $null }
         estimatedSizeBytes = Convert-EstimatedSizeBytes $Item.EstimatedSize
         installDate = if ($Item.InstallDate) { [string]$Item.InstallDate } else { $null }
@@ -78,17 +81,29 @@ function New-AppRecord {
 $apps = New-Object System.Collections.Generic.List[object]
 $sources = New-Object System.Collections.Generic.List[string]
 
-$registryRoots = @(
-    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
-)
-
-foreach ($root in $registryRoots) {
-    $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue | Where-Object { -not [string]::IsNullOrWhiteSpace($_.DisplayName) })
-    if ($items.Count -gt 0) { $sources.Add('registry') | Out-Null }
-    foreach ($item in $items) {
-        $apps.Add((New-AppRecord $item 'registry')) | Out-Null
+$registryPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall'
+$views = if ([Environment]::Is64BitOperatingSystem) { @('Registry64','Registry32') } else { @('Registry32') }
+foreach ($hive in @('LocalMachine','CurrentUser')) {
+    $hiveViews=if($hive -eq 'CurrentUser'){@('Registry32')}else{$views}
+    foreach ($view in $hiveViews) {
+        $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::$hive, [Microsoft.Win32.RegistryView]::$view)
+        $uninstall = $null
+        try {
+            $uninstall = $base.OpenSubKey($registryPath, $false)
+            if ($null -eq $uninstall) { continue }
+            foreach ($keyName in $uninstall.GetSubKeyNames()) {
+                $key = $uninstall.OpenSubKey($keyName, $false)
+                if ($null -eq $key) { continue }
+                try {
+                    $record = @{PSChildName=$keyName}
+                    foreach ($valueName in $key.GetValueNames()) { $record[$valueName]=$key.GetValue($valueName) }
+                    if ([string]::IsNullOrWhiteSpace([string]$record.DisplayName)) { continue }
+                    $identity = New-RooRegistryAppIdentity $hive $view $keyName $currentUserSid
+                    $apps.Add((New-AppRecord ([pscustomobject]$record) 'registry' $identity)) | Out-Null
+                    if (-not $sources.Contains('registry')) { $sources.Add('registry') | Out-Null }
+                } finally { $key.Dispose() }
+            }
+        } finally { if ($null -ne $uninstall) {$uninstall.Dispose()}; $base.Dispose() }
     }
 }
 
@@ -96,10 +111,12 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     $appxItems = @(Get-AppxPackage -ErrorAction SilentlyContinue)
     if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
     foreach ($pkg in $appxItems) {
+        $identity = New-RooAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $currentUserSid
         $risk = Get-AppRisk $pkg.Name $pkg.Publisher
         $reviewRequired = ($risk -eq 'advanced' -or $pkg.Publisher -match 'Microsoft')
         $apps.Add([pscustomobject]@{
-            appId = 'appx:' + (Convert-ToStableId $pkg.PackageFullName)
+            appId = $identity.stableId
+            sourceIdentity = $identity
             displayName = [string]$pkg.Name
             publisher = [string]$pkg.Publisher
             version = [string]$pkg.Version
@@ -107,7 +124,8 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
             uninstallString = $null
             quietUninstallString = $null
             sourceType = 'appx'
-            packageId = [string]$pkg.PackageFamilyName
+            packageId = [string]$pkg.PackageFullName
+            packageFamilyName = [string]$pkg.PackageFamilyName
             estimatedSizeBytes = $null
             installDate = $null
             categories = @(Get-AppCategories $pkg.Name $pkg.Publisher)
@@ -160,7 +178,7 @@ if ($IncludeWinget) {
     }
 }
 
-$appArray = @($apps.ToArray() | Sort-Object displayName, sourceType -Unique)
+$appArray = @($apps.ToArray() | Sort-Object appId -Unique | Sort-Object displayName, sourceType, appId)
 $sources = @($sources.ToArray() + @($appArray | Select-Object -ExpandProperty sourceType) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
 $summary = [pscustomobject]@{
     appCount = $appArray.Count
