@@ -78,6 +78,8 @@ function Invoke-RooBackendHiddenProcess {
     $stdout = ''
     $stderr = ''
     $startError = $null
+    $outputIncomplete = $false
+    $exitVerified = $false
     try {
         try {
             $started = $process.Start()
@@ -91,10 +93,15 @@ function Invoke-RooBackendHiddenProcess {
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 $timedOut = $true
                 try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
-                $process.WaitForExit(5000) | Out-Null
+                $exitVerified = $process.WaitForExit(5000)
+            } else {
+                $exitVerified = $true
             }
-            try { $stdout = $stdoutTask.GetAwaiter().GetResult() } catch { $stdout = '' }
-            try { $stderr = $stderrTask.GetAwaiter().GetResult() } catch { $stderr = '' }
+            # A descendant may inherit the output pipes after the parent exits. Never
+            # turn a bounded runner into an unbounded wait for that descendant.
+            try { if ($stdoutTask.Wait(2000)) { $stdout = $stdoutTask.GetAwaiter().GetResult() } else { $outputIncomplete = $true } } catch { $outputIncomplete = $true }
+            try { if ($stderrTask.Wait(2000)) { $stderr = $stderrTask.GetAwaiter().GetResult() } else { $outputIncomplete = $true } } catch { $outputIncomplete = $true }
+            if ($outputIncomplete) { $timedOut = $true }
             if (-not $timedOut) {
                 try { $exitCode = [int]$process.ExitCode } catch { $exitCode = $null }
             }
@@ -116,6 +123,9 @@ function Invoke-RooBackendHiddenProcess {
         startError = $startError
         exitCode = $exitCode
         timedOut = $timedOut
+        processExitVerified = $exitVerified
+        outputIncomplete = $outputIncomplete
+        descendantExitVerified = $false
         timeoutSeconds = $TimeoutSeconds
         stdout = $stdout
         stderr = $stderr

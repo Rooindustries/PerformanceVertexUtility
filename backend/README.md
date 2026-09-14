@@ -19,11 +19,13 @@ The backend provides Windows discovery, process controls, cleanup planning, driv
 
 Discovery and default previews do not change system settings. Process controls require confirmed apply, capture original state, bind targets to process identity, and provide restore commands. Runtime validation uses disposable processes and temporary state roots.
 
-`Invoke-UninstallCleanupApplyPackage.ps1` can run an explicitly reviewed official uninstaller and remove allowlisted files or folders. It requires one matching app identity, hashes of the reviewed input files, explicit approvals, and separate dependency-review approval where required. Protected leftovers, unsupported item types, overlapping targets, and unsafe backup locations are rejected. The caller must retain the reviewed inputs; rebuilding them at apply time is not approval of the new contents.
+`Invoke-UninstallCleanupApplyPackage.ps1` can run an explicitly reviewed official uninstaller or perform a separately reviewed file cleanup. After vendor removal it returns `cleanup-review-required` with a fresh content scan, leaving the earlier deletion list unapplied. File-only cleanup requires one matching app identity, hashes of the reviewed input files, explicit approvals, and separate dependency-review approval where required. Protected leftovers, unsupported item types, overlapping targets, and unsafe backup locations are rejected. The caller must retain the reviewed inputs; rebuilding them at apply time is not approval of the new contents.
 
 Cleanup copies originals and flushes a recovery journal before destructive work. Each attempted deletion is recorded before execution. Partial failures return the saved journal and actual completed-deletion count. Repeating the same saved operation does not run it again. Restore copies backup contents to their original paths and can be retried. This restores backed-up leftovers; it does not reinstall an application removed by its vendor uninstaller. Keep recovery storage outside temporary directories and deletion targets.
 
 NVIDIA imports and hardware-specific utilities retain their explicit approval and tool requirements. Several catalog entries support discovery, preview, or a disposable fixture rather than unrestricted real execution. Timer-resolution and temporary power-plan validation exercise bounded reversible paths. Service, registry, and driver changes must not be inferred from a capability label or a successful preview.
+
+Supported CPU Sets, durable bulk removal, and the sourced settings inventory are described in [Optimization controls](../docs/optimization-controls.md). The [research index](../docs/research/README.md) separates documented upstream behavior, inferred controls, implementation coverage, and remaining validation.
 
 ## Validation
 

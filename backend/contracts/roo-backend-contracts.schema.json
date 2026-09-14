@@ -3533,6 +3533,12 @@
             "high",
             "unknown"
           ]
+        },
+        "sourceIdentity": {
+          "$ref": "#/$defs/appSourceIdentity"
+        },
+        "packageFamilyName": {
+          "type": "string"
         }
       }
     },
@@ -4011,6 +4017,16 @@
         },
         "reviewRequired": {
           "type": "boolean"
+        },
+        "sourceIdentity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/appSourceIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -5356,6 +5372,9 @@
         },
         "restorableEvidencePath": {
           "type": "string"
+        },
+        "requestPathParam": {
+          "const": "-RequestPath"
         }
       }
     },
@@ -5640,6 +5659,565 @@
           }
         }
       }
+    },
+    "appSourceIdentity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hive",
+            "view",
+            "keyPath",
+            "userSid"
+          ],
+          "properties": {
+            "kind": {
+              "const": "registry"
+            },
+            "hive": {
+              "enum": [
+                "LocalMachine",
+                "CurrentUser"
+              ]
+            },
+            "view": {
+              "enum": [
+                "Registry32",
+                "Registry64"
+              ]
+            },
+            "keyPath": {
+              "type": "string"
+            },
+            "userSid": {
+              "type": "string"
+            },
+            "stableId": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "scope",
+            "packageFullName",
+            "userSid"
+          ],
+          "properties": {
+            "kind": {
+              "const": "appx"
+            },
+            "scope": {
+              "const": "current-user"
+            },
+            "packageFullName": {
+              "type": "string"
+            },
+            "packageFamilyName": {
+              "type": "string"
+            },
+            "userSid": {
+              "type": "string"
+            },
+            "stableId": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "presencePath"
+          ],
+          "properties": {
+            "kind": {
+              "const": "fixture"
+            },
+            "presencePath": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "operationOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine",
+        "userSid"
+      ],
+      "properties": {
+        "machine": {
+          "type": "string"
+        },
+        "userSid": {
+          "type": "string"
+        }
+      }
+    },
+    "cpuSetIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "processId",
+        "executablePath",
+        "creationTimeFileTimeUtc",
+        "startTimeUtc"
+      ],
+      "properties": {
+        "processId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "executablePath": {
+          "type": "string"
+        },
+        "creationTimeFileTimeUtc": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "startTimeUtc": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "cpuSetTopologyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "group",
+        "logicalProcessorIndex",
+        "coreIndex",
+        "lastLevelCacheIndex",
+        "numaNodeIndex",
+        "efficiencyClass",
+        "schedulingClass",
+        "parked",
+        "allocated",
+        "allocatedToTargetProcess",
+        "realTime"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "group": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "logicalProcessorIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "coreIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "lastLevelCacheIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "numaNodeIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "efficiencyClass": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "schedulingClass": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "parked": {
+          "type": "boolean"
+        },
+        "allocated": {
+          "type": "boolean"
+        },
+        "allocatedToTargetProcess": {
+          "type": "boolean"
+        },
+        "realTime": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cpuSetPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "operationId",
+        "createdAtUtc",
+        "owner",
+        "identity",
+        "originalCpuSetIds",
+        "desiredCpuSetIds",
+        "topology",
+        "compatibility"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "cpu-set-preview"
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/operationOwner"
+        },
+        "identity": {
+          "$ref": "#/$defs/cpuSetIdentity"
+        },
+        "originalCpuSetIds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "uniqueItems": true
+        },
+        "desiredCpuSetIds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "uniqueItems": true
+        },
+        "topology": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cpuSetTopologyEntry"
+          }
+        },
+        "compatibility": {
+          "type": "object"
+        }
+      }
+    },
+    "cpuSetOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "actionId",
+        "status",
+        "dryRun",
+        "capturedAtUtc",
+        "data",
+        "journalPath",
+        "errors"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "actionId": {
+          "type": "string",
+          "pattern": "^performance\\.cpuSets\\.(status|preview|apply|restore)$"
+        },
+        "status": {
+          "enum": [
+            "detected",
+            "preview",
+            "applied",
+            "restored",
+            "failed"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "capturedAtUtc": {
+          "type": "string"
+        },
+        "data": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "journalPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "restoreAvailable": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "actionId": {
+                "const": "performance.cpuSets.preview"
+              },
+              "status": {
+                "const": "preview"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/cpuSetPreview"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "bulkUninstallEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entryId",
+        "appId",
+        "displayName",
+        "sourceType",
+        "identity",
+        "executable",
+        "executableSha256",
+        "argumentMode",
+        "arguments",
+        "rawArguments",
+        "workingDirectory",
+        "exitCodePolicy",
+        "protected",
+        "reviewRequired",
+        "risk",
+        "dependencyReasons",
+        "registrationFingerprint"
+      ],
+      "properties": {
+        "entryId": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "#/$defs/appSourceIdentity"
+        },
+        "executable": {
+          "type": "string"
+        },
+        "executableSha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "argumentMode": {
+          "enum": [
+            "raw",
+            "tokens"
+          ]
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rawArguments": {
+          "type": "string"
+        },
+        "workingDirectory": {
+          "type": "string"
+        },
+        "exitCodePolicy": {
+          "enum": [
+            "generic",
+            "windows-installer"
+          ]
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "reviewRequired": {
+          "type": "boolean"
+        },
+        "risk": {
+          "type": "string"
+        },
+        "dependencyReasons": {
+          "type": "array"
+        },
+        "registrationFingerprint": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      }
+    },
+    "bulkUninstallPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "queueId",
+        "owner",
+        "createdAtUtc",
+        "fixtureRoot",
+        "entries",
+        "cleanupMode",
+        "limits"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "bulk-uninstall-plan"
+        },
+        "queueId": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/operationOwner"
+        },
+        "createdAtUtc": {
+          "type": "string"
+        },
+        "fixtureRoot": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/bulkUninstallEntry"
+          }
+        },
+        "cleanupMode": {
+          "const": "fresh-review-after-removal"
+        },
+        "limits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "bulkUninstallOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "actionId",
+        "status",
+        "dryRun",
+        "data",
+        "errors"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "actionId": {
+          "type": "string",
+          "pattern": "^apps\\.bulkUninstall\\.(preview|apply|status|cancel|reconcile)$"
+        },
+        "status": {
+          "enum": [
+            "preview",
+            "ready",
+            "running",
+            "cleanup-review-required",
+            "cancel-requested",
+            "canceled",
+            "needs-reconciliation",
+            "reboot-required",
+            "failed"
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "changed": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "actionId": {
+                "const": "apps.bulkUninstall.preview"
+              },
+              "status": {
+                "const": "preview"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/bulkUninstallPlan"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

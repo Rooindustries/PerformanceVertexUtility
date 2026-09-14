@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
   "family": "cleanup-uninstall",
   "capabilities": [
@@ -491,6 +491,56 @@
         {
           "test": "backend/scripts/Test-CleanupUninstallCapabilities.ps1",
           "proves": "DeviceCleanup utility detection resolves through the Utilities root and Get-CleanupToolFacts reports file/version facts without launching the tool"
+        }
+      ]
+    },
+    {
+      "capabilityId": "cleanup-uninstall.bulk-removal",
+      "family": "cleanup-uninstall",
+      "displayName": "Bulk App Removal",
+      "technicalName": "Durable sequential official removal with registration verification and reconciliation",
+      "source": "roo-native",
+      "implementedBy": "roo-script",
+      "frontendLabel": "Bulk App Removal",
+      "frontendTab": "Clean Junk",
+      "riskLevel": "medium",
+      "approvalRequired": true,
+      "availability": {
+        "detection": [
+          {
+            "method": "file-exists",
+            "target": "backend/scripts/Invoke-OptimizerRequest.ps1"
+          }
+        ],
+        "notes": "Backend command interface; UI integration and protected-game compatibility are separately verified."
+      },
+      "preview": {
+        "status": "implemented",
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "actionId": "apps.bulkUninstall.preview"
+      },
+      "apply": {
+        "status": "live",
+        "mode": "reviewed-execution",
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "actionId": "apps.bulkUninstall.apply",
+        "gates": [
+          "confirm-apply",
+          "reviewed-input-hash",
+          "exact-identity"
+        ]
+      },
+      "restore": {
+        "status": "not-applicable",
+        "mode": "not-reversible",
+        "script": null,
+        "actionId": null
+      },
+      "unavailableReason": null,
+      "testEvidence": [
+        {
+          "test": "backend/scripts/Test-BulkUninstall.ps1",
+          "proves": "Durable sequential official removal with registration verification and reconciliation"
         }
       ]
     }

@@ -176,7 +176,7 @@ $expectedIdGroups = @($expectedCapabilityIds | Group-Object | Where-Object { $_.
 
 Add-Check ($fragments.Count -eq 4) 'Exactly 4 capability fragments were loaded' "Expected 4 capability fragments, found $($fragments.Count)"
 Add-Check ($expectedFamilyMap.Count -eq 4) 'Exactly 4 families are represented in fragments' "Expected 4 represented families, found $($expectedFamilyMap.Count)"
-Add-Check ($expectedCapabilities.Count -eq 53) 'Fragment capability total is exactly 53' "Fragment capability total expected 53, found $($expectedCapabilities.Count)"
+Add-Check ($expectedCapabilities.Count -eq 56) 'Fragment capability total is exactly 56' "Fragment capability total expected 56, found $($expectedCapabilities.Count)"
 Add-Check ($expectedIdGroups.Count -eq 0) 'Fragment capability IDs are unique' "Duplicate fragment capability IDs: $((@($expectedIdGroups | ForEach-Object { $_.Name })) -join ', ')"
 
 $registry = $null
@@ -199,7 +199,7 @@ if ($null -ne $registry) {
     $registryCapabilities = @(Get-PropertyValue $registry 'capabilities' @())
     Add-Check ($registryFamilies.Count -eq 4) 'Registry contains exactly 4 families' "Registry family count expected 4, found $($registryFamilies.Count)"
     Add-Check ($registryCapabilities.Count -eq $expectedCapabilities.Count) 'Registry capability count equals fragment sum' "Registry capability count $($registryCapabilities.Count) does not equal fragment sum $($expectedCapabilities.Count)"
-    Add-Check ($registryCapabilities.Count -eq 53) 'Registry capability total is exactly 53' "Registry capability total expected 53, found $($registryCapabilities.Count)"
+    Add-Check ($registryCapabilities.Count -eq 53) 'Registry capability total is exactly 56' "Registry capability total expected 56, found $($registryCapabilities.Count)"
 
     Test-IdSetMatches $expectedCapabilityIds (@($registryCapabilities | ForEach-Object { [string]$_.capabilityId })) 'Live registry'
 

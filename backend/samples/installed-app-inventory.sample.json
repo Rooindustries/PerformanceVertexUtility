@@ -119,7 +119,7 @@
       "uninstallString": "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}",
       "quietUninstallString": "MsiExec.exe /X{11111111-2222-3333-4444-555555555555} /qn",
       "sourceType": "msi",
-      "packageId": "EpicGames.EpicGamesLauncher",
+      "packageId": "{11111111-2222-3333-4444-555555555555}",
       "estimatedSizeBytes": 2147483648,
       "installDate": "20260416",
       "categories": [
@@ -185,7 +185,7 @@
       "uninstallString": "MsiExec.exe /X{66666666-7777-8888-9999-000000000000}",
       "quietUninstallString": "MsiExec.exe /X{66666666-7777-8888-9999-000000000000} /qn",
       "sourceType": "msi",
-      "packageId": "Intel.DriverAndSupportAssistant",
+      "packageId": "{66666666-7777-8888-9999-000000000000}",
       "estimatedSizeBytes": 314572800,
       "installDate": "20260402",
       "categories": [
@@ -229,7 +229,7 @@
       "uninstallString": "MsiExec.exe /X{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
       "quietUninstallString": "MsiExec.exe /X{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE} /qn",
       "sourceType": "msi",
-      "packageId": "Microsoft.VCRedist.2015+.x64",
+      "packageId": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
       "estimatedSizeBytes": 25165824,
       "installDate": "20260525",
       "categories": [
@@ -252,7 +252,7 @@
       "uninstallString": null,
       "quietUninstallString": null,
       "sourceType": "appx",
-      "packageId": "Microsoft.GamingApp",
+      "packageId": "Microsoft.GamingApp_2406.1001.20.0_x64__8wekyb3d8bbwe",
       "estimatedSizeBytes": null,
       "installDate": null,
       "categories": [
@@ -264,7 +264,8 @@
       "protectionReasons": [
         "Gaming component removal requires explicit review because it can affect Game Pass, Game Bar, and store components"
       ],
-      "startupImpact": "low"
+      "startupImpact": "low",
+      "packageFamilyName": "Microsoft.GamingApp_8wekyb3d8bbwe"
     }
   ]
 }

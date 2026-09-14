@@ -281,8 +281,8 @@ if ($manifest) {
     Add-Check ([int](Get-PropertyValue $manifest 'schemaVersion' 0) -eq 1) 'Route manifest schemaVersion is 1' 'Route manifest schemaVersion is not 1'
     Add-Check ([string](Get-PropertyValue $manifest 'family' '') -eq 'system-optimizations') 'Route manifest family is system-optimizations' 'Route manifest family mismatch'
 }
-Add-Check ($capabilityIds.Count -eq 10) 'System optimization fragment has 10 capabilities' "System optimization fragment expected 10 capabilities, got $($capabilityIds.Count)"
-Add-Check ($routes.Count -eq 10) 'System optimization route manifest has 10 routes' "System optimization route manifest expected 10 routes, got $($routes.Count)"
+Add-Check ($capabilityIds.Count -eq 11) 'System optimization fragment has 11 capabilities' "System optimization fragment expected 11 capabilities, got $($capabilityIds.Count)"
+Add-Check ($routes.Count -eq 11) 'System optimization route manifest has 11 routes' "System optimization route manifest expected 11 routes, got $($routes.Count)"
 
 foreach ($capabilityId in $capabilityIds) {
     $route = Get-RouteByCapabilityId $manifest $capabilityId

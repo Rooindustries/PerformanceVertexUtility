@@ -384,8 +384,8 @@ try {
     $capabilityIds = @($capabilityFragment.capabilities | ForEach-Object { [string](Get-PropertyValue $_ 'capabilityId' '') })
     $routes = @($manifest.routes)
     $routeIds = @($routes | ForEach-Object { [string](Get-PropertyValue $_ 'capabilityId' '') })
-    Add-Check ($capabilityIds.Count -eq 9) 'Cleanup registry contains 9 capabilities' "Cleanup registry capability count expected 9, got $($capabilityIds.Count)"
-    Add-Check ($routes.Count -eq 9) 'Cleanup route manifest contains 9 routes' "Cleanup route count expected 9, got $($routes.Count)"
+    Add-Check ($capabilityIds.Count -eq 10) 'Cleanup registry contains 10 capabilities' "Cleanup registry capability count expected 10, got $($capabilityIds.Count)"
+    Add-Check ($routes.Count -eq 10) 'Cleanup route manifest contains 10 routes' "Cleanup route count expected 10, got $($routes.Count)"
     Add-Check (@($routeIds | Select-Object -Unique).Count -eq $routeIds.Count) 'Cleanup route capabilityIds are unique' 'Cleanup route capabilityIds are not unique'
 
     foreach ($capabilityId in $capabilityIds) {
@@ -558,6 +558,7 @@ exit 0
     }
 
     $mutatingApplyIds = @(
+        'cleanup-uninstall.bulk-removal',
         'cleanup-uninstall.official-uninstall',
         'cleanup-uninstall.cleanup-deletion-plan',
         'cleanup-uninstall.cleanup-rollback'

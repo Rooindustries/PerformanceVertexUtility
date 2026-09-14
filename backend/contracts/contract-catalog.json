@@ -456,6 +456,20 @@
       "workflow": "telemetry and reports",
       "summary": "User-facing findings, metrics, recommended actions, and artifacts.",
       "status": "draft"
+    },
+    {
+      "name": "CPU Set operations",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cpuSetOperation",
+      "workflow": "optimization priorities",
+      "summary": "Supported process-default CPU Set detection, reviewed apply and conflict-aware restore.",
+      "status": "draft"
+    },
+    {
+      "name": "Bulk uninstall operations",
+      "definitionRef": "roo-backend-contracts.schema.json#/$defs/bulkUninstallOperation",
+      "workflow": "optimization priorities",
+      "summary": "Durable sequential vendor removal with explicit reconciliation and a separate cleanup review.",
+      "status": "draft"
     }
   ]
 }

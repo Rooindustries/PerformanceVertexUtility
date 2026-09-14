@@ -143,7 +143,7 @@ function Get-GovernorRestoreChanges {
     if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
         $changes.Add((New-RooControlChange 'gpuPriority' (Get-RooPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
     }
-    return @($changes.ToArray())
+    return @(Select-RooGovernorOwnedRestoreChanges $Snapshot @($changes.ToArray()))
 }
 
 function Get-GovernorProcessKey {
@@ -209,6 +209,10 @@ function Invoke-GovernorActiveRestore {
     $restoreChanges = @(Get-GovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
     foreach ($change in $restoreChanges) {
+        if([bool](Get-RooPropertyValue $change 'blocked' $false)) {
+            $Errors.Add((New-RooIssue 'PROCESS_GOVERNOR_RESTORE_CONFLICT' ([string]$change.blockedReason) 'warning' 'performance.governor' ([string](Get-RooPropertyValue $snapshot 'processName' '')) $false 'Inspect the external process-control change before restoring it.' $null))|Out-Null
+            continue
+        }
         try {
             Invoke-RooProcessControlChange $candidate.process $change
             $appliedRestoreControls.Add($change) | Out-Null
@@ -218,8 +222,11 @@ function Invoke-GovernorActiveRestore {
     }
     $restoredState = Get-RooProcessControlState ([int](Get-RooPropertyValue $snapshot 'processId' 0)) $null
     $restoreItem = New-GovernorRestoredItem $snapshot $restoredState @($appliedRestoreControls.ToArray()) $Reason $PollIndex
-    $RestoredItems.Add($restoreItem) | Out-Null
-    $PollRestoredItems.Add($restoreItem) | Out-Null
+    if($appliedRestoreControls.Count -gt 0) {
+        if(@($restoreChanges|Where-Object {$_.blocked}).Count -gt 0){$restoreItem.reason='Restored owned controls; conflicting external controls were preserved.'}
+        $RestoredItems.Add($restoreItem) | Out-Null
+        $PollRestoredItems.Add($restoreItem) | Out-Null
+    }
     $ActiveRestraints.Remove($Key)
     $LastRestoreAt[$Key] = $Now
     return $true
@@ -495,10 +502,13 @@ try {
                 reason = [string](Get-RooPropertyValue $entryToApply 'reason' '')
                 sessionId = $sessionId
             }
-            if (-not $snapshotKeys.Contains($key)) {
-                $snapshots.Add($snapshot) | Out-Null
-                $snapshotKeys.Add($key) | Out-Null
+            # A new restraint cycle captures the user's current originals. An
+            # older cycle must not overwrite values changed between cycles.
+            for($index=$snapshots.Count-1;$index -ge 0;$index--) {
+                if([int](Get-RooPropertyValue $snapshots[$index] 'processId' 0) -eq $processId){$snapshots.RemoveAt($index)}
             }
+            $snapshots.Add($snapshot) | Out-Null
+            $snapshotKeys.Add($key) | Out-Null
             $backupManifest.snapshots = @($snapshots.ToArray())
             Write-RooProcessGovernorJsonFile $backupManifest $backupPath
             $state.backupManifestPath = $backupPath

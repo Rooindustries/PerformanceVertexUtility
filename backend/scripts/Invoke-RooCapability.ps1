@@ -10,6 +10,7 @@ param(
     [string]$FixtureRoot = '',
     [int]$TargetProcessId = 0,
     [string]$UtilitiesRoot = '',
+    [string]$RequestPath = '',
     [string]$OutputPath = ''
 )
 
@@ -442,7 +443,8 @@ function Get-RooRouteArgumentList {
         [bool]$FixtureRootProvided,
         [string]$FixtureRoot,
         [bool]$TargetProcessIdProvided,
-        [int]$TargetProcessId
+        [int]$TargetProcessId,
+        [string]$RequestPath
     )
 
     $arguments = New-Object System.Collections.Generic.List[string]
@@ -463,6 +465,12 @@ function Get-RooRouteArgumentList {
     if ($TargetProcessIdProvided -and $disposableProbeParam) {
         $arguments.Add($disposableProbeParam) | Out-Null
         $arguments.Add([string]$TargetProcessId) | Out-Null
+    }
+
+    $requestPathParam = Convert-ToCleanString (Get-PropertyValue $Section 'requestPathParam' $null)
+    if ($RequestPath -and $requestPathParam) {
+        $arguments.Add($requestPathParam) | Out-Null
+        $arguments.Add([IO.Path]::GetFullPath($RequestPath)) | Out-Null
     }
 
     return @($arguments.ToArray())
@@ -656,10 +664,16 @@ try {
                                 $envelope.nextRequiredStep = 'Re-run with -FixtureRoot under the OS temp directory before executing this fixture route.'
                             } else {
                                 $targetProvided = $PSBoundParameters.ContainsKey('TargetProcessId')
-                                $routeArgs = Get-RooRouteArgumentList $section $fixtureProvided $FixtureRoot $targetProvided $TargetProcessId
+                                $routeArgs = Get-RooRouteArgumentList $section $fixtureProvided $FixtureRoot $targetProvided $TargetProcessId $RequestPath
                                 $timeoutSeconds = [int](Get-PropertyValue $section 'timeoutSeconds' 60)
                                 $dispatch = Invoke-RooRoutedScript $repoRoot $scriptRelativePath $routeArgs $timeoutSeconds
                                 $envelope.routedScript = ConvertTo-RooRepoRelativePath $repoRoot $scriptRelativePath
+                                if ($null -ne $dispatch.evidence) {
+                                    $envelope.evidence = $dispatch.evidence
+                                    if ($scriptRelativePath -eq 'backend/scripts/Invoke-OptimizerRequest.ps1') {
+                                        $envelope.dryRun = [bool](Get-PropertyValue $dispatch.evidence 'dryRun' $true)
+                                    }
+                                }
 
                                 if ([bool]$dispatch.timedOut) {
                                     $envelope.status = 'failed'

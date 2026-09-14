@@ -227,6 +227,38 @@
         "nextRequiredStep": "Implement device-instance export and reinstall or restore evidence before adding a DeviceCleanup restore route."
       },
       "notes": "All actions are status-only; DeviceCleanup.exe is never launched by the router."
+    },
+    {
+      "capabilityId": "cleanup-uninstall.bulk-removal",
+      "preview": {
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "args": [
+          "-Feature",
+          "BulkUninstall",
+          "-Action",
+          "Preview"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 86400
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-OptimizerRequest.ps1",
+        "args": [
+          "-Feature",
+          "BulkUninstall",
+          "-Action",
+          "Apply",
+          "-ConfirmApply"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 86400,
+        "changedEvidencePath": "changed"
+      },
+      "restore": {
+        "statusOnly": true,
+        "reason": "Vendor removal cannot be undone by file restore",
+        "nextRequiredStep": "Reinstall the application when needed; cleanup file recovery is a separate workflow."
+      }
     }
   ]
 }

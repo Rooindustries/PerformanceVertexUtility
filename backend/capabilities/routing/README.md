@@ -18,6 +18,7 @@ The router invokes dispatch sections with `powershell -NoProfile -ExecutionPolic
 
 - `fixtureRootParam` receives the caller's `-FixtureRoot` value.
 - `disposableProbeParam` receives the caller's `-TargetProcessId` value.
+- `requestPathParam` receives the caller's `-RequestPath` JSON file. Only the declared optimizer request wrapper accepts this parameter; it validates allowed fields and dispatches a fixed backend operation.
 
 Routes that cannot dispatch use a status-only section:
 
@@ -30,3 +31,5 @@ Routes that cannot dispatch use a status-only section:
 ```
 
 Status-only sections never launch a script. Mutating `apply` and `restore` sections are dispatched only after `Invoke-RooCapability.ps1` receives `-ConfirmApply`, and the target script still keeps its own gates.
+
+CPU Set and bulk uninstall requests retain the hashes of their reviewed preview files inside the typed request. The router preserves structured backend rejection evidence, including Windows API names and error codes. See [Optimization controls](../../../docs/optimization-controls.md) for the request fields and recovery behavior.

@@ -84,6 +84,19 @@ try {
     $held=[IO.File]::Open($a.RollbackManifestPath+'.lock',[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
     try { $blocked=Read-Result (& $applyScript @a) } finally { $held.Dispose() }
     Assert ($blocked.status -eq 'failed' -and $blocked.dryRun -and (Test-Path $case.targets[0])) 'Concurrent operation lock fails before mutation'
+    $case=New-Case 'vendor-changes-content'; $a=$case.args
+    $vendorExe=Join-Path $case.root 'Roo Vendor Fixture.exe'
+    Add-Type -TypeDefinition 'using System.IO; public class RooVendorFixture {public static int Main(string[] args) {File.WriteAllText(Path.Combine(args[0],"nested","data.txt"),"changed by vendor"); File.WriteAllText(Path.Combine(args[0],"new user file.txt"),"created during removal"); return 0;}}' -OutputAssembly $vendorExe -OutputType ConsoleApplication
+    $case.official.commands[0].executable=$vendorExe
+    $case.official.commands[0].arguments=@($case.targets[0])
+    $a.AllowedOfficialExecutablePath=$vendorExe; Refresh-Hashes $case
+    $review=Read-Result (& $applyScript @a)
+    if ($review.status -ne 'cleanup-review-required' -or -not $review.summary.officialRunnerCompleted -or $review.summary.restoreReady -or $review.summary.deletedCount -ne 0) {Write-Host ($review|ConvertTo-Json -Depth 20)}
+    Assert ($review.status -eq 'cleanup-review-required' -and $review.summary.officialRunnerCompleted -and $review.summary.deletedCount -eq 0 -and -not $review.summary.restoreReady) 'Vendor removal invalidates the old cleanup approval and creates no misleading file rollback'
+    Assert ((Get-Content (Join-Path $case.targets[0] 'nested\data.txt') -Raw) -eq 'changed by vendor' -and (Test-Path (Join-Path $case.targets[0] 'new user file.txt'))) 'Changed and newly created vendor-stage files survive the earlier cleanup list'
+    Assert ($review.postUninstallReview.reviewRequired -and @($review.postUninstallReview.targets[0].entries | Where-Object {$_.path -like '*new user file.txt' -and $_.sha256}).Count -eq 1) 'A fresh post-vendor scan returns current content hashes for separate review'
+    $replay=Read-Result (& $applyScript @a)
+    Assert ($replay.executionReused -and $replay.status -eq 'cleanup-review-required' -and $replay.executionSequence.Count -eq 0) 'Replaying vendor completion neither relaunches it nor deletes leftovers'
 } finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
