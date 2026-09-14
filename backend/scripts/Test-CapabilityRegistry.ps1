@@ -199,7 +199,7 @@ if ($null -ne $registry) {
     $registryCapabilities = @(Get-PropertyValue $registry 'capabilities' @())
     Add-Check ($registryFamilies.Count -eq 4) 'Registry contains exactly 4 families' "Registry family count expected 4, found $($registryFamilies.Count)"
     Add-Check ($registryCapabilities.Count -eq $expectedCapabilities.Count) 'Registry capability count equals fragment sum' "Registry capability count $($registryCapabilities.Count) does not equal fragment sum $($expectedCapabilities.Count)"
-    Add-Check ($registryCapabilities.Count -eq 53) 'Registry capability total is exactly 56' "Registry capability total expected 56, found $($registryCapabilities.Count)"
+    Add-Check ($registryCapabilities.Count -eq 56) 'Registry capability total is exactly 56' "Registry capability total expected 56, found $($registryCapabilities.Count)"
 
     Test-IdSetMatches $expectedCapabilityIds (@($registryCapabilities | ForEach-Object { [string]$_.capabilityId })) 'Live registry'
 

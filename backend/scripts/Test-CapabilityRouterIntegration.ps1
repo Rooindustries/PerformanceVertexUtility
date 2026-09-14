@@ -273,7 +273,7 @@ $registryIds = @()
 if ($null -ne $registry) {
     $registryCapabilities = @(Get-PropertyValue $registry 'capabilities' @())
     $registryIds = @($registryCapabilities | ForEach-Object { [string](Get-PropertyValue $_ 'capabilityId' '') })
-    Add-Check ($registryIds.Count -eq 53) "capability registry exposes exactly 53 capabilityIds" "capability registry exposed $($registryIds.Count) capabilityIds"
+    Add-Check ($registryIds.Count -eq 56) "capability registry exposes exactly 56 capabilityIds" "capability registry exposed $($registryIds.Count) capabilityIds"
 }
 
 $routeRecords = New-Object System.Collections.Generic.List[object]
@@ -307,7 +307,7 @@ foreach ($manifestPath in @(Get-ChildItem -LiteralPath $routingRoot -Filter '*.r
 }
 
 $routeIds = @($routeRecords.ToArray() | ForEach-Object { [string]$_.capabilityId })
-Add-Check ($routeIds.Count -eq 53) "route manifests contain exactly 53 route records" "route manifests contain $($routeIds.Count) route records"
+Add-Check ($routeIds.Count -eq 56) "route manifests contain exactly 56 route records" "route manifests contain $($routeIds.Count) route records"
 
 if ($registryIds.Count -gt 0) {
     $registryDiff = @(Compare-Object -ReferenceObject @($registryIds | Sort-Object) -DifferenceObject @($routeIds | Sort-Object))
