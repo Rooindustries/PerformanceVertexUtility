@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Roo.OptimizationSuite.Helpers;
 using Roo.OptimizationSuite.ViewModels;
 
@@ -9,9 +10,10 @@ namespace Roo.OptimizationSuite.ViewModels;
 
 public partial class ReportsViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _subtitle = "Your tune results, side by side.";
+    [ObservableProperty] private string _subtitle = "Proof for what changed on this PC.";
     [ObservableProperty] private string _emptyNote =
-        "No saved tune yet. After your first session we save the before and after here so you can see what changed.";
+        "No saved apply or restore run yet. Run Game Tune, ProBalance guard, or Apps & Cleanup, then this page can show what changed against this baseline.";
+    [ObservableProperty] private string _baselineStatus = "Reading the current baseline.";
 
     public ObservableCollection<MetricTile> Baseline { get; } = new();
 
@@ -34,5 +36,9 @@ public partial class ReportsViewModel : PageViewModelBase
             summary.BackgroundProcessCount + " background"));
         Baseline.Add(new MetricTile("RAM Free", Format.Bytes(summary.AvailableMemoryBytes), "available now"));
         Baseline.Add(new MetricTile("RAM In Use", Format.Bytes(used), "in use now"));
+        BaselineStatus = "Baseline refreshed from live Windows counters.";
     }
+
+    [RelayCommand]
+    private Task RefreshBaselineAsync() => ReloadAsync();
 }

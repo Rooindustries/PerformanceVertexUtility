@@ -50,10 +50,10 @@ public sealed class ProcessItem
     public string ClassificationLabel => Classification switch
     {
         "gameTarget" => "GAME",
-        "protectedCompanion" => "KEEP SAFE",
+        "protectedCompanion" => "KEEP STEADY",
         "demotionCandidate" => "PUSH BACK",
         "safeCandidate" => "REVIEW",
-        "protected" => "KEEP SAFE",
+        "protected" => "KEEP STEADY",
         _ => "REVIEW",
     };
 
@@ -61,8 +61,8 @@ public sealed class ProcessItem
     {
         get
         {
-            if (Protected) return "Keep clean";
-            if (Blocked) return "Blocked";
+            if (Protected) return "Keep steady";
+            if (Blocked) return "Review first";
             if (Classification == "gameTarget") return "Give room";
             if (Classification == "demotionCandidate") return "Push back";
             return "Review";
@@ -132,8 +132,8 @@ public sealed class ProcessPreviewRow
     {
         get
         {
-            if (Protected) return "Protected";
-            if (Blocked) return "Blocked";
+            if (Protected) return "Kept steady";
+            if (Blocked) return "Review first";
             if (Classification == "gameTarget") return "Game";
             if (Classification == "demotionCandidate") return "Push back";
             return "Watch";

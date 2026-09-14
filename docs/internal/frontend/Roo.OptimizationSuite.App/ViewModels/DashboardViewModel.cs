@@ -18,13 +18,17 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private int _memoryUsedPercent;
     [ObservableProperty] private string _memoryPressureLabel = "Reading";
     [ObservableProperty] private string? _memoryPressureLine;
+    [ObservableProperty] private DashboardActionRow? _tuneAction;
+    [ObservableProperty] private DashboardActionRow? _cleanupAction;
+    [ObservableProperty] private DashboardActionRow? _driverAction;
 
     public ObservableCollection<StatusLine> SessionLines { get; } = new();
     public ObservableCollection<MetricTile> MemoryStats { get; } = new();
     public ObservableCollection<UsageLine> TopMemoryUsers { get; } = new();
+    public ObservableCollection<DashboardActionRow> Actions { get; } = new();
     public ObservableCollection<MetricTile> BackgroundStats { get; } = new();
     public ObservableCollection<UsageLine> BackgroundOffenders { get; } = new();
-    public ObservableCollection<StatusLine> ProtectedApps { get; } = new();
+    public ObservableCollection<StatusLine> CompanionStatus { get; } = new();
     public ObservableCollection<StatusLine> DriverLines { get; } = new();
     public ObservableCollection<StatusLine> SensorLines { get; } = new();
 
@@ -54,9 +58,10 @@ public partial class DashboardViewModel : PageViewModelBase
         BuildMemory(summary, usedRam, totalRam, ramGb, hardware);
         BuildTopUsers(processes);
         BuildBackground(summary, processes);
-        BuildProtected(processes);
+        BuildCompanionStatus(processes);
         BuildDriver(hardware);
         BuildSensors();
+        BuildActions(summary);
     }
 
     private void BuildVerdict(double? freeRatio, ProcessInventorySummary summary, DriverHardwareSummary? hw, int ramGb)
@@ -74,7 +79,7 @@ public partial class DashboardViewModel : PageViewModelBase
         if (!string.IsNullOrWhiteSpace(gpu)) parts.Add(gpu);
         if (ramGb > 0) parts.Add(ramGb + " GB RAM");
         parts.Add(summary.ProcessCount + " apps open, " + summary.BackgroundProcessCount + " in the background");
-        VerdictSummary = string.Join("  ·  ", parts);
+        VerdictSummary = string.Join("  /  ", parts);
     }
 
     private void BuildSession(IReadOnlyList<ProcessItem> processes)
@@ -92,7 +97,7 @@ public partial class DashboardViewModel : PageViewModelBase
             .Distinct()
             .ToList();
         SessionLines.Add(companions.Count > 0
-            ? new StatusLine("Companion apps", string.Join(" + ", companions) + " protected", "safe")
+            ? new StatusLine("Companion apps", string.Join(" + ", companions) + " kept steady", "safe")
             : new StatusLine("Companion apps", "None running", "neutral"));
 
         SessionLines.Add(new StatusLine("Session plan", "No tune applied yet", "neutral"));
@@ -110,7 +115,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
         var totalText = ramGb > 0 ? ramGb + " GB" : Format.Bytes(totalRam);
         MemoryPressureLine = Format.Bytes(s.AvailableMemoryBytes) + " free of " + totalText
-            + "  ·  Windows memory " + Format.Bytes(s.CommitUsedBytes);
+            + "  /  Windows memory " + Format.Bytes(s.CommitUsedBytes);
     }
 
     private void BuildTopUsers(IReadOnlyList<ProcessItem> processes)
@@ -150,22 +155,57 @@ public partial class DashboardViewModel : PageViewModelBase
         }
     }
 
-    private void BuildProtected(IReadOnlyList<ProcessItem> processes)
+    private void BuildActions(ProcessInventorySummary summary)
     {
-        ProtectedApps.Clear();
+        Actions.Clear();
+
+        var tuneDetail = MemoryUsedPercent >= 70
+            ? "RAM is tight. Check what Roo Industries would quiet before you queue."
+            : "See what Roo Industries would quiet before you queue.";
+        TuneAction = new DashboardActionRow(
+            "Check the session tune",
+            tuneDetail,
+            "Open Game Tune",
+            "profiles",
+            VerdictLevel);
+        Actions.Add(TuneAction);
+
+        var cleanupDetail = summary.BackgroundProcessCount >= 100
+            ? summary.BackgroundProcessCount.ToString(CultureInfo.InvariantCulture) + " background apps are live. Pick one and build the removal plan."
+            : "Check the path, scan leftovers, then build the removal plan.";
+        CleanupAction = new DashboardActionRow(
+            "Review an app cleanup",
+            cleanupDetail,
+            "Open Cleanup",
+            "uninstall",
+            "low");
+        Actions.Add(CleanupAction);
+
+        DriverAction = new DashboardActionRow(
+            "Check drivers and GPU",
+            "Read this PC first. Driver changes stay manual until you approve them.",
+            "Open Drivers",
+            "drivers",
+            "neutral");
+        Actions.Add(DriverAction);
+    }
+
+    private void BuildCompanionStatus(IReadOnlyList<ProcessItem> processes)
+    {
+        CompanionStatus.Clear();
         var present = processes.Where(p => p.Protection == "protected").Select(p => p.Category).ToHashSet();
 
         foreach (var category in new[] { "voiceChat", "captureStreaming", "audioInput", "network", "security" })
         {
             if (present.Contains(category))
             {
-                ProtectedApps.Add(new StatusLine(Naming.CategoryLabel(category), "Kept safe", "protected"));
+                CompanionStatus.Add(new StatusLine(Naming.CategoryLabel(category), "Kept steady", "safe"));
             }
         }
 
-        if (ProtectedApps.Count == 0)
+        if (CompanionStatus.Count == 0)
         {
-            ProtectedApps.Add(new StatusLine("Voice, audio, network, security", "Kept safe", "protected"));
+            CompanionStatus.Add(new StatusLine("Voice, audio, network, security", "Ready to keep steady", "safe"));
         }
     }
 
@@ -195,7 +235,7 @@ public partial class DashboardViewModel : PageViewModelBase
             var gpuText = CleanDevice(gpu.Name);
             if (!string.IsNullOrWhiteSpace(gpu.DriverVersion))
             {
-                gpuText += "  ·  Driver " + gpu.DriverVersion;
+                gpuText += "  /  Driver " + gpu.DriverVersion;
             }
             DriverLines.Add(new StatusLine("Graphics", gpuText ?? "Unknown", "neutral"));
         }

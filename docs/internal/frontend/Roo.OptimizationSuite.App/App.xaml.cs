@@ -88,6 +88,16 @@ public partial class App : Application
         ApplyAccentResourceOverrides();
         MainWindow = new MainWindow();
         MainWindow.Activate();
+        if (MainWindow.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+        {
+            try
+            {
+                presenter.Maximize();
+            }
+            catch
+            {
+            }
+        }
     }
 
     public static void RecreateMainWindow(string navTag, bool onSettings)
@@ -118,6 +128,8 @@ public partial class App : Application
             }
         }
 
+        next.Activate();
+
         if (wasMaximized && next.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter nextPresenter)
         {
             try
@@ -129,7 +141,6 @@ public partial class App : Application
             }
         }
 
-        next.Activate();
         previous?.Close();
     }
 

@@ -31,7 +31,7 @@ public partial class SettingsViewModel : PageViewModelBase
         var product = await Data.GetProductStatusAsync();
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
         VersionText = "Version " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
-        EngineStatus = ReadyLabel(product.Status) + "  ·  Engine " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
+        EngineStatus = ReadyLabel(product.Status) + " / Engine " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
         BuildSafetyRows(product.Safety);
         BuildEngineRows(product.WorkflowReadiness);
     }
@@ -56,20 +56,20 @@ public partial class SettingsViewModel : PageViewModelBase
         var label = (workflow.WorkflowId ?? string.Empty) switch
         {
             "performanceProfiles" => "Game Tune",
-            "processGovernor" => "Background governor",
-            "persistentProcessPolicy" => "Process policy",
-            "uninstallCleanup" => "Clean Junk",
-            "driversProfiles" => "Drivers & hardware",
+            "processGovernor" => "ProBalance guard",
+            "persistentProcessPolicy" => "Process rules",
+            "uninstallCleanup" => "Apps & Cleanup",
+            "driversProfiles" => "Drivers & GPU",
             _ => string.IsNullOrWhiteSpace(workflow.Name) ? "Workflow" : workflow.Name!,
         };
 
         var (value, state) = (workflow.ImplementationStatus ?? string.Empty) switch
         {
-            "preview-dry-run-confirmed-process-controls-and-live-restore" => ("Preview, apply, and live restore", "safe"),
-            "bounded-session-preview-confirmed-restraint-status-and-restore" => ("Session preview and restore", "safe"),
-            "bounded-session-preview-confirmed-launch-watcher-status-and-restore" => ("Session preview and restore", "safe"),
-            "sample-and-read-only-inventory" => ("Read-only preview", "low"),
-            "sample-and-read-only-hardware-inventory" => ("Read-only hardware read", "low"),
+            "preview-dry-run-confirmed-process-controls-and-live-restore" => ("Check, apply, restore", "safe"),
+            "bounded-session-preview-confirmed-restraint-status-and-restore" => ("Start, watch, restore", "safe"),
+            "bounded-session-preview-confirmed-launch-watcher-status-and-restore" => ("Launch watch and restore", "safe"),
+            "sample-and-read-only-inventory" => ("Path, scan, approve", "safe"),
+            "sample-and-read-only-hardware-inventory" => ("Hardware gate and profile check", "safe"),
             _ => ("In development", "low"),
         };
 
@@ -78,7 +78,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
     private static string ReadyLabel(string? status) => (status ?? string.Empty) switch
     {
-        "preview-ready" => "Preview ready",
+        "preview-ready" => "Action paths ready",
         "ready" => "Ready",
         "" => "Status unavailable",
         _ => status!,
@@ -92,13 +92,13 @@ public partial class SettingsViewModel : PageViewModelBase
             return;
         }
 
-        SafetyRows.Add(new SafetyRow("Default mode", "Review first", "protected"));
-        SafetyRows.Add(new SafetyRow("Ask before changes", safety.RequiresExplicitConfirmation ? "On" : "Off", safety.RequiresExplicitConfirmation ? "protected" : "high"));
-        SafetyRows.Add(new SafetyRow("Back up before changes", safety.BackupRequiredBeforeApply ? "On" : "Off", safety.BackupRequiredBeforeApply ? "protected" : "high"));
+        SafetyRows.Add(new SafetyRow("Default mode", "Review first", "safe"));
+        SafetyRows.Add(new SafetyRow("Ask before changes", safety.RequiresExplicitConfirmation ? "On" : "Off", safety.RequiresExplicitConfirmation ? "safe" : "high"));
+        SafetyRows.Add(new SafetyRow("Back up before changes", safety.BackupRequiredBeforeApply ? "On" : "Off", safety.BackupRequiredBeforeApply ? "safe" : "high"));
         SafetyRows.Add(new SafetyRow("One-click undo", safety.RollbackVisible ? "On" : "Off", safety.RollbackVisible ? "safe" : "medium"));
         SafetyRows.Add(new SafetyRow("Remote scripts", safety.RemoteScriptExecutionAllowed ? "Allowed" : "Blocked", safety.RemoteScriptExecutionAllowed ? "high" : "safe"));
         SafetyRows.Add(new SafetyRow("Automatic driver changes", safety.DriverAutomationAllowed ? "Allowed" : "Blocked", safety.DriverAutomationAllowed ? "high" : "safe"));
-        SafetyRows.Add(new SafetyRow("Leftover removal", safety.LeftoverDeletionAllowedByDefault ? "On" : "Off by default", safety.LeftoverDeletionAllowedByDefault ? "high" : "safe"));
+        SafetyRows.Add(new SafetyRow("Leftover removal", safety.LeftoverDeletionAllowedByDefault ? "On" : "Approve first", safety.LeftoverDeletionAllowedByDefault ? "high" : "safe"));
     }
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);

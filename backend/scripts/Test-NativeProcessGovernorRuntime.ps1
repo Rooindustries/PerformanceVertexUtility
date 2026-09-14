@@ -346,12 +346,12 @@ try {
         Add-Failure 'Native dry-run preview did not prove no-apply behavior or did not propose all native controls for disposable busy probe'
     }
     if ($previewProtected.blocked -eq $true -and ($previewProtected.reasonCodes -contains 'NATIVE_VALIDATION_PROTECTED_PROBE') -and ($previewProtected.reasonCodes -contains 'FOREGROUND_PROCESS_EXCLUDED') -and $beforeProtected.priorityClass -eq (Get-RooProcessControlState $protectedProbe.Id $null).priorityClass) {
-        Add-Pass "Native protected foreground probe skipped with reason codes: $($previewProtected.reasonCodes -join ',')"
+        Add-Pass "Native manual-review foreground probe skipped with reason codes: $($previewProtected.reasonCodes -join ',')"
     } else {
-        Add-Failure 'Native protected foreground probe was not skipped with protected and foreground proof'
+        Add-Failure 'Native manual-review foreground probe was not skipped with review and foreground proof'
     }
     if ($previewObs.blocked -eq $true -and ($previewObs.reasonCodes -contains 'GAME_OBS_DISCORD_PROTECTED') -and $previewDiscord.blocked -eq $true -and ($previewDiscord.reasonCodes -contains 'GAME_OBS_DISCORD_PROTECTED') -and $previewGame.blocked -eq $true -and ($previewGame.reasonCodes -contains 'GAME_OBS_DISCORD_PROTECTED')) {
-        Add-Pass 'Managed csc worker protected OBS, Discord, and foreground-game category probes'
+        Add-Pass 'Managed csc worker left OBS, Discord, and foreground-game category probes alone'
     } else {
         Add-Failure 'Managed csc worker did not protect OBS, Discord, and foreground-game category probes'
     }

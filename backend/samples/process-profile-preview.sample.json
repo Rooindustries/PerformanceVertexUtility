@@ -171,13 +171,13 @@
       "proposedPriorityClass": "Normal",
       "proposedAction": "noChange",
       "ruleId": "protected",
-      "reason": "Samsung cross-device features stay protected by default.",
+      "reason": "Samsung cross-device features stay steady by default.",
       "reasonCodes": [
         "SAMSUNG_CONTINUITY_PROTECTED"
       ],
       "classification": "protected",
       "blocked": true,
-      "blockedReason": "Samsung cross-device features stay protected by default.",
+      "blockedReason": "Samsung cross-device features stay steady by default.",
       "risk": "protected",
       "confidence": "high",
       "protected": true,
@@ -193,7 +193,7 @@
       "proposedState": {
         "action": "noChange",
         "priorityClass": "Normal",
-        "reason": "Samsung cross-device features stay protected by default."
+        "reason": "Samsung cross-device features stay steady by default."
       },
       "impact": {
         "expectedMemoryEffectBytes": 0,

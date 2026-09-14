@@ -34,14 +34,15 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+        <ScrollViewer x:Name="ReportsScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel x:Name="ReportsContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
@@ -54,12 +55,21 @@
                                 <TextBlock Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshBaselineCommand}"
+                                    AutomationProperties.Name="Refresh baseline" Padding="12,7" />
+                            <Button Content="Game Tune" Click="OpenGameTune_Click"
+                                    AutomationProperties.Name="Open Game Tune"
+                                    Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}" Padding="12,7" />
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="RIGHT NOW (YOUR BASELINE)" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.BaselineStatus, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                   TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Baseline}" ItemTemplate="{StaticResource BaselineTileTemplate}">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout MinItemWidth="170" MinColumnSpacing="8" MinRowSpacing="16" ItemsStretch="Fill" />
@@ -75,6 +85,12 @@
                             <FontIcon Glyph="&#xE9D9;" FontSize="26" Foreground="{StaticResource RooTextMutedBrush}" HorizontalAlignment="Center" />
                             <TextBlock Text="{x:Bind ViewModel.EmptyNote, Mode=OneWay}" TextWrapping="Wrap" TextAlignment="Center"
                                        MaxWidth="520" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                                <Button Content="Open Game Tune" Click="OpenGameTune_Click"
+                                        AutomationProperties.Name="Open Game Tune from reports" Padding="12,7" />
+                                <Button Content="Open Cleanup" Click="OpenCleanup_Click"
+                                        AutomationProperties.Name="Open Apps and Cleanup from reports" Padding="12,7" />
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>

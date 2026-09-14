@@ -56,9 +56,9 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+        <ScrollViewer x:Name="MonitoringScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="18" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel x:Name="MonitoringContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="20">
@@ -77,6 +77,61 @@
                             </StackPanel>
                         </Grid>
                     </Grid>
+                </Border>
+
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="STUTTER FIXES" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="5">
+                                <TextBlock Text="{x:Bind ViewModel.StutterActionTitle, Mode=OneWay}" FontSize="15" LineHeight="21"
+                                           FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.StutterActionDetail, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            </StackPanel>
+                            <ProgressRing Grid.Column="1" Width="20" Height="20" IsActive="{x:Bind ViewModel.StutterBusy, Mode=OneWay}"
+                                          VerticalAlignment="Center" />
+                        </Grid>
+                        <StackPanel Spacing="4">
+                            <CheckBox Content="Approve short timer run"
+                                      IsChecked="{x:Bind ViewModel.LatencySessionApproved, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind ViewModel.CanRunStutterAction, Mode=OneWay}"
+                                      Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            <CheckBox Content="Approve shader-cache cleanup"
+                                      IsChecked="{x:Bind ViewModel.ShaderCacheApproved, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind ViewModel.CanRunStutterAction, Mode=OneWay}"
+                                      Foreground="{StaticResource RooTextSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.StutterGateSummary, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                       TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.ShaderRestoreHint, Mode=OneWay}" FontSize="12" LineHeight="17"
+                                       TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Check" Command="{x:Bind ViewModel.CheckStutterPlanCommand}"
+                                    AutomationProperties.Name="Check stutter fixes"
+                                    IsEnabled="{x:Bind ViewModel.CanRunStutterAction, Mode=OneWay}" Padding="12,7" />
+                            <Button Grid.Column="1" Content="Run timer" Command="{x:Bind ViewModel.RunTimerSessionCommand}"
+                                    AutomationProperties.Name="Run timer session"
+                                    IsEnabled="{x:Bind ViewModel.CanRunTimerSession, Mode=OneWay}"
+                                    Background="{StaticResource RooNavCtaBrush}" Foreground="{StaticResource RooOnCtaBrush}" Padding="12,7" />
+                            <Button Grid.Column="2" Content="Check cache" Command="{x:Bind ViewModel.PrepareShaderCacheCommand}"
+                                    AutomationProperties.Name="Check shader cache cleanup"
+                                    IsEnabled="{x:Bind ViewModel.CanPrepareShaderCache, Mode=OneWay}" Padding="12,7" />
+                            <Button Grid.Column="3" Content="Restore" Command="{x:Bind ViewModel.RestoreShaderCacheCommand}"
+                                    AutomationProperties.Name="Restore shader cache"
+                                    IsEnabled="{x:Bind ViewModel.CanRestoreShaderCache, Mode=OneWay}" Padding="12,7" />
+                        </Grid>
+                    </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
@@ -103,7 +158,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MaxWidth="560" HorizontalAlignment="Left">
+                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="10">
                         <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooTextMutedBrush}" />
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Sensors}" ItemTemplate="{StaticResource SensorTemplate}" />

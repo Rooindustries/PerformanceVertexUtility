@@ -52,10 +52,10 @@ function Get-OfficialCommandPreview {
     $protected = [bool](Get-RooUninstallPropertyValue $Classification 'protected' $false)
     $warnings = New-Object System.Collections.Generic.List[object]
     if ($blocked) {
-        $warnings.Add((New-RooUninstallIssue 'PROTECTED_APP_BLOCKED' 'Official uninstall preview is blocked by protected app policy.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $true 'Do not include this app in bulk uninstall unless a future policy explicitly allows it.' $null)) | Out-Null
+        $warnings.Add((New-RooUninstallIssue 'REMOVAL_REVIEW_REQUIRED' 'This app route needs review before it can run.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $true 'Review the exact app, route, and cleanup list before applying anything.' $null)) | Out-Null
     }
     if ([string]::IsNullOrWhiteSpace([string]$rawCommand)) {
-        $warnings.Add((New-RooUninstallIssue 'NO_OFFICIAL_UNINSTALL_COMMAND' 'No official uninstall command was found in inventory metadata.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $true 'Use installed app settings or vendor documentation for this app.' $null)) | Out-Null
+        $warnings.Add((New-RooUninstallIssue 'ROO_INDUSTRIES_ROUTE_REQUIRED' 'The app did not publish its own removal command. Roo Industries can still build the run from app traces and leftovers.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $false 'Scan leftovers and build the Roo Industries removal run before applying anything.' $null)) | Out-Null
     }
 
     return [pscustomobject]@{
@@ -123,9 +123,9 @@ try {
             executionAllowedCount = 0
             willRunUninstallers = $false
         }
-        warnings = @((New-RooUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_ONLY' 'Official uninstall command metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Use this output for review before any uninstall command is allowed.' $null))
+        warnings = @((New-RooUninstallIssue 'REMOVAL_PATH_PREVIEW_ONLY' 'Removal path metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Review the path, scan leftovers, and build the Roo Industries removal plan before apply.' $null))
         errors = @($errors.ToArray())
-        logs = @((New-RooUninstallLog 'Official uninstall command preview completed without command execution.'))
+        logs = @((New-RooUninstallLog 'Removal path preview completed without command execution.'))
     }
     Write-RooUninstallJsonOutput $result $OutputPath
     if ($errors.Count -gt 0 -and $commands.Count -eq 0) { exit 1 }
@@ -141,7 +141,7 @@ try {
         summary = [pscustomobject]@{ requestedCount = @($AppId).Count; commandPreviewCount = 0; executionAllowedCount = 0; willRunUninstallers = $false }
         warnings = @()
         errors = @((New-RooUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_FAILED' $_.Exception.Message 'error' 'apps.officialUninstall' $null $true 'Check selected app ids and inventory path.' $null))
-        logs = @((New-RooUninstallLog 'Official uninstall command preview failed.' 'error'))
+        logs = @((New-RooUninstallLog 'Removal path preview failed.' 'error'))
     }
     Write-RooUninstallJsonOutput $result $OutputPath
     exit 1

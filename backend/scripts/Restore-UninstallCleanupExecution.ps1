@@ -2,7 +2,9 @@ param(
     [string]$RollbackManifestPath,
     [string]$OutputPath = '',
     [switch]$ConfirmApply,
-    [switch]$AllowDisposableFixtureApply
+    [switch]$AllowDisposableFixtureApply,
+    [switch]$AllowRealSystemExecution,
+    [switch]$UserApproved
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,15 +54,27 @@ try {
     $manifestPath = Resolve-RooUninstallPath $RollbackManifestPath $RollbackManifestPath
     $manifest = Read-RooUninstallJsonFile $manifestPath
     $fixtureRoot = [string](Get-RooUninstallPropertyValue $manifest 'fixtureRoot' '')
+    $realSystemRollback = [bool](Get-RooUninstallPropertyValue $manifest 'realSystemRollback' $false)
     $fixtureRootInTemp = Test-CleanupRestorePathInsideTemp $fixtureRoot
     $backups = @(Get-RooUninstallPropertyArray $manifest 'fileBackups')
     $escapedTargets = @($backups | Where-Object { -not (Test-CleanupRestorePathInsideRoot ([string](Get-RooUninstallPropertyValue $_ 'source' '')) $fixtureRoot) })
-    $gates = @(
-        (New-CleanupRestoreGate 'confirm-restore' 'Confirmed restore requested' $true ([bool]$ConfirmApply) 'Restore remains preview-only until -ConfirmApply is supplied.' $null),
-        (New-CleanupRestoreGate 'disposable-fixture-flag' 'Disposable fixture restore allowed' $true ([bool]$AllowDisposableFixtureApply) 'Cleanup restore is allowed only for disposable temp fixtures.' $null),
-        (New-CleanupRestoreGate 'fixture-root-temp' 'Fixture root is inside temp' $true $fixtureRootInTemp 'Fixture restore root must be under the OS temp path.' ([pscustomobject]@{ fixtureRoot = $fixtureRoot })),
-        (New-CleanupRestoreGate 'restore-targets-inside-fixture' 'Restore targets stay inside fixture root' $true ($escapedTargets.Count -eq 0) 'Every restore target must resolve inside the disposable fixture root.' ([pscustomobject]@{ escapedTargetCount = $escapedTargets.Count }))
-    )
+    $missingBackups = @($backups | Where-Object { -not (Test-Path -LiteralPath ([string](Get-RooUninstallPropertyValue $_ 'backupPath' ''))) })
+    if ($realSystemRollback) {
+        $gates = @(
+            (New-CleanupRestoreGate 'confirm-restore' 'Confirmed restore requested' $true ([bool]$ConfirmApply) 'Restore remains preview-only until -ConfirmApply is supplied.' $null),
+            (New-CleanupRestoreGate 'real-system-restore-flag' 'Real-system restore allowed' $true ([bool]$AllowRealSystemExecution) 'Restoring real cleanup targets requires the real-system restore flag.' $null),
+            (New-CleanupRestoreGate 'explicit-user-approval' 'Explicit restore approval captured' $true ([bool]$UserApproved) 'Restoring real cleanup targets requires explicit user approval.' $null),
+            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count }))
+        )
+    } else {
+        $gates = @(
+            (New-CleanupRestoreGate 'confirm-restore' 'Confirmed restore requested' $true ([bool]$ConfirmApply) 'Restore remains preview-only until -ConfirmApply is supplied.' $null),
+            (New-CleanupRestoreGate 'disposable-fixture-flag' 'Disposable fixture restore allowed' $true ([bool]$AllowDisposableFixtureApply) 'Cleanup restore is allowed only for disposable temp fixtures.' $null),
+            (New-CleanupRestoreGate 'fixture-root-temp' 'Fixture root is inside temp' $true $fixtureRootInTemp 'Fixture restore root must be under the OS temp path.' ([pscustomobject]@{ fixtureRoot = $fixtureRoot })),
+            (New-CleanupRestoreGate 'restore-targets-inside-fixture' 'Restore targets stay inside fixture root' $true ($escapedTargets.Count -eq 0) 'Every restore target must resolve inside the disposable fixture root.' ([pscustomobject]@{ escapedTargetCount = $escapedTargets.Count })),
+            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count }))
+        )
+    }
     $blockingGateCount = @($gates | Where-Object { $_.blocking }).Count
     $canRestore = ($blockingGateCount -eq 0)
     $restored = New-Object System.Collections.Generic.List[object]
@@ -70,7 +84,7 @@ try {
             $source = [string](Get-RooUninstallPropertyValue $backup 'backupPath' '')
             $target = [string](Get-RooUninstallPropertyValue $backup 'source' '')
             $type = [string](Get-RooUninstallPropertyValue $backup 'type' '')
-            if (-not (Test-CleanupRestorePathInsideRoot $target $fixtureRoot)) { throw "Restore target escaped fixture root: $target" }
+            if ((-not $realSystemRollback) -and -not (Test-CleanupRestorePathInsideRoot $target $fixtureRoot)) { throw "Restore target escaped fixture root: $target" }
             Ensure-RooUninstallDirectory (Split-Path $target -Parent)
             if ($type -eq 'folder') {
                 Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
@@ -94,7 +108,7 @@ try {
         capturedAtUtc = Get-RooUninstallUtcStamp
         dryRun = (-not $canRestore)
         status = if ($canRestore) { 'success' } elseif ($ConfirmApply) { 'blocked' } else { 'preview' }
-        executionMode = if ($canRestore) { 'disposable-fixture-restore' } else { 'preview-or-blocked' }
+        executionMode = if ($canRestore -and $realSystemRollback) { 'real-system-restore' } elseif ($canRestore) { 'disposable-fixture-restore' } else { 'preview-or-blocked' }
         rollbackManifestPath = $manifestPath
         gates = @($gates)
         restoredItems = @($restored.ToArray())
@@ -102,10 +116,10 @@ try {
             restoredCount = $restored.Count
             blockingGateCount = $blockingGateCount
             willRestoreFixtureFiles = $canRestore
-            willChangeRealSystem = $false
+            willChangeRealSystem = ($canRestore -and $realSystemRollback)
             willWriteState = $false
         }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_RESTORE_FIXTURE_ONLY' 'Cleanup restore is limited to disposable temp fixtures.' 'warning' 'apps.restoreUninstallCleanupExecution' (Get-RooUninstallPropertyValue $manifest 'sourceManifestId' $null) $true 'Use this restore path to validate rollback manifests for copied files and folders.' $null))
+        warnings = @((New-RooUninstallIssue 'CLEANUP_RESTORE_CONTROLLED' 'Cleanup restore is gated by rollback manifest, backup presence, and approval.' 'warning' 'apps.restoreUninstallCleanupExecution' (Get-RooUninstallPropertyValue $manifest 'sourceManifestId' $null) (-not $canRestore) 'Use restore only for reviewed rollback manifests.' $null))
         errors = @()
         logs = @((New-RooUninstallLog 'Uninstall cleanup fixture restore evaluated.'))
     }

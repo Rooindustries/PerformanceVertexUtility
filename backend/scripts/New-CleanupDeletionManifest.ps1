@@ -71,7 +71,7 @@ try {
             $excluded.Add([pscustomobject]@{
                 itemId = [string](Get-RooUninstallPropertyValue $item 'itemId' '')
                 target = [string](Get-RooUninstallPropertyValue $item 'target' '')
-                reason = if ([bool](Get-RooUninstallPropertyValue $item 'protected' $false)) { 'Protected shared runtime. Leave it alone.' } else { 'Left out until you approve the cleanup.' }
+                reason = if ([bool](Get-RooUninstallPropertyValue $item 'protected' $false)) { 'Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup.' } else { 'Left out until you approve the cleanup.' }
             }) | Out-Null
         }
     }

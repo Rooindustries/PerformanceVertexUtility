@@ -56,7 +56,7 @@ $networkItems = @($networkAdapters | ForEach-Object {
         pnpDeviceId = $_.PNPDeviceID
         driverVersion = $null
         protected = [bool]$protected
-        reason = if ($protected) { 'Network adapters and VPN interfaces are protected by default' } else { $null }
+        reason = if ($protected) { 'Network adapters and VPN interfaces require manual review by default' } else { $null }
     }
 })
 
@@ -113,4 +113,3 @@ $driverItems = @($drivers | ForEach-Object {
     networkAdapters = $networkItems
     installedDrivers = $driverItems
 } | ConvertTo-Json -Depth 8
-

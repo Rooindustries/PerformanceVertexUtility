@@ -293,7 +293,7 @@ function Get-RooDerivedAppType {
     if ($text -match 'easy anti-cheat|easyanticheat|battleye|battl[e]?eye|vanguard|faceit') { return 'anti-cheat' }
     if ($text -match 'defender|security|firewall|tailscale|wireguard|openvpn|zerotier|vpn|network driver|wi-fi driver|ethernet driver') { return 'security-network-component' }
     if ($text -match 'webview2|microsoft store|gaming services|xbox|windows app runtime|vclibs|ui\.xaml') { return 'store-webview2' }
-    if ($sourceType -eq 'appx' -and $publisher -match 'Microsoft') { return 'protected-windows-component' }
+    if ($sourceType -eq 'appx' -and $publisher -match 'Microsoft') { return 'windows-component' }
     if ($text -match 'visual c\+\+|redistributable|microsoft \.net|\.net runtime|asp\.net|windows desktop runtime|directx|\bruntime\b') { return 'shared-runtime' }
     if ($text -match 'driver.*support assistant|support assistant|updater|update-helper') { return 'vendor-tool' }
     if ($text -match 'graphics driver|display driver|audio driver|bluetooth driver|chipset driver|realtek|nvidia.*driver|amd.*driver|intel.*driver') { return 'driver' }
@@ -311,6 +311,7 @@ function Get-RooAppTypeRank {
         'launcher' { return 1 }
         'overlay' { return 1 }
         'vendor-tool' { return 1 }
+        'windows-component' { return 2 }
         'protected-windows-component' { return 2 }
         'shared-runtime' { return 3 }
         'driver' { return 3 }
@@ -330,7 +331,7 @@ function Get-RooRiskRank {
         'medium' { return 2 }
         'high' { return 3 }
         'advanced' { return 4 }
-        'protected' { return 5 }
+        'protected' { return 4 }
         default { return 2 }
     }
 }
@@ -354,7 +355,8 @@ function Get-RooAppClassification {
     $protectedMatches = @(Get-RooProtectedAppMatches $App $ProtectedCatalog)
     $risk = [string](Get-RooUninstallPropertyValue $App 'risk' 'low')
     if ([string]::IsNullOrWhiteSpace($risk)) { $risk = 'low' }
-    $protected = [bool](Get-RooUninstallPropertyValue $App 'protected' $false)
+    $reviewRequired = [bool](Get-RooUninstallPropertyValue $App 'protected' $false)
+    $protected = $false
     $blockByDefault = $false
     $reasonCodes = New-Object System.Collections.Generic.List[string]
     $reasons = New-Object System.Collections.Generic.List[string]
@@ -366,27 +368,28 @@ function Get-RooAppClassification {
     }
 
     foreach ($match in $protectedMatches) {
-        $protected = $true
-        $blockByDefault = $true
-        $risk = Select-RooHigherRisk $risk ([string](Get-RooUninstallPropertyValue $match 'risk' 'protected'))
+        $reviewRequired = $true
+        $matchRisk = [string](Get-RooUninstallPropertyValue $match 'risk' 'advanced')
+        if ($matchRisk -eq 'protected') { $matchRisk = 'advanced' }
+        $risk = Select-RooHigherRisk $risk $matchRisk
         $matchedRuleIds.Add([string](Get-RooUninstallPropertyValue $match 'itemId' '')) | Out-Null
-        $reasons.Add([string](Get-RooUninstallPropertyValue $match 'reason' 'Protected by uninstall catalog.')) | Out-Null
+        $reasons.Add([string](Get-RooUninstallPropertyValue $match 'reason' 'Manual review required by uninstall catalog.')) | Out-Null
         $matchedAppType = [string](Get-RooUninstallPropertyValue $match 'appType' $appType)
         if ((Get-RooAppTypeRank $matchedAppType) -ge (Get-RooAppTypeRank $appType)) {
             $appType = $matchedAppType
         }
     }
 
-    if ($protected -and [bool](Get-RooUninstallPropertyValue $Policy 'blockProtectedAppsByDefault' $true)) {
-        $blockByDefault = $true
-        $recommendedAction = 'Blocked by preview policy. Keep protected components out of the bulk uninstall queue.'
+    if ($reviewRequired) {
+        if ($risk -eq 'protected') { $risk = 'advanced' }
+        $recommendedAction = 'Needs manual review before apply. Queue preview can still show the route and cleanup list.'
     }
 
     if ($protectedMatches.Count -gt 0) {
-        $reasonCodes.Add('PROTECTED_CATALOG_MATCH') | Out-Null
+        $reasonCodes.Add('MANUAL_REVIEW_CATALOG_MATCH') | Out-Null
     }
-    if ($protected -and $reasonCodes.Count -eq 0) {
-        $reasonCodes.Add('INVENTORY_PROTECTED') | Out-Null
+    if ($reviewRequired -and $reasonCodes.Count -eq 0) {
+        $reasonCodes.Add('INVENTORY_REVIEW_REQUIRED') | Out-Null
     }
     if ($reasonCodes.Count -eq 0) {
         $reasonCodes.Add('APP_CLASSIFIED') | Out-Null
@@ -401,7 +404,7 @@ function Get-RooAppClassification {
         categories = @(Get-RooUninstallPropertyArray $App 'categories')
         primaryClassification = $appType
         risk = $risk
-        protected = $protected
+        protected = $false
         blockByDefault = $blockByDefault
         matchedProtectedRuleIds = @($matchedRuleIds.ToArray() | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
         reasonCodes = @($reasonCodes.ToArray() | Select-Object -Unique)
@@ -409,7 +412,7 @@ function Get-RooAppClassification {
         recommendedAction = $recommendedAction
         uninstallSafety = [pscustomobject]@{
             officialUninstallPreviewOnly = $true
-            queueAllowedByDefault = (-not $blockByDefault)
+            queueAllowedByDefault = $true
             leftoverDeletionPreviewOnly = $true
             confirmedExecutionEnabled = $false
         }

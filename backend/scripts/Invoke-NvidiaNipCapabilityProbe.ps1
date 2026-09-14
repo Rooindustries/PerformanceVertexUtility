@@ -22,6 +22,7 @@ function Test-NvidiaProbePathInsideTemp {
 
 function Get-NvidiaFileVersionEvidence {
     param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     $item = Get-Item -LiteralPath $Path
     return [pscustomobject]@{

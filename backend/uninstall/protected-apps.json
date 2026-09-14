@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "productName": "Roo Industries Optimization Suite",
-  "catalogId": "protected-apps",
-  "name": "Protected Uninstall App Catalog",
-  "description": "Applications and dependency classes blocked or manual-gated by uninstall and cleanup preview workflows.",
+  "catalogId": "manual-review-apps",
+  "name": "Uninstall Manual Review Catalog",
+  "description": "Applications and dependency classes that need manual review in uninstall and cleanup workflows.",
   "defaultPolicy": {
-    "blockProtectedAppsByDefault": true,
+    "blockProtectedAppsByDefault": false,
     "allowProtectedOverrideInPreview": false,
     "previewOnly": true
   },
@@ -35,11 +35,11 @@
       },
       "reason": "Shared runtimes are used by games, launchers, OBS plugins, Discord, and desktop apps.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "runtime",
         "dependency",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
@@ -77,12 +77,12 @@
       },
       "reason": "Store, Xbox, Gaming Services, and WebView2 packages can be shared Windows app dependencies.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "store",
         "webview2",
         "windows-app-dependency",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
@@ -117,14 +117,14 @@
           "vpn"
         ]
       },
-      "reason": "Security, firewall, VPN, Wi-Fi, and network components are protected for connectivity and safety.",
+      "reason": "Security, firewall, VPN, Wi-Fi, and network components need manual review so connectivity is not broken.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "security",
         "network",
         "vpn",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
@@ -164,11 +164,11 @@
       },
       "reason": "Driver package removal belongs in a separate driver workflow with restore and manual gates.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "driver",
         "hardware",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
@@ -199,11 +199,11 @@
       },
       "reason": "Anti-cheat components can affect installed games and require explicit game-aware validation.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "anti-cheat",
         "game-integrity",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
@@ -230,21 +230,21 @@
           "target-scenario"
         ]
       },
-      "reason": "OBS and Discord are protected for the Overwatch streaming target scenario.",
+      "reason": "OBS and Discord are part of the active streaming setup and need manual review before removal.",
       "defaultAction": "block",
-      "risk": "protected",
+      "risk": "advanced",
       "tags": [
         "obs",
         "discord",
         "target-scenario",
-        "do-not-uninstall"
+        "manual-review"
       ]
     },
     {
-      "itemId": "protected-windows-components",
+      "itemId": "windows-components-manual-review",
       "type": "application",
-      "appType": "protected-windows-component",
-      "name": "Protected Windows components",
+      "appType": "windows-component",
+      "name": "Windows components requiring review",
       "matchType": "pattern",
       "match": {
         "displayNamePatterns": [
@@ -267,13 +267,13 @@
           "store-app"
         ]
       },
-      "reason": "Windows components are blocked from bulk uninstall until a dedicated repair/removal flow exists.",
-      "defaultAction": "block",
-      "risk": "protected",
+      "reason": "Windows components need manual review and a rollback plan before removal.",
+      "defaultAction": "review",
+      "risk": "advanced",
       "tags": [
         "windows",
         "component",
-        "do-not-uninstall"
+        "manual-review"
       ]
     }
   ]

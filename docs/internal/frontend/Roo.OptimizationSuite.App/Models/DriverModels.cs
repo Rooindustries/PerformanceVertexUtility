@@ -109,6 +109,14 @@ public sealed class NvidiaProfileEntry
     public string? Notes { get; set; }
 
     public string GameTagsText => GameTags is { Count: > 0 } tags ? string.Join(" / ", tags) : "-";
+    public string StatusText => Status switch
+    {
+        "seed-profile" => "Ready to review",
+        "draft" => "Draft",
+        "approved" => "Approved",
+        "blocked" => "Locked",
+        _ => string.IsNullOrWhiteSpace(Status) ? "Ready to review" : Status
+    };
 }
 
 public sealed class NvidiaProfilePolicy

@@ -55,7 +55,7 @@
     {
       "itemId": "runtime:vc-redist",
       "target": "HKLM\\Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-      "reason": "Protected shared runtime. Leave it alone."
+      "reason": "Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup."
     }
   ],
   "rollback": {

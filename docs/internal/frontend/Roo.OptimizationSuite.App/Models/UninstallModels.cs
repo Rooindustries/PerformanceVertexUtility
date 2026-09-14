@@ -69,6 +69,8 @@ public sealed class InstalledApp
 
     public string FriendlyName => NormalizeName(DisplayName);
 
+    public override string ToString() => FriendlyName;
+
     public bool IsListable => !string.IsNullOrWhiteSpace(DisplayName) && !IsRawEntry(DisplayName!);
 
     public string? SecondaryLabel
@@ -298,4 +300,46 @@ public sealed class CleanupManifestSummary
     public bool WillDeleteOnApply { get; set; }
     public bool WillEditRegistry { get; set; }
     public bool DryRunWritesState { get; set; }
+}
+
+public sealed class UninstallCleanupExecutionPlan
+{
+    public string? PlanId { get; set; }
+    public string? AppId { get; set; }
+    public string? DisplayName { get; set; }
+    public bool DryRun { get; set; }
+    public string? ExecutionMode { get; set; }
+    public string? Status { get; set; }
+    public UninstallCleanupPlanSummary? Summary { get; set; }
+    public UninstallCleanupPlanPolicy? PolicySummary { get; set; }
+    public List<UninstallCleanupPlanGate>? Gates { get; set; }
+}
+
+public sealed class UninstallCleanupPlanSummary
+{
+    public int CommandPreviewCount { get; set; }
+    public int CleanupItemCount { get; set; }
+    public int BlockingGateCount { get; set; }
+    public bool ExecutionReady { get; set; }
+    public bool DisposableFixtureExecutionReady { get; set; }
+    public bool AllowlistedOfficialRunnerReady { get; set; }
+    public bool WillRunUninstallers { get; set; }
+    public bool WillDeleteLeftovers { get; set; }
+}
+
+public sealed class UninstallCleanupPlanPolicy
+{
+    public bool ConfirmedExecutionEnabled { get; set; }
+    public bool FixtureExecutorImplemented { get; set; }
+    public bool RealSystemExecutorImplemented { get; set; }
+}
+
+public sealed class UninstallCleanupPlanGate
+{
+    public string? GateId { get; set; }
+    public string? Name { get; set; }
+    public bool Required { get; set; }
+    public bool Satisfied { get; set; }
+    public bool Blocking { get; set; }
+    public string? Reason { get; set; }
 }

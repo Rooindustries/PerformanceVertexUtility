@@ -8,7 +8,7 @@
     "launcherCount": 4,
     "overlayCount": 2,
     "vendorToolCount": 3,
-    "protectedRuntimeCount": 4,
+    "protectedRuntimeCount": 0,
     "startupHeavyCount": 5,
     "estimatedSizeBytes": 48533159936
   },
@@ -37,9 +37,9 @@
         "target-scenario"
       ],
       "risk": "medium",
-      "protected": true,
+      "protected": false,
       "protectionReasons": [
-        "OBS stays protected so the stream does not fall apart mid-match."
+        "OBS is part of the streaming setup, so removal needs deliberate review."
       ],
       "startupImpact": "medium"
     },
@@ -61,9 +61,9 @@
         "stream-companion"
       ],
       "risk": "medium",
-      "protected": true,
+      "protected": false,
       "protectionReasons": [
-        "Discord stays protected so voice and stream stay clean."
+        "Discord is part of the voice setup, so removal needs deliberate review."
       ],
       "startupImpact": "high"
     },
@@ -213,10 +213,10 @@
         "runtime",
         "windows-app-dependency"
       ],
-      "risk": "protected",
-      "protected": true,
+      "risk": "advanced",
+      "protected": false,
       "protectionReasons": [
-        "Shared runtime required by multiple Windows and desktop apps"
+        "Shared runtime used by multiple Windows and desktop apps; review before removal."
       ],
       "startupImpact": "none"
     },
@@ -236,10 +236,10 @@
         "runtime",
         "shared-dependency"
       ],
-      "risk": "protected",
-      "protected": true,
+      "risk": "advanced",
+      "protected": false,
       "protectionReasons": [
-        "Shared runtime required by games, launchers, OBS plugins, and desktop apps"
+        "Shared runtime used by games, launchers, OBS plugins, and desktop apps; review before removal."
       ],
       "startupImpact": "none"
     },
@@ -260,7 +260,7 @@
         "gaming-component"
       ],
       "risk": "advanced",
-      "protected": true,
+      "protected": false,
       "protectionReasons": [
         "Gaming component removal requires explicit review because it can affect Game Pass, Game Bar, and store components"
       ],

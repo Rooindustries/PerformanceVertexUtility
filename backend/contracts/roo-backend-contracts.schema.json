@@ -730,7 +730,7 @@
       }
     },
     "protectedAppCatalog": {
-      "title": "Protected App Catalog",
+      "title": "Manual Review App Catalog",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -768,7 +768,7 @@
       }
     },
     "protectedAppRule": {
-      "title": "Protected App Rule",
+      "title": "Manual Review App Rule",
       "type": "object",
       "additionalProperties": false,
       "required": [

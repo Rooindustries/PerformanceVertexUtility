@@ -10,6 +10,14 @@ public sealed partial class MonitoringPage : Page
     public MonitoringPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await ViewModel.InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            ResizeContent();
+            await ViewModel.InitializeAsync();
+            ResizeContent();
+        };
+        SizeChanged += (_, _) => ResizeContent();
     }
+
+    private void ResizeContent() => ResponsiveContentSizer.Apply(this, MonitoringContent);
 }

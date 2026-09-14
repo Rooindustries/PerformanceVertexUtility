@@ -25,6 +25,9 @@ public sealed class SampleDataService
     public Task<ProcessInventory> GetProcessInventoryAsync() => LoadAsync<ProcessInventory>("process-inventory.sample.json");
     public Task<ProcessClassification> GetProcessClassificationAsync() => LoadAsync<ProcessClassification>("process-classification.sample.json");
     public Task<ProcessProfileEnvelope> GetProcessProfilePreviewAsync() => LoadAsync<ProcessProfileEnvelope>("process-profile-preview.sample.json");
+    public Task<GameTuneSessionStatus> GetGameTuneSessionStatusAsync() => LoadAsync<GameTuneSessionStatus>("game-tune-session-status.sample.json");
+    public Task<GameTuneRestorePreview> GetGameTuneRestorePreviewAsync() => LoadAsync<GameTuneRestorePreview>("game-tune-session-restore-preview.sample.json");
+    public Task<ProcessGovernorSessionStatus> GetProcessGovernorSessionStatusAsync() => LoadAsync<ProcessGovernorSessionStatus>("process-governor-session-status.sample.json");
     public Task<InstalledAppInventory> GetInstalledAppsAsync() => LoadAsync<InstalledAppInventory>("installed-app-inventory.sample.json");
     public Task<AppClassificationResult> GetAppClassificationAsync() => LoadAsync<AppClassificationResult>("app-classification.sample.json");
     public Task<UninstallQueue> GetUninstallQueueAsync() => LoadAsync<UninstallQueue>("uninstall-queue.sample.json");

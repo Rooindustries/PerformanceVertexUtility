@@ -1,12 +1,13 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Roo.OptimizationSuite.Models;
 using Roo.OptimizationSuite.ViewModels;
 
 namespace Roo.OptimizationSuite.Views;
 
 public sealed partial class UninstallCleanupPage : Page
 {
-    private const double CompactThreshold = 460;
+    private const double CompactThreshold = 1000;
     private bool _layoutApplied;
     private bool _compact;
 
@@ -15,7 +16,23 @@ public sealed partial class UninstallCleanupPage : Page
     public UninstallCleanupPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await ViewModel.InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            ResizeContent();
+            await ViewModel.InitializeAsync();
+            ResizeContent();
+        };
+        SizeChanged += (_, _) => ResizeContent();
+    }
+
+    private void ResizeContent() => ResponsiveContentSizer.Apply(this, CleanupContent);
+
+    private void AppsList_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is InstalledApp app)
+        {
+            ViewModel.SelectedApp = app;
+        }
     }
 
     private void MasterDetail_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -42,7 +59,7 @@ public sealed partial class UninstallCleanupPage : Page
         else
         {
             ListColumn.Width = new GridLength(1.1, GridUnitType.Star);
-            DetailColumn.Width = new GridLength(1.8, GridUnitType.Star);
+            DetailColumn.Width = new GridLength(1.2, GridUnitType.Star);
             TopRow.Height = new GridLength(1, GridUnitType.Star);
             DetailRow.Height = new GridLength(0);
             Grid.SetRow(DetailPane, 0);

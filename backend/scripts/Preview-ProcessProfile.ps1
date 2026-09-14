@@ -38,10 +38,10 @@ function Get-CompanionReasonById {
     )
     foreach ($item in @(Get-RooPropertyArray $Profile 'protectedCompanions')) {
         if ([string](Get-RooPropertyValue $item 'itemId' '') -eq $ItemId) {
-            return [string](Get-RooPropertyValue $item 'reason' 'Protected companion process.')
+            return [string](Get-RooPropertyValue $item 'reason' 'Companion process needs review before changes.')
         }
     }
-    return 'Protected companion process.'
+    return 'Companion process needs review before changes.'
 }
 
 function New-ProcessPreviewEntry {

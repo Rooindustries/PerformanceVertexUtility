@@ -5,7 +5,7 @@
   "name": "Uninstall And Cleanup Preview Policy",
   "previewOnly": true,
   "confirmedExecutionEnabled": false,
-  "blockProtectedAppsByDefault": true,
+  "blockProtectedAppsByDefault": false,
   "allowProtectedOverrideInPreview": false,
   "officialUninstall": {
     "previewOnly": true,
@@ -27,7 +27,7 @@
     "leftoverScanAfterOfficialUninstall": true,
     "requiresElevation": true,
     "confirmationRequired": true,
-    "protectedAppsBlocked": true,
+    "protectedAppsBlocked": false,
     "maxBatchSize": 25
   },
   "leftoverScan": {
@@ -76,7 +76,7 @@
     "requireExplicitUserConfirmation": true,
     "requireRestorePointBeforeApply": true,
     "requireBackupsBeforeApply": true,
-    "allowProtectedItemApply": false,
+    "allowProtectedItemApply": true,
     "dryRunWritesState": false,
     "phases": [
       "preflight-review",
