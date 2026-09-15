@@ -102,13 +102,18 @@ public class RooBulkFixture {
     Assert ($crash.status -eq 'needs-reconciliation' -and -not(Test-Path $case.counter)) 'A crash after durable dispatch intent cannot silently launch the uncertain entry again'
     $journal|Add-Member -NotePropertyName bootTimeUtc -NotePropertyValue (Get-RooBulkBootTime)
     $journal.entries[0].state='reboot-required';$journal.entries[0].outcome=Get-RooUninstallOutcome windows-installer 3010
+    $journal.entries[0].invocation=@{processId=$PID;creationTimeFileTimeUtc=([Diagnostics.Process]::GetCurrentProcess()).StartTime.ToUniversalTime().ToFileTimeUtc().ToString()}
     Remove-Item -LiteralPath $case.markers[0];$journal.entries[0].registrationAbsent=$true
     Write-RooOperationJson $journal $a.JournalPath
     $beforeReboot=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($beforeReboot.status -eq 'reboot-required' -and $beforeReboot.data.entries[1].attemptCount -eq 0) 'Registration absence cannot clear an MSI reboot requirement during the same boot'
     $journal.bootTimeUtc='2000-01-01T00:00:00Z';Write-RooOperationJson $journal $a.JournalPath
+    $resumedQueue=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($resumedQueue.status -eq 'reboot-required' -and $resumedQueue.data.entries[1].attemptCount -eq 0) 'An earlier reboot recorded for the queue cannot clear a later remover restart requirement'
+    $journal.entries[0].invocation.creationTimeFileTimeUtc=([datetime](Get-RooBulkBootTime)).ToUniversalTime().AddMinutes(-1).ToFileTimeUtc().ToString()
+    Write-RooOperationJson $journal $a.JournalPath
     $afterReboot=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
-    Assert ($afterReboot.status -eq 'ready' -and $afterReboot.data.entries[0].state -eq 'removed' -and -not(Test-Path $case.counter)) 'A changed recorded boot and absent registration reconcile without dispatching an uninstaller'
+    Assert ($afterReboot.status -eq 'ready' -and $afterReboot.data.entries[0].state -eq 'removed' -and -not(Test-Path $case.counter)) 'A boot after the remover creation time and absent registration reconcile without dispatching an uninstaller'
     $case=New-Case 'changed-registration';$a=$case.args
     [IO.File]::WriteAllText($case.markers[0],'reinstalled after preview')
     $changedRegistration=Read-Result (& $runScript @a)

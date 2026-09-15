@@ -82,9 +82,9 @@
                         <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooAccentBrush}" />
                         <StackPanel Grid.Column="1" Spacing="7">
                             <TextBlock Text="Apps &amp; Cleanup" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                            <TextBlock Text="Remove selected applications, then review leftover files separately." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                            <TextBlock Text="Remove selected applications, then review leftover files and registry data." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                             <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooTextMutedBrush}">
-                                <Run Text="{x:Bind ViewModel.AppCount, Mode=OneWay}" /><Run Text=" apps installed" />
+                                <Run Text="{x:Bind BulkRemoval.ViewModel.InstalledAppCount, Mode=OneWay}" /><Run Text=" apps installed" />
                                 <Run Text="  /  Nothing is removed until you approve it." />
                             </TextBlock>
                         </StackPanel>
@@ -94,7 +94,7 @@
 
             <TabView Grid.Row="1" IsAddTabButtonVisible="False" TabWidthMode="Equal" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" AutomationProperties.AutomationId="CleanupTabs">
                 <TabViewItem Header="Remove apps" IsClosable="False" AutomationProperties.AutomationId="RemovalTab">
-                    <views:BulkRemovalPanel />
+                    <views:BulkRemovalPanel x:Name="BulkRemoval" />
                 </TabViewItem>
                 <TabViewItem Header="Leftover cleanup" IsClosable="False" AutomationProperties.AutomationId="LeftoversTab">
             <Grid x:Name="MasterDetail" ColumnSpacing="18" RowSpacing="16" SizeChanged="MasterDetail_SizeChanged">

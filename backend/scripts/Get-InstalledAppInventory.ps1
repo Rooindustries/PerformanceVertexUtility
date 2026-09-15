@@ -80,6 +80,7 @@ function New-AppRecord {
 
 $apps = New-Object System.Collections.Generic.List[object]
 $sources = New-Object System.Collections.Generic.List[string]
+$sourceErrors = New-Object System.Collections.Generic.List[string]
 
 $registryPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $views = if ([Environment]::Is64BitOperatingSystem) { @('Registry64','Registry32') } else { @('Registry32') }
@@ -108,7 +109,9 @@ foreach ($hive in @('LocalMachine','CurrentUser')) {
 }
 
 if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
-    $appxItems = @(Get-AppxPackage -ErrorAction SilentlyContinue)
+    $appxErrors = @()
+    $appxItems = @(Get-AppxPackage -ErrorAction SilentlyContinue -ErrorVariable appxErrors)
+    foreach($errorRecord in $appxErrors){$sourceErrors.Add([string]$errorRecord)}
     if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
     foreach ($pkg in $appxItems) {
         $identity = New-RooAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $currentUserSid
@@ -135,7 +138,8 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
             startupImpact = Get-StartupImpact $pkg.Name $pkg.Publisher
         }) | Out-Null
     }
-}
+} else {$sourceErrors.Add('The Appx inventory provider is unavailable.')}
+
 
 if ($IncludeWinget) {
     $winget = Get-Command winget -ErrorAction SilentlyContinue
@@ -197,5 +201,7 @@ $summary = [pscustomobject]@{
     capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     summary = $summary
     sources = @($sources)
+    complete = ($sourceErrors.Count -eq 0)
+    errors = @($sourceErrors.ToArray())
     apps = $appArray
 } | ConvertTo-Json -Depth 8

@@ -11,7 +11,7 @@ using Roo.OptimizationSuite.Models;
 
 namespace Roo.OptimizationSuite.Services;
 
-public sealed class OptimizerService
+public sealed partial class OptimizerService
 {
     private readonly BackendLocator _locator;
     private readonly string _storage;

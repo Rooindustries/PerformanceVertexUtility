@@ -62,7 +62,10 @@
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel x:Name="ProcessContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
 
-                <views:CpuSetsPanel />
+                <views:ProcessControlsPanel x:Name="ApplicationControls" />
+                <Expander Header="Earlier CPU selection recovery" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ApplicationControls.ViewModel.HasLegacyCpuRecovery, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <views:CpuSetsPanel />
+                </Expander>
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <StackPanel Spacing="16">

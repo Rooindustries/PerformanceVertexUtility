@@ -56,6 +56,8 @@ namespace Roo.Optimization.CpuSets
         [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool GetProcessTimes(ProcessHandle process, out long creation, out long exit, out long kernel, out long user);
         [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern uint WaitForSingleObject(ProcessHandle process, uint milliseconds);
+        [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool GetProcessInformation(ProcessHandle process, int informationClass, out uint level, uint size);
         [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool GetProcessDefaultCpuSets(ProcessHandle process, [Out] uint[] ids, uint count, out uint required);
@@ -130,8 +132,8 @@ namespace Roo.Optimization.CpuSets
     // Retain one minimally privileged handle from identity verification through read/write/readback.
     public sealed class Target : IDisposable
     {
-        public const uint QueryAccess = 0x1000;
-        public const uint ChangeAccess = 0x3000;
+        public const uint QueryAccess = 0x101000;
+        public const uint ChangeAccess = 0x103000;
         private readonly ProcessHandle handle;
         private readonly uint access;
         private readonly int pid;
@@ -146,10 +148,12 @@ namespace Roo.Optimization.CpuSets
 
         public ProcessIdentity Identity()
         {
+            uint wait = Native.WaitForSingleObject(handle, 0);
+            if (wait == 0) throw new InvalidOperationException("The target process has exited.");
+            if (wait != 258) throw new NativeFailure("WaitForSingleObject", Marshal.GetLastWin32Error(), access);
             long creation, exit, kernel, user;
             if (!Native.GetProcessTimes(handle, out creation, out exit, out kernel, out user))
                 throw new NativeFailure("GetProcessTimes", Marshal.GetLastWin32Error(), access);
-            if (exit != 0) throw new InvalidOperationException("The target process has exited.");
             uint capacity = 32768;
             StringBuilder image = new StringBuilder((int)capacity);
             if (!Native.QueryFullProcessImageName(handle, 0, image, ref capacity))

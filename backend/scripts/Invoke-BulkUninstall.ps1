@@ -65,7 +65,7 @@ try {
             if($Action -eq 'Reconcile') {
                 if($state.attemptCount -eq 0){continue}
                 if($null -ne $state.outcome -and $state.outcome.rebootRequired -and $state.state -in @('reboot-required','restart-initiated')) {
-                    if(-not $journal.bootTimeUtc -or $journal.bootTimeUtc -ceq (Get-RooBulkBootTime)){continue}
+                    if(-not(Test-RooBulkRestartAfterInvocation $state.invocation)){continue}
                 }
                 if((Test-RooBulkInvocationLive $state.invocation)){$state.state='needs-reconciliation';continue}
                 if(-not(Test-RooBulkAppPresent $entry.identity $fixtureRoot)){$state.state='removed';$state.registrationAbsent=$true;$state.error=$null;Remove-RooBulkOwnedClaim $entry $plan $fixtureRoot}

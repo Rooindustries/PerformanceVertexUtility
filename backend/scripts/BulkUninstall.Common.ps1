@@ -133,6 +133,17 @@ function Get-RooBulkBootTime {
     return $system.LastBootUpTime.ToUniversalTime().ToString('o')
 }
 
+function Test-RooBulkRestartAfterInvocation {
+    param($Invocation)
+    $createdFileTime=[long]0
+    if($null -eq $Invocation -or -not [long]::TryParse([string]$Invocation.creationTimeFileTimeUtc,[ref]$createdFileTime) -or $createdFileTime -le 0){
+        throw 'The remover creation time is missing; a later restart cannot be verified.'
+    }
+    $created=[datetime]::FromFileTimeUtc($createdFileTime)
+    $boot=[datetime]::Parse((Get-RooBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    return $boot -gt $created
+}
+
 function Invoke-RooBulkEntry {
     param($Entry,$JournalEntry,$Journal,[string]$JournalPath,[int]$TimeoutSeconds,[string]$FixtureRoot='')
     $process=$null; $executableLease=$null; $claimLease=$null; $capture=$null

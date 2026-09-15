@@ -1,18 +1,55 @@
 # Optimization controls
 
-The desktop provides process-default CPU selection and a durable bulk removal queue with separate leftover cleanup. The backend also exposes these operations as commands and provides a queryable research catalog. Assignment readback does not establish better frame times or compatibility with a particular protected game.
+The desktop provides reviewed process controls, saved rules, queued vendor removal, and app-specific file and registry cleanup with recovery. Readback establishes the requested Windows configuration; it does not establish better frame times or compatibility with every protected game.
 
 ## Desktop workflows
 
-In **Process Control**, choose a running application, keep Windows default or select preferred CPUs, and preview the original and requested assignments. Apply records a recovery ticket; Restore verifies the saved assignment. Restore remains available after restarting the desktop. If the original process has exited, the desktop releases that session's ticket without changing a replacement process. A new process requires a new preview.
+In **Process Control**, select a running application and choose CPU priority, I/O priority, GPU priority, memory priority, execution QoS, dynamic priority boosts, CPU Sets or hard affinity. Preview shows each original and requested value. Apply once records recovery data for that process identity; Restore preserves controls changed by another actor. The identity includes executable path, PID and creation time, so a reused PID is not a replacement target.
 
-In **Apps & Cleanup → Remove apps**, select applications and review each program and its arguments. Removal runs sequentially. Stop queue lets the active remover finish; Resume runs only untouched entries. Uncertain outcomes require Check state before continuation. Completed entries remain available for a fresh leftover scan, explicit path selection, preview, deletion and file recovery.
+CPU selections can use logical processors, performance/efficiency classes, one thread per physical core, cache groups or NUMA nodes. Hard affinity has its own group-relative mask and can differ from the CPU Set preference. Memory priority controls page retention, not a RAM allocation limit.
 
-Desktop operation files are stored under `%LOCALAPPDATA%\RooOptimizationSuite\operations`. The latest removal queue and file recovery ticket survive desktop restarts. File restoration does not reinstall an application. Keep these records and their backups until recovery is no longer needed.
+**Saved rules** can be edited, paused or deleted. They store semantic CPU selection and a topology fingerprint, resolving fresh opaque IDs for each process instance. Hard-affinity rules also bind the reviewed topology. Rules apply only to the current Windows user's matching processes. Exact executable-path matching is the default; filename matching and executable-file hash binding are explicit options. An external field change suspends that instance rather than repeatedly overriding it.
+
+The rule worker runs separately from the desktop. **Enable at sign-in** registers a task for the current user; **Stop and restore** verifies restoration of still-owned controls. Closing the desktop does not stop an enabled worker. Rules and recovery state live under `%LOCALAPPDATA%\RooOptimizationSuite\process-rules`.
+
+In **Apps & Cleanup → Remove apps**, select applications and review their published removal commands. The queue runs sequentially. Stop queue lets the current remover finish; Resume runs only untouched entries. Unknown outcomes require reconciliation. A restart requirement is satisfied only by a Windows boot after that remover's recorded creation time; an older reboot of a resumed queue is insufficient.
+
+After removal, scan one app or all completed removals. Select exact file, folder, registry-key or registry-value candidates. Matching evidence is shown for each item; known shared owners, protected locations and incomplete subtree ownership block selection. Whole-key deletion requires explicit acceptance of its restoration limits. A separate preview and confirmation bind the cleanup to the reviewed resources.
+
+Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
+
+Desktop operations and backups live under `%LOCALAPPDATA%\RooOptimizationSuite\operations`. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
+
+## Native helper
+
+`backend/scripts/Invoke-OptimizerCore.ps1` invokes the compiled .NET 8 Windows x64 helper. Requests are UTF-8 JSON with `schemaVersion: 1` and an absolute `repoRoot`. Mutating requests require `confirm: true`; reviewed paths and hashes remain separate from journals.
+
+| Operation family | Actions | Additional input |
+|---|---|---|
+| Direct process controls | `process-status`, `process-preview`, `process-apply`, `process-restore` | PID; controls/semantic selection for preview; preview path/hash and journal for apply; journal for restore |
+| Rules | `rules-list`, `rule-save`, `rule-delete` | Policy root; complete rule or rule ID |
+| Worker | `policy-run`, `policy-stop`, `policy-status` | Policy root |
+| Application cleanup | `cleanup-authority`, `cleanup-scan`, `cleanup-preview`, `cleanup-apply`, `cleanup-restore` | Queue journal/app ID; selected item IDs for preview; reviewed paths/hashes for execution |
+| Cleanup batches | `cleanup-batch-preview`, `cleanup-batch-apply`, `cleanup-batch-cancel`, `cleanup-batch-restore` | Application operation references or batch review/journal; cancellation ID when resuming a stopped batch |
+
+`Invoke-ProcessPolicyWorker.ps1` exposes Start, Stop, Status, EnableLogon, DisableLogon and Remove for a policy folder. It validates the task's owner/folder binding and observes the actual worker identity. A stale `running` journal is not evidence of a live worker.
+
+## Control and cleanup limits
+
+- CPU Sets express scheduling preferences. Thread-specific assignments and hard affinity may further restrict placement. Hard-affinity changes use one processor group; CPU Sets can represent multiple groups. Homogeneous efficiency classes cannot identify performance/efficiency cores.
+- GPU priority is a per-process scheduling hint, not GPU-device affinity, and is not inherited by child processes. High I/O uses an NT interface whose availability depends on Windows and the token; errors remain explicit. No unsupported API result becomes an assumed default.
+- Protected/excluded targets and access denial remain intact. Compatibility can be obtained by controlling eligible background workloads; these controls do not bypass an anti-cheat, inject into games, or promise zero ban risk.
+- Discovery searches published installation locations, product/publisher data directories, package-family data, and current-user/machine Software registry views. Coverage is reported separately from candidate eligibility. Access failures, unsupported names, depth limits and the one-million-key limit remain visible; the scan does not claim those locations were inspected.
+- Registry values bind exact raw type/data and native namespace. Unrelated parent timestamps do not invalidate a selected value. Whole-key reviews additionally bind the captured tree and metadata. Application registration, remover lifetime, reboot requirements and peer inventory are rechecked independently. Inventory changes require a new review.
+- Registry deletion and receipt creation commit in one registry transaction. Before committed deletion, an uncommitted delete/restore rehearsal verifies the promised recoverable data and rolls back. Whole-key restoration recreates ordinary persistent keys and preserves captured owner, group and DACL; audit/integrity metadata, original volatility and original last-write times are not promised. Value-only operations preserve the parent object and its unrelated data.
+- File execution retains verified ancestor/object handles, checks file identities and streams, flushes backups, and verifies them through a disposable restore before deletion. Supported data streams, attributes, timestamps and owner/group/DACL metadata are recorded. Reparse paths, multiple hard links, encrypted/compressed/sparse or unsupported storage cases remain excluded. Shared package payloads such as WindowsApps are not app leftovers.
+- File-tree operations are not filesystem transactions. Unreviewed children and changed destinations are preserved, with partial outcomes retained for recovery. Restoring a partly completed directory uses its recorded identity and finalizes metadata only after its reviewed descendants are restored. Windows does not provide atomic compare-and-set for process controls; independent writers can race observations.
+
+See the [process contracts](research/process-control-contracts.md), [registry contracts](research/registry-cleanup-contracts.md) and [measurement protocol](research/parity-validation.md) for the supporting API contracts and test cases.
 
 ## CPU Sets
 
-`Invoke-ProcessCpuSets.ps1` uses Windows' documented CPU Set APIs. Detection opens the target with `PROCESS_QUERY_LIMITED_INFORMATION` (`0x1000`); changes request that right plus `PROCESS_SET_LIMITED_INFORMATION` (`0x3000` combined). One process handle covers identity checks, mutation and readback. The handle is opened under a temporary copy of the caller token with maximum privileges disabled, so an already enabled debug privilege cannot override the target access check. The original thread security context is restored even when the open fails. This uses Microsoft's [restricted-token API](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken) and preserves existing impersonation. There is no debug-privilege retry, process-memory access, injection, driver, or anti-cheat modification in this path.
+`Invoke-ProcessCpuSets.ps1` uses Windows' documented CPU Set APIs. Detection opens the target with `PROCESS_QUERY_LIMITED_INFORMATION` and `SYNCHRONIZE` (`0x101000`); changes additionally request `PROCESS_SET_LIMITED_INFORMATION` (`0x103000` combined). Synchronization provides an explicit liveness check; the live process exit FILETIME is not interpreted. One process handle covers identity checks, mutation and readback. The handle is opened under a temporary copy of the caller token with maximum privileges disabled, so an already enabled debug privilege cannot override the target access check. The original thread security context is restored even when the open fails. This uses Microsoft's [restricted-token API](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken) and preserves existing impersonation. There is no debug-privilege retry, process-memory access, injection, driver, or anti-cheat modification in this path.
 
 CPU Set IDs are opaque identifiers returned by the operating system. They are not CPU indexes or bits in an affinity mask. The topology result includes processor group, logical processor index, core, cache and NUMA indexes, efficiency class, scheduling class, parking and allocation flags. Sets reserved for another process are rejected.
 
@@ -96,9 +133,9 @@ An arbitrary vendor uninstaller cannot provide exactly-once execution solely thr
 .\backend\scripts\Invoke-BulkUninstall.ps1 -Action Reconcile -JournalPath $journal -ConfirmApply
 ```
 
-Reconciliation checks that the recorded process is no longer running and whether the exact registration is absent. An MSI reboot requirement also retains the recorded Windows boot time and remains pending until Windows reports a different boot. It dispatches nothing. A new confirmed `Apply` resumes untouched entries after cancellation or resolved completion; it never silently retries an attempted entry. If a registration remains after an attempted remover, retain the unresolved claim and investigate the vendor outcome. This version does not offer a force-retry override. Descendant processes and external installer services are not comprehensively tracked; a timeout or incomplete registration therefore never authorizes leftover deletion.
+Reconciliation checks that the recorded process is no longer running and whether the exact registration is absent. An MSI reboot requirement remains pending until the current Windows boot time is later than that remover’s recorded process creation time. It dispatches nothing. A new confirmed `Apply` resumes untouched entries after cancellation or resolved completion; it never silently retries an attempted entry. If a registration remains after an attempted remover, retain the unresolved claim and investigate the vendor outcome. This version does not offer a force-retry override. Descendant processes and external installer services are not comprehensively tracked; a timeout or incomplete registration therefore never authorizes leftover deletion.
 
-## Cleanup after removal
+## Earlier file-cleanup interface
 
 The queue ends with `cleanup-review-required` and never deletes leftovers. Run a new leftover scan, review shared ownership and current contents, and build a separate cleanup manifest. The same separation now applies to `Invoke-UninstallCleanupApplyPackage.ps1`: after running a vendor command, it returns fresh target content hashes and leaves the earlier cleanup list unapplied. A repeated call returns that recorded result without relaunching the vendor or deleting files.
 
@@ -119,7 +156,7 @@ $cleanupHash = (Get-FileHash -LiteralPath $cleanupPreview -Algorithm SHA256).Has
     -ReviewSha256 $cleanupHash -ConfirmApply
 ```
 
-File-only cleanup continues through the existing exact-target allowlist, backup and recovery journal. File restoration recovers backed-up leftovers; it cannot reinstall an application or reverse vendor registry/service changes. Path-based copying/deletion still has a filesystem race window against a concurrent hostile writer. A native file-handle ownership layer, broader dependency analysis, registry/service leftover mutation and install-time tracing remain separate work.
+File-only cleanup continues through the existing exact-target allowlist, backup and recovery journal. File restoration recovers backed-up leftovers; it cannot reinstall an application or reverse vendor registry/service changes. Path-based copying/deletion still has a filesystem race window against a concurrent hostile writer. The desktop now uses the native handle-based file and transactional registry path described above. This earlier file-only interface remains available for existing recovery records. Service deletion and install-time tracing are separate capabilities and are not implied by a file/registry scan.
 
 ## Capability router requests
 
@@ -151,6 +188,8 @@ Mutating router actions additionally require `-ConfirmApply`. Router errors pres
 The inventory contains 376 setting/control records, 267 application/package records, and 1,319 {source} YAML records. Settings, packages, orchestration actions and inferred Dash symbols are separate collections. Filters return the filtered total and stable pages; no catalog entry automatically executes. Source snapshots and risks travel with the result. See the [research index](research/README.md) for provenance, edition distinctions and the limits of binary-symbol evidence.
 
 ## Verification
+
+`Test-OptimizerCore.ps1`, `Test-OptimizerHost.ps1`, `Test-ProcessPolicyWorker.ps1`, `Test-CleanupAuthority.ps1` and `Test-NativeGovernorRecovery.ps1` exercise the native controls, app/registry/file identity, batch recovery, worker lifetime and partial failures. Host tests create disposable installed-app records and vendor removers to use the production removal-to-cleanup path. `Measure-OptimizerPolicy.ps1` rebuilds the helper and records its binary hashes, worker startup, idle footprint and process-launch detection samples; its output states the presence of external controllers and the resulting comparison limits.
 
 New reusable checks are `Test-ProcessCpuSets.ps1`, `Test-BulkUninstall.ps1`, `Test-InstalledAppIdentity.ps1`, `Test-NativeGovernorRestoreOwnership.ps1` and `Test-UpstreamSettingsCatalog.ps1`. The combined cleanup regression now includes a vendor fixture that changes an existing file and creates a new file. Tests use disposable processes, registrations represented by fixture markers, and isolated journals; actual installed applications are inventoried read-only.
 
