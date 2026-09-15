@@ -175,6 +175,26 @@ Before every treatment, the rule was applied, paused and independently read back
 
 Raw JSON SHA-256: `25b2c813a91aed0cd49964e45ac294ab0d7ccfc214a26a1f0827043b6494f626`. Measured harness assembly SHA-256: `3ae4b4b87414a0d3135c117cfc848a45a262279f5d8b9bd11e475a467ce5582d`. Raw JSON/XML and plots remain outside source control. Reproduce with `Measure-OptimizerStorage.ps1` and `tools/validation/analyze_storage_measurement.py`.
 
+## Measured GPU contention result
+
+A run completed at **2026-09-15 20:49 UTC** on the RX 9070 XT, explicitly selected by vendor/device ID and bound to the same adapter LUID in both workload processes. Ten paired nine-second blocks used randomized order with seed `16092026`. The foreground submitted an offscreen Direct3D11 compute dispatch every 20 ms: 16,384 elements and 256 dependent integer-mix iterations. The background used 262,144 elements, 4,096 iterations and four dispatches per batch. Both CPU priorities stayed Normal, with dynamic boosts disabled. The treatment lowered only the background GPU priority from Normal (2) to BelowNormal (1) through the real saved-rule host.
+
+| Measurement | Result |
+|---|---|
+| Median per-run scheduled-to-completion p99 | Normal: 2.641 ms; BelowNormal: 2.646 ms |
+| Paired foreground p99 ratio, rule / normal | 1.00297; 95% interval 0.99183–1.01229 |
+| Median background dispatches per second | Normal: 1,790.86; BelowNormal: 1,790.70 |
+| Paired background-throughput ratio | 0.99977; 95% interval 0.99847–1.00121 |
+| Improvement gate | Not met: the foreground interval includes no improvement |
+
+The analysis uses the same paired-run method and background-retention floor as the CPU and storage experiments. This workload did not show a clear benefit from the GPU-priority change. Readback established the requested configuration; it did not establish a speedup.
+
+CPU submission/completion timing was recorded before output verification and kept separate from GPU timestamp intervals. Each query was polled independently, with disjoint or unordered timestamps rejected. Four output values spread across each buffer were recomputed on the CPU after timing; deterministic foreground values matched across conditions. The original GPU priority was independently verified before the processes exited. Deliberately ineffective priority and incorrect-shader variants both failed their intended checks and left incomplete results.
+
+This is an offscreen compute result, not presented frames, input latency or gameplay. Existing Lasso processes remained active and unchanged in both conditions. A later read-only inspection found that the installed Lasso GUI/governor had signature hash mismatches, so this environment must not be represented as a verified stock-vendor comparison. No service or installation change was made. Per-game and isolated-controller comparisons remain separate work.
+
+Raw JSON SHA-256: `defb3304c617a549ec6553f450244fa70f087253f0f0f174b14524b0d81ff3d9`. Measured benchmark assembly SHA-256: `c910f884b572c8cdfdf0af7ae2834768b447bb2894d020408a74d574560cad79`. Raw samples, controller hashes and plots remain outside source control. Reproduce with `Measure-OptimizerGpu.ps1` and `tools/validation/analyze_gpu_measurement.py`.
+
 ## Implementation order and closure
 
 The starting baseline exposed metadata/rule-based candidate scanning, separate file recovery and a process footprint script. Their historical tests do not establish coverage of every requirement above. The implementation sequence is:
