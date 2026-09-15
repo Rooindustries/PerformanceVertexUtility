@@ -155,6 +155,26 @@ This establishes an effect of Roo's background-priority rule in this synthetic w
 
 Raw JSON remains outside source control. Its SHA-256 is `b2c6b4706195eb236ff2dba6c383f34a7455ee051ff108b8d79b6c578c87c203`; the measured benchmark assembly SHA-256 is `02613e0f56070efcd27b20c6c175726232b5323d92be262fe1d1232f943cfe29`. The JSON also records the host/core binary hashes and complete per-run samples. Reproduce with `Measure-OptimizerCpu.ps1` and `tools/validation/analyze_cpu_measurement.py`.
 
+## Measured storage tradeoff
+
+A read-only storage run completed at **2026-09-15 20:16 UTC** on the same PC's WD_BLACK SN850X 4 TB NVMe drive. Ten randomized paired blocks used nine-second measured windows, two-second warmups and separate 512 MiB disposable files. Foreground reads were random 4 KiB at queue depth 1; background reads were sequential 128 KiB at queue depth 32. Both used one thread, disabled software caching and disabled DiskSpd's default CPU affinity. CPU priorities stayed Normal. The treatment used the saved-rule host to lower only the background process's I/O priority from Normal (2) to Low (1).
+
+| Measurement | Result |
+|---|---|
+| Median per-run foreground read p99 | Normal: 0.983 ms; Low: 0.076 ms |
+| Paired foreground p99 ratio, Low / Normal | 0.07694; 95% interval 0.07635–0.07752 |
+| Median background read throughput | Normal: 6,564 MiB/s; Low: 1.714 MiB/s |
+| Paired background-throughput ratio, Low / Normal | 0.000261; 95% interval 0.000223–0.000305 |
+| Balance gate | Failed: only about 0.026% of background throughput remained |
+
+The analysis uses the same paired-block bootstrap method and 0.80 background-retention floor as the CPU experiment. The faster foreground reads do not establish an overall performance win: the background workload was starved under this sustained contention. These results argue against treating a persistent Low I/O rule as a universally beneficial default. They do not establish the behavior of every device, workload or priority level. Lasso remained active and unchanged; this was not an isolated comparison against its own equivalent rule.
+
+The harness used the [Microsoft DiskSpd 2.3 release](https://github.com/microsoft/diskspd/releases/tag/v2.3), amd64 binary SHA-256 `dd4e57e1e8ccaf5d6437938f8aab7f17e9a1e6d8fba8a093006b7cadf16faea2`. Its default Normal file-I/O hint does not call the per-file priority setter, so no `-I` option was used to manufacture the treatment. A native probe found that this build's `-ys`/`-yf` notification events did not signal; the harness uses working shared `-yr`/`-yp` start/stop controls and checks actual XML durations instead. See the [pinned generator](https://github.com/microsoft/diskspd/blob/v2.3/IORequestGenerator/IORequestGenerator.cpp) and [command options](https://github.com/microsoft/diskspd/wiki/Command-line-and-parameters).
+
+Before every treatment, the rule was applied, paused and independently read back as restored while the process was alive, then restarted for measurement. After the read processes exited, their exact instances were reconciled as expired. XML checks confirmed paths, blocks, queue depths, cache mode, nonzero read counts, zero writes and matched measured durations. File hashes were unchanged and fixture processes/data were removed. A deliberately ineffective rule failed the native readback gate and left its result incomplete.
+
+Raw JSON SHA-256: `25b2c813a91aed0cd49964e45ac294ab0d7ccfc214a26a1f0827043b6494f626`. Measured harness assembly SHA-256: `3ae4b4b87414a0d3135c117cfc848a45a262279f5d8b9bd11e475a467ce5582d`. Raw JSON/XML and plots remain outside source control. Reproduce with `Measure-OptimizerStorage.ps1` and `tools/validation/analyze_storage_measurement.py`.
+
 ## Implementation order and closure
 
 The starting baseline exposed metadata/rule-based candidate scanning, separate file recovery and a process footprint script. Their historical tests do not establish coverage of every requirement above. The implementation sequence is:

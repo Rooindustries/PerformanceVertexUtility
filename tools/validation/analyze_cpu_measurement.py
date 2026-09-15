@@ -5,20 +5,12 @@ import argparse
 import json
 import math
 from pathlib import Path
-import random
-import statistics
+import runpy
 
 
-def quantile(values, probability):
-    ordered = sorted(values)
-    return ordered[max(0, math.ceil(probability * len(ordered)) - 1)]
-
-
-def ratio_interval(ratios):
-    logs = [math.log(value) for value in ratios]
-    randomizer = random.Random(20260916)
-    means = [math.exp(statistics.mean(randomizer.choices(logs, k=len(logs)))) for _ in range(10000)]
-    return {"estimate": math.exp(statistics.mean(logs)), "lower95": quantile(means, .025), "upper95": quantile(means, .975)}
+statistics_api = runpy.run_path(str(Path(__file__).with_name("paired_statistics.py")))
+quantile = statistics_api["quantile"]
+ratio_interval = statistics_api["ratio_interval"]
 
 
 def analyze(data):
