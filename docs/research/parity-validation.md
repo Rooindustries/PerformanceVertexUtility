@@ -1,6 +1,6 @@
 # Removal and scheduling acceptance criteria
 
-Checked against primary sources on **2026-09-15**. Repository starting point: `8df0c71bc22655e522f864ffb9a93ad6ea250371`. This report defines the cleanup contracts and comparison protocol, including broader parity work such as installation tracing. It is not an execution report. See [optimization controls](../optimization-controls.md) for implemented workflows, reusable checks and current limits; keep runtime evidence bound to the tested revision.
+Checked against primary sources on **2026-09-15**. Repository starting point: `8df0c71bc22655e522f864ffb9a93ad6ea250371`. This report defines the cleanup contracts and comparison protocol, including broader parity work such as installation tracing. The measured CPU result below is separate from the proposed checks. See [optimization controls](../optimization-controls.md) for implemented workflows, reusable checks and current limits; keep runtime evidence bound to the tested revision.
 
 The target is a useful, free replacement for the requested Revo and Process Lasso workflows. Feature availability, correct execution, and performance improvement are separate claims. A named workload can demonstrate an improvement; no finite benchmark establishes that an optimizer is universally better. Existing [removal research](uninstall-cleanup.md) and [process research](process-management.md) retain the broader edition and feature catalogs.
 
@@ -132,6 +132,28 @@ The following are proposed engineering gates, not vendor guarantees:
 - Require the upper 95% confidence bound on the paired p99 latency ratio to stay within a predeclared non-regression margin, initially 1.05, for clean-system trials. Report uncertainty if the data cannot establish it. For an improvement claim, the interval must exclude no improvement in the named contention scenario while background work remains within a declared acceptable budget.
 - Measure the complete resident engine separately with UI hidden and visible. Use CPU seconds per wall second and also a clearly normalized system percentage; include idle/churn overhead, startup delay, memory, wakeups, handles and log growth. A four-second working-set sample is a smoke measurement, not evidence of sustained low overhead.
 - Keep process-control, benchmark, visual and per-game compatibility evidence separate. A disposable-process success or a no-error game session cannot establish future anti-cheat policy or a zero-ban guarantee.
+
+## Measured CPU contention result
+
+A run completed at **2026-09-15 19:14 UTC** on the i5-14600K/9070 XT test PC, Windows 11 build 26200. Ten paired blocks used randomized order with seed `16092026`; each condition ran for nine seconds. A separate earlier two-block pilot was excluded from these estimates.
+
+The workload pinned two busy background threads and a periodic foreground worker to logical CPU 0. Every 20 ms, the foreground worker performed 500,000 dependent integer-mix iterations. Both fixture processes disabled dynamic priority boosts. The normal condition had no Roo worker; the treatment used the real saved-rule host to lower only the background process from Normal to BelowNormal. This did not reserve the CPU against other software. The existing Ultimate Performance plan and Lasso configuration were left unchanged; Lasso process identities and binary hashes matched before and after the experiment.
+
+| Measurement | Result |
+|---|---|
+| Valid paired blocks | 10; 450 timing samples per condition per block |
+| Median of per-run p99 scheduled-to-finish time | Normal: 63.327 ms; Roo rule: 1.937 ms |
+| Paired p99 ratio, rule / normal | 0.0376; 95% bootstrap interval 0.0261–0.0560 |
+| Paired background-throughput ratio, rule / normal | 0.9881; 95% bootstrap interval 0.9860–0.9902 |
+| Median per-run fraction exceeding the 20 ms interval | Normal: 15.22%; Roo rule: 0.22% |
+
+Ratios use the geometric mean of paired run ratios. Confidence intervals resample whole paired blocks 10,000 times with seed `20260916`; individual bursts are not treated as independent runs. The predeclared gate required ten blocks, a p99-ratio upper bound below 1, and a background-throughput lower bound of at least 0.80. This run met that gate.
+
+Independent Windows process APIs checked CPU time, priority, affinity and boost state; the original priority was restored before each fixture exited. A deliberately ineffective rule failed the native readback gate and left its result incomplete. The analysis also rejects contradictory controls, missing work, changed controller identity and incomplete recovery; a faster foreground result cannot override excessive background slowdown.
+
+This establishes an effect of Roo's background-priority rule in this synthetic workload. The timing includes timer wakeup, scheduling and work completion. It is not a measurement of CPU ready time, input latency or game frame time. Lasso stayed active in both conditions, so it is not an isolated comparison against Windows or a separately configured Lasso rule. Effective-clock/temperature traces, storage/GPU contention and protected-game trials are not covered by this result.
+
+Raw JSON remains outside source control. Its SHA-256 is `b2c6b4706195eb236ff2dba6c383f34a7455ee051ff108b8d79b6c578c87c203`; the measured benchmark assembly SHA-256 is `02613e0f56070efcd27b20c6c175726232b5323d92be262fe1d1232f943cfe29`. The JSON also records the host/core binary hashes and complete per-run samples. Reproduce with `Measure-OptimizerCpu.ps1` and `tools/validation/analyze_cpu_measurement.py`.
 
 ## Implementation order and closure
 

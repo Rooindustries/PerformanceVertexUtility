@@ -3,6 +3,12 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Roo.Optimizer;
 
+if (args.Length > 0 && args[0].StartsWith("--cpu-", StringComparison.Ordinal))
+{
+    try { CpuContention.Run(args); }
+    catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }
+    return;
+}
 if (args is ["--probe"]) { Thread.Sleep(TimeSpan.FromMinutes(10)); return; }
 if (args.Length != 3) throw new ArgumentException("Provide repository root, dotnet executable and output JSON path.");
 var repo = Path.GetFullPath(args[0]);
