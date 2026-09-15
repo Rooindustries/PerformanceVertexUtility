@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -449,11 +450,12 @@ public sealed class RooProcessGovernor
                 {
                     live = Process.GetProcessById(process.pid);
                     BackupSnapshot snapshot = BackupSnapshot.FromProcess(process, live, applicableChanges, policyId, sessionId);
-                    ApplyChanges(live, applicableChanges);
-                    ProcessSnapshot after = SnapshotProcess(live);
                     snapshots.Add(snapshot);
                     active[itemKey] = snapshot;
                     appliedKeys.Add(itemKey);
+                    WriteBackup(backupPath, policyId, sessionId, startedAtUtc, snapshots);
+                    ApplyChanges(live, snapshot.appliedControls, delegate { WriteBackup(backupPath, policyId, sessionId, startedAtUtc, snapshots); });
+                    ProcessSnapshot after = SnapshotProcess(live);
 
                     Dictionary<string, object> changed = Dict(
                         "processId", process.pid,
@@ -468,7 +470,7 @@ public sealed class RooProcessGovernor
                         "originalGpuPriority", snapshot.originalGpuPriority,
                         "appliedGpuPriority", after.gpuPriority,
                         "processStartTimeUtc", snapshot.processStartTimeUtc,
-                        "appliedControls", applicableChanges,
+                        "appliedControls", snapshot.appliedControls,
                         "ruleId", decision.ruleId,
                         "reason", decision.reason,
                         "reasonCodes", decision.reasonCodes,
@@ -900,6 +902,14 @@ public sealed class RooProcessGovernor
             }
         }
 
+        foreach (Dictionary<string, object> change in changes)
+        {
+            if (SnapshotControl(process, AsString(change, "control")) == null)
+            {
+                change["blocked"] = true;
+                change["blockedReason"] = "The original process control could not be read and cannot be restored reliably.";
+            }
+        }
         return changes;
     }
 
@@ -982,11 +992,28 @@ public sealed class RooProcessGovernor
         );
     }
 
-    private static void ApplyChanges(Process process, List<Dictionary<string, object>> changes)
+    private static string SnapshotControl(ProcessSnapshot snapshot, string control)
+    {
+        if (StringEquals(control, "priorityClass")) return snapshot.priorityClass;
+        if (StringEquals(control, "affinityMask")) return snapshot.affinityMask == 0 ? null : snapshot.affinityMask.ToString(CultureInfo.InvariantCulture);
+        if (StringEquals(control, "ioPriority")) return IoPriorityToValue(snapshot.ioPriority).HasValue ? snapshot.ioPriority : null;
+        if (StringEquals(control, "gpuPriority")) return snapshot.gpuPriorityAvailable && GpuPriorityToValue(snapshot.gpuPriority).HasValue ? snapshot.gpuPriority : null;
+        throw new InvalidOperationException("Unknown process control: " + control);
+    }
+
+    private static void ApplyChanges(Process process, List<Dictionary<string, object>> changes, Action checkpoint)
     {
         for (int i = 0; i < changes.Count; i++)
         {
             string control = AsString(changes[i], "control");
+            process.Refresh();
+            string current = SnapshotControl(SnapshotProcess(process), control);
+            string proposed = AsString(changes[i], "proposedValue");
+            if (String.IsNullOrWhiteSpace(current) || !StringEquals(current, AsString(changes[i], "currentValue")))
+                throw new InvalidOperationException("The reviewed original " + control + " changed or could not be read.");
+            if (StringEquals(current, proposed)) { changes[i]["state"] = "unchanged"; checkpoint(); continue; }
+            changes[i]["state"] = "applyIntent";
+            checkpoint();
             if (StringEquals(control, "priorityClass"))
             {
                 string priority = NormalizePriority(AsString(changes[i], "proposedValue"));
@@ -1005,6 +1032,11 @@ public sealed class RooProcessGovernor
             {
                 SetGpuPriority(process, NormalizeGpuPriority(AsString(changes[i], "proposedValue")));
             }
+            process.Refresh();
+            string observed = SnapshotControl(SnapshotProcess(process), control);
+            if (!StringEquals(observed, proposed)) throw new InvalidOperationException("Windows readback differs from the requested " + control + ".");
+            changes[i]["state"] = "applied";
+            checkpoint();
         }
     }
 
@@ -1033,7 +1065,11 @@ public sealed class RooProcessGovernor
                     foreach (Dictionary<string, object> change in snapshot.appliedControls)
                     {
                         if (IsBlockedChange(change)) continue;
+                        string state = AsString(change, "state");
+                        if (StringEquals(state, "pending") || StringEquals(state, "unchanged")) continue;
                         string control = AsString(change, "control");
+                        live.Refresh();
+                        current = SnapshotProcess(live);
                         string original = null, observed = null;
                         if (StringEquals(control, "priorityClass")) { original = snapshot.originalPriorityClass; observed = current.priorityClass; }
                         else if (StringEquals(control, "affinityMask")) { original = snapshot.originalAffinityMask.ToString(); observed = current.affinityMask.ToString(); }
@@ -1052,6 +1088,10 @@ public sealed class RooProcessGovernor
                         else if (StringEquals(control, "affinityMask")) live.ProcessorAffinity = new IntPtr(snapshot.originalAffinityMask);
                         else if (StringEquals(control, "ioPriority")) SetIoPriority(live, original);
                         else if (StringEquals(control, "gpuPriority")) SetGpuPriority(live, original);
+                        live.Refresh();
+                        if (!StringEquals(SnapshotControl(SnapshotProcess(live), control), original))
+                            throw new InvalidOperationException("Windows readback differs from the restored " + control + ".");
+                        change["state"] = "restored";
                         restoredControls.Add(Dict("control", control, "restoredValue", original));
                     }
                 }
@@ -2008,7 +2048,19 @@ public sealed class RooProcessGovernor
         {
             Directory.CreateDirectory(parent);
         }
-        File.WriteAllText(path, NewSerializer().Serialize(value));
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        byte[] bytes = new System.Text.UTF8Encoding(false).GetBytes(NewSerializer().Serialize(value));
+        try
+        {
+            using (FileStream stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+            if (File.Exists(path)) File.Replace(temporary, path, null);
+            else File.Move(temporary, path);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     private static JavaScriptSerializer NewSerializer()
@@ -2469,6 +2521,11 @@ public sealed class RooProcessGovernor
         public static BackupSnapshot FromProcess(ProcessSnapshot snapshot, Process live, List<Dictionary<string, object>> changes, string policyId, string sessionId)
         {
             ProcessSnapshot original = SnapshotProcess(live);
+            if (String.IsNullOrWhiteSpace(original.startTimeUtc) || String.IsNullOrWhiteSpace(original.executablePath) || !StringEquals(ProcessKey(snapshot), ProcessKey(original)))
+                throw new InvalidOperationException("The process identity changed before recovery data was captured.");
+            foreach (Dictionary<string, object> change in changes)
+                if (String.IsNullOrWhiteSpace(SnapshotControl(original, AsString(change, "control"))))
+                    throw new InvalidOperationException("The original process control is unknown; no change was attempted.");
             BackupSnapshot backup = new BackupSnapshot();
             backup.processId = snapshot.pid;
             backup.processName = snapshot.processName;
@@ -2478,7 +2535,13 @@ public sealed class RooProcessGovernor
             backup.originalIoPriority = original.ioPriority;
             backup.originalGpuPriority = original.gpuPriority;
             backup.processStartTimeUtc = original.startTimeUtc;
-            backup.appliedControls = changes;
+            backup.appliedControls = new List<Dictionary<string, object>>();
+            foreach (Dictionary<string, object> change in changes)
+            {
+                Dictionary<string, object> captured = new Dictionary<string, object>(change);
+                captured["state"] = "pending";
+                backup.appliedControls.Add(captured);
+            }
             backup.capturedAtUtc = UtcNow();
             backup.policyId = policyId;
             backup.sessionId = sessionId;

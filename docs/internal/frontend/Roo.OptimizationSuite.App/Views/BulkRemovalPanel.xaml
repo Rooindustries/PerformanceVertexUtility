@@ -50,32 +50,43 @@
                         <CheckBox IsChecked="{x:Bind ViewModel.DependenciesReviewed, Mode=TwoWay}" Visibility="{x:Bind ViewModel.RequiresDependencyReview, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovalDependencyReview">
                             <TextBlock Text="I reviewed shared components and dependencies in this selection." TextWrapping="Wrap" />
                         </CheckBox>
-                        <Expander Header="Review leftover files" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasRemovedApps, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <Expander Header="Review leftover files and registry data" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasRemovedApps, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Spacing="10">
                                 <ComboBox ItemsSource="{x:Bind ViewModel.RemovedApps}" SelectedItem="{x:Bind ViewModel.SelectedRemovedApp, Mode=TwoWay}" PlaceholderText="Choose a removed application" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="RemovedAppPicker" />
+                                <CheckBox Content="Scan all completed removals" IsChecked="{x:Bind ViewModel.ScanAllApps, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovedAppsScanAll" />
                                 <Button Content="Scan leftovers" Command="{x:Bind ViewModel.ScanFilesCommand}" IsEnabled="{x:Bind ViewModel.CanScanFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedAppScan" />
+                                <Button Content="Stop scan" Command="{x:Bind ViewModel.CancelScanCommand}" Visibility="{x:Bind ViewModel.CanCancelScan, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CleanupScanCancel" />
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.Leftovers}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:LeftoverChoice">
                                             <CheckBox IsChecked="{x:Bind Selected, Mode=TwoWay}" IsEnabled="{x:Bind CanSelect}" AutomationProperties.Name="{x:Bind Item.Target}">
                                                 <StackPanel Spacing="3">
                                                     <TextBlock Text="{x:Bind Item.Target}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" />
-                                                    <TextBlock Text="{x:Bind Item.Reason}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                                                    <TextBlock Text="{x:Bind Evidence}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                                                 </StackPanel>
                                             </CheckBox>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <Button Content="Preview file cleanup" Command="{x:Bind ViewModel.PreviewFilesCommand}" IsEnabled="{x:Bind ViewModel.CanPreviewFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesPreview" />
+                                <CheckBox IsChecked="{x:Bind ViewModel.AcceptKeyRecreation, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" Visibility="{x:Bind ViewModel.HasSelectedKeys, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RegistryRecreationReview">
+                                    <TextBlock Text="I accept whole-key recovery: values and access permissions are saved; audit settings, timestamps and volatile-key status are not preserved. Recovered keys use normal persistent storage." TextWrapping="Wrap" />
+                                </CheckBox>
+                                <Button Content="Preview selected leftovers" Command="{x:Bind ViewModel.PreviewFilesCommand}" IsEnabled="{x:Bind ViewModel.CanPreviewFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesPreview" />
                                 <TextBlock Text="{x:Bind ViewModel.FileStatus, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooTextPrimaryBrush}" AutomationProperties.AutomationId="RemovedFilesStatus" />
                                 <TextBlock Text="{x:Bind ViewModel.FileSummary, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                                 <CheckBox IsChecked="{x:Bind ViewModel.FilesReviewed, Mode=TwoWay}" Visibility="{x:Bind ViewModel.FileReviewReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovedFilesApproval">
-                                    <TextBlock Text="I reviewed these exact paths and any shared data they contain." TextWrapping="Wrap" />
+                                    <TextBlock Text="I reviewed these exact file and registry targets, their ownership, and any personal data they contain." TextWrapping="Wrap" />
                                 </CheckBox>
-                                <Button Content="Delete reviewed files" Command="{x:Bind ViewModel.ApplyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanApplyFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesApply" />
+                                <Button Content="{x:Bind ViewModel.CleanupApplyLabel, Mode=OneWay}" Command="{x:Bind ViewModel.ApplyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanApplyFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesApply" />
+                                <Button Content="Stop after this app" Command="{x:Bind ViewModel.CancelCleanupCommand}" Visibility="{x:Bind ViewModel.CanCancelCleanup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CleanupBatchCancel" />
                             </StackPanel>
                         </Expander>
-                        <Button Content="Restore last file cleanup" Command="{x:Bind ViewModel.RestoreFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreFiles, Mode=OneWay}" Visibility="{x:Bind ViewModel.FileRestoreAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovedFilesRestore" />
+                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasCleanupHistory, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <ComboBox Header="Cleanup history" ItemsSource="{x:Bind ViewModel.CleanupHistory}" SelectedItem="{x:Bind ViewModel.SelectedCleanupHistory, Mode=TwoWay}" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="CleanupHistory" />
+                            <Button Content="Restore this cleanup" Command="{x:Bind ViewModel.RestoreFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesRestore" />
+                            <TextBlock Text="Recovery restores supported leftover data. It does not reinstall the application or overwrite changed destination data." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
+                        </StackPanel>
+                        <Button Content="Restore earlier file backup" Command="{x:Bind ViewModel.RestoreLegacyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreLegacyFiles, Mode=OneWay}" Visibility="{x:Bind ViewModel.FileRestoreAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="LegacyFilesRestore" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>

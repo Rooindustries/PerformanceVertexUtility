@@ -100,7 +100,7 @@ public static class CpuSetOracle {
     $invalidIds=Read-Result (& $scriptPath -Action Preview -TargetProcessId $probe.Id -CpuSetId ([uint32]::MaxValue))
     Assert ($invalidIds.status -eq 'failed') 'An ID absent from current target topology is rejected'
     $denied=Read-Result (& $scriptPath -Action Status -TargetProcessId ([int]::MaxValue))
-    Assert ($denied.status -eq 'failed' -and $denied.errors[0].api -eq 'OpenProcess' -and $denied.errors[0].requestedAccess -eq '0x1000' -and $null -ne $denied.errors[0].win32Error) 'Native rejection reports the exact API, Win32 code and minimal access mask'
+    Assert ($denied.status -eq 'failed' -and $denied.errors[0].api -eq 'OpenProcess' -and $denied.errors[0].requestedAccess -eq '0x101000' -and $null -ne $denied.errors[0].win32Error) 'Native rejection reports the exact API, Win32 code and query/synchronization access mask'
     $queryOnly=[Roo.Optimization.CpuSets.Target]::new($probe.Id,$false)
     try { $rejected=$false; try {$queryOnly.Write([uint32[]]@())} catch {$rejected=$true}; Assert $rejected 'A detection handle cannot mutate process controls' } finally {$queryOnly.Dispose()}
     $control.Write([uint32[]]$original)
@@ -123,7 +123,7 @@ public static class CpuSetOracle {
     $deniedJournal=Join-Path $root 'denied.json'
     $deniedApply=Read-Result (& $scriptPath -Action Apply -InputPath $previewPath -ReviewSha256 (Get-FileHash $previewPath).Hash -JournalPath $deniedJournal -ConfirmApply)
     if ($deniedApply.status -ne 'failed' -or $deniedApply.errors[0].win32Error -ne 5) { Write-Host ($deniedApply|ConvertTo-Json -Depth 16); & whoami.exe /priv /fo csv | Where-Object {$_ -match 'SeDebugPrivilege'} | Write-Host }
-    Assert ($deniedApply.status -eq 'failed' -and $deniedApply.errors[0].api -eq 'OpenProcess' -and $deniedApply.errors[0].win32Error -eq 5 -and $deniedApply.errors[0].requestedAccess -eq '0x3000' -and -not(Test-Path $deniedJournal)) 'A disposable process denying SET_LIMITED_INFORMATION is respected without escalation or mutation'
+    Assert ($deniedApply.status -eq 'failed' -and $deniedApply.errors[0].api -eq 'OpenProcess' -and $deniedApply.errors[0].win32Error -eq 5 -and $deniedApply.errors[0].requestedAccess -eq '0x103000' -and -not(Test-Path $deniedJournal)) 'A disposable process denying SET_LIMITED_INFORMATION is respected without escalation or mutation'
     Assert ([Security.Principal.WindowsIdentity]::GetCurrent().ImpersonationLevel -eq $contextBefore -and (@(& whoami.exe /priv /fo csv) -join "`n") -ceq $privilegesBefore) 'A denied target open restores the caller context and preserves process-token privileges'
     $caller=[Security.Principal.WindowsIdentity]::GetCurrent();$nested=$caller.Impersonate()
     try {

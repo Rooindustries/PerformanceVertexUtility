@@ -46,5 +46,7 @@ if (-not (Test-Path -LiteralPath $projectPath)) {
 
 $dotnet = Resolve-DotNetSdk -RequestedPath $DotNetPath
 Write-Host "Using dotnet SDK host: $dotnet"
+& $dotnet publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') --configuration $Configuration --self-contained false -o (Join-Path $repoRoot 'backend\bin\optimizer')
+if ($LASTEXITCODE -ne 0) { throw 'The optimizer helper build failed.' }
 & $dotnet build $projectPath --configuration $Configuration -p:Platform=x64
 exit $LASTEXITCODE

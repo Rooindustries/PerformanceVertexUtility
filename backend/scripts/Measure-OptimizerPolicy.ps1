@@ -1,0 +1,9 @@
+param([Parameter(Mandatory=$true)][string]$OutputPath,[string]$DotNetPath=$env:ROO_DOTNET_EXE)
+$ErrorActionPreference='Stop'
+if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
+$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
+$root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+& (Join-Path $PSScriptRoot 'Build-OptimizerHost.ps1') -DotNetPath $DotNetPath
+if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+& $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerBench\OptimizerBench.csproj') --configuration Release -- $root $DotNetPath ([IO.Path]::GetFullPath($OutputPath))
+exit $LASTEXITCODE
