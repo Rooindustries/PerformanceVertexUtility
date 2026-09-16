@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE)
+param([string]$DotNetPath=$env:ROO_DOTNET_EXE,[switch]$SharedQueuePaths)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -46,6 +46,7 @@ public class RooHostRemover {
         $keyName='RooHostFixture-'+$caseId+'-'+$label
         $display='Roo Host '+$label+' '+$caseId.Substring(0,8)
         $install=Join-Path $root ($label+' application files')
+        if($SharedQueuePaths -and $label -eq 'Two'){$install=Join-Path $apps[0].install 'Shared add-on'}
         [IO.Directory]::CreateDirectory($install)|Out-Null
         [IO.File]::WriteAllText((Join-Path $install 'preferences.txt'),$label+' original preferences')
         $dataPath=$dataRoot+'\'+$display
@@ -60,6 +61,10 @@ public class RooHostRemover {
         } finally {$registration.Dispose()}
         $apps+=@{keyName=$keyName;displayName=$display;install=$install;dataPath=$dataPath;label=$label}
     }
+    if($SharedQueuePaths){
+        $key=$hive.OpenSubKey($apps[0].dataPath,$true)
+        try {$key.SetValue('SharedOwner',$apps[1].install,[Microsoft.Win32.RegistryValueKind]::String)}finally{$key.Dispose()}
+    }
     $inventory=(& (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1'))|ConvertFrom-Json
     Assert ($inventory.complete -eq $true) 'Production inventory explicitly reports complete ownership-provider reads'
     foreach($app in $apps){$matches=@($inventory.apps|Where-Object {$_.displayName -ceq $app.displayName});Assert ($matches.Count -eq 1) 'Disposable registration has one exact production inventory identity';$app.appId=$matches[0].appId}
@@ -69,29 +74,62 @@ public class RooHostRemover {
     $queue=Join-Path $root 'removal-journal.json'
     $removal=(& (Join-Path $PSScriptRoot 'Invoke-BulkUninstall.ps1') -Action Apply -InputPath $planPath -ReviewSha256 (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash -JournalPath $queue -ConfirmApply -ManualReviewApproved)|ConvertFrom-Json
     Assert ($removal.status -eq 'cleanup-review-required' -and @($removal.data.entries|Where-Object {$_.attemptCount -ne 1 -or $_.state -ne 'removed'}).Count -eq 0) 'Both disposable vendor removers finish once through the production queue'
-    foreach($app in $apps){
-        $authority=Core 'cleanup-authority' @{queueJournalPath=$queue;appId=$app.appId}
-        Assert ($authority.providerQueryComplete -and -not $authority.registrationPresent -and -not $authority.removerRunning -and $authority.removalResolved) 'Native cleanup receives fresh authority from an actual completed remover journal'
-        $clock=[Diagnostics.Stopwatch]::StartNew()
-        $scan=Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$app.appId}
-        Write-Output ('Scan '+$app.label+': '+[Math]::Round($clock.Elapsed.TotalSeconds,2)+' s; '+$scan.registryKeysVisited+' registry keys; '+@($scan.candidates).Count+' candidates; complete='+$scan.complete)
-        $selected=@($scan.candidates|Where-Object {($_.target -eq $app.install) -or ($_.registry.keyPath -eq $app.dataPath -and $_.registry.kind -eq 'key') -or ($_.registry.keyPath -eq ($dataRoot+'\SharedReferences') -and $_.registry.valueName -eq $app.label)})
-        Assert ($selected.Count -eq 3 -and @($selected|Where-Object {$_.protected -or -not $_.ownershipComplete -or @($_.sharedOwners).Count -gt 0}).Count -eq 0) 'Broad discovery finds the owned folder, whole key and shared-container value'
-        $reviewPath=Join-Path $root ($app.label+'-cleanup-review.json')
-        $preview=Core 'cleanup-preview' @{queueJournalPath=$queue;appId=$app.appId;itemIds=@($selected|ForEach-Object {$_.itemId});outputPath=$reviewPath;ownershipReviewed=$true;acceptKeyRecreation=$true}
-        $reviews+=@{preview=$preview;operation=@{previewPath=$reviewPath;reviewHash=(Get-FileHash -LiteralPath $reviewPath -Algorithm SHA256).Hash;journalPath=(Join-Path $root ($app.label+'-cleanup-journal.json'))}}
-    }
-    $batchPath=Join-Path $root 'batch-review.json'
-    Core 'cleanup-batch-preview' @{cleanupOperations=@($reviews|ForEach-Object {$_.operation});outputPath=$batchPath}|Out-Null
-    $batchJournal=Join-Path $root 'batch-journal.json'
-    $applied=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath -Algorithm SHA256).Hash;journalPath=$batchJournal;confirm=$true}
-    Assert ($applied.status -eq 'applied') 'The public batch endpoint completes both reviewed cleanup operations'
-    foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert (-not(Test-Path -LiteralPath $app.install) -and $null -eq $key) 'Independent Windows reads confirm the selected file and registry resources are absent'}finally{if($key){$key.Dispose()}}}
-    $restored=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;confirm=$true}
-    Assert ($restored.status -eq 'restored') 'The public batch endpoint restores the captured data'
-    foreach($app in $apps){
-        $key=$hive.OpenSubKey($app.dataPath)
-        try {Assert ($key.GetValue('Original') -eq ($app.label+' original registry') -and $key.GetValue('VendorCreated') -eq 17 -and [IO.File]::ReadAllText((Join-Path $app.install 'vendor-created.txt')) -eq 'created by fixture vendor' -and [IO.File]::ReadAllText((Join-Path $app.install 'preferences.txt')) -eq ($app.label+' original preferences')) 'Recovery includes both original and vendor-created leftovers'}finally{$key.Dispose()}
+    if($SharedQueuePaths){
+        $fresh=(& (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1'))|ConvertFrom-Json
+        Assert ($fresh.complete -eq $true -and @($fresh.apps|Where-Object {$_.appId -in @($apps.appId)}).Count -eq 0) 'Both shared-resource owners are absent from fresh installed inventory'
+        $scan=Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$apps[0].appId}
+        $folder=@($scan.candidates|Where-Object {$_.target -eq $apps[0].install})
+        $key=@($scan.candidates|Where-Object {$_.registry.kind -eq 'key' -and $_.registry.keyPath -eq $apps[0].dataPath})
+        Assert ($folder.Count -eq 1 -and $folder[0].sharedOwners -contains $apps[1].displayName) 'A removed, unselected queue peer still protects its nested installation files'
+        Assert ($key.Count -eq 1 -and $key[0].sharedOwners -contains $apps[1].displayName) 'A removed queue peer still protects whole-key data that references its installation'
+        foreach($candidate in @($folder[0],$key[0])){
+            $reviewPath=Join-Path $root ([Guid]::NewGuid().ToString('N')+'-rejected-review.json')
+            $rejected=$false
+            try {Core 'cleanup-preview' @{queueJournalPath=$queue;appId=$apps[0].appId;itemIds=@($candidate.itemId);outputPath=$reviewPath;ownershipReviewed=$true;acceptKeyRecreation=$true}|Out-Null}
+            catch {if($_.Exception.Message -notlike '*This leftover is protected, shared or has incomplete ownership evidence*'){throw};$rejected=$true}
+            Assert ($rejected -and -not(Test-Path -LiteralPath $reviewPath)) 'Ownership confirmation cannot authorize another removed app''s shared resource'
+        }
+        $queueBytes=[IO.File]::ReadAllBytes($queue)
+        try {
+            foreach($invalid in @('missing','mismatched')){
+                $changed=[Text.Encoding]::UTF8.GetString($queueBytes).TrimStart([char]0xfeff)|ConvertFrom-Json
+                $peer=@($changed.plan.entries|Where-Object {$_.appId -eq $apps[1].appId})[0]
+                if($invalid -eq 'missing'){$peer.PSObject.Properties.Remove('appSnapshot');$expected='Removal queue ownership metadata is incomplete.'}
+                else {$peer.appSnapshot.appId=$apps[0].appId;$expected='Saved ownership metadata belongs to another queue entry.'}
+                Write-RooOperationJson $changed $queue
+                $rejected=$false
+                try {Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$apps[0].appId}|Out-Null}
+                catch {if(-not $_.Exception.Message.EndsWith($expected)){throw};$rejected=$true}
+                Assert $rejected ('Cleanup rejects '+$invalid+' ownership evidence for an unselected queue peer')
+            }
+        } finally {[IO.File]::WriteAllBytes($queue,$queueBytes)}
+        $key=$hive.OpenSubKey($apps[0].dataPath)
+        try {Assert ([IO.File]::ReadAllText((Join-Path $apps[1].install 'preferences.txt')) -eq 'Two original preferences' -and $key.GetValue('SharedOwner') -eq $apps[1].install) 'Rejected cleanup preserves the unselected app''s file and registry evidence'}finally{$key.Dispose()}
+    } else {
+        foreach($app in $apps){
+            $authority=Core 'cleanup-authority' @{queueJournalPath=$queue;appId=$app.appId}
+            Assert ($authority.providerQueryComplete -and -not $authority.registrationPresent -and -not $authority.removerRunning -and $authority.removalResolved) 'Native cleanup receives fresh authority from an actual completed remover journal'
+            $clock=[Diagnostics.Stopwatch]::StartNew()
+            $scan=Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$app.appId}
+            Write-Output ('Scan '+$app.label+': '+[Math]::Round($clock.Elapsed.TotalSeconds,2)+' s; '+$scan.registryKeysVisited+' registry keys; '+@($scan.candidates).Count+' candidates; complete='+$scan.complete)
+            $selected=@($scan.candidates|Where-Object {($_.target -eq $app.install) -or ($_.registry.keyPath -eq $app.dataPath -and $_.registry.kind -eq 'key') -or ($_.registry.keyPath -eq ($dataRoot+'\SharedReferences') -and $_.registry.valueName -eq $app.label)})
+            Assert ($selected.Count -eq 3 -and @($selected|Where-Object {$_.protected -or -not $_.ownershipComplete -or @($_.sharedOwners).Count -gt 0}).Count -eq 0) 'Broad discovery finds the owned folder, whole key and shared-container value'
+            $reviewPath=Join-Path $root ($app.label+'-cleanup-review.json')
+            $preview=Core 'cleanup-preview' @{queueJournalPath=$queue;appId=$app.appId;itemIds=@($selected|ForEach-Object {$_.itemId});outputPath=$reviewPath;ownershipReviewed=$true;acceptKeyRecreation=$true}
+            $reviews+=@{preview=$preview;operation=@{previewPath=$reviewPath;reviewHash=(Get-FileHash -LiteralPath $reviewPath -Algorithm SHA256).Hash;journalPath=(Join-Path $root ($app.label+'-cleanup-journal.json'))}}
+        }
+        $batchPath=Join-Path $root 'batch-review.json'
+        Core 'cleanup-batch-preview' @{cleanupOperations=@($reviews|ForEach-Object {$_.operation});outputPath=$batchPath}|Out-Null
+        $batchJournal=Join-Path $root 'batch-journal.json'
+        $applied=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath -Algorithm SHA256).Hash;journalPath=$batchJournal;confirm=$true}
+        Assert ($applied.status -eq 'applied') 'The public batch endpoint completes both reviewed cleanup operations'
+        foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert (-not(Test-Path -LiteralPath $app.install) -and $null -eq $key) 'Independent Windows reads confirm the selected file and registry resources are absent'}finally{if($key){$key.Dispose()}}}
+        $restored=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;confirm=$true}
+        Assert ($restored.status -eq 'restored') 'The public batch endpoint restores the captured data'
+        foreach($app in $apps){
+            $key=$hive.OpenSubKey($app.dataPath)
+            try {Assert ($key.GetValue('Original') -eq ($app.label+' original registry') -and $key.GetValue('VendorCreated') -eq 17 -and [IO.File]::ReadAllText((Join-Path $app.install 'vendor-created.txt')) -eq 'created by fixture vendor' -and [IO.File]::ReadAllText((Join-Path $app.install 'preferences.txt')) -eq ($app.label+' original preferences')) 'Recovery includes both original and vendor-created leftovers'}finally{$key.Dispose()}
+        }
     }
 } finally {
     foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
@@ -100,3 +138,4 @@ public class RooHostRemover {
     if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
 }
 Assert (-not(Test-Path -LiteralPath $root)) 'Host validation removes its registrations, receipts, binaries, journals and leftovers'
+if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -SharedQueuePaths}
