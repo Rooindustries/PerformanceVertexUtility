@@ -9,4 +9,6 @@ if(-not $PythonPath){
 if(-not $PythonPath){throw 'Set ROO_PYTHON_EXE to the validation Python interpreter.'}
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 & $PythonPath (Join-Path $root 'tools\validation\test_cpu_measurement.py')
+if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+& $PythonPath (Join-Path $root 'tools\validation\test_reference_measurement.py')
 exit $LASTEXITCODE
