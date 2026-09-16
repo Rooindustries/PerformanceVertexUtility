@@ -5,7 +5,7 @@ using Roo.Optimizer;
 
 try
 {
-if (args is ["--probe"]) { Thread.Sleep(TimeSpan.FromMinutes(3)); return; }
+if (args is ["--probe"] or ["--probe-ready"]) { if (args[0] == "--probe-ready") Console.WriteLine("ready"); Thread.Sleep(TimeSpan.FromMinutes(3)); return; }
 void Check(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
@@ -13,7 +13,7 @@ void Check(bool condition, string message)
 }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
-if (args is ["--policies"]) { PolicyChecks.Run(Check); return; }
+if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
@@ -137,6 +137,7 @@ try
     if (controlsApplied.Status != "applied") Console.WriteLine(JsonSerializer.Serialize(controlsApplied, OperationFiles.Json));
     probe.Refresh();
     Check(controlsApplied.Status == "applied" && probe.PriorityClass != priorityBefore && probe.ProcessorAffinity == (IntPtr)1 && Oracle.Io(probe.Handle) != ioBefore && Oracle.Gpu(probe.Handle) != gpuBefore && Oracle.CpuSets(probe.Handle).Length == 1, "CPU priority, affinity, CPU Sets, I/O and GPU priority changes are independently visible");
+    Check(engine.Apply(controlsPath, OperationFiles.HashFile(controlsPath), controlsJournal).Status == "applied" && Oracle.Gpu(probe.Handle) != gpuBefore && Oracle.Io(probe.Handle) != ioBefore, "Repeated combined-control application keeps independently observed GPU and I/O assignments healthy");
     Check(engine.Restore(controlsJournal).Status == "restored", "Combined process controls restore through the owned recovery path");
     probe.Refresh();
     Check(probe.PriorityClass == priorityBefore && probe.ProcessorAffinity == affinityBefore && Oracle.Io(probe.Handle) == ioBefore && Oracle.Gpu(probe.Handle) == gpuBefore && Oracle.CpuSets(probe.Handle).Length == 0, "Independent readback verifies all original combined controls");
@@ -160,6 +161,7 @@ RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 FileChecks.Run(Check);
 FileConflictChecks.Run(Check);
+ProcessIdentityChecks.Run(Check);
 PolicyChecks.Run(Check);
 DiscoveryChecks.Run(Check);
 ApplicationCleanupChecks.Run(Check);
@@ -200,7 +202,11 @@ static class Oracle
         if (!SetPowerInfo(process, 4, ref data, 12)) throw new InvalidOperationException("Oracle power write failed: " + Marshal.GetLastWin32Error());
     }
     public static int Io(IntPtr process) => NtQueryInformationProcess(process, 33, out var value, 4, IntPtr.Zero) == 0 ? value : throw new InvalidOperationException("Oracle I/O query failed");
-    public static int Gpu(IntPtr process) => D3DKMTGetProcessSchedulingPriorityClass(process, out var value) == 0 ? value : throw new InvalidOperationException("Oracle GPU query failed");
+    public static int Gpu(IntPtr process)
+    {
+        var status = D3DKMTGetProcessSchedulingPriorityClass(process, out var value);
+        return status == 0 ? value : throw new InvalidOperationException($"Oracle GPU query failed: NTSTATUS 0x{status:X8}");
+    }
     public static uint[] CpuSets(IntPtr process)
     {
         var values = new uint[1024];

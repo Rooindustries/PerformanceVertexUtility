@@ -40,10 +40,17 @@ public sealed class ProcessTarget : IDisposable
     {
         EnsureRunning();
         if (!CpuApi.GetProcessTimes(_handle, out var creation, out _, out _, out _)) Fail("GetProcessTimes");
-        var path = new StringBuilder(32768);
-        uint length = (uint)path.Capacity;
-        if (!CpuApi.QueryFullProcessImageName(_handle, 0, path, ref length)) Fail("QueryFullProcessImageName");
-        return new(_pid, creation.ToString(CultureInfo.InvariantCulture), path.ToString());
+        var capacity = 260;
+        while (true)
+        {
+            var path = new StringBuilder(capacity);
+            uint length = (uint)path.Capacity;
+            if (CpuApi.QueryFullProcessImageName(_handle, 0, path, ref length))
+                return new(_pid, creation.ToString(CultureInfo.InvariantCulture), path.ToString());
+            var error = Marshal.GetLastWin32Error();
+            if (error != 122 || capacity == 32768) throw new CpuFailure("QueryFullProcessImageName", error, _access);
+            capacity = Math.Min(capacity * 2, 32768);
+        }
     }
 
     public bool HasExited
