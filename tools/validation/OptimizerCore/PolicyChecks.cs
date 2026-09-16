@@ -10,9 +10,21 @@ static class PolicyChecks
         Process? probe = null;
         Process StartProbe()
         {
-            var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
-            start.ArgumentList.Add("--probe");
-            return Process.Start(start)!;
+            var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+            start.ArgumentList.Add("--probe-ready");
+            var process = Process.Start(start)!;
+            try
+            {
+                var ready = process.StandardOutput.ReadLineAsync();
+                if (ready.Wait(5000) && ready.Result == "ready") return process;
+                throw new InvalidOperationException("The policy fixture did not become ready.");
+            }
+            catch
+            {
+                if (!process.HasExited) process.Kill();
+                process.WaitForExit(); process.Dispose();
+                throw;
+            }
         }
         try
         {
@@ -22,12 +34,14 @@ static class PolicyChecks
             var cpu = topology.First(item => item.Available);
             var initial = Oracle.Memory(probe.Handle);
             var memory = initial == 2 ? 3u : 2u;
+            var initialGpu = Oracle.Gpu(probe.Handle);
+            var gpu = initialGpu == 1 ? 2 : 1;
             var store = new ProcessPolicyStore(root);
             var rule = new SavedProcessRule
             {
                 SchemaVersion = 1, RuleId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(), Name = "Disposable process policy",
                 Enabled = true, MatchMode = "path", ExecutablePath = Environment.ProcessPath!, ExecutableHash = null,
-                Controls = new() { ["memoryPriority"] = JsonSerializer.SerializeToElement(memory) },
+                Controls = new() { ["memoryPriority"] = JsonSerializer.SerializeToElement(memory), ["gpuPriority"] = JsonSerializer.SerializeToElement(gpu) },
                 CpuSelection = new() { Kind = "logical", TopologyHash = CpuSelection.Fingerprint(topology), Processors = [new(cpu.Group, cpu.Index)] },
             };
             store.Save(rule);
@@ -36,11 +50,12 @@ static class PolicyChecks
             if (first.Errors.Count > 0) Console.WriteLine(string.Join("\n", first.Errors));
             check(Oracle.Memory(probe.Handle) == memory && Oracle.CpuSets(probe.Handle).SequenceEqual(new[] { cpu.Id }), "Saved policies apply memory controls and semantic CPU choices to an existing process");
             host.Tick();
-            check(first.Instances.Count(instance => instance.Status == "active") == 1, "Repeated policy polling does not create duplicate process operations");
+            check(first.Instances.Count(instance => instance.Status == "active") == 1 && Oracle.Gpu(probe.Handle) == gpu, "Repeated policy polling retains one healthy operation with the independently observed GPU priority");
             var oldId = probe.Id;
             probe.Kill(); probe.WaitForExit(); probe.Dispose();
             probe = StartProbe();
             var relaunchedOriginal = Oracle.Memory(probe.Handle);
+            var relaunchedGpu = Oracle.Gpu(probe.Handle);
             var relaunched = host.Tick();
             check(relaunched.Instances.Any(instance => instance.Process.ProcessId == oldId && instance.Status == "expired") && Oracle.Memory(probe.Handle) == memory && Oracle.CpuSets(probe.Handle).SequenceEqual(new[] { cpu.Id }), "A new process instance receives a fresh policy operation while the exited instance expires");
             host = new ProcessPolicyHost(store, _ => false);
@@ -51,7 +66,7 @@ static class PolicyChecks
             check(Oracle.Memory(probe.Handle) == 4 && recovered.Instances.Any(instance => instance.Process.ProcessId == probe.Id && instance.Status == "conflict"), "A policy suspends on a foreign change instead of repeatedly overwriting it");
             store.Save(rule with { Enabled = false });
             host.Tick();
-            check(Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).Length == 0, "Disabling a rule restores only the controls it still owns");
+            check(Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).Length == 0 && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Disabling a rule restores its CPU Sets and GPU priority while preserving a foreign memory priority");
             Oracle.SetMemory(probe.Handle, memory);
             check(host.Stop().Status == "stopped" && Oracle.Memory(probe.Handle) == relaunchedOriginal, "Policy stop resolves an available owned restoration and leaves no active controller");
             store.Save(rule with { Enabled = true });
