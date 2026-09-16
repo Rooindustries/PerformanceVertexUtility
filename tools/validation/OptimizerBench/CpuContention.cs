@@ -16,25 +16,44 @@ static class CpuContention
     {
         if (args is ["--cpu-foreground", var foreground]) { Work(OperationFiles.Read<Request>(foreground), true); return; }
         if (args is ["--cpu-background", var background]) { Work(OperationFiles.Read<Request>(background), false); return; }
+        string? referencePath = null, heartbeat = null;
+        if (args.Length == 8 && args[0] == "--cpu-reference-measure")
+        {
+            referencePath = Path.GetFullPath(args[6]);
+            heartbeat = Path.GetFullPath(args[7]);
+            if (OperationFiles.HashFile(referencePath) != ReferenceGovernor.Sha256 || !File.Exists(heartbeat))
+                throw new InvalidDataException("A verified reference governor and active recovery heartbeat are required.");
+            ReferenceGovernor.VerifyIsolation(null);
+            args = ["--cpu-measure", .. args[1..6]];
+        }
         if (args is not ["--cpu-measure", var repository, var dotnet, var output, var blocksText, var durationText])
             throw new ArgumentException("CPU measurement needs repository, dotnet, output, paired-block count and trial seconds.");
         var blocks = int.Parse(blocksText);
         var seconds = int.Parse(durationText);
         if (blocks is < 1 or > 30 || seconds is < 3 or > 60) throw new ArgumentException("Use 1–30 paired blocks and 3–60 seconds per trial.");
-        Measure(Path.GetFullPath(repository), Path.GetFullPath(dotnet), Path.GetFullPath(output), blocks, seconds);
+        Measure(Path.GetFullPath(repository), Path.GetFullPath(dotnet), Path.GetFullPath(output), blocks, seconds, referencePath, heartbeat);
     }
 
-    static void Measure(string repository, string dotnet, string output, int blocks, int seconds)
+    static void Measure(string repository, string dotnet, string output, int blocks, int seconds, string? referencePath, string? heartbeat)
     {
         using var self = new ProcessTarget(Environment.ProcessId);
         var topology = self.Topology();
         var cpu = topology.Where(cpu => cpu.Available && cpu.Group == 0).OrderByDescending(cpu => cpu.Efficiency).ThenBy(cpu => cpu.Index).First();
         var root = Path.Combine(Path.GetTempPath(), "roo-cpu-measure-" + Guid.NewGuid().ToString("N"));
-        var foregroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuForeground.exe");
-        var backgroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuBackground.exe");
+        var suffix = referencePath is null ? "" : "-" + Guid.NewGuid().ToString("N");
+        var foregroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuForeground" + suffix + ".exe");
+        var backgroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuBackground" + suffix + ".exe");
         var hostPath = Path.Combine(repository, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         using var fixtureLease = OperationFiles.Lock(Path.Combine(Path.GetDirectoryName(foregroundExe)!, "cpu-measure"));
         if (File.Exists(foregroundExe) || File.Exists(backgroundExe)) throw new IOException("A CPU measurement executable already exists.");
+        if (referencePath is not null)
+            foreach (var name in new[] { Path.GetFileNameWithoutExtension(foregroundExe), Path.GetFileNameWithoutExtension(backgroundExe) })
+            {
+                var existing = Process.GetProcessesByName(name);
+                foreach (var process in existing) process.Dispose();
+                if (existing.Length != 0) throw new InvalidOperationException("A benchmark process name is already in use.");
+            }
+        void RefreshGuard() { if (heartbeat is not null) File.SetLastWriteTimeUtc(heartbeat, DateTime.UtcNow); }
         var foregroundCreated = false;
         var backgroundCreated = false;
         var trials = new List<object>();
@@ -52,9 +71,15 @@ static class CpuContention
             backgroundCreated = true;
             for (var block = 0; block < blocks; block++)
             {
-                var order = random.Next(2) == 0 ? new[] { false, true } : new[] { true, false };
-                foreach (var enabled in order)
+                var order = referencePath is null
+                    ? (random.Next(2) == 0 ? new[] { "normal", "roo" } : new[] { "roo", "normal" })
+                    : new[] { "normal", "roo", "lasso" };
+                if (referencePath is not null)
+                    for (var index = order.Length - 1; index > 0; index--) { var other = random.Next(index + 1); (order[index], order[other]) = (order[other], order[index]); }
+                foreach (var controller in order)
                 {
+                    RefreshGuard();
+                    var enabled = controller != "normal";
                     var trial = Path.Combine(root, "trial-" + Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(trial);
                     var request = new Request(trial, "Local\\RooCpuMeasure-" + Guid.NewGuid().ToString("N"), 1ul << cpu.Index, seconds, 500000);
@@ -63,7 +88,7 @@ static class CpuContention
                     var path = Path.Combine(trial, "request.json");
                     OperationFiles.Write(path, request);
                     var store = new ProcessPolicyStore(Path.Combine(trial, "policies"));
-                    Process? worker = null, foreground = null, background = null;
+                    Process? worker = null, reference = null, foreground = null, background = null;
                     Task<string>? workerOutput = null, workerErrors = null;
                     try
                     {
@@ -73,7 +98,8 @@ static class CpuContention
                         var original = Priority(background);
                         if (original != ProcessPriorityClass.Normal || Priority(foreground) != ProcessPriorityClass.Normal)
                             throw new InvalidOperationException("Another controller changed the normalized fixture priority before measurement.");
-                        if (enabled)
+                        var applyTimer = Stopwatch.StartNew();
+                        if (controller == "roo")
                         {
                             store.Save(new SavedProcessRule
                             {
@@ -86,14 +112,24 @@ static class CpuContention
                             worker = Start(dotnet, hostPath, "policy-run", workerRequest);
                             workerOutput = worker.StandardOutput.ReadToEndAsync();
                             workerErrors = worker.StandardError.ReadToEndAsync();
+                        }
+                        if (controller == "lasso") reference = ReferenceGovernor.Start(referencePath!, trial, Path.GetFileName(backgroundExe));
+                        if (enabled)
+                        {
                             var deadline = Stopwatch.StartNew();
                             while (Priority(background) != ProcessPriorityClass.BelowNormal && deadline.Elapsed < TimeSpan.FromSeconds(15))
                             {
-                                if (worker.HasExited) throw new InvalidOperationException("The policy worker exited before applying the fixture rule.");
+                                if ((worker ?? reference)!.HasExited) throw new InvalidOperationException("The controller exited before applying the fixture rule.");
+                                RefreshGuard();
                                 Thread.Sleep(20);
                             }
                             if (Priority(background) != ProcessPriorityClass.BelowNormal) throw new InvalidOperationException("The fixture rule was not independently observed.");
                         }
+                        var applyMilliseconds = enabled ? applyTimer.Elapsed.TotalMilliseconds : (double?)null;
+                        if (referencePath is not null) ReferenceGovernor.VerifyIsolation(reference);
+                        var activeController = worker ?? reference;
+                        activeController?.Refresh();
+                        var controllerCpuBefore = activeController?.TotalProcessorTime.TotalSeconds;
                         var backgroundPriority = Priority(background);
                         var foregroundPriority = Priority(foreground);
                         VerifyPlacement(foreground, request.Affinity); VerifyPlacement(background, request.Affinity);
@@ -109,6 +145,8 @@ static class CpuContention
                             if (Priority(background) != backgroundPriority || Priority(foreground) != foregroundPriority)
                                 throw new InvalidOperationException("A competing priority change invalidated the trial.");
                             VerifyPlacement(foreground, request.Affinity); VerifyPlacement(background, request.Affinity);
+                            if (referencePath is not null) ReferenceGovernor.VerifyIsolation(reference);
+                            RefreshGuard();
                             Thread.Sleep(100);
                         }
                         var front = OperationFiles.Read<WorkResult>(foregroundPath);
@@ -123,6 +161,10 @@ static class CpuContention
                         var backgroundCpuSeconds = background.TotalProcessorTime.TotalSeconds - backgroundCpuBefore;
                         if (backgroundCpuSeconds < seconds * .5 || foregroundCpuSeconds < seconds * .01)
                             throw new InvalidOperationException("Independent process CPU time does not establish the intended contention workload.");
+                        activeController?.Refresh();
+                        var controllerCpuSeconds = activeController?.TotalProcessorTime.TotalSeconds - controllerCpuBefore;
+                        var controllerPrivateBytes = activeController?.PrivateMemorySize64;
+                        if (referencePath is not null) ReferenceGovernor.VerifyIsolation(reference);
                         double? workerCpuSeconds = null;
                         if (worker is not null)
                         {
@@ -132,16 +174,24 @@ static class CpuContention
                             if (worker.ExitCode != 0 || store.Status().State?.Status != "stopped")
                                 throw new InvalidOperationException("Worker recovery was incomplete: " + workerOutput!.GetAwaiter().GetResult() + workerErrors!.GetAwaiter().GetResult());
                         }
+                        if (reference is not null)
+                        {
+                            ReferenceGovernor.Stop(reference);
+                            reference = null;
+                            background.PriorityClass = original;
+                        }
                         if (Priority(background) != original || Priority(foreground) != ProcessPriorityClass.Normal)
                             throw new InvalidOperationException("The original fixture priorities were not restored.");
-                        trials.Add(new { block, enabled, backgroundPriority = backgroundPriority.ToString(), foregroundPriority = foregroundPriority.ToString(),
+                        trials.Add(new { block, enabled, controller, applyMilliseconds, controllerCpuSeconds, controllerPrivateBytes,
+                            restoration = controller == "lasso" ? "harnessAfterReferenceExit" : controller == "roo" ? "controller" : "unchanged", backgroundPriority = backgroundPriority.ToString(), foregroundPriority = foregroundPriority.ToString(),
                             restoredPriority = original.ToString(), foreground = front, background = back, foregroundCpuSeconds, backgroundCpuSeconds, workerCpuSeconds });
                         OperationFiles.Write(output, new { status = "running", binaries, blocks, seconds, trials });
-                        Console.WriteLine($"CPU block {block + 1}/{blocks}: {(enabled ? "Roo rule" : "normal priority")}, background operations {back.Operations}, foreground samples {front.Samples.Length}");
+                        Console.WriteLine($"CPU block {block + 1}/{blocks}: {controller}, background operations {back.Operations}, foreground samples {front.Samples.Length}");
                     }
                     finally
                     {
                         var failures = new List<Exception>();
+                        try { ReferenceGovernor.Stop(reference); } catch (Exception error) { failures.Add(error); }
                         if (worker is not null && !worker.HasExited)
                         {
                             try { store.RequestStop(); }
@@ -157,16 +207,21 @@ static class CpuContention
             }
             OperationFiles.Write(output, new
             {
-                schemaVersion = 1, status = "completed", measuredAtUtc = DateTime.UtcNow, machine = Environment.MachineName, os = Environment.OSVersion.ToString(),
+                schemaVersion = referencePath is null ? 1 : 2, status = "completed", measuredAtUtc = DateTime.UtcNow, machine = Environment.MachineName, os = Environment.OSVersion.ToString(),
                 cpu, topologyHash = CpuSelection.Fingerprint(topology), logicalProcessors = Environment.ProcessorCount, binaries,
                 blocks, seconds, intervalMilliseconds = 20, iterationsPerBurst = 500000, backgroundThreads = 2, seed = 16092026,
                 trials, externalBefore, externalAfter = Controllers(),
+                referenceSha256 = referencePath is null ? null : OperationFiles.HashFile(referencePath),
+                referencePollRequestKey = referencePath is null ? null : "Performance.UpdateSpeedCore",
+                referencePollRequestMilliseconds = referencePath is null ? (int?)null : 500,
                 conditions = new[] { "The desktop app remained closed; only owned disposable processes were controlled.",
                     "Both workloads use one logical CPU; this does not reserve that CPU against other software.",
                     "Dynamic priority boosts are disabled on both fixture processes. No power plan or system timer resolution is changed.",
                     "Samples measure scheduled wake-to-work completion, not input latency, CPU ready time or frame time.",
                     "The normal-priority condition has no Roo worker; the rule condition includes its worker and recovery.",
-                    "Existing Lasso configuration and processes remain unchanged; this is not an isolated Windows-only or Lasso-only comparison." },
+                    referencePath is null
+                        ? "Existing Lasso configuration and processes remain unchanged; this is not an isolated Windows-only or Lasso-only comparison."
+                        : "The installed governor was absent. The normal, Roo and verified reference conditions run separately; the existing GUI remains open. Reference fixture priority is restored by the harness after its governor exits." },
             });
         }
         finally

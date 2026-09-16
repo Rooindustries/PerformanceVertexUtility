@@ -195,6 +195,36 @@ This is an offscreen compute result, not presented frames, input latency or game
 
 Raw JSON SHA-256: `defb3304c617a549ec6553f450244fa70f087253f0f0f174b14524b0d81ff3d9`. Measured benchmark assembly SHA-256: `c910f884b572c8cdfdf0af7ae2834768b447bb2894d020408a74d574560cad79`. Raw samples, controller hashes and plots remain outside source control. Reproduce with `Measure-OptimizerGpu.ps1` and `tools/validation/analyze_gpu_measurement.py`.
 
+## Stock-reference CPU comparison
+
+The final run completed on **2026-09-16 at 06:42 UTC** on the same 9070 XT/i5-14600K PC. Ten randomized blocks contained normal priority, Roo and stock Process Lasso conditions, each lasting nine seconds with 450 foreground samples. Both controllers set only the disposable background process to BelowNormal. Their configured polling interval was 500 ms; Lasso used the current `Performance.UpdateSpeedCore` setting. The original governor service was temporarily stopped under an approved recovery guard, then restored with its startup mode, executable path and configuration hash unchanged. The existing Lasso GUI remained open in all conditions.
+
+The reference was the publisher's signed **18.3.0.34** governor, SHA-256 `EA338D4C47F61BB3AA107A26DE3614D112F19DA9438291B3A8212F21BB01D495`. Its installer was extracted without installation. Private Windows-written INI files and unquoted short paths established working rule application; the benchmark does not alter the installed Lasso configuration. The publisher documents private configuration paths. The current engine key was also checked against the verified binary and the installed configuration; the older online INI example's `UpdateSpeed` key must not be treated as the current core setting. [Command-line reference](https://bitsum.com/apps/process-lasso/docs/reference/command-lines/), [INI reference](https://bitsum.com/apps/process-lasso/docs/reference/ini-config/).
+
+| Measurement | Result |
+|---|---|
+| Median per-run foreground p99 | Normal: 74.594 ms; Roo: 2.902 ms; Lasso: 1.419 ms |
+| Paired Roo / normal p99 ratio | 0.04149; 95% interval 0.02676–0.06581 |
+| Paired Lasso / normal p99 ratio | 0.02357; 95% interval 0.01632–0.03906 |
+| Paired Roo / Lasso p99 ratio | 1.76054; 95% interval 0.85000–3.21704 |
+| Background throughput retained versus normal | Roo: 98.21%; Lasso: 97.89% (paired geometric ratios) |
+| Paired Roo / Lasso background-throughput ratio | 1.00325; 95% interval 0.98931–1.02132 |
+| Controller CPU accumulated over ten measured windows | Roo: 3.53125 s; Lasso: 0.15625 s, across 90 s per condition |
+| Controller private bytes, nearest-rank p50 | Roo: 14.21 MB; Lasso: 3.71 MB (decimal MB) |
+| Roo versus Lasso improvement / 5% non-regression gates | Neither established |
+
+Both explicit rules improved this synthetic workload versus normal priority while retaining background progress. **The comparison does not establish a Roo latency advantage or its predeclared 5% non-regression bound against Lasso.** The wide interval also does not establish that the point-estimate slowdown is repeatable. Roo used more observed controller CPU and private memory. Process CPU counters were quantized; an individual zero sample is not zero CPU use. These short windows follow fresh controller starts and are not a sustained-idle overhead measurement. Startup-to-apply includes configuration preparation and remains separate from workload timing.
+
+All final runs were retained. Earlier pilots and a run using the outdated polling-key name were excluded from this matched estimate before interpretation; their raw evidence remains separate. The final build includes the [measured allocation reduction](process-polling.md). That component improvement does not establish a game or controller-latency speedup. Effective-clock/temperature traces were not captured, and these offscreen CPU workers do not measure presented frames, input latency or an adaptive ProBalance comparison.
+
+A competing installed governor was rejected before measurement. An intentionally unmatched reference rule failed the independent Windows priority readback and left the result incomplete. Each completed trial checked placement, boost state, original-priority restoration and controller isolation. Lasso fixture priority was restored by the harness after terminating its exact owned reference instance; Roo restored its own journaled change. Analysis rejects missing conditions, altered reference identity, contradictory control/recovery data and background starvation.
+
+Raw final JSON SHA-256: `dbaa4bf2b20d6533753662c0f9d09104be49b500e92f57a1bb5a15697873f410`. Benchmark assembly SHA-256: `533484A12A0D4A0582BC47104A7FEBCAF0760DF7EE9C60902615A16E878BFFD3`; Host: `67DB9F639AC73FC6039F0DD055BC44DBB5CF99106272F3A381E3ECFBB35B3A14`; Core: `70E306FBD9F021C4DD32A8EC1E02755AD214EA71BB88A76FB5370B09B826B876`. Reproduce with `Measure-OptimizerReference.ps1` and `analyze_reference_measurement.py` under an approved service-recovery guard.
+
+## Protected-game validation limit
+
+A normal Steam launch of the installed Overwatch title reached a warning that continuing would disconnect another computer's active CS2 session. The launch was cancelled, no Overwatch process was started, and the original Steam process remained running with its window hidden again. Screenshots and process observations were retained privately. Actual protected-game behavior remains unverified; the separate launcher-inheritance/access-denial fixture is not a substitute for gameplay evidence.
+
 ## Implementation order and closure
 
 The starting baseline exposed metadata/rule-based candidate scanning, separate file recovery and a process footprint script. Their historical tests do not establish coverage of every requirement above. The implementation sequence is:
