@@ -553,3 +553,11 @@ function New-RooLeftoverItem {
         metadata = $Metadata
     }
 }
+function Assert-RooCleanupExclusions {
+    param([string[]]$Targets)
+    $policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\cleanup-exclusions.json'
+    if(@($Targets).Count -eq 0){return}
+    try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
+    catch [System.Management.Automation.ItemNotFoundException] {return}
+    & (Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1') -Action Check -FileTarget $Targets|Out-Null
+}

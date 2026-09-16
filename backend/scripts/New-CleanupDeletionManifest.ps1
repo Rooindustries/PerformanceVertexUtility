@@ -76,6 +76,7 @@ try {
         }
     }
 
+    Assert-RooCleanupExclusions @($selected.ToArray() | Where-Object { $_.type -in @('file','folder') } | ForEach-Object { [string]$_.target })
     $fileBackups = New-Object System.Collections.Generic.List[object]
     $registryExports = New-Object System.Collections.Generic.List[object]
     $serviceBackups = New-Object System.Collections.Generic.List[object]

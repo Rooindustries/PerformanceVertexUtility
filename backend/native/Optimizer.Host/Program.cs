@@ -66,21 +66,35 @@ try
             data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Status();
             break;
         case "cleanup-authority": data = Authority(request); break;
+        case "cleanup-exclusions-status":
+            data = new CleanupExclusionStore(CleanupExclusionStore.DefaultPath).Read();
+            break;
+        case "cleanup-exclusions-save":
+            RequireConfirmation(request);
+            data = new CleanupExclusionStore(CleanupExclusionStore.DefaultPath).Save(
+                request.Exclusions ?? throw new InvalidDataException("An explicit exclusion list is required."), request.ExpectedRevision);
+            break;
+        case "cleanup-exclusions-check":
+            var exclusions = new CleanupExclusionMatcher(new CleanupExclusionStore(CleanupExclusionStore.DefaultPath).Read().Exclusions);
+            foreach (var path in request.FileTargets ?? throw new InvalidDataException("Explicit file targets are required."))
+                if (exclusions.Match(path, directory: true) is { } reason) throw new InvalidDataException(reason);
+            data = new { allowed = true };
+            break;
         case "cleanup-scan":
-            data = new ApplicationCleanup(() => CleanupContextFor(request)).Scan(CancellationToken.None);
+            data = Cleanup(request).Scan(CancellationToken.None);
             break;
         case "cleanup-preview":
-            data = new ApplicationCleanup(() => CleanupContextFor(request)).Preview(Require(request.OutputPath, "output path"),
+            data = Cleanup(request).Preview(Require(request.OutputPath, "output path"),
                 request.ItemIds ?? throw new InvalidDataException("Select leftover item IDs."), request.OwnershipReviewed == true, request.AcceptKeyRecreation == true);
             break;
         case "cleanup-apply":
             RequireConfirmation(request);
-            data = new ApplicationCleanup(() => CleanupContextFor(request)).Apply(Require(request.PreviewPath, "preview path"),
+            data = Cleanup(request).Apply(Require(request.PreviewPath, "preview path"),
                 Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
             break;
         case "cleanup-restore":
             RequireConfirmation(request);
-            data = new ApplicationCleanup(() => CleanupContextFor(request)).Restore(Require(request.JournalPath, "journal path"));
+            data = Cleanup(request).Restore(Require(request.JournalPath, "journal path"));
             break;
         case "cleanup-batch-preview":
             data = CleanupBatch.Preview(Require(request.OutputPath, "output path"), request.CleanupOperations ?? throw new InvalidDataException("Application cleanup reviews are required."));
@@ -95,7 +109,7 @@ try
             break;
         case "cleanup-batch-restore":
             RequireConfirmation(request);
-            data = Batch(request).Restore(Require(request.JournalPath, "journal path"));
+            data = Batch(request).Restore(Require(request.JournalPath, "journal path"), request.RestoreAppIds);
             break;
         default: throw new InvalidDataException("Unknown optimizer action.");
     }
@@ -109,7 +123,9 @@ catch (Exception error)
 
 static string Require(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new InvalidDataException("Missing " + name + ".") : value;
 static void RequireConfirmation(HostRequest request) { if (request.Confirm != true) throw new InvalidDataException("This operation needs explicit confirmation."); }
-static CleanupBatch Batch(HostRequest request) => new((source, appId) => new ApplicationCleanup(() => CleanupContextFor(request with { QueueJournalPath = source, AppId = appId })));
+static ApplicationCleanup Cleanup(HostRequest request) => new(() => CleanupContextFor(request),
+    currentExclusions: () => new CleanupExclusionStore(CleanupExclusionStore.DefaultPath).Read().Exclusions);
+static CleanupBatch Batch(HostRequest request) => new((source, appId) => Cleanup(request with { QueueJournalPath = source, AppId = appId }));
 
 static CleanupAuthority Authority(HostRequest request)
 {
@@ -200,4 +216,8 @@ sealed record HostRequest
     public bool? AcceptKeyRecreation { get; init; }
     public CleanupPart[]? CleanupOperations { get; init; }
     public string? CancellationId { get; init; }
+    public CleanupExclusions? Exclusions { get; init; }
+    public string? ExpectedRevision { get; init; }
+    public string[]? FileTargets { get; init; }
+    public string[]? RestoreAppIds { get; init; }
 }

@@ -17,7 +17,7 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    private FileLease(string path, bool writable, bool create, bool directory, bool restore)
+    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false)
     {
         Path = NormalizePath(path);
         _writable = writable;
@@ -25,7 +25,7 @@ public sealed class FileLease : IDisposable
         {
             var root = System.IO.Path.GetPathRoot(Path)!;
             if (GetDriveType(root) == 4) throw new InvalidDataException("Network drives are outside this file recovery contract.");
-            var parent = CreateFile("\\\\?\\" + root, ReadData | ReadAttributes | Synchronize, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+            var parent = CreateFile("\\\\?\\" + root, ReadData | ReadAttributes | Synchronize, shareDelete ? 7u : 3u, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
             if (parent.IsInvalid) { parent.Dispose(); Fail("CreateFile(root)"); }
             _ancestors.Add(parent);
             var parts = Path[root.Length..].Split('\\');
@@ -35,7 +35,7 @@ public sealed class FileLease : IDisposable
                 var access = ReadData | ReadAttributes | Synchronize;
                 if (final) access |= ReadControl | (writable ? Delete : 0);
                 if (final && restore) access |= (create ? 2u : 0u) | WriteAttributes | WriteDacl | WriteOwner;
-                var handle = OpenRelative(parent, parts[index], access, final ? 1u : 3u, final && create ? 2u : 1u,
+                var handle = OpenRelative(parent, parts[index], access, shareDelete ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
                     0x00200020 | (final && create ? directory ? 1u : 0x40u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
@@ -51,6 +51,25 @@ public sealed class FileLease : IDisposable
     public static FileLease Open(string path, bool writable = false) => new(path, writable, false, false, false);
     public static FileLease Create(string path, bool directory) => new(path, true, true, directory, true);
     public static FileLease OpenForRestore(string path) => new(path, true, false, false, true);
+
+    public static string ResolveExclusionPath(string path)
+    {
+        if (!System.IO.Path.IsPathFullyQualified(path)) throw new InvalidDataException("An exclusion needs an absolute local path.");
+        var full = NormalizePath(path);
+        var current = full;
+        while (current.Length > 3)
+        {
+            try
+            {
+                using var lease = new FileLease(current, false, false, false, false, shareDelete: true);
+                return CanonicalName(lease._handle).TrimEnd('\\') + full[current.Length..];
+            }
+            catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { current = System.IO.Path.GetDirectoryName(current)!; }
+        }
+        using var root = CreateFile("\\\\?\\" + current, ReadAttributes | Synchronize, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (root.IsInvalid) Fail("CreateFile(exclusion volume)");
+        return CanonicalName(root).TrimEnd('\\') + "\\" + full[3..];
+    }
 
     public FileSnapshot Capture()
     {
