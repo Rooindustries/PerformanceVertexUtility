@@ -123,11 +123,20 @@ static CleanupContext CleanupContextFor(HostRequest request)
     authority.Verify(Require(request.AppId, "app ID"), authority.ProviderIdentityHash);
     var source = Path.GetFullPath(Require(request.QueueJournalPath, "queue journal"));
     var queue = OperationFiles.Read<JsonElement>(source);
-    var entries = queue.GetProperty("plan").GetProperty("entries").EnumerateArray().Where(entry => entry.GetProperty("appId").GetString() == request.AppId).ToArray();
-    if (entries.Length != 1 || !entries[0].TryGetProperty("appSnapshot", out var app)) throw new InvalidDataException("The completed queue has no unique saved application metadata.");
+    var entries = queue.GetProperty("plan").GetProperty("entries").EnumerateArray().ToArray();
+    var selected = entries.Where(entry => entry.GetProperty("appId").GetString() == request.AppId).ToArray();
+    if (selected.Length != 1 || !selected[0].TryGetProperty("appSnapshot", out var app)) throw new InvalidDataException("The completed queue has no unique saved application metadata.");
+    var snapshots = entries.Select(entry =>
+    {
+        if (!entry.TryGetProperty("appSnapshot", out var snapshot)) throw new InvalidDataException("Removal queue ownership metadata is incomplete.");
+        var application = Application(snapshot);
+        if (application.AppId != entry.GetProperty("appId").GetString()) throw new InvalidDataException("Saved ownership metadata belongs to another queue entry.");
+        return application;
+    }).ToArray();
     var inventory = RunScript(request.RepoRoot, "Get-InstalledAppInventory.ps1", []);
     var complete = inventory.TryGetProperty("complete", out var known) && known.ValueKind == JsonValueKind.True;
-    return new(source, authority, Application(app), inventory.GetProperty("apps").EnumerateArray().Select(Application).ToArray(), complete);
+    var peers = inventory.GetProperty("apps").EnumerateArray().Select(Application).Concat(snapshots).Distinct().ToArray();
+    return new(source, authority, Application(app), peers, complete);
 }
 
 static CleanupApplication Application(JsonElement app)
