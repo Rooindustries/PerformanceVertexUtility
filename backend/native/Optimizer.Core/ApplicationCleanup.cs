@@ -47,7 +47,8 @@ public sealed class ApplicationCleanupJournal
 }
 
 public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
-    string[]? discoveryFileRoots = null, RegistryAddress[]? discoveryRegistryRoots = null)
+    string[]? discoveryFileRoots = null, RegistryAddress[]? discoveryRegistryRoots = null,
+    Func<CleanupExclusions>? currentExclusions = null)
 {
     public LeftoverDiscoveryResult Scan(CancellationToken cancellationToken)
     {
@@ -70,7 +71,11 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
                 throw new InvalidDataException("This leftover is protected, shared or has incomplete ownership evidence: " + item.Target);
         var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
         var operationId = Guid.NewGuid().ToString("N");
-        CleanupAuthority Authority() => VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, context.InventoryHash).Authority;
+        CleanupAuthority Authority()
+        {
+            Exclusions().RequireAllowed(selection);
+            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, context.InventoryHash).Authority;
+        }
         var registryTargets = selection.Where(item => item.Registry is not null).Select(item => item.Registry!).ToArray();
         var fileTargets = selection.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
         CleanupPart? registry = null, files = null;
@@ -115,7 +120,11 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         if (journal.RestoreStarted) return journal;
         journal.Errors = [];
         Save(journalPath, journal);
-        CleanupAuthority Authority() => VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash).Authority;
+        CleanupAuthority Authority()
+        {
+            Exclusions().RequireAllowed(preview.Selection);
+            return VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash).Authority;
+        }
         try
         {
             Authority();
@@ -186,7 +195,19 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
     }
 
     private LeftoverDiscoveryResult Scan(CleanupContext context, CancellationToken cancellationToken)
-        => new LeftoverDiscovery(context.Application, context.Peers).Scan(cancellationToken, discoveryFileRoots, discoveryRegistryRoots);
+    {
+        var exclusions = Exclusions();
+        var result = new LeftoverDiscovery(context.Application, context.Peers).Scan(cancellationToken, discoveryFileRoots, discoveryRegistryRoots);
+        foreach (var candidate in result.Candidates.Where(item => !item.Protected && item.Exists == true && item.OwnershipComplete && item.Error is null))
+            if (exclusions.Match(candidate) is { } reason)
+            {
+                candidate.Protected = true;
+                candidate.Evidence.Add(reason);
+            }
+        return result;
+    }
+
+    private CleanupExclusionMatcher Exclusions() => new(currentExclusions?.Invoke() ?? CleanupExclusions.Empty);
 
     private CleanupContext VerifyContext(string source, string appId, string identityHash, string? inventoryHash)
     {

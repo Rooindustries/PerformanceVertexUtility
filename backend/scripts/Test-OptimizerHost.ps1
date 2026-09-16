@@ -10,6 +10,9 @@ $hostDirectory=Join-Path $root 'host'
 $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooHostFixture-'+$caseId
 $apps=@();$reviews=@()
+$exclusionPath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\cleanup-exclusions.json'
+$exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
+$ownedExclusionHash=$null
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 function Core([string]$CoreAction,[object]$Fields){
@@ -121,9 +124,22 @@ public class RooHostRemover {
         $batchPath=Join-Path $root 'batch-review.json'
         Core 'cleanup-batch-preview' @{cleanupOperations=@($reviews|ForEach-Object {$_.operation});outputPath=$batchPath}|Out-Null
         $batchJournal=Join-Path $root 'batch-journal.json'
+        $originalExclusions=Core 'cleanup-exclusions-status' @{}
+        $protectedExclusions=@{paths=@($originalExclusions.exclusions.paths)+@((Join-Path $apps[0].install 'preferences.txt'));registry=@($originalExclusions.exclusions.registry)}
+        $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$protectedExclusions;expectedRevision=$originalExclusions.revision;confirm=$true}
+        $ownedExclusionHash=$savedExclusions.revision
+        $excluded=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath).Hash;journalPath=$batchJournal;confirm=$true}
+        Assert ($excluded.status -eq 'needsReconciliation' -and $excluded.entries[0].error -like '*Excluded path:*') 'The public batch endpoint enforces exclusions added after review'
+        foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert ((Test-Path (Join-Path $app.install 'preferences.txt')) -and $null -ne $key) 'Late exclusions preserve both applications before deletion'}finally{if($key){$key.Dispose()}}}
+        $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$originalExclusions.exclusions;expectedRevision=$ownedExclusionHash;confirm=$true}
+        $ownedExclusionHash=$savedExclusions.revision
         $applied=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath -Algorithm SHA256).Hash;journalPath=$batchJournal;confirm=$true}
         Assert ($applied.status -eq 'applied') 'The public batch endpoint completes both reviewed cleanup operations'
         foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert (-not(Test-Path -LiteralPath $app.install) -and $null -eq $key) 'Independent Windows reads confirm the selected file and registry resources are absent'}finally{if($key){$key.Dispose()}}}
+        [IO.File]::WriteAllText($exclusionPath,'{"schemaVersion":1}')
+        $ownedExclusionHash=(Get-FileHash $exclusionPath).Hash
+        $partial=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;restoreAppIds=@($apps[0].appId);confirm=$true}
+        Assert ($partial.status -eq 'partiallyRestored' -and (Test-Path $apps[0].install) -and -not(Test-Path $apps[1].install)) 'Public selective recovery works despite an unreadable exclusion policy and leaves the other app deleted'
         $restored=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;confirm=$true}
         Assert ($restored.status -eq 'restored') 'The public batch endpoint restores the captured data'
         foreach($app in $apps){
@@ -132,10 +148,17 @@ public class RooHostRemover {
         }
     }
 } finally {
-    foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
-    foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
-    $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()
-    if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
+    try {
+        if($ownedExclusionHash){
+            if(-not(Test-Path $exclusionPath) -or (Get-FileHash $exclusionPath).Hash -ne $ownedExclusionHash){throw 'Cleanup settings changed outside the fixture; current exclusions were preserved'}
+            if($null -eq $exclusionBefore){Remove-Item -LiteralPath $exclusionPath}else{[IO.File]::WriteAllBytes($exclusionPath,$exclusionBefore)}
+        }
+    } finally {
+        foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
+        foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
+        $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()
+        if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
+    }
 }
 Assert (-not(Test-Path -LiteralPath $root)) 'Host validation removes its registrations, receipts, binaries, journals and leftovers'
 if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -SharedQueuePaths}

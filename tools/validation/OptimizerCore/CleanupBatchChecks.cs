@@ -48,6 +48,10 @@ static class CleanupBatchChecks
             var stopped = engineBatch.Apply(batchPath, hash, journalPath);
             check(stopped.Status == "stopped" && stopped.Entries[0].Status == "applied" && stopped.Entries[1].Status == "pending" &&
                 !Directory.Exists(Path.Combine(root, "Roo Batch One")) && Directory.Exists(Path.Combine(root, "Roo Batch Two")), "Batch cancellation finishes the current app and preserves the unstarted app's leftovers");
+            var pendingRejected = false;
+            try { engineBatch.Restore(journalPath, [plans[1].AppId]); }
+            catch (InvalidDataException error) { pendingRejected = error.Message.Contains("no attempted cleanup"); }
+            check(pendingRejected && !CleanupBatch.ReadJournal(journalPath).RestoreStarted, "Selecting an unattempted app cannot falsely begin recovery");
             var newer = CleanupBatch.Cancel(journalPath);
             var staleResume = engineBatch.Apply(batchPath, hash, journalPath, stopped.CancellationId);
             check(staleResume.Status == "stopped" && staleResume.CancellationId == newer.CancellationId && Directory.Exists(Path.Combine(root, "Roo Batch Two")), "An old resume token cannot clear a newer cancellation request");
@@ -65,7 +69,47 @@ static class CleanupBatchChecks
                 using var key = hive.OpenSubKey(registryRoot + "\\" + context.Application.DisplayName);
                 check(key is null, "Completed batch cleanup removed the selected app's registry data: " + context.Application.DisplayName);
             }
-            var restored = engineBatch.Restore(journalPath);
+            var originalJournalHash = OperationFiles.HashFile(journalPath);
+            foreach (var invalid in new[] { Array.Empty<string>(), new[] { "fixture:unknown" }, new[] { plans[0].AppId, plans[0].AppId } })
+            {
+                var rejected = false;
+                try { engineBatch.Restore(journalPath, invalid); } catch (InvalidDataException) { rejected = true; }
+                check(rejected && OperationFiles.HashFile(journalPath) == originalJournalHash, "Invalid recovery selections leave the saved batch unchanged");
+            }
+            var selectedId = plans[0].AppId;
+            var selectedContext = contexts[selectedId];
+            contexts[selectedId] = selectedContext with { Authority = selectedContext.Authority with { RegistrationPresent = true } };
+            var failedRestore = engineBatch.Restore(journalPath, [selectedId]);
+            check(failedRestore.Status == "needsReconciliation" && contexts.Values.All(context => !Directory.Exists(context.Application.InstallLocation)),
+                "A selected app's blocking registration state cannot restore it or dispatch another app");
+            contexts[selectedId] = selectedContext;
+            engineBatch = new CleanupBatch(App);
+            var partial = engineBatch.Restore(journalPath, [selectedId]);
+            using (var firstKey = hive.OpenSubKey(registryRoot + "\\Roo Batch One"))
+            using (var secondKey = hive.OpenSubKey(registryRoot + "\\Roo Batch Two"))
+                check(partial.Status == "partiallyRestored" && partial.RestoreStarted &&
+                    File.ReadAllText(Path.Combine(root, "Roo Batch One", "data.txt")) == "Roo Batch One file" &&
+                    firstKey?.GetValue("Original") as string == "Roo Batch One registry" && secondKey is null && !Directory.Exists(Path.Combine(root, "Roo Batch Two")),
+                    "Selective recovery restores only the chosen application's files and registry data after restart");
+            var partialBytes = File.ReadAllBytes(journalPath);
+            try
+            {
+                partial.RestoreStarted = false;
+                OperationFiles.Write(journalPath, partial);
+                var rejected = false;
+                try { engineBatch.Apply(batchPath, hash, journalPath); }
+                catch (InvalidDataException error) { rejected = error.Message.Contains("missing its restoration evidence"); }
+                check(rejected, "A favorable partial status cannot override missing restoration evidence");
+            }
+            finally { File.WriteAllBytes(journalPath, partialBytes); }
+            check(engineBatch.Apply(batchPath, hash, journalPath).Status == "partiallyRestored" && Directory.Exists(Path.Combine(root, "Roo Batch One")),
+                "Partial recovery permanently ends deletion for the entire batch");
+            File.WriteAllText(Path.Combine(root, "Roo Batch One", "data.txt"), "edited after recovery");
+            check(engineBatch.Restore(journalPath, [selectedId]).Status == "partiallyRestored" &&
+                File.ReadAllText(Path.Combine(root, "Roo Batch One", "data.txt")) == "edited after recovery" && !Directory.Exists(Path.Combine(root, "Roo Batch Two")),
+                "Repeated selective recovery preserves later edits and leaves unselected apps untouched");
+            File.WriteAllText(Path.Combine(root, "Roo Batch One", "data.txt"), "Roo Batch One file");
+            var restored = new CleanupBatch(App).Restore(journalPath);
             check(restored.Status == "restored", "Batch recovery restores both application operations");
             foreach (var context in contexts.Values)
             {

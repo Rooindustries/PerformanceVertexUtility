@@ -112,6 +112,7 @@ function Copy-ApplyPackageBackup {
 function Remove-ApplyPackageTarget {
     param([object]$Item)
     $target = [System.IO.Path]::GetFullPath([string](Get-RooUninstallPropertyValue $Item 'target' ''))
+    Assert-RooCleanupExclusions @($target)
     if (Test-Path -LiteralPath $target) {
         Remove-Item -LiteralPath $target -Recurse -Force
         return $true
@@ -155,6 +156,7 @@ try {
     $command = if ($commands.Count -eq 1) { $commands[0] } else { $null }
     $items = @(Get-RooUninstallPropertyArray $cleanupManifest 'items')
     $fileFolderItems = @($items | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'type' '') -in @('file','folder') })
+    Assert-RooCleanupExclusions @($fileFolderItems | ForEach-Object { [string]$_.target })
     $unsupportedItems = @($items | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'type' '') -notin @('file','folder') })
     $reviewItems = @($items | Where-Object { [bool](Get-RooUninstallPropertyValue $_ 'protected' $false) })
     $reviewRequired = [bool](Get-RooUninstallPropertyValue $command 'reviewRequired' $true)

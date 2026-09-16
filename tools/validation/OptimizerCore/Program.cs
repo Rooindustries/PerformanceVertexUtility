@@ -15,7 +15,7 @@ if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check);
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
-if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); return; }
+if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
 using (var self = Process.GetCurrentProcess())
@@ -165,6 +165,7 @@ ProcessIdentityChecks.Run(Check);
 PolicyChecks.Run(Check);
 DiscoveryChecks.Run(Check);
 ApplicationCleanupChecks.Run(Check);
+ExclusionChecks.Run(Check);
 CleanupBatchChecks.Run(Check);
 
 }

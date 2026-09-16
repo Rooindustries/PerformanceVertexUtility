@@ -168,6 +168,56 @@ $cleanupHash = (Get-FileHash -LiteralPath $cleanupPreview -Algorithm SHA256).Has
 
 File-only cleanup continues through the existing exact-target allowlist, backup and recovery journal. File restoration recovers backed-up leftovers; it cannot reinstall an application or reverse vendor registry/service changes. Path-based copying/deletion still has a filesystem race window against a concurrent hostile writer. The desktop now uses the native handle-based file and transactional registry path described above. This earlier file-only interface remains available for existing recovery records. Service deletion and install-time tracing are separate capabilities and are not implied by a file/registry scan.
 
+## Cleanup exclusions
+
+`Invoke-CleanupExclusions.ps1` manages the current Windows user's exclusions for Roo's application cleanup. Each entry protects a local path and its descendants, a registry subtree, or one named registry value. A selected folder or whole key containing an excluded item is also protected. Discovery explains the exclusion in the item's evidence.
+
+```powershell
+$current = .\backend\scripts\Invoke-CleanupExclusions.ps1 -Action Status | ConvertFrom-Json
+.\backend\scripts\Invoke-CleanupExclusions.ps1 -Action Save `
+    -InputPath 'C:\RooOperations\exclusions.json' `
+    -ExpectedRevision $current.data.revision -ConfirmApply
+```
+
+The input file contains both lists, including empty lists when appropriate:
+
+```json
+{
+  "paths": ["C:\\Users\\Example\\AppData\\Local\\ExampleApp\\SavedProjects"],
+  "registry": [
+    {
+      "hive": "CurrentUser",
+      "view": "Registry64",
+      "keyPath": "Software\\ExampleApp",
+      "kind": "value",
+      "valueName": "License"
+    }
+  ]
+}
+```
+
+Paths must be absolute local paths beneath a drive root. Registry entries use `CurrentUser` or `LocalMachine`, an explicit `Registry32` or `Registry64` view, and an exact Software subkey. A key entry has `kind: "key"` and `valueName: null`; an unnamed value has `kind: "value"` and `valueName: ""`.
+
+The saved document is bound to the Windows user and machine. Saving requires the revision returned by the latest read; a stale editor cannot overwrite another update. Canonical file and native registry identities prevent short-path and shared-view aliases from bypassing exclusions. Missing future paths are resolved through their existing ancestors. Unreadable or unsupported identities produce an error for review.
+
+Native application cleanup, cleanup batches, and the older file cleanup manifest/apply commands enforce exclusions. Apply checks the current list again, so adding an exclusion after preview stops further deletion. Already completed changes remain in their recovery journals. Restoration remains available if the exclusion list changes or becomes unreadable. Vendor removal executables control their own changes; these exclusions govern Roo's subsequent cleanup.
+
+## Restore selected applications
+
+The native `cleanup-batch-restore` request accepts `restoreAppIds`, an array of exact application IDs from the saved batch. Each selected application's saved file and registry data is restored together. Omit the property to restore the whole batch; an explicit empty, duplicate or unknown selection is rejected before journal changes.
+
+```json
+{
+  "schemaVersion": 1,
+  "repoRoot": "C:\\RooOptimizationSuite",
+  "journalPath": "C:\\RooOperations\\cleanup-batch-journal.json",
+  "restoreAppIds": ["the-exact-app-id-from-the-batch"],
+  "confirm": true
+}
+```
+
+Run the request through `Optimizer.Host.dll cleanup-batch-restore <request.json>`. A successful subset returns `partiallyRestored` while other cleaned applications remain unchanged. Restore another selection or omit the selection to finish recovery. Errors retain `needsReconciliation` and the per-application result. Repeated recovery preserves already restored applications and their subsequent edits. Starting any recovery ends the batch's deletion phase permanently.
+
 ## Capability router requests
 
 The capability IDs are `process-controls.cpu-sets`, `cleanup-uninstall.bulk-removal`, and `system-optimizations.upstream-settings-inventory`. The first two use `Invoke-OptimizerRequest.ps1` through a route-declared `-RequestPath`; command names and dispatch targets are fixed by the wrapper.
@@ -198,6 +248,8 @@ Mutating router actions additionally require `-ConfirmApply`. Router errors pres
 The inventory contains 376 setting/control records, 267 application/package records, and 1,319 FSOS-X YAML records. Settings, packages, orchestration actions and inferred Dash symbols are separate collections. Filters return the filtered total and stable pages; no catalog entry automatically executes. Source snapshots and risks travel with the result. See the [research index](research/README.md) for provenance, edition distinctions and the limits of binary-symbol evidence.
 
 ## Verification
+
+`Test-CleanupExclusions.ps1` exercises persisted preferences, stale updates, and the legacy deletion boundary. The Core cleanup and batch checks cover canonical aliases, late exclusions, independent recovery, selected applications, interrupted recovery, duplicate requests, and conflicting journal signals. `Test-OptimizerHost.ps1` exercises exclusions and selected restoration through the public commands with actual disposable removers.
 
 `Test-OptimizerCore.ps1`, `Test-OptimizerHost.ps1`, `Test-ProcessPolicyWorker.ps1`, `Test-CleanupAuthority.ps1` and `Test-NativeGovernorRecovery.ps1` exercise the native controls, app/registry/file identity, batch recovery, worker lifetime and partial failures. Host tests create disposable installed-app records and vendor removers to use the production removal-to-cleanup path. `Measure-OptimizerPolicy.ps1` rebuilds the helper and records its binary hashes, worker startup, idle footprint and process-launch detection samples; its output states the presence of external controllers and the resulting comparison limits.
 
