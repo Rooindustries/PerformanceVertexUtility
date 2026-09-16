@@ -16,7 +16,7 @@
 
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="16" MaxWidth="880" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+            <StackPanel Spacing="16" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
                 <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
                     <Grid ColumnSpacing="14">
@@ -38,7 +38,7 @@
                                 <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.RestoreHeadline, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
                                            VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource RooTextSecondaryBrush}" />
                             </Grid>
-                            <TextBlock Text="Every change Roo Industries makes is backed up first. Undo from here and read the history."
+                            <TextBlock Text="Check saved process settings and session history."
                                        FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
@@ -46,6 +46,7 @@
 
                 <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,16">
                     <StackPanel Spacing="10">
+                        <Button Content="Open Process Control" Click="OpenProcessControl" HorizontalAlignment="Left"/>
                         <TextBlock Text="BACKUPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
@@ -65,7 +66,7 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <TextBlock Text="Restoring from Process Control puts every changed value back exactly as it was recorded."
+                        <TextBlock Text="In Process Control, select Restore under Game priority or ProBalance guard."
                                    FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooTextMutedBrush}" />
                     </StackPanel>
                 </Border>

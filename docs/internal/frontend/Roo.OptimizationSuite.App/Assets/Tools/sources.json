@@ -1,0 +1,165 @@
+[
+  {
+    "id": "hwinfo",
+    "source": "Utilities/hwi_834x.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.hwinfo.com/download/"
+  },
+  {
+    "id": "gpu-z",
+    "source": "Utilities/GPU-Z.2.68.0.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.techpowerup.com/gpuz/"
+  },
+  {
+    "id": "userdiag",
+    "source": "Utilities/UserDiag.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://userdiag.com/"
+  },
+  {
+    "id": "msi-afterburner",
+    "source": "Utilities/MSIAfterburnerInstaller466.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.msi.com/Landing/afterburner/graphics-cards"
+  },
+  {
+    "id": "process-lasso",
+    "source": "Utilities/processlassosetup64.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://bitsum.com/"
+  },
+  {
+    "id": "unparkcpu",
+    "source": "Utilities/Stock Only (otherwise not necessary)/UnparkCpu.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://coderbag.com/Programming-C/Disable-CPU-Core-Parking-Utility"
+  },
+  {
+    "id": "autoruns",
+    "source": "Utilities/autoruns.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://learn.microsoft.com/en-us/sysinternals/downloads/autoruns"
+  },
+  {
+    "id": "bulk-uninstaller-native",
+    "source": "Utilities/revosetup.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.revouninstaller.com/"
+  },
+  {
+    "id": "device-cleanup",
+    "source": "Utilities/Other/DeviceCleanup.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.uwe-sieber.de/misc_tools_e.html"
+  },
+  {
+    "id": "oosu10",
+    "source": "Utilities/Stock Only (otherwise not necessary)/OOSU10.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.oo-software.com/en/shutup10"
+  },
+  {
+    "id": "wpd",
+    "source": "Utilities/Stock Only (otherwise not necessary)/WPD.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://wpd.app/"
+  },
+  {
+    "id": "inspectre",
+    "source": "Utilities/Stock Only (otherwise not necessary)/InSpectre.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.grc.com/inspectre.htm"
+  },
+  {
+    "id": "ddu",
+    "source": "Utilities/Other/DDU v18.0.8.9/Display Driver Uninstaller.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.wagnardsoft.com/display-driver-uninstaller-DDU-"
+  },
+  {
+    "id": "nvcleanstall",
+    "source": "Utilities/Stock Only (otherwise not necessary)/NVCleanstall_1.19.0.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.techpowerup.com/nvcleanstall/"
+  },
+  {
+    "id": "nvidia-profile-inspector",
+    "source": "Utilities/Other/NVPI/nvidiaProfileInspector.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://github.com/Orbmu2k/nvidiaProfileInspector"
+  },
+  {
+    "id": "amd-graphics-26-2-2",
+    "source": "Utilities/Drivers/Graphics/AMD 26.2.2.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.amd.com/en/support/download/drivers.html"
+  },
+  {
+    "id": "amd-chipset-8-02-18-557",
+    "source": "Utilities/Drivers/Chipset/AMD CHIPSET 8.02.18.557.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.amd.com/en/support/download/drivers.html"
+  },
+  {
+    "id": "realtek-network",
+    "source": "Utilities/Drivers/Network/Realtek Network/Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.realtek.com/Download/List?cate_id=584"
+  },
+  {
+    "id": "nvidia-59579-with-app",
+    "source": "Utilities/Drivers/Graphics/NVIDIA_595.79_With_Nvidia_App.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.nvidia.com/en-us/drivers/"
+  },
+  {
+    "id": "driver-booster",
+    "source": "Utilities/Drivers/driver_booster_setup.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.iobit.com/en/driver-booster.php"
+  },
+  {
+    "id": "dotnetfx35",
+    "source": "Utilities/Prerequisites/dotNetFx35setup.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://learn.microsoft.com/en-us/dotnet/framework/install/dotnet-35-windows"
+  },
+  {
+    "id": "directx-runtime",
+    "source": "Utilities/Prerequisites/DX/DXSETUP.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://www.microsoft.com/en-us/download/details.aspx?id=35"
+  },
+  {
+    "id": "vcredist-runtime",
+    "source": "Utilities/Prerequisites/VCRedist/vcredist2015_2017_2019_2022_x64.exe",
+    "type": "unmodified executable icon, converted to PNG",
+    "website": "https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist"
+  },
+  {
+    "id": "cpu-z",
+    "source": "https://www.cpuid.com/medias/images/softwares/cpu-z.svg",
+    "type": "official product icon, converted to PNG"
+  },
+  {
+    "id": "latencymon",
+    "source": "https://www.resplendence.com/images/latmon.ico",
+    "type": "official product icon, converted to PNG"
+  },
+  {
+    "id": "intel-chipset",
+    "source": "https://www.intel.com/etc.clientlibs/settings/wcm/designs/intel/default/resources/favicon-32x32.png",
+    "type": "official product icon, converted to PNG"
+  },
+  {
+    "id": "intel-network",
+    "source": "https://www.intel.com/etc.clientlibs/settings/wcm/designs/intel/default/resources/favicon-32x32.png",
+    "type": "official product icon, converted to PNG"
+  },
+  {
+    "id": "msi-kombustor",
+    "source": "https://geeks3d.com/furmark/kombustor/favicon.ico",
+    "type": "official product icon, converted to PNG"
+  }
+]
