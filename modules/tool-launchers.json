@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 1,
+  "tools": [
+    {
+      "id": "hwinfo",
+      "name": "HWiNFO",
+      "description": "Sensors, temperatures and clocks",
+      "category": "Diagnostics",
+      "website": "https://www.hwinfo.com/download/",
+      "archivePath": "Utilities/hwi_834x.exe",
+      "installedPaths": [
+        "HWiNFO64/HWiNFO64.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "hwinfo.png"
+    },
+    {
+      "id": "cpu-z",
+      "name": "CPU-Z",
+      "description": "CPU, memory and motherboard details",
+      "category": "Diagnostics",
+      "website": "https://www.cpuid.com/softwares/cpu-z.html",
+      "archivePath": "Utilities/cpu-z_2.17-en.exe",
+      "installedPaths": [
+        "CPUID/CPU-Z/cpuz.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "cpu-z.png"
+    },
+    {
+      "id": "gpu-z",
+      "name": "GPU-Z",
+      "description": "GPU specs, sensors and PCIe link",
+      "category": "Diagnostics",
+      "website": "https://www.techpowerup.com/gpuz/",
+      "archivePath": "Utilities/GPU-Z.2.68.0.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "gpu-z.png"
+    },
+    {
+      "id": "latencymon",
+      "name": "LatencyMon",
+      "description": "Find drivers causing audio dropouts",
+      "category": "Diagnostics",
+      "website": "https://www.resplendence.com/latencymon",
+      "archivePath": "Utilities/LatencyMon.exe",
+      "installedPaths": [
+        "LatencyMon/LatMon.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "latencymon.png"
+    },
+    {
+      "id": "userdiag",
+      "name": "UserDiag",
+      "description": "Run a hardware diagnostic",
+      "category": "Diagnostics",
+      "website": "https://userdiag.com/",
+      "archivePath": "Utilities/UserDiag.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "userdiag.png"
+    },
+    {
+      "id": "msi-afterburner",
+      "name": "MSI Afterburner",
+      "description": "GPU tuning and fan curves",
+      "category": "Tuning",
+      "website": "https://www.msi.com/Landing/afterburner/graphics-cards",
+      "archivePath": "Utilities/MSIAfterburnerInstaller466.exe",
+      "installedPaths": [
+        "MSI Afterburner/MSIAfterburner.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "msi-afterburner.png"
+    },
+    {
+      "id": "process-lasso",
+      "name": "Process Lasso",
+      "description": "Process priorities and CPU rules",
+      "category": "Tuning",
+      "website": "https://bitsum.com/",
+      "archivePath": "Utilities/processlassosetup64.exe",
+      "installedPaths": [
+        "Process Lasso/ProcessLasso.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "process-lasso.png"
+    },
+    {
+      "id": "msi-util-v3",
+      "name": "MSI Utility v3",
+      "description": "Device interrupt mode and priority",
+      "category": "Tuning",
+      "website": "https://forums.guru3d.com/threads/windows-line-based-vs-message-signaled-based-interrupts.378044/",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/MSI_util_v3.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": null
+    },
+    {
+      "id": "unparkcpu",
+      "name": "UnparkCPU",
+      "description": "CPU core parking settings",
+      "category": "Tuning",
+      "website": "https://coderbag.com/Programming-C/Disable-CPU-Core-Parking-Utility",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/UnparkCpu.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "unparkcpu.png"
+    },
+    {
+      "id": "msi-kombustor",
+      "name": "MSI Kombustor",
+      "description": "GPU stress test",
+      "category": "Diagnostics",
+      "website": "https://geeks3d.com/furmark/kombustor/",
+      "archivePath": "Utilities/MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+      "installedPaths": [
+        "MSI Kombustor 4 x64/MSI-Kombustor-x64.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "msi-kombustor.png"
+    },
+    {
+      "id": "autoruns",
+      "name": "Autoruns",
+      "description": "Manage everything that starts with Windows",
+      "category": "System",
+      "website": "https://learn.microsoft.com/en-us/sysinternals/downloads/autoruns",
+      "archivePath": "Utilities/autoruns.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "autoruns.png"
+    },
+    {
+      "id": "bulk-uninstaller-native",
+      "name": "Revo Uninstaller",
+      "description": "Uninstall apps and find leftovers",
+      "category": "System",
+      "website": "https://www.revouninstaller.com/",
+      "archivePath": "Utilities/revosetup.exe",
+      "installedPaths": [
+        "VS Revo Group/Revo Uninstaller/RevoUnin.exe"
+      ],
+      "bundleAction": "install",
+      "icon": "bulk-uninstaller-native.png"
+    },
+    {
+      "id": "device-cleanup",
+      "name": "Device Cleanup Tool",
+      "description": "Remove disconnected device entries",
+      "category": "System",
+      "website": "https://www.uwe-sieber.de/misc_tools_e.html",
+      "archivePath": "Utilities/Other/DeviceCleanup.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "device-cleanup.png"
+    },
+    {
+      "id": "oosu10",
+      "name": "O&O ShutUp10++",
+      "description": "Windows privacy settings",
+      "category": "System",
+      "website": "https://www.oo-software.com/en/shutup10",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/OOSU10.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "oosu10.png"
+    },
+    {
+      "id": "wpd",
+      "name": "WPD",
+      "description": "Windows privacy and telemetry controls",
+      "category": "System",
+      "website": "https://wpd.app/",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/WPD.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "wpd.png"
+    },
+    {
+      "id": "inspectre",
+      "name": "InSpectre",
+      "description": "Inspect and configure CPU mitigations",
+      "category": "System",
+      "website": "https://www.grc.com/inspectre.htm",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/InSpectre.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "inspectre.png"
+    },
+    {
+      "id": "ddu",
+      "name": "Display Driver Uninstaller",
+      "description": "Clean out display drivers",
+      "category": "Drivers",
+      "website": "https://www.wagnardsoft.com/display-driver-uninstaller-DDU-",
+      "archivePath": "Utilities/Other/DDU v18.0.8.9/Display Driver Uninstaller.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "ddu.png"
+    },
+    {
+      "id": "nvcleanstall",
+      "name": "NVCleanstall",
+      "description": "Choose NVIDIA driver components",
+      "category": "Drivers",
+      "website": "https://www.techpowerup.com/nvcleanstall/",
+      "archivePath": "Utilities/Stock Only (otherwise not necessary)/NVCleanstall_1.19.0.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "nvcleanstall.png"
+    },
+    {
+      "id": "nvidia-profile-inspector",
+      "name": "NVIDIA Profile Inspector",
+      "description": "Edit NVIDIA driver profiles",
+      "category": "Drivers",
+      "website": "https://github.com/Orbmu2k/nvidiaProfileInspector",
+      "archivePath": "Utilities/Other/NVPI/nvidiaProfileInspector.exe",
+      "installedPaths": [],
+      "bundleAction": "open",
+      "icon": "nvidia-profile-inspector.png"
+    },
+    {
+      "id": "amd-graphics-26-2-2",
+      "name": "AMD Software: Adrenalin Edition",
+      "description": "Install AMD graphics drivers",
+      "category": "Drivers",
+      "website": "https://www.amd.com/en/support/download/drivers.html",
+      "archivePath": "Utilities/Drivers/Graphics/AMD 26.2.2.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "amd-graphics-26-2-2.png"
+    },
+    {
+      "id": "amd-chipset-8-02-18-557",
+      "name": "AMD Chipset Software",
+      "description": "Install AMD chipset drivers",
+      "category": "Drivers",
+      "website": "https://www.amd.com/en/support/download/drivers.html",
+      "archivePath": "Utilities/Drivers/Chipset/AMD CHIPSET 8.02.18.557.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "amd-chipset-8-02-18-557.png"
+    },
+    {
+      "id": "intel-chipset",
+      "name": "Intel Chipset Device Software",
+      "description": "Install Intel chipset support",
+      "category": "Drivers",
+      "website": "https://www.intel.com/content/www/us/en/download-center/home.html",
+      "archivePath": "Utilities/Drivers/Chipset/Intel Chipset.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "intel-chipset.png"
+    },
+    {
+      "id": "intel-network",
+      "name": "Intel Ethernet Drivers",
+      "description": "Install Intel network drivers",
+      "category": "Drivers",
+      "website": "https://www.intel.com/content/www/us/en/download-center/home.html",
+      "archivePath": "Utilities/Drivers/Network/Intel Network/SetupBD.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "intel-network.png"
+    },
+    {
+      "id": "realtek-network",
+      "name": "Realtek Ethernet Drivers",
+      "description": "Install Realtek network drivers",
+      "category": "Drivers",
+      "website": "https://www.realtek.com/Download/List?cate_id=584",
+      "archivePath": "Utilities/Drivers/Network/Realtek Network/Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "realtek-network.png"
+    },
+    {
+      "id": "nvidia-59579-with-app",
+      "name": "NVIDIA App & Driver",
+      "description": "Install NVIDIA graphics drivers",
+      "category": "Drivers",
+      "website": "https://www.nvidia.com/en-us/drivers/",
+      "archivePath": "Utilities/Drivers/Graphics/NVIDIA_595.79_With_Nvidia_App.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "nvidia-59579-with-app.png"
+    },
+    {
+      "id": "driver-booster",
+      "name": "IObit Driver Booster",
+      "description": "Find and update drivers",
+      "category": "Drivers",
+      "website": "https://www.iobit.com/en/driver-booster.php",
+      "archivePath": "Utilities/Drivers/driver_booster_setup.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "driver-booster.png"
+    },
+    {
+      "id": "dotnetfx35",
+      "name": ".NET Framework 3.5",
+      "description": "Install support for older apps",
+      "category": "Runtimes",
+      "website": "https://learn.microsoft.com/en-us/dotnet/framework/install/dotnet-35-windows",
+      "archivePath": "Utilities/Prerequisites/dotNetFx35setup.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "dotnetfx35.png"
+    },
+    {
+      "id": "directx-runtime",
+      "name": "DirectX Runtime",
+      "description": "Install legacy game libraries",
+      "category": "Runtimes",
+      "website": "https://www.microsoft.com/en-us/download/details.aspx?id=35",
+      "archivePath": "Utilities/Prerequisites/DX/DXSETUP.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "directx-runtime.png"
+    },
+    {
+      "id": "vcredist-runtime",
+      "name": "Visual C++ Redistributable",
+      "description": "Microsoft C++ 2015\u20132022 runtime (x64)",
+      "category": "Runtimes",
+      "website": "https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist",
+      "archivePath": "Utilities/Prerequisites/VCRedist/vcredist2015_2017_2019_2022_x64.exe",
+      "installedPaths": [],
+      "bundleAction": "install",
+      "icon": "vcredist-runtime.png"
+    }
+  ]
+}

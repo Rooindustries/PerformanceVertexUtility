@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/ViewModels/FirmwareViewModel.cs" Link="FirmwareViewModel.cs" /><Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/ToolLauncherService.cs" Link="ToolLauncherService.cs" /></ItemGroup>
+</Project>

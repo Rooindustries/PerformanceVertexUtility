@@ -11,6 +11,8 @@ void Check(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine("PASS " + message);
 }
+if (args is ["--firmware-provider", var firmwareFixture]) { FirmwareProviderChecks.Run(Check, firmwareFixture); return; }
+if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
@@ -167,6 +169,7 @@ DiscoveryChecks.Run(Check);
 ApplicationCleanupChecks.Run(Check);
 ExclusionChecks.Run(Check);
 CleanupBatchChecks.Run(Check);
+FirmwareChecks.Run(Check);
 
 }
 catch (Exception error)

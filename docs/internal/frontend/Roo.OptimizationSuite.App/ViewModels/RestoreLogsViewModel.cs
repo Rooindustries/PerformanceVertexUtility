@@ -35,8 +35,8 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
         RestoreHeadline = restorable
             ? "Saved recovery data is available. Review it in Process Control."
-            : unavailable ? "Restore status could not be read. Reopen this page to retry."
-                : "Nothing to restore right now. Backups appear here the moment a change is applied.";
+            : unavailable ? "Could not read process recovery. Reopen this page to retry."
+                : "No saved process settings to restore.";
         RestoreState = restorable ? "safe" : unavailable ? "medium" : "neutral";
 
         RestoreRows.Add(new StatusLine(
@@ -47,10 +47,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             "Background restraint",
             governorRecovery == true ? "Backed up · restorable" : governorRecovery == false ? "No restraint backup recorded" : "Status unavailable",
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
-        RestoreRows.Add(new StatusLine(
-            "Backup before changes",
-            "Always on: every apply writes a backup first",
-            "low"));
+
     }
 
     private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor)
