@@ -466,7 +466,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));
     private static ControlOption[] Options(string name) => name switch
     {
-        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "RealTime" }.Select(value => Option(value, value)).ToArray(),
+        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value, value)).ToArray(),
         "ioPriority" => [Option("Very low", 0), Option("Low", 1), Option("Normal", 2), Option("High · Windows support varies", 3)],
         "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime", 5)],
         "memoryPriority" => [Option("Very low", 1), Option("Low", 2), Option("Medium", 3), Option("Below normal", 4), Option("Normal", 5)],
