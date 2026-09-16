@@ -1,7 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Roo.OptimizationSuite.Helpers;
@@ -20,32 +18,35 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     protected override async Task LoadCoreAsync()
     {
         var session = await App.Live.GetGameTuneSessionStatusAsync();
-        var restore = await TrySample(Data.GetGameTuneRestorePreviewAsync);
         var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
 
-        BuildRestore(session, restore, governor);
+        BuildRestore(
+            session is { DryRun: true } ? null : RecoveryAvailable(session?.Status, session?.Restorable),
+            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable));
         BuildHistory(session, governor);
         IsEmpty = false;
     }
 
-    private void BuildRestore(GameTuneSessionStatus? session, GameTuneRestorePreview? restore, ProcessGovernorSessionStatus? governor)
+    private void BuildRestore(bool? gameRecovery, bool? governorRecovery)
     {
         RestoreRows.Clear();
-        var restorable = session is { Restorable: true } || restore is { Restorable: true };
+        var restorable = gameRecovery == true || governorRecovery == true;
+        var unavailable = gameRecovery is null || governorRecovery is null;
 
         RestoreHeadline = restorable
-            ? "A restorable session is saved. One click puts everything back."
-            : "Nothing to restore right now. Backups appear here the moment a change is applied.";
-        RestoreState = restorable ? "safe" : "neutral";
+            ? "Saved recovery data is available. Review it in Process Control."
+            : unavailable ? "Restore status could not be read. Reopen this page to retry."
+                : "Nothing to restore right now. Backups appear here the moment a change is applied.";
+        RestoreState = restorable ? "safe" : unavailable ? "medium" : "neutral";
 
         RestoreRows.Add(new StatusLine(
             "Game priority session",
-            session is { Restorable: true } ? "Backed up · restorable" : "No session backup recorded",
-            session is { Restorable: true } ? "safe" : "neutral"));
+            gameRecovery == true ? "Backed up · restorable" : gameRecovery == false ? "No session backup recorded" : "Status unavailable",
+            gameRecovery == true ? "safe" : gameRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
             "Background restraint",
-            governor is { Restorable: true } ? "Backed up · restorable" : "No restraint backup recorded",
-            governor is { Restorable: true } ? "safe" : "neutral"));
+            governorRecovery == true ? "Backed up · restorable" : governorRecovery == false ? "No restraint backup recorded" : "Status unavailable",
+            governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
             "Backup before changes",
             "Always on: every apply writes a backup first",
@@ -80,8 +81,8 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
         if (HistoryRows.Count == 0)
         {
-            HistoryRows.Add(new AuditRow("-", "Ready", "neutral", "No changes recorded yet",
-                "History appears after you apply your first change", "-", "neutral"));
+            HistoryRows.Add(new AuditRow("-", "Ready", "neutral", "No history entries loaded",
+                "Recorded changes appear here when session history is available", "-", "neutral"));
         }
     }
 
@@ -97,8 +98,10 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         _ => value!,
     };
 
-    private static async Task<T?> TrySample<T>(Func<Task<T>> load) where T : class
+    private static bool? RecoveryAvailable(string? status, bool? restorable) => (status, restorable) switch
     {
-        try { return await load(); } catch { return null; }
-    }
+        ("active" or "restorable" or "failed", true) => true,
+        ("notFound" or "completed" or "active", false) => false,
+        _ => null,
+    };
 }
