@@ -18,6 +18,43 @@ try
     object data;
     switch (action)
     {
+        case "protected-session-preview":
+            if (request.Controls is not null && request.ControlsPath is not null) throw new InvalidDataException("Provide inline controls or a controls file, not both.");
+            data = new ProtectedSessions(Excluded).Preview(request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required."),
+                Require(request.GamePath, "game executable"), request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file")), request.AcceptLauncherScope == true);
+            OperationFiles.Write(Require(request.OutputPath, "output path"), (ProtectedSessionPreview)data);
+            break;
+        case "protected-session-check":
+            data = new ProtectedSessions(Excluded).Check(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"));
+            break;
+        case "protected-session-run":
+            RequireConfirmation(request);
+            using (var cancellation = new CancellationTokenSource())
+            {
+                Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
+                data = new ProtectedSessions(Excluded).Run(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"),
+                    Require(request.SessionRoot, "session directory"), (root, operationId) => StartProtectedWatch(request.RepoRoot, root, operationId), cancellation.Token,
+                    request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null);
+            }
+            break;
+        case "protected-session-status":
+            data = new ProtectedSessions(Excluded).Status(Require(request.SessionRoot, "session directory"));
+            break;
+        case "protected-session-stop":
+        case "protected-session-affinity":
+            RequireConfirmation(request);
+            new ProtectedSessions(Excluded).Command(Require(request.SessionRoot, "session directory"), action == "protected-session-stop" ? "stop" : "affinity", request.Affinity);
+            data = new { requested = true };
+            break;
+        case "protected-session-recover":
+            RequireConfirmation(request);
+            data = new ProtectedSessions(Excluded).Recover(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
+            break;
+        case "protected-session-watch":
+            RequireConfirmation(request);
+            new ProtectedSessions(Excluded).Watch(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
+            data = new { recovered = true };
+            break;
         case "process-status":
             using (var process = new ProcessTarget(request.ProcessId ?? throw new InvalidDataException("Process ID is required."))) data = process.Snapshot();
             break;
@@ -113,12 +150,23 @@ try
             break;
         default: throw new InvalidDataException("Unknown optimizer action.");
     }
-    Console.WriteLine(JsonSerializer.Serialize(new { schemaVersion = 1, status = "completed", data }, OperationFiles.Json));
+    if (action != "protected-session-watch") Console.WriteLine(JsonSerializer.Serialize(new { schemaVersion = 1, status = "completed", data }, OperationFiles.Json));
 }
 catch (Exception error)
 {
-    Console.WriteLine(JsonSerializer.Serialize(new { schemaVersion = 1, status = "failed", error = new { type = error.GetType().Name, message = error.Message } }, OperationFiles.Json));
+    if (args.FirstOrDefault() != "protected-session-watch") Console.WriteLine(JsonSerializer.Serialize(new { schemaVersion = 1, status = "failed", error = new { type = error.GetType().Name, message = error.Message } }, OperationFiles.Json));
     Environment.ExitCode = 1;
+}
+
+static void StartProtectedWatch(string repoRoot, string root, string operationId)
+{
+    var path = Path.Combine(root, "watch-request.json");
+    OperationFiles.Write(path, new { schemaVersion = 1, repoRoot, sessionRoot = root, operationId, confirm = true });
+    var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+    if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
+        start.ArgumentList.Add(System.Reflection.Assembly.GetEntryAssembly()!.Location);
+    start.ArgumentList.Add("protected-session-watch"); start.ArgumentList.Add(path);
+    using var watcher = Process.Start(start) ?? throw new InvalidOperationException("The recovery watcher did not start.");
 }
 
 static string Require(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new InvalidDataException("Missing " + name + ".") : value;
@@ -198,6 +246,12 @@ sealed record HostRequest
     public required int SchemaVersion { get; init; }
     public required string RepoRoot { get; init; }
     public int? ProcessId { get; init; }
+    public string? GamePath { get; init; }
+    public string? ControlsPath { get; init; }
+    public string? SessionRoot { get; init; }
+    public string? OperationId { get; init; }
+    public bool? AcceptLauncherScope { get; init; }
+    public AffinityState? Affinity { get; init; }
     public Dictionary<string, JsonElement>? Controls { get; init; }
     public CpuSelection? CpuSelection { get; init; }
     public string? OutputPath { get; init; }
