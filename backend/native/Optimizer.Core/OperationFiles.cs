@@ -57,7 +57,8 @@ public static class OperationFiles
                 JsonSerializer.Serialize(output, value, Json);
                 output.Flush(flushToDisk: true);
             }
-            File.Move(temporary, path, overwrite: true);
+            if (File.Exists(path)) File.Replace(temporary, path, null, ignoreMetadataErrors: true);
+            else File.Move(temporary, path);
         }
         finally { File.Delete(temporary); }
     }

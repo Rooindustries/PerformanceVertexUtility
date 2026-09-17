@@ -13,6 +13,7 @@ void Check(bool condition, string message)
 }
 if (args is ["--firmware-provider", var firmwareFixture]) { FirmwareProviderChecks.Run(Check, firmwareFixture); return; }
 if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
+if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
@@ -159,6 +160,7 @@ finally
     Directory.Delete(root, true);
 }
 Check(!Directory.Exists(root), "Core validation removes its process and operation files");
+OperationFileChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 FileChecks.Run(Check);
