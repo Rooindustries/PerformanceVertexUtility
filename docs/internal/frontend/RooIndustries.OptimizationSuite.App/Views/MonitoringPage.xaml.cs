@@ -20,4 +20,8 @@ public sealed partial class MonitoringPage : Page
     }
 
     private void ResizeContent() => ResponsiveContentSizer.Apply(this, MonitoringContent);
+    private void OpenTimerSettings(object sender, Microsoft.UI.Xaml.RoutedEventArgs args)
+    {
+        if (App.MainWindow is MainWindow window) window.FindWindowsSetting("timer");
+    }
 }

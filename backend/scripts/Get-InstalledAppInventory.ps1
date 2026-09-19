@@ -1,9 +1,11 @@
 param(
-    [switch]$IncludeWinget
+    [switch]$IncludeWinget,
+    [switch]$IncludeAllAppxUsers
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'InstalledAppIdentity.Common.ps1')
+. (Join-Path $PSScriptRoot 'AppxInventory.Common.ps1')
 $currentUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 
 function Convert-ToStableId {
@@ -110,11 +112,20 @@ foreach ($hive in @('LocalMachine','CurrentUser')) {
 
 if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     $appxErrors = @()
-    $appxItems = @(Get-AppxPackage -ErrorAction SilentlyContinue -ErrorVariable appxErrors)
+    $query=@{ErrorAction='SilentlyContinue';ErrorVariable='appxErrors';PackageTypeFilter=@('Main','Bundle','Framework')}
+    if($IncludeAllAppxUsers){$query.AllUsers=$true}
+    $appxItems = @(Get-AppxPackage @query)
     foreach($errorRecord in $appxErrors){$sourceErrors.Add([string]$errorRecord)}
     if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
     foreach ($pkg in $appxItems) {
-        $identity = New-RooIndustriesAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $currentUserSid
+        try {$facts=Get-RooIndustriesAppxFacts $pkg;$sids=if($IncludeAllAppxUsers){@(Get-RooIndustriesAppxInstalledSids $pkg)}else{@($currentUserSid)}}
+        catch {$sourceErrors.Add([string]$pkg.PackageFullName+': '+$_.Exception.Message);continue}
+        foreach($sid in $sids){
+        try {$parent=Get-RooIndustriesAppxParentBundle $pkg $appxItems $sid -AllUsers:$IncludeAllAppxUsers}
+        catch {$sourceErrors.Add($_.Exception.Message);continue}
+        if($null -ne $parent){continue}
+        $scope=if($sid -ceq $currentUserSid){'current-user'}else{'registered-user'}
+        $identity = New-RooIndustriesAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $sid $scope
         $risk = Get-AppRisk $pkg.Name $pkg.Publisher
         $reviewRequired = ($risk -eq 'advanced' -or $pkg.Publisher -match 'Microsoft')
         $apps.Add([pscustomobject]@{
@@ -129,14 +140,16 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
             sourceType = 'appx'
             packageId = [string]$pkg.PackageFullName
             packageFamilyName = [string]$pkg.PackageFamilyName
+            packageFacts = $facts
             estimatedSizeBytes = $null
             installDate = $null
             categories = @(Get-AppCategories $pkg.Name $pkg.Publisher)
             risk = if ($reviewRequired -and $risk -eq 'low') { 'advanced' } else { $risk }
-            protected = $false
-            protectionReasons = @(if ($reviewRequired) { 'Appx package requires dependency review before removal' })
+            protected = ($facts.nonRemovable -or $facts.isFramework -or $facts.isResource)
+            protectionReasons = @(if($facts.nonRemovable){'Windows marks this package as non-removable'}elseif($facts.isFramework -or $facts.isResource){'Shared package dependency'}elseif ($reviewRequired) { 'Appx package requires dependency review before removal' })
             startupImpact = Get-StartupImpact $pkg.Name $pkg.Publisher
         }) | Out-Null
+        }
     }
 } else {$sourceErrors.Add('The Appx inventory provider is unavailable.')}
 

@@ -3,6 +3,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using RooIndustries.Optimizer;
 
+if (args is ["--service-probe"]) { ServiceProbe.Start(); return; }
+if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
+if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
+if (args is ["--timer-detached-start", var detachedRoot]) { TimerChecks.DetachedStart(detachedRoot); return; }
+if (args is ["--timer-detached-stop", var stopRoot]) { TimerChecks.DetachedStop(stopRoot); return; }
 var repo = Path.GetFullPath(args[0]);
 var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(repo, "backend/catalogs/windows-tweaks.json"));
 var root = Path.Combine(Path.GetTempPath(), "roo-industries-tweak-checks-" + Guid.NewGuid().ToString("N"));
@@ -50,9 +55,19 @@ void Put(string name, RegistryAddress address, RegistryValueData data)
 }
 try
 {
+    if (args is [_, "--power-fixture"]) { PowerChecks.Run(root, Check); Console.WriteLine($"Completed {count} native power checks."); return; }
+    if (args is [_, "--file-controls-fixture"]) { NativeFileControlChecks.Run(Check, Reject); Console.WriteLine($"Completed {count} native file-control checks."); return; }
+    if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
+    if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
+    if (args is [_, "--power-plan-fixture"]) { PowerPlanChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native power-plan checks."); return; }
+    if (args is [_, "--timer-startup-fixture"]) { TimerStartupChecks.Native(Check); Console.WriteLine($"Completed {count} native startup checks."); return; }
+    if (args is [_, "--download-blocker-fixture"]) { DownloadBlockerChecks.Native(Check); Console.WriteLine($"Completed {count} native download blocker checks."); return; }
+    if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
+    if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
+    if (args is [_, "--controls-fixture"]) { NativeControlChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native control checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();
-    Check(catalog.Settings.Length == 12 && catalog.Presets.Length == 3, "First batch has twelve distinct settings and three reusable presets");
+    Check(catalog.Settings.Select(item => item.Id).Distinct().Count() == catalog.Settings.Length, "Catalog setting identities are unique");
     var store = Fresh("shared"); var engine = new TweakEngine(catalog, store);
     var first = Preview(engine, "first", [.. Show(), .. Show()]);
     Check(first.Plan.Changes.Length == 1 && first.Plan.Selections.Length == 1, "Duplicate source selections become one Windows value change");
@@ -184,6 +199,12 @@ try
     Apply(new(catalog, upgraded), "one", []);
     Check(upgraded.Read(extension).Value is null, "Restoration survives a Windows build change even when new tweaks are unsupported");
 
+    bool ConcurrentApply(Func<TweakApplyResult> apply)
+    {
+        try { return !apply().Replayed; }
+        catch (IOException) { return false; }
+        catch (InvalidDataException error) when (error.Message is "The fixture changed after review." or "The reviewed settings or their current values changed. Review again.") { return false; }
+    }
     store = Fresh("parallel"); engine = new(catalog, store);
     var parallel = Preview(engine, "one", Show());
     using (var barrier = new Barrier(2))
@@ -191,12 +212,13 @@ try
         var outcomes = Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
         {
             barrier.SignalAndWait();
-            try { new TweakEngine(catalog, new FileTweakStore(Path.Combine(root, "parallel.json"))).Apply(parallel.Path, parallel.Hash); return true; }
-            catch (IOException) { return false; }
+            return ConcurrentApply(() => new TweakEngine(catalog, new FileTweakStore(Path.Combine(root, "parallel.json"))).Apply(parallel.Path, parallel.Hash));
         })).ToArray();
         Task.WaitAll(outcomes);
-        Check(outcomes.Any(task => task.Result) && Fixture("parallel").Writes == 1, "Concurrent requests cannot apply the same reviewed operation twice");
+        Check(outcomes.Count(task => task.Result) == 1 && Fixture("parallel").Writes == 1, "Concurrent requests cannot apply the same reviewed operation twice");
     }
+    Check(!ConcurrentApply(() => new(store.Commit(parallel.Plan, parallel.Hash), true, false)) && Fixture("parallel").Writes == 1, "A losing commit after the winner releases its lock is an expected stale rejection");
+    Reject(() => ConcurrentApply(() => throw new InvalidDataException("Unexpected review failure")), "Unexpected invalid review errors cannot be mistaken for concurrent stale rejection");
     engine.Apply(parallel.Path, parallel.Hash);
     Check(Fixture("parallel").Writes == 1, "Retry after concurrent contention retains one commit and one original snapshot");
     var bounded = new TweakEngine(catalog, store).Preview("bounded", Show());
@@ -207,6 +229,12 @@ try
     Reject(oversized.Validate, "Oversized originals cannot make the recovery receipt unreadable");
     var duplicate = Encoding.UTF8.GetBytes("{\"schemaVersion\":1,\"schemaVersion\":1}");
     Reject(() => OperationFiles.Deserialize<TweakState>(duplicate), "Duplicate properties are rejected in registry-backed recovery data");
+    CompositionChecks.Run(root, Check, Reject);
+    ControlChecks.Run(root, Check, Reject);
+    SelectionChecks.Run(root, Check, Reject);
+    PowerCompositionChecks.Run(root, Check, Reject);
+    HostsChecks.Run(root, Check, Reject);
+    CatalogIntegrationChecks.Run(root, catalog, Check, Reject);
     Console.WriteLine($"Completed {count} tweak checks.");
 }
 finally { Directory.Delete(root, true); }

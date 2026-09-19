@@ -1,0 +1,981 @@
+{
+  "schemaVersion": 1,
+  "version": "2026-09-19.1",
+  "settings": [
+    {
+      "id": "privacy.advertising-id-policy",
+      "name": "Advertising ID policy",
+      "category": "Privacy",
+      "description": "Controls whether apps may use the advertising ID. Allowing user choice does not force the user preference on.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "none",
+      "options": [
+        {
+          "id": "blocked",
+          "name": "Blocked",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\AdvertisingInfo",
+                "kind": "value",
+                "valueName": "DisabledByGroupPolicy"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "user-choice",
+          "name": "Let each user choose",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\AdvertisingInfo",
+                "kind": "value",
+                "valueName": "DisabledByGroupPolicy"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\AdvertisingInfo",
+                "kind": "value",
+                "valueName": "DisabledByGroupPolicy"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#disableadvertisingid",
+          "evidence": "documented-policy"
+        }
+      ]
+    },
+    {
+      "id": "privacy.activity-feed",
+      "name": "Activity history",
+      "category": "Privacy",
+      "description": "Activity-history policy. Disabling it can prevent Windows Backup for Organizations from running.",
+      "minimumBuild": 16299,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "none",
+      "options": [
+        {
+          "id": "disabled",
+          "name": "Disabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "EnableActivityFeed"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "enabled",
+          "name": "Enabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "EnableActivityFeed"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "EnableActivityFeed"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#enableactivityfeed",
+          "evidence": "documented-policy"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFTweaksActivity",
+          "evidence": "target-reference; this is one member of the source option"
+        },
+        {
+          "product": "Gaming playbook R11H2",
+          "reference": "gaming-playbook-r11h2.action.phase7-privacy-0031",
+          "evidence": "target-reference; desired values verified against the Windows contract"
+        }
+      ]
+    },
+    {
+      "id": "privacy.activity-publishing",
+      "name": "Publish activity history",
+      "category": "Privacy",
+      "description": "Activity-history policy. Disabling it can prevent Windows Backup for Organizations from running.",
+      "minimumBuild": 16299,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "none",
+      "options": [
+        {
+          "id": "disabled",
+          "name": "Disabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "PublishUserActivities"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "enabled",
+          "name": "Enabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "PublishUserActivities"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "PublishUserActivities"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#publishuseractivities",
+          "evidence": "documented-policy"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFTweaksActivity",
+          "evidence": "target-reference; this is one member of the source option"
+        }
+      ]
+    },
+    {
+      "id": "privacy.activity-upload",
+      "name": "Upload activity history",
+      "category": "Privacy",
+      "description": "Activity-history policy. Disabling it can prevent Windows Backup for Organizations from running.",
+      "minimumBuild": 17134,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "none",
+      "options": [
+        {
+          "id": "disabled",
+          "name": "Disabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "UploadUserActivities"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "enabled",
+          "name": "Enabled",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "UploadUserActivities"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\System",
+                "kind": "value",
+                "valueName": "UploadUserActivities"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#uploaduseractivities",
+          "evidence": "documented-policy"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFTweaksActivity",
+          "evidence": "target-reference; this is one member of the source option"
+        }
+      ]
+    },
+    {
+      "id": "privacy.tailored-experiences",
+      "name": "Personalized tips from diagnostic data",
+      "category": "Privacy",
+      "description": "Controls use of diagnostic data for personalized Windows suggestions.",
+      "minimumBuild": 15063,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "sign-out",
+      "options": [
+        {
+          "id": "blocked",
+          "name": "Blocked",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\CloudContent",
+                "kind": "value",
+                "valueName": "DisableTailoredExperiencesWithDiagnosticData"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "allowed",
+          "name": "Allowed by this policy",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\CloudContent",
+                "kind": "value",
+                "valueName": "DisableTailoredExperiencesWithDiagnosticData"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\CloudContent",
+                "kind": "value",
+                "valueName": "DisableTailoredExperiencesWithDiagnosticData"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowtailoredexperienceswithdiagnosticdata",
+          "evidence": "documented-policy"
+        }
+      ]
+    },
+    {
+      "id": "privacy.feedback-prompts",
+      "name": "Feedback prompts",
+      "category": "Privacy",
+      "description": "Controls Windows feedback-request notifications.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "none",
+      "options": [
+        {
+          "id": "blocked",
+          "name": "Blocked",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\DataCollection",
+                "kind": "value",
+                "valueName": "DoNotShowFeedbackNotifications"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "allowed",
+          "name": "Allowed by this policy",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\DataCollection",
+                "kind": "value",
+                "valueName": "DoNotShowFeedbackNotifications"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "name": "Not configured",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "Software\\Policies\\Microsoft\\Windows\\DataCollection",
+                "kind": "value",
+                "valueName": "DoNotShowFeedbackNotifications"
+              },
+              "dword": null
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#donotshowfeedbacknotifications",
+          "evidence": "documented-policy"
+        }
+      ]
+    },
+    {
+      "id": "explorer.file-extensions",
+      "name": "File extensions",
+      "category": "Windows & Explorer",
+      "description": "Show or hide extensions for known file types. Existing Explorer windows may need to be reopened.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "explorer-refresh",
+      "options": [
+        {
+          "id": "show",
+          "name": "Show",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "HideFileExt"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Hide",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "HideFileExt"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleShowExt",
+          "evidence": "source-confirmed registry preference"
+        }
+      ]
+    },
+    {
+      "id": "explorer.hidden-files",
+      "name": "Hidden files",
+      "category": "Windows & Explorer",
+      "description": "Show hidden files. This does not expose protected operating-system files.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "explorer-refresh",
+      "options": [
+        {
+          "id": "show",
+          "name": "Show",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "Hidden"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Hide",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "Hidden"
+              },
+              "dword": 2
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleHiddenFiles",
+          "evidence": "source-confirmed registry preference"
+        }
+      ]
+    },
+    {
+      "id": "explorer.app-theme",
+      "name": "App color mode",
+      "category": "Windows & Explorer",
+      "description": "Color preference for applications and Windows surfaces that support it.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "new-windows-or-sign-out",
+      "options": [
+        {
+          "id": "dark",
+          "name": "Dark",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "AppsUseLightTheme"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "light",
+          "name": "Light",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "AppsUseLightTheme"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
+          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
+        }
+      ]
+    },
+    {
+      "id": "explorer.system-theme",
+      "name": "Windows color mode",
+      "category": "Windows & Explorer",
+      "description": "Color preference for applications and Windows surfaces that support it.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "new-windows-or-sign-out",
+      "options": [
+        {
+          "id": "dark",
+          "name": "Dark",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "SystemUsesLightTheme"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "light",
+          "name": "Light",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "SystemUsesLightTheme"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
+          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
+        }
+      ]
+    },
+    {
+      "id": "explorer.task-view",
+      "name": "Task View button",
+      "category": "Windows & Explorer",
+      "description": "Show or hide the Task View button on the taskbar.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "explorer-refresh",
+      "options": [
+        {
+          "id": "show",
+          "name": "Show",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "ShowTaskViewButton"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Hide",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "ShowTaskViewButton"
+              },
+              "dword": 0
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskView",
+          "evidence": "source-confirmed registry preference"
+        }
+      ]
+    },
+    {
+      "id": "explorer.taskbar-alignment",
+      "name": "Taskbar alignment",
+      "category": "Windows & Explorer",
+      "description": "Align Windows 11 taskbar icons to the left or center.",
+      "minimumBuild": 22000,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "explorer-refresh",
+      "options": [
+        {
+          "id": "left",
+          "name": "Left",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "TaskbarAl"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "center",
+          "name": "Center",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "TaskbarAl"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskbarAlignment",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Gaming playbook R11H2",
+          "reference": "gaming-playbook-r11h2.action.phase5-apply-0060",
+          "evidence": "target-reference; desired values verified against the Windows contract"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "privacy-basics",
+      "name": "Privacy basics",
+      "selections": [
+        {
+          "settingId": "privacy.advertising-id-policy",
+          "optionId": "blocked"
+        },
+        {
+          "settingId": "privacy.tailored-experiences",
+          "optionId": "blocked"
+        },
+        {
+          "settingId": "privacy.feedback-prompts",
+          "optionId": "blocked"
+        }
+      ]
+    },
+    {
+      "id": "explorer-details",
+      "name": "Explorer details",
+      "selections": [
+        {
+          "settingId": "explorer.file-extensions",
+          "optionId": "show"
+        },
+        {
+          "settingId": "explorer.hidden-files",
+          "optionId": "show"
+        }
+      ]
+    },
+    {
+      "id": "activity-history-off",
+      "name": "Activity history off",
+      "selections": [
+        {
+          "settingId": "privacy.activity-feed",
+          "optionId": "disabled"
+        },
+        {
+          "settingId": "privacy.activity-publishing",
+          "optionId": "disabled"
+        },
+        {
+          "settingId": "privacy.activity-upload",
+          "optionId": "disabled"
+        }
+      ]
+    }
+  ]
+}

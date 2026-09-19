@@ -9,6 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'UninstallCleanup.Common.ps1')
+. (Join-Path $PSScriptRoot 'AppxInventory.Common.ps1')
 
 function Get-OfficialCommandPreview {
     param(
@@ -39,12 +40,15 @@ function Get-OfficialCommandPreview {
     } elseif ($sourceType -eq 'appx') {
         if ([string]$packageId -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$') { throw 'Appx removal requires PackageFullName, not PackageFamilyName. Refresh inventory.' }
         $commandType = 'appx-package-removal-preview'
-        $rawCommand = "Remove-AppxPackage -Package '" + ([string]$packageId).Replace("'","''") + "'"
+        $identity=Get-RooIndustriesUninstallPropertyValue $App 'sourceIdentity' $null
+        if($null -eq $identity -or $identity.userSid -notmatch '^S-1-\d+(?:-\d+)+$'){throw 'Appx preview requires an exact Windows user SID.'}
+        $rawCommand = Get-RooIndustriesAppxRemoveCommand $identity
         $metadata = [pscustomobject]@{
             previewExecution = 'disabled'
             packageFullName = $packageId
-            scope = 'current-user'
-            reason = 'Review the exact full package name and its current-user dependencies before removal.'
+            scope = $identity.scope
+            userSid = $identity.userSid
+            reason = 'Review the exact package and Windows account. This removes the selected registration; provisioning for new users is separate.'
         }
     } elseif ($sourceType -eq 'winget' -and -not [string]::IsNullOrWhiteSpace([string]$packageId)) {
         $commandType = 'winget-uninstall-preview'

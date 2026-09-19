@@ -92,7 +92,7 @@
                 </Grid>
             </Border>
 
-            <TabView Grid.Row="1" IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" AutomationProperties.AutomationId="CleanupTabs">
+            <TabView x:Name="CleanupTabs" Grid.Row="1" IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" AutomationProperties.AutomationId="CleanupTabs">
                 <TabViewItem Header="Remove apps" IsClosable="False" AutomationProperties.AutomationId="RemovalTab">
                     <views:BulkRemovalPanel x:Name="BulkRemoval" />
                 </TabViewItem>

@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
         ["startup"] = typeof(StartupServicesPage),
         ["drivers"] = typeof(DriversProfilesPage),
         ["memory"] = typeof(MemoryLatencyPage),
+        ["windows"] = typeof(WindowsTweaksPage),
         ["monitoring"] = typeof(MonitoringPage),
         ["tools"] = typeof(ToolsDiagnosticsPage),
         ["restore"] = typeof(RestoreLogsPage),
@@ -28,18 +29,20 @@ public sealed partial class MainWindow : Window
     private bool _onSettings;
     private readonly string _pendingTag;
     private readonly bool _pendingSettings;
+    private readonly string? _ownershipPath;
 
     public MainWindow() : this("dashboard", false)
     {
     }
 
-    public MainWindow(string navTag, bool onSettings)
+    public MainWindow(string navTag, bool onSettings, string? ownershipPath = null)
     {
         InitializeComponent();
         Title = "Roo Industries Optimization Suite";
         _pendingTag = navTag;
         _pendingSettings = onSettings;
         _currentTag = navTag;
+        _ownershipPath = ownershipPath;
         ConfigureTitleBar();
         LogoImage.Source = BrandAssets.TryGetLogo();
         App.Theme.ThemeChanged += OnThemeChanged;
@@ -113,6 +116,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void OpenAppGroup(string group)
+    {
+        SelectNav("uninstall");
+        if (ContentFrame.Content is UninstallCleanupPage page) page.ShowGroup(group);
+    }
+    public void FindTool(string query)
+    {
+        SelectNav("tools");
+        if (ContentFrame.Content is ToolsDiagnosticsPage page) page.ViewModel.Search = query;
+    }
+    public void FindWindowsSetting(string query)
+    {
+        SelectNav("windows");
+        if (ContentFrame.Content is WindowsTweaksPage page) page.ViewModel.Search = query;
+    }
     public void ShowProcesses()
     {
         if (ContentFrame.Content is PerformanceProfilesPage page) page.ShowProcesses();
@@ -169,6 +187,7 @@ public sealed partial class MainWindow : Window
         {
             ContentFrame.Navigate(pageType);
         }
+        if (_ownershipPath is not null && ContentFrame.Content is WindowsTweaksPage ownershipPage) _ = ownershipPage.ShowOwnershipAsync(_ownershipPath);
     }
 
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

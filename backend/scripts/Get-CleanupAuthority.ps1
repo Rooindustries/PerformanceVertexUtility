@@ -14,6 +14,7 @@ try {
     $entry=$entries[0];$state=$states[0]
     if($entry.entryId -cne $state.entryId -or $entry.protected -isnot [bool] -or $entry.protected){throw 'Entry binding or protection state does not authorize cleanup.'}
     Assert-RooIndustriesBulkIdentity $entry.identity ([string]$queue.plan.fixtureRoot)
+    if($entry.identity.kind -eq 'appx' -and $entry.identity.userSid -cne $queue.plan.owner.userSid){throw 'Other-account package removal does not authorize deletion of this user''s leftovers. Review any remaining data in its own account context.'}
     $sha=[Security.Cryptography.SHA256]::Create()
     try {$result.providerIdentityHash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($entry.identity|ConvertTo-Json -Depth 12 -Compress))))).Replace('-','')}
     finally {$sha.Dispose()}

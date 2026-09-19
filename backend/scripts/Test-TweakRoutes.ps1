@@ -13,7 +13,8 @@ try {
     $fixture=Join-Path $work 'fixture.json'
     $null=& $wrapper -Action CreateFixture -FixturePath $fixture -ConfirmApply -DotNetPath $DotNetPath
     $catalog=Read-Json (& $router -CapabilityId $capability -Action preview)
-    Assert ($catalog.status -eq 'completed' -and $catalog.evidence.data.catalog.settings.Count -eq 12) 'Capability preview exposes the executable catalog'
+    $expectedCatalog=Get-Content -LiteralPath (Join-Path $root 'backend/catalogs/windows-tweaks.json') -Raw|ConvertFrom-Json
+    Assert ($catalog.status -eq 'completed' -and $catalog.evidence.data.catalog.settings.Count -eq $expectedCatalog.settings.Count) 'Capability preview exposes the executable catalog'
     $preview=Join-Path $work 'preview.json';$request=Join-Path $work 'request.json'
     Save $request @{schemaVersion=1;repoRoot=$root;fixturePath=$fixture;profileId='route-test';presetId='explorer-details';outputPath=$preview}
     $planned=Read-Json (& $router -CapabilityId $capability -Action preview -RequestPath $request)

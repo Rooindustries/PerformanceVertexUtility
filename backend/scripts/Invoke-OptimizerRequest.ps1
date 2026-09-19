@@ -10,7 +10,7 @@ try {
         if($Action -ne 'Preview'){throw 'RequestPath is required for this action.'}
         if($Feature -eq 'CpuSets'){& (Join-Path $PSScriptRoot 'Invoke-ProcessCpuSets.ps1') -Action Status -TargetProcessId $TargetProcessId}
         else {[pscustomobject]@{schemaVersion=1;actionId='apps.bulkUninstall.preview';status='preview';dryRun=$true;
-            requiredInput=@('appIds');optionalInput=@('inventoryPath','quiet','outputPath');
+            requiredInput=@('appIds');optionalInput=@('inventoryPath','quiet','includeAllAppxUsers','outputPath');
             behavior='Select exact installed app IDs to create a reviewed sequential removal plan. Leftover deletion requires a separate fresh review.'}|ConvertTo-Json}
         return
     }
@@ -39,8 +39,9 @@ try {
     } else {
         if($Action -eq 'Restore'){throw 'Vendor removal is not reversible. Use a separately reviewed cleanup restore journal when applicable.'}
         if($Action -eq 'Preview') {
-            $scriptName='New-BulkUninstallPlan.ps1';$allowed=@('schemaVersion','appIds','inventoryPath','quiet','fixtureRoot','outputPath')
+            $scriptName='New-BulkUninstallPlan.ps1';$allowed=@('schemaVersion','appIds','inventoryPath','quiet','includeAllAppxUsers','fixtureRoot','outputPath')
             $args.AppId=[string[]]@($request.appIds);$args.InventoryPath=[string]$request.inventoryPath;$args.Quiet=[bool]$request.quiet;$args.FixtureRoot=[string]$request.fixtureRoot
+            $args.IncludeAllAppxUsers=[bool]$request.includeAllAppxUsers
         } else {
             $scriptName='Invoke-BulkUninstall.ps1';$allowed=@('schemaVersion','inputPath','reviewSha256','journalPath','manualReviewApproved','allowFixtureExecution','timeoutSeconds','outputPath')
             $args.Action='Apply';$args.InputPath=[string]$request.inputPath;$args.ReviewSha256=[string]$request.reviewSha256;$args.JournalPath=[string]$request.journalPath

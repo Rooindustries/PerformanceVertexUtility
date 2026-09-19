@@ -1,33 +1,30 @@
-# Windows tweaks
+# Windows settings
 
-The shared backend exposes twelve Privacy and Explorer settings in
-`backend/catalogs/windows-tweaks.json`. It supports current-state detection,
-reviewed apply, and restoration of an individual profile. The first batch uses
-registry values; it does not implement service, task, network-adapter or package
-changes. No frontend changes are included in this backend batch.
+Roo Industries combines source controls from O&O ShutUp10, Chris Titus Tech
+WinUtil, Gaming toggles and WPD into a shared catalog. The current development
+catalog contains 1,035 setting resources and 1,271 presets derived from 632
+version/control records. These are catalog counts, not a claim that every
+upstream action or visible Windows effect has been verified.
 
-## Included settings
+`backend/catalogs/sources/` retains the pinned source facts. Run
+`python3 tools/catalogs/compile_windows_tweaks.py` to rebuild the catalog and
+`windows-tweak-coverage.json`. The coverage file retains unresolved effects,
+refresh requirements, Windows applicability and guided actions. Source bundles use the same setting IDs. Deliberate differences from upstream
+behavior are recorded on their coverage entries.
 
-| Group | Settings |
-| --- | --- |
-| Privacy | Advertising ID policy, activity history, activity publishing, activity upload, personalized tips from diagnostic data, feedback prompts |
-| Windows & Explorer | File extensions, hidden files, app color mode, Windows color mode, Task View button, taskbar alignment |
+The shared engine handles typed registry values, individual fields in a common
+value, services, scheduled tasks, managed firewall rules, hibernation, Windows
+features, network adapter controls, DNS configuration, system mitigations and
+other named Windows controls. Unsupported or unavailable targets report their
+actual detection error. Native execution verification varies by adapter; see
+below. Unknown value meanings remain advanced settings.
 
-Every setting declares its Windows build range, editions, exact registry scope,
-options and refresh requirement. Unsupported editions/builds reject new changes.
-Restoration uses stored claims and originals, so removing a catalog entry or
-upgrading Windows does not discard an existing recovery record. Detection reports
-registry configuration; it does not assert that a cached shell view has refreshed
-or that an external management policy cannot supersede it.
-
-The Privacy definitions follow Microsoft's [Privacy policy mapping](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy)
-and [Experience policy mapping](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience).
-Explorer bindings are pinned to the [WinUtil configuration](https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json).
-Source references identify individual targets; they do not imply that an entire
-upstream preset is implemented. In particular, WinUtil's Activity History option
-keeps the activity feed enabled while disabling publication and upload. The
-individual controls here expose those policies separately. Disabling these
-policies can affect [Windows Backup for Organizations](https://learn.microsoft.com/en-us/windows/configuration/windows-backup/).
+Every setting declares its Windows build range, editions, exact scope, options
+and refresh requirement. Some controls also require installed Office or a
+specific available device. Device selections resolve to concrete reviewed
+targets; missing primary-network evidence cannot become an all-adapter change.
+Detection reports observed configuration. It does not establish that a policy
+has taken effect in a running app or improved gaming performance.
 
 ## One setting, shared ownership
 
@@ -79,8 +76,7 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
   -ReviewHash (Get-FileHash ./review.json -Algorithm SHA256).Hash -ConfirmApply
 ```
 
-`-PresetId explorer-details` can replace `-SelectionsPath`. The other bundled
-presets are `privacy-basics` and `activity-history-off`. Presets are named
+`-PresetId explorer-details` can replace `-SelectionsPath`. The original presets `privacy-basics` and `activity-history-off` remain available. Generated source presets are included only when every required setting effect has an executor. Presets are named
 selections of the same controls, with no separate execution bodies.
 
 To restore a profile, create another selections file containing `[]`, preview it
@@ -105,59 +101,138 @@ The capability ID is `system-optimizations.windows-settings`. Its router accepts
 
 For apply/restore, use `previewPath`, `reviewHash`, and `confirm: true` instead of
 selection fields, and also supply the router's `-ConfirmApply`. The wrapper binds
-the request to its own backend root. The native actions are `tweak-catalog`,
-`tweak-status`, `tweak-preview`, `tweak-apply`, and `tweak-restore`.
+the request to its own backend root. The native actions include `tweak-catalog`, `tweak-status`, `tweak-preview`,
+`tweak-apply`, `tweak-restore`, `tweak-recovery`, and `tweak-recover`.
+`acceptDataLoss: true` (or `-AcceptDataLoss` on the direct wrapper) is additionally
+required when the reviewed choices can delete Recall snapshots.
 
 Apply returns `state`, `changed`, `replayed`, and `restorable`. `changed` counts
 setting changes, not an ownership-only update. A replay returns the current state
 without reapplying an old profile that may already have been restored. Older
 reviews outside the retained receipt history are rejected as stale.
 
-## Recovery and validation
+## Native recovery
 
-Windows uses a registry transaction for the target changes and the recovery
-receipt at `HKLM\Software\RooIndustriesOptimizationSuite\Tweaks\<user SID>`,
-value `State`. Native mutations require an administrator token for this protected
-recovery store, including when the selected preferences are per-user. The
-transaction commits both together, or neither. The receipt is bound to the PC,
-Windows user, and store. Stale revisions, changed review bytes, changed catalog
-choices, missing required fields, and conflicting current values reject apply.
-Recent history is bounded to 128 entries and may be shortened to keep the receipt
-within 8 MiB; active recovery snapshots are not discarded. An original value
-larger than 64 KiB is rejected before application.
+Registry changes and their recovery receipt commit together in a Windows
+registry transaction. The receipt is stored at
+`HKLM\Software\RooIndustriesOptimizationSuite\Tweaks\<user SID>`, value
+`State`. This store requires an administrator token, including for per-user
+preferences. The PC, Windows user, store identity, catalog, review hash and
+state revision bind each operation.
 
-The file fixture uses the same planner and profile/recovery contract, committing
-fixture values and state together through the shared atomic file writer. It does
-not edit the Windows registry. Create one with `-Action CreateFixture
--FixturePath <new-file> -ConfirmApply`, then pass that `FixturePath` to subsequent
-commands. Fixture plans cannot be applied to the Windows store.
+Non-registry changes use a durable `Pending` journal. Each attempted native
+write is recorded before execution and read back afterward. Failure restores
+completed changes in reverse order. An external change or failed restoration
+retains the journal for recovery instead of reporting success. Registry changes
+are committed only after the native phase succeeds. `tweak-recovery` reads the
+receipt; `tweak-recover` requires confirmation and its exact pending hash.
 
-Run the normal checks with:
+Windows feature changes can require a restart. An accepted pending target is
+reported separately from a completed change. The journal remains until a fresh
+read after restart confirms the target. Pending servicing blocks another
+feature change or restoration. No automatic restart occurs.
+
+Hibernation uses `powercfg` and captures actual file mode plus five raw power
+registry values, including their absence. Hibernation and Fast Startup share
+one native resource with separate field ownership. Restoring one profile
+preserves another profile's Fast Startup choice. Full hibernation requires S4
+support; an unreproducible full-file size fails review before mutation.
+Restoration covers configuration, not the contents of an earlier hibernation
+image. Full/reduced modes need space for the Windows-managed file.
+
+The file fixture uses the same planner, composition and ownership contract. It
+does not change production Windows settings. Create it with `-Action
+CreateFixture -FixturePath <new-file> -ConfirmApply`. Fixture reviews cannot
+cross into the native Windows store.
+
+## Executed verification
+
+On the 9070XT, Windows build 26200 Professional:
+
+- The approved native registry fixture passed 13 checks for apply, exact
+  type/byte restoration, shared ownership, stale review, retries and rollback.
+- The approved service/task/firewall/HKLM fixture passed 17 checks, including
+  partial failure, interruption recovery and cleanup.
+- The approved hibernation round trip exercised full and reduced modes and
+  restored the original disabled state and five registry values. The app's
+  profile apply/restore path then passed five native checks. No sleep,
+  hibernation or restart was invoked; the temporary hibernation file was removed.
+- Native temporary files verified exact permission/ownership restore (12 checks),
+  hosts content and metadata recovery (6), and absent/existing download blockers (7).
+- Native timer checks covered acquisition, release and lost-worker detection (6).
+  A separate SSH session proved the worker survived its exited parent and session.
+  The approved sign-in task test passed 6 checks for registration, real helper
+  acquisition, stop, exact task removal and cleanup.
+- Ultimate Performance passed 8 temporary-plan checks, including external selection
+  preservation and returning to the captured prior plan from the explicit Off choice.
+- The current settings fixture suite passed 136 checks. Public routes, AppX account
+  scope, installed-app identity and the disposable bulk-removal queue also passed.
+  Native restore-point enumeration succeeded; no new system restore point was created.
+
+The current file-fixture suite also covers ownership composition, field drift,
+device selection, missing inputs, dependencies and pending servicing. Run:
 
 ```powershell
 ./backend/scripts/Test-Tweaks.ps1 -DotNetPath "$env:USERPROFILE/.dotnet/dotnet.exe"
 ```
 
-The separate native registry fixture is opt-in. After exact approval, its command
-is `dotnet run --project tools/validation/Tweaks/Tweaks.csproj -c Release --
-<repo-root> --registry-fixture`. Its entire write scope is
-`HKCU\Software\RooIndustriesTweakTests\ec3d917cb672498785218eb3d0aa790f`; the test
-refuses an existing root and removes its created keys after the run. It does not
-change the production tweak targets or production recovery store.
+The separately approved native fixture switches are `--registry-fixture`,
+`--controls-fixture` and `--power-fixture` on
+`tools/validation/Tweaks/Tweaks.csproj`. They refuse unexpected baseline state
+and clean only their owned test resources. They are not part of the ordinary
+file-fixture run.
 
-## Verified native execution
+Catalog contracts and negative controls run with:
 
-On 2026-09-19, the approved isolated registry test passed thirteen checks on the
-9070XT machine, Windows build 26200 Professional. Independent Windows registry
-reads verified apply, shared ownership, exact type restoration, stale-review
-rejection, retry behavior, and rollback of both values and recovery state after
-a forced transaction failure. The test root and its recovery receipt were
-removed. These results verify the native registry adapter; visible effects of
-the twelve production settings remain a separate validation step.
+```sh
+python3 tools/catalogs/compile_windows_tweaks.py --check
+python3 tools/validation/check_baseline.py --contracts-only
+```
 
-## Remaining coverage
+## Integrated actions and limits
 
-The complete O&O ShutUp10++ and WPD inventories, unresolved Gaming toggles controls,
-remaining WinUtil options, existing legacy-module migration, and frontend
-controls remain separate work. This batch establishes native registry execution
-and shared ownership. It does not claim complete parity with any upstream tool.
+Windows settings includes search, categories, source filters, reusable profiles,
+presets, before/after review, apply, restore and interruption recovery. Advanced
+values and unavailable settings can be shown explicitly. Backups & history reads
+the actual recovery state. An empty list does not become a sample backup.
+
+More actions connects Widgets, Copilot, Edge and OneDrive to the existing
+installed-app removal queue. Each remover and subsequent leftover cleanup has
+its own review. The other-account option inventories exact installed AppX
+registrations by SID; removal does not claim to deprovision future accounts.
+WPD custom switches import registry, policy, service and task definitions into
+the shared catalog. Importing alone applies nothing.
+
+File ownership review captures one selected file or folder's identity, owner and
+DACL. Hosts changes keep a marked block and preserve outside content and metadata;
+a known interrupted write can be recovered from the durable journal. Razer and
+Logitech download restrictions can create an absent folder, but restore removes
+an owned folder only if it remains unchanged and empty.
+
+The timer control owns a separate 0.5 ms request worker; its sign-in option uses
+a current-user task. This replaces {source}'s system boot task with an interactive
+session lifetime. The control reports the worker's request, not a measured game
+benefit or proof that every process uses that interval. Ultimate Performance uses
+an owned clone and restores the captured original selection, preserving external
+changes and other plans.
+
+Restore-point creation verifies a new Windows sequence and description, including
+completion. A successful API return alone is insufficient. The optional creation
+frequency override uses the same settings recovery engine. Recall snapshot
+deletion opens Windows Privacy settings and guides the Windows-owned deletion
+flow; opening the page is not reported as deletion success.
+
+Source behavior is normalized where exact-state recovery is more appropriate:
+restore preserves unrelated policy values and context menus; FTH changes preserve
+learned history; Explorer folder-template changes preserve saved folder views;
+WPD Group Policy controls write their documented policy values without claiming
+to edit the Local Group Policy database. Edge encrypted DNS is an explicit setting,
+not an automatic side effect of changing another Edge policy. Windows dialogs
+handle BitLocker, Disk Cleanup and separately requested folder-view resets.
+
+DNS, mitigations and optional-feature writes have not been applied to production
+targets during this work. File-fixture coverage and read-only detection do not
+prove their visible or network effects. Native creation of a system restore point was not performed on this PC; creation
+result checks use controlled identities, and the native list reader was exercised.
+The sign-in task was created, explicitly run and removed in the approved fixture.
+No reboot or actual sign-in cycle was performed.

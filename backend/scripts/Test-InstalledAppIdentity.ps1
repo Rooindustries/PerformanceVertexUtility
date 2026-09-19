@@ -34,7 +34,7 @@ try {
     $inventory=Join-Path $root 'inventory.json'
     @{schemaVersion=1; apps=$apps}|ConvertTo-Json -Depth 12|Set-Content $inventory -Encoding UTF8
     $preview=Read-Result (& (Join-Path $PSScriptRoot 'Preview-OfficialUninstall.ps1') -AppId @($first.stableId,'msi:fixture') -InventoryPath $inventory)
-    Assert ($preview.commands.Count -eq 2 -and $preview.commands[0].metadata.packageFullName -eq $pkg -and $preview.commands[0].rawCommand -like "*'$pkg'") 'Appx removal preview binds the exact full name, not the family name'
+    Assert ($preview.commands.Count -eq 2 -and $preview.commands[0].metadata.packageFullName -eq $pkg -and $preview.commands[0].rawCommand -like "*-User 'S-1-5-21-1' -Package '$pkg' -ErrorAction Stop") 'Appx removal preview binds the exact full name, not the family name'
     Assert ($preview.commands[1].arguments -match '(?i)/x ' -and $preview.commands[1].arguments -match '(?i)/norestart' -and $preview.commands[1].arguments -notmatch '(?i)/i') 'MSI preview derives uninstall from ProductCode and prevents automatic restart'
     foreach($code in @(3010,1641,1605,1614)) {
         Assert ((Get-RooIndustriesUninstallOutcome windows-installer $code).success -and -not (Get-RooIndustriesUninstallOutcome generic $code).success) "MSI exit $code is interpreted only for Windows Installer"

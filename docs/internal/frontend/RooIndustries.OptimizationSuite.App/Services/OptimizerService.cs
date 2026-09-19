@@ -68,11 +68,11 @@ public sealed partial class OptimizerService
         return ended;
     }
 
-    public async Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds)
+    public async Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false)
     {
         var directory = NewOperationDirectory("removal");
         var preview = Path.Combine(directory, "preview.json");
-        var result = await RequestAsync<BulkRemovalPlan>("BulkUninstall", "Preview", new { schemaVersion = 1, appIds, outputPath = preview }, directory);
+        var result = await RequestAsync<BulkRemovalPlan>("BulkUninstall", "Preview", new { schemaVersion = 1, appIds, includeAllAppxUsers, outputPath = preview }, directory);
         return new BulkRemovalReview(RequireData(result), preview, Hash(preview), Path.Combine(directory, "journal.json"));
     }
 

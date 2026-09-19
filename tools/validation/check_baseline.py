@@ -48,6 +48,7 @@ def public_hygiene_text(relative: str, source: str):
 
 def validate(root: Path, contracts_only: bool = False):
     failures = []
+    failures.extend(runpy.run_path(str(Path(__file__).with_name('check_windows_tweaks.py')))['check'](root))
     if not contracts_only:
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
     documents = {}

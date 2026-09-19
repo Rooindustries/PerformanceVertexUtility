@@ -1,0 +1,98 @@
+[
+  {
+    "parameter": "DEP",
+    "group": "Dep",
+    "field": "Enable",
+    "override": "OverrideDEP"
+  },
+  {
+    "parameter": "EmulateAtlThunks",
+    "group": "Dep",
+    "field": "EmulateAtlThunks",
+    "override": "OverrideDEP"
+  },
+  {
+    "parameter": "SEHOP",
+    "group": "Sehop",
+    "field": "Enable",
+    "override": "OverrideSEHOP"
+  },
+  {
+    "parameter": "ForceRelocateImages",
+    "group": "Aslr",
+    "field": "ForceRelocateImages",
+    "override": "OverrideForceRelocateImages"
+  },
+  {
+    "parameter": "RequireInfo",
+    "group": "Aslr",
+    "field": "RequireInfo",
+    "override": "OverrideForceRelocateImages"
+  },
+  {
+    "parameter": "BottomUp",
+    "group": "Aslr",
+    "field": "BottomUp",
+    "override": "OverrideBottomUp"
+  },
+  {
+    "parameter": "HighEntropy",
+    "group": "Aslr",
+    "field": "HighEntropy",
+    "override": "OverrideHighEntropy"
+  },
+  {
+    "parameter": "StrictHandle",
+    "group": "StrictHandle",
+    "field": "Enable",
+    "override": "OverrideStrictHandle"
+  },
+  {
+    "parameter": "CFG",
+    "group": "Cfg",
+    "field": "Enable",
+    "override": "OverrideCFG"
+  },
+  {
+    "parameter": "SuppressExports",
+    "group": "Cfg",
+    "field": "SuppressExports",
+    "override": "OverrideCFG"
+  },
+  {
+    "parameter": "DisableExtensionPoints",
+    "group": "ExtensionPoint",
+    "field": "DisableExtensionPoints",
+    "override": "OverrideExtensionPoint"
+  },
+  {
+    "parameter": "BlockDynamicCode",
+    "group": "DynamicCode",
+    "field": "BlockDynamicCode",
+    "override": "OverrideDynamicCode"
+  },
+  {
+    "parameter": "AuditDynamicCode",
+    "group": "DynamicCode",
+    "field": "Audit",
+    "override": "OverrideDynamicCode"
+  },
+  {
+    "parameter": "AuditFont",
+    "group": "FontDisable",
+    "field": "Audit",
+    "override": "OverrideFontDisable"
+  },
+  {
+    "parameter": "BlockRemoteImageLoads",
+    "group": "ImageLoad",
+    "field": "BlockRemoteImageLoads",
+    "override": "OverrideBlockRemoteImageLoads"
+  },
+  {
+    "parameter": "AuditRemoteImageLoads",
+    "group": "ImageLoad",
+    "field": "AuditRemoteImageLoads",
+    "override": "OverrideBlockRemoteImageLoads"
+  }
+]

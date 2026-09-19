@@ -87,10 +87,11 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Button Grid.Column="0" Content="Check" Command="{x:Bind ViewModel.CheckStutterPlanCommand}" AutomationProperties.Name="Review timer and cache settings" IsEnabled="{x:Bind ViewModel.CanRunStutterAction, Mode=OneWay}" Padding="12,7" />
-                            <Button Grid.Column="1" Content="Run timer" Command="{x:Bind ViewModel.RunTimerSessionCommand}" AutomationProperties.Name="Run timer session" IsEnabled="{x:Bind ViewModel.CanRunTimerSession, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" Padding="12,7" />
+                            <Button Grid.Column="1" Content="Test timer" Command="{x:Bind ViewModel.RunTimerSessionCommand}" AutomationProperties.Name="Run timer session" IsEnabled="{x:Bind ViewModel.CanRunTimerSession, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" Padding="12,7" />
                             <Button Grid.Column="2" Content="Check cache" Command="{x:Bind ViewModel.PrepareShaderCacheCommand}" AutomationProperties.Name="Check shader cache cleanup" IsEnabled="{x:Bind ViewModel.CanPrepareShaderCache, Mode=OneWay}" Padding="12,7" />
                             <Button Grid.Column="3" Content="Restore" Command="{x:Bind ViewModel.RestoreShaderCacheCommand}" AutomationProperties.Name="Restore shader cache" IsEnabled="{x:Bind ViewModel.CanRestoreShaderCache, Mode=OneWay}" Padding="12,7" />
                         </Grid>
+                        <HyperlinkButton Content="Keep the timer active or start it at sign-in" Click="OpenTimerSettings" HorizontalAlignment="Left" AutomationProperties.AutomationId="PersistentTimerSettings"/>
                     </StackPanel>
                 </Border>
                 <Expander Header="Performance readings" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="PerformanceReadings">

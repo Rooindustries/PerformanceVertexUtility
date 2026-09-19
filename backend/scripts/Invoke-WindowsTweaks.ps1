@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Catalog','Status','Preview','Apply','Restore','CreateFixture')][string]$Action,
     [string]$ProfileId='', [string]$SelectionsPath='', [string]$PresetId='',
     [string]$PreviewPath='', [string]$ReviewHash='', [string]$OutputPath='',
-    [string]$FixturePath='', [switch]$ConfirmApply, [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE
+    [string]$FixturePath='', [switch]$ConfirmApply, [switch]$AcceptDataLoss, [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference='Stop'
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -17,6 +17,7 @@ $request=@{schemaVersion=1;repoRoot=$root}
 if($FixturePath){$request.fixturePath=[IO.Path]::GetFullPath($FixturePath)}
 if($Action -in @('Apply','Restore','CreateFixture') -and -not $ConfirmApply){throw 'This action requires ConfirmApply.'}
 if($ConfirmApply){$request.confirm=$true}
+if($AcceptDataLoss){$request.acceptDataLoss=$true}
 switch($Action){
     'Catalog' {$command='tweak-catalog'}
     'Status' {$command='tweak-status'}

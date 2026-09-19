@@ -12,6 +12,10 @@ public sealed partial class RestoreLogsPage : Page
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
+    private void OpenWindowsSettings(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (App.MainWindow is MainWindow window) window.SelectNav("windows");
+    }
     private void OpenProcessControl(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (App.MainWindow is MainWindow window) window.SelectNav("profiles");
