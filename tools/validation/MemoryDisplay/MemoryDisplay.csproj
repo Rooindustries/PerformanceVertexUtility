@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/MemoryUsage.cs" Link="MemoryUsage.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/ProcessModels.cs" Link="ProcessModels.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/CommonModels.cs" Link="CommonModels.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
+  </ItemGroup>
+</Project>

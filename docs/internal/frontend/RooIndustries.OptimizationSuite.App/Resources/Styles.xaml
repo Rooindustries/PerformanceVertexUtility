@@ -20,7 +20,7 @@
     <Style TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource RooIndustriesFontFamily}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="6" />
     </Style>
 
     <Style TargetType="TextBox">
@@ -77,9 +77,9 @@
     </Style>
 
     <Style x:Key="CardBorderStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="18" />
+        <Setter Property="Padding" Value="16" />
     </Style>
 
     <Style x:Key="DisplayHeadingTextBlockStyle" TargetType="TextBlock">
@@ -98,7 +98,7 @@
     </Style>
 
     <Style x:Key="NavCtaButtonStyle" TargetType="Button">
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="Padding" Value="16,9,16,9" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="BorderBrush" Value="{StaticResource RooIndustriesBorderAccentBrush}" />
@@ -107,41 +107,41 @@
         <Setter Property="UseSystemFocusVisuals" Value="True" />
     </Style>
 
-    <ThemeShadow x:Key="RooIndustriesPanelShadow" />
-
     <Style x:Key="PanelBorderStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="CornerRadius" Value="8" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="20" />
+        <Setter Property="Padding" Value="16" />
         <Setter Property="Background" Value="{StaticResource RooIndustriesSurfaceCardBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource RooIndustriesBorderBrush}" />
-        <Setter Property="Shadow" Value="{StaticResource RooIndustriesPanelShadow}" />
     </Style>
 
     <Style x:Key="FocalPanelBorderStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="CornerRadius" Value="8" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="22" />
+        <Setter Property="Padding" Value="16" />
         <Setter Property="Background" Value="{StaticResource RooIndustriesSurfaceCardBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource RooIndustriesBorderAccentBrush}" />
-        <Setter Property="Shadow" Value="{StaticResource RooIndustriesPanelShadow}" />
     </Style>
 
     <Style x:Key="CommandHeaderBorderStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="24,20" />
-        <Setter Property="Background" Value="{StaticResource RooIndustriesGlassMenuBrush}" />
+        <Setter Property="Padding" Value="0,0,0,12" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="BorderBrush" Value="{StaticResource RooIndustriesBorderBrush}" />
-        <Setter Property="Shadow" Value="{StaticResource RooIndustriesPanelShadow}" />
     </Style>
 
     <Style x:Key="PanelLabelTextBlockStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource RooIndustriesFontFamily}" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CharacterSpacing" Value="70" />
+        <Setter Property="CharacterSpacing" Value="0" />
         <Setter Property="LineHeight" Value="15" />
     </Style>
 
+    <Style x:Key="PageHeaderIconStyle" TargetType="Image">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0,2,0,0" />
+        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
 </ResourceDictionary>

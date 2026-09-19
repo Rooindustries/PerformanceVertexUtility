@@ -11,9 +11,9 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 
 public partial class MonitoringViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _subtitle = "Live memory, frame sensors, and stutter fixes you can run.";
-    [ObservableProperty] private string _stutterActionTitle = "Ready to reduce stutter";
-    [ObservableProperty] private string _stutterActionDetail = "Check the plan, run a short timer session, or check shader-cache cleanup. Restore stays beside the fix.";
+    [ObservableProperty] private string _subtitle = "Timer settings, shader cache review, and performance readings.";
+    [ObservableProperty] private string _stutterActionTitle = "Timer and shader cache";
+    [ObservableProperty] private string _stutterActionDetail = "Review the settings before running a temporary timer change or checking the shader cache.";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRunStutterAction))]
     [NotifyPropertyChangedFor(nameof(CanRunTimerSession))]
@@ -28,7 +28,7 @@ public partial class MonitoringViewModel : PageViewModelBase
     [NotifyPropertyChangedFor(nameof(StutterGateSummary))]
     [NotifyPropertyChangedFor(nameof(CanPrepareShaderCache))]
     private bool _shaderCacheApproved;
-    [ObservableProperty] private string _shaderRestoreHint = "Cache restore appears after Roo Industries writes a rollback file.";
+    [ObservableProperty] private string _shaderRestoreHint = "Restore becomes available after a cache backup is saved.";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRestoreShaderCache))]
     private bool _shaderRestoreAvailable;
@@ -44,7 +44,7 @@ public partial class MonitoringViewModel : PageViewModelBase
     public bool CanRestoreShaderCache => !StutterBusy && ShaderRestoreAvailable;
     public string StutterGateSummary => LatencySessionApproved && ShaderCacheApproved
             ? "Ready: timer and cache cleanup are approved."
-            : "Choose the fix you want, then approve that exact step. Roo Industries checks first and stops there.";
+            : "Select the action you want to allow.";
 
     protected override async Task LoadCoreAsync()
     {
@@ -58,22 +58,23 @@ public partial class MonitoringViewModel : PageViewModelBase
         }
 
         var total = hardware?.Memory?.TotalPhysicalBytes ?? 0;
-        var used = total > summary.AvailableMemoryBytes ? total - summary.AvailableMemoryBytes : 0;
-        var usedPct = total > 0 ? ((int)System.Math.Round((double)used / total * 100)) + "% of memory" : "in use";
+        var percent = MemoryUsage.UsedPercent(total, summary.AvailableMemoryBytes);
+        var used = percent is not null ? Format.Bytes(total - summary.AvailableMemoryBytes!.Value) : "Unavailable";
+        var usedPct = percent is not null ? percent + "% of physical memory" : "physical memory reading missing";
         var gpu = hardware?.Gpus?.Count > 0 ? hardware.Gpus[0].Name : "graphics";
 
         LiveTiles.Clear();
-        LiveTiles.Add(new MetricTile("Apps Running", summary.ProcessCount.ToString(CultureInfo.InvariantCulture),
+        LiveTiles.Add(new MetricTile("Processes", summary.ProcessCount.ToString(CultureInfo.InvariantCulture),
             summary.BackgroundProcessCount + " background"));
-        LiveTiles.Add(new MetricTile("RAM Free", Format.Bytes(summary.AvailableMemoryBytes), "available now"));
-        LiveTiles.Add(new MetricTile("RAM In Use", Format.Bytes(used), usedPct));
-        LiveTiles.Add(new MetricTile("Windows Memory", Format.Bytes(summary.CommitUsedBytes), "commit charge"));
+        LiveTiles.Add(new MetricTile("Available memory", summary.AvailableMemoryBytes is >= 0 ? Format.Bytes(summary.AvailableMemoryBytes.Value) : "Unavailable", "available now"));
+        LiveTiles.Add(new MetricTile("Memory in use", used, usedPct));
+        LiveTiles.Add(new MetricTile("Committed memory", Format.Bytes(summary.CommitUsedBytes), "commit charge"));
 
         PendingTiles.Clear();
         PendingTiles.Add(new MetricTile("Average FPS", "Unavailable", "frame capture not connected"));
         PendingTiles.Add(new MetricTile("1% Low", "Unavailable", "frame capture not connected"));
-        PendingTiles.Add(new MetricTile("Frametime", "Unavailable", "frame capture not connected"));
-        PendingTiles.Add(new MetricTile("GPU Load", "Unavailable", CleanDevice(gpu)));
+        PendingTiles.Add(new MetricTile("Frame time", "Unavailable", "frame capture not connected"));
+        PendingTiles.Add(new MetricTile("GPU usage", "Unavailable", CleanDevice(gpu)));
 
         Sensors.Clear();
         Sensors.Add(new StatusLine("Windows counters", "Connected", "safe"));
@@ -90,13 +91,13 @@ public partial class MonitoringViewModel : PageViewModelBase
         }
 
         StutterBusy = true;
-        StutterActionTitle = "Checking stutter fixes";
+        StutterActionTitle = "Checking timer and cache settings";
         StutterActionDetail = "Roo Industries is reading the plan. No timer, power, cache, or service setting changes from this.";
         try
         {
             var json = await App.Live.PreviewStutterOptimizationTextAsync();
-            StutterActionTitle = "Stutter plan ready";
-            StutterActionDetail = SummarizeStutterAction(json, "Roo Industries checked the stutter plan. Nothing changed.");
+            StutterActionTitle = "Settings reviewed";
+            StutterActionDetail = SummarizeStutterAction(json, "Roo Industries checked the timer and cache settings. Nothing changed.");
         }
         finally
         {

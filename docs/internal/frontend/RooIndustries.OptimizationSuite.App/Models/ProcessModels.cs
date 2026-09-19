@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace RooIndustries.OptimizationSuite.Models;
 
@@ -21,7 +22,8 @@ public sealed class ProcessInventorySummary
     public int VendorUtilityProcessCount { get; set; }
     public long WorkingSetBytes { get; set; }
     public long PrivateBytes { get; set; }
-    public long AvailableMemoryBytes { get; set; }
+    [JsonConverter(typeof(MemoryByteCountConverter))]
+    public long? AvailableMemoryBytes { get; set; }
     public long CommitUsedBytes { get; set; }
 }
 
@@ -50,10 +52,10 @@ public sealed class ProcessItem
     public string ClassificationLabel => Classification switch
     {
         "gameTarget" => "GAME",
-        "protectedCompanion" => "KEEP STEADY",
-        "demotionCandidate" => "PUSH BACK",
+        "protectedCompanion" => "Excluded",
+        "demotionCandidate" => "Lower priority",
         "safeCandidate" => "REVIEW",
-        "protected" => "KEEP STEADY",
+        "protected" => "Excluded",
         _ => "REVIEW",
     };
 
@@ -61,10 +63,10 @@ public sealed class ProcessItem
     {
         get
         {
-            if (Protected) return "Keep steady";
+            if (Protected) return "Excluded";
             if (Blocked) return "Review first";
-            if (Classification == "gameTarget") return "Give room";
-            if (Classification == "demotionCandidate") return "Push back";
+            if (Classification == "gameTarget") return "Raise priority";
+            if (Classification == "demotionCandidate") return "Lower priority";
             return "Review";
         }
     }
@@ -132,10 +134,10 @@ public sealed class ProcessPreviewRow
     {
         get
         {
-            if (Protected) return "Kept steady";
+            if (Protected) return "Excluded";
             if (Blocked) return "Review first";
             if (Classification == "gameTarget") return "Game";
-            if (Classification == "demotionCandidate") return "Push back";
+            if (Classification == "demotionCandidate") return "Lower priority";
             return "Watch";
         }
     }

@@ -206,7 +206,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             }
             RuleName = Path.GetFileNameWithoutExtension(snapshot.Identity.ExecutablePath);
             Status = "Controls for " + process.Name;
-            Detail = "Current CPU Sets: " + Describe("cpuSets", snapshot.Controls["cpuSets"].Require()) + ". Current hard affinity: " + Describe("affinity", snapshot.Controls["affinity"].Require()) + ".";
+            Detail = "Current Preferred CPUs: " + Describe("cpuSets", snapshot.Controls["cpuSets"].Require()) + ". Current hard affinity: " + Describe("affinity", snapshot.Controls["affinity"].Require()) + ".";
         }
         catch (Exception error) { if (version == _selectionVersion) { Status = "Process controls are unavailable."; Detail = error.Message; } }
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
@@ -314,10 +314,10 @@ public partial class ProcessControlsViewModel : ObservableObject
             };
             var saved = await App.Operations.SaveRuleAsync(rule);
             _editingRuleId = saved.RuleId;
-            Status = "Rule saved. Starting its worker…";
+            Status = "Rule saved. Enabling automatic apply…";
             _worker = await App.Operations.PolicyWorkerAsync("Start");
             await RefreshRulesAsync();
-            Status = "Rule saved; the worker is running.";
+            Status = "Rule saved and enabled.";
             Detail = "Rules continue after this window closes. Conflicting changes suspend that process instance for review.";
             Invalidate();
         }
@@ -340,8 +340,8 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private void ShowWorker(PolicyWorkerStatus state)
     {
-        WorkerSummary = state.HostRunning == true ? "Worker running · " + state.State?.Instances.Count(instance => instance.Status == "active") + " active instances"
-            : state.HostRunning == false ? "Worker stopped" : "Worker state is unknown";
+        WorkerSummary = state.HostRunning == true ? "Rules enabled · " + state.State?.Instances.Count(instance => instance.Status == "active") + " active instances"
+            : state.HostRunning == false ? "Rules disabled" : "Rule status unavailable";
         if (state.Error is not null) WorkerSummary += "\n" + state.Error;
         var issues = (state.State?.Errors ?? new()).Concat(state.State?.Instances.Where(instance => instance.Status == "conflict").Select(instance => instance.Process.ExecutablePath + ": " + instance.Error) ?? Enumerable.Empty<string>());
         if (issues.Any()) WorkerSummary += "\n" + string.Join("\n", issues);
@@ -436,7 +436,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             else await App.Operations.SaveRuleAsync(SelectedRule!.Rule with { Enabled = !SelectedRule.Rule.Enabled });
             await RefreshRulesAsync();
             Status = delete ? "Rule deleted." : "Rule updated.";
-            Detail = "The worker restores controls it still owns when a rule is paused or deleted.";
+            Detail = "Pausing or deleting a rule restores settings that have not changed elsewhere.";
         }
         catch (Exception error) { Status = "Couldn't update the rule."; Detail = error.Message; }
         finally { Busy = false; }
@@ -453,7 +453,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             _worker = await App.Operations.PolicyWorkerAsync(action);
             await RefreshRulesAsync();
         }
-        catch (Exception error) { Status = "The rule worker needs attention."; Detail = error.Message; }
+        catch (Exception error) { Status = "Saved rules need attention."; Detail = error.Message; }
         finally { Busy = false; }
     }
 
@@ -466,7 +466,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));
     internal static ControlOption[] Options(string name) => name switch
     {
-        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value, value)).ToArray(),
+        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", _ => value }, value)).ToArray(),
         "ioPriority" => [Option("Very low", 0), Option("Low", 1), Option("Normal", 2), Option("High · Windows support varies", 3)],
         "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime", 5)],
         "memoryPriority" => [Option("Very low", 1), Option("Low", 2), Option("Medium", 3), Option("Below normal", 4), Option("Normal", 5)],
@@ -477,7 +477,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     public static string Label(string name) => name switch
     {
         "cpuPriority" => "CPU priority", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
-        "executionQoS" => "Execution QoS", "priorityBoost" => "Dynamic priority boost", "cpuSets" => "CPU Sets", "affinity" => "Hard affinity", _ => name,
+        "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU affinity", _ => name,
     };
     public static string Describe(string name, JsonElement value) => name switch
     {

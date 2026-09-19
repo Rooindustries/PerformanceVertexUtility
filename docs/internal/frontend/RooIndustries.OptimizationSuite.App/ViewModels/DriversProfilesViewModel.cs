@@ -36,8 +36,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string? _gpuNote;
     [ObservableProperty] private string _nvidiaProfileId = "base-profile";
     [ObservableProperty] private string _nvidiaProfileName = "Base profile";
-    [ObservableProperty] private string _nvidiaActionTitle = "NVIDIA profile path";
-    [ObservableProperty] private string _nvidiaActionDetail = "Check the tool, preview the profile, then apply only after the three approvals are selected.";
+    [ObservableProperty] private string _nvidiaActionTitle = "NVIDIA profile";
+    [ObservableProperty] private string _nvidiaActionDetail = "Check NVIDIA Profile Inspector, review the profile, and confirm the requirements below.";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCheckNvidiaAction))]
     [NotifyPropertyChangedFor(nameof(CanApproveNvidiaProfile))]
@@ -70,7 +70,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     public string NvidiaGateSummary => !HasNvidiaProfiles
         ? "No NVIDIA profile catalog found."
         : !HasNvidia
-            ? "Apply is locked on this GPU. You can still check the local tool path."
+            ? "An NVIDIA GPU is required to apply this profile."
             : NvidiaExportReviewed && NvidiaProfileApproved && NvidiaBenchmarkReady
                 ? "Ready to apply " + NvidiaProfileName + "."
                 : "Review export, exact profile approval, and benchmark evidence first.";

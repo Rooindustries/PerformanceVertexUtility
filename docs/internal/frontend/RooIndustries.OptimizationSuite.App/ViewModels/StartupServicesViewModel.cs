@@ -33,8 +33,8 @@ public partial class StartupServicesViewModel : PageViewModelBase
         LauncherCount = background.Count(p => p.Category is "launcher" or "vendorUtility");
         ProtectedCount = processes.Count(p => p.Protected || p.Protection == "protected");
         LoadSummary = background.Count == 0
-            ? "No background load recorded yet. Connect the local engine for a live view."
-            : background.Count + " background apps and helpers are running that don't need to load with Windows.";
+            ? "No background processes reported."
+            : background.Count + " background processes are running.";
 
         BackgroundRows.Clear();
         foreach (var p in background.OrderByDescending(p => p.WorkingSetBytes).Take(8))
@@ -43,7 +43,7 @@ public partial class StartupServicesViewModel : PageViewModelBase
                 string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
                 Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Keep steady" : "Reviewable",
+                p.Protected ? "Excluded" : "Normal",
                 p.Protected ? "low" : "neutral"));
         }
 

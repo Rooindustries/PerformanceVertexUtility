@@ -6,12 +6,13 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Helpers;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
 public sealed record CpuProcessChoice(int Id, string Name)
 {
-    public override string ToString() => $"{Name} ({Id})";
+    public override string ToString() => $"{Naming.FriendlyName(Name)} · PID {Id}";
 }
 
 public partial class CpuChoice : ObservableObject

@@ -1,111 +1,83 @@
-<Page
-    x:Class="RooIndustries.OptimizationSuite.Views.StartupServicesPage"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels"
-    mc:Ignorable="d"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
-
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:RooIndustries.OptimizationSuite.Views" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="RooIndustries.OptimizationSuite.Views.StartupServicesPage" mc:Ignorable="d" xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels" xmlns:d="http://schemas.microsoft.com/expression/blend/2008">
     <Grid Padding="{StaticResource RooIndustriesPageMargin}">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
-                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
             <TextBlock Text="Reading startup and services" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
         </StackPanel>
-
-        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
-                      VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="16" MaxWidth="880" HorizontalAlignment="Stretch" Padding="0,0,6,0">
-
-                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+        <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="16" MaxWidth="1600" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooIndustriesAccentBrush}" />
+                        <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/startup.svg" Style="{StaticResource PageHeaderIconStyle}" />
                         <StackPanel Grid.Column="1" Spacing="7">
-                            <TextBlock Text="Startup &amp; Services" FontSize="22" FontWeight="SemiBold"
-                                       Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.LoadSummary, Mode=OneWay}" FontSize="13" LineHeight="19"
-                                       TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                            <TextBlock Text="What loads with Windows and what runs in the background, reviewed here before anything is paused."
-                                       FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Startup &amp; services" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.LoadSummary, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                            <TextBlock Text="Background processes and startup information." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
                 </Border>
-
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind ViewModel.BackgroundCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}"
-                                       Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.BackgroundCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                             <TextBlock Text="Background apps" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Border>
-                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind ViewModel.LauncherCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}"
-                                       Foreground="{StaticResource RiskLowBrush}" />
-                            <TextBlock Text="Launchers &amp; helpers" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.LauncherCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RiskLowBrush}" />
+                            <TextBlock Text="Launchers" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Border>
-                    <Border Grid.Column="2" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
+                    <Border Grid.Column="2" Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind ViewModel.ProtectedCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}"
-                                       Foreground="{StaticResource RiskProtectedBrush}" />
-                            <TextBlock Text="Keep steady" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.ProtectedCount, Mode=OneWay}" Style="{StaticResource MetricValueTextBlockStyle}" Foreground="{StaticResource RiskProtectedBrush}" />
+                            <TextBlock Text="Excluded" Style="{StaticResource MetricLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Border>
                 </Grid>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="BACKGROUND LOAD" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                        <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
-                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
-                                  ItemsSource="{x:Bind ViewModel.BackgroundRows}">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BackgroundRow">
-                                    <Grid ColumnSpacing="14" Padding="0,9" VerticalAlignment="Center">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="110" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="2">
-                                            <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                                            <TextBlock Text="{x:Bind Role}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Ram}" FontSize="13" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                        <TextBlock Grid.Column="2" Text="{x:Bind StateText}" FontSize="12" FontWeight="Medium"
-                                                   TextAlignment="Right" VerticalAlignment="Center"
-                                                   Foreground="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                        <TextBlock Text="These don't need to load with Windows. Pausing and startup trimming ship with the same preview-and-restore gates as Process Control. Nothing is changed from this page today."
-                                   FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="STARTUP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                        <TextBlock Text="Startup entries are read with Autoruns-class tooling, shown here for review first. You approve every change, and every change is reversible."
-                                   FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                    </StackPanel>
-                </Border>
-
+                <views:AdaptivePanel MinColumnWidth="380" MaxColumns="2">
+                    <Border Style="{StaticResource PanelBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Running background apps" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0" ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled" ItemsSource="{x:Bind ViewModel.BackgroundRows}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BackgroundRow">
+                                        <Grid ColumnSpacing="14" Padding="0,9" VerticalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="110" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                                <TextBlock Text="{x:Bind Role}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Ram}" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                                            <TextBlock Grid.Column="2" Text="{x:Bind StateText}" FontSize="12" FontWeight="Medium" TextAlignment="Right" VerticalAlignment="Center" Foreground="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <TextBlock Text="This list shows running processes. Use Games &amp; processes to change priorities." FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource PanelBorderStyle}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Startup apps" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Open Autoruns from Tools to manage startup entries." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </views:AdaptivePanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

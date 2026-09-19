@@ -14,6 +14,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     [ObservableProperty] private string _memoryHeadline = "Reading memory pressure…";
     [ObservableProperty] private string _memoryDetail = string.Empty;
     [ObservableProperty] private double _memoryUsedPercent;
+    [ObservableProperty] private bool _hasMemory;
     [ObservableProperty] private string _pressureState = "neutral";
 
     public ObservableCollection<BackgroundRow> TopMemoryRows { get; } = new();
@@ -24,33 +25,33 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     {
         var inventory = await App.Live.GetProcessInventoryAsync();
         var classification = await App.Live.GetProcessClassificationAsync();
+        var hardware = await App.Live.GetDriverHardwareAsync();
         TelemetrySnapshot? telemetry = null;
 
-        BuildMemory(inventory?.Summary);
+        BuildMemory(inventory?.Summary, hardware?.Memory?.TotalPhysicalBytes);
         BuildTopUsers(classification?.Processes);
         BuildSensors(telemetry?.Providers);
         BuildDiagnostics();
         IsEmpty = false;
     }
 
-    private void BuildMemory(ProcessInventorySummary? summary)
+    private void BuildMemory(ProcessInventorySummary? summary, long? totalBytes)
     {
-        if (summary is null || summary.AvailableMemoryBytes <= 0)
+        var percent = MemoryUsage.UsedPercent(totalBytes, summary?.AvailableMemoryBytes);
+        HasMemory = percent is not null;
+        if (percent is null)
         {
-            MemoryHeadline = "Memory pressure not measured yet";
-            MemoryDetail = "Connect the local engine to see live RAM pressure.";
+            MemoryHeadline = "Memory usage unavailable";
+            MemoryDetail = "Physical RAM capacity or available memory could not be read.";
             MemoryUsedPercent = 0;
             PressureState = "neutral";
             return;
         }
 
-        var used = summary.CommitUsedBytes > 0 ? summary.CommitUsedBytes : summary.WorkingSetBytes;
-        var total = used + summary.AvailableMemoryBytes;
-        var percent = total > 0 ? Math.Round(100.0 * used / total) : 0;
-        MemoryUsedPercent = percent;
+        MemoryUsedPercent = percent.Value;
         PressureState = percent >= 85 ? "high" : percent >= 65 ? "medium" : "safe";
-        MemoryHeadline = percent + "% of memory in use - " + (percent >= 85 ? "heavy" : percent >= 65 ? "moderate" : "light") + " pressure";
-        MemoryDetail = Format.Bytes(summary.AvailableMemoryBytes) + " free · "
+        MemoryHeadline = percent + "% of physical memory in use";
+        MemoryDetail = Format.Bytes(summary!.AvailableMemoryBytes!.Value) + " free of " + Format.Bytes(totalBytes!.Value) + " · "
             + summary.ProcessCount + " processes · "
             + summary.BackgroundProcessCount + " in the background";
     }
@@ -68,7 +69,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
                 string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
                 Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Keep steady" : "Normal",
+                p.Protected ? "Excluded" : "Normal",
                 p.Protected ? "low" : "neutral"));
         }
     }
@@ -86,18 +87,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     private void BuildDiagnostics()
     {
         DiagnosticRows.Clear();
-        DiagnosticRows.Add(new DiagnosticRow(
-            "DPC and driver latency",
-            "LatencyMon-class diagnostics find the drivers behind stutter and audio dropouts. Read-only: it measures, it doesn't change anything.",
-            "Read-only", "low"));
-        DiagnosticRows.Add(new DiagnosticRow(
-            "Core parking",
-            "Roo Industries handles core parking through native power-plan controls with full restore, so no third-party unpark tool is needed.",
-            "Native", "safe"));
-        DiagnosticRows.Add(new DiagnosticRow(
-            "Standby memory and caches",
-            "Standby-list and shader-cache actions arrive preview-gated: see exactly what clears before anything does.",
-            "Preview-gated", "low"));
+        DiagnosticRows.Add(new("LatencyMon", "Measure driver latency and audio dropouts.", "Open tools", "neutral"));
+        DiagnosticRows.Add(new("HWiNFO", "Inspect temperatures, clocks, and sensor readings.", "Open tools", "neutral"));
+        DiagnosticRows.Add(new("UnparkCPU", "View and change CPU core parking.", "Open tools", "neutral"));
     }
 
     private static async Task<T?> TrySample<T>(Func<Task<T>> load) where T : class

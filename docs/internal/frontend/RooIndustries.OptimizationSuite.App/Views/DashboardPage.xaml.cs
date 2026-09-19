@@ -7,38 +7,19 @@ namespace RooIndustries.OptimizationSuite.Views;
 public sealed partial class DashboardPage : Page
 {
     public DashboardViewModel ViewModel { get; } = new();
-
     public DashboardPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) =>
-        {
-            ResizeContent();
-            await ViewModel.InitializeAsync();
-            ResizeContent();
-            DispatcherQueue.TryEnqueue(ResizeContent);
-        };
-        SizeChanged += (_, _) => ResizeContent();
+        Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
-
-    private void OnReviewProcessPlanClick(object sender, RoutedEventArgs e)
-    {
-        (App.MainWindow as MainWindow)?.SelectNav("profiles");
-    }
-
+    private async void Refresh_Click(object sender, RoutedEventArgs e) => await ViewModel.ReloadAsync();
     private void OnDashboardActionClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string tag })
-        {
-            (App.MainWindow as MainWindow)?.SelectNav(tag);
-        }
+        if (sender is Button { Tag: string tag }) (App.MainWindow as MainWindow)?.SelectNav(tag);
     }
-
-    private void ResizeContent()
+    private void OnProcessesClick(object sender, RoutedEventArgs e)
     {
-        ResponsiveContentSizer.Apply(this, DashContent);
-        TuneActionHost.Width = double.NaN;
-        CleanupActionHost.Width = double.NaN;
-        DriverActionHost.Width = double.NaN;
+        (App.MainWindow as MainWindow)?.SelectNav("profiles");
+        if (App.MainWindow is MainWindow window) window.ShowProcesses();
     }
 }

@@ -17,14 +17,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string _gameStatus = "No game running";
     [ObservableProperty] private string _gameStatusLevel = "neutral";
     [ObservableProperty] private string _ruleSummary =
-        "Give the game room first. Leave stream apps steady. Push launchers and browser helpers back.";
+        "Review priorities for games, launchers, and background apps.";
     [ObservableProperty] private int _appsCount;
     [ObservableProperty] private int _keepCount;
     [ObservableProperty] private int _quietCount;
     [ObservableProperty] private string _searchText = string.Empty;
-    [ObservableProperty] private string _actionTitle = "Ready to tune";
-    [ObservableProperty] private string _actionDetail = "Check shows the live plan. Apply changes the current session. Restore puts changed processes back.";
-    [ObservableProperty] private string _restoreHint = "No restore point yet";
+    [ObservableProperty] private string _actionTitle = "Process priorities";
+    [ObservableProperty] private string _actionDetail = "Review the selected priorities, then apply them. Restore returns changed processes to their saved settings.";
+    [ObservableProperty] private string _restoreHint = "No saved process settings";
     [NotifyPropertyChangedFor(nameof(CanRunProcessAction))]
     [NotifyPropertyChangedFor(nameof(CanRestoreProfile))]
     [NotifyPropertyChangedFor(nameof(CanCheckMatchTune))]
@@ -38,12 +38,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _restoreAvailable;
     [NotifyPropertyChangedFor(nameof(CanStartMatchTune))]
     [ObservableProperty] private bool _hasGameRunning;
-    [ObservableProperty] private string _matchTuneStatus = "No match tune checked yet";
+    [ObservableProperty] private string _matchTuneStatus = "No game priorities checked yet";
     [ObservableProperty] private string _matchTuneDetail =
-        "Raises the game CPU priority, leaves OBS and Discord steady, and pushes launchers or browser helpers back.";
-    [ObservableProperty] private string _governorStatus = "Background guard not checked yet";
+        "Raises the game CPU priority, leaves OBS and Discord unchanged, and lowers the priority of launchers and browser helpers.";
+    [ObservableProperty] private string _governorStatus = "Background limits not checked yet";
     [ObservableProperty] private string _governorDetail =
-        "Watches for background CPU spikes and lowers priority or I/O until the app calms down.";
+        "Watches for background CPU spikes and lowers priority or I/O until CPU use drops.";
     [NotifyPropertyChangedFor(nameof(CanRestoreMatchTune))]
     [ObservableProperty] private bool _matchTuneRestoreAvailable;
     [NotifyPropertyChangedFor(nameof(CanRestoreGovernor))]
@@ -106,8 +106,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         AppsCount = _all.Count;
-        KeepCount = _all.Count(r => r.Plan == "Keep steady");
-        QuietCount = _all.Count(r => r.Plan == "Quiet");
+        KeepCount = _all.Count(r => r.Plan == "Excluded");
+        QuietCount = _all.Count(r => r.Plan == "Lower priority");
         RestoreAvailable = App.Live.FindLatestProcessProfileBackup() is not null;
         RestoreHint = RestoreAvailable ? "Restore is available from the latest apply" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
@@ -148,7 +148,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             _lastBackupPath = ExtractString(json, "backup", "location") ?? App.Live.FindLatestProcessProfileBackup();
             RestoreAvailable = _lastBackupPath is not null || App.Live.FindLatestProcessProfileBackup() is not null;
             RestoreHint = RestoreAvailable ? "Restore is ready" : "No process needed a restore point";
-            ActionTitle = "Session tune applied";
+            ActionTitle = "Process priorities applied";
             ActionDetail = SummarizeProcessAction(json, "Roo Industries applied the process controls it could safely change.");
         }
         finally
@@ -165,9 +165,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (string.IsNullOrWhiteSpace(backup))
         {
             ActionTitle = "Nothing to restore";
-            ActionDetail = "Apply a session tune first. Roo Industries restores from the backup it writes before changing process controls.";
+            ActionDetail = "Apply process priorities first. Restore uses the saved original values.";
             RestoreAvailable = false;
-            RestoreHint = "No restore point yet";
+            RestoreHint = "No saved process settings";
             return;
         }
 
@@ -180,7 +180,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             ActionTitle = "Restore complete";
             ActionDetail = SummarizeProcessAction(json, "Roo Industries restored the live process controls from the latest backup.");
             RestoreAvailable = App.Live.FindLatestProcessProfileBackup() is not null;
-            RestoreHint = RestoreAvailable ? "Latest backup remains available" : "No restore point yet";
+            RestoreHint = RestoreAvailable ? "Latest backup remains available" : "No saved process settings";
         }
         finally
         {
@@ -193,13 +193,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (ActionBusy) return;
         ActionBusy = true;
-        MatchTuneStatus = "Checking match tune";
+        MatchTuneStatus = "Checking game priorities";
         MatchTuneDetail = "Roo Industries is checking the match profile without changing process priority.";
         try
         {
             var json = await App.Live.RunGameTuneSessionTextAsync(false, 3, 1);
-            MatchTuneStatus = "Match tune checked";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the match tune path. Nothing changed.");
+            MatchTuneStatus = "Game priorities checked";
+            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the game priority settings. Nothing changed.");
         }
         finally
         {
@@ -218,13 +218,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         ActionBusy = true;
-        MatchTuneStatus = "Starting match tune";
-        MatchTuneDetail = "For a short match run, Roo Industries can raise the game and keep stream apps steady.";
+        MatchTuneStatus = "Starting game priorities";
+        MatchTuneDetail = "For a short match run, Roo Industries can raise the game and leave streaming apps unchanged.";
         try
         {
             var json = await App.Live.RunGameTuneSessionTextAsync(true, 12, 2);
-            MatchTuneStatus = "Match tune finished";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries ran the match tune and wrote a restore point when anything changed.");
+            MatchTuneStatus = "Game priorities finished";
+            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries ran the game priorities and wrote a restore point when anything changed.");
             MatchTuneRestoreAvailable = SessionCanRestore(json);
             RestoreHint = "Session restore is available if Roo Industries changed anything";
         }
@@ -246,13 +246,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         ActionBusy = true;
-        MatchTuneStatus = "Restoring match tune";
+        MatchTuneStatus = "Restoring game priorities";
         MatchTuneDetail = "Roo Industries is putting game-session process controls back.";
         try
         {
             var json = await App.Live.RestoreGameTuneSessionTextAsync();
-            MatchTuneStatus = "Match tune restore checked";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the match-tune restore path.");
+            MatchTuneStatus = "Game priorities restore checked";
+            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the game-priority restore path.");
             MatchTuneRestoreAvailable = SessionCanRestore(json);
         }
         finally
@@ -266,13 +266,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (!CanCheckGovernor) return;
         ActionBusy = true;
-        GovernorStatus = "Checking background guard";
-        GovernorDetail = "Roo Industries is checking the ProBalance guard without restraining anything.";
+        GovernorStatus = "Checking background limits";
+        GovernorDetail = "Checking background limits. No settings are being changed.";
         try
         {
             var json = await App.Live.RunProcessGovernorSessionTextAsync(false, 3, 1, 250);
-            GovernorStatus = "Background guard checked";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background guard path. Nothing changed.");
+            GovernorStatus = "Background limits checked";
+            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background limit settings. Nothing changed.");
         }
         finally
         {
@@ -290,8 +290,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var json = await App.Live.RunProcessGovernorSessionTextAsync(true, 12, 2, 250);
-            GovernorStatus = "Background guard finished";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries ran the background guard and restored calm apps when needed.");
+            GovernorStatus = "Background limits finished";
+            GovernorDetail = SummarizeSessionAction(json, "Roo Industries ran the background limits and restored priorities after CPU use dropped.");
             GovernorRestoreAvailable = SessionCanRestore(json);
         }
         finally
@@ -306,19 +306,19 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanRestoreGovernor)
         {
             GovernorStatus = "Nothing to restore";
-            GovernorDetail = "Run the ProBalance guard first. Restore appears after Roo Industries writes a session backup.";
+            GovernorDetail = "Start background limits first. Restore appears after Roo Industries writes a session backup.";
             GovernorRestoreAvailable = false;
             return;
         }
 
         ActionBusy = true;
-        GovernorStatus = "Restoring background guard";
+        GovernorStatus = "Restoring background limits";
         GovernorDetail = "Roo Industries is putting restrained apps back to their previous controls.";
         try
         {
             var json = await App.Live.RestoreProcessGovernorSessionTextAsync();
-            GovernorStatus = "Background guard restore checked";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background-guard restore path.");
+            GovernorStatus = "Background limits restore checked";
+            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background-limits restore path.");
             GovernorRestoreAvailable = SessionCanRestore(json);
         }
         finally
@@ -330,14 +330,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private static (string plan, string state) PlanFor(ProcessItem p)
     {
         if (p.Category == "foregroundGame") return ("Boost", "safe");
-        if (p.Protection == "protected") return ("Keep steady", "neutral");
-        if (QuietCategories.Contains(p.Category)) return ("Quiet", "low");
+        if (p.Protection == "protected") return ("Excluded", "neutral");
+        if (QuietCategories.Contains(p.Category)) return ("Lower priority", "low");
         return ("Watch", "neutral");
     }
 
     private static string FriendlyPriority(string? priorityClass) => priorityClass switch
     {
-        "AboveNormal" => "Above",
+        "AboveNormal" => "Above normal",
         "BelowNormal" => "Below",
         "RealTime" => "Realtime",
         "High" => "High",
@@ -370,13 +370,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private async Task RefreshSessionStatusesAsync()
     {
         var game = await App.Live.GetGameTuneSessionStatusTextAsync();
-        MatchTuneStatus = SessionStatusTitle(game, "No active match tune");
-        MatchTuneDetail = SummarizeSessionAction(game, "No match tune has changed this PC yet.");
+        MatchTuneStatus = SessionStatusTitle(game, "No active game priorities");
+        MatchTuneDetail = SummarizeSessionAction(game, "No game priorities has changed this PC yet.");
         MatchTuneRestoreAvailable = SessionCanRestore(game);
 
         var governor = await App.Live.GetProcessGovernorSessionStatusTextAsync();
-        GovernorStatus = SessionStatusTitle(governor, "No active background guard");
-        GovernorDetail = SummarizeSessionAction(governor, "No background guard session has changed this PC yet.");
+        GovernorStatus = SessionStatusTitle(governor, "No active background limits");
+        GovernorDetail = SummarizeSessionAction(governor, "No background limits session has changed this PC yet.");
         GovernorRestoreAvailable = SessionCanRestore(governor);
     }
 

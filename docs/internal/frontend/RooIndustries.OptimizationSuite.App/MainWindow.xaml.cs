@@ -113,6 +113,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void ShowProcesses()
+    {
+        if (ContentFrame.Content is PerformanceProfilesPage page) page.ShowProcesses();
+    }
+
     private void ApplyNavFocusBrushes()
     {
         if (!(Application.Current.Resources.TryGetValue("RooIndustriesFocusVisualBrush", out var value) && value is Brush primary))
@@ -141,6 +146,8 @@ public sealed partial class MainWindow : Window
     private void OnNavLoaded(object sender, RoutedEventArgs e)
     {
         ApplyNavFocusBrushes();
+        if (Nav.SettingsItem is NavigationViewItem settingsItem)
+            settingsItem.Icon = new ImageIcon { Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri("ms-appx:///Assets/Icons/settings.svg")) };
 
         if (_pendingSettings)
         {
