@@ -2,6 +2,7 @@
 . (Join-Path $PSScriptRoot 'UninstallCleanup.Common.ps1')
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 . (Join-Path $PSScriptRoot 'UninstallOutcome.Common.ps1')
+. (Join-Path $PSScriptRoot 'AppxInventory.Common.ps1')
 
 function Assert-RooIndustriesBulkFixtureRoot {
     param([string]$Root)
@@ -24,8 +25,10 @@ function Assert-RooIndustriesBulkIdentity {
             if ($Identity.hive -eq 'CurrentUser' -and $Identity.userSid -cne $owner.userSid) {throw 'Selected registry app belongs to another Windows user.'}
         }
         'appx' {
-            if ($Identity.scope -ne 'current-user' -or $Identity.userSid -cne $owner.userSid -or
-                $Identity.packageFullName -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$') {throw 'Invalid current-user Appx identity.'}
+            if ($Identity.scope -notin @('current-user','registered-user') -or $Identity.userSid -notmatch '^S-1-\d+(?:-\d+)+$' -or
+                $Identity.packageFullName -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$') {throw 'Invalid Appx user/package identity.'}
+            if($Identity.scope -eq 'current-user' -and $Identity.userSid -cne $owner.userSid){throw 'The current-user package identity belongs to another Windows account.'}
+            if($Identity.scope -eq 'registered-user' -and -not ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Removing another account''s Appx registration requires an administrator token.'}
         }
         'fixture' {
             if (-not $FixtureRoot -or -not (Test-RooIndustriesCleanupPathWithin ([string]$Identity.presencePath) $FixtureRoot) -or
@@ -40,7 +43,7 @@ function Test-RooIndustriesBulkAppPresent {
     Assert-RooIndustriesBulkIdentity $Identity $FixtureRoot
     if ($Identity.kind -eq 'fixture') {return [IO.File]::Exists([string]$Identity.presencePath)}
     if ($Identity.kind -eq 'appx') {
-        return @(Get-AppxPackage -ErrorAction Stop | Where-Object {$_.PackageFullName -ceq $Identity.packageFullName}).Count -gt 0
+        return $null -ne (Get-RooIndustriesExactAppxPackage $Identity)
     }
     $hive=[Microsoft.Win32.RegistryHive]([string]$Identity.hive)
     $view=[Microsoft.Win32.RegistryView]([string]$Identity.view)
@@ -62,6 +65,12 @@ function Get-RooIndustriesBulkRegistrationState {
     if($Identity.kind -eq 'fixture'){return [pscustomobject]@{fingerprint=(Get-FileHash -LiteralPath $Identity.presencePath -Algorithm SHA256).Hash.ToLowerInvariant();displayValues=$null}}
     $values=[ordered]@{identity=$Identity}
     $displayValues=@{}
+    if($Identity.kind -eq 'appx'){
+        $package=Get-RooIndustriesExactAppxPackage $Identity
+        if($null -eq $package){throw 'The exact Appx user registration disappeared during review.'}
+        $values.packageFacts=Get-RooIndustriesAppxFacts $package
+        $displayValues=$values.packageFacts
+    }
     if($Identity.kind -eq 'registry') {
         $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]([string]$Identity.hive),[Microsoft.Win32.RegistryView]([string]$Identity.view));$key=$null
         try {
@@ -86,6 +95,12 @@ function Get-RooIndustriesBulkRegistrationFingerprint {
 
 function Assert-RooIndustriesBulkInventoryBinding {
     param($App,$Registration)
+    if($App.sourceIdentity.kind -eq 'appx'){
+        $facts=$Registration.displayValues
+        if($facts.nonRemovable -or $facts.isFramework -or $facts.isResource){throw 'Windows protects this package or identifies it as a shared dependency.'}
+        if($null -ne $App.PSObject.Properties['packageFacts'] -and ($App.packageFacts|ConvertTo-Json -Depth 8 -Compress) -cne ($facts|ConvertTo-Json -Depth 8 -Compress)){throw 'Appx dependency or protection information changed after inventory. Refresh before removal.'}
+        return
+    }
     if($App.sourceIdentity.kind -ne 'registry'){return}
     $mapping=@{displayName='DisplayName';version='DisplayVersion';publisher='Publisher';installLocation='InstallLocation';uninstallString='UninstallString';quietUninstallString='QuietUninstallString'}
     foreach($name in $mapping.Keys) {

@@ -22,11 +22,11 @@ function New-RooIndustriesRegistryAppIdentity {
 }
 
 function New-RooIndustriesAppxIdentity {
-    param([string]$PackageFullName,[string]$PackageFamilyName,[string]$UserSid)
+    param([string]$PackageFullName,[string]$PackageFamilyName,[string]$UserSid,[ValidateSet('current-user','registered-user')][string]$Scope='current-user')
     if ($PackageFullName -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$' -or [string]::IsNullOrWhiteSpace($UserSid)) {
         throw 'Appx identity requires a full package name and the current Windows user SID.'
     }
-    return [pscustomobject]@{ kind='appx'; scope='current-user'; packageFullName=$PackageFullName;
+    return [pscustomobject]@{ kind='appx'; scope=$Scope; packageFullName=$PackageFullName;
         packageFamilyName=$PackageFamilyName; userSid=$UserSid;
         stableId=Get-RooIndustriesAppIdentityId 'appx' @($PackageFullName,$UserSid) }
 }

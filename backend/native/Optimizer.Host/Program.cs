@@ -6,6 +6,8 @@ using RooIndustries.Optimizer;
 
 try
 {
+    if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
+    if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var request = OperationFiles.Read<HostRequest>(args[1]);
@@ -24,18 +26,43 @@ try
             var tweakCatalog = ReadTweakCatalog(request.RepoRoot);
             data = new { catalog = tweakCatalog, hash = tweakCatalog.Digest };
             break;
+        case "restore-point-list": data = RestorePoints.List(); break;
+        case "restore-point-preview":
+            data = RestorePoints.Preview(request.AllowFreshRestorePoint == true); WriteNewTweakPreview(Require(request.OutputPath, "output path"), data); break;
+        case "restore-point-create":
+            RequireConfirmation(request);
+            data = RestorePoints.Create(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path")); break;
         case "tweak-fixture-create":
             RequireConfirmation(request);
             data = FileTweakStore.Create(Require(request.FixturePath, "fixture path")).Context;
+            break;
+        case "tweak-custom-import":
+            RequireConfirmation(request);
+            var imported = CustomTweaks.Import(ReadTweakCatalog(request.RepoRoot, custom: false), Require(request.CustomSettingsPath, "constructor file"));
+            data = new { catalog = imported, hash = imported.Digest }; break;
+        case "tweak-ownership-preview":
+            var ownershipPath = Require(request.SelectedFilePath, "selected file or folder");
+            var ownershipCatalog = CustomTweaks.AddOwnership(ReadTweakCatalog(request.RepoRoot, custom: false), ownershipPath);
+            var ownershipTarget = "selected:" + FileLease.NormalizePath(ownershipPath);
+            var ownershipSetting = ownershipCatalog.Settings.Single(setting => setting.Options.Any(option => (option.Controls ?? []).Any(control => control.Address.Kind == "file-ownership" && control.Address.Target == ownershipTarget)));
+            var ownershipRead = FileAccessControl.Read(new("file-ownership", ownershipTarget, "permissions"));
+            data = new TweakEngine(ownershipCatalog, new RegistryTweakStore()).Preview("file-permissions-" + ownershipRead.Id[..16].ToLowerInvariant(), [new(ownershipSetting.Id, ownershipSetting.Options[0].Id)]);
+            WriteNewTweakPreview(Require(request.OutputPath, "output path"), data); break;
+        case "tweak-recovery":
+            data = new RegistryTweakStore().Recovery();
+            break;
+        case "tweak-recover":
+            RequireConfirmation(request);
+            data = new { recovered = new RegistryTweakStore().Recover(Require(request.ReviewHash, "recovery review hash")) };
             break;
         case "tweak-status":
             data = Tweaks(request).Detect();
             break;
         case "tweak-preview":
             if (request.Selections is not null && request.PresetId is not null) throw new InvalidDataException("Provide selections or a preset, not both.");
-            var selected = request.PresetId is null ? request.Selections ?? throw new InvalidDataException("Explicit selections are required; an empty array restores a profile.")
-                : ReadTweakCatalog(request.RepoRoot).Presets.SingleOrDefault(item => item.Id == request.PresetId)?.Selections ?? throw new InvalidDataException("Unknown tweak preset.");
-            data = Tweaks(request).Preview(Require(request.ProfileId, "profile ID"), selected);
+            var previewEngine = Tweaks(request);
+            data = request.PresetId is null ? previewEngine.Preview(Require(request.ProfileId, "profile ID"), request.Selections ?? throw new InvalidDataException("Explicit selections are required; an empty array restores a profile."))
+                : previewEngine.PreviewPreset(Require(request.ProfileId, "profile ID"), request.PresetId);
             WriteNewTweakPreview(Require(request.OutputPath, "output path"), data);
             break;
         case "tweak-apply":
@@ -45,7 +72,9 @@ try
             var tweakHash = Require(request.ReviewHash, "review hash");
             if (action == "tweak-restore" && OperationFiles.Read<TweakPlan>(tweakPreview, tweakHash).Selections.Length != 0)
                 throw new InvalidDataException("Restore requires a reviewed empty selection for the profile.");
-            data = Tweaks(request).Apply(tweakPreview, tweakHash);
+            var tweakApplied = Tweaks(request).Apply(tweakPreview, tweakHash, request.AcceptDataLoss == true);
+            if (action == "tweak-restore" && request.FixturePath is null) CustomTweaks.PruneOwnership(tweakApplied.State);
+            data = tweakApplied;
             break;
         case "protected-session-preview":
             if (request.Controls is not null && request.ControlsPath is not null) throw new InvalidDataException("Provide inline controls or a controls file, not both.");
@@ -187,11 +216,11 @@ catch (Exception error)
     Environment.ExitCode = 1;
 }
 
-static TweakCatalog ReadTweakCatalog(string root)
+static TweakCatalog ReadTweakCatalog(string root, bool custom = true)
 {
     var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(root, "backend", "catalogs", "windows-tweaks.json"));
     catalog.Validate();
-    return catalog;
+    return custom ? CustomTweaks.Merge(catalog) : catalog;
 }
 static TweakEngine Tweaks(HostRequest request) => new(ReadTweakCatalog(request.RepoRoot),
     request.FixturePath is null ? new RegistryTweakStore() : new FileTweakStore(request.FixturePath));
@@ -292,6 +321,9 @@ sealed record HostRequest
     public required int SchemaVersion { get; init; }
     public required string RepoRoot { get; init; }
     public string? FixturePath { get; init; }
+    public string? CustomSettingsPath { get; init; }
+    public string? SelectedFilePath { get; init; }
+    public bool? AllowFreshRestorePoint { get; init; }
     public string? ProfileId { get; init; }
     public string? PresetId { get; init; }
     public TweakSelection[]? Selections { get; init; }
@@ -309,6 +341,7 @@ sealed record HostRequest
     public string? ReviewHash { get; init; }
     public string? JournalPath { get; init; }
     public bool? Confirm { get; init; }
+    public bool? AcceptDataLoss { get; init; }
     public string? PolicyRoot { get; init; }
     public SavedProcessRule? Rule { get; init; }
     public string? RuleId { get; init; }

@@ -164,6 +164,7 @@ public sealed partial class OptimizerService
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
             };
+            start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
             foreach (var argument in new[] { host, action, path }) start.ArgumentList.Add(argument);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
             var output = process.StandardOutput.ReadToEndAsync();

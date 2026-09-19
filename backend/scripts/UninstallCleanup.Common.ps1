@@ -306,12 +306,12 @@ function Test-RooIndustriesAppMatch {
 }
 
 function Get-RooIndustriesInstalledAppInventory {
-    param([string]$InventoryPath)
+    param([string]$InventoryPath,[switch]$IncludeAllAppxUsers)
     if (-not [string]::IsNullOrWhiteSpace($InventoryPath)) {
         $resolved = Resolve-RooIndustriesUninstallPath $InventoryPath $InventoryPath
         return Read-RooIndustriesUninstallJsonFile $resolved
     }
-    $output = & (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1')
+    $output = & (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1') -IncludeAllAppxUsers:$IncludeAllAppxUsers
     return $output | ConvertFrom-Json
 }
 

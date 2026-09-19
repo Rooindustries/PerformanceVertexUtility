@@ -17,7 +17,7 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false)
+    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false)
     {
         Path = NormalizePath(path);
         _writable = writable;
@@ -35,8 +35,11 @@ public sealed class FileLease : IDisposable
                 var access = ReadData | ReadAttributes | Synchronize;
                 if (final) access |= ReadControl | (writable ? Delete : 0);
                 if (final && restore) access |= (create ? 2u : 0u) | WriteAttributes | WriteDacl | WriteOwner;
+                if (final && policy) access = ReadAttributes | ReadControl | Synchronize | (writable ? WriteDacl : 0);
+                if (final && owner) access |= WriteOwner;
+                if (final && content) access = ReadData | ReadAttributes | ReadControl | Synchronize | (writable ? 2u | WriteAttributes : 0u);
                 var handle = OpenRelative(parent, parts[index], access, shareDelete ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
-                    0x00200020 | (final && create ? directory ? 1u : 0x40u : 0u));
+                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
                 if ((Basic(handle).FileAttributes & 0x10) == 0) { handle.Dispose(); throw new InvalidDataException("A file replaced a path ancestor."); }
@@ -51,6 +54,60 @@ public sealed class FileLease : IDisposable
     public static FileLease Open(string path, bool writable = false) => new(path, writable, false, false, false);
     public static FileLease Create(string path, bool directory) => new(path, true, true, directory, true);
     public static FileLease OpenForRestore(string path) => new(path, true, false, false, true);
+    public static FileLease OpenPolicy(string path, bool writable = false, bool owner = false) => new(path, writable, false, false, false, policy: true, owner: owner);
+    public void SetOwner(byte[] sid)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot change ownership.");
+        var pin = GCHandle.Alloc(sid, GCHandleType.Pinned);
+        try
+        {
+            var status = SetSecurityInfo(_handle, 1, 1, pin.AddrOfPinnedObject(), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            if (status != 0) throw new Win32Exception((int)status, "SetSecurityInfo(owner) failed: " + status);
+        }
+        finally { pin.Free(); }
+    }
+    public static FileLease OpenContent(string path, bool writable = false) => new(path, writable, false, false, false, content: true);
+    public byte[] ReadContent()
+    {
+        var size = Standard(_handle);
+        if (size.Directory || size.EndOfFile > 262144) throw new InvalidDataException("This file control requires a regular file no larger than 256 KiB.");
+        using var borrowed = new SafeFileHandle(_handle.DangerousGetHandle(), ownsHandle: false);
+        using var input = new FileStream(borrowed, FileAccess.Read);
+        input.Position = 0;
+        var data = new byte[checked((int)size.EndOfFile)]; input.ReadExactly(data); return data;
+    }
+    public void WriteContent(byte[] data)
+    {
+        if (!_writable || data.Length > 262144) throw new InvalidDataException("A reviewed writable file of at most 256 KiB is required.");
+        var attributes = Basic(_handle).FileAttributes;
+        using var borrowed = new SafeFileHandle(_handle.DangerousGetHandle(), ownsHandle: false);
+        using var output = new FileStream(borrowed, FileAccess.Write);
+        output.Position = 0; output.Write(data); output.SetLength(data.Length); output.Flush(flushToDisk: true);
+        if (Basic(_handle).FileAttributes != attributes)
+        {
+            var metadata = new FileBasicInfo { FileAttributes = attributes };
+            if (!SetBasicInformation(_handle, 0, ref metadata, Marshal.SizeOf<FileBasicInfo>())) Fail("SetFileInformationByHandle(content attributes)");
+        }
+    }
+
+    public (FileIdentity Identity, long CreationTime, byte[] Security, uint Attributes) ReadPolicy()
+    {
+        RequireOrdinary(_handle);
+        if (!Standard(_handle).Directory && Standard(_handle).NumberOfLinks != 1) throw new InvalidDataException("Hard-linked file permissions require a separate review.");
+        var basic = Basic(_handle);
+        return (Identity(_handle), basic.CreationTime, ReadSecurity(_handle), basic.FileAttributes);
+    }
+    public void SetDacl(byte[] dacl)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot change permissions.");
+        var pin = GCHandle.Alloc(dacl, GCHandleType.Pinned);
+        try
+        {
+            var status = SetSecurityInfo(_handle, 1, 4, IntPtr.Zero, IntPtr.Zero, pin.AddrOfPinnedObject(), IntPtr.Zero);
+            if (status != 0) throw new Win32Exception((int)status, "SetSecurityInfo(DACL) failed: " + status);
+        }
+        finally { pin.Free(); }
+    }
 
     public static string ResolveExclusionPath(string path)
     {
@@ -338,6 +395,7 @@ public sealed class FileLease : IDisposable
     [StructLayout(LayoutKind.Sequential)] private struct FileStandardInfo { public long AllocationSize, EndOfFile; public uint NumberOfLinks; [MarshalAs(UnmanagedType.U1)] public bool DeletePending; [MarshalAs(UnmanagedType.U1)] public bool Directory; }
     [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] private struct FindStreamData { public long Length; [MarshalAs(UnmanagedType.ByValTStr, SizeConst=296)] public string Name; }
     [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet=CharSet.Unicode, SetLastError=true)] private static extern SafeFileHandle CreateFile(string path, uint access, uint sharing, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("advapi32.dll")] private static extern uint SetSecurityInfo(SafeFileHandle handle, uint kind, uint information, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
     [DllImport("ntdll.dll")] private static extern int NtCreateFile(out SafeFileHandle handle, uint access, ref ObjectAttributes attributes, out IoStatusBlock status, IntPtr allocation, uint fileAttributes, uint sharing, uint disposition, uint options, IntPtr ea, uint eaLength);
     [DllImport("ntdll.dll")] private static extern uint RtlNtStatusToDosError(int status);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int kind, IntPtr data, int size);

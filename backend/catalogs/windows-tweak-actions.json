@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "id": "remove-widgets",
+      "name": "Remove Windows Widgets",
+      "flow": "installed-apps:widgets",
+      "sourceIds": [
+        "WPFTweaksWidget"
+      ],
+      "description": "Choose the installed Widgets packages, review their official removers, then review leftover files separately."
+    },
+    {
+      "id": "remove-copilot",
+      "name": "Remove Copilot apps",
+      "flow": "installed-apps:copilot",
+      "sourceIds": [
+        "WPFTweaksWindowsAI"
+      ],
+      "description": "Review removable Copilot and Office Hub packages. Windows-protected components retain their protection; their available feature and policy settings are separate controls."
+    },
+    {
+      "id": "remove-edge",
+      "name": "Remove Microsoft Edge",
+      "flow": "installed-apps:edge",
+      "sourceIds": [
+        "WPFTweaksRemoveEdge"
+      ],
+      "description": "Use the installed version's registered remover. Review profile data separately instead of forcing profile deletion."
+    },
+    {
+      "id": "remove-onedrive",
+      "name": "Remove OneDrive",
+      "flow": "installed-apps:onedrive",
+      "sourceIds": [
+        "WPFTweaksRemoveOneDrive"
+      ],
+      "description": "Use the registered OneDrive remover and review leftovers. Synced personal files are not part of automatic app removal."
+    },
+    {
+      "id": "system-protection",
+      "name": "System Protection and restore points",
+      "flow": "windows:SystemPropertiesProtection.exe",
+      "sourceIds": [
+        "system-restore",
+        "WPFTweaksRestorePoint"
+      ],
+      "description": "Open Windows System Protection to inspect each volume, change protection or create a restore point. Erased restore points cannot be recreated from a settings backup."
+    },
+    {
+      "id": "bitlocker",
+      "name": "Manage BitLocker",
+      "flow": "windows:Microsoft.BitLockerDriveEncryption",
+      "sourceIds": [
+        "WPFTweaksDisableBitLocker"
+      ],
+      "description": "Use Windows' encryption flow to review the drive and its recovery-key requirements before encryption or decryption."
+    },
+    {
+      "id": "disk-cleanup",
+      "name": "Disk Cleanup",
+      "flow": "windows:cleanmgr.exe",
+      "sourceIds": [
+        "WPFTweaksDiskCleanup",
+        "WPFTweaksDeleteTempFiles"
+      ],
+      "description": "Review cleanup categories in Windows Disk Cleanup. Deleting component-store backups or personal temporary files is a separate data-deletion action, not a reversible settings profile."
+    },
+    {
+      "id": "oosu",
+      "name": "O&O ShutUp10",
+      "flow": "tools:ShutUp",
+      "sourceIds": [
+        "WPFOOSUbutton"
+      ],
+      "description": "Open the existing O&O tool entry. This launcher is not counted as another optimization."
+    },
+    {
+      "id": "custom-import",
+      "name": "Import WPD custom switches",
+      "flow": "tweak-custom-import",
+      "sourceIds": [
+        "custom-switches"
+      ],
+      "description": "Import registry, policy, service and scheduled-task definitions into the shared catalog. Review selections before applying."
+    },
+    {
+      "id": "file-ownership",
+      "name": "Review file ownership",
+      "flow": "tweak-ownership-preview",
+      "sourceIds": [
+        "Pro1"
+      ],
+      "description": "Review ownership and a non-inheriting Full Control permission for one selected file or folder. Restore uses the captured owner and permissions."
+    },
+    {
+      "id": "restore-point-create",
+      "name": "Create a Windows restore point",
+      "flow": "restore-point-create",
+      "sourceIds": [
+        "restorePoint",
+        "WPFTweaksRestorePoint"
+      ],
+      "description": "Create and verify a new Windows restore point. An optional temporary frequency override is restored after the request."
+    },
+    {
+      "id": "recall-data",
+      "name": "Delete Recall snapshots",
+      "flow": "windows:recall-data",
+      "sourceIds": [
+        "recall-data-erasure"
+      ],
+      "description": "Open Windows Privacy settings and guide deletion in Recall & snapshots. Windows handles the deletion and any Windows Hello confirmation."
+    },
+    {
+      "id": "folder-options",
+      "name": "File Explorer folder options",
+      "flow": "windows:control.exe folders",
+      "sourceIds": [
+        "WPFTweaksDisableExplorerAutoDiscovery"
+      ],
+      "description": "Open File Explorer folder options. Saved-view resets are separate from restoring the catalog preference."
+    },
+    {
+      "id": "installed-apps",
+      "name": "Remove installed apps",
+      "flow": "installed-apps:all",
+      "sourceIds": [
+        "installed-app-removal"
+      ],
+      "description": "Review exact installed registrations for this user or another Windows account. Removing a registration does not remove provisioned packages for future accounts."
+    }
+  ]
+}

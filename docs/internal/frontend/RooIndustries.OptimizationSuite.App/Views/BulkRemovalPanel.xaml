@@ -5,14 +5,22 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <StackPanel Spacing="8">
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Search installed apps" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalSearch" />
-            <Button Grid.Column="1" Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalRefresh" />
+            <CheckBox Grid.Column="1" Content="Other Windows accounts" IsChecked="{x:Bind ViewModel.IncludeAllAppxUsers, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalAllUsers"/>
+            <Button Grid.Column="2" Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalRefresh" />
         </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="12" Visibility="{x:Bind ViewModel.HasGroupFilter, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{x:Bind ViewModel.GroupFilterLabel, Mode=OneWay}" VerticalAlignment="Center"/>
+            <HyperlinkButton Content="Show all apps" Command="{x:Bind ViewModel.ClearGroupFilterCommand}" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalClearGroup"/>
+        </StackPanel>
+        </StackPanel>
         <Grid Grid.Row="1" ColumnSpacing="14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -25,7 +33,7 @@
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="models:InstalledApp">
                                 <StackPanel Spacing="3" Padding="0,8">
-                                    <TextBlock Text="{x:Bind FriendlyName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                    <TextBlock Text="{x:Bind SelectionLabel}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                     <TextBlock Text="{x:Bind SecondaryLabel}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 </StackPanel>
                             </DataTemplate>
@@ -41,7 +49,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:RemovalRow">
                                     <StackPanel Spacing="5" Margin="0,0,0,14">
-                                        <TextBlock Text="{x:Bind Entry.DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                        <TextBlock Text="{x:Bind Entry.ReviewLabel}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                         <TextBlock Text="{x:Bind State, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                                         <Expander Header="Removal command" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                                             <TextBlock Text="{x:Bind Entry.Command}" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />

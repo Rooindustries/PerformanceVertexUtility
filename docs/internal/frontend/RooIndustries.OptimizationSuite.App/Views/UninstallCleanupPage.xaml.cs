@@ -25,6 +25,7 @@ public sealed partial class UninstallCleanupPage : Page
         SizeChanged += (_, _) => ResizeContent();
     }
 
+    public void ShowGroup(string group) { CleanupTabs.SelectedIndex = 0; BulkRemoval.ViewModel.ShowGroup(group); }
     private void ResizeContent() => ResponsiveContentSizer.Apply(this, CleanupContent);
 
     private void AppsList_ItemClick(object sender, ItemClickEventArgs e)

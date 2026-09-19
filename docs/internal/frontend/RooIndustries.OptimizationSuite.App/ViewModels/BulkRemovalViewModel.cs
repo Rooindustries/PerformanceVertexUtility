@@ -49,6 +49,9 @@ public sealed record CleanupHistoryChoice(CleanupBatchSession Session)
 
 public partial class BulkRemovalViewModel : ObservableObject
 {
+    private string? _suggestedGroup;
+    public bool HasGroupFilter => _suggestedGroup is not null;
+    public string GroupFilterLabel => _suggestedGroup switch { "widgets" => "Windows Widgets", "copilot" => "Copilot and Office Hub", "edge" => "Microsoft Edge", "onedrive" => "Microsoft OneDrive", _ => "" };
     private readonly List<InstalledApp> _all = new();
     private readonly List<InstalledApp> _selected = new();
     private BulkRemovalReview? _review;
@@ -88,6 +91,7 @@ public partial class BulkRemovalViewModel : ObservableObject
     [ObservableProperty] private bool _hasProtectedSelection;
     [ObservableProperty] private string _selectionSummary = "Select applications to remove.";
     [ObservableProperty] private string _status = "Nothing selected.";
+    [ObservableProperty] private bool _includeAllAppxUsers;
     [ObservableProperty] private string _detail = "Preview the exact removal commands before running them.";
     [ObservableProperty] private string _applyLabel = "Remove selected apps";
     public bool CanSelect => !Busy && _phase is not ("running" or "canceled" or "needs-reconciliation" or "reboot-required" or "ready");
@@ -107,7 +111,8 @@ public partial class BulkRemovalViewModel : ObservableObject
     public bool HasCleanupHistory => CleanupHistory.Count > 0;
     partial void OnBusyChanged(bool value) => RefreshCommands();
     partial void OnDependenciesReviewedChanged(bool value) => RefreshCommands();
-    partial void OnSearchTextChanged(string value) => Filter();
+    partial void OnSearchTextChanged(string value) { _suggestedGroup = null; Filter(); }
+    partial void OnIncludeAllAppxUsersChanged(bool value) { if (!Busy) _ = RefreshAsync(); }
     partial void OnSelectedRemovedAppChanged(RemovedAppChoice? value) { _fileSelectionVersion++; Leftovers.Clear(); _fileReview = null; FileReviewReady = false; FilesReviewed = false; FileStatus = "Scan this application's current leftovers."; FileSummary = ""; RefreshCommands(); }
     partial void OnFilesReviewedChanged(bool value) => RefreshCommands();
     partial void OnFileReviewReadyChanged(bool value) => RefreshCommands();
@@ -154,23 +159,47 @@ public partial class BulkRemovalViewModel : ObservableObject
         Busy = true;
         try
         {
-            var inventory = await App.Live.GetInstalledAppsAsync();
+            var inventory = await App.Live.GetInstalledAppsAsync(includeAllAppxUsers: IncludeAllAppxUsers);
             if (inventory?.Apps is null) throw new InvalidOperationException(App.Live.LastError ?? "Installed applications could not be read.");
             _all.Clear();
-            _all.AddRange(inventory.Apps.Where(app => app.IsListable).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));
+            _all.AddRange(inventory.Apps.Where(app => app.IsListable || app.SourceType == "appx" && !app.Protected).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));
             InstalledAppCount = _all.Count;
             Filter();
+            if (inventory.Complete == false) { Status = "Some app registrations could not be read."; Detail = string.Join("\n", inventory.Errors ?? new()); }
         }
         catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
         finally { Busy = false; }
     }
 
+    public void ShowGroup(string group)
+    {
+        SearchText = ""; _suggestedGroup = group; Filter();
+        Status = group switch { "widgets" => "Windows Widgets packages", "copilot" => "Copilot and Office Hub apps", "edge" => "Microsoft Edge", "onedrive" => "Microsoft OneDrive", _ => "Choose installed apps" };
+        Detail = "Type in Search to show other apps. Review removal and leftover files separately. Protected Windows packages remain protected.";
+    }
+    private bool MatchesGroup(InstalledApp app)
+    {
+        var package = app.PackageId ?? app.DisplayName ?? "";
+        if (_suggestedGroup == "copilot" && app.FriendlyName.StartsWith("Copilot CLI", StringComparison.OrdinalIgnoreCase)) return false;
+        return _suggestedGroup switch
+        {
+            "widgets" => package.StartsWith("Microsoft.WidgetsPlatformRuntime", StringComparison.OrdinalIgnoreCase) || package.StartsWith("MicrosoftWindows.Client.WebExperience", StringComparison.OrdinalIgnoreCase),
+            "copilot" => package.StartsWith("Microsoft.Copilot", StringComparison.OrdinalIgnoreCase) || package.StartsWith("Microsoft.Windows.Ai.Copilot", StringComparison.OrdinalIgnoreCase) || package.StartsWith("MicrosoftWindows.Client.CoreAI", StringComparison.OrdinalIgnoreCase) || package.StartsWith("Microsoft.MicrosoftOfficeHub", StringComparison.OrdinalIgnoreCase) || app.FriendlyName.Equals("Microsoft Copilot", StringComparison.OrdinalIgnoreCase),
+            "edge" => app.FriendlyName.Equals("Microsoft Edge", StringComparison.OrdinalIgnoreCase),
+            "onedrive" => app.FriendlyName.Equals("Microsoft OneDrive", StringComparison.OrdinalIgnoreCase),
+            _ => true,
+        };
+    }
     private void Filter()
     {
         Apps.Clear();
-        foreach (var app in _all.Where(app => string.IsNullOrWhiteSpace(SearchText) || app.FriendlyName.Contains(SearchText, StringComparison.OrdinalIgnoreCase))) Apps.Add(app);
+        foreach (var app in _all.Where(app => MatchesGroup(app) && (string.IsNullOrWhiteSpace(SearchText) || app.FriendlyName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)))) Apps.Add(app);
         OnPropertyChanged(nameof(NoMatches));
+        OnPropertyChanged(nameof(HasGroupFilter));
+        OnPropertyChanged(nameof(GroupFilterLabel));
     }
+    [RelayCommand]
+    private void ClearGroupFilter() { _suggestedGroup = null; Filter(); }
 
     public void SetSelection(IEnumerable<InstalledApp> selected)
     {
@@ -190,7 +219,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         Busy = true;
         try
         {
-            _review = await App.Operations.PreviewRemovalAsync(_selected.Select(app => app.AppId!).ToArray());
+            _review = await App.Operations.PreviewRemovalAsync(_selected.Select(app => app.AppId!).ToArray(), IncludeAllAppxUsers);
             SetReview(_review); _phase = "preview";
             Status = HasProtectedSelection ? "A protected application is selected." : "Review the selected removals.";
             Detail = HasProtectedSelection ? "Remove protected entries from the selection before continuing." : "Check each application and its command. Vendor removal cannot be undone by restoring leftover files.";

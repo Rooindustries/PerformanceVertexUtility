@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string[]]$AppId,
     [string]$InventoryPath='',
     [switch]$Quiet,
+    [switch]$IncludeAllAppxUsers,
     [string]$FixtureRoot='',
     [string]$OutputPath=''
 )
@@ -14,7 +15,8 @@ try {
     $outputSafe=$true
     if (@($AppId|Select-Object -Unique).Count -ne $AppId.Count -or $AppId.Count -eq 0) {throw 'Select each app exactly once.'}
     if ($FixtureRoot) {$FixtureRoot=Assert-RooIndustriesBulkFixtureRoot $FixtureRoot}
-    $inventory=Get-RooIndustriesInstalledAppInventory $InventoryPath
+    $inventory=Get-RooIndustriesInstalledAppInventory $InventoryPath -IncludeAllAppxUsers:$IncludeAllAppxUsers
+    if($IncludeAllAppxUsers -and $inventory.complete -ne $true){throw 'All-user package inventory is incomplete. Refresh it before reviewing other accounts.'}
     $policy=Read-RooIndustriesUninstallPolicy ''; $protected=Read-RooIndustriesProtectedAppsCatalog ''
     $entries=New-Object System.Collections.Generic.List[object]
     foreach($id in $AppId) {
@@ -37,7 +39,7 @@ try {
             $exitPolicy='windows-installer'
         } elseif ($identity.kind -eq 'appx') {
             $exe=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
-            $command="try { Remove-AppxPackage -Package '"+([string]$identity.packageFullName).Replace("'","''")+"' -ErrorAction Stop; exit 0 } catch { exit 1 }"
+            $command='$ProgressPreference=''SilentlyContinue''; try { '+(Get-RooIndustriesAppxRemoveCommand $identity)+'; exit 0 } catch { [Console]::Error.WriteLine((@{message=$_.Exception.Message;hresult=$_.Exception.HResult;errorId=$_.FullyQualifiedErrorId;details=$_.ErrorDetails.Message}|ConvertTo-Json -Compress)); exit 1 }'
             $arguments=@('-NoProfile','-NonInteractive','-EncodedCommand',[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
         } else {
             $command=[string](Get-RooIndustriesUninstallPropertyValue $app 'uninstallString' '')

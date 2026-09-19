@@ -90,7 +90,9 @@ public partial class App : Application
         ApplyAccentResourceOverrides();
 
         var initialNav = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_INITIAL_NAV");
-        MainWindow = string.IsNullOrWhiteSpace(initialNav)
+        var commandLine = System.Environment.GetCommandLineArgs();
+        var ownershipPath = commandLine.Length == 3 && commandLine[1] == "--ownership-review" ? commandLine[2] : null;
+        MainWindow = ownershipPath is not null ? new MainWindow("windows", false, ownershipPath) : string.IsNullOrWhiteSpace(initialNav)
             ? new MainWindow()
             : new MainWindow(initialNav.Trim(), false);
         MainWindow.Activate();

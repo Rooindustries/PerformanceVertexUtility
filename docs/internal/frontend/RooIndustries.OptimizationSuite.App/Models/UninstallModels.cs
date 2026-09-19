@@ -12,6 +12,8 @@ public sealed class InstalledAppInventory
     public InstalledAppSummary? Summary { get; set; }
     public List<string>? Sources { get; set; }
     public List<InstalledApp>? Apps { get; set; }
+    public bool? Complete { get; set; }
+    public List<string>? Errors { get; set; }
 }
 
 public sealed class InstalledAppSummary
@@ -28,6 +30,7 @@ public sealed class InstalledAppSummary
 
 public sealed class InstalledApp
 {
+    public System.Text.Json.JsonElement? SourceIdentity { get; set; }
     public string? AppId { get; set; }
     public string? DisplayName { get; set; }
     public string? Publisher { get; set; }
@@ -56,6 +59,12 @@ public sealed class InstalledApp
         ["Microsoft.Windows.Photos"] = "Photos",
         ["Microsoft.ZuneMusic"] = "Media Player",
         ["Microsoft.GamingApp"] = "Xbox",
+        ["Microsoft.Copilot"] = "Microsoft Copilot",
+        ["Microsoft.Windows.Ai.Copilot"] = "Windows Copilot",
+        ["Microsoft.MicrosoftOfficeHub"] = "Microsoft 365 Copilot",
+        ["Microsoft.WidgetsPlatformRuntime"] = "Windows Widgets",
+        ["MicrosoftWindows.Client.WebExperience"] = "Windows Web Experience Pack",
+        ["MicrosoftWindows.Client.CoreAI"] = "Windows AI components",
         ["Microsoft.XboxApp"] = "Xbox",
         ["SpotifyAB.SpotifyMusic"] = "Spotify",
         ["AppUp.IntelArcSoftware"] = "Intel Arc Software",
@@ -69,8 +78,11 @@ public sealed class InstalledApp
     private static readonly Regex InternalToken = new(@"^[a-z][a-z0-9]{1,8}$", RegexOptions.Compiled);
 
     public string FriendlyName => NormalizeName(DisplayName);
+    public string AccountLabel => SourceType != "appx" ? "" : SourceIdentity is { } identity && identity.TryGetProperty("scope", out var scope) && scope.GetString() == "registered-user"
+        ? "Windows account: " + (identity.TryGetProperty("userSid", out var sid) ? sid.GetString() : "Unknown") : "This Windows user";
+    public string SelectionLabel => AccountLabel.Length == 0 ? FriendlyName : FriendlyName + " · " + AccountLabel;
 
-    public override string ToString() => FriendlyName;
+    public override string ToString() => SelectionLabel;
 
     public bool IsListable => !string.IsNullOrWhiteSpace(DisplayName) && !IsRawEntry(DisplayName!);
 
@@ -83,7 +95,7 @@ public sealed class InstalledApp
                 && !GuidLike.IsMatch(pub!.Trim('{', '}'))
                 && !Regex.IsMatch(pub!, @"^[a-z0-9]{12,}$"))
             {
-                return pub;
+                return SourceType == "appx" && !string.IsNullOrWhiteSpace(Version) ? pub + " · " + Version : pub;
             }
 
             return SourceLabel(SourceType);

@@ -1,0 +1,735 @@
+{
+  "schemaVersion": 1,
+  "linkedEffects": [
+    {
+      "id": "edge-dns-over-https-auto",
+      "trigger": "Toggling a machine-scope Microsoft Edge policy registered by NewEdge before callback binding; excludes later-added legacy Edge E011/E012.",
+      "target": {
+        "hive": "HKLM",
+        "path": "SOFTWARE\\Policies\\Microsoft\\Edge",
+        "name": "DnsOverHttpsMode",
+        "type": "String"
+      },
+      "whenAnyMachineEdgeSettingEnabled": {
+        "operation": "write",
+        "value": "automatic"
+      },
+      "otherwise": {
+        "operation": "delete"
+      },
+      "implementationDecision": "Preserve as explicit opt-in setting; do not silently copy this side effect.",
+      "aggregateStateScope": "At callback time, evaluate all enabled setting records whose registered target is HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge.",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceUrl": "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe",
+      "coverageStatus": "not-accounted-in-fixed-632",
+      "affectedRecords": [
+        {
+          "sourceId": "E201",
+          "variant": 157
+        },
+        {
+          "sourceId": "E215",
+          "variant": 159
+        },
+        {
+          "sourceId": "E216",
+          "variant": 161
+        },
+        {
+          "sourceId": "E217",
+          "variant": 163
+        },
+        {
+          "sourceId": "E218",
+          "variant": 165
+        },
+        {
+          "sourceId": "E207",
+          "variant": 167
+        },
+        {
+          "sourceId": "E211",
+          "variant": 169
+        },
+        {
+          "sourceId": "E212",
+          "variant": 171
+        },
+        {
+          "sourceId": "E209",
+          "variant": 173
+        },
+        {
+          "sourceId": "E221",
+          "variant": 175
+        },
+        {
+          "sourceId": "E203",
+          "variant": 177
+        },
+        {
+          "sourceId": "E223",
+          "variant": 179
+        },
+        {
+          "sourceId": "E224",
+          "variant": 181
+        },
+        {
+          "sourceId": "E228",
+          "variant": 183
+        },
+        {
+          "sourceId": "E230",
+          "variant": 185
+        },
+        {
+          "sourceId": "E232",
+          "variant": 187
+        },
+        {
+          "sourceId": "E233",
+          "variant": 189
+        },
+        {
+          "sourceId": "E234",
+          "variant": 191
+        },
+        {
+          "sourceId": "E235",
+          "variant": 193
+        },
+        {
+          "sourceId": "E236",
+          "variant": 195
+        },
+        {
+          "sourceId": "E237",
+          "variant": 197
+        },
+        {
+          "sourceId": "E238",
+          "variant": 199
+        },
+        {
+          "sourceId": "E239",
+          "variant": 201
+        },
+        {
+          "sourceId": "E240",
+          "variant": 203
+        },
+        {
+          "sourceId": "E241",
+          "variant": 205
+        },
+        {
+          "sourceId": "E242",
+          "variant": 207
+        },
+        {
+          "sourceId": "E243",
+          "variant": 209
+        },
+        {
+          "sourceId": "E244",
+          "variant": 211
+        },
+        {
+          "sourceId": "E245",
+          "variant": 213
+        },
+        {
+          "sourceId": "E246",
+          "variant": 215
+        },
+        {
+          "sourceId": "E247",
+          "variant": 217
+        },
+        {
+          "sourceId": "E248",
+          "variant": 219
+        },
+        {
+          "sourceId": "E249",
+          "variant": 221
+        },
+        {
+          "sourceId": "E250",
+          "variant": 223
+        },
+        {
+          "sourceId": "E251",
+          "variant": 225
+        },
+        {
+          "sourceId": "E256",
+          "variant": 227
+        },
+        {
+          "sourceId": "E252",
+          "variant": 229
+        },
+        {
+          "sourceId": "E219",
+          "variant": 231
+        },
+        {
+          "sourceId": "E220",
+          "variant": 233
+        },
+        {
+          "sourceId": "E222",
+          "variant": 235
+        },
+        {
+          "sourceId": "E225",
+          "variant": 237
+        },
+        {
+          "sourceId": "E226",
+          "variant": 239
+        },
+        {
+          "sourceId": "E253",
+          "variant": 242
+        },
+        {
+          "sourceId": "E254",
+          "variant": 244
+        },
+        {
+          "sourceId": "E255",
+          "variant": 246
+        },
+        {
+          "sourceId": "E229",
+          "variant": 248
+        },
+        {
+          "sourceId": "E206",
+          "variant": 250
+        },
+        {
+          "sourceId": "E227",
+          "variant": 252
+        }
+      ],
+      "normalization": "Expose a single explicit shared Edge DNS mode control and bind a reviewed source preset choice to it; capture original value. Do not claim exact aggregate callback behavior unless implemented and tested."
+    },
+    {
+      "id": "empty-policy-key-cleanup",
+      "trigger": "Deleting a registry value from a policy path",
+      "effect": "Delete that key and successive empty policy ancestors only while they contain no values or subkeys.",
+      "prefixes": [
+        "SOFTWARE\\Policies\\",
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\"
+      ],
+      "implementationDecision": "If implemented, delete only empty keys created and owned by this app transaction.",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceUrl": "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe",
+      "coverageStatus": "not-accounted-in-fixed-632",
+      "normalization": "Deliberately normalize to exact app-owned recovery. Broad factory-reset deletion is not required for restoring prior state; record this as a scope decision."
+    },
+    {
+      "id": "factory-reset-policy-tree-cleanup",
+      "trigger": "Factory reset of selected setting collection",
+      "effect": "Delete the entire HKLM policy subkey trees referenced by selected records, after resetting their individual values.",
+      "implementationDecision": "Do not implement as normal restore. Restore exact saved values and preserve unrelated policy data.",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceUrl": "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe",
+      "coverageStatus": "not-accounted-in-fixed-632",
+      "normalization": "Deliberately normalize to exact app-owned recovery. Broad factory-reset deletion is not required for restoring prior state; record this as a scope decision."
+    }
+  ],
+  "features": [
+    {
+      "id": "ai-settings-group",
+      "effect": "Group existing WindowsAI/AI-marked settings; no independent duplicate implementation required.",
+      "source": "https://manuals.oo-software.com/ooshutup10/en/docs/common-features/ai-removal/",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceVersion": "3.5.1130.0",
+      "sourceUrl": "https://manuals.oo-software.com/ooshutup10/en/docs/common-features/ai-removal/",
+      "status": "not-accounted-in-fixed-632",
+      "preferredSharedImplementation": "preset over existing applicable setting IDs",
+      "members": [
+        {
+          "sourceId": "P082",
+          "variant": 13
+        },
+        {
+          "sourceId": "P083",
+          "variant": 14
+        },
+        {
+          "sourceId": "P084",
+          "variant": 15
+        },
+        {
+          "sourceId": "P085",
+          "variant": 16
+        },
+        {
+          "sourceId": "E128",
+          "variant": 182
+        },
+        {
+          "sourceId": "E228",
+          "variant": 183
+        },
+        {
+          "sourceId": "E135",
+          "variant": 192
+        },
+        {
+          "sourceId": "E235",
+          "variant": 193
+        },
+        {
+          "sourceId": "E137",
+          "variant": 196
+        },
+        {
+          "sourceId": "E237",
+          "variant": 197
+        },
+        {
+          "sourceId": "E138",
+          "variant": 198
+        },
+        {
+          "sourceId": "E238",
+          "variant": 199
+        },
+        {
+          "sourceId": "E139",
+          "variant": 200
+        },
+        {
+          "sourceId": "E239",
+          "variant": 201
+        },
+        {
+          "sourceId": "E140",
+          "variant": 202
+        },
+        {
+          "sourceId": "E240",
+          "variant": 203
+        },
+        {
+          "sourceId": "E145",
+          "variant": 212
+        },
+        {
+          "sourceId": "E245",
+          "variant": 213
+        },
+        {
+          "sourceId": "E151",
+          "variant": 224
+        },
+        {
+          "sourceId": "E251",
+          "variant": 225
+        },
+        {
+          "sourceId": "E152",
+          "variant": 228
+        },
+        {
+          "sourceId": "E252",
+          "variant": 229
+        },
+        {
+          "sourceId": "M025",
+          "variant": 300
+        },
+        {
+          "sourceId": "M003",
+          "variant": 302
+        },
+        {
+          "sourceId": "M103",
+          "variant": 303
+        },
+        {
+          "sourceId": "C101",
+          "variant": 342
+        },
+        {
+          "sourceId": "C201",
+          "variant": 343
+        },
+        {
+          "sourceId": "C204",
+          "variant": 344
+        },
+        {
+          "sourceId": "C205",
+          "variant": 345
+        },
+        {
+          "sourceId": "C102",
+          "variant": 346
+        },
+        {
+          "sourceId": "C104",
+          "variant": 347
+        },
+        {
+          "sourceId": "C103",
+          "variant": 348
+        },
+        {
+          "sourceId": "C203",
+          "variant": 349
+        },
+        {
+          "sourceId": "C206",
+          "variant": 350
+        },
+        {
+          "sourceId": "C207",
+          "variant": 351
+        },
+        {
+          "sourceId": "C208",
+          "variant": 352
+        },
+        {
+          "sourceId": "C209",
+          "variant": 353
+        },
+        {
+          "sourceId": "C210",
+          "variant": 354
+        },
+        {
+          "sourceId": "C211",
+          "variant": 355
+        }
+      ]
+    },
+    {
+      "id": "copilot-app-removal",
+      "effect": "Uninstall matching AppX packages and matching desktop application entries.",
+      "packageFamilyPrefixes": [
+        "Microsoft.Windows.Ai.Copilot",
+        "Microsoft.Copilot",
+        "Microsoft.MicrosoftOfficeHub_8wekyb3d8bbwe"
+      ],
+      "desktopDisplayNamePrefixes": [
+        "Microsoft Copilot",
+        "Copilot"
+      ],
+      "desktopDisplayNameExclusions": [
+        "Copilot CLI"
+      ],
+      "api": "Windows.Management.Deployment.PackageManager.RemovePackageAsync, current-user and machine/all-users scope; registered desktop uninstall command launch",
+      "reversible": false,
+      "evidence": "official-package-static-mapping",
+      "runtimeVerified": false,
+      "implementationDecision": "Reuse app-removal backend with exact selection/review; never broad-prefix uninstall without inventory preview.",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceVersion": "3.5.1130.0",
+      "sourceUrl": "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe",
+      "status": "not-accounted-in-fixed-632",
+      "preferredSharedImplementation": "installed-apps:copilot with explicit per-user/all-user package scope and desktop exclusions"
+    },
+    {
+      "id": "recall-data-erasure",
+      "effect": "Enumerate and irreversibly erase user Recall data, including ownership changes before deletion",
+      "path": "{local-app-data}\\CoreAIPlatform.00",
+      "vendorApi": "O&O SafeErase native RunList; semZeros; ignoreSSD=true",
+      "reversible": false,
+      "evidence": "official-package-static-mapping",
+      "runtimeVerified": false,
+      "implementationDecision": "Independent cleanup requires explicit data-deletion flow; zero-fill of SSD files must not be described as guaranteed physical secure erasure.",
+      "sourceProduct": "O&O ShutUp10",
+      "sourceVersion": "3.5.1130.0",
+      "sourceUrl": "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe",
+      "status": "not-accounted-in-fixed-632",
+      "preferredSharedImplementation": "separate file-cleanup scan/preview/executor bound to initiating user; irreversible status"
+    },
+    {
+      "id": "installed-app-removal",
+      "status": "dynamic-inventory-required",
+      "sourceUrl": "https://wpd.app/docs/faq/",
+      "restore": "Reinstall is not exact user-data restoration; preserve package identity/dependencies/data and disclose limits.",
+      "inventoryApi": "PackageManager.FindPackagesForUserWithPackageTypes(currentUserSid, Main)",
+      "filters": [
+        "not in configured AppxBlacklist",
+        "IsFramework=false",
+        "InstalledLocation contains \\WindowsApps\\"
+      ],
+      "removeApi": "PackageManager.RemovePackageAsync(packageFullName)",
+      "scope": "current user",
+      "vendorCompletionLimit": "Wrapper starts asynchronous removal without awaiting deployment-operation completion; native implementation must await final deployment result.",
+      "vendorRestoreAction": "Open https://wpd.app in browser; no package/data restoration",
+      "sourceProduct": "WPD",
+      "sourceVersion": "1.5.2042 RC 1",
+      "coverageStatus": "not-accounted-in-fixed-632"
+    },
+    {
+      "id": "custom-switches",
+      "status": "open-ended-user-defined",
+      "sourceUrl": "https://wpd.app/get/latest.zip",
+      "kinds": [
+        "Gp",
+        "Service",
+        "Scheduler",
+        "Registry"
+      ],
+      "notes": "Constructor.json contains four examples; custom arbitrary targets are not a finite shipped-tweak inventory.",
+      "requiresExperimentalMode": true,
+      "sourceProduct": "WPD",
+      "sourceVersion": "1.5.2042 RC 1",
+      "coverageStatus": "not-accounted-in-fixed-632"
+    },
+    {
+      "id": "firewallGlobalControl",
+      "sourceProduct": "WPD",
+      "sourceUrl": "https://wpd.app/docs/arguments/",
+      "contract": {
+        "enable": "Ensure MpsSvc auto/running, set Domain/Private/Public enabled",
+        "disable": "Disable Domain/Private/Public profiles; Vista/Win7 additionally attempts stop/disable MpsSvc. Newer Windows leaves MpsSvc running.",
+        "nativeDecision": "Independent address blocking retains Windows Firewall. Expose global toggles only with separate explicit review and recovery."
+      },
+      "coverageStatus": "not-accounted-in-fixed-632",
+      "preferredSharedImplementation": "Separate reviewed firewall profile state, preserving each profile and MpsSvc original state."
+    },
+    {
+      "id": "restorePoint",
+      "sourceProduct": "WPD",
+      "sourceUrl": "https://wpd.app/docs/arguments/",
+      "contract": {
+        "api": "WMI SystemRestore.CreateRestorePoint",
+        "type": 12,
+        "extraWriteIfMissing": "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore\\SystemRestorePointCreationFrequency DWORD=0",
+        "nativeDecision": "Reuse existing backup provider and disclose any frequency-setting change."
+      },
+      "coverageStatus": "not-accounted-in-fixed-632",
+      "preferredSharedImplementation": "Shared restore-point action; capture any creation-frequency policy mutation."
+    },
+    {
+      "id": "privacy-presets",
+      "sourceProduct": "WPD",
+      "sourceUrl": "https://wpd.app/docs/arguments/",
+      "contract": "recommended=base privacy switches plus Telemetry block group; privacyAll=all selected privacy+block groups; defaults reset settings but do not restore apps; -security/-includeAdv alter choice membership.",
+      "coverageStatus": "individual controls do not establish grouped preset coverage",
+      "preferredSharedImplementation": "Compose from existing shared atom IDs; no duplicate executors."
+    },
+    {
+      "id": "app-settings-and-cli",
+      "sourceProduct": "WPD",
+      "sourceUrl": "https://wpd.app/docs/arguments/",
+      "contract": [
+        {
+          "argument": "-help",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-install",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-install \"all\"",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-multipleInstances",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-nosplash",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-nowarnOS",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-proxy",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-locale",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-restorePoint",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-dumpRules",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-dumpRules \"Path\"",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-wfpOnly",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-saveState",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-close",
+          "section": "App arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-reg4gp",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-pro",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-showAppxErrors",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-noMOcheck",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-nofw",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-noappx",
+          "section": "Tab arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-default",
+          "section": "Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-privacyAll",
+          "section": "Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-recommended",
+          "section": "Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-privacy \"\"",
+          "section": "Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-revert \"\"",
+          "section": "Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-security",
+          "section": "Advanced Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-includeAdv",
+          "section": "Advanced Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-defender \"\"",
+          "section": "Advanced Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        },
+        {
+          "argument": "-wfp \"\"",
+          "section": "Advanced Button arguments",
+          "kind": "app-control",
+          "sourceUrl": "https://wpd.app/docs/arguments/"
+        }
+      ],
+      "coverageStatus": "application administration, not independent Windows-tweak count",
+      "preferredSharedImplementation": "Map state export/import and preset selection if exposed. WPD installation PATH/WPD_DIR and splash/locale/multiple-instance switches are not Windows optimization requirements."
+    }
+  ],
+  "atomicDataLossRules": [
+    {
+      "hives": [
+        "HKCU",
+        "HKLM"
+      ],
+      "path": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+      "name": "DisableAIDataAnalysis",
+      "desiredDword": 1,
+      "effect": "Deletes saved Recall snapshots",
+      "reversibleConfiguration": true,
+      "reversibleData": false,
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-windowsai#disableaidataanalysis"
+    },
+    {
+      "hives": [
+        "HKLM"
+      ],
+      "path": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+      "name": "AllowRecallEnablement",
+      "desiredDword": 0,
+      "effect": "Deletes saved Recall snapshots and removes Recall component bits; restart needed",
+      "reversibleConfiguration": true,
+      "reversibleData": false,
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-windowsai#allowrecallenablement"
+    }
+  ]
+}

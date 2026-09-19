@@ -11,6 +11,14 @@ public sealed record TweakFixture
     public required TweakState? State { get; set; }
     public required Dictionary<string, TweakFixtureKey> Keys { get; init; }
     public required int Writes { get; set; }
+    public uint? InstalledMemoryKiB { get; init; }
+    public int? OfficeMajor { get; init; }
+    public int? EdgeMajor { get; init; }
+    public int? EdgeProfileMajor { get; init; }
+    public bool RemoteSession { get; init; }
+    public string? MenuExecutable { get; init; }
+    public string[] PrimaryInterfaces { get; init; } = [];
+    public Dictionary<string, TweakControlRead> Controls { get; init; } = [];
 }
 
 public class FileTweakStore : ITweakStore
@@ -40,9 +48,37 @@ public class FileTweakStore : ITweakStore
         return result;
     }
     public TweakState? ReadState() => Load().State;
-    public TweakRead Read(RegistryAddress address) { TweakRead.ValidateAddress(address); return Read(Load(), address); }
+    public void CheckRequirement(string requirement)
+    {
+        var fixture = Load();
+        if (requirement.StartsWith("edge", StringComparison.Ordinal) || requirement == "legacy-edge") { TweakProducts.CheckEdge(requirement, requirement.StartsWith("edge-profile:", StringComparison.Ordinal) ? fixture.EdgeProfileMajor : fixture.EdgeMajor); return; }
+        if (requirement == "local-session") { if (fixture.RemoteSession) throw new InvalidDataException("The fixture is a remote session."); return; }
+        if (requirement == "office16") { if (fixture.OfficeMajor != 16) throw new InvalidDataException("Office16 is not installed in the fixture."); return; }
+        if (requirement != "office" || Load().OfficeMajor is not (> 0 and < 100)) throw new InvalidDataException("The fixture does not provide the required Office identity.");
+    }
+    public TweakRead Read(RegistryAddress address)
+    {
+        TweakRead.ValidateAddress(address); var fixture = Load();
+        if (address.KeyPath.Contains("{office-major-version}", StringComparison.Ordinal))
+        {
+            CheckRequirement("office"); address = address with { KeyPath = address.KeyPath.Replace("{office-major-version}", fixture.OfficeMajor!.Value.ToString(), StringComparison.Ordinal) };
+        }
+        return Read(fixture, address);
+    }
+    public TweakAssignment[] Resolve(TweakAssignment assignment)
+    {
+        var fixture = Load();
+        string[] Children(RegistryAddress address)
+        {
+            var prefix = Native(Context, address, address.KeyPath) + "\\";
+            return fixture.Keys.Values.Where(key => key.NativeKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(key => key.NativeKey[prefix.Length..].Split('\\')[0]).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        return RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, () => fixture.InstalledMemoryKiB ?? throw new InvalidDataException("Fixture physical memory is missing."), name => "\"" + (fixture.MenuExecutable ?? throw new InvalidDataException("Fixture menu executable is missing.")) + "\" " + name), Children, address => Read(fixture, address), () => fixture.PrimaryInterfaces);
+    }
+    public TweakControlRead ReadControl(ControlAddress address) => Load().Controls.GetValueOrDefault(address.Key) ?? throw new InvalidDataException("Fixture control is unavailable: " + address.Target);
     private static string Native(TweakContext context, RegistryAddress address, string path) =>
-        (address.Hive == "CurrentUser" ? "\\REGISTRY\\USER\\" + context.Owner.UserSid : "\\REGISTRY\\MACHINE") + "\\" +
+        (address.Hive == "CurrentUser" ? "\\REGISTRY\\USER\\" + context.Owner.UserSid : address.Hive == "Users" ? "\\REGISTRY\\USER" : "\\REGISTRY\\MACHINE") + "\\" +
         (address.View == "Registry32" && address.Hive == "LocalMachine" ? path.Replace("Software\\", "Software\\WOW6432Node\\", StringComparison.OrdinalIgnoreCase) : path);
     private static TweakRead Read(TweakFixture fixture, RegistryAddress address)
     {
@@ -50,7 +86,7 @@ public class FileTweakStore : ITweakStore
         fixture.Keys.TryGetValue(native.ToUpperInvariant(), out var key);
         var missing = new List<string>();
         var parts = address.KeyPath.Split('\\');
-        for (var count = 2; count <= parts.Length; count++)
+        for (var count = parts.Length == 1 ? 1 : 2; count <= parts.Length; count++)
         {
             var path = string.Join('\\', parts.Take(count));
             if (!fixture.Keys.ContainsKey(Native(fixture.Context, address, path).ToUpperInvariant())) missing.Add(path);
@@ -67,6 +103,10 @@ public class FileTweakStore : ITweakStore
         if (fixture.State?.Revision != plan.BeforeRevision || fixture.Context != plan.Context) throw new InvalidDataException("The fixture changed after review.");
         foreach (var expected in plan.Expected)
             if (!Read(fixture, expected.Address).Same(expected)) throw new InvalidDataException("A fixture setting changed after review.");
+        foreach (var expected in plan.Controls?.Expected ?? [])
+            if (!fixture.Controls.TryGetValue(expected.Address.Key, out var current) || !current.Same(expected)) throw new InvalidDataException("A fixture control changed after review.");
+        foreach (var change in plan.Controls?.Changes ?? [])
+            { fixture.Controls[change.Before.Address.Key] = change.Before with { Value = change.After }; fixture.Writes++; }
         var next = TweakEngine.NextState(plan, reviewHash, fixture.State);
         var created = next.CreatedKeys.ToList();
         foreach (var change in plan.Changes)

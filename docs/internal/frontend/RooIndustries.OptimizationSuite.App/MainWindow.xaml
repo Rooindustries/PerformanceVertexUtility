@@ -77,6 +77,9 @@
                         <ImageIcon Source="ms-appx:///Assets/Icons/memory.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Windows settings" Tag="windows">
+                    <NavigationViewItem.Icon><ImageIcon Source="ms-appx:///Assets/Icons/windows.svg" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Timer &amp; cache" Tag="monitoring">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/timer.svg" />

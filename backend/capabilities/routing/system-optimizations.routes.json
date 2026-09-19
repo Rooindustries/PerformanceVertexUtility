@@ -301,7 +301,7 @@
           "Preview"
         ],
         "requestPathParam": "-RequestPath",
-        "timeoutSeconds": 60
+        "timeoutSeconds": 600
       },
       "apply": {
         "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
@@ -311,7 +311,7 @@
           "-ConfirmApply"
         ],
         "requestPathParam": "-RequestPath",
-        "timeoutSeconds": 60,
+        "timeoutSeconds": 600,
         "changedEvidencePath": "data.changed",
         "restorableEvidencePath": "data.restorable"
       },
@@ -323,11 +323,11 @@
           "-ConfirmApply"
         ],
         "requestPathParam": "-RequestPath",
-        "timeoutSeconds": 60,
+        "timeoutSeconds": 600,
         "changedEvidencePath": "data.changed",
         "restorableEvidencePath": "data.restorable"
       },
-      "notes": "Preview without a request returns the catalog. Execution accepts only named setting IDs and the exact review hash, owner, store and current state revision."
+      "notes": "Preview resolves exact targets and applicability. Apply and restore require the exact review hash, owner, store and state revision; irreversible data effects also require acceptDataLoss. Servicing may retain a restart-pending recovery journal."
     }
   ]
 }

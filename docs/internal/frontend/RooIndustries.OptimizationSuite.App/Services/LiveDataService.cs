@@ -187,8 +187,8 @@ public sealed class LiveDataService
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
 
-    public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default)
-        => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct);
+    public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false)
+        => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "");
 
     public Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken ct = default)
         => RunAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));

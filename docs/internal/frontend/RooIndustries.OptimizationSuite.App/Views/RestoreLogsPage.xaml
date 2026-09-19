@@ -38,7 +38,7 @@
                                 <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.RestoreHeadline, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
                                            VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                             </Grid>
-                            <TextBlock Text="Check saved process settings and session history."
+                            <TextBlock Text="Review saved Windows settings, process settings, and their history."
                                        FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
@@ -46,7 +46,7 @@
 
                 <Border Style="{StaticResource FocalPanelBorderStyle}">
                     <StackPanel Spacing="10">
-                        <Button Content="Open game settings" Click="OpenProcessControl" HorizontalAlignment="Left"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows settings" Click="OpenWindowsSettings"/></StackPanel>
                         <TextBlock Text="Saved settings" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
@@ -66,7 +66,7 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <TextBlock Text="Open Games &amp; processes to stop a session or restore process settings."
+                        <TextBlock Text="Use Windows settings to restore a saved profile. Use Games &amp; processes to stop a session or restore process settings."
                                    FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Border>

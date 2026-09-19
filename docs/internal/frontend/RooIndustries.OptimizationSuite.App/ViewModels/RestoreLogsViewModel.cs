@@ -1,3 +1,5 @@
+using System;
+using RooIndustries.Optimizer;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
@@ -23,25 +25,28 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var session = await App.Live.GetGameTuneSessionStatusAsync();
         var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
         var games = await App.Operations.ReadGameSessionsAsync();
+        TweakRecovery? windows = null;
+        try { windows = await App.Operations.ReadWindowsRecoveryAsync(); } catch (Exception) { }
 
         BuildRestore(
             session is { DryRun: true } ? null : RecoveryAvailable(session?.Status, session?.Restorable),
-            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable), games);
-        BuildHistory(session, governor, games);
+            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable), games, windows);
+        BuildHistory(session, governor, games, windows);
         IsEmpty = false;
     }
 
-    private void BuildRestore(bool? gameRecovery, bool? governorRecovery, GameSessionEntry[] games)
+    private void BuildRestore(bool? gameRecovery, bool? governorRecovery, GameSessionEntry[] games, TweakRecovery? windows)
     {
         RestoreRows.Clear();
-        var restorable = gameRecovery == true || governorRecovery == true || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
-        var unavailable = gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
+        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var unavailable = windows is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
-        RestoreHeadline = restorable
-            ? "Saved recovery data is available. Review it in Process Control."
-            : unavailable ? "Could not read process recovery. Reopen this page to retry."
-                : "No saved process settings to restore.";
-        RestoreState = restorable ? "safe" : unavailable ? "medium" : "neutral";
+        var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
+        RestoreHeadline = restart ? "Windows feature changes are waiting for restart verification." : windows?.Pending is not null ? "A Windows settings change needs recovery. Open Windows settings to review it." : restorable
+            ? "Saved settings are available. Open the matching section to restore them."
+            : unavailable ? "Some recovery state could not be read. Reopen this page to retry."
+                : "No saved settings to restore.";
+        RestoreState = windows?.Pending is not null ? "medium" : restorable ? "safe" : unavailable ? "medium" : "neutral";
 
         RestoreRows.Add(new StatusLine(
             "Game priority session",
@@ -52,13 +57,16 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             governorRecovery == true ? "Backed up · restorable" : governorRecovery == false ? "No restraint backup recorded" : "Status unavailable",
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
 
+        RestoreRows.Add(new StatusLine("Windows settings", windows is null ? "Status unavailable" : windows.Pending is not null ? restart ? "Check restart completion" : "Interrupted change · review recovery" :
+            windows.State?.Profiles.Length > 0 ? windows.State.Profiles.Length + " saved profiles" : "No saved profiles", windows is null || windows.Pending is not null ? "medium" : windows.State?.Profiles.Length > 0 ? "safe" : "neutral"));
+        foreach (var profile in windows?.State?.Profiles ?? []) RestoreRows.Add(new StatusLine(profile.Id, profile.Selections.Length + " selected settings · restorable", "safe"));
         foreach (var game in games)
             RestoreRows.Add(new StatusLine(game.Worker.State is { } state ? Path.GetFileNameWithoutExtension(state.Preview.GamePath) : "Game session",
                 GameSessionDisplay.Title(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "neutral" : "medium"));
 
     }
 
-    private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor, GameSessionEntry[] games)
+    private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor, GameSessionEntry[] games, TweakRecovery? windows)
     {
         HistoryRows.Clear();
 
@@ -91,6 +99,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                 Path.GetFileNameWithoutExtension(state.Preview.GamePath), GameSessionDisplay.Title(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "Done" : "Review", "neutral"));
         }
 
+        foreach (var entry in (windows?.State?.History ?? []).Reverse())
+            HistoryRows.Add(new AuditRow(entry.AtUtc.ToLocalTime().ToString("g"), "Windows settings", "neutral", entry.ProfileId,
+                (entry.Changes.Length + (entry.Controls?.Length ?? 0)) + " value changes", windows!.State!.Profiles.Any(profile => profile.Id == entry.ProfileId) ? "Review profile" : "No active profile", "neutral"));
         if (HistoryRows.Count == 0)
         {
             HistoryRows.Add(new AuditRow("-", "Ready", "neutral", "No history entries loaded",

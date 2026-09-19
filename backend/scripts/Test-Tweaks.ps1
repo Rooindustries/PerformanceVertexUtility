@@ -5,3 +5,4 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';
 & $DotNetPath run --project (Join-Path $root 'tools/validation/Tweaks/Tweaks.csproj') --configuration Release -p:UseSharedCompilation=false -- $root
 if($LASTEXITCODE -ne 0){throw 'Tweak engine checks failed'}
 & (Join-Path $PSScriptRoot 'Test-TweakRoutes.ps1') -DotNetPath $DotNetPath
+& (Join-Path $PSScriptRoot 'Test-AppxScopes.ps1')
