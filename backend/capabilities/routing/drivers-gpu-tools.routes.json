@@ -100,7 +100,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-no-app",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -119,7 +119,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-with-app",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -138,7 +138,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-amd-26-2-2",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -157,7 +157,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-amd-chipset-8-02-18-557",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -176,7 +176,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-intel-chipset",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -195,7 +195,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-intel-network",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -214,7 +214,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-package-realtek-network",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -233,7 +233,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-booster-package",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -252,7 +252,7 @@
     {
       "capabilityId": "drivers-gpu-tools.driver-cleanup-ddu",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -271,7 +271,7 @@
     {
       "capabilityId": "drivers-gpu-tools.nvcleanstall",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -290,7 +290,7 @@
     {
       "capabilityId": "drivers-gpu-tools.hwinfo-installer",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -309,7 +309,7 @@
     {
       "capabilityId": "drivers-gpu-tools.hwinfo-installed-sensor-monitoring",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -321,14 +321,14 @@
       "restore": {
         "statusOnly": true,
         "reason": "read-only monitoring",
-        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for read-only monitoring inventory; installed sensor monitoring has no restore path."
+        "nextRequiredStep": "Use Get-RooIndustriesUtilitiesInventory.ps1 for read-only monitoring inventory; installed sensor monitoring has no restore path."
       },
       "notes": "Inventory detector inspects the installed binary metadata only."
     },
     {
       "capabilityId": "drivers-gpu-tools.cpu-z-diagnostics",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -340,14 +340,14 @@
       "restore": {
         "statusOnly": true,
         "reason": "diagnostics only",
-        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+        "nextRequiredStep": "Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
       },
       "notes": "Inventory detector reports CPU-Z metadata without launching CPU-Z."
     },
     {
       "capabilityId": "drivers-gpu-tools.gpu-z-diagnostics",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -359,14 +359,14 @@
       "restore": {
         "statusOnly": true,
         "reason": "diagnostics only",
-        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+        "nextRequiredStep": "Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
       },
       "notes": "Inventory detector reports GPU-Z metadata without launching GPU-Z."
     },
     {
       "capabilityId": "drivers-gpu-tools.msi-afterburner",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -385,7 +385,7 @@
     {
       "capabilityId": "drivers-gpu-tools.msi-kombustor",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -397,14 +397,14 @@
       "restore": {
         "statusOnly": true,
         "reason": "benchmark only",
-        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for benchmark package inventory; benchmark-only capability has no restore path."
+        "nextRequiredStep": "Use Get-RooIndustriesUtilitiesInventory.ps1 for benchmark package inventory; benchmark-only capability has no restore path."
       },
       "notes": "Inventory detector reports the Kombustor installer without launching it."
     },
     {
       "capabilityId": "drivers-gpu-tools.latencymon",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -416,14 +416,14 @@
       "restore": {
         "statusOnly": true,
         "reason": "diagnostics only",
-        "nextRequiredStep": "Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
+        "nextRequiredStep": "Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path."
       },
       "notes": "Inventory detector reports LatencyMon metadata without launching LatencyMon."
     },
     {
       "capabilityId": "drivers-gpu-tools.scewin",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -442,7 +442,7 @@
     {
       "capabilityId": "drivers-gpu-tools.prerequisite-dotnetfx35",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },
@@ -461,7 +461,7 @@
     {
       "capabilityId": "drivers-gpu-tools.prerequisite-directx-june2010",
       "preview": {
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "args": [],
         "timeoutSeconds": 30
       },

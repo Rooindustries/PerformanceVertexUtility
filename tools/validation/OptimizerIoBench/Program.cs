@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 try
 {
@@ -27,9 +27,9 @@ static class StorageMeasurement
     public static void Run(string repository, string dotnet, string diskspd, string output, int blocks, int seconds, int priority)
     {
         if (OperationFiles.HashFile(diskspd) != DiskSpdHash) throw new InvalidDataException("Use the verified DiskSpd 2.3 amd64 release binary.");
-        using var lease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), "roo-storage-measure"));
+        using var lease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), "roo-industries-storage-measure"));
         if (new DriveInfo(Path.GetPathRoot(Path.GetTempPath())!).AvailableFreeSpace < FileBytes * 3) throw new IOException("Insufficient free space for the disposable measurement files.");
-        var root = Path.Combine(Path.GetTempPath(), "roo-storage-measure-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-storage-measure-" + Guid.NewGuid().ToString("N"));
         var evidence = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "-xml");
         if (File.Exists(output) || Directory.Exists(evidence)) throw new IOException("Choose a new output path for this experiment.");
         var hostPath = Path.Combine(repository, "backend", "bin", "optimizer", "Optimizer.Host.dll");
@@ -41,8 +41,8 @@ static class StorageMeasurement
         Directory.CreateDirectory(root); Directory.CreateDirectory(evidence);
         try
         {
-            var foregroundExe = Path.Combine(root, "RooIoForeground.exe");
-            var backgroundExe = Path.Combine(root, "RooIoBackground.exe");
+            var foregroundExe = Path.Combine(root, "RooIndustriesIoForeground.exe");
+            var backgroundExe = Path.Combine(root, "RooIndustriesIoBackground.exe");
             File.Copy(diskspd, foregroundExe); File.Copy(diskspd, backgroundExe);
             var foregroundFile = Path.Combine(root, "foreground.bin");
             var backgroundFile = Path.Combine(root, "background.bin");
@@ -53,7 +53,7 @@ static class StorageMeasurement
             {
                 foreach (var enabled in random.Next(2) == 0 ? new[] { false, true } : new[] { true, false })
                 {
-                    var prefix = "Local\\RooStorage-" + Guid.NewGuid().ToString("N");
+                    var prefix = "Local\\RooIndustriesStorage-" + Guid.NewGuid().ToString("N");
                     using var start = new EventWaitHandle(false, EventResetMode.ManualReset, prefix + "-start");
                     using var stop = new EventWaitHandle(false, EventResetMode.ManualReset, prefix + "-stop");
                     var trialDirectory = Path.Combine(root, Guid.NewGuid().ToString("N"));
@@ -132,7 +132,7 @@ static class StorageMeasurement
                             foregroundIdentity, backgroundIdentity, foreground = front, background = back,
                             foregroundXml, backgroundXml, foregroundArgs, backgroundArgs });
                         OperationFiles.Write(output, new { status = "running", binaries, blocks, seconds, priority, trials });
-                        Console.WriteLine($"Storage block {block + 1}/{blocks}: {(enabled ? "Roo rule" : "normal priority")}, foreground p99 {front.P99Milliseconds:F3} ms, background {back.BytesPerSecond / 1048576:F1} MiB/s");
+                        Console.WriteLine($"Storage block {block + 1}/{blocks}: {(enabled ? "Roo Industries rule" : "normal priority")}, foreground p99 {front.P99Milliseconds:F3} ms, background {back.BytesPerSecond / 1048576:F1} MiB/s");
                     }
                     finally
                     {

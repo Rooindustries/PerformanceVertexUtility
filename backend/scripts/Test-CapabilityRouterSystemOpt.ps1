@@ -102,7 +102,7 @@ function Invoke-Router {
 
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:RouterPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
-    $json = ConvertFrom-RouterJson $output "Invoke-RooCapability $($Arguments -join ' ')"
+    $json = ConvertFrom-RouterJson $output "Invoke-RooIndustriesCapability $($Arguments -join ' ')"
     return [pscustomobject]@{
         exitCode = [int]$exitCode
         output = ($output | Out-String).Trim()
@@ -249,7 +249,7 @@ function Test-PowerCapabilityFailureEvidence {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
 $fragmentPath = Join-Path $repoRoot 'backend\capabilities\system-optimizations.json'
 $manifestPath = Join-Path $repoRoot 'backend\capabilities\routing\system-optimizations.routes.json'
 $adminFeatureStep = 'Requires an administrators-group token: launch via an elevated helper before DISM feature queries can run'
@@ -460,8 +460,8 @@ if ($null -ne $standbyApply.json) {
     Add-Check ([string](Get-PropertyValue $standbyApply.json 'nextRequiredStep' '') -eq 'Run Build-StandbyMemoryHelper.ps1, then package the helper with an elevated launch manifest.') 'Standby memory apply names helper packaging next step' 'Standby memory apply nextRequiredStep mismatch'
 }
 
-$shaderTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-router-shader-$([guid]::NewGuid().ToString('N'))"
-$serviceTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-router-service-$([guid]::NewGuid().ToString('N'))"
+$shaderTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-router-shader-$([guid]::NewGuid().ToString('N'))"
+$serviceTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-router-service-$([guid]::NewGuid().ToString('N'))"
 $cleanupPaths = New-Object System.Collections.Generic.List[string]
 $cleanupPaths.Add($shaderTempRoot) | Out-Null
 $cleanupPaths.Add($serviceTempRoot) | Out-Null

@@ -1,7 +1,7 @@
 #nullable enable
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record CleanupBatchPart(ApplicationCleanupPreview Preview, CleanupPart Operation);
 

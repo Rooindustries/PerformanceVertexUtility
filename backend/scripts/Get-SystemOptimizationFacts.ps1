@@ -5,23 +5,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Get-RooUtcStamp {
+function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
-function New-RooLog {
+function New-RooIndustriesLog {
     param(
         [string]$Message,
         [string]$Level = 'info'
     )
     return [pscustomobject]@{
-        timestampUtc = Get-RooUtcStamp
+        timestampUtc = Get-RooIndustriesUtcStamp
         level = $Level
         message = $Message
     }
 }
 
-function Write-RooJsonOutput {
+function Write-RooIndustriesJsonOutput {
     param(
         [object]$Value,
         [string]$Path
@@ -152,7 +152,7 @@ function Get-FileFact {
 }
 
 $correlationId = [guid]::NewGuid().ToString()
-$startedAtUtc = Get-RooUtcStamp
+$startedAtUtc = Get-RooIndustriesUtcStamp
 
 try {
     $registryTargets = @(
@@ -178,7 +178,7 @@ try {
     )
 
     $fileTargets = @(
-        'backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs',
+        'backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs',
         '%LOCALAPPDATA%\D3DSCache',
         '%LOCALAPPDATA%\NVIDIA'
     )
@@ -224,8 +224,8 @@ try {
         productName = 'Roo Industries Optimization Suite'
         correlationId = $correlationId
         startedAtUtc = $startedAtUtc
-        capturedAtUtc = Get-RooUtcStamp
-        completedAtUtc = Get-RooUtcStamp
+        capturedAtUtc = Get-RooIndustriesUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'completed'
         facts = [pscustomobject]@{
@@ -258,10 +258,10 @@ try {
         }
         warnings = @()
         errors = @()
-        logs = @((New-RooLog 'System optimization facts collected without system changes.'))
+        logs = @((New-RooIndustriesLog 'System optimization facts collected without system changes.'))
     }
 
-    Write-RooJsonOutput -Value $result -Path $OutputPath
+    Write-RooIndustriesJsonOutput -Value $result -Path $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'systemOptimizations.facts'
@@ -269,8 +269,8 @@ try {
         productName = 'Roo Industries Optimization Suite'
         correlationId = $correlationId
         startedAtUtc = $startedAtUtc
-        capturedAtUtc = Get-RooUtcStamp
-        completedAtUtc = Get-RooUtcStamp
+        capturedAtUtc = Get-RooIndustriesUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'failed'
         facts = $null
@@ -289,8 +289,8 @@ try {
             recoverable = $true
             nextStep = 'Check read-only registry, service, CIM, and file access.'
         })
-        logs = @((New-RooLog 'System optimization facts collection failed.' 'error'))
+        logs = @((New-RooIndustriesLog 'System optimization facts collection failed.' 'error'))
     }
-    Write-RooJsonOutput -Value $errorResult -Path $OutputPath
+    Write-RooIndustriesJsonOutput -Value $errorResult -Path $OutputPath
     exit 1
 }

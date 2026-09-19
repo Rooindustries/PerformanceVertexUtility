@@ -8,12 +8,12 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/BackendLocator.cs" Link="BackendLocator.cs" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/OptimizerService.cs" Link="OptimizerService.cs" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/OptimizerService.Controls.cs" Link="OptimizerService.Controls.cs" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/OptimizerService.GameSessions.cs" Link="OptimizerService.GameSessions.cs" />
-    <Compile Include="../../../docs/internal/frontend/Roo.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendLocator.cs" Link="BackendLocator.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.cs" Link="OptimizerService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.Controls.cs" Link="OptimizerService.Controls.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.GameSessions.cs" Link="OptimizerService.GameSessions.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
   </ItemGroup>
 </Project>

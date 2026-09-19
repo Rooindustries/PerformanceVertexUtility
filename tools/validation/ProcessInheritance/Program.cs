@@ -5,7 +5,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 try
 {
@@ -22,8 +22,8 @@ static class Fixture
 {
     public static void CheckInheritance()
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-inheritance-" + Guid.NewGuid().ToString("N"));
-        var eventName = "Local\\RooInheritance-" + Guid.NewGuid().ToString("N");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-inheritance-" + Guid.NewGuid().ToString("N"));
+        var eventName = "Local\\RooIndustriesInheritance-" + Guid.NewGuid().ToString("N");
         using var exit = new EventWaitHandle(false, EventResetMode.ManualReset, eventName);
         Directory.CreateDirectory(root);
         using var launcher = Start("--launcher", root, eventName);
@@ -58,7 +58,7 @@ static class Fixture
             using (var readable = new ProcessTarget(child.Identity.ProcessId)) child.Identity.Verify(readable.Identity());
             var denied = false;
             try { using var blocked = new ProcessTarget(child.Identity.ProcessId, ["affinity"]); }
-            catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5) { denied = true; }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5) { denied = true; }
             Check(denied && Affinity.Read(child.Identity.ProcessId) == selected, "The real control adapter preserves access denial without a privilege retry");
 
             Check(engine.Restore(journal).Status == "restored" && Affinity.Read(launcher.Id) == original, "The launcher restores its original affinity");

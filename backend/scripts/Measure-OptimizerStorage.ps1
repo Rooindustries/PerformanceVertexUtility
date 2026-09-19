@@ -4,7 +4,7 @@ param(
     [ValidateRange(1,30)][int]$Blocks=10,
     [ValidateRange(3,60)][int]$Seconds=9,
     [ValidateSet('Low','VeryLow')][string]$Priority='Low',
-    [string]$DotNetPath=$env:ROO_DOTNET_EXE
+    [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}

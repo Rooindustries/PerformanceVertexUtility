@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class PolicyChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-policies-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-policies-" + Guid.NewGuid().ToString("N"));
         Process? probe = null;
         Process StartProbe()
         {

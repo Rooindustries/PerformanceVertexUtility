@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class CpuContention
 {
@@ -39,10 +39,10 @@ static class CpuContention
         using var self = new ProcessTarget(Environment.ProcessId);
         var topology = self.Topology();
         var cpu = topology.Where(cpu => cpu.Available && cpu.Group == 0).OrderByDescending(cpu => cpu.Efficiency).ThenBy(cpu => cpu.Index).First();
-        var root = Path.Combine(Path.GetTempPath(), "roo-cpu-measure-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cpu-measure-" + Guid.NewGuid().ToString("N"));
         var suffix = referencePath is null ? "" : "-" + Guid.NewGuid().ToString("N");
-        var foregroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuForeground" + suffix + ".exe");
-        var backgroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooCpuBackground" + suffix + ".exe");
+        var foregroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooIndustriesCpuForeground" + suffix + ".exe");
+        var backgroundExe = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooIndustriesCpuBackground" + suffix + ".exe");
         var hostPath = Path.Combine(repository, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         using var fixtureLease = OperationFiles.Lock(Path.Combine(Path.GetDirectoryName(foregroundExe)!, "cpu-measure"));
         if (File.Exists(foregroundExe) || File.Exists(backgroundExe)) throw new IOException("A CPU measurement executable already exists.");
@@ -72,8 +72,8 @@ static class CpuContention
             for (var block = 0; block < blocks; block++)
             {
                 var order = referencePath is null
-                    ? (random.Next(2) == 0 ? new[] { "normal", "roo" } : new[] { "roo", "normal" })
-                    : new[] { "normal", "roo", "lasso" };
+                    ? (random.Next(2) == 0 ? new[] { "normal", "roo-industries" } : new[] { "roo-industries", "normal" })
+                    : new[] { "normal", "roo-industries", "lasso" };
                 if (referencePath is not null)
                     for (var index = order.Length - 1; index > 0; index--) { var other = random.Next(index + 1); (order[index], order[other]) = (order[other], order[index]); }
                 foreach (var controller in order)
@@ -82,7 +82,7 @@ static class CpuContention
                     var enabled = controller != "normal";
                     var trial = Path.Combine(root, "trial-" + Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(trial);
-                    var request = new Request(trial, "Local\\RooCpuMeasure-" + Guid.NewGuid().ToString("N"), 1ul << cpu.Index, seconds, 500000);
+                    var request = new Request(trial, "Local\\RooIndustriesCpuMeasure-" + Guid.NewGuid().ToString("N"), 1ul << cpu.Index, seconds, 500000);
                     using var startEvent = new EventWaitHandle(false, EventResetMode.ManualReset, request.EventPrefix + "-start");
                     using var exitEvent = new EventWaitHandle(false, EventResetMode.ManualReset, request.EventPrefix + "-exit");
                     var path = Path.Combine(trial, "request.json");
@@ -99,7 +99,7 @@ static class CpuContention
                         if (original != ProcessPriorityClass.Normal || Priority(foreground) != ProcessPriorityClass.Normal)
                             throw new InvalidOperationException("Another controller changed the normalized fixture priority before measurement.");
                         var applyTimer = Stopwatch.StartNew();
-                        if (controller == "roo")
+                        if (controller == "roo-industries")
                         {
                             store.Save(new SavedProcessRule
                             {
@@ -183,7 +183,7 @@ static class CpuContention
                         if (Priority(background) != original || Priority(foreground) != ProcessPriorityClass.Normal)
                             throw new InvalidOperationException("The original fixture priorities were not restored.");
                         trials.Add(new { block, enabled, controller, applyMilliseconds, controllerCpuSeconds, controllerPrivateBytes,
-                            restoration = controller == "lasso" ? "harnessAfterReferenceExit" : controller == "roo" ? "controller" : "unchanged", backgroundPriority = backgroundPriority.ToString(), foregroundPriority = foregroundPriority.ToString(),
+                            restoration = controller == "lasso" ? "harnessAfterReferenceExit" : controller == "roo-industries" ? "controller" : "unchanged", backgroundPriority = backgroundPriority.ToString(), foregroundPriority = foregroundPriority.ToString(),
                             restoredPriority = original.ToString(), foreground = front, background = back, foregroundCpuSeconds, backgroundCpuSeconds, workerCpuSeconds });
                         OperationFiles.Write(output, new { status = "running", binaries, blocks, seconds, trials });
                         Console.WriteLine($"CPU block {block + 1}/{blocks}: {controller}, background operations {back.Operations}, foreground samples {front.Samples.Length}");
@@ -218,10 +218,10 @@ static class CpuContention
                     "Both workloads use one logical CPU; this does not reserve that CPU against other software.",
                     "Dynamic priority boosts are disabled on both fixture processes. No power plan or system timer resolution is changed.",
                     "Samples measure scheduled wake-to-work completion, not input latency, CPU ready time or frame time.",
-                    "The normal-priority condition has no Roo worker; the rule condition includes its worker and recovery.",
+                    "The normal-priority condition has no Roo Industries worker; the rule condition includes its worker and recovery.",
                     referencePath is null
                         ? "Existing Lasso configuration and processes remain unchanged; this is not an isolated Windows-only or Lasso-only comparison."
-                        : "The installed governor was absent. The normal, Roo and verified reference conditions run separately; the existing GUI remains open. Reference fixture priority is restored by the harness after its governor exits." },
+                        : "The installed governor was absent. The normal, Roo Industries and verified reference conditions run separately; the existing GUI remains open. Reference fixture priority is restored by the harness after its governor exits." },
             });
         }
         finally

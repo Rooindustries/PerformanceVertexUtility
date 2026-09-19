@@ -59,7 +59,7 @@ function Get-StateEntryCount {
 function Get-FrontendProcessIds {
     $items = New-Object System.Collections.Generic.List[int]
     foreach ($proc in @(Get-Process -ErrorAction SilentlyContinue)) {
-        if ([string]$proc.ProcessName -like 'Roo.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooOptimizationSuite*') {
+        if ([string]$proc.ProcessName -like 'RooIndustries.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooIndustriesOptimizationSuite*') {
             $items.Add([int]$proc.Id) | Out-Null
         }
     }
@@ -98,8 +98,8 @@ function Get-NewIds {
         [int[]]$After
     )
     $beforeSet = @{}
-    foreach ($id in @(Get-RooArray $Before)) { $beforeSet[[int]$id] = $true }
-    return @(@(Get-RooArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
+    foreach ($id in @(Get-RooIndustriesArray $Before)) { $beforeSet[[int]$id] = $true }
+    return @(@(Get-RooIndustriesArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
 }
 
 function Write-GovernorValidationProfile {
@@ -263,16 +263,16 @@ $stateBefore = Get-StateEntryCount
 $frontendBefore = @(Get-FrontendProcessIds)
 $backendHostBefore = @(Get-BackendScriptHostProcesses)
 $externalGovernorBefore = @(Get-ExternalGovernorProcessIds)
-$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-process-governor-live-$([guid]::NewGuid().ToString('N'))"
+$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-process-governor-live-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 $busyProbe = $null
 $protectedProbe = $null
 $calmProbe = $null
 try {
     New-Item -ItemType Directory -Path $liveRoot -Force | Out-Null
-    $busyExe = Join-Path $liveRoot 'RooGovernorBusyProbe.exe'
-    $protectedExe = Join-Path $liveRoot 'RooGovernorProtectedProbe.exe'
-    $calmExe = Join-Path $liveRoot 'RooGovernorCalmProbe.exe'
+    $busyExe = Join-Path $liveRoot 'RooIndustriesGovernorBusyProbe.exe'
+    $protectedExe = Join-Path $liveRoot 'RooIndustriesGovernorProtectedProbe.exe'
+    $calmExe = Join-Path $liveRoot 'RooIndustriesGovernorCalmProbe.exe'
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $busyExe -Force
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $protectedExe -Force
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $calmExe -Force
@@ -280,21 +280,21 @@ try {
     $stateRoot = Join-Path $liveRoot 'state'
     Write-GovernorValidationProfile `
         -Path $profilePath `
-        -CandidateNames @('RooGovernorBusyProbe.exe','RooGovernorProtectedProbe.exe','RooGovernorCalmProbe.exe') `
-        -ProtectedName 'RooGovernorProtectedProbe.exe' `
+        -CandidateNames @('RooIndustriesGovernorBusyProbe.exe','RooIndustriesGovernorProtectedProbe.exe','RooIndustriesGovernorCalmProbe.exe') `
+        -ProtectedName 'RooIndustriesGovernorProtectedProbe.exe' `
         -MaxDurationSeconds 7
 
-    $busyProbe = Start-Process -FilePath $busyExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
+    $busyProbe = Start-Process -FilePath $busyExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
-    $beforeBusy = Get-RooProcessControlState $busyProbe.Id $null
-    $beforeProtected = Get-RooProcessControlState $protectedProbe.Id $null
+    $beforeBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
+    $beforeProtected = Get-RooIndustriesProcessControlState $protectedProbe.Id $null
 
     $preview = & (Join-Path $PSScriptRoot 'Preview-ProcessGovernor.ps1') `
         -ProfilePath $profilePath `
         -SampleIntervalMilliseconds 400 `
         -ForegroundProcessId $protectedProbe.Id | ConvertFrom-Json
-    $afterPreviewBusy = Get-RooProcessControlState $busyProbe.Id $null
+    $afterPreviewBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     $previewBusy = @($preview.preview | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $previewProtected = @($preview.preview | Where-Object { $_.processId -eq $protectedProbe.Id }) | Select-Object -First 1
 
@@ -308,7 +308,7 @@ try {
     } else {
         Add-Failure 'Manual-review foreground-style probe was not skipped with review and foreground proof'
     }
-    if ($beforeProtected.priorityClass -eq (Get-RooProcessControlState $protectedProbe.Id $null).priorityClass) {
+    if ($beforeProtected.priorityClass -eq (Get-RooIndustriesProcessControlState $protectedProbe.Id $null).priorityClass) {
         Add-Pass "Manual-review probe priority stayed unchanged during preview: $($beforeProtected.priorityClass)"
     } else {
         Add-Failure 'Protected probe priority changed during preview'
@@ -321,7 +321,7 @@ try {
         -ForegroundProcessId $protectedProbe.Id `
         -StateRoot $stateRoot `
         -ConfirmApply | ConvertFrom-Json
-    $afterApplyBusy = Get-RooProcessControlState $busyProbe.Id $null
+    $afterApplyBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     $changedBusy = @($session.changedItems | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     if ($session.dryRun -eq $false -and $changedBusy -and $afterApplyBusy.priorityClass -eq 'BelowNormal') {
         Add-Pass "Live governor restrained busy probe: before=$($beforeBusy.priorityClass) applied=$($afterApplyBusy.priorityClass)"
@@ -340,14 +340,14 @@ try {
         Add-Failure 'Confirmed process governor status runtime evidence was incomplete'
     }
     $restorePreview = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -SessionPath $session.sessionPath | ConvertFrom-Json
-    $afterRestorePreview = Get-RooProcessControlState $busyProbe.Id $null
+    $afterRestorePreview = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     if ($restorePreview.dryRun -eq $true -and $afterRestorePreview.priorityClass -eq 'BelowNormal') {
         Add-Pass 'Process governor stop preview did not restore or change the busy probe'
     } else {
         Add-Failure 'Process governor stop preview changed the busy probe unexpectedly'
     }
     $restore = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -SessionPath $session.sessionPath -ConfirmApply | ConvertFrom-Json
-    $afterRestoreBusy = Get-RooProcessControlState $busyProbe.Id $null
+    $afterRestoreBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     if ($restore.dryRun -eq $false -and @($restore.restoredItems).Count -ge 1 -and $afterRestoreBusy.priorityClass -eq $beforeBusy.priorityClass) {
         Add-Pass "Confirmed process governor stop restored busy probe: applied=$($afterApplyBusy.priorityClass) restored=$($afterRestoreBusy.priorityClass)"
     } else {
@@ -355,13 +355,13 @@ try {
     }
 
     if ($busyProbe -and -not $busyProbe.HasExited) {
-        Stop-RooValidationProcess $busyProbe
+        Stop-RooIndustriesValidationProcess $busyProbe
     }
     $busyProbe = $null
 
-    $calmProbe = Start-Process -FilePath $calmExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 60')) -WindowStyle Hidden -PassThru
+    $calmProbe = Start-Process -FilePath $calmExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 60')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
-    $beforeCalm = Get-RooProcessControlState $calmProbe.Id $null
+    $beforeCalm = Get-RooIndustriesProcessControlState $calmProbe.Id $null
     $calmSession = & (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1') `
         -ProfilePath $profilePath `
         -SampleIntervalMilliseconds 400 `
@@ -369,7 +369,7 @@ try {
         -ForegroundProcessId $protectedProbe.Id `
         -StateRoot $stateRoot `
         -ConfirmApply | ConvertFrom-Json
-    $afterCalmSession = Get-RooProcessControlState $calmProbe.Id $null
+    $afterCalmSession = Get-RooIndustriesProcessControlState $calmProbe.Id $null
     $calmChanged = @($calmSession.changedItems | Where-Object { $_.processId -eq $calmProbe.Id }) | Select-Object -First 1
     $calmRestored = @($calmSession.restoredItems | Where-Object { $_.processId -eq $calmProbe.Id }) | Select-Object -First 1
     if ($calmChanged -and $calmRestored -and $afterCalmSession.priorityClass -eq $beforeCalm.priorityClass) {
@@ -390,10 +390,10 @@ try {
     }
 
     if ($protectedProbe -and -not $protectedProbe.HasExited) {
-        Stop-RooValidationProcess $protectedProbe
+        Stop-RooIndustriesValidationProcess $protectedProbe
     }
     if ($calmProbe -and -not $calmProbe.HasExited) {
-        Stop-RooValidationProcess $calmProbe
+        Stop-RooIndustriesValidationProcess $calmProbe
     }
     $protectedProbe = $null
     $calmProbe = $null
@@ -412,7 +412,7 @@ try {
 } finally {
     foreach ($probe in @($busyProbe, $protectedProbe, $calmProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-RooValidationProcess $probe
+            Stop-RooIndustriesValidationProcess $probe
         }
     }
     if (-not $cleanupDone) {

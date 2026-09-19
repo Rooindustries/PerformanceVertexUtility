@@ -2,7 +2,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record ApiError(string Api, string CodeKind, long Code, string Access, string Message);
 public sealed class ProcessEndedException() : InvalidOperationException("The target process has exited.");

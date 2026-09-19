@@ -99,7 +99,7 @@ foreach ($hive in @('LocalMachine','CurrentUser')) {
                     $record = @{PSChildName=$keyName}
                     foreach ($valueName in $key.GetValueNames()) { $record[$valueName]=$key.GetValue($valueName) }
                     if ([string]::IsNullOrWhiteSpace([string]$record.DisplayName)) { continue }
-                    $identity = New-RooRegistryAppIdentity $hive $view $keyName $currentUserSid
+                    $identity = New-RooIndustriesRegistryAppIdentity $hive $view $keyName $currentUserSid
                     $apps.Add((New-AppRecord ([pscustomobject]$record) 'registry' $identity)) | Out-Null
                     if (-not $sources.Contains('registry')) { $sources.Add('registry') | Out-Null }
                 } finally { $key.Dispose() }
@@ -114,7 +114,7 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     foreach($errorRecord in $appxErrors){$sourceErrors.Add([string]$errorRecord)}
     if ($appxItems.Count -gt 0) { $sources.Add('appx') | Out-Null }
     foreach ($pkg in $appxItems) {
-        $identity = New-RooAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $currentUserSid
+        $identity = New-RooIndustriesAppxIdentity $pkg.PackageFullName $pkg.PackageFamilyName $currentUserSid
         $risk = Get-AppRisk $pkg.Name $pkg.Publisher
         $reviewRequired = ($risk -eq 'advanced' -or $pkg.Publisher -match 'Microsoft')
         $apps.Add([pscustomobject]@{

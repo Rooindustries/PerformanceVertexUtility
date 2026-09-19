@@ -1,0 +1,207 @@
+<Page
+    x:Class="RooIndustries.OptimizationSuite.Views.DashboardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <Page.Resources>
+        <DataTemplate x:Key="StatusLineTemplate" x:DataType="vm:StatusLine">
+            <StackPanel Padding="0,7" Spacing="3">
+                <TextBlock Text="{x:Bind Label}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <TextBlock Text="{x:Bind Value}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="UsageLineTemplate" x:DataType="vm:UsageLine">
+            <Grid Padding="0,7" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="{x:Bind Name}" FontSize="13" LineHeight="18" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Detail}" FontSize="11" LineHeight="15" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{x:Bind Value}" FontSize="13" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextDisplayBrush}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActionRowTemplate" x:DataType="vm:DashboardActionRow">
+            <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" MinHeight="96"
+                    HorizontalAlignment="Stretch">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="3" CornerRadius="1.5"
+                            Background="{x:Bind State, Converter={StaticResource RiskToBrush}}" />
+                    <Grid Grid.Column="1" ColumnSpacing="20" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{x:Bind Title}" FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Detail}" FontSize="13" LineHeight="18" TextWrapping="Wrap"
+                                   Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </Grid>
+                    <Button Grid.Column="2" Content="{x:Bind ButtonLabel}" Tag="{x:Bind NavTag}"
+                            Click="OnDashboardActionClick"
+                            AutomationProperties.Name="{x:Bind ButtonLabel}"
+                            VerticalAlignment="Center" MinWidth="142" Padding="12,7" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="{StaticResource RooIndustriesPageMargin}">
+
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <ProgressRing IsActive="True" Width="40" Height="40" />
+            <TextBlock Text="Reading this PC" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+        </StackPanel>
+
+        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
+                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
+                Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Can't read this PC yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
+                           Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap"
+                           Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer x:Name="DashScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="DashContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1320">
+
+                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooIndustriesAccentBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="{x:Bind ViewModel.VerdictHeadline, Mode=OneWay}" FontSize="23" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
+                                             Fill="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.VerdictSummary, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                               VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                        <Button Grid.Column="1" VerticalAlignment="Center" Click="OnReviewProcessPlanClick"
+                                Style="{StaticResource NavCtaButtonStyle}"
+                                Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{StaticResource RooIndustriesOnCtaBrush}" />
+                                <TextBlock Text="Tune" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <StackPanel Spacing="16">
+                    <ContentControl x:Name="TuneActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.TuneAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                    <ContentControl x:Name="CleanupActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.CleanupAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                    <ContentControl x:Name="DriverActionHost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.DriverAction, Mode=OneWay}"
+                                    ContentTemplate="{StaticResource ActionRowTemplate}" />
+                </StackPanel>
+
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,28" HorizontalAlignment="Stretch">
+                        <StackPanel Spacing="18">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="MEMORY PRESSURE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="RAM in use" FontSize="14" VerticalAlignment="Bottom" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{x:Bind ViewModel.MemoryPressureLabel, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,4"
+                                                   Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
+                                        <TextBlock VerticalAlignment="Bottom" Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"><Run Text="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" FontSize="30" FontWeight="SemiBold" /><Run Text="%" FontSize="16" FontWeight="SemiBold" /></TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                                <ProgressBar Value="{x:Bind ViewModel.MemoryUsedPercent, Mode=OneWay}" Maximum="100" Height="10" CornerRadius="5"
+                                             Foreground="{x:Bind ViewModel.VerdictLevel, Mode=OneWay, Converter={StaticResource RiskToBrush}}"
+                                             Background="{StaticResource RooIndustriesSurfaceInputBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.MemoryPressureLine, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="TOP CONSUMERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.TopMemoryUsers}" ItemTemplate="{StaticResource UsageLineTemplate}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Spacing="16">
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="THIS SESSION" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SessionLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="SENSORS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.SensorLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="BACKGROUND APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Most you can push back to free memory" FontSize="12" LineHeight="16" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.BackgroundOffenders}" ItemTemplate="{StaticResource UsageLineTemplate}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" HorizontalAlignment="Stretch">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="DRIVERS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.DriverLines}" ItemTemplate="{StaticResource StatusLineTemplate}" />
+                            <TextBlock Text="{x:Bind ViewModel.DriverNote, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
+                                       Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

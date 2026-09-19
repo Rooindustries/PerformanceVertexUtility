@@ -1,10 +1,10 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-function Get-RooBackendProcessCount {
+function Get-RooIndustriesBackendProcessCount {
     return @(Get-Process -ErrorAction SilentlyContinue).Count
 }
 
-function Get-RooBackendScriptProcessMeasurement {
+function Get-RooIndustriesBackendScriptProcessMeasurement {
     param([System.Diagnostics.Process]$Process)
     if ($null -eq $Process) {
         $Process = Get-Process -Id $PID
@@ -36,7 +36,7 @@ function Get-RooBackendScriptProcessMeasurement {
     }
 }
 
-function Get-RooBackendFootprintDelta {
+function Get-RooIndustriesBackendFootprintDelta {
     param(
         [object]$Before,
         [object]$After,
@@ -45,7 +45,7 @@ function Get-RooBackendFootprintDelta {
     $processorCount = [Environment]::ProcessorCount
     if ($processorCount -lt 1) { $processorCount = 1 }
     if ($ElapsedSeconds -le 0) { $ElapsedSeconds = 0.001 }
-    $cpuDelta = [double](Get-RooPropertyValue $After 'cpuSeconds' 0) - [double](Get-RooPropertyValue $Before 'cpuSeconds' 0)
+    $cpuDelta = [double](Get-RooIndustriesPropertyValue $After 'cpuSeconds' 0) - [double](Get-RooIndustriesPropertyValue $Before 'cpuSeconds' 0)
     if ($cpuDelta -lt 0) { $cpuDelta = 0 }
     $averageCpuPercent = (($cpuDelta / $ElapsedSeconds) / $processorCount) * 100
     return [pscustomobject]@{
@@ -56,19 +56,19 @@ function Get-RooBackendFootprintDelta {
     }
 }
 
-function Resolve-RooBackendBudgetProfilePath {
+function Resolve-RooIndustriesBackendBudgetProfilePath {
     param([string]$BudgetProfilePath)
     $defaultPath = Join-Path $PSScriptRoot '..\profiles\lightweight-governor-budget.profile.json'
-    return Resolve-RooPath $BudgetProfilePath $defaultPath
+    return Resolve-RooIndustriesPath $BudgetProfilePath $defaultPath
 }
 
-function Get-RooBackendBudgetProfile {
+function Get-RooIndustriesBackendBudgetProfile {
     param([string]$BudgetProfilePath)
-    $resolved = Resolve-RooBackendBudgetProfilePath $BudgetProfilePath
+    $resolved = Resolve-RooIndustriesBackendBudgetProfilePath $BudgetProfilePath
     if (Test-Path -LiteralPath $resolved) {
         return [pscustomobject]@{
             path = $resolved
-            profile = (Read-RooJsonFile $resolved)
+            profile = (Read-RooIndustriesJsonFile $resolved)
         }
     }
     return [pscustomobject]@{
@@ -77,7 +77,7 @@ function Get-RooBackendBudgetProfile {
     }
 }
 
-function New-RooBackendBudgetEvaluation {
+function New-RooIndustriesBackendBudgetEvaluation {
     param(
         [object]$BudgetProfile,
         [double]$AverageCpuPercent,
@@ -86,16 +86,16 @@ function New-RooBackendBudgetEvaluation {
         [bool]$PersistentUiProcessRequired
     )
     if ($null -eq $BudgetProfile) { return $null }
-    $budgets = Get-RooPropertyValue $BudgetProfile 'budgets' $null
-    $cpuMax = [double](Get-RooPropertyValue $budgets 'idleBackendCpuAveragePercentMax' 0.5)
-    $privateMax = [int64](Get-RooPropertyValue $budgets 'backendPowerShellPrivateBytesMax' 78643200)
-    $stateMax = [int64](Get-RooPropertyValue $budgets 'backendStateEntryCountMaxAfterValidation' 0)
+    $budgets = Get-RooIndustriesPropertyValue $BudgetProfile 'budgets' $null
+    $cpuMax = [double](Get-RooIndustriesPropertyValue $budgets 'idleBackendCpuAveragePercentMax' 0.5)
+    $privateMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendPowerShellPrivateBytesMax' 78643200)
+    $stateMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendStateEntryCountMaxAfterValidation' 0)
     $idleWithinBudget = ($AverageCpuPercent -le $cpuMax)
     $privateWithinBudget = ($PrivateBytes -le $privateMax)
     $stateWithinBudget = ($StateEntryCount -le $stateMax)
     $uiWithinBudget = (-not $PersistentUiProcessRequired)
     return [pscustomobject]@{
-        profileId = [string](Get-RooPropertyValue $BudgetProfile 'profileId' 'lightweight-governor-budget')
+        profileId = [string](Get-RooIndustriesPropertyValue $BudgetProfile 'profileId' 'lightweight-governor-budget')
         idleBackendCpuAveragePercentMax = $cpuMax
         backendPowerShellPrivateBytesMax = $privateMax
         backendStateEntryCountMaxAfterValidation = $stateMax
@@ -108,14 +108,14 @@ function New-RooBackendBudgetEvaluation {
     }
 }
 
-function Get-RooBackendStateEntryCount {
+function Get-RooIndustriesBackendStateEntryCount {
     param([string]$RepositoryRoot)
     $stateRoot = Join-Path $RepositoryRoot 'backend\state'
     if (-not (Test-Path -LiteralPath $stateRoot)) { return 0 }
     return @(Get-ChildItem -LiteralPath $stateRoot -Force -Recurse -ErrorAction SilentlyContinue).Count
 }
 
-function Get-RooResidentHostStatusModel {
+function Get-RooIndustriesResidentHostStatusModel {
     param(
         [int]$ProcessId,
         [string]$Status,
@@ -134,12 +134,12 @@ function Get-RooResidentHostStatusModel {
     )
     $measurement = $null
     $live = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if ($live) { $measurement = Get-RooBackendScriptProcessMeasurement $live }
+    if ($live) { $measurement = Get-RooIndustriesBackendScriptProcessMeasurement $live }
     return [pscustomobject]@{
         actionId = 'backend.residentHost.status'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         startedAtUtc = $StartedAtUtc
         completedAtUtc = $CompletedAtUtc
         status = $Status
@@ -159,9 +159,9 @@ function Get-RooResidentHostStatusModel {
         bounds = $Bounds
         state = $State
         dependencyProof = $DependencyProof
-        samples = @(Get-RooArray $Samples)
-        warnings = @(Get-RooArray $Warnings)
-        errors = @(Get-RooArray $Errors)
-        logs = @(Get-RooArray $Logs)
+        samples = @(Get-RooIndustriesArray $Samples)
+        warnings = @(Get-RooIndustriesArray $Warnings)
+        errors = @(Get-RooIndustriesArray $Errors)
+        logs = @(Get-RooIndustriesArray $Logs)
     }
 }

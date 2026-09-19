@@ -1,5 +1,5 @@
 #nullable enable
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record CleanupExclusions
 {
@@ -101,7 +101,7 @@ public sealed record CleanupExclusionState(CleanupExclusions Exclusions, string?
 
 public sealed class CleanupExclusionStore(string path)
 {
-    public static string DefaultPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooOptimizationSuite", "cleanup-exclusions.json");
+    public static string DefaultPath => Path.Combine(BrandCompatibility.LocalDataRoot, "cleanup-exclusions.json");
 
     public CleanupExclusionState Read()
     {

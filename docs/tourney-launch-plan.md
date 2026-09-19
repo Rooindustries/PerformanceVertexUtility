@@ -15,8 +15,8 @@ Depth can continue after launch, but risky automation still needs preview, backu
 ## Must Ship For Launch
 
 - Professional WinUI app shell using the Windows Settings-style layout.
-- Roo Blue default theme and Blackout Gold alternate theme.
-- Manrope font, Roo app icon, static logo navigation, and polished splash/loading moment.
+- Roo Industries Blue default theme and Blackout Gold alternate theme.
+- Manrope font, Roo Industries app icon, static logo navigation, and polished splash/loading moment.
 - Dashboard with current PC status, safety status, last baseline, and recommended next action.
 - Optimize page backed by `modules/tweak_manifest.json`.
 - Baseline, smoke test, dry-run, apply, rollback, and report flows wired to the existing PowerShell harness.
@@ -77,7 +77,7 @@ These can appear as preview/manual workflows, but should not ship as aggressive 
 - Install WinUI/.NET/Visual Studio toolchain.
 - Create WinUI solution and project structure.
 - Implement navigation shell and page placeholders.
-- Load Roo theme tokens and brand assets.
+- Load Roo Industries theme tokens and brand assets.
 - Load local manifests read-only.
 - Create domain models for performance profiles, uninstall inventory, leftovers, driver catalog, and protected processes.
 

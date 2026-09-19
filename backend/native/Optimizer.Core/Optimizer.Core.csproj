@@ -6,6 +6,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../CpuSets/RooCpuSets.cs" Link="Interop/CpuSets.cs" />
+    <Compile Include="../CpuSets/RooIndustriesCpuSets.cs" Link="Interop/CpuSets.cs" />
   </ItemGroup>
 </Project>

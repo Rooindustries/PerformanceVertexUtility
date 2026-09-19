@@ -4,8 +4,8 @@
   "productName": "Roo Industries Optimization Suite",
   "capturedAtUtc": "2026-06-15T18:47:55.0000000Z",
   "status": "completed",
-  "stateRoot": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy",
-  "auditPath": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-audit\\audit.jsonl",
+  "stateRoot": "C:\\ProgramData\\Roo Industries\\RuntimeState\\ProcessPolicy",
+  "auditPath": "C:\\ProgramData\\Roo Industries\\RuntimeState\\ProcessPolicy\\process-policy-audit\\audit.jsonl",
   "filters": {
     "process": "ContosoLauncherHelper.exe",
     "action": null,
@@ -96,7 +96,7 @@
       "protectionCategory": "backgroundApp",
       "restore": {
         "available": true,
-        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+        "path": "C:\\ProgramData\\Roo Industries\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
       },
       "outcome": "applied",
       "dryRun": false
@@ -124,7 +124,7 @@
       "protectionCategory": "backgroundApp",
       "restore": {
         "available": true,
-        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+        "path": "C:\\ProgramData\\Roo Industries\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
       },
       "outcome": "applied",
       "dryRun": false
@@ -152,7 +152,7 @@
       "protectionCategory": "backgroundApp",
       "restore": {
         "available": true,
-        "path": "C:\\ProgramData\\Roo\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
+        "path": "C:\\ProgramData\\Roo Industries\\RuntimeState\\ProcessPolicy\\process-policy-rule-backups\\process-policy-rule-rule-contoso-launcher-helper-balanced-20260615-184421-a1b2c3d4.json"
       },
       "outcome": "restored",
       "dryRun": false

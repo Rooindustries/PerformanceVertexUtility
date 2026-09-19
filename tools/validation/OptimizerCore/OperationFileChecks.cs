@@ -1,11 +1,11 @@
 using System.Text;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class OperationFileChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-operation-file-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-operation-file-" + Guid.NewGuid().ToString("N"));
         var path = Path.Combine(root, "state.json");
         var original = new Snapshot(1, "original", Enumerable.Range(0, 128).ToArray());
         var replacement = new Snapshot(2, "replacement", Enumerable.Range(128, 128).ToArray());

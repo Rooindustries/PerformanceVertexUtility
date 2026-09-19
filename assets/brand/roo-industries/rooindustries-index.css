@@ -22,7 +22,7 @@
    Two designed themes share one semantic token contract. There is NO light
    mode — both themes are dark; they differ in depth and color temperature.
 
-   • "Roo Blue" (default, canonical) — the brand identity: abyssal #000040 →
+   • "Roo Industries Blue" (default, canonical) — the brand identity: abyssal #000040 →
      energized teal #00b7c0 field, slate-navy glass lit by a cyan top-light,
      electric #03e9f4 energy lines. The default must never drift.
 
@@ -37,7 +37,7 @@
    - Low-performance fallbacks must use --color-surface-solid so degraded
      rendering follows the active theme.
    - The theme runtime sets data-theme="default|dark" on <html> before
-     paint. With no attribute, :root resolves to Roo Blue.
+     paint. With no attribute, :root resolves to Roo Industries Blue.
    ════════════════════════════════════════════════════════════════════════ */
 :root,
 html[data-theme="default"] {
@@ -197,7 +197,7 @@ html[data-theme="default"] {
   );
   --gradient-platform-twitch: linear-gradient(135deg, #9146ff, #6633cc);
 
-  /* Effect layer — buttons, traces, flair. Values are the legacy Roo Blue
+  /* Effect layer — buttons, traces, flair. Values are the legacy Roo Industries Blue
      look, verbatim, so the default theme stays pixel-identical. */
   --shadow-button: 0 0 15px rgba(3, 233, 244, 0.25),
     0 0 30px rgba(3, 233, 244, 0.15);
@@ -991,7 +991,7 @@ html[data-theme="dark"] .glow-button:hover .glow-line {
 /* ── Blackout material treatment ─────────────────────────────────────────
    Buttons are dark metal at rest — gunmetal body, thin warm rim, top
    light. Hover brings the energy forward. Filled CTAs become smoked
-   glass with a brass rim and warm-silver label. Roo Blue is untouched. */
+   glass with a brass rim and warm-silver label. Roo Industries Blue is untouched. */
 /* Keep micro-texture and bevel layers at natural scale; only the body
    layer is oversized so the sweep animation moves a sheen, not the
    texture. Button labels read off-white, not pure white. */
@@ -1036,7 +1036,7 @@ html[data-theme="dark"] .glow-button.fps-boosts-button:hover {
 
 /* Hero headline, line 1 — machined silver lit from the top, not a flat
    white slab. Applies to nested .text-ink spans too (the heading split
-   renderer wraps segments in them). No-op in Roo Blue. */
+   renderer wraps segments in them). No-op in Roo Industries Blue. */
 html[data-theme="dark"] .text-metal-display,
 html[data-theme="dark"] .text-metal-display .text-ink {
   background-image: linear-gradient(
@@ -1158,7 +1158,7 @@ html[data-theme="dark"] .glow-button.packages-divider-line {
 }
 
 /* ── Theme switch ────────────────────────────────────────────────────────
-   Two-state Roo Blue ⇄ Blackout control. CRT icon = Roo Blue side, moon =
+   Two-state Roo Industries Blue ⇄ Blackout control. CRT icon = Roo Industries Blue side, moon =
    Blackout side. The thumb carries each theme's identity: cyan-blue
    gradient in default, polished champagne-to-brass gold in dark. */
 .theme-switch {
@@ -1289,7 +1289,7 @@ html[data-theme="dark"] .nav-cta:hover {
    Silver text on graphite; warm brass is precision light, not prose.
    Static text set in the accent color (headings, prices, labels, stat
    values) demotes to soft silver. Interactive elements (links, buttons)
-   keep the warm accent: active states are exactly where it belongs. Roo
+   keep the warm accent: active states are exactly where it belongs. Roo Industries
    Blue is untouched. */
 html[data-theme="dark"] .text-accent,
 html[data-theme="dark"] .text-cyan-300 {
@@ -1307,7 +1307,7 @@ html[data-theme="dark"] svg.text-accent {
   color: var(--color-accent);
 }
 
-/* Gradient-clipped display text (hero line 2). Roo Blue keeps the brand
+/* Gradient-clipped display text (hero line 2). Roo Industries Blue keeps the brand
    sweep. Blackout uses polished silver with a warm whisper at the tail. */
 .text-gradient-display {
   background-image: var(--gradient-display-text);
@@ -1346,10 +1346,10 @@ html[data-theme="dark"] .text-gradient-display {
   margin-bottom: -0.12em;
 }
 
-/* ── Roo Blue legacy visual compatibility ────────────────────────────────
+/* ── Roo Industries Blue legacy visual compatibility ────────────────────────────────
    Default mode is the pre-Blackout site. Tokenized components may keep
    their semantic classes for Blackout, but these marker classes restore
-   the original Roo Blue surfaces, rings, and glows where broad tokens
+   the original Roo Industries Blue surfaces, rings, and glows where broad tokens
    changed the visual weight. */
 html:not([data-theme="dark"]) .ri-services-skeleton {
   border-color: rgba(3, 105, 161, 0.2);
@@ -1773,7 +1773,7 @@ html:not([data-theme="dark"]) .ri-hiw-trust-link:hover {
    Neutralizes literal sky/cyan/indigo Tailwind utilities that survive in
    components. Gradient-clipped TEXT goes silver; gradient FILLS go
    graphite; legacy sky borders/text go steel; legacy cyan-filled buttons
-   become black metal. Roo Blue is untouched. */
+   become black metal. Roo Industries Blue is untouched. */
 html[data-theme="dark"] .bg-clip-text[class*="from-sky-"] {
   background-image: linear-gradient(90deg, #f4f4f0, #b9bdc0);
 }
@@ -1861,7 +1861,7 @@ html.animations-ready .blur-3xl {
   will-change: transform;
 }
 
-.roo-logo-video {
+.roo-industries-logo-video {
   pointer-events: none !important;
   user-select: none !important;
   -webkit-user-select: none !important;
@@ -1869,28 +1869,28 @@ html.animations-ready .blur-3xl {
 }
 
 /* Hides native webkit controls aggressively */
-.roo-logo-video::-webkit-media-controls,
-.roo-logo-video::-webkit-media-controls-enclosure,
-.roo-logo-video::-webkit-media-controls-panel,
-.roo-logo-video::-webkit-media-controls-overlay-play-button,
-.roo-logo-video::-webkit-media-controls-start-playback-button,
-.roo-logo-video::-webkit-media-controls-current-time-display,
-.roo-logo-video::-webkit-media-controls-time-remaining-display,
-.roo-logo-video::-webkit-media-controls-timeline,
-.roo-logo-video::-webkit-media-controls-volume-slider,
-.roo-logo-video::-webkit-media-controls-mute-button,
-.roo-logo-video::-webkit-media-controls-fullscreen-button {
+.roo-industries-logo-video::-webkit-media-controls,
+.roo-industries-logo-video::-webkit-media-controls-enclosure,
+.roo-industries-logo-video::-webkit-media-controls-panel,
+.roo-industries-logo-video::-webkit-media-controls-overlay-play-button,
+.roo-industries-logo-video::-webkit-media-controls-start-playback-button,
+.roo-industries-logo-video::-webkit-media-controls-current-time-display,
+.roo-industries-logo-video::-webkit-media-controls-time-remaining-display,
+.roo-industries-logo-video::-webkit-media-controls-timeline,
+.roo-industries-logo-video::-webkit-media-controls-volume-slider,
+.roo-industries-logo-video::-webkit-media-controls-mute-button,
+.roo-industries-logo-video::-webkit-media-controls-fullscreen-button {
   display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   -webkit-appearance: none !important;
 }
 
-.roo-logo {
+.roo-industries-logo {
   transition: opacity 500ms ease-in-out;
 }
 
-html.nav-past-logo .roo-logo {
+html.nav-past-logo .roo-industries-logo {
   opacity: 0;
   pointer-events: none;
 }

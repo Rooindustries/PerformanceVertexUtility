@@ -44,7 +44,7 @@ foreach ($relative in $requiredFiles) {
 }
 
 $stateBefore = Get-StateEntryCount
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-stutter-contract-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-stutter-contract-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 try {
     $shaderRoot = Join-Path $tempRoot 'shader-cache'

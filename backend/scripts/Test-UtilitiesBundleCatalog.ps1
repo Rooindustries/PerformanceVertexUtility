@@ -100,8 +100,8 @@ function Get-OptionalArchivePath {
         return [System.IO.Path]::GetFullPath($repoArchive)
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ARCHIVE)) {
-        return [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ARCHIVE)
+    if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE)) {
+        return [System.IO.Path]::GetFullPath($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE)
     }
 
     return ''

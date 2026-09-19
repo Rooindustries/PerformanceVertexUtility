@@ -1,7 +1,7 @@
 #nullable enable
 using System.Diagnostics;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 internal static class ProcessNames
 {

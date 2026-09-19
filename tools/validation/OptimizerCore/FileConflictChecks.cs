@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class FileConflictChecks
 {
@@ -9,7 +9,7 @@ static class FileConflictChecks
 
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-file-conflicts-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-file-conflicts-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var authority = new CleanupAuthority
         {

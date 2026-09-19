@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessPolicyRules.Common.ps1')
 
 try {
-    $rows = @(Read-RooProcessPolicyAuditRows $StateRoot)
+    $rows = @(Read-RooIndustriesProcessPolicyAuditRows $StateRoot)
     $sinceUtc = $null
     if (-not [string]::IsNullOrWhiteSpace($Since)) {
         $sinceUtc = ([DateTime]::Parse($Since)).ToUniversalTime()
@@ -18,19 +18,19 @@ try {
 
     $filtered = New-Object System.Collections.Generic.List[object]
     foreach ($row in $rows) {
-        if (-not [string]::IsNullOrWhiteSpace($Action) -and [string](Get-RooPropertyValue $row 'action' '') -ne $Action) {
+        if (-not [string]::IsNullOrWhiteSpace($Action) -and [string](Get-RooIndustriesPropertyValue $row 'action' '') -ne $Action) {
             continue
         }
         if ($sinceUtc) {
-            $rowTime = ([DateTime]::Parse([string](Get-RooPropertyValue $row 'timestampUtc' '1970-01-01T00:00:00Z'))).ToUniversalTime()
+            $rowTime = ([DateTime]::Parse([string](Get-RooIndustriesPropertyValue $row 'timestampUtc' '1970-01-01T00:00:00Z'))).ToUniversalTime()
             if ($rowTime -lt $sinceUtc) { continue }
         }
         if (-not [string]::IsNullOrWhiteSpace($Process)) {
-            $target = Get-RooPropertyValue $row 'targetProcess' $null
-            $identity = [string](Get-RooPropertyValue $row 'targetProcessIdentity' '')
-            $processName = [string](Get-RooPropertyValue $target 'processName' '')
-            $processId = [string](Get-RooPropertyValue $target 'processId' '')
-            $path = [string](Get-RooPropertyValue $target 'executablePath' '')
+            $target = Get-RooIndustriesPropertyValue $row 'targetProcess' $null
+            $identity = [string](Get-RooIndustriesPropertyValue $row 'targetProcessIdentity' '')
+            $processName = [string](Get-RooIndustriesPropertyValue $target 'processName' '')
+            $processId = [string](Get-RooIndustriesPropertyValue $target 'processId' '')
+            $path = [string](Get-RooIndustriesPropertyValue $target 'executablePath' '')
             if ($identity -notlike "*$Process*" -and $processName -notlike "*$Process*" -and $processId -ne $Process -and $path -notlike "*$Process*") {
                 continue
             }
@@ -42,13 +42,13 @@ try {
     $outcomeCounts = @{}
     $processIdentities = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($row in @($filtered.ToArray())) {
-        $actionName = [string](Get-RooPropertyValue $row 'action' 'unknown')
-        $outcome = [string](Get-RooPropertyValue $row 'outcome' 'unknown')
+        $actionName = [string](Get-RooIndustriesPropertyValue $row 'action' 'unknown')
+        $outcome = [string](Get-RooIndustriesPropertyValue $row 'outcome' 'unknown')
         if (-not $actionCounts.ContainsKey($actionName)) { $actionCounts[$actionName] = 0 }
         if (-not $outcomeCounts.ContainsKey($outcome)) { $outcomeCounts[$outcome] = 0 }
         $actionCounts[$actionName] = [int]$actionCounts[$actionName] + 1
         $outcomeCounts[$outcome] = [int]$outcomeCounts[$outcome] + 1
-        $identity = [string](Get-RooPropertyValue $row 'targetProcessIdentity' '')
+        $identity = [string](Get-RooIndustriesPropertyValue $row 'targetProcessIdentity' '')
         if (-not [string]::IsNullOrWhiteSpace($identity)) { $processIdentities.Add($identity) | Out-Null }
     }
 
@@ -64,11 +64,11 @@ try {
     $result = [pscustomobject]@{
         actionId = 'performance.policy.auditHistory'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         status = 'completed'
-        stateRoot = Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot
-        auditPath = Get-RooProcessPolicyAuditPath $StateRoot
+        stateRoot = Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot
+        auditPath = Get-RooIndustriesProcessPolicyAuditPath $StateRoot
         filters = [pscustomobject]@{
             process = if ([string]::IsNullOrWhiteSpace($Process)) { $null } else { $Process }
             action = if ([string]::IsNullOrWhiteSpace($Action)) { $null } else { $Action }
@@ -85,16 +85,16 @@ try {
         warnings = @()
         errors = @()
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.policy.auditHistory'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         status = 'failed'
-        stateRoot = Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot
-        auditPath = Get-RooProcessPolicyAuditPath $StateRoot
+        stateRoot = Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot
+        auditPath = Get-RooIndustriesProcessPolicyAuditPath $StateRoot
         filters = [pscustomobject]@{
             process = if ([string]::IsNullOrWhiteSpace($Process)) { $null } else { $Process }
             action = if ([string]::IsNullOrWhiteSpace($Action)) { $null } else { $Action }
@@ -109,8 +109,8 @@ try {
         }
         auditRows = @()
         warnings = @()
-        errors = @((New-RooIssue 'PROCESS_POLICY_AUDIT_HISTORY_FAILED' $_.Exception.Message 'error' 'performance.policy' $StateRoot $true 'Check the runtime state root and filter values.' $null))
+        errors = @((New-RooIndustriesIssue 'PROCESS_POLICY_AUDIT_HISTORY_FAILED' $_.Exception.Message 'error' 'performance.policy' $StateRoot $true 'Check the runtime state root and filter values.' $null))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

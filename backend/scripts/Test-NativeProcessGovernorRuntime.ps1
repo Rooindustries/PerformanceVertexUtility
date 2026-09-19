@@ -59,7 +59,7 @@ function Get-StateEntryCount {
 function Get-FrontendProcessIds {
     $items = New-Object System.Collections.Generic.List[int]
     foreach ($proc in @(Get-Process -ErrorAction SilentlyContinue)) {
-        if ([string]$proc.ProcessName -like 'Roo.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooOptimizationSuite*') {
+        if ([string]$proc.ProcessName -like 'RooIndustries.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooIndustriesOptimizationSuite*') {
             $items.Add([int]$proc.Id) | Out-Null
         }
     }
@@ -96,8 +96,8 @@ function Get-NewIds {
         [int[]]$After
     )
     $beforeSet = @{}
-    foreach ($id in @(Get-RooArray $Before)) { $beforeSet[[int]$id] = $true }
-    return @(@(Get-RooArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
+    foreach ($id in @(Get-RooIndustriesArray $Before)) { $beforeSet[[int]$id] = $true }
+    return @(@(Get-RooIndustriesArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
 }
 
 function Stop-ValidationProbe {
@@ -105,7 +105,7 @@ function Stop-ValidationProbe {
     if ($null -eq $Process) { return }
     try { $Process.Refresh() } catch { }
     if (-not $Process.HasExited) {
-        Stop-RooValidationProcess $Process
+        Stop-RooIndustriesValidationProcess $Process
     }
 }
 
@@ -136,7 +136,7 @@ function Write-NativeGovernorPolicy {
         [int64]$AffinityMask = 1,
         [string]$IoPriority = 'Low',
         [string]$GpuPriority = '',
-        [string[]]$DisposableNamePatterns = @('RooNativeGovernor*Probe.exe')
+        [string[]]$DisposableNamePatterns = @('RooIndustriesNativeGovernor*Probe.exe')
     )
     $protected = @()
     if (-not [string]::IsNullOrWhiteSpace($ProtectedName)) {
@@ -191,7 +191,7 @@ function Write-NativeGovernorPolicy {
 }
 
 $requiredFiles = @(
-    'backend\native\ProcessGovernor\RooProcessGovernor.cs',
+    'backend\native\ProcessGovernor\RooIndustriesProcessGovernor.cs',
     'backend\scripts\Get-NativeProcessGovernorToolchain.ps1',
     'backend\scripts\Build-NativeProcessGovernor.ps1',
     'backend\scripts\Start-NativeProcessGovernorSession.ps1'
@@ -220,7 +220,7 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'backend\scrip
 
 try {
     $toolchain = & (Join-Path $PSScriptRoot 'Get-NativeProcessGovernorToolchain.ps1') | ConvertFrom-Json
-    $expectedDotnet = $env:ROO_DOTNET_EXE
+    $expectedDotnet = $env:ROO_INDUSTRIES_DOTNET_EXE
     if ([string]::IsNullOrWhiteSpace($expectedDotnet)) { $expectedDotnet = (Get-Command dotnet.exe -ErrorAction Stop).Source }
     $actualVersions = @(& $expectedDotnet --list-sdks | ForEach-Object { if ($_ -match '^([0-9]+\.[0-9]+\.[0-9]+)') { $Matches[1] } })
     $candidate = @($toolchain.dotnetCandidates | Where-Object { [string]$_.path -eq $expectedDotnet }) | Select-Object -First 1
@@ -254,13 +254,13 @@ $previousManagedCscBaseline = [pscustomobject]@{
     processCountBefore = 289
     processCountAfter = 281
 }
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-native-governor-runtime-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-native-governor-runtime-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 $probes = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-    $workerPath = Join-Path $tempRoot 'RooProcessGovernor.exe'
+    $workerPath = Join-Path $tempRoot 'RooIndustriesProcessGovernor.exe'
     $build = & (Join-Path $PSScriptRoot 'Build-NativeProcessGovernor.ps1') -OutputPath $workerPath -Force | ConvertFrom-Json
     if ($build.status -eq 'built' -and $build.workerClassification -eq 'managed-csc' -and $build.workerIsTrueNative -eq $false -and (Test-Path -LiteralPath $workerPath)) {
         Add-Pass "Managed csc process governor worker built with $($build.toolchain): $workerPath"
@@ -268,43 +268,43 @@ try {
         Add-Failure "Managed csc process governor worker did not build with expected classification: status=$($build.status), worker=$($build.workerClassification), trueNative=$($build.workerIsTrueNative)"
     }
 
-    $busyName = 'RooNativeGovernorBusyProbe.exe'
-    $protectedName = 'RooNativeGovernorProtectedProbe.exe'
-    $obsName = 'RooNativeGovernorObsProbe.exe'
-    $discordName = 'RooNativeGovernorDiscordProbe.exe'
-    $gameName = 'RooNativeGovernorOverwatchProbe.exe'
-    $antiCheatName = 'RooNativeGovernorEasyAntiCheatProbe.exe'
-    $networkName = 'RooNativeGovernorTailscaleProbe.exe'
-    $audioName = 'RooNativeGovernorAudiodgProbe.exe'
-    $inputName = 'RooNativeGovernorInputAppProbe.exe'
-    $securityName = 'RooNativeGovernorSecurityHealthProbe.exe'
-    $gpuDriverName = 'RooNativeGovernorNvcontainerProbe.exe'
+    $busyName = 'RooIndustriesNativeGovernorBusyProbe.exe'
+    $protectedName = 'RooIndustriesNativeGovernorProtectedProbe.exe'
+    $obsName = 'RooIndustriesNativeGovernorObsProbe.exe'
+    $discordName = 'RooIndustriesNativeGovernorDiscordProbe.exe'
+    $gameName = 'RooIndustriesNativeGovernorOverwatchProbe.exe'
+    $antiCheatName = 'RooIndustriesNativeGovernorEasyAntiCheatProbe.exe'
+    $networkName = 'RooIndustriesNativeGovernorTailscaleProbe.exe'
+    $audioName = 'RooIndustriesNativeGovernorAudiodgProbe.exe'
+    $inputName = 'RooIndustriesNativeGovernorInputAppProbe.exe'
+    $securityName = 'RooIndustriesNativeGovernorSecurityHealthProbe.exe'
+    $gpuDriverName = 'RooIndustriesNativeGovernorNvcontainerProbe.exe'
     $regularName = 'NativeGovernorRegularTarget.exe'
-    $launchName = 'RooNativeGovernorLaunchProbe.exe'
+    $launchName = 'RooIndustriesNativeGovernorLaunchProbe.exe'
     $probeNames = @($busyName, $protectedName, $obsName, $discordName, $gameName, $antiCheatName, $networkName, $audioName, $inputName, $securityName, $gpuDriverName, $regularName, $launchName)
     foreach ($name in $probeNames) {
         Copy-Item -LiteralPath $workerPath -Destination (Join-Path $tempRoot $name) -Force
     }
 
-    $busyProbe = Start-Process -FilePath (Join-Path $tempRoot $busyName) -ArgumentList (Join-RooWindowsArguments @('--probe','busy-then-sleep','8','120')) -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath (Join-Path $tempRoot $protectedName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $obsProbe = Start-Process -FilePath (Join-Path $tempRoot $obsName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $discordProbe = Start-Process -FilePath (Join-Path $tempRoot $discordName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $gameProbe = Start-Process -FilePath (Join-Path $tempRoot $gameName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $antiCheatProbe = Start-Process -FilePath (Join-Path $tempRoot $antiCheatName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $networkProbe = Start-Process -FilePath (Join-Path $tempRoot $networkName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $audioProbe = Start-Process -FilePath (Join-Path $tempRoot $audioName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $inputProbe = Start-Process -FilePath (Join-Path $tempRoot $inputName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $securityProbe = Start-Process -FilePath (Join-Path $tempRoot $securityName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
-    $gpuDriverProbe = Start-Process -FilePath (Join-Path $tempRoot $gpuDriverName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $busyProbe = Start-Process -FilePath (Join-Path $tempRoot $busyName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','busy-then-sleep','8','120')) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath (Join-Path $tempRoot $protectedName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $obsProbe = Start-Process -FilePath (Join-Path $tempRoot $obsName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $discordProbe = Start-Process -FilePath (Join-Path $tempRoot $discordName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $gameProbe = Start-Process -FilePath (Join-Path $tempRoot $gameName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $antiCheatProbe = Start-Process -FilePath (Join-Path $tempRoot $antiCheatName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $networkProbe = Start-Process -FilePath (Join-Path $tempRoot $networkName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $audioProbe = Start-Process -FilePath (Join-Path $tempRoot $audioName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $inputProbe = Start-Process -FilePath (Join-Path $tempRoot $inputName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $securityProbe = Start-Process -FilePath (Join-Path $tempRoot $securityName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $gpuDriverProbe = Start-Process -FilePath (Join-Path $tempRoot $gpuDriverName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     foreach ($probe in @($busyProbe, $protectedProbe, $obsProbe, $discordProbe, $gameProbe, $antiCheatProbe, $networkProbe, $audioProbe, $inputProbe, $securityProbe, $gpuDriverProbe)) { $probes.Add($probe) | Out-Null }
     Start-Sleep -Milliseconds 800
 
-    $beforeBusy = Get-RooProcessControlState $busyProbe.Id $null
-    $beforeProtected = Get-RooProcessControlState $protectedProbe.Id $null
+    $beforeBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
+    $beforeProtected = Get-RooIndustriesProcessControlState $protectedProbe.Id $null
     $affinityTarget = if ([Environment]::ProcessorCount -gt 1) { [int64]1 } else { [int64]$beforeBusy.affinityMask }
     $gpuTarget = if ([string]$beforeBusy.gpuPriority -eq 'BelowNormal') { 'Normal' } else { 'BelowNormal' }
-    if ([bool](Get-RooPropertyValue $beforeBusy 'gpuPriorityAvailable' $false)) {
+    if ([bool](Get-RooIndustriesPropertyValue $beforeBusy 'gpuPriorityAvailable' $false)) {
         Add-Pass "Disposable busy probe GPU priority is readable for native validation: original=$($beforeBusy.gpuPriority), target=$gpuTarget, status=$($beforeBusy.gpuPriorityStatus)"
     } else {
         Add-Failure "Disposable busy probe GPU priority is not readable for native validation: status=$($beforeBusy.gpuPriorityStatus)"
@@ -323,7 +323,7 @@ try {
         -GpuPriority $gpuTarget
 
     $preview = & (Join-Path $PSScriptRoot 'Start-NativeProcessGovernorSession.ps1') -PolicyPath $previewPolicy -WorkerPath $workerPath | ConvertFrom-Json
-    $afterPreviewBusy = Get-RooProcessControlState $busyProbe.Id $null
+    $afterPreviewBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     $previewBusy = @($preview.preview | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $previewProtected = @($preview.preview | Where-Object { $_.processId -eq $protectedProbe.Id }) | Select-Object -First 1
     $previewObs = @($preview.preview | Where-Object { $_.processId -eq $obsProbe.Id }) | Select-Object -First 1
@@ -344,7 +344,7 @@ try {
     } else {
         Add-Failure 'Native dry-run preview did not prove no-apply behavior or did not propose all native controls for disposable busy probe'
     }
-    if ($previewProtected.blocked -eq $true -and ($previewProtected.reasonCodes -contains 'NATIVE_VALIDATION_PROTECTED_PROBE') -and ($previewProtected.reasonCodes -contains 'FOREGROUND_PROCESS_EXCLUDED') -and $beforeProtected.priorityClass -eq (Get-RooProcessControlState $protectedProbe.Id $null).priorityClass) {
+    if ($previewProtected.blocked -eq $true -and ($previewProtected.reasonCodes -contains 'NATIVE_VALIDATION_PROTECTED_PROBE') -and ($previewProtected.reasonCodes -contains 'FOREGROUND_PROCESS_EXCLUDED') -and $beforeProtected.priorityClass -eq (Get-RooIndustriesProcessControlState $protectedProbe.Id $null).priorityClass) {
         Add-Pass "Native manual-review foreground probe skipped with reason codes: $($previewProtected.reasonCodes -join ',')"
     } else {
         Add-Failure 'Native manual-review foreground probe was not skipped with review and foreground proof'
@@ -384,11 +384,11 @@ try {
         -GpuPriority $gpuTarget
 
     $session = & (Join-Path $PSScriptRoot 'Start-NativeProcessGovernorSession.ps1') -PolicyPath $confirmPolicy -WorkerPath $workerPath | ConvertFrom-Json
-    $afterSessionBusy = Get-RooProcessControlState $busyProbe.Id $null
+    $afterSessionBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     $changedBusy = @($session.changedItems | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $restoredBusy = @($session.restoredItems | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $affinityRestored = ([int64]$afterSessionBusy.affinityMask -eq [int64]$beforeBusy.affinityMask)
-    $ioExpected = ([bool](Get-RooPropertyValue $beforeBusy 'ioPriorityAvailable' $false) -and [string]$beforeBusy.ioPriority -ne 'Low')
+    $ioExpected = ([bool](Get-RooIndustriesPropertyValue $beforeBusy 'ioPriorityAvailable' $false) -and [string]$beforeBusy.ioPriority -ne 'Low')
     $ioApplied = if ($ioExpected) { [string]$changedBusy.appliedIoPriority -eq 'Low' } else { $true }
     $ioRestored = if ($ioExpected) { [string]$afterSessionBusy.ioPriority -eq [string]$beforeBusy.ioPriority } else { $true }
     $gpuApplied = ([string]$changedBusy.appliedGpuPriority -eq [string]$gpuTarget)
@@ -410,10 +410,10 @@ try {
         Add-Failure 'Native confirmed session did not write session state and backup under the temp state root'
     }
 
-    $regularProbe = Start-Process -FilePath (Join-Path $tempRoot $regularName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $regularProbe = Start-Process -FilePath (Join-Path $tempRoot $regularName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     $probes.Add($regularProbe) | Out-Null
     Start-Sleep -Milliseconds 500
-    $beforeRegular = Get-RooProcessControlState $regularProbe.Id $null
+    $beforeRegular = Get-RooIndustriesProcessControlState $regularProbe.Id $null
     $blockedPolicy = Join-Path $tempRoot 'blocked-policy.json'
     Write-NativeGovernorPolicy `
         -Path $blockedPolicy `
@@ -422,10 +422,10 @@ try {
         -AllowLiveApply:$true `
         -StateRoot (Join-Path $tempRoot 'blocked-state') `
         -MaxDurationSeconds 1 `
-        -DisposableNamePatterns @('RooNativeGovernor*Probe.exe') `
+        -DisposableNamePatterns @('RooIndustriesNativeGovernor*Probe.exe') `
         -AffinityMask $affinityTarget
     $blocked = & (Join-Path $PSScriptRoot 'Start-NativeProcessGovernorSession.ps1') -PolicyPath $blockedPolicy -WorkerPath $workerPath | ConvertFrom-Json
-    $afterRegular = Get-RooProcessControlState $regularProbe.Id $null
+    $afterRegular = Get-RooIndustriesProcessControlState $regularProbe.Id $null
     $blockedRegular = @($blocked.skippedItems | Where-Object { $_.processId -eq $regularProbe.Id -and ($_.reasonCodes -contains 'NON_DISPOSABLE_TARGET') }) | Select-Object -First 1
     if ($blockedRegular -and @($blocked.changedItems).Count -eq 0 -and $afterRegular.priorityClass -eq $beforeRegular.priorityClass) {
         Add-Pass 'Native confirmed apply refused a non-disposable validation target'
@@ -444,11 +444,11 @@ try {
         -MaxDurationSeconds 5 `
         -PollIntervalMilliseconds 500 `
         -AffinityMask $affinityTarget
-    $launchSessionProc = Start-Process -FilePath $workerPath -ArgumentList (Join-RooWindowsArguments @('--policy', $launchPolicy, '--output', $launchOutput)) -WindowStyle Hidden -PassThru
+    $launchSessionProc = Start-Process -FilePath $workerPath -ArgumentList (Join-RooIndustriesWindowsArguments @('--policy', $launchPolicy, '--output', $launchOutput)) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 1200
-    $launchProbe = Start-Process -FilePath (Join-Path $tempRoot $launchName) -ArgumentList (Join-RooWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
+    $launchProbe = Start-Process -FilePath (Join-Path $tempRoot $launchName) -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     $probes.Add($launchProbe) | Out-Null
-    Wait-RooValidationProcess $launchSessionProc 15
+    Wait-RooIndustriesValidationProcess $launchSessionProc 15
     $launchSessionProc.Refresh()
     $launchSessionExit = $launchSessionProc.ExitCode
     $launchSession = Get-Content -LiteralPath $launchOutput -Raw | ConvertFrom-Json
@@ -494,7 +494,7 @@ try {
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        (Join-Path $PSScriptRoot 'Start-RooResidentSessionHost.ps1'),
+        (Join-Path $PSScriptRoot 'Start-RooIndustriesResidentSessionHost.ps1'),
         '-MaxDurationSeconds',
         '4',
         '-PollIntervalMilliseconds',
@@ -502,7 +502,7 @@ try {
         '-BudgetProfilePath',
         (Join-Path $repoRoot 'backend\profiles\lightweight-governor-budget.profile.json')
     )
-    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $residentArgs) -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
+    $residentProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooIndustriesWindowsArguments $residentArgs) -WindowStyle Hidden -RedirectStandardOutput $residentOut -RedirectStandardError $residentErr -Wait -PassThru
     $resident = Get-Content -LiteralPath $residentOut -Raw | ConvertFrom-Json
     if ($residentProc.ExitCode -eq 0 -and $resident.actionId -eq 'backend.residentHost.start' -and $resident.footprint.privateBytes -gt 0 -and $resident.footprint.workingSetBytes -gt 0 -and $resident.footprint.cpuTimeDeltaSeconds -ge 0 -and $resident.footprint.averageCpuPercent -ge 0 -and $resident.footprint.handleCount -ge 0 -and $resident.footprint.processCount.after -gt 0 -and $resident.footprint.elapsedRuntimeSeconds -gt 0) {
         Add-Pass "PowerShell resident host footprint measured private=$($resident.footprint.privateBytes), workingSet=$($resident.footprint.workingSetBytes), cpuDelta=$($resident.footprint.cpuTimeDeltaSeconds), avgCpu=$($resident.footprint.averageCpuPercent), handles=$($resident.footprint.handleCount), processCount=$($resident.footprint.processCount.after), elapsed=$($resident.footprint.elapsedRuntimeSeconds)"

@@ -92,7 +92,7 @@ function Invoke-Router {
 
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:RouterPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
-    $json = ConvertFrom-RouterJson $output "Invoke-RooCapability $($Arguments -join ' ')"
+    $json = ConvertFrom-RouterJson $output "Invoke-RooIndustriesCapability $($Arguments -join ' ')"
     return [pscustomobject]@{
         exitCode = [int]$exitCode
         output = ($output | Out-String).Trim()
@@ -196,7 +196,7 @@ function Test-ControlStateRestored {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
 $manifestPath = Join-Path $repoRoot 'backend\capabilities\routing\process-controls.routes.json'
 $capabilityPath = Join-Path $repoRoot 'backend\capabilities\process-controls.json'
 
@@ -301,7 +301,7 @@ $previewExpectations = [ordered]@{
     'process-controls.io-priority' = 'backend/scripts/Preview-ProcessPolicy.ps1'
     'process-controls.probalance-restraint' = 'backend/scripts/Preview-ProcessGovernor.ps1'
     'process-controls.session-restore' = 'backend/scripts/Get-GameTuneSessionStatus.ps1'
-    'process-controls.lightweight-governor-budget' = 'backend/scripts/Measure-RooBackendFootprint.ps1'
+    'process-controls.lightweight-governor-budget' = 'backend/scripts/Measure-RooIndustriesBackendFootprint.ps1'
 }
 
 foreach ($capabilityId in $previewExpectations.Keys) {
@@ -334,18 +334,18 @@ foreach ($capability in $capabilities) {
     Add-Check ($null -eq (Get-PropertyValue $result.json 'routedScript' $null)) "$label did not dispatch" "$label unexpectedly dispatched"
 }
 
-$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-router-process-controls-$([guid]::NewGuid().ToString('N'))"
+$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-router-process-controls-$([guid]::NewGuid().ToString('N'))"
 $busyProbe = $null
 $protectedProbe = $null
 $cleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $liveRoot -Force | Out-Null
-    $busyExe = Join-Path $liveRoot 'RooRouterWebHelperProbe.exe'
-    $protectedExe = Join-Path $liveRoot 'RooRouterProtectedProbe.exe'
+    $busyExe = Join-Path $liveRoot 'RooIndustriesRouterWebHelperProbe.exe'
+    $protectedExe = Join-Path $liveRoot 'RooIndustriesRouterProtectedProbe.exe'
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $busyExe -Force
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $protectedExe -Force
 
-    $busyCommand = "Add-Type -TypeDefinition 'using System; using System.Threading; public static class RooRouterBurn { public static void Run() { while (true) { Thread.SpinWait(1000000); } } }'; `$method = [RooRouterBurn].GetMethod('Run'); `$starter = [System.Delegate]::CreateDelegate([System.Threading.ThreadStart], `$method); `$threads = @(); for (`$i = 0; `$i -lt [Environment]::ProcessorCount; `$i++) { `$thread = [System.Threading.Thread]::new(`$starter); `$thread.IsBackground = `$true; `$thread.Start(); `$threads += `$thread }; Start-Sleep -Seconds 120"
+    $busyCommand = "Add-Type -TypeDefinition 'using System; using System.Threading; public static class RooIndustriesRouterBurn { public static void Run() { while (true) { Thread.SpinWait(1000000); } } }'; `$method = [RooIndustriesRouterBurn].GetMethod('Run'); `$starter = [System.Delegate]::CreateDelegate([System.Threading.ThreadStart], `$method); `$threads = @(); for (`$i = 0; `$i -lt [Environment]::ProcessorCount; `$i++) { `$thread = [System.Threading.Thread]::new(`$starter); `$thread.IsBackground = `$true; `$thread.Start(); `$threads += `$thread }; Start-Sleep -Seconds 120"
 
     $busyProbe = Start-Process -FilePath $busyExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',$busyCommand -WindowStyle Hidden -PassThru
     $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
@@ -356,14 +356,14 @@ try {
     } catch { }
     Start-Sleep -Milliseconds 500
 
-    $before = Get-RooProcessControlState $busyProbe.Id $null
+    $before = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     Add-Check ([bool](Get-PropertyValue $before 'exists' $false)) 'Disposable governor busy probe is running before routed apply' 'Disposable governor busy probe was not running before routed apply'
-    $protectedBefore = Get-RooProcessControlState $protectedProbe.Id $null
+    $protectedBefore = Get-RooIndustriesProcessControlState $protectedProbe.Id $null
     Add-Check ([bool](Get-PropertyValue $protectedBefore 'exists' $false)) 'Disposable governor foreground probe is running before routed apply' 'Disposable governor foreground probe was not running before routed apply'
 
-    $previewBefore = Get-RooProcessControlState $busyProbe.Id $null
+    $previewBefore = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     $directPreview = & (Join-Path $PSScriptRoot 'Preview-ProcessGovernor.ps1') -SampleIntervalMilliseconds 800 -ForegroundProcessId $protectedProbe.Id | ConvertFrom-Json
-    $previewAfter = Get-RooProcessControlState $busyProbe.Id $null
+    $previewAfter = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     Add-Check (Test-ControlStateRestored $previewBefore $previewAfter) 'Direct governor preview left the disposable busy probe unchanged' "Direct governor preview changed the disposable busy probe: priority $([string](Get-PropertyValue $previewAfter 'priorityClass' ''))/$([string](Get-PropertyValue $previewBefore 'priorityClass' ''))"
     $directBusyPreview = @($directPreview.preview | Where-Object { [int](Get-PropertyValue $_ 'processId' 0) -eq [int]$busyProbe.Id })
     if ($directBusyPreview.Count -ge 1) {
@@ -397,7 +397,7 @@ try {
         Add-Check ([string](Get-PropertyValue $applyEvidence 'stateRoot' '') -like "$stateRoot*") 'Confirmed governor apply state stayed under temp fixture root' 'Confirmed governor apply stateRoot was not under the temp fixture root'
     }
 
-    $afterApply = Get-RooProcessControlState $busyProbe.Id $null
+    $afterApply = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     Add-Check ([string](Get-PropertyValue $afterApply 'priorityClass' '') -eq 'BelowNormal') 'Disposable governor busy probe priority changed to BelowNormal after routed apply' "Disposable governor busy probe priority after apply was $([string](Get-PropertyValue $afterApply 'priorityClass' ''))"
 
     $restore = Invoke-Router @(
@@ -421,7 +421,7 @@ try {
         Add-Check ($restoredProbe.Count -ge 1) 'Confirmed governor restore evidence includes the disposable busy probe' 'Confirmed governor restore evidence did not include the disposable busy probe'
     }
 
-    $afterRestore = Get-RooProcessControlState $busyProbe.Id $null
+    $afterRestore = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     Add-Check (Test-ControlStateRestored $before $afterRestore) 'Disposable governor busy probe returned to its original process-control state' "Disposable governor busy probe restore mismatch: priority $([string](Get-PropertyValue $afterRestore 'priorityClass' ''))/$([string](Get-PropertyValue $before 'priorityClass' '')), affinity $([string](Get-PropertyValue $afterRestore 'affinityMask' ''))/$([string](Get-PropertyValue $before 'affinityMask' '')), I/O $([string](Get-PropertyValue $afterRestore 'ioPriority' ''))/$([string](Get-PropertyValue $before 'ioPriority' '')), GPU $([string](Get-PropertyValue $afterRestore 'gpuPriority' ''))/$([string](Get-PropertyValue $before 'gpuPriority' ''))"
 } catch {
     Add-Failure "Disposable governor router proof failed: $($_.Exception.Message)"
@@ -446,7 +446,7 @@ try {
 Add-Check $cleanupDone 'Disposable router proof cleanup ran' 'Disposable router proof cleanup did not run'
 
 $leftovers = @()
-foreach ($item in @(Get-Process -Name 'RooRouterWebHelperProbe','RooRouterProtectedProbe' -ErrorAction SilentlyContinue)) {
+foreach ($item in @(Get-Process -Name 'RooIndustriesRouterWebHelperProbe','RooIndustriesRouterProtectedProbe' -ErrorAction SilentlyContinue)) {
     $path = $null
     try { $path = $item.Path } catch { $path = $null }
     if (-not [string]::IsNullOrWhiteSpace([string]$path) -and [string]$path -like "$liveRoot*") {

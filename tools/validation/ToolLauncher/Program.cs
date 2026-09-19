@@ -1,5 +1,5 @@
-using Roo.OptimizationSuite.ViewModels;
-using Roo.Optimizer;
+using RooIndustries.OptimizationSuite.ViewModels;
+using RooIndustries.Optimizer;
 
 try
 {

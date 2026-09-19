@@ -1,5 +1,5 @@
 #nullable enable
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record CleanupContext(string Source, CleanupAuthority Authority, CleanupApplication Application,
     CleanupApplication[] Peers, bool InventoryComplete)
@@ -81,7 +81,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupPart? registry = null, files = null;
         if (registryTargets.Length != 0)
         {
-            var receipt = new RegistryAddress("CurrentUser", "Registry64", "Software\\RooOptimizationSuite.Receipt." + operationId, "key", null);
+            var receipt = new RegistryAddress("CurrentUser", "Registry64", "Software\\RooIndustriesOptimizationSuite.Receipt." + operationId, "key", null);
             var preview = new RegistryCleanupEngine(Authority).Preview(context.Application.AppId, context.Authority.ProviderIdentityHash, registryTargets,
                 receipt, ownershipReviewed, acceptKeyRecreation);
             registry = SavePart("registry", preview);

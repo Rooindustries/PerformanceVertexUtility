@@ -85,7 +85,7 @@ function Invoke-Router {
 
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:RouterPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
-    $json = ConvertFrom-RouterJson $output "Invoke-RooCapability $($Arguments -join ' ')"
+    $json = ConvertFrom-RouterJson $output "Invoke-RooIndustriesCapability $($Arguments -join ' ')"
     return [pscustomobject]@{
         exitCode = [int]$exitCode
         output = ($output | Out-String).Trim()
@@ -150,7 +150,7 @@ function Test-CompleteEnvelope {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
 $registryTestPath = Join-Path $repoRoot 'backend\scripts\Test-CapabilityRegistry.ps1'
 
 $stateBefore = Get-StateEntryCount $repoRoot
@@ -197,7 +197,7 @@ Add-Check ($preview.exitCode -eq 0) 'Worked example preview exits 0' "Worked exa
 Test-CompleteEnvelope $preview.json 'Worked example preview'
 if ($null -ne $preview.json) {
     Add-Check ([string](Get-PropertyValue $preview.json 'status' '') -eq 'completed') 'Worked example preview status is completed' 'Worked example preview status mismatch'
-    Add-Check ([string](Get-PropertyValue $preview.json 'routedScript' '') -eq 'backend/scripts/Measure-RooBackendFootprint.ps1') 'Worked example preview routed the footprint script' 'Worked example preview routedScript mismatch'
+    Add-Check ([string](Get-PropertyValue $preview.json 'routedScript' '') -eq 'backend/scripts/Measure-RooIndustriesBackendFootprint.ps1') 'Worked example preview routed the footprint script' 'Worked example preview routedScript mismatch'
     $evidence = Get-PropertyValue $preview.json 'evidence' $null
     Add-Check ([string](Get-PropertyValue $evidence 'actionId' '') -eq 'backend.measureFootprint') 'Worked example preview embeds real footprint evidence' 'Worked example preview evidence actionId mismatch'
     Add-Check ([string](Get-PropertyValue $evidence 'status' '') -eq 'completed') 'Worked example footprint evidence completed' 'Worked example footprint evidence did not complete'

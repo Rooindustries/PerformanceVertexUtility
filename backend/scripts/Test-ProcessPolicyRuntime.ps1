@@ -59,7 +59,7 @@ function Get-StateEntryCount {
 function Get-FrontendProcessIds {
     $items = New-Object System.Collections.Generic.List[int]
     foreach ($proc in @(Get-Process -ErrorAction SilentlyContinue)) {
-        if ([string]$proc.ProcessName -like 'Roo.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooOptimizationSuite*') {
+        if ([string]$proc.ProcessName -like 'RooIndustries.OptimizationSuite*' -or [string]$proc.ProcessName -like 'RooIndustriesOptimizationSuite*') {
             $items.Add([int]$proc.Id) | Out-Null
         }
     }
@@ -98,8 +98,8 @@ function Get-NewIds {
         [int[]]$After
     )
     $beforeSet = @{}
-    foreach ($id in @(Get-RooArray $Before)) { $beforeSet[[int]$id] = $true }
-    return @(@(Get-RooArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
+    foreach ($id in @(Get-RooIndustriesArray $Before)) { $beforeSet[[int]$id] = $true }
+    return @(@(Get-RooIndustriesArray $After) | Where-Object { -not $beforeSet.ContainsKey([int]$_) })
 }
 
 function Wait-PolicyPriority {
@@ -110,7 +110,7 @@ function Wait-PolicyPriority {
     )
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        $state = Get-RooProcessControlState $ProcessId $null
+        $state = Get-RooIndustriesProcessControlState $ProcessId $null
         if ($state.exists -and [string]$state.priorityClass -eq $PriorityClass) { return $true }
         Start-Sleep -Milliseconds 250
     }
@@ -168,7 +168,7 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    processNames = @('RooPolicyExistingProbe.exe')
+                    processNames = @('RooIndustriesPolicyExistingProbe.exe')
                     commandLinePatterns = @('*policy-existing-marker*')
                 }
                 controls = $controls
@@ -182,7 +182,7 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    processNames = @('RooPolicyProtectedProbe.exe')
+                    processNames = @('RooIndustriesPolicyProtectedProbe.exe')
                 }
                 controls = [pscustomobject]@{ priorityClass = 'BelowNormal' }
                 reason = 'Disposable protected probe is present so preview can explain the skip.'
@@ -198,7 +198,7 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    processNames = @('RooPolicyExistingProbe.exe')
+                    processNames = @('RooIndustriesPolicyExistingProbe.exe')
                 }
                 controls = $controls
                 reason = 'Apply saved policy to a disposable process that was already running when the session started.'
@@ -211,8 +211,8 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    namePatterns = @('RooPolicyLaunch*.exe')
-                    pathPatterns = @((Join-Path $LiveRoot 'RooPolicyLaunch*.exe'))
+                    namePatterns = @('RooIndustriesPolicyLaunch*.exe')
+                    pathPatterns = @((Join-Path $LiveRoot 'RooIndustriesPolicyLaunch*.exe'))
                     processCategories = @('backgroundApp')
                 }
                 controls = $controls
@@ -226,7 +226,7 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    processNames = @('RooPolicyRelaunchProbe.exe')
+                    processNames = @('RooIndustriesPolicyRelaunchProbe.exe')
                     processCategories = @('backgroundApp')
                 }
                 controls = $controls
@@ -240,7 +240,7 @@ function Write-PolicyValidationProfile {
                 enabled = $true
                 allowConfirmedApply = $true
                 match = [pscustomobject]@{
-                    processNames = @('RooPolicyProtectedProbe.exe')
+                    processNames = @('RooIndustriesPolicyProtectedProbe.exe')
                 }
                 controls = $controls
                 reason = 'Protected disposable process should be skipped even when a policy rule matches.'
@@ -273,7 +273,7 @@ function Write-PolicyValidationProfile {
                 [pscustomobject]@{
                     itemId = 'protect-live-policy-probe'
                     type = 'process'
-                    names = @('RooPolicyProtectedProbe.exe')
+                    names = @('RooIndustriesPolicyProtectedProbe.exe')
                     reason = 'Disposable protected validation probe is excluded from persistent policy control.'
                     reasonCodes = @('LIVE_POLICY_PROTECTED_PROBE')
                     defaultAction = 'block'
@@ -304,10 +304,10 @@ function Get-PolicyControlValue {
         [string]$Control
     )
     switch ($Control) {
-        'priorityClass' { return Get-RooPropertyValue $State 'priorityClass' $null }
-        'affinityMask' { return Get-RooPropertyValue $State 'affinityMask' $null }
-        'ioPriority' { return Get-RooPropertyValue $State 'ioPriority' $null }
-        'gpuPriority' { return Get-RooPropertyValue $State 'gpuPriority' $null }
+        'priorityClass' { return Get-RooIndustriesPropertyValue $State 'priorityClass' $null }
+        'affinityMask' { return Get-RooIndustriesPropertyValue $State 'affinityMask' $null }
+        'ioPriority' { return Get-RooIndustriesPropertyValue $State 'ioPriority' $null }
+        'gpuPriority' { return Get-RooIndustriesPropertyValue $State 'gpuPriority' $null }
         default { return $null }
     }
 }
@@ -429,14 +429,14 @@ function Invoke-PolicySingleControlValidation {
         'gpuPriority' { 'Gpu' }
         default { 'Control' }
     }
-    $probeName = "RooPolicyControl$($safeControl)Probe.exe"
+    $probeName = "RooIndustriesPolicyControl$($safeControl)Probe.exe"
     $probeExe = Join-Path $LiveRoot $probeName
     $probe = $null
     try {
         Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
-        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-all-control-$Control'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-all-control-$Control'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 700
-        $before = Get-RooProcessControlState $probe.Id $null
+        $before = Get-RooIndustriesProcessControlState $probe.Id $null
         $originalValue = Get-PolicyControlValue $before $Control
         $targetValue = $null
         $osStatus = $null
@@ -461,15 +461,15 @@ function Invoke-PolicySingleControlValidation {
                 }
             }
             'ioPriority' {
-                $osStatus = Get-RooPropertyValue $before 'ioPriorityStatus' $null
-                if (-not [bool](Get-RooPropertyValue $before 'ioPriorityAvailable' $false)) {
+                $osStatus = Get-RooIndustriesPropertyValue $before 'ioPriorityStatus' $null
+                if (-not [bool](Get-RooIndustriesPropertyValue $before 'ioPriorityAvailable' $false)) {
                     return New-PolicyControlValidationResult $Control 'unsupported' 'Low' $originalValue $null $null $osStatus 'I/O priority is not available for the disposable probe in this Windows session.'
                 }
                 $targetValue = if ([string]$before.ioPriority -eq 'Low') { 'Normal' } else { 'Low' }
             }
             'gpuPriority' {
-                $osStatus = Get-RooPropertyValue $before 'gpuPriorityStatus' $null
-                if (-not [bool](Get-RooPropertyValue $before 'gpuPriorityAvailable' $false)) {
+                $osStatus = Get-RooIndustriesPropertyValue $before 'gpuPriorityStatus' $null
+                if (-not [bool](Get-RooIndustriesPropertyValue $before 'gpuPriorityAvailable' $false)) {
                     return New-PolicyControlValidationResult $Control 'unsupported' 'BelowNormal' $originalValue $null $null $osStatus 'GPU scheduling priority is not available for the disposable probe in this Windows session.'
                 }
                 $targetValue = if ([string]$before.gpuPriority -eq 'BelowNormal') { 'Normal' } else { 'BelowNormal' }
@@ -485,7 +485,7 @@ function Invoke-PolicySingleControlValidation {
             -StateRoot $StateRoot `
             -ConfirmApply `
             -IncludeCommandLine | ConvertFrom-Json
-        $afterApply = Get-RooProcessControlState $probe.Id $null
+        $afterApply = Get-RooIndustriesProcessControlState $probe.Id $null
         $appliedValue = Get-PolicyControlValue $afterApply $Control
         $changed = @($session.changedItems | Where-Object { $_.processId -eq $probe.Id }) | Select-Object -First 1
         $appliedControl = @($changed.appliedControls | Where-Object { $_.control -eq $Control }) | Select-Object -First 1
@@ -496,7 +496,7 @@ function Invoke-PolicySingleControlValidation {
             return New-PolicyControlValidationResult $Control $status $targetValue $originalValue $appliedValue $null $osStatus $message
         }
         $restore = & (Join-Path $PSScriptRoot 'Stop-ProcessPolicySession.ps1') -SessionPath $session.sessionPath -ConfirmApply | ConvertFrom-Json
-        $afterRestore = Get-RooProcessControlState $probe.Id $null
+        $afterRestore = Get-RooIndustriesProcessControlState $probe.Id $null
         $restoredValue = Get-PolicyControlValue $afterRestore $Control
         $appliedMatches = Test-PolicyControlValueEquals $Control $appliedValue $targetValue
         $restoredMatches = Test-PolicyControlValueEquals $Control $restoredValue $originalValue
@@ -510,7 +510,7 @@ function Invoke-PolicySingleControlValidation {
         return New-PolicyControlValidationResult $Control $status $null $null $null $null $null $message
     } finally {
         if ($probe -and -not $probe.HasExited) {
-            Stop-RooValidationProcess $probe
+            Stop-RooIndustriesValidationProcess $probe
         }
     }
 }
@@ -592,7 +592,7 @@ $stateBefore = Get-StateEntryCount
 $frontendBefore = @(Get-FrontendProcessIds)
 $backendHostBefore = @(Get-BackendScriptHostProcesses)
 $externalGovernorBefore = @(Get-ExternalGovernorProcessIds)
-$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-process-policy-live-$([guid]::NewGuid().ToString('N'))"
+$liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-process-policy-live-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 $existingProbe = $null
 $launchProbe = $null
@@ -602,20 +602,20 @@ $protectedProbe = $null
 $sessionProc = $null
 try {
     New-Item -ItemType Directory -Path $liveRoot -Force | Out-Null
-    $existingExe = Join-Path $liveRoot 'RooPolicyExistingProbe.exe'
-    $launchExe = Join-Path $liveRoot 'RooPolicyLaunchProbe.exe'
-    $relaunchExe = Join-Path $liveRoot 'RooPolicyRelaunchProbe.exe'
-    $protectedExe = Join-Path $liveRoot 'RooPolicyProtectedProbe.exe'
+    $existingExe = Join-Path $liveRoot 'RooIndustriesPolicyExistingProbe.exe'
+    $launchExe = Join-Path $liveRoot 'RooIndustriesPolicyLaunchProbe.exe'
+    $relaunchExe = Join-Path $liveRoot 'RooIndustriesPolicyRelaunchProbe.exe'
+    $protectedExe = Join-Path $liveRoot 'RooIndustriesPolicyProtectedProbe.exe'
     foreach ($exe in @($existingExe, $launchExe, $relaunchExe, $protectedExe)) {
         Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $exe -Force
     }
 
-    $existingProbe = Start-Process -FilePath $existingExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-existing-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
-    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-protected-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
-    $relaunchProbeFirst = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-first'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $existingProbe = Start-Process -FilePath $existingExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-existing-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-protected-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $relaunchProbeFirst = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-first'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
-    $beforeExisting = Get-RooProcessControlState $existingProbe.Id $null
-    $beforeProtected = Get-RooProcessControlState $protectedProbe.Id $null
+    $beforeExisting = Get-RooIndustriesProcessControlState $existingProbe.Id $null
+    $beforeProtected = Get-RooIndustriesProcessControlState $protectedProbe.Id $null
     $targetAffinity = if (($beforeExisting.affinityMask -band 1) -eq 1 -and [int64]$beforeExisting.affinityMask -ne 1) { 1 } elseif (($beforeExisting.affinityMask -band 2) -eq 2) { 2 } else { $beforeExisting.affinityMask }
 
     $previewProfilePath = Join-Path $liveRoot 'policy-preview-profile.json'
@@ -623,7 +623,7 @@ try {
     $preview = & (Join-Path $PSScriptRoot 'Preview-ProcessPolicy.ps1') `
         -ProfilePath $previewProfilePath `
         -IncludeCommandLine | ConvertFrom-Json
-    $afterPreviewExisting = Get-RooProcessControlState $existingProbe.Id $null
+    $afterPreviewExisting = Get-RooIndustriesProcessControlState $existingProbe.Id $null
     $previewExisting = @($preview.preview | Where-Object { $_.processId -eq $existingProbe.Id }) | Select-Object -First 1
     $previewProtected = @($preview.preview | Where-Object { $_.processId -eq $protectedProbe.Id }) | Select-Object -First 1
     $previewControls = @($previewExisting.controlChanges | ForEach-Object { $_.control })
@@ -637,7 +637,7 @@ try {
     } else {
         Add-Failure 'Protected probe was not reported as a protected preview skip'
     }
-    if ((Get-RooProcessControlState $protectedProbe.Id $null).priorityClass -eq $beforeProtected.priorityClass) {
+    if ((Get-RooIndustriesProcessControlState $protectedProbe.Id $null).priorityClass -eq $beforeProtected.priorityClass) {
         Add-Pass "Protected probe priority stayed unchanged during preview: $($beforeProtected.priorityClass)"
     } else {
         Add-Failure 'Protected probe priority changed during preview'
@@ -684,17 +684,17 @@ try {
         $stateRoot,
         '-ConfirmApply'
     )
-    $sessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
+    $sessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooIndustriesWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
     $firstRelaunchApplied = Wait-PolicySessionChanged -StateRoot $stateRoot -ProcessId $relaunchProbeFirst.Id -TimeoutSeconds 25
     if ($relaunchProbeFirst -and -not $relaunchProbeFirst.HasExited) {
-        Stop-RooValidationProcess $relaunchProbeFirst
+        Stop-RooIndustriesValidationProcess $relaunchProbeFirst
     }
     Start-Sleep -Seconds 1
-    $launchProbe = Start-Process -FilePath $launchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-launch-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $launchProbe = Start-Process -FilePath $launchExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-launch-marker'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds 2
-    $relaunchProbeSecond = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-second'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
+    $relaunchProbeSecond = Start-Process -FilePath $relaunchExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command',"`$marker='policy-relaunch-second'; Start-Sleep -Seconds 120")) -WindowStyle Hidden -PassThru
     Wait-PolicySessionChanged -StateRoot $stateRoot -ProcessId $relaunchProbeSecond.Id -TimeoutSeconds 15 | Out-Null
-    Wait-RooValidationProcess $sessionProc 75
+    Wait-RooIndustriesValidationProcess $sessionProc 75
     $sessionProc.Refresh()
     $sessionExitCode = $sessionProc.ExitCode
     $sessionProc = $null
@@ -703,9 +703,9 @@ try {
         Add-Failure "Confirmed persistent policy session exited with code $sessionExitCode :: $errorText"
     }
     $session = Get-Content -LiteralPath $sessionOutput -Raw | ConvertFrom-Json
-    $afterSessionExisting = Get-RooProcessControlState $existingProbe.Id $null
-    $afterSessionLaunch = Get-RooProcessControlState $launchProbe.Id $null
-    $afterSessionSecond = Get-RooProcessControlState $relaunchProbeSecond.Id $null
+    $afterSessionExisting = Get-RooIndustriesProcessControlState $existingProbe.Id $null
+    $afterSessionLaunch = Get-RooIndustriesProcessControlState $launchProbe.Id $null
+    $afterSessionSecond = Get-RooIndustriesProcessControlState $relaunchProbeSecond.Id $null
     $existingChanged = @($session.changedItems | Where-Object { $_.processId -eq $existingProbe.Id }) | Select-Object -First 1
     $launchChanged = @($session.changedItems | Where-Object { $_.processId -eq $launchProbe.Id }) | Select-Object -First 1
     $firstRelaunchChanged = @($session.changedItems | Where-Object { $_.processId -eq $relaunchProbeFirst.Id }) | Select-Object -First 1
@@ -726,7 +726,7 @@ try {
     } else {
         Add-Failure 'Relaunch watcher did not prove first and second same-name probe applications'
     }
-    if ($protectedSkip -and ($protectedSkip.reasonCodes -contains 'LIVE_POLICY_PROTECTED_PROBE') -and (Get-RooProcessControlState $protectedProbe.Id $null).priorityClass -eq $beforeProtected.priorityClass) {
+    if ($protectedSkip -and ($protectedSkip.reasonCodes -contains 'LIVE_POLICY_PROTECTED_PROBE') -and (Get-RooIndustriesProcessControlState $protectedProbe.Id $null).priorityClass -eq $beforeProtected.priorityClass) {
         Add-Pass "Protected probe was skipped and remained unchanged: priority=$($beforeProtected.priorityClass)"
     } else {
         Add-Failure 'Protected probe was not skipped or changed unexpectedly'
@@ -751,16 +751,16 @@ try {
         Add-Failure 'Persistent policy status did not report active restorable applications'
     }
     $restorePreview = & (Join-Path $PSScriptRoot 'Stop-ProcessPolicySession.ps1') -SessionPath $session.sessionPath | ConvertFrom-Json
-    $afterRestorePreviewExisting = Get-RooProcessControlState $existingProbe.Id $null
+    $afterRestorePreviewExisting = Get-RooIndustriesProcessControlState $existingProbe.Id $null
     if ($restorePreview.dryRun -eq $true -and $afterRestorePreviewExisting.priorityClass -eq 'BelowNormal') {
         Add-Pass 'Persistent policy stop preview did not restore or change the existing probe'
     } else {
         Add-Failure 'Persistent policy stop preview changed the existing probe unexpectedly'
     }
     $restore = & (Join-Path $PSScriptRoot 'Stop-ProcessPolicySession.ps1') -SessionPath $session.sessionPath -ConfirmApply | ConvertFrom-Json
-    $afterRestoreExisting = Get-RooProcessControlState $existingProbe.Id $null
-    $afterRestoreLaunch = Get-RooProcessControlState $launchProbe.Id $null
-    $afterRestoreSecond = Get-RooProcessControlState $relaunchProbeSecond.Id $null
+    $afterRestoreExisting = Get-RooIndustriesProcessControlState $existingProbe.Id $null
+    $afterRestoreLaunch = Get-RooIndustriesProcessControlState $launchProbe.Id $null
+    $afterRestoreSecond = Get-RooIndustriesProcessControlState $relaunchProbeSecond.Id $null
     if ($restore.dryRun -eq $false -and @($restore.restoredItems).Count -ge 3 -and $afterRestoreExisting.priorityClass -eq $beforeExisting.priorityClass -and $afterRestoreLaunch.priorityClass -eq $beforeExisting.priorityClass -and $afterRestoreSecond.priorityClass -eq $beforeExisting.priorityClass) {
         Add-Pass "Confirmed persistent policy stop restored running probes to original priority: $($beforeExisting.priorityClass)"
     } else {
@@ -775,7 +775,7 @@ try {
 
     foreach ($probe in @($existingProbe, $launchProbe, $relaunchProbeSecond, $protectedProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-RooValidationProcess $probe
+            Stop-RooIndustriesValidationProcess $probe
         }
     }
     $existingProbe = $null
@@ -801,7 +801,7 @@ try {
     }
     foreach ($probe in @($existingProbe, $launchProbe, $relaunchProbeFirst, $relaunchProbeSecond, $protectedProbe)) {
         if ($probe -and -not $probe.HasExited) {
-            Stop-RooValidationProcess $probe
+            Stop-RooIndustriesValidationProcess $probe
         }
     }
     if (-not $cleanupDone) {
@@ -814,14 +814,14 @@ try {
 }
 
 $leftoverProbeNames = @(
-    'RooPolicyExistingProbe',
-    'RooPolicyLaunchProbe',
-    'RooPolicyRelaunchProbe',
-    'RooPolicyProtectedProbe',
-    'RooPolicyControlPriorityProbe',
-    'RooPolicyControlAffinityProbe',
-    'RooPolicyControlIoProbe',
-    'RooPolicyControlGpuProbe'
+    'RooIndustriesPolicyExistingProbe',
+    'RooIndustriesPolicyLaunchProbe',
+    'RooIndustriesPolicyRelaunchProbe',
+    'RooIndustriesPolicyProtectedProbe',
+    'RooIndustriesPolicyControlPriorityProbe',
+    'RooIndustriesPolicyControlAffinityProbe',
+    'RooIndustriesPolicyControlIoProbe',
+    'RooIndustriesPolicyControlGpuProbe'
 )
 $leftovers = @()
 foreach ($name in $leftoverProbeNames) {

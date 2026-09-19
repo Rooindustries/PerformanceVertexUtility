@@ -14,7 +14,7 @@ try {
             behavior='Select exact installed app IDs to create a reviewed sequential removal plan. Leftover deletion requires a separate fresh review.'}|ConvertTo-Json}
         return
     }
-    $request=(Read-RooOperationJson $RequestPath).data
+    $request=(Read-RooIndustriesOperationJson $RequestPath).data
     if($request.schemaVersion -ne 1){throw 'Optimizer request schemaVersion must be 1.'}
     foreach($name in @('resetDefault','quiet','manualReviewApproved','allowFixtureExecution')) {
         $property=$request.PSObject.Properties[$name]
@@ -49,7 +49,7 @@ try {
         }
     }
     foreach($property in $request.PSObject.Properties){if($allowed -notcontains $property.Name){throw "Unknown optimizer request field: $($property.Name)"}}
-    Assert-RooDistinctOperationPaths @($RequestPath,[string]$request.outputPath)
+    Assert-RooIndustriesDistinctOperationPaths @($RequestPath,[string]$request.outputPath)
     if($request.outputPath){$args.OutputPath=[string]$request.outputPath}
     & (Join-Path $PSScriptRoot $scriptName) @args
 } catch {

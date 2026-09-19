@@ -8,7 +8,7 @@
       "displayName": "Standby Memory",
       "technicalName": "NtSetSystemInformation(SystemMemoryListInformation=80, MemoryPurgeStandbyList)",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Standby Memory",
       "frontendTab": "Live Feel",
       "riskLevel": "medium",
@@ -21,10 +21,10 @@
           },
           {
             "method": "file-exists",
-            "target": "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs"
+            "target": "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs"
           }
         ],
-        "notes": "FSOS-X Dash exposes Clear Standby Memory; Roo has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
+        "notes": "FSOS-X Dash exposes Clear Standby Memory; Roo Industries has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
       },
       "preview": {
         "status": "implemented",
@@ -65,7 +65,7 @@
       "displayName": "Timer Resolution",
       "technicalName": "timeBeginPeriod/timeEndPeriod via Invoke-TimerResolutionSession.ps1",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Timer Resolution",
       "frontendTab": "Live Feel",
       "riskLevel": "medium",
@@ -118,7 +118,7 @@
       "displayName": "Power Plan",
       "technicalName": "powercfg /getactivescheme, /export, /import, /setactive, /delete",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Power Plan",
       "frontendTab": "Live Feel",
       "riskLevel": "medium",
@@ -130,7 +130,7 @@
             "target": "powercfg.exe"
           }
         ],
-        "notes": "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo's temporary export/import/select/restore/delete executor."
+        "notes": "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo Industries's temporary export/import/select/restore/delete executor."
       },
       "preview": {
         "status": "implemented",
@@ -172,7 +172,7 @@
       "displayName": "Shader Cache",
       "technicalName": "%LOCALAPPDATA%\\D3DSCache; %LOCALAPPDATA%\\NVIDIA\\DXCache; %LOCALAPPDATA%\\AMD\\DxCache; Steam shader cache directories",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Shader Cache",
       "frontendTab": "Live Feel",
       "riskLevel": "medium",
@@ -184,7 +184,7 @@
             "target": "%LOCALAPPDATA%\\D3DSCache"
           }
         ],
-        "notes": "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo proves only disposable fixture backup/delete/restore."
+        "notes": "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo Industries proves only disposable fixture backup/delete/restore."
       },
       "preview": {
         "status": "implemented",
@@ -226,7 +226,7 @@
       "displayName": "Service Trim",
       "technicalName": "sc.exe query/config/stop/start allowlist workflow for WerSvc, PcaSvc, TrkWks, InventorySvc, MapsBroker, diagsvc",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Service Trim",
       "frontendTab": "Live Feel",
       "riskLevel": "high",
@@ -284,7 +284,7 @@
       "displayName": "Network Tweaks",
       "technicalName": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\NetworkThrottlingIndex; HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\*\\TcpAckFrequency/TCPNoDelay; Set-NetAdapterAdvancedProperty; Set-DnsClientServerAddress",
       "source": "fsosx-dash",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Network Tweaks",
       "frontendTab": "Live Feel",
       "riskLevel": "high",
@@ -335,7 +335,7 @@
       "displayName": "Game Registry Tweaks",
       "technicalName": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR\\AppCaptureEnabled/AudioCaptureEnabled/CursorCaptureEnabled/MicrophoneCaptureEnabled; HKCU\\System\\GameConfigStore\\GameDVR_Enabled; HKCU\\Software\\Microsoft\\GameBar\\ShowStartupPanel/UseNexusForGameBarEnabled",
       "source": "winutil",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Game Registry Tweaks",
       "frontendTab": "Live Feel",
       "riskLevel": "low",
@@ -386,7 +386,7 @@
       "displayName": "Svchost Process Grouping",
       "technicalName": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SvcHostSplitThresholdInKB=0xffffffff",
       "source": "winutil",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Svchost Grouping (Registry)",
       "frontendTab": "Live Feel",
       "riskLevel": "high",
@@ -534,8 +534,8 @@
       "family": "system-optimizations",
       "displayName": "Settings Research Catalog",
       "technicalName": "Primary-source setting inventory and paginated read-only lookup",
-      "source": "roo-native",
-      "implementedBy": "roo-script",
+      "source": "roo-industries-native",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Settings Research Catalog",
       "frontendTab": "Live Feel",
       "riskLevel": "safe",

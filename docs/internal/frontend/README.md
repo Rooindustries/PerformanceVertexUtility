@@ -16,13 +16,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\scripts\Build-Fr
 The script builds:
 
 ```text
-docs\internal\frontend\Roo.OptimizationSuite.App\Roo.OptimizationSuite.App.csproj
+docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj
 ```
 
 Default behavior:
 
 - Builds `Debug` with `-p:Platform=x64`.
-- Uses `ROO_DOTNET_EXE` or the `-DotNetPath` argument when provided.
+- Uses `ROO_INDUSTRIES_DOTNET_EXE` or the `-DotNetPath` argument when provided.
 - Otherwise prefers `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`, then `dotnet.exe`
   on `PATH`.
 - Requires a dotnet host with at least one installed SDK.
@@ -36,7 +36,7 @@ dotnet run -p:Platform=x64
 
 ## Runtime data sources
 
-`BackendLocator` resolves the repository root from `ROO_BACKEND_ROOT` when set.
+`BackendLocator` resolves the repository root from `ROO_INDUSTRIES_BACKEND_ROOT` when set.
 Without that override, it walks upward from the executable until it finds
 `backend\samples`.
 
@@ -53,17 +53,17 @@ The frontend currently reads data from two service paths:
 Local UI preferences are stored in:
 
 ```text
-%LOCALAPPDATA%\RooOptimizationSuite\settings.json
+%LOCALAPPDATA%\RooIndustriesOptimizationSuite\settings.json
 ```
 
 ## Current shell
 
 ```text
-Roo.OptimizationSuite.App/
+RooIndustries.OptimizationSuite.App/
   App.xaml(.cs)             App entry, shared services, persisted theme, crash log hook.
   MainWindow.xaml(.cs)      Settings-style NavigationView shell and page routing.
   Resources/
-    Theme.RooBlue.xaml      Default Roo Industries Blue resource dictionary.
+    Theme.RooIndustriesBlue.xaml      Default Roo Industries Blue resource dictionary.
     Theme.BlackoutGold.xaml Alternate Blackout Gold resource dictionary.
     Brand.xaml              Font family and shared sizing tokens.
     Styles.xaml             Converters, typography, card, chip, and layout styles.

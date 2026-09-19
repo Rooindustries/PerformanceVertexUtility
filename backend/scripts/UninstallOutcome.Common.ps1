@@ -1,4 +1,4 @@
-function Get-RooUninstallOutcome {
+function Get-RooIndustriesUninstallOutcome {
     param([ValidateSet('generic','windows-installer')][string]$Policy, [int]$ExitCode)
     $state='failed'; $success=$false; $reboot=$false; $stop=$true
     if ($ExitCode -eq 0) {$state='removed'; $success=$true; $stop=$false}
@@ -15,7 +15,7 @@ function Get-RooUninstallOutcome {
     return [pscustomobject]@{ policy=$Policy; exitCode=$ExitCode; state=$state; success=$success; rebootRequired=$reboot; stopQueue=$stop }
 }
 
-function Get-RooPostUninstallReview {
+function Get-RooIndustriesPostUninstallReview {
     param([object[]]$Items)
     $evidence=New-Object System.Collections.Generic.List[object]
     foreach ($item in $Items) {

@@ -15,11 +15,11 @@ public static class ValidationArgumentParser {
 }
 '@
 $expected = @('program.exe', '', 'two words', 'C:\folder with spaces\', 'embedded"quote', 'backslash\"quote', 'plain')
-$actual = [ValidationArgumentParser]::Parse((Join-RooWindowsArguments $expected))
+$actual = [ValidationArgumentParser]::Parse((Join-RooIndustriesWindowsArguments $expected))
 if ($actual.Count -ne $expected.Count) { throw 'Windows argument count changed.' }
 for ($i = 0; $i -lt $expected.Count; $i++) { if ($actual[$i] -cne $expected[$i]) { throw "Windows argument $i did not round-trip." } }
 Write-Host 'PASS Windows parses empty arguments, spaces, quotes, and trailing backslashes without changing values'
-$executor = Join-RooBackendExecutorCommandLine $expected[0] $expected[1..($expected.Count - 1)]
+$executor = Join-RooIndustriesBackendExecutorCommandLine $expected[0] $expected[1..($expected.Count - 1)]
 $actual = [ValidationArgumentParser]::Parse($executor)
 for ($i = 0; $i -lt $expected.Count; $i++) { if ($actual[$i] -cne $expected[$i]) { throw "Executor argument $i changed." } }
 Write-Host 'PASS Executor uses the same verified Windows argument encoding'

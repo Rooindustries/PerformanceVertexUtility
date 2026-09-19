@@ -27,16 +27,16 @@ Current source snapshot:
 
 Chris Titus WinUtil becomes a feature-source layer inside the Roo Industries app.
 
-The Roo app should not look like WinUtil and should not execute the public launcher from inside the product. Instead, it should:
+The Roo Industries app should not look like WinUtil and should not execute the public launcher from inside the product. Instead, it should:
 
 - Sync or vendor audited WinUtil config definitions.
 - Render them through the Windows Settings-style WinUI shell.
-- Route every action through Roo backup, preview, confirmation, telemetry, and rollback rules.
-- Keep Roo Blue and Blackout Gold as the only product themes.
+- Route every action through Roo Industries backup, preview, confirmation, telemetry, and rollback rules.
+- Keep Roo Industries Blue and Blackout Gold as the only product themes.
 
 ## Page Mapping
 
-| WinUtil area | Roo app page |
+| WinUtil area | Roo Industries app page |
 |---|---|
 | Applications | Apps > Install |
 | Essential Tweaks | Optimize > Safe / Standard |
@@ -63,7 +63,7 @@ The Roo app should not look like WinUtil and should not execute the public launc
 ## Implementation Plan
 
 1. Add a WinUtil sync step that downloads pinned config files into a local cache.
-2. Normalize WinUtil entries into Roo app actions: install, tweak, preference, feature, fix, DNS, panel, preset.
+2. Normalize WinUtil entries into Roo Industries app actions: install, tweak, preference, feature, fix, DNS, panel, preset.
 3. Add risk labels and protected-feature checks before any entry can be shown as safe.
 4. Map audited tweaks into `modules/tweak_manifest.json` or a new app-side catalog.
 5. Build the WinUI pages using this normalized catalog.

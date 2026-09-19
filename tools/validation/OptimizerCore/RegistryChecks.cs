@@ -1,14 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class RegistryChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var name = "Software\\RooCleanupTests\\" + Guid.NewGuid().ToString("N");
-        var files = Path.Combine(Path.GetTempPath(), "roo-registry-" + Guid.NewGuid().ToString("N"));
+        var name = "Software\\RooIndustriesCleanupTests\\" + Guid.NewGuid().ToString("N");
+        var files = Path.Combine(Path.GetTempPath(), "roo-industries-registry-" + Guid.NewGuid().ToString("N"));
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         Directory.CreateDirectory(files);
         try
@@ -22,8 +22,8 @@ static class RegistryChecks
                 Write(app, "Little", 4, [0x78, 0x56, 0x34, 0x12]);
                 Write(app, "Big", 5, [0x12, 0x34, 0x56, 0x78]);
                 Write(app, "Wide", 11, [8, 7, 6, 5, 4, 3, 2, 1]);
-                Write(app, "Text", 1, Encoding.Unicode.GetBytes("Roo λ\0"));
-                Write(app, "Expand", 2, Encoding.Unicode.GetBytes("%TEMP%\\Roo\0"));
+                Write(app, "Text", 1, Encoding.Unicode.GetBytes("Roo Industries λ\0"));
+                Write(app, "Expand", 2, Encoding.Unicode.GetBytes("%TEMP%\\Roo Industries\0"));
                 Write(app, "Multi", 7, Encoding.Unicode.GetBytes("one\0two\0\0"));
                 using var child = app.CreateSubKey("Child");
                 Write(child, "Bytes", 3, [9, 8, 0, 6]);
@@ -151,8 +151,8 @@ static class RegistryChecks
         finally
         {
             hive.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
-            using (var parent = hive.OpenSubKey("Software\\RooCleanupTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooCleanupTests", throwOnMissingSubKey: false);
+            using (var parent = hive.OpenSubKey("Software\\RooIndustriesCleanupTests"))
+                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesCleanupTests", throwOnMissingSubKey: false);
             Directory.Delete(files, true);
         }
         check(hive.OpenSubKey(name) is null && !Directory.Exists(files), "Registry validation removes keys, receipts and backup fixtures");

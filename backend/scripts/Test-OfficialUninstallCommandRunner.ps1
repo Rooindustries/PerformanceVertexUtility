@@ -74,7 +74,7 @@ foreach ($relative in $requiredFiles) {
 }
 
 $stateBefore = Get-StateEntryCount
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-official-runner-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-official-runner-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null

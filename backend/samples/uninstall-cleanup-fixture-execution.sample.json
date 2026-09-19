@@ -8,8 +8,8 @@
   "executionMode": "disposable-fixture-apply",
   "appId": "fixture:fake-app",
   "displayName": "Fixture Fake App",
-  "fixtureRoot": "%TEMP%\\roo-uninstall-cleanup-fixture",
-  "backupRoot": "%TEMP%\\roo-uninstall-cleanup-fixture\\_roo-cleanup-backup",
+  "fixtureRoot": "%TEMP%\\roo-industries-uninstall-cleanup-fixture",
+  "backupRoot": "%TEMP%\\roo-industries-uninstall-cleanup-fixture\\_roo-cleanup-backup",
   "gates": [
     {
       "gateId": "confirm-apply",
@@ -31,7 +31,7 @@
     }
   ],
   "rollback": {
-    "rollbackManifestPath": "%TEMP%\\roo-uninstall-cleanup-fixture\\_roo-cleanup-backup\\rollback-manifest.json",
+    "rollbackManifestPath": "%TEMP%\\roo-industries-uninstall-cleanup-fixture\\_roo-cleanup-backup\\rollback-manifest.json",
     "rollbackSupported": true,
     "backupRecords": [
       {

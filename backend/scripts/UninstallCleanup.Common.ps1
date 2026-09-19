@@ -1,21 +1,21 @@
-$script:RooUninstallProductName = 'Roo Industries Optimization Suite'
+$script:RooIndustriesUninstallProductName = 'Roo Industries Optimization Suite'
 
-function Get-RooUninstallUtcStamp {
+function Get-RooIndustriesUninstallUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
-function Get-RooUninstallFileStamp {
+function Get-RooIndustriesUninstallFileStamp {
     return (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
 }
 
-function ConvertTo-RooStableId {
+function ConvertTo-RooIndustriesStableId {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return 'unknown' }
     $id = $Value.ToLowerInvariant() -replace '[^a-z0-9]+','-'
     return $id.Trim('-')
 }
 
-function Resolve-RooUninstallPath {
+function Resolve-RooIndustriesUninstallPath {
     param(
         [string]$Path,
         [string]$DefaultPath
@@ -29,7 +29,7 @@ function Resolve-RooUninstallPath {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
 }
 
-function Read-RooUninstallJsonFile {
+function Read-RooIndustriesUninstallJsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "JSON file not found: $Path"
@@ -37,9 +37,9 @@ function Read-RooUninstallJsonFile {
     return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
-function Write-RooCleanupJournal {
+function Write-RooIndustriesCleanupJournal {
     param([object]$Value, [string]$Path)
-    Ensure-RooUninstallDirectory (Split-Path $Path -Parent)
+    Ensure-RooIndustriesUninstallDirectory (Split-Path $Path -Parent)
     $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
         $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Depth 32))
@@ -52,7 +52,7 @@ function Write-RooCleanupJournal {
     }
 }
 
-function Test-RooCleanupPathWithin {
+function Test-RooIndustriesCleanupPathWithin {
     param([string]$Path, [string]$Root)
     if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) { return $false }
     $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
@@ -60,7 +60,7 @@ function Test-RooCleanupPathWithin {
     return ($full.Equals($parent, [System.StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($parent + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))
 }
 
-function Test-RooCleanupReparsePath {
+function Test-RooIndustriesCleanupReparsePath {
     param([string]$Path, [switch]$Recurse)
     $current = [System.IO.Path]::GetFullPath($Path)
     while (-not [string]::IsNullOrWhiteSpace($current)) {
@@ -83,19 +83,19 @@ function Test-RooCleanupReparsePath {
     return $false
 }
 
-function Copy-RooCleanupRestoreTree {
+function Copy-RooIndustriesCleanupRestoreTree {
     param([string]$Source, [string]$Target)
-    if ((Test-RooCleanupReparsePath $Source) -or (Test-RooCleanupReparsePath $Target)) { throw 'Restore encountered a reparse path.' }
-    Ensure-RooUninstallDirectory $Target
+    if ((Test-RooIndustriesCleanupReparsePath $Source) -or (Test-RooIndustriesCleanupReparsePath $Target)) { throw 'Restore encountered a reparse path.' }
+    Ensure-RooIndustriesUninstallDirectory $Target
     foreach ($child in Get-ChildItem -LiteralPath $Source -Force) {
         if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Restore encountered a reparse path.' }
         $destination = Join-Path $Target $child.Name
-        if ($child.PSIsContainer) { Copy-RooCleanupRestoreTree $child.FullName $destination }
+        if ($child.PSIsContainer) { Copy-RooIndustriesCleanupRestoreTree $child.FullName $destination }
         else { Copy-Item -LiteralPath $child.FullName -Destination $destination -Force }
     }
 }
 
-function Ensure-RooUninstallDirectory {
+function Ensure-RooIndustriesUninstallDirectory {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return }
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -103,27 +103,27 @@ function Ensure-RooUninstallDirectory {
     }
 }
 
-function Write-RooUninstallJsonOutput {
+function Write-RooIndustriesUninstallJsonOutput {
     param(
         [object]$Value,
         [string]$OutputPath
     )
     $json = $Value | ConvertTo-Json -Depth 32
     if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-        $resolved = Resolve-RooUninstallPath $OutputPath (Join-Path (Get-Location) $OutputPath)
-        Ensure-RooUninstallDirectory (Split-Path $resolved -Parent)
+        $resolved = Resolve-RooIndustriesUninstallPath $OutputPath (Join-Path (Get-Location) $OutputPath)
+        Ensure-RooIndustriesUninstallDirectory (Split-Path $resolved -Parent)
         $json | Set-Content -LiteralPath $resolved -Encoding UTF8
     }
     return $json
 }
 
-function Get-RooUninstallArray {
+function Get-RooIndustriesUninstallArray {
     param([object]$Value)
     if ($null -eq $Value) { return @() }
     return @($Value)
 }
 
-function Get-RooUninstallPropertyArray {
+function Get-RooIndustriesUninstallPropertyArray {
     param(
         [object]$Object,
         [string]$Name
@@ -131,10 +131,10 @@ function Get-RooUninstallPropertyArray {
     if ($null -eq $Object) { return @() }
     $prop = $Object.PSObject.Properties[$Name]
     if ($null -eq $prop) { return @() }
-    return @(Get-RooUninstallArray $prop.Value)
+    return @(Get-RooIndustriesUninstallArray $prop.Value)
 }
 
-function Get-RooUninstallPropertyValue {
+function Get-RooIndustriesUninstallPropertyValue {
     param(
         [object]$Object,
         [string]$Name,
@@ -147,7 +147,7 @@ function Get-RooUninstallPropertyValue {
     return $prop.Value
 }
 
-function New-RooUninstallIssue {
+function New-RooIndustriesUninstallIssue {
     param(
         [string]$Code,
         [string]$Message,
@@ -170,55 +170,55 @@ function New-RooUninstallIssue {
     }
 }
 
-function New-RooUninstallLog {
+function New-RooIndustriesUninstallLog {
     param(
         [string]$Message,
         [string]$Level = 'info'
     )
     return [pscustomobject]@{
-        timestampUtc = Get-RooUninstallUtcStamp
+        timestampUtc = Get-RooIndustriesUninstallUtcStamp
         level = $Level
         message = $Message
     }
 }
 
-function Get-RooUninstallPolicyPath {
+function Get-RooIndustriesUninstallPolicyPath {
     param([string]$PolicyPath)
-    return Resolve-RooUninstallPath $PolicyPath (Join-Path $PSScriptRoot '..\uninstall\uninstall-policy.json')
+    return Resolve-RooIndustriesUninstallPath $PolicyPath (Join-Path $PSScriptRoot '..\uninstall\uninstall-policy.json')
 }
 
-function Get-RooProtectedAppsPath {
+function Get-RooIndustriesProtectedAppsPath {
     param([string]$ProtectedAppsPath)
-    return Resolve-RooUninstallPath $ProtectedAppsPath (Join-Path $PSScriptRoot '..\uninstall\protected-apps.json')
+    return Resolve-RooIndustriesUninstallPath $ProtectedAppsPath (Join-Path $PSScriptRoot '..\uninstall\protected-apps.json')
 }
 
-function Get-RooLeftoverRulesPath {
+function Get-RooIndustriesLeftoverRulesPath {
     param([string]$RulesPath)
-    return Resolve-RooUninstallPath $RulesPath (Join-Path $PSScriptRoot '..\uninstall\leftover-scan-rules.json')
+    return Resolve-RooIndustriesUninstallPath $RulesPath (Join-Path $PSScriptRoot '..\uninstall\leftover-scan-rules.json')
 }
 
-function Read-RooUninstallPolicy {
+function Read-RooIndustriesUninstallPolicy {
     param([string]$PolicyPath)
-    return Read-RooUninstallJsonFile (Get-RooUninstallPolicyPath $PolicyPath)
+    return Read-RooIndustriesUninstallJsonFile (Get-RooIndustriesUninstallPolicyPath $PolicyPath)
 }
 
-function Read-RooProtectedAppsCatalog {
+function Read-RooIndustriesProtectedAppsCatalog {
     param([string]$ProtectedAppsPath)
-    return Read-RooUninstallJsonFile (Get-RooProtectedAppsPath $ProtectedAppsPath)
+    return Read-RooIndustriesUninstallJsonFile (Get-RooIndustriesProtectedAppsPath $ProtectedAppsPath)
 }
 
-function Read-RooLeftoverRules {
+function Read-RooIndustriesLeftoverRules {
     param([string]$RulesPath)
-    return Read-RooUninstallJsonFile (Get-RooLeftoverRulesPath $RulesPath)
+    return Read-RooIndustriesUninstallJsonFile (Get-RooIndustriesLeftoverRulesPath $RulesPath)
 }
 
-function Test-RooPatternMatch {
+function Test-RooIndustriesPatternMatch {
     param(
         [string]$Value,
         [object[]]$Patterns
     )
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-    foreach ($pattern in @(Get-RooUninstallArray $Patterns)) {
+    foreach ($pattern in @(Get-RooIndustriesUninstallArray $Patterns)) {
         $p = [string]$pattern
         if ([string]::IsNullOrWhiteSpace($p)) { continue }
         if ($Value -like $p) { return $true }
@@ -226,21 +226,21 @@ function Test-RooPatternMatch {
     return $false
 }
 
-function Test-RooAnyExactOrPatternMatch {
+function Test-RooIndustriesAnyExactOrPatternMatch {
     param(
         [string]$Value,
         [object[]]$Patterns
     )
-    return Test-RooPatternMatch $Value $Patterns
+    return Test-RooIndustriesPatternMatch $Value $Patterns
 }
 
-function Test-RooAnyCategoryMatch {
+function Test-RooIndustriesAnyCategoryMatch {
     param(
         [object]$App,
         [object[]]$Tags
     )
-    $categories = @(Get-RooUninstallPropertyArray $App 'categories')
-    foreach ($tag in @(Get-RooUninstallArray $Tags)) {
+    $categories = @(Get-RooIndustriesUninstallPropertyArray $App 'categories')
+    foreach ($tag in @(Get-RooIndustriesUninstallArray $Tags)) {
         foreach ($category in $categories) {
             if ([string]$category -ieq [string]$tag) { return $true }
         }
@@ -248,7 +248,7 @@ function Test-RooAnyCategoryMatch {
     return $false
 }
 
-function Test-RooAppMatch {
+function Test-RooIndustriesAppMatch {
     param(
         [object]$App,
         [object]$Match
@@ -258,30 +258,30 @@ function Test-RooAppMatch {
     $hasPrimarySelector = $false
     $primaryMatched = $false
     $publisherMatched = $false
-    $displayName = [string](Get-RooUninstallPropertyValue $App 'displayName' '')
-    $publisher = [string](Get-RooUninstallPropertyValue $App 'publisher' '')
-    $packageId = [string](Get-RooUninstallPropertyValue $App 'packageId' '')
-    $sourceType = [string](Get-RooUninstallPropertyValue $App 'sourceType' '')
+    $displayName = [string](Get-RooIndustriesUninstallPropertyValue $App 'displayName' '')
+    $publisher = [string](Get-RooIndustriesUninstallPropertyValue $App 'publisher' '')
+    $packageId = [string](Get-RooIndustriesUninstallPropertyValue $App 'packageId' '')
+    $sourceType = [string](Get-RooIndustriesUninstallPropertyValue $App 'sourceType' '')
 
-    $displayNamePatterns = Get-RooUninstallPropertyArray $Match 'displayNamePatterns'
+    $displayNamePatterns = Get-RooIndustriesUninstallPropertyArray $Match 'displayNamePatterns'
     if ($displayNamePatterns.Count -gt 0) {
         $hasPrimarySelector = $true
-        if (Test-RooAnyExactOrPatternMatch $displayName $displayNamePatterns) { $primaryMatched = $true }
+        if (Test-RooIndustriesAnyExactOrPatternMatch $displayName $displayNamePatterns) { $primaryMatched = $true }
     }
 
-    $publisherPatterns = Get-RooUninstallPropertyArray $Match 'publisherPatterns'
+    $publisherPatterns = Get-RooIndustriesUninstallPropertyArray $Match 'publisherPatterns'
     if ($publisherPatterns.Count -gt 0) {
-        if (Test-RooAnyExactOrPatternMatch $publisher $publisherPatterns) { $publisherMatched = $true }
+        if (Test-RooIndustriesAnyExactOrPatternMatch $publisher $publisherPatterns) { $publisherMatched = $true }
     }
 
-    $packageIdPatterns = Get-RooUninstallPropertyArray $Match 'packageIdPatterns'
+    $packageIdPatterns = Get-RooIndustriesUninstallPropertyArray $Match 'packageIdPatterns'
     if ($packageIdPatterns.Count -gt 0) {
         $hasPrimarySelector = $true
-        if ((Test-RooAnyExactOrPatternMatch $packageId $packageIdPatterns) -or
-            (Test-RooAnyExactOrPatternMatch ([string](Get-RooUninstallPropertyValue $App 'packageFamilyName' '')) $packageIdPatterns)) { $primaryMatched = $true }
+        if ((Test-RooIndustriesAnyExactOrPatternMatch $packageId $packageIdPatterns) -or
+            (Test-RooIndustriesAnyExactOrPatternMatch ([string](Get-RooIndustriesUninstallPropertyValue $App 'packageFamilyName' '')) $packageIdPatterns)) { $primaryMatched = $true }
     }
 
-    $sourceTypes = Get-RooUninstallPropertyArray $Match 'sourceTypes'
+    $sourceTypes = Get-RooIndustriesUninstallPropertyArray $Match 'sourceTypes'
     if ($sourceTypes.Count -gt 0) {
         $hasPrimarySelector = $true
         foreach ($candidate in $sourceTypes) {
@@ -289,10 +289,10 @@ function Test-RooAppMatch {
         }
     }
 
-    $categoryTags = Get-RooUninstallPropertyArray $Match 'categoryTags'
+    $categoryTags = Get-RooIndustriesUninstallPropertyArray $Match 'categoryTags'
     if ($categoryTags.Count -gt 0) {
         $hasPrimarySelector = $true
-        if (Test-RooAnyCategoryMatch $App $categoryTags) { $primaryMatched = $true }
+        if (Test-RooIndustriesAnyCategoryMatch $App $categoryTags) { $primaryMatched = $true }
     }
 
     if ($hasPrimarySelector) {
@@ -305,49 +305,49 @@ function Test-RooAppMatch {
     return $false
 }
 
-function Get-RooInstalledAppInventory {
+function Get-RooIndustriesInstalledAppInventory {
     param([string]$InventoryPath)
     if (-not [string]::IsNullOrWhiteSpace($InventoryPath)) {
-        $resolved = Resolve-RooUninstallPath $InventoryPath $InventoryPath
-        return Read-RooUninstallJsonFile $resolved
+        $resolved = Resolve-RooIndustriesUninstallPath $InventoryPath $InventoryPath
+        return Read-RooIndustriesUninstallJsonFile $resolved
     }
     $output = & (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1')
     return $output | ConvertFrom-Json
 }
 
-function Find-RooInstalledApp {
+function Find-RooIndustriesInstalledApp {
     param(
         [object]$Inventory,
         [string]$AppId
     )
-    $matches=@(Get-RooUninstallPropertyArray $Inventory 'apps' | Where-Object { [string](Get-RooUninstallPropertyValue $_ 'appId' '') -eq $AppId })
+    $matches=@(Get-RooIndustriesUninstallPropertyArray $Inventory 'apps' | Where-Object { [string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -eq $AppId })
     if($matches.Count -gt 1){throw "Inventory contains multiple records for app ID $AppId. Refresh inventory before selecting a removal target."}
     if($matches.Count -eq 1){return $matches[0]}
     return $null
 }
 
-function Get-RooProtectedAppMatches {
+function Get-RooIndustriesProtectedAppMatches {
     param(
         [object]$App,
         [object]$ProtectedCatalog
     )
     $matches = New-Object System.Collections.Generic.List[object]
-    foreach ($item in @(Get-RooUninstallPropertyArray $ProtectedCatalog 'protectedApps')) {
-        if (Test-RooAppMatch $App (Get-RooUninstallPropertyValue $item 'match' $null)) {
+    foreach ($item in @(Get-RooIndustriesUninstallPropertyArray $ProtectedCatalog 'protectedApps')) {
+        if (Test-RooIndustriesAppMatch $App (Get-RooIndustriesUninstallPropertyValue $item 'match' $null)) {
             $matches.Add($item) | Out-Null
         }
     }
     return @($matches.ToArray())
 }
 
-function Get-RooDerivedAppType {
+function Get-RooIndustriesDerivedAppType {
     param([object]$App)
-    $name = [string](Get-RooUninstallPropertyValue $App 'displayName' '')
-    $publisher = [string](Get-RooUninstallPropertyValue $App 'publisher' '')
-    $packageId = [string](Get-RooUninstallPropertyValue $App 'packageId' '')
-    $sourceType = [string](Get-RooUninstallPropertyValue $App 'sourceType' '')
+    $name = [string](Get-RooIndustriesUninstallPropertyValue $App 'displayName' '')
+    $publisher = [string](Get-RooIndustriesUninstallPropertyValue $App 'publisher' '')
+    $packageId = [string](Get-RooIndustriesUninstallPropertyValue $App 'packageId' '')
+    $sourceType = [string](Get-RooIndustriesUninstallPropertyValue $App 'sourceType' '')
     $text = ($name + ' ' + $publisher + ' ' + $packageId).ToLowerInvariant()
-    $categories = @(Get-RooUninstallPropertyArray $App 'categories' | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    $categories = @(Get-RooIndustriesUninstallPropertyArray $App 'categories' | ForEach-Object { ([string]$_).ToLowerInvariant() })
 
     if ($text -match 'easy anti-cheat|easyanticheat|battleye|battl[e]?eye|vanguard|faceit') { return 'anti-cheat' }
     if ($text -match 'defender|security|firewall|tailscale|wireguard|openvpn|zerotier|vpn|network driver|wi-fi driver|ethernet driver') { return 'security-network-component' }
@@ -363,7 +363,7 @@ function Get-RooDerivedAppType {
     return 'normal-app'
 }
 
-function Get-RooAppTypeRank {
+function Get-RooIndustriesAppTypeRank {
     param([string]$AppType)
     switch ($AppType) {
         'normal-app' { return 0 }
@@ -382,7 +382,7 @@ function Get-RooAppTypeRank {
     }
 }
 
-function Get-RooRiskRank {
+function Get-RooIndustriesRiskRank {
     param([string]$Risk)
     switch ($Risk) {
         'safe' { return 0 }
@@ -395,26 +395,26 @@ function Get-RooRiskRank {
     }
 }
 
-function Select-RooHigherRisk {
+function Select-RooIndustriesHigherRisk {
     param(
         [string]$Left,
         [string]$Right
     )
-    if ((Get-RooRiskRank $Right) -gt (Get-RooRiskRank $Left)) { return $Right }
+    if ((Get-RooIndustriesRiskRank $Right) -gt (Get-RooIndustriesRiskRank $Left)) { return $Right }
     return $Left
 }
 
-function Get-RooAppClassification {
+function Get-RooIndustriesAppClassification {
     param(
         [object]$App,
         [object]$ProtectedCatalog,
         [object]$Policy
     )
-    $appType = Get-RooDerivedAppType $App
-    $protectedMatches = @(Get-RooProtectedAppMatches $App $ProtectedCatalog)
-    $risk = [string](Get-RooUninstallPropertyValue $App 'risk' 'low')
+    $appType = Get-RooIndustriesDerivedAppType $App
+    $protectedMatches = @(Get-RooIndustriesProtectedAppMatches $App $ProtectedCatalog)
+    $risk = [string](Get-RooIndustriesUninstallPropertyValue $App 'risk' 'low')
     if ([string]::IsNullOrWhiteSpace($risk)) { $risk = 'low' }
-    $reviewRequired = [bool](Get-RooUninstallPropertyValue $App 'protected' $false)
+    $reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $App 'protected' $false)
     $protected = $false
     $blockByDefault = $false
     $reasonCodes = New-Object System.Collections.Generic.List[string]
@@ -422,19 +422,19 @@ function Get-RooAppClassification {
     $matchedRuleIds = New-Object System.Collections.Generic.List[string]
     $recommendedAction = 'Eligible for uninstall queue preview. Official uninstall must be reviewed before any future execution.'
 
-    foreach ($reason in @(Get-RooUninstallPropertyArray $App 'protectionReasons')) {
+    foreach ($reason in @(Get-RooIndustriesUninstallPropertyArray $App 'protectionReasons')) {
         if (-not [string]::IsNullOrWhiteSpace([string]$reason)) { $reasons.Add([string]$reason) | Out-Null }
     }
 
     foreach ($match in $protectedMatches) {
         $reviewRequired = $true
-        $matchRisk = [string](Get-RooUninstallPropertyValue $match 'risk' 'advanced')
+        $matchRisk = [string](Get-RooIndustriesUninstallPropertyValue $match 'risk' 'advanced')
         if ($matchRisk -eq 'protected') { $matchRisk = 'advanced' }
-        $risk = Select-RooHigherRisk $risk $matchRisk
-        $matchedRuleIds.Add([string](Get-RooUninstallPropertyValue $match 'itemId' '')) | Out-Null
-        $reasons.Add([string](Get-RooUninstallPropertyValue $match 'reason' 'Manual review required by uninstall catalog.')) | Out-Null
-        $matchedAppType = [string](Get-RooUninstallPropertyValue $match 'appType' $appType)
-        if ((Get-RooAppTypeRank $matchedAppType) -ge (Get-RooAppTypeRank $appType)) {
+        $risk = Select-RooIndustriesHigherRisk $risk $matchRisk
+        $matchedRuleIds.Add([string](Get-RooIndustriesUninstallPropertyValue $match 'itemId' '')) | Out-Null
+        $reasons.Add([string](Get-RooIndustriesUninstallPropertyValue $match 'reason' 'Manual review required by uninstall catalog.')) | Out-Null
+        $matchedAppType = [string](Get-RooIndustriesUninstallPropertyValue $match 'appType' $appType)
+        if ((Get-RooIndustriesAppTypeRank $matchedAppType) -ge (Get-RooIndustriesAppTypeRank $appType)) {
             $appType = $matchedAppType
         }
     }
@@ -455,12 +455,12 @@ function Get-RooAppClassification {
     }
 
     return [pscustomobject]@{
-        appId = [string](Get-RooUninstallPropertyValue $App 'appId' '')
-        displayName = [string](Get-RooUninstallPropertyValue $App 'displayName' '')
-        publisher = Get-RooUninstallPropertyValue $App 'publisher' $null
-        sourceType = [string](Get-RooUninstallPropertyValue $App 'sourceType' '')
-        packageId = Get-RooUninstallPropertyValue $App 'packageId' $null
-        categories = @(Get-RooUninstallPropertyArray $App 'categories')
+        appId = [string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')
+        displayName = [string](Get-RooIndustriesUninstallPropertyValue $App 'displayName' '')
+        publisher = Get-RooIndustriesUninstallPropertyValue $App 'publisher' $null
+        sourceType = [string](Get-RooIndustriesUninstallPropertyValue $App 'sourceType' '')
+        packageId = Get-RooIndustriesUninstallPropertyValue $App 'packageId' $null
+        categories = @(Get-RooIndustriesUninstallPropertyArray $App 'categories')
         primaryClassification = $appType
         risk = $risk
         protected = $false
@@ -479,7 +479,7 @@ function Get-RooAppClassification {
     }
 }
 
-function Split-RooUninstallCommandLine {
+function Split-RooIndustriesUninstallCommandLine {
     param([string]$CommandLine)
     if ([string]::IsNullOrWhiteSpace($CommandLine)) {
         return [pscustomobject]@{ executable = $null; arguments = $null; rawCommand = $null }
@@ -507,27 +507,27 @@ function Split-RooUninstallCommandLine {
     }
 }
 
-function Resolve-RooEnvironmentPath {
+function Resolve-RooIndustriesEnvironmentPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
     return [Environment]::ExpandEnvironmentVariables($Path)
 }
 
-function Test-RooProtectedPath {
+function Test-RooIndustriesProtectedPath {
     param(
         [string]$Path,
         [object]$Rules
     )
     if ([string]::IsNullOrWhiteSpace($Path)) { return $true }
-    $expandedPath = Resolve-RooEnvironmentPath $Path
-    foreach ($item in @(Get-RooUninstallPropertyArray $Rules 'protectedPaths')) {
-        $pattern = Resolve-RooEnvironmentPath ([string](Get-RooUninstallPropertyValue $item 'pathPattern' ''))
+    $expandedPath = Resolve-RooIndustriesEnvironmentPath $Path
+    foreach ($item in @(Get-RooIndustriesUninstallPropertyArray $Rules 'protectedPaths')) {
+        $pattern = Resolve-RooIndustriesEnvironmentPath ([string](Get-RooIndustriesUninstallPropertyValue $item 'pathPattern' ''))
         if (-not [string]::IsNullOrWhiteSpace($pattern) -and $expandedPath -like $pattern) { return $true }
     }
     return $false
 }
 
-function New-RooLeftoverItem {
+function New-RooIndustriesLeftoverItem {
     param(
         [string]$ItemId,
         [string]$Type,
@@ -544,7 +544,7 @@ function New-RooLeftoverItem {
         itemId = $ItemId
         type = $Type
         target = $Target
-        matchedBy = @(Get-RooUninstallArray $MatchedBy)
+        matchedBy = @(Get-RooIndustriesUninstallArray $MatchedBy)
         confidence = $Confidence
         risk = $Risk
         defaultSelected = ($DefaultSelected -and -not $Protected)
@@ -553,9 +553,9 @@ function New-RooLeftoverItem {
         metadata = $Metadata
     }
 }
-function Assert-RooCleanupExclusions {
+function Assert-RooIndustriesCleanupExclusions {
     param([string[]]$Targets)
-    $policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\cleanup-exclusions.json'
+    $policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
     if(@($Targets).Count -eq 0){return}
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}

@@ -20,7 +20,7 @@ The job and launcher defaults affect other new descendants of that launcher too.
 
 In the desktop app, open Process Control → Game sessions. Close the game, select its running launcher and installed executable, choose launch priorities and a core mask, accept the launcher scope, and review the settings. **Arm session** starts the worker; launch the game normally after it reports Ready. The panel shows requested and observed values separately, permits live core switching, and offers Stop and restore or recovery after a worker exit. Saved sessions are rediscovered when the app opens, and Restore & Logs includes their actual recovery state. GPU access denial remains unavailable; it does not prevent other accepted controls from being shown individually.
 
-Desktop session state lives under `%LOCALAPPDATA%\RooOptimizationSuite\operations\game-session-*\session`, outside the repository. Closing the app does not stop a session. This flow does not enable automatic startup at Windows sign-in.
+Desktop session state lives under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations\game-session-*\session`, outside the repository. Closing the app does not stop a session. This flow does not enable automatic startup at Windows sign-in.
 
 Build the native package with `backend/scripts/Build-OptimizerHost.ps1`. It includes the command host and a self-contained x64 Windows background worker in `backend/bin/optimizer/session`; the worker and recovery watcher create no console windows. Put the requested controls in a JSON file, for example:
 
@@ -77,7 +77,7 @@ Recovery cannot take over a live worker. Create a new preview and session direct
 
 `tools/scripts/Test-GameSessionClient.ps1` exercises the desktop service against the actual session worker with disposable RX9070XT workloads. It covers review-hash binding, saved-session discovery, sustained native GPU-class readback, live affinity changes, stop/restoration, and rejection of stale, missing or conflicting UI success signals. Its requested GPU and affinity controls do not write registry launch policies.
 
-`backend/scripts/Test-ProtectedGameSessions.ps1` is discovered by the normal backend regression runner. It uses disposable launcher/game processes and the `RooLaunchPolicyProbe.exe` IFEO key, restoring and removing fixture state afterward. It requires permission to perform that reversible registry fixture on the selected machine.
+`backend/scripts/Test-ProtectedGameSessions.ps1` is discovered by the normal backend regression runner. It uses disposable launcher/game processes and the `RooIndustriesLaunchPolicyProbe.exe` IFEO key, restoring and removing fixture state afterward. It requires permission to perform that reversible registry fixture on the selected machine.
 
 `-HardwareGpu` additionally runs and verifies real offscreen compute on an RX9070XT. Assertions independently query the game fixture's CPU, I/O, memory, GPU and affinity values; exercise GPU reset/reapplication, live core switching, game PID changes, explicit stop, stale requests, and forced worker exit with watcher recovery. A target-specific anti-cheat denial must still be verified on that title and reported independently of fixture success.
 

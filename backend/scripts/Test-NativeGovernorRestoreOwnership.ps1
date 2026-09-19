@@ -2,17 +2,17 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Host "PASS $Message"}
 function Read-Result($Lines){return ($Lines -join [Environment]::NewLine)|ConvertFrom-Json}
-$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-native-restore-ownership-'+[guid]::NewGuid().ToString('N'))
+$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-native-restore-ownership-'+[guid]::NewGuid().ToString('N'))
 $probe=$null
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
-    $exe=Join-Path $root 'RooRestoreProbe.exe'
-    Add-Type -TypeDefinition 'using System.Threading; public class RooRestoreProbe {public static void Main(){Thread.Sleep(120000);}}' -OutputAssembly $exe -OutputType ConsoleApplication
+    $exe=Join-Path $root 'RooIndustriesRestoreProbe.exe'
+    Add-Type -TypeDefinition 'using System.Threading; public class RooIndustriesRestoreProbe {public static void Main(){Thread.Sleep(120000);}}' -OutputAssembly $exe -OutputType ConsoleApplication
     $start=[Diagnostics.ProcessStartInfo]::new($exe);$start.UseShellExecute=$false;$start.CreateNoWindow=$true
     $probe=[Diagnostics.Process]::new();$probe.StartInfo=$start;$probe.Start()|Out-Null
-    $build=Read-Result (& (Join-Path $PSScriptRoot 'Build-NativeProcessGovernor.ps1') -OutputPath (Join-Path $root 'RooProcessGovernor.exe'))
+    $build=Read-Result (& (Join-Path $PSScriptRoot 'Build-NativeProcessGovernor.ps1') -OutputPath (Join-Path $root 'RooIndustriesProcessGovernor.exe'))
     if($build.status -ne 'built' -and $build.status -ne 'success'){Write-Host ($build|ConvertTo-Json -Depth 12)}
-    $worker=@(Get-ChildItem $root -Recurse -Filter RooProcessGovernor.exe)[0].FullName
+    $worker=@(Get-ChildItem $root -Recurse -Filter RooIndustriesProcessGovernor.exe)[0].FullName
     $originalAffinity=$probe.ProcessorAffinity.ToInt64()
     $snapshot=@{processId=$probe.Id;processName=$probe.ProcessName;executablePath=$exe;processStartTimeUtc=$probe.StartTime.ToUniversalTime().ToString('o');
         originalPriorityClass='Normal';originalAffinityMask=$originalAffinity;originalIoPriority='Normal';originalGpuPriority='Normal';

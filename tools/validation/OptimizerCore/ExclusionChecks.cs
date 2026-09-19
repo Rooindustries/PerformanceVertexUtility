@@ -2,16 +2,16 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class ExclusionChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-exclusions-" + Guid.NewGuid().ToString("N"));
-        var registryRoot = "Software\\RooExclusionTests\\" + Guid.NewGuid().ToString("N");
-        var source = Path.Combine(root, "Roo Exclusion Example");
-        var keyPath = registryRoot + "\\Roo Exclusion Example";
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-exclusions-" + Guid.NewGuid().ToString("N"));
+        var registryRoot = "Software\\RooIndustriesExclusionTests\\" + Guid.NewGuid().ToString("N");
+        var source = Path.Combine(root, "Roo Industries Exclusion Example");
+        var keyPath = registryRoot + "\\Roo Industries Exclusion Example";
         var keyAddress = new RegistryAddress("CurrentUser", "Registry64", keyPath, "key", null);
         Directory.CreateDirectory(source);
         var file = Path.Combine(source, "settings.txt");
@@ -105,7 +105,7 @@ static class ExclusionChecks
                 AppId = "fixture:exclusions", ProviderIdentityHash = new string('E', 64), Owner = OperationOwner.Current(),
                 ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
             };
-            var app = new CleanupApplication { AppId = authority.AppId, DisplayName = "Roo Exclusion Example", Publisher = "Roo", InstallLocation = source, PackageFamilyName = null };
+            var app = new CleanupApplication { AppId = authority.AppId, DisplayName = "Roo Industries Exclusion Example", Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
             var context = new CleanupContext(Path.Combine(root, "queue.json"), authority, app, [], true);
             var policy = paths;
             var policyUnavailable = false;
@@ -148,8 +148,8 @@ static class ExclusionChecks
         {
             if (preview?.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
             hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooExclusionTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooExclusionTests", false);
+            using (var parent = hive.OpenSubKey("Software\\RooIndustriesExclusionTests"))
+                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesExclusionTests", false);
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Exclusion validation removes its owned files, registry data and receipts");

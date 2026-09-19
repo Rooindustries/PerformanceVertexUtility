@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record RegistryAddress([property: JsonRequired] string Hive, [property: JsonRequired] string View,
     [property: JsonRequired] string KeyPath, [property: JsonRequired] string Kind, [property: JsonRequired] string? ValueName)
@@ -33,7 +33,7 @@ public sealed record RegistryAddress([property: JsonRequired] string Hive, [prop
         string[] protectedRoots = ["Software", "Software\\Microsoft", "Software\\Classes", "Software\\Microsoft\\Windows",
             "Software\\Microsoft\\Windows\\CurrentVersion", "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
             "Software\\Microsoft\\Windows\\CurrentVersion\\Run", "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
-            "Software\\Classes\\CLSID", "Software\\Classes\\Interface", "Software\\Classes\\TypeLib", "Software\\RooOptimizationSuite"];
+            "Software\\Classes\\CLSID", "Software\\Classes\\Interface", "Software\\Classes\\TypeLib", "Software\\RooIndustriesOptimizationSuite", BrandCompatibility.LegacyRegistryRoot];
         if (protectedRoots.Contains(KeyPath, StringComparer.OrdinalIgnoreCase))
             throw new InvalidDataException("A shared registry container cannot be deleted as an app leftover.");
     }

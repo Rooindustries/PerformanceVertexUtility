@@ -33,11 +33,11 @@ function Test-PathInsideTemp {
 
 try {
     if ([string]::IsNullOrWhiteSpace($SourcePath)) {
-        $SourcePath = Join-Path $PSScriptRoot '..\native\StandbyMemoryHelper\RooStandbyMemoryHelper.cs'
+        $SourcePath = Join-Path $PSScriptRoot '..\native\StandbyMemoryHelper\RooIndustriesStandbyMemoryHelper.cs'
     }
-    $resolvedSource = Resolve-RooPath $SourcePath $SourcePath
+    $resolvedSource = Resolve-RooIndustriesPath $SourcePath $SourcePath
     $resolvedOutput = if ([string]::IsNullOrWhiteSpace($HelperOutputPath)) { '' } else { [System.IO.Path]::GetFullPath($HelperOutputPath) }
-    $buildScriptPath = Resolve-RooPath $PSCommandPath $PSCommandPath
+    $buildScriptPath = Resolve-RooIndustriesPath $PSCommandPath $PSCommandPath
     $sourceExists = Test-Path -LiteralPath $resolvedSource -PathType Leaf
     $cscPath = Get-CscCompilerPath
     $toolchainDetected = -not [string]::IsNullOrWhiteSpace($cscPath)
@@ -55,22 +55,22 @@ try {
     }
 
     if ($Build -and $buildGateSatisfied) {
-        Ensure-RooDirectory (Split-Path $resolvedOutput -Parent)
-        $buildResult = Invoke-RooBackendHiddenProcess -FilePath $cscPath -Arguments @('/nologo', '/target:exe', "/out:$resolvedOutput", $resolvedSource) -TimeoutSeconds $TimeoutSeconds
-        $buildSucceeded = ((-not [bool](Get-RooPropertyValue $buildResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $buildResult 'exitCode' -1) -eq 0 -and (Test-Path -LiteralPath $resolvedOutput -PathType Leaf))
+        Ensure-RooIndustriesDirectory (Split-Path $resolvedOutput -Parent)
+        $buildResult = Invoke-RooIndustriesBackendHiddenProcess -FilePath $cscPath -Arguments @('/nologo', '/target:exe', "/out:$resolvedOutput", $resolvedSource) -TimeoutSeconds $TimeoutSeconds
+        $buildSucceeded = ((-not [bool](Get-RooIndustriesPropertyValue $buildResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $buildResult 'exitCode' -1) -eq 0 -and (Test-Path -LiteralPath $resolvedOutput -PathType Leaf))
         $status = if ($buildSucceeded) { 'success' } else { 'failed' }
     }
 
     $commandLine = if ([string]::IsNullOrWhiteSpace($resolvedOutput)) {
-        'Build first, then run elevated: RooStandbyMemoryHelper.exe --purge-standby-list'
+        'Build first, then run elevated: RooIndustriesStandbyMemoryHelper.exe --purge-standby-list'
     } else {
         "Start-Process -Verb RunAs -FilePath `"$resolvedOutput`" -ArgumentList '--purge-standby-list'"
     }
     $result = [pscustomobject]@{
         actionId = 'performance.standbyMemoryHelper.build'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = (-not [bool]$Build)
         status = $status
         buildScriptPath = $buildScriptPath
@@ -105,21 +105,21 @@ try {
         }
         warnings = @()
         errors = @()
-        logs = @((New-RooLog 'Standby memory helper build contract evaluated without running the helper.'))
+        logs = @((New-RooIndustriesLog 'Standby memory helper build contract evaluated without running the helper.'))
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.standbyMemoryHelper.build'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'failed'
         summary = [pscustomobject]@{ willPurgeStandbyList = $false; willLaunchElevatedHelper = $false; nextEngineeringStep = 'Check helper source path, compiler availability, and temp output path.' }
-        errors = @((New-RooIssue 'STANDBY_HELPER_BUILD_FAILED' $_.Exception.Message 'error' 'performance.standbyMemoryHelper' $SourcePath $true 'Check helper source path, compiler availability, and temp output path.' $null))
-        logs = @((New-RooLog 'Standby memory helper build contract failed.' 'error'))
+        errors = @((New-RooIndustriesIssue 'STANDBY_HELPER_BUILD_FAILED' $_.Exception.Message 'error' 'performance.standbyMemoryHelper' $SourcePath $true 'Check helper source path, compiler availability, and temp output path.' $null))
+        logs = @((New-RooIndustriesLog 'Standby memory helper build contract failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

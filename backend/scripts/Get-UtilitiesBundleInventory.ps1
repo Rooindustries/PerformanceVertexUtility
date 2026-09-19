@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
-function Get-RooUtcStamp {
+function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
@@ -24,8 +24,8 @@ function Resolve-UtilitiesArchive {
     $repoRelative = Join-Path $repoRoot 'vendor\Utilities.zip'
     $candidates.Add($repoRelative) | Out-Null
 
-    if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ARCHIVE)) {
-        $candidates.Add($env:ROO_UTILITIES_ARCHIVE) | Out-Null
+    if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE)) {
+        $candidates.Add($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE) | Out-Null
     }
 
     foreach ($candidate in $candidates) {
@@ -36,10 +36,10 @@ function Resolve-UtilitiesArchive {
         }
     }
 
-    throw "Utilities archive not found. Provide -ArchivePath or set ROO_UTILITIES_ARCHIVE."
+    throw "Utilities archive not found. Provide -ArchivePath or set ROO_INDUSTRIES_UTILITIES_ARCHIVE."
 }
 
-function ConvertTo-RooId {
+function ConvertTo-RooIndustriesId {
     param([string]$Value)
 
     $text = ([string]$Value).ToLowerInvariant()
@@ -58,7 +58,7 @@ function New-Classification {
     $pathLower = $path.ToLowerInvariant()
     $extension = [System.IO.Path]::GetExtension($pathLower)
     $defaults = [ordered]@{
-        toolId = ConvertTo-RooId $path
+        toolId = ConvertTo-RooIndustriesId $path
         displayName = [System.IO.Path]::GetFileName($path)
         category = 'bundle-metadata'
         risk = 'medium'
@@ -157,7 +157,7 @@ function New-Classification {
             $defaults.allowedExecutionMode = 'excluded-never-run'
             $defaults.hardwareGates = @('none')
             $defaults.restoreBackupRequirement = 'Not applicable because this updater is excluded from default integration.'
-            $defaults.integrationPlan = 'Exclude from default driver strategy. Prefer Roo hardware-gated recommendations and manual driver packages.'
+            $defaults.integrationPlan = 'Exclude from default driver strategy. Prefer Roo Industries hardware-gated recommendations and manual driver packages.'
             $defaults.executionClass = 'excluded'
             break
         }
@@ -577,7 +577,7 @@ function New-Classification {
             $defaults.allowedExecutionMode = 'manual-launcher-only'
             $defaults.hardwareGates = @('windows')
             $defaults.restoreBackupRequirement = 'Not required for manual diagnostic launch; native diagnostics should keep report artifacts user-visible.'
-            $defaults.integrationPlan = 'Separate diagnostics section with transparent Roo plan recommendation after findings.'
+            $defaults.integrationPlan = 'Separate diagnostics section with transparent Roo Industries plan recommendation after findings.'
             $defaults.executionClass = 'manual-launcher'
             break
         }
@@ -652,7 +652,7 @@ try {
         $classification = New-Classification ($entry.FullName)
         [pscustomobject]@{
             archivePath = $entryPath
-            normalizedId = ConvertTo-RooId $entry.FullName
+            normalizedId = ConvertTo-RooIndustriesId $entry.FullName
             toolId = $classification.toolId
             displayName = $classification.displayName
             entryKind = Get-EntryKind $extension
@@ -691,7 +691,7 @@ try {
         productName = 'Roo Industries Optimization Suite'
         catalogId = 'utilities-bundle-catalog'
         sourceArchive = $SourceArchiveLabel
-        generatedAtUtc = Get-RooUtcStamp
+        generatedAtUtc = Get-RooIndustriesUtcStamp
         sourceArchiveSizeBytes = [uint64]$archiveItem.Length
         entryCount = [int]$allEntries.Count
         executableScriptCount = [int]$executableScriptEntries.Count

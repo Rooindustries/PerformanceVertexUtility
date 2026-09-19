@@ -64,7 +64,7 @@ function Convert-RegistryTarget {
 
 function Resolve-DetectionFilePath {
     param([string]$Target)
-    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_UTILITIES_ROOT }
+    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_INDUSTRIES_UTILITIES_ROOT }
     $expanded = $Target.Replace('{utilitiesRoot}', $utilitiesRoot)
     $expanded = [Environment]::ExpandEnvironmentVariables($expanded)
     if (-not [System.IO.Path]::IsPathRooted($expanded)) {
@@ -244,8 +244,8 @@ $requiredFields = @(
     'testEvidence'
 )
 $allowedFamilies = @('process-controls', 'cleanup-uninstall', 'drivers-gpu-tools', 'system-optimizations')
-$allowedSources = @('process-lasso', 'revo', 'nvpi', 'fsosx-dash', 'winutil', 'utilities-folder', 'roo-native')
-$allowedImplementedBy = @('roo-native', 'roo-script', 'external-tool', 'not-implemented')
+$allowedSources = @('process-lasso', 'revo', 'nvpi', 'fsosx-dash', 'winutil', 'utilities-folder', 'roo-industries-native')
+$allowedImplementedBy = @('roo-industries-native', 'roo-industries-script', 'external-tool', 'not-implemented')
 $allowedRisk = @('safe', 'low', 'medium', 'high', 'critical')
 $allowedPreviewStatus = @('implemented', 'not-implemented')
 $allowedApplyStatus = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')

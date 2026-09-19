@@ -1,16 +1,16 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE,[switch]$SharedQueuePaths)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[switch]$SharedQueuePaths)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $caseId=[Guid]::NewGuid().ToString('N')
-$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-host-contract-'+$caseId)
+$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-contract-'+$caseId)
 $hostDirectory=Join-Path $root 'host'
 $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
-$dataRoot='Software\RooHostFixture-'+$caseId
+$dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
-$exclusionPath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\cleanup-exclusions.json'
+$exclusionPath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
 $exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
 $ownedExclusionHash=$null
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
@@ -19,7 +19,7 @@ function Core([string]$CoreAction,[object]$Fields){
     $request=@{schemaVersion=1;repoRoot=$repoRoot}
     foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
     $path=Join-Path $root ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
-    Write-RooOperationJson $request $path
+    Write-RooIndustriesOperationJson $request $path
     $text=@(& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') $CoreAction $path) -join "`n"
     $exitCode=$LASTEXITCODE
     $result=$text|ConvertFrom-Json
@@ -30,14 +30,14 @@ try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
-    $remover=Join-Path $root 'RooHostRemover.exe'
+    $remover=Join-Path $root 'RooIndustriesHostRemover.exe'
     Add-Type @'
 using System;
 using System.IO;
 using Microsoft.Win32;
-public class RooHostRemover {
+public class RooIndustriesHostRemover {
  public static int Main(string[] args) {
-  if(args.Length!=3 || !args[0].StartsWith("RooHostFixture-",StringComparison.Ordinal) || !args[2].StartsWith(@"Software\RooHostFixture-",StringComparison.Ordinal) || !Path.GetFullPath(args[1]).StartsWith(Path.GetTempPath(),StringComparison.OrdinalIgnoreCase))return 2;
+  if(args.Length!=3 || !args[0].StartsWith("RooIndustriesHostFixture-",StringComparison.Ordinal) || !args[2].StartsWith(@"Software\RooIndustriesHostFixture-",StringComparison.Ordinal) || !Path.GetFullPath(args[1]).StartsWith(Path.GetTempPath(),StringComparison.OrdinalIgnoreCase))return 2;
   using(var root=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall",true))root.DeleteSubKeyTree(args[0],false);
   File.WriteAllText(Path.Combine(args[1],"vendor-created.txt"),"created by fixture vendor");
   using(var key=Registry.CurrentUser.CreateSubKey(args[2]))key.SetValue("VendorCreated",17,RegistryValueKind.DWord);
@@ -46,8 +46,8 @@ public class RooHostRemover {
 }
 '@ -OutputAssembly $remover -OutputType WindowsApplication
     foreach($label in @('One','Two')){
-        $keyName='RooHostFixture-'+$caseId+'-'+$label
-        $display='Roo Host '+$label+' '+$caseId.Substring(0,8)
+        $keyName='RooIndustriesHostFixture-'+$caseId+'-'+$label
+        $display='Roo Industries Host '+$label+' '+$caseId.Substring(0,8)
         $install=Join-Path $root ($label+' application files')
         if($SharedQueuePaths -and $label -eq 'Two'){$install=Join-Path $apps[0].install 'Shared add-on'}
         [IO.Directory]::CreateDirectory($install)|Out-Null
@@ -59,7 +59,7 @@ public class RooHostRemover {
         try {$shared.SetValue($label,$install,[Microsoft.Win32.RegistryValueKind]::String)}finally{$shared.Dispose()}
         $registration=$hive.CreateSubKey($registrationRoot+'\'+$keyName)
         try {
-            $registration.SetValue('DisplayName',$display);$registration.SetValue('Publisher','Roo');$registration.SetValue('DisplayVersion','1.0');$registration.SetValue('InstallLocation',$install)
+            $registration.SetValue('DisplayName',$display);$registration.SetValue('Publisher','Roo Industries');$registration.SetValue('DisplayVersion','1.0');$registration.SetValue('InstallLocation',$install)
             $registration.SetValue('UninstallString',('"'+$remover+'" "'+$keyName+'" "'+$install+'" "'+$dataPath+'"'))
         } finally {$registration.Dispose()}
         $apps+=@{keyName=$keyName;displayName=$display;install=$install;dataPath=$dataPath;label=$label}
@@ -99,7 +99,7 @@ public class RooHostRemover {
                 $peer=@($changed.plan.entries|Where-Object {$_.appId -eq $apps[1].appId})[0]
                 if($invalid -eq 'missing'){$peer.PSObject.Properties.Remove('appSnapshot');$expected='Removal queue ownership metadata is incomplete.'}
                 else {$peer.appSnapshot.appId=$apps[0].appId;$expected='Saved ownership metadata belongs to another queue entry.'}
-                Write-RooOperationJson $changed $queue
+                Write-RooIndustriesOperationJson $changed $queue
                 $rejected=$false
                 try {Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$apps[0].appId}|Out-Null}
                 catch {if(-not $_.Exception.Message.EndsWith($expected)){throw};$rejected=$true}

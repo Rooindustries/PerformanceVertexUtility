@@ -1,14 +1,14 @@
 using Microsoft.Win32;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class ApplicationCleanupChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-application-cleanup-" + Guid.NewGuid().ToString("N"));
-        var registryRoot = "Software\\RooApplicationCleanupTests\\" + Guid.NewGuid().ToString("N");
-        var registryPath = registryRoot + "\\Roo Composite Example";
-        var source = Path.Combine(root, "Roo Composite Example");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-application-cleanup-" + Guid.NewGuid().ToString("N"));
+        var registryRoot = "Software\\RooIndustriesApplicationCleanupTests\\" + Guid.NewGuid().ToString("N");
+        var registryPath = registryRoot + "\\Roo Industries Composite Example";
+        var source = Path.Combine(root, "Roo Industries Composite Example");
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, "settings.txt"), "original settings");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
@@ -21,7 +21,7 @@ static class ApplicationCleanupChecks
                 AppId = "fixture:composite", ProviderIdentityHash = new string('B', 64), Owner = OperationOwner.Current(),
                 ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
             };
-            var application = new CleanupApplication { AppId = authority.AppId, DisplayName = "Roo Composite Example", Publisher = "Roo", InstallLocation = source, PackageFamilyName = null };
+            var application = new CleanupApplication { AppId = authority.AppId, DisplayName = "Roo Industries Composite Example", Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
             var context = new CleanupContext(Path.Combine(root, "queue.json"), authority, application, [], true);
             var engine = new ApplicationCleanup(() => context, [root], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
             var scan = engine.Scan(CancellationToken.None);
@@ -62,8 +62,8 @@ static class ApplicationCleanupChecks
                 hive.DeleteSubKeyTree(registry.Receipt.KeyPath, false);
             }
             hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooApplicationCleanupTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooApplicationCleanupTests", false);
+            using (var parent = hive.OpenSubKey("Software\\RooIndustriesApplicationCleanupTests"))
+                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesApplicationCleanupTests", false);
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Combined cleanup validation removes all owned files, registry data and commit receipts");

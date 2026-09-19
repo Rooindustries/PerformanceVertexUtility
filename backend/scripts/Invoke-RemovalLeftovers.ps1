@@ -11,22 +11,22 @@ $ErrorActionPreference='Stop'
 $result=[pscustomobject]@{schemaVersion=1;actionId='apps.removalLeftovers.'+$Action.ToLowerInvariant();status='failed';dryRun=$true;data=$null;errors=@()}
 $scratch=$null
 try {
-    Assert-RooDistinctOperationPaths @($QueueJournalPath,$ReviewPath,$OutputPath)
-    $queue=(Read-RooOperationJson $QueueJournalPath).data
+    Assert-RooIndustriesDistinctOperationPaths @($QueueJournalPath,$ReviewPath,$OutputPath)
+    $queue=(Read-RooIndustriesOperationJson $QueueJournalPath).data
     if($queue.kind -ne 'bulk-uninstall-journal'){throw 'A bulk removal journal is required.'}
-    Assert-RooOperationOwner $queue.plan.owner
+    Assert-RooIndustriesOperationOwner $queue.plan.owner
     $entries=@($queue.plan.entries|Where-Object {$_.appId -ceq $AppId})
     $states=@($queue.entries|Where-Object {$_.appId -ceq $AppId})
     if($entries.Count -ne 1 -or $states.Count -ne 1){throw 'App identity is not unique in the removal journal.'}
     $entry=$entries[0];$state=$states[0]
     if($entry.protected -or -not $state.registrationAbsent -or $state.state -notin @('removed','already-absent')){throw 'Official removal must be reconciled before leftover cleanup.'}
-    if(Test-RooBulkAppPresent $entry.identity ([string]$queue.plan.fixtureRoot)){throw 'The app registration is present again. Review the current installation instead.'}
+    if(Test-RooIndustriesBulkAppPresent $entry.identity ([string]$queue.plan.fixtureRoot)){throw 'The app registration is present again. Review the current installation instead.'}
     if($Action -in @('Scan','Preview')) {
         if($null -eq $entry.appSnapshot){throw 'This older queue has no saved app metadata for a post-removal scan.'}
-        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-leftover-discovery-'+[guid]::NewGuid().ToString('N'))
+        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-discovery-'+[guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($scratch)|Out-Null
         $inventoryPath=Join-Path $scratch 'inventory.json';$scanPath=Join-Path $scratch 'scan.json'
-        Write-RooOperationJson @{schemaVersion=1;apps=@($entry.appSnapshot)} $inventoryPath
+        Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($entry.appSnapshot)} $inventoryPath
         $scan=(& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId $AppId -InventoryPath $inventoryPath -OutputPath $scanPath)|ConvertFrom-Json
         if(@($scan.errors).Count -gt 0){throw (@($scan.errors|ForEach-Object {$_.message}) -join ' ')}
         if($Action -eq 'Scan') {$result.data=$scan;$result.status='preview'}
@@ -42,7 +42,7 @@ try {
             $manifest=(& (Join-Path $PSScriptRoot 'New-CleanupDeletionManifest.ps1') -ScanPath $scanPath -ItemId $ItemId -OutputPath $manifestPath)|ConvertFrom-Json
             if(@($manifest.errors).Count -gt 0){throw 'The selected cleanup manifest could not be built.'}
             $official=@{schemaVersion=1;status='preview';commands=@(@{appId=$AppId;displayName=$entry.displayName;executable=$null;blocked=$false;protected=$false;reviewRequired=[bool]$entry.reviewRequired});errors=@()}
-            Write-RooOperationJson $official $officialPath
+            Write-RooIndustriesOperationJson $official $officialPath
             $result.data=[pscustomobject]@{queueId=$queue.plan.queueId;appId=$AppId;displayName=$entry.displayName;items=@($manifest.items);
                 requiresReview=[bool]$entry.reviewRequired;manifestPath=$manifestPath;manifestSha256=(Get-FileHash $manifestPath).Hash;
                 officialPath=$officialPath;officialSha256=(Get-FileHash $officialPath).Hash;backupRoot=(Join-Path $directory 'backup');rollbackPath=(Join-Path $directory 'rollback.json')}
@@ -50,7 +50,7 @@ try {
         }
     } else {
         if(-not $ReviewPath -or $ReviewSha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'The reviewed cleanup preview and its SHA-256 are required.'}
-        $review=(Read-RooOperationJson $ReviewPath $ReviewSha256).data
+        $review=(Read-RooIndustriesOperationJson $ReviewPath $ReviewSha256).data
         $data=$review.data
         if($review.status -ne 'preview' -or $review.actionId -ne 'apps.removalLeftovers.preview' -or $data.appId -cne $AppId -or $data.queueId -cne $queue.plan.queueId){throw 'Cleanup review does not belong to this app and queue.'}
         if($Action -eq 'Apply') {
@@ -68,6 +68,6 @@ try {
     }
 } catch {$result.errors=@([pscustomobject]@{code='REMOVAL_LEFTOVERS_REJECTED';message=$_.Exception.Message})}
 finally {if($scratch -and (Test-Path -LiteralPath $scratch)){Remove-Item -LiteralPath $scratch -Recurse -Force}}
-if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -ine [IO.Path]::GetFullPath($QueueJournalPath) -and (-not $ReviewPath -or [IO.Path]::GetFullPath($OutputPath) -ine [IO.Path]::GetFullPath($ReviewPath))){Write-RooOperationJson $result $OutputPath}
+if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -ine [IO.Path]::GetFullPath($QueueJournalPath) -and (-not $ReviewPath -or [IO.Path]::GetFullPath($OutputPath) -ine [IO.Path]::GetFullPath($ReviewPath))){Write-RooIndustriesOperationJson $result $OutputPath}
 $result|ConvertTo-Json -Depth 32
 if($result.status -eq 'failed'){exit 1}

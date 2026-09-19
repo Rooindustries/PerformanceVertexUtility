@@ -15,7 +15,7 @@ The supplied `DL_SCEWIN.exe` is a downloader, not a firmware helper. It retrieve
 - An import-intent journal is written before launching the helper. A second apply of the same review returns the existing journal without importing again. A shared operation lock serializes the app, and an existing SCEWIN process blocks another command.
 - A nonzero exit, reported error, uncertain result or mismatched re-export remains `needsAttention`. Verification cannot silently clear a prior import failure. A clean import plus matching values is `restartRequired`; a subsequent changed boot identity plus matching values is `applied`.
 - Restart has a separate confirmation and re-verifies settings first. Undo requires a fresh export and review; values changed by another actor are not overwritten.
-- Recovery exports are kept in `%LOCALAPPDATA%\RooOptimizationSuite\firmware\sessions`. They are not a guarantee of recovery from a PC that cannot boot or run SCEWIN.
+- Recovery exports are kept in `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\firmware\sessions`. They are not a guarantee of recovery from a PC that cannot boot or run SCEWIN.
 
 ## Verification
 

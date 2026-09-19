@@ -1,6 +1,6 @@
 param([string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'))
 $ErrorActionPreference = 'Stop'
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
     Write-Host "PASS $Message"

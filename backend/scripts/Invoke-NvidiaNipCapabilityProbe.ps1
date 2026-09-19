@@ -37,31 +37,31 @@ function Get-NvidiaFileVersionEvidence {
 }
 
 try {
-    $catalog = Read-RooNvidiaNipCatalog $CatalogPath
-    $profile = Get-RooNvidiaNipProfile $catalog $ProfileId
-    $profileName = [string](Get-RooPropertyValue $profile 'profileNameInNip' (Get-RooPropertyValue $profile 'name' 'Base Profile'))
-    $resolvedNvpi = if ([string]::IsNullOrWhiteSpace($NvpiExecutablePath)) { '' } else { Resolve-RooPath $NvpiExecutablePath $NvpiExecutablePath }
+    $catalog = Read-RooIndustriesNvidiaNipCatalog $CatalogPath
+    $profile = Get-RooIndustriesNvidiaNipProfile $catalog $ProfileId
+    $profileName = [string](Get-RooIndustriesPropertyValue $profile 'profileNameInNip' (Get-RooIndustriesPropertyValue $profile 'name' 'Base Profile'))
+    $resolvedNvpi = if ([string]::IsNullOrWhiteSpace($NvpiExecutablePath)) { '' } else { Resolve-RooIndustriesPath $NvpiExecutablePath $NvpiExecutablePath }
     $toolExists = (-not [string]::IsNullOrWhiteSpace($resolvedNvpi) -and (Test-Path -LiteralPath $resolvedNvpi -PathType Leaf))
 
     $createdProbeRoot = $false
     if ([string]::IsNullOrWhiteSpace($ExportPath)) {
-        $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('roo-nvidia-nip-readonly-probe-' + [guid]::NewGuid().ToString('N'))
+        $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('roo-industries-nvidia-nip-readonly-probe-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
         $createdProbeRoot = $true
         $resolvedExportPath = Join-Path $probeRoot 'current-profile-export.nip'
     } else {
-        $resolvedExportPath = Resolve-RooPath $ExportPath $ExportPath
+        $resolvedExportPath = Resolve-RooIndustriesPath $ExportPath $ExportPath
         $probeRoot = Split-Path $resolvedExportPath -Parent
     }
 
     $exportPathInsideTemp = Test-NvidiaProbePathInsideTemp $resolvedExportPath
     $exportExtensionSafe = ([System.IO.Path]::GetExtension($resolvedExportPath) -ieq '.nip')
     $gates = @(
-        (New-RooBackendExecutorGate 'read-only-probe-flag' 'Read-only NVPI probe explicitly allowed' $true ([bool]$AllowReadOnlyNvpiProbe) 'Real NVPI process probes require -AllowReadOnlyNvpiProbe.' $null),
-        (New-RooBackendExecutorGate 'nvpi-tool-exists' 'NVPI executable exists' $true $toolExists 'A local NVIDIA Profile Inspector executable is required for real process probing.' ([pscustomobject]@{ nvpiExecutablePath = $resolvedNvpi })),
-        (New-RooBackendExecutorGate 'export-path-temp' 'Probe export path is under temp' $true $exportPathInsideTemp 'Read-only export probes must write only to a temp path.' ([pscustomobject]@{ exportPath = $resolvedExportPath })),
-        (New-RooBackendExecutorGate 'export-extension-nip' 'Probe export uses .nip extension' $true $exportExtensionSafe 'Export probe output must be a .nip file.' ([pscustomobject]@{ exportPath = $resolvedExportPath })),
-        (New-RooBackendExecutorGate 'real-import-forbidden' 'Real NVPI import is not part of capability probe' $true $true 'Capability probing never calls -importProfile.' $null)
+        (New-RooIndustriesBackendExecutorGate 'read-only-probe-flag' 'Read-only NVPI probe explicitly allowed' $true ([bool]$AllowReadOnlyNvpiProbe) 'Real NVPI process probes require -AllowReadOnlyNvpiProbe.' $null),
+        (New-RooIndustriesBackendExecutorGate 'nvpi-tool-exists' 'NVPI executable exists' $true $toolExists 'A local NVIDIA Profile Inspector executable is required for real process probing.' ([pscustomobject]@{ nvpiExecutablePath = $resolvedNvpi })),
+        (New-RooIndustriesBackendExecutorGate 'export-path-temp' 'Probe export path is under temp' $true $exportPathInsideTemp 'Read-only export probes must write only to a temp path.' ([pscustomobject]@{ exportPath = $resolvedExportPath })),
+        (New-RooIndustriesBackendExecutorGate 'export-extension-nip' 'Probe export uses .nip extension' $true $exportExtensionSafe 'Export probe output must be a .nip file.' ([pscustomobject]@{ exportPath = $resolvedExportPath })),
+        (New-RooIndustriesBackendExecutorGate 'real-import-forbidden' 'Real NVPI import is not part of capability probe' $true $true 'Capability probing never calls -importProfile.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canProbe = ($blockingGates.Count -eq 0)
@@ -69,12 +69,12 @@ try {
     $exportEvidence = $null
 
     if ($canProbe) {
-        Ensure-RooDirectory (Split-Path $resolvedExportPath -Parent)
-        $helpResult = Invoke-RooBackendHiddenProcess -FilePath $resolvedNvpi -Arguments @('-?') -TimeoutSeconds $TimeoutSeconds
+        Ensure-RooIndustriesDirectory (Split-Path $resolvedExportPath -Parent)
+        $helpResult = Invoke-RooIndustriesBackendHiddenProcess -FilePath $resolvedNvpi -Arguments @('-?') -TimeoutSeconds $TimeoutSeconds
         $runs.Add([pscustomobject]@{ order = 1; probe = 'help'; arguments = @('-?'); result = $helpResult; destructive = $false }) | Out-Null
 
         $exportArgs = @('-exportProfile', $profileName, $resolvedExportPath)
-        $exportResult = Invoke-RooBackendHiddenProcess -FilePath $resolvedNvpi -Arguments $exportArgs -TimeoutSeconds $TimeoutSeconds
+        $exportResult = Invoke-RooIndustriesBackendHiddenProcess -FilePath $resolvedNvpi -Arguments $exportArgs -TimeoutSeconds $TimeoutSeconds
         if (Test-Path -LiteralPath $resolvedExportPath -PathType Leaf) {
             $exportItem = Get-Item -LiteralPath $resolvedExportPath
             $exportEvidence = [pscustomobject]@{
@@ -91,11 +91,11 @@ try {
     }
 
     $runArray = @($runs.ToArray())
-    $exportSucceeded = ($null -ne $exportEvidence -and [bool](Get-RooPropertyValue $exportEvidence 'exists' $false) -and @($runArray | Where-Object { $_.probe -eq 'export-current-profile' -and $_.result.timedOut -ne $true -and [int]$_.result.exitCode -eq 0 }).Count -gt 0)
+    $exportSucceeded = ($null -ne $exportEvidence -and [bool](Get-RooIndustriesPropertyValue $exportEvidence 'exists' $false) -and @($runArray | Where-Object { $_.probe -eq 'export-current-profile' -and $_.result.timedOut -ne $true -and [int]$_.result.exitCode -eq 0 }).Count -gt 0)
     $timeoutCount = @($runArray | Where-Object { $_.result.timedOut -eq $true }).Count
     $nonZeroExitCount = @($runArray | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count
 
-    $startErrors = @($runArray | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-RooPropertyValue (Get-RooPropertyValue $_ 'result' $null) 'startError' '')) } | ForEach-Object { [string](Get-RooPropertyValue $_.result 'startError' '') })
+    $startErrors = @($runArray | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $_ 'result' $null) 'startError' '')) } | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_.result 'startError' '') })
     $elevationRequired = (@($startErrors | Where-Object { $_ -match 'requires elevation|elevation|access is denied' }).Count -gt 0)
     $cliUnsupported = ($canProbe -and -not $exportSucceeded -and -not $elevationRequired -and (@($runArray | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count -gt 0))
     $status = if (-not $canProbe) {
@@ -126,8 +126,8 @@ try {
     $result = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.capabilityProbe'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         profileId = $ProfileId
         dryRun = (-not $canProbe)
         status = $status
@@ -151,7 +151,7 @@ try {
         }
         summary = [pscustomobject]@{
             processRunnerInvoked = ($runArray.Count -gt 0)
-            exportFileCreated = [bool](Get-RooPropertyValue $exportEvidence 'exists' $false)
+            exportFileCreated = [bool](Get-RooIndustriesPropertyValue $exportEvidence 'exists' $false)
             timeoutCount = $timeoutCount
             nonZeroExitCount = $nonZeroExitCount
             startErrorCount = $startErrors.Count
@@ -163,18 +163,18 @@ try {
             blockingGateCount = $blockingGates.Count
             nextEngineeringStep = $nextStep
         }
-        warnings = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_REAL_READONLY_PROBE' 'Real NVPI process probing is limited to help/version/export checks and never imports a profile.' 'info' $ProfileId $false $nextStep $null))
+        warnings = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_REAL_READONLY_PROBE' 'Real NVPI process probing is limited to help/version/export checks and never imports a profile.' 'info' $ProfileId $false $nextStep $null))
         errors = @()
-        logs = @((New-RooLog 'NVIDIA NIP real read-only capability probe completed.'))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP real read-only capability probe completed.'))
     }
 
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.capabilityProbe'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         profileId = $ProfileId
         dryRun = $true
         status = 'failed'
@@ -182,10 +182,10 @@ try {
         executionSequence = @()
         summary = [pscustomobject]@{ processRunnerInvoked = $false; noImportAttempted = $true; nextEngineeringStep = 'Check NVPI path, export path, probe permissions, and timeout.' }
         warnings = @()
-        errors = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_CAPABILITY_PROBE_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check NVPI path, export path, probe permissions, and timeout.' $null))
-        logs = @((New-RooLog 'NVIDIA NIP real read-only capability probe failed.' 'error'))
+        errors = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_CAPABILITY_PROBE_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check NVPI path, export path, probe permissions, and timeout.' $null))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP real read-only capability probe failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 } finally {
     if ($createdProbeRoot -and -not $PreserveProbeArtifacts -and -not [string]::IsNullOrWhiteSpace($probeRoot) -and (Test-Path -LiteralPath $probeRoot)) {

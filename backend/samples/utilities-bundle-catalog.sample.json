@@ -81,7 +81,7 @@
                                                                "none"
                                                            ],
                                          "restoreBackupRequirement":  "Not applicable because this updater is excluded from default integration.",
-                                         "integrationPlan":  "Exclude from default driver strategy. Prefer Roo hardware-gated recommendations and manual driver packages."
+                                         "integrationPlan":  "Exclude from default driver strategy. Prefer Roo Industries hardware-gated recommendations and manual driver packages."
                                      },
                                      {
                                          "archivePath":  "Utilities\\Drivers\\Network\\Intel Network\\PRO1000\\Winx64\\NDIS65\\PROUnstl.exe",

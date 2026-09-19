@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record SavedProcessRule
 {
@@ -108,7 +108,7 @@ public sealed class ProcessPolicyStore
             return new(state, true, DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale; it may be busy or unresponsive." : null);
         }
         catch (ProcessEndedException) { return new(state, false, "The previous worker has exited."); }
-        catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return new(state, false, "The previous worker has exited."); }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return new(state, false, "The previous worker has exited."); }
         catch (Exception error) { return new(state, null, error.Message); }
     }
 
@@ -223,7 +223,7 @@ public sealed class ProcessPolicyHost
                 instance.Error = result.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
             }
             catch (ProcessEndedException) { instance.Status = "expired"; }
-            catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { instance.Status = "expired"; }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { instance.Status = "expired"; }
             catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
         }
 
@@ -268,7 +268,7 @@ public sealed class ProcessPolicyHost
                     instance.Error = applied.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
                 }
                 catch (ProcessEndedException) { }
-                catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+                catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
                 catch (Exception error) { _state.Errors.Add(rule.Name + ": " + error.Message); }
             }
         }

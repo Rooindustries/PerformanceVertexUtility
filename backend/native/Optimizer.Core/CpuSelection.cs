@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record LogicalCpu(uint Id, ushort Group, byte Index, byte Core, byte Cache, byte Numa,
     byte Efficiency, bool Parked, bool Allocated, bool AllocatedToTarget)

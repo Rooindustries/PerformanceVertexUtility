@@ -10,7 +10,7 @@
     "startedAtUtc":  "2026-07-03T12:50:08.4252510Z",
     "completedAtUtc":  "2026-07-03T12:50:09.0203623Z",
     "generatedAtUtc":  "2026-07-03T12:50:09.0203623Z",
-    "utilitiesRoot":  "%ROO_UTILITIES_ROOT%",
+    "utilitiesRoot":  "%ROO_INDUSTRIES_UTILITIES_ROOT%",
     "families":  [
         {
             "name": "cleanup-uninstall",
@@ -36,7 +36,7 @@
                              "displayName":  "Installed App Inventory",
                              "technicalName":  "HKLM/HKCU Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall registry inventory, Get-AppxPackage inventory, optional winget list",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Installed App Inventory",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "safe",
@@ -123,7 +123,7 @@
                              "displayName":  "App Classification",
                              "technicalName":  "protected-apps.json rules, uninstall-policy.json policy gates, sourceType/packageId/publisher/displayName classification",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "App Classification",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "safe",
@@ -210,7 +210,7 @@
                              "displayName":  "Uninstall Queue",
                              "technicalName":  "Preview-UninstallQueue selected app list with protected-app block policy and no command execution",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Uninstall Queue",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "medium",
@@ -298,7 +298,7 @@
                              "displayName":  "Official Uninstall",
                              "technicalName":  "registry UninstallString/QuietUninstallString, Remove-AppxPackage preview, winget uninstall preview, exact executable allowlist harmless runner",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Official Uninstall",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "high",
@@ -393,7 +393,7 @@
                              "displayName":  "Leftover Scan",
                              "technicalName":  "metadata-derived leftover scan over installLocation, knownAppDataPaths, vendorRegistryKeys, services, scheduled tasks, and Run-key startup entries",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Leftover Scan",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "medium",
@@ -482,7 +482,7 @@
                              "displayName":  "Cleanup Deletion Plan",
                              "technicalName":  "New-CleanupDeletionManifest backup/export requirements plus Invoke-UninstallCleanupExecution disposable temp file/folder fixture backup-delete runner",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Cleanup Deletion Plan",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "high",
@@ -579,7 +579,7 @@
                              "displayName":  "Cleanup Rollback",
                              "technicalName":  "Restore-UninstallCleanupExecution rollback-manifest file/folder copy restore inside disposable temp fixture root",
                              "source":  "revo",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Cleanup Rollback",
                              "frontendTab":  "Clean Junk",
                              "riskLevel":  "medium",
@@ -701,10 +701,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\autoruns.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\autoruns.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\autoruns.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\autoruns.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\autoruns.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1758240,
@@ -775,10 +775,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\DeviceCleanup.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\DeviceCleanup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  76832,
@@ -801,7 +801,7 @@
                              "displayName":  "NVIDIA Profile Preview",
                              "technicalName":  "Preview-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -exportProfile/-importProfile command metadata without process launch",
                              "source":  "nvpi",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "NVIDIA Profile Preview",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "medium",
@@ -851,10 +851,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -870,10 +870,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -915,7 +915,7 @@
                              "displayName":  "NVIDIA Profile Export Probe",
                              "technicalName":  "nvidiaProfileInspector.exe -exportProfile read-only probe to a temp .nip path",
                              "source":  "nvpi",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Profile Export",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "low",
@@ -965,10 +965,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1010,7 +1010,7 @@
                              "displayName":  "NVIDIA Profile Gated Import",
                              "technicalName":  "nvidiaProfileInspector.exe -importProfile through Invoke-NvidiaNipExecutor.ps1 export-before-import gate",
                              "source":  "nvpi",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "NVIDIA Profile Import",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "medium",
@@ -1068,10 +1068,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1087,10 +1087,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1132,7 +1132,7 @@
                              "displayName":  "NVIDIA Profile Restore Manifest",
                              "technicalName":  "Restore-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -importProfile rollback command metadata from prior export",
                              "source":  "nvpi",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Profile Restore Manifest",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "medium",
@@ -1178,10 +1178,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  637440,
@@ -1223,7 +1223,7 @@
                              "displayName":  "FrameSync NIP Profile Catalog",
                              "technicalName":  "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\framesync.nip",
                              "source":  "nvpi",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "NVIDIA Profile Catalog (FrameSync)",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "medium",
@@ -1272,10 +1272,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1291,10 +1291,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\Reference.xml",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\Reference.xml",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  255585,
@@ -1356,7 +1356,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1381,10 +1381,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_NO_Nvidia_App.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  782079095,
@@ -1446,7 +1446,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1471,10 +1471,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\NVIDIA_595.79_With_Nvidia_App.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1007022314,
@@ -1536,7 +1536,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1561,10 +1561,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Graphics\\AMD 26.2.2.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Graphics\\AMD 26.2.2.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  952645264,
@@ -1622,7 +1622,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1647,10 +1647,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Chipset\\AMD CHIPSET 8.02.18.557.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  78491296,
@@ -1689,7 +1689,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1714,10 +1714,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Chipset\\Intel Chipset.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Chipset\\Intel Chipset.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  3250272,
@@ -1756,7 +1756,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1781,10 +1781,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Network\\Intel Network\\SetupBD.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Network\\Intel Network\\SetupBD.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  592400,
@@ -1823,7 +1823,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1848,10 +1848,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\Network\\Realtek Network\\Install_PCIE_Win11_11027_20_0920_DMAROFF_11282025.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  5520328,
@@ -1890,7 +1890,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1915,10 +1915,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Drivers\\driver_booster_setup.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Drivers\\driver_booster_setup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  33267856,
@@ -1957,7 +1957,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -1982,10 +1982,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\DDU v18.0.8.9\\Display Driver Uninstaller.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1662648,
@@ -2028,7 +2028,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2053,10 +2053,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\NVCleanstall.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\NVCleanstall.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\NVCleanstall.exe",
                                                                                    "passed":  false,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\NVCleanstall.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\NVCleanstall.exe",
                                                                                                     "exists":  false,
                                                                                                     "pathType":  "missing",
                                                                                                     "sizeBytes":  null,
@@ -2114,7 +2114,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2139,10 +2139,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\hwi_834x.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\hwi_834x.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\hwi_834x.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\hwi_834x.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\hwi_834x.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  18761768,
@@ -2181,7 +2181,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2248,7 +2248,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2273,10 +2273,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\cpu-z_2.17-en.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\cpu-z_2.17-en.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  4740096,
@@ -2315,7 +2315,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2340,10 +2340,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\GPU-Z.2.68.0.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\GPU-Z.2.68.0.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  11405088,
@@ -2382,7 +2382,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2407,10 +2407,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\MSIAfterburnerInstaller466.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\MSIAfterburnerInstaller466.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  44529816,
@@ -2449,7 +2449,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2474,10 +2474,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\MSI_Kombustor4_Setup_v4.1.36_x64.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  97206463,
@@ -2516,7 +2516,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2541,10 +2541,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\LatencyMon.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\LatencyMon.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\LatencyMon.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\LatencyMon.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\LatencyMon.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  3478312,
@@ -2583,7 +2583,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2608,10 +2608,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\DL_SCEWIN.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\DL_SCEWIN.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\DL_SCEWIN.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\DL_SCEWIN.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\DL_SCEWIN.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  9364610,
@@ -2654,7 +2654,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2679,10 +2679,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\dotNetFx35setup.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\dotNetFx35setup.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  2869264,
@@ -2739,7 +2739,7 @@
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Get-RooUtilitiesInventory.ps1",
+                                             "script":  "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
                                              "actionId":  "drivers.utilities.inventory"
                                          },
                              "apply":  {
@@ -2764,10 +2764,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\DX\\DXSETUP.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\DX\\DXSETUP.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  517976,
@@ -2783,10 +2783,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Prerequisites\\DX\\Jun2010_d3dx9_43_x64.cab",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  937246,
@@ -2809,7 +2809,7 @@
                              "displayName":  "CPU Priority",
                              "technicalName":  "SetPriorityClass / System.Diagnostics.Process.PriorityClass",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-native",
+                             "implementedBy":  "roo-industries-native",
                              "frontendLabel":  "CPU Priority",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "low",
@@ -2880,7 +2880,7 @@
                              "displayName":  "I/O Priority",
                              "technicalName":  "NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-native",
+                             "implementedBy":  "roo-industries-native",
                              "frontendLabel":  "I/O Priority",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "low",
@@ -2952,7 +2952,7 @@
                              "displayName":  "GPU Priority",
                              "technicalName":  "D3DKMTSetProcessSchedulingPriorityClass",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-native",
+                             "implementedBy":  "roo-industries-native",
                              "frontendLabel":  "GPU Priority",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "medium",
@@ -3024,7 +3024,7 @@
                              "displayName":  "CPU Affinity",
                              "technicalName":  "SetProcessAffinityMask / System.Diagnostics.Process.ProcessorAffinity",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-native",
+                             "implementedBy":  "roo-industries-native",
                              "frontendLabel":  "CPU Affinity",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "medium",
@@ -3096,7 +3096,7 @@
                              "displayName":  "ProBalance Restraint",
                              "technicalName":  "SetPriorityClass + NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-native",
+                             "implementedBy":  "roo-industries-native",
                              "frontendLabel":  "ProBalance Restraint",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "medium",
@@ -3206,7 +3206,7 @@
                              "displayName":  "Per-Game Rules",
                              "technicalName":  "profile rules -\u003e SetPriorityClass / SetProcessAffinityMask / NtSetInformationProcess / D3DKMTSetProcessSchedulingPriorityClass",
                              "source":  "process-lasso",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Per-Game Rules",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "medium",
@@ -3308,8 +3308,8 @@
                              "family":  "process-controls",
                              "displayName":  "Process Control Restore",
                              "technicalName":  "Stop-GameTuneSession.ps1 / Stop-ProcessGovernorSession.ps1 / Stop-ProcessPolicySession.ps1 backup snapshot restore",
-                             "source":  "roo-native",
-                             "implementedBy":  "roo-script",
+                             "source":  "roo-industries-native",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Process Control Restore",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "low",
@@ -3435,9 +3435,9 @@
                              "capabilityId":  "process-controls.lightweight-governor-budget",
                              "family":  "process-controls",
                              "displayName":  "Lightweight Governor Budget",
-                             "technicalName":  "Measure-RooBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
-                             "source":  "roo-native",
-                             "implementedBy":  "roo-script",
+                             "technicalName":  "Measure-RooIndustriesBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
+                             "source":  "roo-industries-native",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Governor Budget (read-only)",
                              "frontendTab":  "Game Tune",
                              "riskLevel":  "safe",
@@ -3450,20 +3450,20 @@
                                                                     },
                                                                     {
                                                                         "method":  "file-exists",
-                                                                        "target":  "backend/scripts/Measure-RooBackendFootprint.ps1"
+                                                                        "target":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1"
                                                                     }
                                                                 ],
                                                   "notes":  "Budget profile constrains resident/backend CPU, memory, state growth, frontend dependency, and session duration."
                                               },
                              "preview":  {
                                              "status":  "implemented",
-                                             "script":  "backend/scripts/Measure-RooBackendFootprint.ps1",
+                                             "script":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
                                              "actionId":  "backend.measureFootprint"
                                          },
                              "apply":  {
                                            "status":  "preview-only",
                                            "mode":  "read-only-budget-measurement",
-                                           "script":  "backend/scripts/Measure-RooBackendFootprint.ps1",
+                                           "script":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
                                            "actionId":  "backend.measureFootprint",
                                            "gates":  [
 
@@ -3478,7 +3478,7 @@
                              "unavailableReason":  null,
                              "testEvidence":  [
                                                   {
-                                                      "test":  "backend/scripts/Test-RooResidentBackendRuntime.ps1",
+                                                      "test":  "backend/scripts/Test-RooIndustriesResidentBackendRuntime.ps1",
                                                       "proves":  "footprint measurement and bounded resident host stay within lightweight budget and leave backend/state empty"
                                                   }
                                               ],
@@ -3506,11 +3506,11 @@
                                                                                },
                                                                                {
                                                                                    "method":  "file-exists",
-                                                                                   "target":  "backend/scripts/Measure-RooBackendFootprint.ps1",
-                                                                                   "resolvedTarget":  "backend/scripts/Measure-RooBackendFootprint.ps1",
+                                                                                   "target":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
+                                                                                   "resolvedTarget":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "backend/scripts/Measure-RooBackendFootprint.ps1",
+                                                                                                    "path":  "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  5478,
@@ -3582,10 +3582,10 @@
                                                                                {
                                                                                    "method":  "file-exists",
                                                                                    "target":  "{utilitiesRoot}\\AffTool\\intPolicy_x64.exe",
-                                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\AffTool\\intPolicy_x64.exe",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  32848,
@@ -3608,7 +3608,7 @@
                              "displayName":  "Standby Memory",
                              "technicalName":  "NtSetSystemInformation(SystemMemoryListInformation=80, MemoryPurgeStandbyList)",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Standby Memory",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "medium",
@@ -3621,10 +3621,10 @@
                                                                     },
                                                                     {
                                                                         "method":  "file-exists",
-                                                                        "target":  "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs"
+                                                                        "target":  "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs"
                                                                     }
                                                                 ],
-                                                  "notes":  "FSOS-X Dash exposes Clear Standby Memory; Roo has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
+                                                  "notes":  "FSOS-X Dash exposes Clear Standby Memory; Roo Industries has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3674,11 +3674,11 @@
                                                                                },
                                                                                {
                                                                                    "method":  "file-exists",
-                                                                                   "target":  "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs",
-                                                                                   "resolvedTarget":  "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs",
+                                                                                   "target":  "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs",
+                                                                                   "resolvedTarget":  "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "backend/native/StandbyMemoryHelper/RooStandbyMemoryHelper.cs",
+                                                                                                    "path":  "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  1305,
@@ -3701,7 +3701,7 @@
                              "displayName":  "Timer Resolution",
                              "technicalName":  "timeBeginPeriod/timeEndPeriod via Invoke-TimerResolutionSession.ps1",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Timer Resolution",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "medium",
@@ -3771,7 +3771,7 @@
                              "displayName":  "Power Plan",
                              "technicalName":  "powercfg /getactivescheme, /export, /import, /setactive, /delete",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Power Plan",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "medium",
@@ -3783,7 +3783,7 @@
                                                                         "target":  "powercfg.exe"
                                                                     }
                                                                 ],
-                                                  "notes":  "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo\u0027s temporary export/import/select/restore/delete executor."
+                                                  "notes":  "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo Industries\u0027s temporary export/import/select/restore/delete executor."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3846,7 +3846,7 @@
                              "displayName":  "Shader Cache",
                              "technicalName":  "%LOCALAPPDATA%\\D3DSCache; %LOCALAPPDATA%\\NVIDIA\\DXCache; %LOCALAPPDATA%\\AMD\\DxCache; Steam shader cache directories",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Shader Cache",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "medium",
@@ -3858,7 +3858,7 @@
                                                                         "target":  "%LOCALAPPDATA%\\D3DSCache"
                                                                     }
                                                                 ],
-                                                  "notes":  "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo proves only disposable fixture backup/delete/restore."
+                                                  "notes":  "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo Industries proves only disposable fixture backup/delete/restore."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3925,7 +3925,7 @@
                              "displayName":  "Service Trim",
                              "technicalName":  "sc.exe query/config/stop/start allowlist workflow for WerSvc, PcaSvc, TrkWks, InventorySvc, MapsBroker, diagsvc",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Service Trim",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "high",
@@ -4017,7 +4017,7 @@
                              "displayName":  "Network Tweaks",
                              "technicalName":  "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\NetworkThrottlingIndex; HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\*\\TcpAckFrequency/TCPNoDelay; Set-NetAdapterAdvancedProperty; Set-DnsClientServerAddress",
                              "source":  "fsosx-dash",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Network Tweaks",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "high",
@@ -4103,7 +4103,7 @@
                              "displayName":  "Game Registry Tweaks",
                              "technicalName":  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR\\AppCaptureEnabled/AudioCaptureEnabled/CursorCaptureEnabled/MicrophoneCaptureEnabled; HKCU\\System\\GameConfigStore\\GameDVR_Enabled; HKCU\\Software\\Microsoft\\GameBar\\ShowStartupPanel/UseNexusForGameBarEnabled",
                              "source":  "winutil",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Game Registry Tweaks",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "low",
@@ -4190,7 +4190,7 @@
                              "displayName":  "Svchost Process Grouping",
                              "technicalName":  "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SvcHostSplitThresholdInKB=0xffffffff",
                              "source":  "winutil",
-                             "implementedBy":  "roo-script",
+                             "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Svchost Grouping (Registry)",
                              "frontendTab":  "Live Feel",
                              "riskLevel":  "high",
@@ -4427,8 +4427,8 @@
                              "family": "cleanup-uninstall",
                              "displayName": "Bulk App Removal",
                              "technicalName": "Durable sequential official removal with registration verification and reconciliation",
-                             "source": "roo-native",
-                             "implementedBy": "roo-script",
+                             "source": "roo-industries-native",
+                             "implementedBy": "roo-industries-script",
                              "frontendLabel": "Bulk App Removal",
                              "frontendTab": "Clean Junk",
                              "riskLevel": "medium",
@@ -4494,8 +4494,8 @@
                              "family": "process-controls",
                              "displayName": "CPU Sets",
                              "technicalName": "Minimal-rights CPU Set apply/readback/restore on disposable processes",
-                             "source": "roo-native",
-                             "implementedBy": "roo-script",
+                             "source": "roo-industries-native",
+                             "implementedBy": "roo-industries-script",
                              "frontendLabel": "CPU Sets",
                              "frontendTab": "Game Tune",
                              "riskLevel": "medium",
@@ -4561,8 +4561,8 @@
                              "family": "system-optimizations",
                              "displayName": "Settings Research Catalog",
                              "technicalName": "Primary-source setting inventory and paginated read-only lookup",
-                             "source": "roo-native",
-                             "implementedBy": "roo-script",
+                             "source": "roo-industries-native",
+                             "implementedBy": "roo-industries-script",
                              "frontendLabel": "Settings Research Catalog",
                              "frontendTab": "Live Feel",
                              "riskLevel": "safe",

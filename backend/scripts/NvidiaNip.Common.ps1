@@ -1,56 +1,56 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-$script:RooNvidiaNipProductName = 'Roo Industries Optimization Suite'
+$script:RooIndustriesNvidiaNipProductName = 'Roo Industries Optimization Suite'
 
-function Get-RooNvidiaNipCatalogPath {
+function Get-RooIndustriesNvidiaNipCatalogPath {
     param([string]$CatalogPath)
-    return Resolve-RooPath $CatalogPath (Join-Path $PSScriptRoot '..\catalogs\nvidia-profile-inspector-nip-catalog.json')
+    return Resolve-RooIndustriesPath $CatalogPath (Join-Path $PSScriptRoot '..\catalogs\nvidia-profile-inspector-nip-catalog.json')
 }
 
-function Read-RooNvidiaNipCatalog {
+function Read-RooIndustriesNvidiaNipCatalog {
     param([string]$CatalogPath)
-    return Read-RooJsonFile (Get-RooNvidiaNipCatalogPath $CatalogPath)
+    return Read-RooIndustriesJsonFile (Get-RooIndustriesNvidiaNipCatalogPath $CatalogPath)
 }
 
-function Get-RooNvidiaNipProfile {
+function Get-RooIndustriesNvidiaNipProfile {
     param(
         [object]$Catalog,
         [string]$ProfileId
     )
-    foreach ($profile in @(Get-RooPropertyArray $Catalog 'profiles')) {
-        if ([string](Get-RooPropertyValue $profile 'profileId' '') -eq $ProfileId) {
+    foreach ($profile in @(Get-RooIndustriesPropertyArray $Catalog 'profiles')) {
+        if ([string](Get-RooIndustriesPropertyValue $profile 'profileId' '') -eq $ProfileId) {
             return $profile
         }
     }
     throw "NVIDIA NIP profile not found: $ProfileId"
 }
 
-function ConvertTo-RooNvidiaSafeId {
+function ConvertTo-RooIndustriesNvidiaSafeId {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return 'unknown' }
     return (($Value.ToLowerInvariant() -replace '[^a-z0-9\-]+','-').Trim('-'))
 }
 
-function ConvertTo-RooNvidiaQuotedArgument {
+function ConvertTo-RooIndustriesNvidiaQuotedArgument {
     param([string]$Value)
     if ($null -eq $Value) { return '""' }
     return '"' + ([string]$Value).Replace('"', '\"') + '"'
 }
 
-function Join-RooNvidiaCommandLine {
+function Join-RooIndustriesNvidiaCommandLine {
     param(
         [string]$Executable,
         [string[]]$Arguments
     )
     $parts = New-Object System.Collections.Generic.List[string]
-    $parts.Add((ConvertTo-RooNvidiaQuotedArgument $Executable)) | Out-Null
+    $parts.Add((ConvertTo-RooIndustriesNvidiaQuotedArgument $Executable)) | Out-Null
     foreach ($arg in @($Arguments)) {
-        $parts.Add((ConvertTo-RooNvidiaQuotedArgument ([string]$arg))) | Out-Null
+        $parts.Add((ConvertTo-RooIndustriesNvidiaQuotedArgument ([string]$arg))) | Out-Null
     }
     return ($parts.ToArray() -join ' ')
 }
 
-function New-RooNvidiaNipCommand {
+function New-RooIndustriesNvidiaNipCommand {
     param(
         [string]$Operation,
         [string]$ExecutablePath,
@@ -72,20 +72,20 @@ function New-RooNvidiaNipCommand {
         toolId = 'nvidia-profile-inspector'
         executablePath = $ExecutablePath
         arguments = @($arguments)
-        commandLine = Join-RooNvidiaCommandLine $ExecutablePath @($arguments)
+        commandLine = Join-RooIndustriesNvidiaCommandLine $ExecutablePath @($arguments)
         commandFamily = 'nvidia-profile-inspector-cli'
         launchAllowedNow = $false
         processStarted = $false
     }
 }
 
-function Get-RooNvidiaHardwareEvidence {
+function Get-RooIndustriesNvidiaHardwareEvidence {
     param([string]$HardwareInventoryPath)
 
     $summary = $null
     $source = 'live-readonly-driver-summary'
     if (-not [string]::IsNullOrWhiteSpace($HardwareInventoryPath)) {
-        $summary = Read-RooJsonFile (Resolve-RooPath $HardwareInventoryPath $HardwareInventoryPath)
+        $summary = Read-RooIndustriesJsonFile (Resolve-RooIndustriesPath $HardwareInventoryPath $HardwareInventoryPath)
         $source = 'provided-hardware-inventory'
     } else {
         try {
@@ -97,28 +97,28 @@ function Get-RooNvidiaHardwareEvidence {
     }
 
     $matched = New-Object System.Collections.Generic.List[object]
-    foreach ($gpu in @(Get-RooPropertyArray $summary 'gpus')) {
-        $vendor = [string](Get-RooPropertyValue $gpu 'vendor' '')
-        $pnp = [string](Get-RooPropertyValue $gpu 'pnpDeviceId' '')
+    foreach ($gpu in @(Get-RooIndustriesPropertyArray $summary 'gpus')) {
+        $vendor = [string](Get-RooIndustriesPropertyValue $gpu 'vendor' '')
+        $pnp = [string](Get-RooIndustriesPropertyValue $gpu 'pnpDeviceId' '')
         if ($vendor -ieq 'NVIDIA' -or $pnp.IndexOf('PCI\VEN_10DE', [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $matched.Add([pscustomobject]@{
-                name = Get-RooPropertyValue $gpu 'name' $null
+                name = Get-RooIndustriesPropertyValue $gpu 'name' $null
                 vendor = $vendor
                 pnpDeviceId = $pnp
-                driverVersion = Get-RooPropertyValue $gpu 'driverVersion' $null
+                driverVersion = Get-RooIndustriesPropertyValue $gpu 'driverVersion' $null
             }) | Out-Null
         }
     }
 
     return [pscustomobject]@{
         source = $source
-        hardwareInventoryPath = if ([string]::IsNullOrWhiteSpace($HardwareInventoryPath)) { $null } else { Resolve-RooPath $HardwareInventoryPath $HardwareInventoryPath }
+        hardwareInventoryPath = if ([string]::IsNullOrWhiteSpace($HardwareInventoryPath)) { $null } else { Resolve-RooIndustriesPath $HardwareInventoryPath $HardwareInventoryPath }
         nvidiaGpuPresent = ($matched.Count -gt 0)
         matchedGpus = @($matched.ToArray())
     }
 }
 
-function New-RooNvidiaNipIssue {
+function New-RooIndustriesNvidiaNipIssue {
     param(
         [string]$Code,
         [string]$Message,
@@ -140,7 +140,7 @@ function New-RooNvidiaNipIssue {
     }
 }
 
-function New-RooNvidiaNipGate {
+function New-RooIndustriesNvidiaNipGate {
     param(
         [string]$GateId,
         [string]$Name,
@@ -160,21 +160,21 @@ function New-RooNvidiaNipGate {
     }
 }
 
-function New-RooNvidiaNipRollbackManifest {
+function New-RooIndustriesNvidiaNipRollbackManifest {
     param(
         [object]$Profile,
         [object]$ExportCommand,
         [string]$ExportPath
     )
-    $profileId = [string](Get-RooPropertyValue $Profile 'profileId' '')
+    $profileId = [string](Get-RooIndustriesPropertyValue $Profile 'profileId' '')
     return [pscustomobject]@{
-        manifestId = 'nvidia-nip-rollback-' + (ConvertTo-RooNvidiaSafeId $profileId) + '-' + (Get-RooFileStamp)
+        manifestId = 'nvidia-nip-rollback-' + (ConvertTo-RooIndustriesNvidiaSafeId $profileId) + '-' + (Get-RooIndustriesFileStamp)
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
+        productName = $script:RooIndustriesNvidiaNipProductName
         actionId = 'drivers.nvidiaNip.rollbackManifest'
         profileId = $profileId
-        profileName = [string](Get-RooPropertyValue $Profile 'name' '')
-        createdAtUtc = Get-RooUtcStamp
+        profileName = [string](Get-RooIndustriesPropertyValue $Profile 'name' '')
+        createdAtUtc = Get-RooIndustriesUtcStamp
         exportPath = $ExportPath
         exportCommand = $ExportCommand
         restoreActionId = 'drivers.nvidiaNip.restoreProfile'

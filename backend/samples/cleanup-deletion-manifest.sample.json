@@ -59,7 +59,7 @@
     }
   ],
   "rollback": {
-    "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup\\sample-cleanup-manifest-overwolf-20260628-100000",
+    "backupRoot": "C:\\ProgramData\\RooIndustriesOptimizationSuite\\backups\\cleanup\\sample-cleanup-manifest-overwolf-20260628-100000",
     "rollbackActionId": "apps.rollbackCleanup",
     "rollbackSupported": true,
     "restorePoint": {

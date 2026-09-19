@@ -1,5 +1,5 @@
 #nullable enable
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record CleanupAuthority
 {

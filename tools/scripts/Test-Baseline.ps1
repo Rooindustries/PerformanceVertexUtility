@@ -2,7 +2,7 @@ param(
     [string[]]$TestName = @(),
     [string]$ResultsRoot = '',
     [switch]$BuildFrontend,
-    [string]$DotNetPath = $env:ROO_DOTNET_EXE
+    [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -11,7 +11,7 @@ if ([string]::IsNullOrWhiteSpace($ResultsRoot)) { $ResultsRoot = Join-Path $repo
 New-Item -ItemType Directory -Path $ResultsRoot -Force | Out-Null
 function Get-ValidationTempPaths {
     $paths = @()
-    foreach ($pattern in @('roo-*','RooBackend*','RooNvidia*','RooStutter*')) {
+    foreach ($pattern in @('roo-industries-*','RooIndustriesBackend*','RooIndustriesNvidia*','RooIndustriesStutter*')) {
         $paths += @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter $pattern -Force -ErrorAction Stop | Select-Object -ExpandProperty FullName)
     }
     return @($paths | Sort-Object -Unique)
@@ -38,7 +38,7 @@ foreach ($test in $testScripts) {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = 'powershell.exe'
-    $start.Arguments = Join-RooWindowsArguments @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$test.FullName)
+    $start.Arguments = Join-RooIndustriesWindowsArguments @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$test.FullName)
     $start.WorkingDirectory = $repoRoot
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true

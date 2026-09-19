@@ -8,13 +8,13 @@ $ErrorActionPreference = 'Stop'
 
 try {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-    $sourcePath = Join-Path $repoRoot 'backend\native\ProcessGovernor\RooProcessGovernor.cs'
+    $sourcePath = Join-Path $repoRoot 'backend\native\ProcessGovernor\RooIndustriesProcessGovernor.cs'
     if (-not (Test-Path -LiteralPath $sourcePath)) {
         throw "Native process governor source file was not found: $sourcePath"
     }
 
-    $defaultOutputPath = Join-Path $repoRoot 'backend\bin\RooProcessGovernor.exe'
-    $resolvedOutputPath = Resolve-RooPath $OutputPath $defaultOutputPath
+    $defaultOutputPath = Join-Path $repoRoot 'backend\bin\RooIndustriesProcessGovernor.exe'
+    $resolvedOutputPath = Resolve-RooIndustriesPath $OutputPath $defaultOutputPath
     if ((Test-Path -LiteralPath $resolvedOutputPath) -and -not $Force) {
         $source = Get-Item -LiteralPath $sourcePath
         $existing = Get-Item -LiteralPath $resolvedOutputPath
@@ -22,7 +22,7 @@ try {
             $result = [pscustomobject]@{
                 actionId = 'performance.nativeGovernor.build'
                 schemaVersion = 1
-                productName = $script:RooProcessProductName
+                productName = $script:RooIndustriesProcessProductName
                 status = 'upToDate'
                 sourcePath = $sourcePath
                 outputPath = $resolvedOutputPath
@@ -33,7 +33,7 @@ try {
                 serviceInstalled = $false
                 serviceInstallActionPerformed = $false
             }
-            Write-RooJsonOutput $result ''
+            Write-RooIndustriesJsonOutput $result ''
             exit 0
         }
     }
@@ -45,7 +45,7 @@ try {
         throw 'No built-in .NET Framework csc.exe compiler was found.'
     }
 
-    Ensure-RooDirectory (Split-Path $resolvedOutputPath -Parent)
+    Ensure-RooIndustriesDirectory (Split-Path $resolvedOutputPath -Parent)
     $compilerOutput = & $cscPath /nologo /optimize+ /target:exe /platform:x64 /out:$resolvedOutputPath /reference:System.Web.Extensions.dll $sourcePath 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "csc.exe failed with exit code $LASTEXITCODE :: $($compilerOutput -join ' ')"
@@ -54,7 +54,7 @@ try {
     $result = [pscustomobject]@{
         actionId = 'performance.nativeGovernor.build'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         status = 'built'
         sourcePath = $sourcePath
         outputPath = $resolvedOutputPath
@@ -67,16 +67,16 @@ try {
         serviceInstallActionPerformed = $false
         compilerOutput = @($compilerOutput)
     }
-    Write-RooJsonOutput $result ''
+    Write-RooIndustriesJsonOutput $result ''
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.nativeGovernor.build'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         status = 'failed'
         outputPath = $OutputPath
-        errors = @((New-RooIssue 'NATIVE_GOVERNOR_BUILD_FAILED' $_.Exception.Message 'error' 'performance.nativeGovernor' $OutputPath $true 'Check csc.exe availability and source parser errors.' $null))
+        errors = @((New-RooIndustriesIssue 'NATIVE_GOVERNOR_BUILD_FAILED' $_.Exception.Message 'error' 'performance.nativeGovernor' $OutputPath $true 'Check csc.exe availability and source parser errors.' $null))
     }
-    Write-RooJsonOutput $errorResult ''
+    Write-RooIndustriesJsonOutput $errorResult ''
     exit 1
 }

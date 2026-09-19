@@ -2,6 +2,14 @@
 
 The optimizer app should use the same brand source as `rooindustries.com` and the public `Rooindustries/RooIndustries` repo.
 
+## Naming
+
+Use **Roo Industries** in product text, titles, shortcuts, descriptions and documentation. Code identifiers and executable names use `RooIndustries`; environment variables use `ROO_INDUSTRIES_`; lowercase identifiers use `roo-industries-`. Do not shorten the company name.
+
+The naming check runs through `tools/validation/check_baseline.py` and can be run separately with `tools/validation/check_branding.py`. Official third-party product identities and source URLs keep their original names.
+
+Existing installations retain their original data directory in place so absolute recovery paths and reviewed hashes remain valid. Fresh installations use the full product directory name. The explicit compatibility modules retain only the old storage, environment, theme, job, task, restore-staging and cross-version exclusion identities needed to read settings and restore earlier changes. Current executables, UI, scripts, resources and newly created task labels use the full name. Historical measurement inputs remain readable without rewriting the recorded evidence.
+
 ## Copied Assets
 
 Assets live in:

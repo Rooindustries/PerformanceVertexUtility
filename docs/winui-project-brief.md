@@ -22,7 +22,7 @@ The target shell should follow the Windows Settings app pattern:
 
 Use the Roo Industries brand layer already captured in this repo:
 
-- Default theme: Roo Blue.
+- Default theme: Roo Industries Blue.
 - Alternate theme: Blackout Gold.
 - Font: Manrope Variable.
 - Static logo in navigation.
@@ -35,7 +35,7 @@ Use the Roo Industries brand layer already captured in this repo:
 - Keep benchmarking separate from the main app shell, but allow it as an internal provider workflow.
 - Build native replacements for Process Lasso-style priority/profile management and Revo-style bulk uninstall cleanup instead of bypassing third-party licensing.
 - DDU, NVCleanstall, OOSU10, WPD, driver installers, and destructive cleanup flows remain manual or confirmation-gated.
-- Implement the Chris Titus Tech Windows Utility feature set as a source-backed catalog, routed through Roo preview, confirmation, backup, and rollback flows instead of remote script execution.
+- Implement the Chris Titus Tech Windows Utility feature set as a source-backed catalog, routed through Roo Industries preview, confirmation, backup, and rollback flows instead of remote script execution.
 - Driver recommendations should be hardware-aware and game-aware, with tested game-logo tags.
 - NVIDIA Profile Inspector should start from `framesync.nip`, then later score candidate `.nip` profiles and expose the top tested options.
 

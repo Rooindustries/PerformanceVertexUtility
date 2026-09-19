@@ -10,7 +10,7 @@ class FirmwareHelperFixture
     {
         var root = AppDomain.CurrentDomain.BaseDirectory;
         var authority = Path.Combine(root, "fixture-authority.txt");
-        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-firmware-cli-fixture/v1") return 200;
+        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-industries-firmware-cli-fixture/v1") return 200;
         if (args.Length == 1 && args[0] == "--hold") { System.Threading.Thread.Sleep(10000); return 0; }
         File.AppendAllText(Path.Combine(root, "calls.log"), string.Join("|", args) + "\n");
         if (args.Length != 4 || args[1] != "/s" || (args[0] == "/o" ? args[3] != "/v" : args[0] != "/i" || args[3] != "/r")) return 201;

@@ -190,7 +190,7 @@
     "executorImplemented": true,
     "fixtureExecutorImplemented": true,
     "realSystemExecutorImplemented": true,
-    "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
+    "backupRoot": "C:\\ProgramData\\RooIndustriesOptimizationSuite\\backups\\cleanup"
   },
   "warnings": [
     {

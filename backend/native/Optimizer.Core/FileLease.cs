@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class FileLease : IDisposable
 {

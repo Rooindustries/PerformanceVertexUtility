@@ -1,6 +1,6 @@
-# Lean Client Optimizer
+# Roo Industries Optimization Suite
 
-Lean Client Optimizer is a Windows performance and cleanup tool focused on smooth gameplay under memory pressure. It is being built around safe previews, backups, rollback, process-profile tuning, uninstall cleanup, driver/profile recommendations, and practical system diagnostics.
+Roo Industries Optimization Suite is a Windows performance and cleanup tool focused on smooth gameplay under memory pressure. It is being built around safe previews, backups, rollback, process-profile tuning, uninstall cleanup, driver/profile recommendations, and practical system diagnostics.
 
 The repository contains a WinUI desktop app, a PowerShell backend, native Windows helpers, and the original benchmark-and-rollback harness. Backend execution and the desktop share versioned contracts and explicit preview, approval, and recovery paths.
 
@@ -96,6 +96,6 @@ This project is under active development. High-risk workflows remain preview, co
 
 Linux is the development host. Windows compilation and runtime checks run from isolated source copies on the NVIDIA and AMD test PCs. See [backend validation](backend/README.md#validation) for the repeatable commands and [development workflow](docs/development-workflow.md) for the baseline boundaries.
 
-The desktop project is under `docs/internal/frontend/Roo.OptimizationSuite.App`. Build it with `tools/scripts/Build-Frontend.ps1`; the .NET 8 SDK is required. Building does not launch the app. Capture and inspect screenshots whenever the app is launched for a UI check.
+The desktop project is under `docs/internal/frontend/RooIndustries.OptimizationSuite.App`. Build it with `tools/scripts/Build-Frontend.ps1`; the .NET 8 SDK is required. Building does not launch the app. Capture and inspect screenshots whenever the app is launched for a UI check.
 
 See [desktop controls](docs/optimization-controls.md#desktop-workflows) for CPU selection, queued app removal, separate leftover cleanup, and recovery.

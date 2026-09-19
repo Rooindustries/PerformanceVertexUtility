@@ -1,5 +1,5 @@
 # Durable operation files shared by the CPU Set and uninstall queue executors.
-function Assert-RooDistinctOperationPaths {
+function Assert-RooIndustriesDistinctOperationPaths {
     param([string[]]$Paths)
     $seen=@{}
     foreach($path in $Paths){
@@ -10,7 +10,7 @@ function Assert-RooDistinctOperationPaths {
     }
 }
 
-function Write-RooOperationJson {
+function Write-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)]$Value, [Parameter(Mandatory=$true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
@@ -24,7 +24,7 @@ function Write-RooOperationJson {
     } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 }
 
-function Read-RooOperationJson {
+function Read-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)][string]$Path, [string]$ExpectedSha256 = '')
     $bytes = [IO.File]::ReadAllBytes([IO.Path]::GetFullPath($Path))
     $hash = [Security.Cryptography.SHA256]::Create()
@@ -34,20 +34,20 @@ function Read-RooOperationJson {
     return [pscustomobject]@{ sha256=$digest; data=($text | ConvertFrom-Json) }
 }
 
-function Lock-RooOperation {
+function Lock-RooIndustriesOperation {
     param([Parameter(Mandatory=$true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
     return [IO.FileStream]::new($full+'.lock',[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None,4096,[IO.FileOptions]::DeleteOnClose)
 }
 
-function Get-RooOperationOwner {
+function Get-RooIndustriesOperationOwner {
     return [pscustomobject]@{ machine=$env:COMPUTERNAME; userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
 }
 
-function Assert-RooOperationOwner {
+function Assert-RooIndustriesOperationOwner {
     param($Owner)
-    $current = Get-RooOperationOwner
+    $current = Get-RooIndustriesOperationOwner
     if ($null -eq $Owner -or $Owner.machine -ine $current.machine -or $Owner.userSid -cne $current.userSid) {
         throw 'Operation belongs to a different computer or Windows user.'
     }

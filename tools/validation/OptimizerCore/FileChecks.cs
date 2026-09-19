@@ -1,11 +1,11 @@
 using System.Text;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class FileChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-file-core-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-file-core-" + Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "Application files");
         var operations = Path.Combine(root, "Operations");
         Directory.CreateDirectory(Path.Combine(source, "Settings"));

@@ -38,10 +38,10 @@
                                                                {
                                                                    "method":  "file-exists",
                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                    "passed":  true,
                                                                    "evidence":  {
-                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                     "exists":  true,
                                                                                     "pathType":  "leaf",
                                                                                     "sizeBytes":  637440,
@@ -57,10 +57,10 @@
                                                                {
                                                                    "method":  "file-exists",
                                                                    "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                    "passed":  true,
                                                                    "evidence":  {
-                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
                                                                                     "exists":  true,
                                                                                     "pathType":  "leaf",
                                                                                     "sizeBytes":  6037,

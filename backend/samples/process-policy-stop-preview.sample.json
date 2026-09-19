@@ -10,18 +10,18 @@
   "sessionStatus": "preview",
   "startedAtUtc": "2026-06-30T09:41:15.0000000Z",
   "completedAtUtc": "2026-06-30T09:41:15.0000000Z",
-  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
-  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
   "restorable": true,
   "preview": [
     {
       "previewId": "process-policy-restore-roopolicyexistingprobe-exe-7404",
       "type": "persistentProcessPolicyRestore",
-      "target": "RooPolicyExistingProbe.exe:7404",
-      "displayName": "RooPolicyExistingProbe.exe",
+      "target": "RooIndustriesPolicyExistingProbe.exe:7404",
+      "displayName": "RooIndustriesPolicyExistingProbe.exe",
       "processId": 7404,
-      "processName": "RooPolicyExistingProbe.exe",
-      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+      "processName": "RooIndustriesPolicyExistingProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\RooIndustriesPolicyExistingProbe.exe",
       "currentPriorityClass": "BelowNormal",
       "proposedPriorityClass": "Normal",
       "currentAffinityMask": 255,
@@ -86,7 +86,7 @@
     "backupId": "process-policy-live-policy-validation-20260630-094100",
     "scope": "persistent-process-policy-controls",
     "createdAtUtc": "2026-06-30T09:41:00.0000000Z",
-    "location": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+    "location": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
     "restorePoint": {
       "requested": false,
       "status": "not-required-for-process-policy",
@@ -95,13 +95,13 @@
     "snapshots": [
       {
         "type": "persistentProcessPolicy",
-        "target": "RooPolicyExistingProbe.exe:7404",
+        "target": "RooIndustriesPolicyExistingProbe.exe:7404",
         "originalState": {
           "priorityClass": "Normal",
           "affinityMask": 255,
           "ioPriority": "Normal",
           "gpuPriority": "Normal",
-          "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+          "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\RooIndustriesPolicyExistingProbe.exe",
           "startTimeUtc": "2026-06-30T09:40:58.0000000Z"
         }
       }
@@ -125,7 +125,7 @@
     "artifacts": [
       {
         "type": "processPolicySessionBackup",
-        "path": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json"
+        "path": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json"
       }
     ]
   },
@@ -135,7 +135,7 @@
       "message": "Persistent policy restore preview did not change any process because -ConfirmApply was omitted.",
       "severity": "info",
       "source": "performance.policy",
-      "target": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+      "target": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
       "blocking": false,
       "recommendedAction": "Rerun with -ConfirmApply only after reviewing the restore preview.",
       "details": null

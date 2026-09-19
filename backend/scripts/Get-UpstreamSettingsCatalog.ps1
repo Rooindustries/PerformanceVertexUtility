@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
-$catalog=(Read-RooOperationJson (Join-Path $PSScriptRoot '..\catalogs\upstream-settings-inventory.json')).data
+$catalog=(Read-RooIndustriesOperationJson (Join-Path $PSScriptRoot '..\catalogs\upstream-settings-inventory.json')).data
 $entries=@($catalog.$Collection)
 if($Source){$entries=@($entries|Where-Object {$_.sourceId -ceq $Source})}
 if($Category){$entries=@($entries|Where-Object {$_.category -ieq $Category})}
@@ -16,5 +16,5 @@ $result=[pscustomobject]@{schemaVersion=1;actionId='settings.upstreamCatalog';st
     catalogId=$catalog.catalogId;capturedDate=$catalog.capturedDate;sourceSnapshots=$catalog.sourceSnapshots;safetyPolicy=$catalog.safetyPolicy;
     collection=$Collection;totalCount=$entries.Count;offset=$Offset;limit=$Limit;entries=@($entries|Select-Object -Skip $Offset -First $Limit);
     catalogSummary=$catalog.summary}
-if($OutputPath){Write-RooOperationJson $result $OutputPath}
+if($OutputPath){Write-RooIndustriesOperationJson $result $OutputPath}
 $result|ConvertTo-Json -Depth 32

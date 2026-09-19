@@ -47,15 +47,15 @@ def inspect(host: str, machine: str):
 
 
 def upload(host: str, machine: str, directory: str, include_frontend: bool = False):
-    if not re.fullmatch(r'roo-[a-z0-9-]{1,70}', directory):
-        raise ValueError('The staging directory must be a roo- prefixed name beneath Windows Temp.')
+    if not re.fullmatch(r'roo-industries-[a-z0-9-]{1,70}', directory):
+        raise ValueError('The staging directory must be a roo-industries- prefixed name beneath Windows Temp.')
     identity = inspect(host, machine)  # Confirm the target before creating or copying anything.
     remote_root = identity['temp'].rstrip('\\/') + '\\' + directory
     root = Path(__file__).resolve().parents[2]
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
     files = sorted(name for name in tracked if name and (include_frontend or not name.startswith('docs/internal/frontend/')) and (root / name).is_file())
     manifest = {
-        'protocol': 'roo-source-snapshot/v1', 'machine': identity['machine'],
+        'protocol': 'roo-industries-source-snapshot/v1', 'machine': identity['machine'],
         'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root).decode().strip(),
         'files': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in files},
     }
@@ -65,7 +65,7 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
            "-not(Test-Path -LiteralPath (Join-Path $root 'source-verification.json'))) "
            "{throw 'Existing directory has no source snapshot marker'}; "
            "[IO.Directory]::CreateDirectory($root)|Out-Null")
-    with tempfile.TemporaryDirectory(prefix='roo-source-upload-') as staging:
+    with tempfile.TemporaryDirectory(prefix='roo-industries-source-upload-') as staging:
         archive = Path(staging) / 'source.tar.gz'
         with tarfile.open(archive, 'w:gz') as bundle:
             for name in files:
@@ -89,7 +89,7 @@ def main():
     commands = parser.add_subparsers(dest='action', required=True)
     commands.add_parser('inspect')
     stage = commands.add_parser('upload')
-    stage.add_argument('--directory', default='roo-backend-validation')
+    stage.add_argument('--directory', default='roo-industries-backend-validation')
     stage.add_argument('--include-frontend', action='store_true', help='Include desktop sources for an authorized UI validation run')
     run = commands.add_parser('run')
     run.add_argument('script', type=Path, help='A trusted local PowerShell validation script')

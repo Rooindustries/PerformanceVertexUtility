@@ -96,7 +96,7 @@ function Invoke-Router {
 
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:RouterPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
-    $json = ConvertFrom-RouterJson $output "Invoke-RooCapability $($Arguments -join ' ')"
+    $json = ConvertFrom-RouterJson $output "Invoke-RooIndustriesCapability $($Arguments -join ' ')"
     return [pscustomobject]@{
         exitCode = [int]$exitCode
         output = ($output | Out-String).Trim()
@@ -242,7 +242,7 @@ function Get-RouteSection {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
 $fragmentPath = Join-Path $repoRoot 'backend\capabilities\drivers-gpu-tools.json'
 $manifestPath = Join-Path $repoRoot 'backend\capabilities\routing\drivers-gpu-tools.routes.json'
 
@@ -324,20 +324,20 @@ $expectedRestoreSteps = @{
     'drivers-gpu-tools.driver-cleanup-ddu' = 'Create a restore-point and driver reinstall plan before adding a restore route; no DDU restore automation is implemented.'
     'drivers-gpu-tools.nvcleanstall' = 'Add NVCleanstall at the expected path before defining a restore route; no restore automation is implemented.'
     'drivers-gpu-tools.hwinfo-installer' = 'Create an uninstall contract before adding a restore route; no HWiNFO uninstall automation is implemented.'
-    'drivers-gpu-tools.hwinfo-installed-sensor-monitoring' = 'Use Get-RooUtilitiesInventory.ps1 for read-only monitoring inventory; installed sensor monitoring has no restore path.'
-    'drivers-gpu-tools.cpu-z-diagnostics' = 'Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
-    'drivers-gpu-tools.gpu-z-diagnostics' = 'Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
+    'drivers-gpu-tools.hwinfo-installed-sensor-monitoring' = 'Use Get-RooIndustriesUtilitiesInventory.ps1 for read-only monitoring inventory; installed sensor monitoring has no restore path.'
+    'drivers-gpu-tools.cpu-z-diagnostics' = 'Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
+    'drivers-gpu-tools.gpu-z-diagnostics' = 'Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
     'drivers-gpu-tools.msi-afterburner' = 'Create a GPU profile rollback contract before adding a restore route; no Afterburner automation is implemented.'
-    'drivers-gpu-tools.msi-kombustor' = 'Use Get-RooUtilitiesInventory.ps1 for benchmark package inventory; benchmark-only capability has no restore path.'
-    'drivers-gpu-tools.latencymon' = 'Use Get-RooUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
+    'drivers-gpu-tools.msi-kombustor' = 'Use Get-RooIndustriesUtilitiesInventory.ps1 for benchmark package inventory; benchmark-only capability has no restore path.'
+    'drivers-gpu-tools.latencymon' = 'Use Get-RooIndustriesUtilitiesInventory.ps1 for diagnostics inventory; diagnostics-only capabilities have no restore path.'
     'drivers-gpu-tools.scewin' = 'Create a firmware restore manifest before adding a restore route; no SCEWIN automation is implemented.'
     'drivers-gpu-tools.prerequisite-dotnetfx35' = 'Create a feature restore plan before adding a restore route; no DISM or installer execution is implemented.'
     'drivers-gpu-tools.prerequisite-directx-june2010' = 'Create a feature restore plan before adding a restore route; no DXSETUP execution is implemented.'
 }
 
-$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-driver-router-' + [guid]::NewGuid().ToString('N'))
-$previousUtilitiesRoot = $env:ROO_UTILITIES_ROOT
-$env:ROO_UTILITIES_ROOT = $fixtureRoot
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-driver-router-' + [guid]::NewGuid().ToString('N'))
+$previousUtilitiesRoot = $env:ROO_INDUSTRIES_UTILITIES_ROOT
+$env:ROO_INDUSTRIES_UTILITIES_ROOT = $fixtureRoot
 New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 Set-Content -LiteralPath (Join-Path $fixtureRoot 'cpu-z_2.17-en.exe') -Value 'Disposable detector data; never execute.' -Encoding UTF8
 $hasNvidia = @((Get-CimInstance Win32_VideoController).Name | Where-Object { $_ -match 'NVIDIA' }).Count -gt 0
@@ -402,7 +402,7 @@ foreach ($capability in $capabilities) {
         $previewSection = Get-RouteSection $route 'preview'
         $previewStatusOnly = [bool](Get-PropertyValue $previewSection 'statusOnly' $false)
         $previewScript = [string](Get-PropertyValue $previewSection 'script' '')
-        Add-Check (($previewStatusOnly -eq $true) -or ($previewScript -eq 'backend/scripts/Get-RooUtilitiesInventory.ps1')) "$capabilityId external-tool preview routes to inventory or statusOnly" "$capabilityId external-tool preview route is not inventory/statusOnly"
+        Add-Check (($previewStatusOnly -eq $true) -or ($previewScript -eq 'backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1')) "$capabilityId external-tool preview routes to inventory or statusOnly" "$capabilityId external-tool preview route is not inventory/statusOnly"
     }
 }
 
@@ -458,7 +458,7 @@ foreach ($capability in $capabilities) {
 
     if ($null -ne $routedScript) {
         $previewDispatchCount += 1
-        if ([string]$routedScript -eq 'backend/scripts/Get-RooUtilitiesInventory.ps1') {
+        if ([string]$routedScript -eq 'backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1') {
             $inventoryPreviewDispatchCount += 1
             $evidence = Get-PropertyValue $result.json 'evidence' $null
             Add-Check ([string](Get-PropertyValue $evidence 'actionId' '') -eq 'drivers.utilities.inventory') "$label embeds utilities inventory evidence" "$label inventory evidence actionId mismatch"
@@ -468,7 +468,7 @@ foreach ($capability in $capabilities) {
 }
 
 Add-Check ($previewDispatchCount -gt 0) 'at least one implemented drivers preview dispatched' 'no implemented drivers preview dispatched'
-Add-Check ($inventoryPreviewDispatchCount -gt 0) 'at least one external-tool preview dispatched to Get-RooUtilitiesInventory.ps1' 'no external-tool preview dispatched to Get-RooUtilitiesInventory.ps1'
+Add-Check ($inventoryPreviewDispatchCount -gt 0) 'at least one external-tool preview dispatched to Get-RooIndustriesUtilitiesInventory.ps1' 'no external-tool preview dispatched to Get-RooIndustriesUtilitiesInventory.ps1'
 
 foreach ($capability in $capabilities) {
     $capabilityId = [string](Get-PropertyValue $capability 'capabilityId' '')
@@ -545,7 +545,7 @@ Add-Check ($stateBefore -eq $stateAfter) "backend/state item count unchanged at 
 
 } finally {
     if ($null -ne $script:ToolWatchJob) { Stop-Job $script:ToolWatchJob -ErrorAction SilentlyContinue; Remove-Job $script:ToolWatchJob -Force -ErrorAction SilentlyContinue; $script:ToolWatchJob = $null }
-    $env:ROO_UTILITIES_ROOT = $previousUtilitiesRoot
+    $env:ROO_INDUSTRIES_UTILITIES_ROOT = $previousUtilitiesRoot
     if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
 }
 

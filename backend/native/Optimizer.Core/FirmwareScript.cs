@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record FirmwareOption(string Value, string Label);
 public sealed record FirmwareQuestion(string Id, string Name, string Help, string Current, string Kind,

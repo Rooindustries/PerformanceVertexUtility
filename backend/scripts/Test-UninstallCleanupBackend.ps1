@@ -210,7 +210,7 @@ try {
     Add-Failure "Uninstall cleanup execution plan failed: $($_.Exception.Message)"
 }
 
-$fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-uninstall-cleanup-fixture-$([guid]::NewGuid().ToString('N'))"
+$fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-uninstall-cleanup-fixture-$([guid]::NewGuid().ToString('N'))"
 $fixtureCleanupDone = $false
 try {
     $appFolder = Join-Path $fixtureRoot 'FakeApp'

@@ -2,10 +2,10 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-using CpuApi = Roo.Optimization.CpuSets.Native;
-using ProcessHandle = Roo.Optimization.CpuSets.ProcessHandle;
+using CpuApi = RooIndustries.Optimization.CpuSets.Native;
+using ProcessHandle = RooIndustries.Optimization.CpuSets.ProcessHandle;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class ProcessJob : IDisposable
 {
@@ -14,7 +14,7 @@ public sealed class ProcessJob : IDisposable
     public static string Name(string operationId)
     {
         if (!Guid.TryParseExact(operationId, "N", out _)) throw new InvalidDataException("Invalid session identity.");
-        return "Global\\RooProtectedSession-" + operationId;
+        return "Global\\RooIndustriesProtectedSession-" + operationId;
     }
     public static ProcessJob Create(string operationId)
     {
@@ -29,7 +29,13 @@ public sealed class ProcessJob : IDisposable
         var handle = OpenJobObject(0x6, false, Name(operationId));
         if (!handle.IsInvalid) return new(handle);
         var error = Marshal.GetLastWin32Error(); handle.Dispose();
-        if (error == 2) return null;
+        if (error == 2)
+        {
+            handle = OpenJobObject(0x6, false, BrandCompatibility.LegacyJobPrefix + operationId);
+            if (!handle.IsInvalid) return new(handle);
+            error = Marshal.GetLastWin32Error(); handle.Dispose();
+            if (error == 2) return null;
+        }
         throw Failure(error, "OpenJobObject");
     }
     public void Attach(RunningProcess expected)

@@ -1,7 +1,7 @@
 #nullable enable
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class ProcessControlEngine
 {
@@ -138,7 +138,7 @@ public sealed class ProcessControlEngine
         using var instanceLease = InstanceLease(journal.Preview.Identity);
         ProcessTarget target;
         try { target = Open(journal.Preview.Identity.ProcessId, journal.Changes.Where(IsAttempted).Select(change => change.Name)); }
-        catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87)
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87)
         {
             journal.Status = "expired";
             Save(journalPath, journal);
@@ -256,7 +256,7 @@ public sealed class ProcessControlEngine
 
     private static IDisposable InstanceLease(RunningProcess identity)
     {
-        var mutex = new Mutex(false, "Local\\RooProcessControls-" + identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc);
+        var mutex = new Mutex(false, BrandCompatibility.ProcessMutexPrefix + identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc);
         bool held;
         try { held = mutex.WaitOne(0); } catch (AbandonedMutexException) { held = true; }
         if (!held) { mutex.Dispose(); throw new IOException("Another operation controls this process instance."); }

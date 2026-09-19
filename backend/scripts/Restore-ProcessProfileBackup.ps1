@@ -10,9 +10,9 @@ $ErrorActionPreference = 'Stop'
 
 function Get-RestoreCandidate {
     param([object]$Snapshot)
-    $processId = [int](Get-RooPropertyValue $Snapshot 'processId' 0)
-    $expectedName = [string](Get-RooPropertyValue $Snapshot 'processName' '')
-    $expectedPath = Get-RooPropertyValue $Snapshot 'executablePath' $null
+    $processId = [int](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)
+    $expectedName = [string](Get-RooIndustriesPropertyValue $Snapshot 'processName' '')
+    $expectedPath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
     $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if ($null -eq $live) {
         return [pscustomobject]@{
@@ -27,7 +27,7 @@ function Get-RestoreCandidate {
 
     $currentPath = $null
     try { $currentPath = $live.Path } catch { $currentPath = $null }
-    $nameMatches = Test-RooProcessNameEquals $live.ProcessName $expectedName
+    $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $pathMatches = $true
     if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath) -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
@@ -38,7 +38,7 @@ function Get-RestoreCandidate {
         matches = ($nameMatches -and $pathMatches)
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
-        currentControlState = Get-RooProcessControlState $processId $null
+        currentControlState = Get-RooIndustriesProcessControlState $processId $null
         currentPath = $currentPath
         blockedReason = if ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the backup snapshot.' }
     }
@@ -52,9 +52,9 @@ function New-RestoreSkippedItem {
         [string]$Category = 'skipped'
     )
     return [pscustomobject]@{
-        processId = Get-RooPropertyValue $Entry 'processId' 0
-        processName = Get-RooPropertyValue $Entry 'processName' ''
-        controlChanges = @(Get-RooArray $ControlChanges)
+        processId = Get-RooIndustriesPropertyValue $Entry 'processId' 0
+        processName = Get-RooIndustriesPropertyValue $Entry 'processName' ''
+        controlChanges = @(Get-RooIndustriesArray $ControlChanges)
         category = $Category
         reason = $Reason
     }
@@ -66,20 +66,20 @@ function New-RollbackPreviewEntry {
         [object]$Candidate
     )
 
-    $processId = [int](Get-RooPropertyValue $Snapshot 'processId' 0)
-    $processName = [string](Get-RooPropertyValue $Snapshot 'processName' '')
-    $originalPriority = [string](Get-RooPropertyValue $Snapshot 'originalPriorityClass' '')
-    $originalAffinityMask = Get-RooPropertyValue $Snapshot 'originalAffinityMask' $null
-    $originalIoPriority = Get-RooPropertyValue $Snapshot 'originalIoPriority' $null
-    $originalGpuPriority = Get-RooPropertyValue $Snapshot 'originalGpuPriority' $null
-    $currentState = Get-RooPropertyValue $Candidate 'currentControlState' $null
-    $currentPriority = if ($currentState) { Get-RooPropertyValue $currentState 'priorityClass' $Candidate.currentPriorityClass } else { $Candidate.currentPriorityClass }
-    $currentAffinityMask = if ($currentState) { Get-RooPropertyValue $currentState 'affinityMask' $null } else { $null }
-    $currentIoPriority = if ($currentState) { Get-RooPropertyValue $currentState 'ioPriority' $null } else { $null }
-    $currentGpuPriority = if ($currentState) { Get-RooPropertyValue $currentState 'gpuPriority' $null } else { $null }
-    $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches) -or (-not (Test-RooPriorityAllowed $originalPriority))
+    $processId = [int](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)
+    $processName = [string](Get-RooIndustriesPropertyValue $Snapshot 'processName' '')
+    $originalPriority = [string](Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' '')
+    $originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
+    $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
+    $currentState = Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null
+    $currentPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'priorityClass' $Candidate.currentPriorityClass } else { $Candidate.currentPriorityClass }
+    $currentAffinityMask = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null } else { $null }
+    $currentIoPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'ioPriority' $null } else { $null }
+    $currentGpuPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null } else { $null }
+    $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches) -or (-not (Test-RooIndustriesPriorityAllowed $originalPriority))
     $reason = if ($blocked) {
-        if (-not (Test-RooPriorityAllowed $originalPriority)) {
+        if (-not (Test-RooIndustriesPriorityAllowed $originalPriority)) {
             "Original priority class '$originalPriority' is outside the allow-list."
         } else {
             [string]$Candidate.blockedReason
@@ -89,31 +89,31 @@ function New-RollbackPreviewEntry {
     }
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (-not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooPriorityAllowed $originalPriority) -and [string]$currentPriority -ne [string]$originalPriority) {
-            $controlChanges.Add((New-RooControlChange 'priorityClass' $currentPriority $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
+        if (-not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority) -and [string]$currentPriority -ne [string]$originalPriority) {
+            $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if ($null -ne $originalAffinityMask -and (Test-RooAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
-            $controlChanges.Add((New-RooControlChange 'affinityMask' $currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
+        if ($null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
+            $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIoPriorityAllowed $originalIoPriority) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
-            $controlChanges.Add((New-RooControlChange 'ioPriority' $currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
+        if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
+            $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
-            if ([bool](Get-RooPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
-                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority.')) | Out-Null
+        if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
+            if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority.')) | Out-Null
             } else {
                 $blocked = $true
                 $reason = 'GPU scheduling priority is unavailable for this restore target.'
-                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
             }
         }
         if ($controlChanges.Count -eq 0) {
             $reason = 'Process already matches the process profile backup.'
         }
     }
-    $restorePlan = Get-RooApplicableProcessControlChanges @($controlChanges.ToArray()) $currentState
-    $applicableControlChanges = @(Get-RooPropertyArray $restorePlan 'changes')
-    $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
+    $restorePlan = Get-RooIndustriesApplicableProcessControlChanges @($controlChanges.ToArray()) $currentState
+    $applicableControlChanges = @(Get-RooIndustriesPropertyArray $restorePlan 'changes')
+    $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
 
     return [pscustomobject]@{
         previewId = ("rollback-$processName-$processId").ToLowerInvariant() -replace '[^a-z0-9\-]+', '-'
@@ -122,7 +122,7 @@ function New-RollbackPreviewEntry {
         displayName = $processName
         processId = $processId
         processName = $processName
-        executablePath = Get-RooPropertyValue $Snapshot 'executablePath' $null
+        executablePath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
         currentPriorityClass = $currentPriority
         proposedPriorityClass = if ($blocked) { $currentPriority } else { $originalPriority }
         currentAffinityMask = $currentAffinityMask
@@ -131,11 +131,11 @@ function New-RollbackPreviewEntry {
         proposedIoPriority = if ($blocked) { $currentIoPriority } else { $originalIoPriority }
         currentGpuPriority = $currentGpuPriority
         proposedGpuPriority = if ($blocked) { $currentGpuPriority } else { $originalGpuPriority }
-        gpuPriorityAvailable = Get-RooPropertyValue $currentState 'gpuPriorityAvailable' $false
-        gpuPriorityStatus = Get-RooPropertyValue $currentState 'gpuPriorityStatus' $null
+        gpuPriorityAvailable = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false
+        gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
-        ruleId = [string](Get-RooPropertyValue $Snapshot 'ruleId' '')
+        ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         reasonCodes = if ($blocked) { @('ROLLBACK_SKIPPED') } else { @('ROLLBACK_PROCESS_CONTROLS_RESTORE') }
         classification = 'rollbackCandidate'
@@ -175,27 +175,27 @@ function New-BackupEnvelopeMetadata {
         [string]$ResolvedBackupPath
     )
     $snapshots = New-Object System.Collections.Generic.List[object]
-    foreach ($snap in @(Get-RooPropertyArray $Backup 'snapshots')) {
+    foreach ($snap in @(Get-RooIndustriesPropertyArray $Backup 'snapshots')) {
         $snapshots.Add([pscustomobject]@{
             type = 'processControls'
-            target = "$([string](Get-RooPropertyValue $snap 'processName' ''))`:$([int](Get-RooPropertyValue $snap 'processId' 0))"
+            target = "$([string](Get-RooIndustriesPropertyValue $snap 'processName' ''))`:$([int](Get-RooIndustriesPropertyValue $snap 'processId' 0))"
             originalState = [pscustomobject]@{
-                priorityClass = Get-RooPropertyValue $snap 'originalPriorityClass' $null
-                affinityMask = Get-RooPropertyValue $snap 'originalAffinityMask' $null
-                ioPriority = Get-RooPropertyValue $snap 'originalIoPriority' $null
-                gpuPriority = Get-RooPropertyValue $snap 'originalGpuPriority' $null
-                proposedPriorityClass = Get-RooPropertyValue $snap 'proposedPriorityClass' $null
-                proposedAffinityMask = Get-RooPropertyValue $snap 'proposedAffinityMask' $null
-                proposedIoPriority = Get-RooPropertyValue $snap 'proposedIoPriority' $null
-                proposedGpuPriority = Get-RooPropertyValue $snap 'proposedGpuPriority' $null
+                priorityClass = Get-RooIndustriesPropertyValue $snap 'originalPriorityClass' $null
+                affinityMask = Get-RooIndustriesPropertyValue $snap 'originalAffinityMask' $null
+                ioPriority = Get-RooIndustriesPropertyValue $snap 'originalIoPriority' $null
+                gpuPriority = Get-RooIndustriesPropertyValue $snap 'originalGpuPriority' $null
+                proposedPriorityClass = Get-RooIndustriesPropertyValue $snap 'proposedPriorityClass' $null
+                proposedAffinityMask = Get-RooIndustriesPropertyValue $snap 'proposedAffinityMask' $null
+                proposedIoPriority = Get-RooIndustriesPropertyValue $snap 'proposedIoPriority' $null
+                proposedGpuPriority = Get-RooIndustriesPropertyValue $snap 'proposedGpuPriority' $null
             }
         }) | Out-Null
     }
 
     return [pscustomobject]@{
-        backupId = [string](Get-RooPropertyValue $Backup 'backupId' '')
+        backupId = [string](Get-RooIndustriesPropertyValue $Backup 'backupId' '')
         scope = 'process-profile-process-controls'
-        createdAtUtc = [string](Get-RooPropertyValue $Backup 'createdAtUtc' '')
+        createdAtUtc = [string](Get-RooIndustriesPropertyValue $Backup 'createdAtUtc' '')
         location = $ResolvedBackupPath
         restorePoint = [pscustomobject]@{
             requested = $false
@@ -213,11 +213,11 @@ function New-BackupEnvelopeMetadata {
 }
 
 try {
-    $resolvedBackupPath = Resolve-RooPath $BackupPath $BackupPath
-    $backup = Read-RooJsonFile $resolvedBackupPath
+    $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
+    $backup = Read-RooIndustriesJsonFile $resolvedBackupPath
 
     $previewEntries = New-Object System.Collections.Generic.List[object]
-    foreach ($snapshot in @(Get-RooPropertyArray $backup 'snapshots')) {
+    foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
         $candidate = Get-RestoreCandidate $snapshot
         $previewEntries.Add((New-RollbackPreviewEntry $snapshot $candidate)) | Out-Null
     }
@@ -227,42 +227,42 @@ try {
 
     if ($ConfirmApply) {
         foreach ($entry in @($previewEntries.ToArray())) {
-            if ([bool](Get-RooPropertyValue $entry 'blocked' $false)) {
-                $skipped.Add((New-RestoreSkippedItem $entry (Get-RooPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.') @(Get-RooPreviewControlChanges $entry) 'blocked')) | Out-Null
+            if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                $skipped.Add((New-RestoreSkippedItem $entry (Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.') @(Get-RooIndustriesPreviewControlChanges $entry) 'blocked')) | Out-Null
                 continue
             }
 
-            $processId = [int](Get-RooPropertyValue $entry 'processId' 0)
+            $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
             $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
             if ($null -eq $live) {
-                $skipped.Add((New-RestoreSkippedItem $entry 'Process exited before rollback.' @(Get-RooPreviewControlChanges $entry) 'exited')) | Out-Null
+                $skipped.Add((New-RestoreSkippedItem $entry 'Process exited before rollback.' @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
                 continue
             }
 
-            $entryControlChanges = @(Get-RooPreviewControlChanges $entry | Where-Object { -not [bool](Get-RooPropertyValue $_ 'blocked' $false) })
+            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false) })
             if ($entryControlChanges.Count -eq 0) { continue }
             $appliedControls = New-Object System.Collections.Generic.List[object]
             $failedControls = New-Object System.Collections.Generic.List[string]
             try {
                 foreach ($change in $entryControlChanges) {
                     try {
-                        Invoke-RooProcessControlChange $live $change
+                        Invoke-RooIndustriesProcessControlChange $live $change
                         $appliedControls.Add($change) | Out-Null
                     } catch {
-                        $failedControls.Add("$([string](Get-RooPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                        $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
                     }
                 }
                 if ($appliedControls.Count -gt 0) {
-                    $afterControls = Get-RooProcessControlState $processId $null
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null
                     $changed.Add([pscustomobject]@{
                         processId = $processId
-                        processName = Get-RooPropertyValue $entry 'processName' ''
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
                         restoredPriorityClass = $afterControls.priorityClass
                         restoredAffinityMask = $afterControls.affinityMask
                         restoredIoPriority = $afterControls.ioPriority
                         restoredGpuPriority = $afterControls.gpuPriority
                         restoredControls = @($appliedControls.ToArray())
-                        ruleId = Get-RooPropertyValue $entry 'ruleId' ''
+                        ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
                     }) | Out-Null
                 }
                 if ($failedControls.Count -gt 0) {
@@ -274,8 +274,8 @@ try {
         }
     } else {
         foreach ($entry in @($previewEntries.ToArray())) {
-            if ([bool](Get-RooPropertyValue $entry 'blocked' $false)) {
-                $skipped.Add((New-RestoreSkippedItem $entry (Get-RooPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.') @(Get-RooPreviewControlChanges $entry) 'blocked')) | Out-Null
+            if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                $skipped.Add((New-RestoreSkippedItem $entry (Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.') @(Get-RooIndustriesPreviewControlChanges $entry) 'blocked')) | Out-Null
             }
         }
     }
@@ -290,8 +290,8 @@ try {
         "Rollback preview completed. No process control changes were applied."
     }
 
-    $result = New-RooActionResult `
-        -ResultId ("rollback-" + (Get-RooFileStamp)) `
+    $result = New-RooIndustriesActionResult `
+        -ResultId ("rollback-" + (Get-RooIndustriesFileStamp)) `
         -Status $status `
         -Summary $summary `
         -ChangedItems @($changed.ToArray()) `
@@ -300,10 +300,10 @@ try {
 
     $warnings = New-Object System.Collections.Generic.List[object]
     if (-not $ConfirmApply) {
-        $warnings.Add((New-RooIssue 'ROLLBACK_PREVIEW_ONLY' 'Rollback preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.rollback' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the rollback preview.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesIssue 'ROLLBACK_PREVIEW_ONLY' 'Rollback preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.rollback' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the rollback preview.' $null)) | Out-Null
     }
 
-    $envelope = New-RooActionEnvelope `
+    $envelope = New-RooIndustriesActionEnvelope `
         -ActionId 'performance.rollbackProfile' `
         -DryRun (-not $ConfirmApply) `
         -Risk 'low' `
@@ -314,11 +314,11 @@ try {
         -Result $result `
         -Warnings @($warnings.ToArray()) `
         -Errors @() `
-        -Logs @((New-RooLog $summary))
+        -Logs @((New-RooIndustriesLog $summary))
 
-    Write-RooJsonOutput $envelope $OutputPath
+    Write-RooIndustriesJsonOutput $envelope $OutputPath
 } catch {
-    $envelope = New-RooActionEnvelope `
+    $envelope = New-RooIndustriesActionEnvelope `
         -ActionId 'performance.rollbackProfile' `
         -DryRun (-not $ConfirmApply) `
         -Risk 'low' `
@@ -328,8 +328,8 @@ try {
         -Backup $null `
         -Result $null `
         -Warnings @() `
-        -Errors @((New-RooIssue 'PROCESS_PROFILE_ROLLBACK_FAILED' $_.Exception.Message 'error' 'performance.rollback' $BackupPath $true 'Check the backup path and retry.' $null)) `
-        -Logs @((New-RooLog 'Rollback failed.' 'error'))
-    Write-RooJsonOutput $envelope $OutputPath
+        -Errors @((New-RooIndustriesIssue 'PROCESS_PROFILE_ROLLBACK_FAILED' $_.Exception.Message 'error' 'performance.rollback' $BackupPath $true 'Check the backup path and retry.' $null)) `
+        -Logs @((New-RooIndustriesLog 'Rollback failed.' 'error'))
+    Write-RooIndustriesJsonOutput $envelope $OutputPath
     exit 1
 }
