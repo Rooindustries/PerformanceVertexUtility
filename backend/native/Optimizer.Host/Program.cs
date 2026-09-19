@@ -9,6 +9,8 @@ try
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var request = OperationFiles.Read<HostRequest>(args[1]);
+    if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
+        throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
@@ -18,6 +20,33 @@ try
     object data;
     switch (action)
     {
+        case "tweak-catalog":
+            var tweakCatalog = ReadTweakCatalog(request.RepoRoot);
+            data = new { catalog = tweakCatalog, hash = tweakCatalog.Digest };
+            break;
+        case "tweak-fixture-create":
+            RequireConfirmation(request);
+            data = FileTweakStore.Create(Require(request.FixturePath, "fixture path")).Context;
+            break;
+        case "tweak-status":
+            data = Tweaks(request).Detect();
+            break;
+        case "tweak-preview":
+            if (request.Selections is not null && request.PresetId is not null) throw new InvalidDataException("Provide selections or a preset, not both.");
+            var selected = request.PresetId is null ? request.Selections ?? throw new InvalidDataException("Explicit selections are required; an empty array restores a profile.")
+                : ReadTweakCatalog(request.RepoRoot).Presets.SingleOrDefault(item => item.Id == request.PresetId)?.Selections ?? throw new InvalidDataException("Unknown tweak preset.");
+            data = Tweaks(request).Preview(Require(request.ProfileId, "profile ID"), selected);
+            WriteNewTweakPreview(Require(request.OutputPath, "output path"), data);
+            break;
+        case "tweak-apply":
+        case "tweak-restore":
+            RequireConfirmation(request);
+            var tweakPreview = Require(request.PreviewPath, "preview path");
+            var tweakHash = Require(request.ReviewHash, "review hash");
+            if (action == "tweak-restore" && OperationFiles.Read<TweakPlan>(tweakPreview, tweakHash).Selections.Length != 0)
+                throw new InvalidDataException("Restore requires a reviewed empty selection for the profile.");
+            data = Tweaks(request).Apply(tweakPreview, tweakHash);
+            break;
         case "protected-session-preview":
             if (request.Controls is not null && request.ControlsPath is not null) throw new InvalidDataException("Provide inline controls or a controls file, not both.");
             data = new ProtectedSessions(Excluded).Preview(request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required."),
@@ -158,6 +187,23 @@ catch (Exception error)
     Environment.ExitCode = 1;
 }
 
+static TweakCatalog ReadTweakCatalog(string root)
+{
+    var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(root, "backend", "catalogs", "windows-tweaks.json"));
+    catalog.Validate();
+    return catalog;
+}
+static TweakEngine Tweaks(HostRequest request) => new(ReadTweakCatalog(request.RepoRoot),
+    request.FixturePath is null ? new RegistryTweakStore() : new FileTweakStore(request.FixturePath));
+static void WriteNewTweakPreview(string path, object plan)
+{
+    path = Path.GetFullPath(path);
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+    try { OperationFiles.Write(temporary, plan); File.Move(temporary, path); }
+    finally { File.Delete(temporary); }
+}
+
 static void StartProtectedWatch(string repoRoot, string root, string operationId)
 {
     var path = Path.Combine(root, "watch-request.json");
@@ -245,6 +291,10 @@ sealed record HostRequest
 {
     public required int SchemaVersion { get; init; }
     public required string RepoRoot { get; init; }
+    public string? FixturePath { get; init; }
+    public string? ProfileId { get; init; }
+    public string? PresetId { get; init; }
+    public TweakSelection[]? Selections { get; init; }
     public int? ProcessId { get; init; }
     public string? GamePath { get; init; }
     public string? ControlsPath { get; init; }

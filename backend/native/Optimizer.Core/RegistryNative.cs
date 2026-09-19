@@ -35,7 +35,7 @@ public sealed class RegistryTransaction : SafeHandleZeroOrMinusOneIsInvalid
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(IntPtr handle);
 }
 
-public static class RegistryNative
+public static partial class RegistryNative
 {
     private const uint Query = 1, SetValue = 2, CreateSubKey = 4, Enumerate = 8, Delete = 0x10000, ReadControl = 0x20000, WriteDacl = 0x40000, WriteOwner = 0x80000;
     private const uint Read = Query | Enumerate | ReadControl;

@@ -50,7 +50,8 @@
     "backend/samples/telemetry-snapshot.sample.json": "telemetrySnapshot",
     "backend/samples/uninstall-queue.sample.json": "uninstallQueue",
     "backend/samples/cpu-set-preview.sample.json": "cpuSetOperation",
-    "backend/samples/bulk-uninstall-preview.sample.json": "bulkUninstallOperation"
+    "backend/samples/bulk-uninstall-preview.sample.json": "bulkUninstallOperation",
+    "backend/catalogs/windows-tweaks.json": "windowsTweaksCatalog"
   },
   "domainTests": {
     "backend/samples/dashboard-backend-status.sample.json": "backend/scripts/Test-BackendContracts.ps1",

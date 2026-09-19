@@ -266,3 +266,11 @@ New reusable checks are `Test-ProcessCpuSets.ps1`, `Test-BulkUninstall.ps1`, `Te
 The bulk tests also cover post-removal scan, reviewed file deletion, exact restoration, stale review hashes, reinstallation and cross-app rejection. `Test-ClientCleanupBoundary.ps1` compiles the desktop services into a disposable command-line test and checks recovery-ticket handling for live, ended, replaced and incomplete process identities.
 
 Windows PowerShell 5.1 and the Windows APIs are the execution surfaces. Linux parsing and schema checks establish source/contract properties only. Vendor MSI/Appx removal, protected games, hardware performance, reboot behavior and UI journeys require separate Windows validation. Current task evidence and any pending machine access are kept in the development handoff rather than represented as product guarantees.
+
+## Privacy and Explorer settings
+
+`system-optimizations.windows-settings` exposes the first twelve shared Windows
+settings through `Invoke-WindowsTweaks.ps1` and the native host. Profiles share
+one original snapshot per native registry resource, with transactional target
+and recovery updates. See [Windows tweaks](windows-tweaks.md) for the catalog,
+request format, exact restore semantics, fixture checks, and coverage limits.
