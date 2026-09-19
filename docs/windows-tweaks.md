@@ -145,6 +145,16 @@ is `dotnet run --project tools/validation/Tweaks/Tweaks.csproj -c Release --
 refuses an existing root and removes its created keys after the run. It does not
 change the production tweak targets or production recovery store.
 
+## Verified native execution
+
+On 2026-09-19, the approved isolated registry test passed thirteen checks on the
+9070XT machine, Windows build 26200 Professional. Independent Windows registry
+reads verified apply, shared ownership, exact type restoration, stale-review
+rejection, retry behavior, and rollback of both values and recovery state after
+a forced transaction failure. The test root and its recovery receipt were
+removed. These results verify the native registry adapter; visible effects of
+the twelve production settings remain a separate validation step.
+
 ## Remaining coverage
 
 The complete O&O ShutUp10++ and WPD inventories, unresolved FSOS-X Dash controls,
