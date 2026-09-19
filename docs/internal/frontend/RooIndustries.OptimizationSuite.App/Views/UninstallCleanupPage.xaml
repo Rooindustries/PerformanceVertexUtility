@@ -52,7 +52,7 @@
         </StackPanel>
 
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Style="{StaticResource PanelBorderStyle}" Translation="0,0,16"
+                Style="{StaticResource PanelBorderStyle}"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Can't read installed apps yet" Style="{StaticResource SectionHeaderTextBlockStyle}"
@@ -63,13 +63,13 @@
         </Border>
 
         <Grid x:Name="CleanupContent" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" RowSpacing="18"
-              HorizontalAlignment="Center" MaxWidth="1320">
+              HorizontalAlignment="Center" MaxWidth="1600">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+            <Border Grid.Row="0" Style="{StaticResource CommandHeaderBorderStyle}">
                 <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -79,20 +79,20 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooIndustriesAccentBrush}" />
+                        <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/apps.svg" Style="{StaticResource PageHeaderIconStyle}" />
                         <StackPanel Grid.Column="1" Spacing="7">
-                            <TextBlock Text="Apps &amp; Cleanup" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                            <TextBlock Text="Installed apps" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                             <TextBlock Text="Remove selected applications, then review leftover files and registry data." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooIndustriesTextMutedBrush}">
                                 <Run Text="{x:Bind BulkRemoval.ViewModel.InstalledAppCount, Mode=OneWay}" /><Run Text=" apps installed" />
-                                <Run Text="  /  Nothing is removed until you approve it." />
+                                <Run Text="" />
                             </TextBlock>
                         </StackPanel>
                     </Grid>
                 </Grid>
             </Border>
 
-            <TabView Grid.Row="1" IsAddTabButtonVisible="False" TabWidthMode="Equal" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" AutomationProperties.AutomationId="CleanupTabs">
+            <TabView Grid.Row="1" IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" AutomationProperties.AutomationId="CleanupTabs">
                 <TabViewItem Header="Remove apps" IsClosable="False" AutomationProperties.AutomationId="RemovalTab">
                     <views:BulkRemovalPanel x:Name="BulkRemoval" />
                 </TabViewItem>
@@ -115,9 +115,9 @@
                     <TextBox Grid.Row="0" PlaceholderText="Search installed apps"
                              AutomationProperties.AutomationId="AppsCleanupSearchBox"
                              Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                    <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Padding="0">
                         <StackPanel>
-                            <TextBlock Text="INSTALLED APPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Padding="20,16,20,8" />
+                            <TextBlock Text="Installed apps" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Padding="20,16,20,8" />
                             <ListView x:Name="AppsList" ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Single"
                                       AutomationProperties.AutomationId="AppsCleanupInstalledAppsList"
                                       IsItemClickEnabled="True" ItemClick="AppsList_ItemClick"
@@ -128,26 +128,26 @@
                     </Border>
                 </Grid>
 
-                <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Translation="0,0,16" Padding="0">
+                <Border x:Name="DetailPane" Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Padding="0">
                   <Grid>
 
                     <StackPanel VerticalAlignment="Top" Padding="24,18,24,28" Spacing="12"
                                 Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
                         <StackPanel Spacing="5">
-                            <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="App details" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock Text="Pick an app to review" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                            <TextBlock Text="Select an app and Roo Industries will build the removal path. Nothing is removed until you approve it."
+                            <TextBlock Text="Select an app to inspect its uninstaller and scan for leftover files."
                                        FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                         </StackPanel>
                         <StackPanel Spacing="9">
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Path" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" - Check the safest first step. Some apps expose a Windows removal path; Roo Industries still owns the plan." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Path" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Check the app's uninstaller." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Scan" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" - Find what the app leaves behind." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Scan" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Find leftover files." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Apply" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" - Approve the exact list first. Restore appears after rollback data exists." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Apply" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Review selected files before removing them." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                         </StackPanel>
                     </StackPanel>
@@ -158,7 +158,7 @@
                         <StackPanel Padding="24,20,24,24" Spacing="20">
 
                             <StackPanel Spacing="7">
-                                <TextBlock Text="APP REVIEW" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="App details" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold"
                                            Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind ViewModel.SelectedSummary, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap"
@@ -323,7 +323,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="LEFTOVER SCAN" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Leftover files" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.LeftoverState, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooIndustriesTextMutedBrush}"
                                            Visibility="{x:Bind ViewModel.LeftoverState, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
@@ -334,8 +334,8 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="REMOVAL PLAN" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                <TextBlock Text="Roo Industries combines the app path, leftover scan, backup list, and restore plan into one review."
+                                <TextBlock Text="Selected items" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Review the selected items and backup before removing them."
                                            FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.CleanupPlanState, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooIndustriesTextMutedBrush}" />

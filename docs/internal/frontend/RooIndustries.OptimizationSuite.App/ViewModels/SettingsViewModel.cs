@@ -15,7 +15,7 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string? _versionText;
     [ObservableProperty] private string? _engineStatus;
 
-    public string Tagline => "Precision Performance Engineering";
+    public string Tagline => "Windows optimization tools";
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
     public ObservableCollection<SafetyRow> SafetyRows { get; } = new();
     public ObservableCollection<StatusLine> EngineRows { get; } = new();
@@ -55,8 +55,8 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         var label = (workflow.WorkflowId ?? string.Empty) switch
         {
-            "performanceProfiles" => "Game Tune",
-            "processGovernor" => "ProBalance guard",
+            "performanceProfiles" => "Process priorities",
+            "processGovernor" => "Background limits",
             "persistentProcessPolicy" => "Process rules",
             "uninstallCleanup" => "Apps & Cleanup",
             "driversProfiles" => "Drivers & GPU",
@@ -78,7 +78,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
     private static string ReadyLabel(string? status) => (status ?? string.Empty) switch
     {
-        "preview-ready" => "Action paths ready",
+        "preview-ready" => "Preview available",
         "ready" => "Ready",
         "" => "Status unavailable",
         _ => status!,

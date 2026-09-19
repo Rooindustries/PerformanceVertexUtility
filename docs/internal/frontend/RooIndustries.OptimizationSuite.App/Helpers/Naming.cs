@@ -8,6 +8,8 @@ public static class Naming
 {
     private static readonly Dictionary<string, string> KnownApps = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["FortniteClient-Win64-Shipping"] = "Fortnite",
+        ["Marvel-Win64-Shipping"] = "Marvel Rivals",
         ["discord"] = "Discord",
         ["discordcanary"] = "Discord Canary",
         ["discordptb"] = "Discord PTB",

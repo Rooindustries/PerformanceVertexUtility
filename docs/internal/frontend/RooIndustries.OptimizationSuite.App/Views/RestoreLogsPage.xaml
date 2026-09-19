@@ -18,15 +18,15 @@
                       VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" HorizontalAlignment="Stretch" Padding="0,0,6,0">
 
-                <Border Style="{StaticResource CommandHeaderBorderStyle}" Translation="0,0,32">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{StaticResource RooIndustriesAccentBrush}" />
+                        <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/history.svg" Style="{StaticResource PageHeaderIconStyle}" />
                         <StackPanel Grid.Column="1" Spacing="7">
-                            <TextBlock Text="Restore &amp; Logs" FontSize="22" FontWeight="SemiBold"
+                            <TextBlock Text="Backups &amp; history" FontSize="22" FontWeight="SemiBold"
                                        Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
@@ -44,10 +44,10 @@
                     </Grid>
                 </Border>
 
-                <Border Style="{StaticResource FocalPanelBorderStyle}" Translation="0,0,16">
+                <Border Style="{StaticResource FocalPanelBorderStyle}">
                     <StackPanel Spacing="10">
-                        <Button Content="Open Process Control" Click="OpenProcessControl" HorizontalAlignment="Left"/>
-                        <TextBlock Text="BACKUPS" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
+                        <Button Content="Open game settings" Click="OpenProcessControl" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Saved settings" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
                                   ItemsSource="{x:Bind ViewModel.RestoreRows}">
@@ -66,12 +66,12 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <TextBlock Text="Open Process Control to stop or recover a game session, or restore earlier process changes."
+                        <TextBlock Text="Open Games &amp; processes to stop a session or restore process settings."
                                    FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource PanelBorderStyle}" Padding="0" Translation="0,0,16">
+                <Border Style="{StaticResource PanelBorderStyle}" Padding="0">
                     <StackPanel>
                         <Grid ColumnSpacing="12" Padding="18,16,18,12">
                             <Grid.ColumnDefinitions>
@@ -81,11 +81,11 @@
                                 <ColumnDefinition Width="1.8*" />
                                 <ColumnDefinition Width="110" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="TIME" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="1" Text="ACTION" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="2" Text="TARGET" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="3" Text="CHANGE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="4" Text="RESTORE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="0" Text="Time" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="1" Text="Action" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="2" Text="App" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="4" Text="Restore" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </Grid>
                         <Rectangle Height="1" Fill="{StaticResource RooIndustriesBorderBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"

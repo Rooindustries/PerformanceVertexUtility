@@ -1,115 +1,50 @@
-# Roo Industries Optimization Suite - WinUI Frontend
+# Roo Industries Optimization Suite — WinUI frontend
 
-Internal WinUI 3 frontend for the local Roo Industries Optimization Suite. The project is kept
-under `docs/internal/frontend` while the backend contracts and runtime scripts are
-still being hardened. It should stay a frontend shell: no risky Windows behavior is
-implemented directly in the UI layer.
+The Windows desktop app uses WinUI 3. System changes run through the existing
+backend review, apply, and restore operations.
 
-## Build
+## Build and verify
 
-Build from the repository root:
+On Windows, from the repository root:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\scripts\Build-Frontend.ps1
+./tools/scripts/Test-Frontend.ps1 -DotNetPath "$env:USERPROFILE/.dotnet/dotnet.exe"
 ```
 
-The script builds:
+This runs the physical-memory display regressions and builds the backend helper
+and WinUI app. It does not launch the app or change system settings.
+`tools/scripts/Build-Frontend.ps1` remains available for builds alone.
 
-```text
-docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj
-```
+## Interface
 
-Default behavior:
+- **Overview:** physical memory, running processes, detected game, hardware, and shortcuts.
+- **Games & processes:** separate Games, Processes, and Background apps tabs.
+- **Installed apps:** application removal and leftover cleanup.
+- **Startup & services:** background-process inventory and startup information.
+- **Drivers & GPU:** hardware, driver recommendations, and expandable NVIDIA profiles.
+- **Memory:** physical RAM use, largest processes, and diagnostic tools.
+- **Timer & cache:** timer and shader-cache actions, with expandable performance readings.
+- **Tools:** official tool names, logos, search, categories, and BIOS settings.
+- **Backups & history:** saved settings and operation history.
+- **Settings:** appearance and app information.
 
-- Builds `Debug` with `-p:Platform=x64`.
-- Uses `ROO_INDUSTRIES_DOTNET_EXE` or the `-DotNetPath` argument when provided.
-- Otherwise prefers `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`, then `dotnet.exe`
-  on `PATH`.
-- Requires a dotnet host with at least one installed SDK.
-- Builds only; it does not run or focus the app.
+Navigation and app-owned icons use the packaged SVG files in `Assets/Icons`.
+Third-party tools retain their official logo assets. Blue and gold accents use
+shared flat surfaces and spacing. The navigation collapses on smaller windows;
+`AdaptivePanel` reflows cards and controls to fit their available width.
 
-Manual development run, from the project directory only:
+Game setup reveals its settings after a launcher is selected. Custom CPU masks
+and saved process rules are expandable. Each action keeps its existing backend
+command and review requirements. Changing a selection invalidates its review.
 
-```powershell
-dotnet run -p:Platform=x64
-```
+Physical RAM use is calculated from total physical capacity and available bytes.
+Missing or inconsistent readings display as unavailable. Committed memory is
+not used as physical RAM usage.
 
-## Runtime data sources
+## Runtime
 
-`BackendLocator` resolves the repository root from `ROO_INDUSTRIES_BACKEND_ROOT` when set.
-Without that override, it walks upward from the executable until it finds
-`backend\samples`.
-
-The frontend currently reads data from two service paths:
-
-- `LiveDataService` runs read-oriented backend PowerShell scripts from
-  `backend\scripts` and consumes JSON output for process inventory, process
-  classification, hardware summary, installed-app inventory, and leftover preview
-  data.
-- `SampleDataService` reads `backend\samples\*.sample.json` for product status,
-  backend fixtures, driver recommendations, NVIDIA profile catalog data, telemetry
-  fixtures, and report summaries.
-
-Local UI preferences are stored in:
-
-```text
-%LOCALAPPDATA%\RooIndustriesOptimizationSuite\settings.json
-```
-
-## Current shell
-
-```text
-RooIndustries.OptimizationSuite.App/
-  App.xaml(.cs)             App entry, shared services, persisted theme, crash log hook.
-  MainWindow.xaml(.cs)      Settings-style NavigationView shell and page routing.
-  Resources/
-    Theme.RooIndustriesBlue.xaml      Default Roo Industries Blue resource dictionary.
-    Theme.BlackoutGold.xaml Alternate Blackout Gold resource dictionary.
-    Brand.xaml              Font family and shared sizing tokens.
-    Styles.xaml             Converters, typography, card, chip, and layout styles.
-  Assets/Fonts/             Checked-in app font assets copied to output.
-  Models/                   System.Text.Json models for backend contracts and fixtures.
-  Services/
-    BackendLocator          Resolves repo-relative backend and brand asset locations.
-    LiveDataService         Runs read-oriented backend scripts and parses JSON.
-    SampleDataService       Loads checked-in sample JSON fixtures.
-    ThemeService            Swaps theme dictionaries and persists preference.
-    SettingsStore           Stores local UI preferences under LocalAppData.
-    BrandAssets             Loads repo brand logos during development.
-  ViewModels/               Page view models with load, ready, empty, and error state.
-  Views/
-    DashboardPage.xaml
-    PerformanceProfilesPage.xaml
-    UninstallCleanupPage.xaml
-    DriversProfilesPage.xaml
-    MonitoringPage.xaml
-    ReportsPage.xaml
-    SettingsPage.xaml
-```
-
-Navigation labels in the shell are Dashboard, Game Tune, Apps & Cleanup, Drivers &
-Settings, Live Feel, Before & After, and Settings.
-
-## Theme and assets
-
-- The app ships two dark theme dictionaries: Roo Industries Blue and Blackout Gold.
-- `ThemeService` persists the selected theme and swaps the active resource
-  dictionary at runtime.
-- `Brand.xaml` currently points to the checked-in Roboto Flex TTF asset under
-  `Assets\Fonts`.
-- Development logo lookup comes from `assets\brand\roo-industries` through
-  `BrandAssets`.
-
-If the project moves out of `docs/internal/frontend`, keep the build script,
-`BackendLocator`, and `BrandAssets` in sync. A packaged/public layout should copy
-the required brand images into the app `Assets` folder and use `ms-appx:///` asset
-URIs instead of repo-relative logo lookup.
-
-## Current limitations
-
-- Live data depends on the backend scripts being present under `backend\scripts`
-  and returning JSON that matches the frontend models.
-- Catalog-style data still comes from checked-in sample JSON until the matching
-  backend endpoints are wired.
-- The development logo path is repo-relative. Packaged builds need app-local brand
-  assets.
+`ROO_INDUSTRIES_BACKEND_ROOT` selects the backend repository or packaged root.
+`LiveDataService` reads local inventory and hardware data. Catalogs and some
+feature metadata still use `SampleDataService`; they are not live measurements.
+Local preferences and recovery data use the root selected by
+`BrandCompatibility.LocalDataRoot`, including existing legacy installations.

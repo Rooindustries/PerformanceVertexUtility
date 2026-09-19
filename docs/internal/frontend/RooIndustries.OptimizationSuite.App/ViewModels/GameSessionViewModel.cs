@@ -66,6 +66,7 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     public bool CanEdit => !Busy && _sessionRoot is null;
+    public bool HasLauncher => _launcher is not null || HasSession;
     public bool HasSession => _sessionRoot is not null;
     public bool HasReview => _review is not null;
     public bool CanPreview => CanEdit && _launcher is not null && SelectedLauncher?.Id == _launcher.Identity.ProcessId &&
@@ -171,7 +172,7 @@ public partial class GameSessionViewModel : ObservableObject
             var snapshot = await App.Operations.ReadProcessControlsAsync(choice.Id);
             if (version != _version || _sessionRoot is not null) return;
             LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!);
-            _launcher = snapshot; Status = "Choose launch priorities and review the session."; Detail = "";
+            _launcher = snapshot; Status = "Choose priorities and CPU cores, then review your changes."; Detail = "";
         }
         catch (Exception error) { if (version == _version) { Status = "Couldn't read this launcher."; Detail = error.Message; } }
         finally { if (version == _version) NotifyState(); }
@@ -229,7 +230,7 @@ public partial class GameSessionViewModel : ObservableObject
             ReviewSummary = Path.GetFileName(_review.Plan.GamePath) + " via " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + "\n" +
                 string.Join("\n", Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label)) +
                 "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename.";
-            Status = "Review these settings, then arm the session."; Detail = "Launch the game normally after the session reports Ready.";
+            Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
         catch (Exception error) { _review = null; ReviewSummary = ""; Status = "Couldn't prepare this session."; Detail = error.Message; }
         finally { Busy = false; }
@@ -274,7 +275,7 @@ public partial class GameSessionViewModel : ObservableObject
             var requested = AffinityMask.Trim();
             _pendingAffinity = requested;
             ShowStatus(await App.Operations.SwitchGameCoresAsync(_sessionRoot!, requested));
-            Detail = "Core switch requested: " + requested + ". Check the observed hard affinity below.";
+            Detail = "Core switch requested: " + requested + ". Check the current CPU affinity below.";
         }
         catch (Exception error) { _pendingAffinity = null; Status = "Couldn't switch cores."; Detail = error.Message; }
         finally { Busy = false; }
@@ -331,6 +332,6 @@ public partial class GameSessionViewModel : ObservableObject
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()
     {
-        foreach (var name in new[] { nameof(CanEdit), nameof(HasSession), nameof(HasReview), nameof(CanPreview), nameof(CanStart), nameof(CanStop), nameof(CanRecover), nameof(CanSwitch), nameof(CanChooseCores), nameof(CanChooseSession) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(CanEdit), nameof(HasLauncher), nameof(HasSession), nameof(HasReview), nameof(CanPreview), nameof(CanStart), nameof(CanStop), nameof(CanRecover), nameof(CanSwitch), nameof(CanChooseCores), nameof(CanChooseSession) }) OnPropertyChanged(name);
     }
 }

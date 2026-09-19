@@ -14,8 +14,9 @@
             FontFamily="{StaticResource RooIndustriesFontFamily}"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"
-            PaneDisplayMode="Left"
-            OpenPaneLength="248"
+            PaneDisplayMode="Auto"
+            ExpandedModeThresholdWidth="1100" CompactModeThresholdWidth="720"
+            OpenPaneLength="224"
             SelectionChanged="Nav_SelectionChanged">
 
             <NavigationView.Resources>
@@ -44,49 +45,52 @@
             </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Dashboard" Tag="dashboard" IsSelected="True">
+                <NavigationViewItemHeader Content="YOUR PC" />
+                <NavigationViewItem Content="Overview" Tag="dashboard" IsSelected="True">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE80F;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/home.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Process Control" Tag="profiles">
+                <NavigationViewItem Content="Games &amp; processes" Tag="profiles">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE9D9;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/game.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Apps &amp; Cleanup" Tag="uninstall">
+                <NavigationViewItem Content="Installed apps" Tag="uninstall">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE74D;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/apps.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Startup &amp; Services" Tag="startup">
+                <NavigationViewItemHeader Content="SYSTEM" />
+                <NavigationViewItem Content="Startup &amp; services" Tag="startup">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE945;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/startup.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Drivers &amp; GPU" Tag="drivers">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE950;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/gpu.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Memory &amp; Latency" Tag="memory">
+                <NavigationViewItem Content="Memory" Tag="memory">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE823;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/memory.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Windows Tweaks" Tag="monitoring">
+                <NavigationViewItem Content="Timer &amp; cache" Tag="monitoring">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE9D2;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/timer.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Tools &amp; Diagnostics" Tag="tools">
+                <NavigationViewItemHeader Content="UTILITIES" />
+                <NavigationViewItem Content="Tools" Tag="tools">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE90F;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/tools.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Restore &amp; Logs" Tag="restore">
+                <NavigationViewItem Content="Backups &amp; history" Tag="restore">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
+                        <ImageIcon Source="ms-appx:///Assets/Icons/history.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.ViewModels;
 
@@ -11,5 +12,9 @@ public sealed partial class MemoryLatencyPage : Page
     {
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
+    }
+    private void OpenTools(object sender, RoutedEventArgs e)
+    {
+        (App.MainWindow as MainWindow)?.SelectNav("tools");
     }
 }
