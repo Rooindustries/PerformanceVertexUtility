@@ -27,6 +27,16 @@ NVIDIA imports and hardware-specific utilities retain their explicit approval an
 
 Supported CPU Sets, durable bulk removal, and the sourced settings inventory are described in [Optimization controls](../docs/optimization-controls.md). The [research index](../docs/research/README.md) separates documented upstream behavior, inferred controls, implementation coverage, and remaining validation.
 
+## Protected launch sessions
+
+`Invoke-ProtectedGameSession.ps1` exposes Preview, Start, Status, Affinity, Stop and Recover. Arm a reviewed session before opening the game through its normal launcher. The separate worker and recovery watcher bind every game instance to its executable path, creation time and launcher job. Launcher scope must be accepted explicitly.
+
+On Windows 11 build 26100.4770 or later, GPU sessions retain a normal launch-time process handle and immediately copy it to the recovery watcher. Both handles must independently read the same original GPU class before applying the reviewed value. The session reads back the actual process class, reapplies only a reset to its captured original, and preserves other values. The watcher can restore through its retained handle after the controller exits. Earlier Windows builds keep the existing fresh-handle route. The capture uses Microsoft's documented [basic process enumeration](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntquerysysteminformation) and [handle duplication](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
+
+Missing access remains `unavailable`; graphics initialization can remain pending for up to 90 seconds. An unreadable original or missing, conflicting or stale recovery acknowledgement never authorizes a GPU setter. Launch timing and game protection can prevent capture. A Windows API contract does not establish publisher endorsement or compatibility with future game updates.
+
+Run `Test-ProtectedGameSessions.ps1 -RetainedGpu` on the RX9070XT validation machine to exercise real GPU work after a disposable process denies new control handles. This mode covers sustained class changes, controller and watcher termination, foreign values and rejected recovery evidence. `-HardwareGpu` runs the broader launch-priority, core-switching, relaunch and recovery checks; those checks also exercise the disposable fixture's IFEO registry settings.
+
 ## Validation
 
 Install Python 3.10+ and the development requirements:

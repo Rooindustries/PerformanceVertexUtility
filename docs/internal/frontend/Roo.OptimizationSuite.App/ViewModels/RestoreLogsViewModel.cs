@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
+using System.IO;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Roo.OptimizationSuite.Helpers;
 using Roo.OptimizationSuite.Models;
+using Roo.OptimizationSuite.Services;
 
 namespace Roo.OptimizationSuite.ViewModels;
 
@@ -19,19 +22,20 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     {
         var session = await App.Live.GetGameTuneSessionStatusAsync();
         var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
+        var games = await App.Operations.ReadGameSessionsAsync();
 
         BuildRestore(
             session is { DryRun: true } ? null : RecoveryAvailable(session?.Status, session?.Restorable),
-            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable));
-        BuildHistory(session, governor);
+            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable), games);
+        BuildHistory(session, governor, games);
         IsEmpty = false;
     }
 
-    private void BuildRestore(bool? gameRecovery, bool? governorRecovery)
+    private void BuildRestore(bool? gameRecovery, bool? governorRecovery, GameSessionEntry[] games)
     {
         RestoreRows.Clear();
-        var restorable = gameRecovery == true || governorRecovery == true;
-        var unavailable = gameRecovery is null || governorRecovery is null;
+        var restorable = gameRecovery == true || governorRecovery == true || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var unavailable = gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         RestoreHeadline = restorable
             ? "Saved recovery data is available. Review it in Process Control."
@@ -48,9 +52,13 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             governorRecovery == true ? "Backed up · restorable" : governorRecovery == false ? "No restraint backup recorded" : "Status unavailable",
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
 
+        foreach (var game in games)
+            RestoreRows.Add(new StatusLine(game.Worker.State is { } state ? Path.GetFileNameWithoutExtension(state.Preview.GamePath) : "Game session",
+                GameSessionDisplay.Title(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "neutral" : "medium"));
+
     }
 
-    private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor)
+    private void BuildHistory(GameTuneSessionStatus? session, ProcessGovernorSessionStatus? governor, GameSessionEntry[] games)
     {
         HistoryRows.Clear();
 
@@ -74,6 +82,13 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             HistoryRows.Add(new AuditRow("Recent", "Restrained", "medium",
                 "Background · " + restraints + (restraints == 1 ? " app" : " apps"),
                 "Eased while the game runs", "Reversible", "low"));
+        }
+
+        foreach (var game in games.Where(game => game.Worker.State is not null))
+        {
+            var state = game.Worker.State!;
+            HistoryRows.Add(new AuditRow(state.UpdatedAtUtc.ToLocalTime().ToString("g"), "Game session", "neutral",
+                Path.GetFileNameWithoutExtension(state.Preview.GamePath), GameSessionDisplay.Title(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "Done" : "Review", "neutral"));
         }
 
         if (HistoryRows.Count == 0)

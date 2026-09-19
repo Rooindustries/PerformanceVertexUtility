@@ -6,11 +6,20 @@ namespace Roo.Optimizer;
 public sealed class ProcessControlEngine
 {
     private readonly Func<RunningProcess, bool> _excluded;
+    private readonly ProcessTarget? _retained;
     public ProcessControlEngine(Func<RunningProcess, bool> excluded) => _excluded = excluded;
+    private ProcessControlEngine(Func<RunningProcess, bool> excluded, ProcessTarget retained) { _excluded = excluded; _retained = retained; }
+    internal ProcessControlEngine WithTarget(ProcessTarget retained) => new(_excluded, retained);
+    private ProcessTarget Open(int processId, IEnumerable<string>? writable = null, IEnumerable<string>? readControls = null)
+    {
+        if (_retained is null) return new(processId, writable, readControls);
+        if (_retained.Identity().ProcessId != processId) throw new InvalidDataException("The retained handle belongs to another process.");
+        return _retained.Borrow(writable);
+    }
 
     public ProcessControlPreview Preview(int processId, Dictionary<string, JsonElement> desired, CpuSelection? cpuSelection = null)
     {
-        using var target = new ProcessTarget(processId, readControls: desired.Keys);
+        using var target = Open(processId, readControls: desired.Keys);
         var identity = target.Identity();
         if (_excluded(identity)) throw new InvalidOperationException("This application is excluded by the protection policy.");
         target.RequireUnprotected();
@@ -54,7 +63,7 @@ public sealed class ProcessControlEngine
             ValidateJournal(existing);
             if (existing.Status is "restored" or "expired") return existing;
             var before = JsonSerializer.Serialize(existing, OperationFiles.Json);
-            using var observedTarget = new ProcessTarget(preview.Identity.ProcessId);
+            using var observedTarget = Open(preview.Identity.ProcessId);
             preview.Identity.Verify(observedTarget.Identity());
             existing.Status = "applied";
             foreach (var change in existing.Changes)
@@ -73,7 +82,7 @@ public sealed class ProcessControlEngine
             if (before != JsonSerializer.Serialize(existing, OperationFiles.Json)) Save(journalPath, existing);
             return existing;
         }
-        using var target = new ProcessTarget(preview.Identity.ProcessId, preview.Desired.Keys);
+        using var target = Open(preview.Identity.ProcessId, preview.Desired.Keys);
         preview.Identity.Verify(target.Identity());
         if (_excluded(preview.Identity)) throw new InvalidOperationException("This application is now excluded by the protection policy.");
         target.RequireUnprotected();
@@ -128,7 +137,7 @@ public sealed class ProcessControlEngine
         if (journal.Status is "restored" or "expired") return journal;
         using var instanceLease = InstanceLease(journal.Preview.Identity);
         ProcessTarget target;
-        try { target = new ProcessTarget(journal.Preview.Identity.ProcessId, journal.Changes.Where(IsAttempted).Select(change => change.Name)); }
+        try { target = Open(journal.Preview.Identity.ProcessId, journal.Changes.Where(IsAttempted).Select(change => change.Name)); }
         catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87)
         {
             journal.Status = "expired";

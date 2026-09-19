@@ -19,6 +19,44 @@ public sealed class ProcessTarget : IDisposable
     private readonly uint _access;
     private readonly int _pid;
     private readonly HashSet<string> _writable;
+    private readonly bool _borrowed;
+
+    private ProcessTarget(ProcessHandle handle, int processId, uint access, HashSet<string> writable, bool borrowed = false)
+    {
+        _handle = handle; _pid = processId; _access = access; _writable = writable; _borrowed = borrowed;
+    }
+
+    internal static ProcessTarget CaptureGpu(int processId)
+        => new(CpuApi.OpenWithoutPrivileges(0x101200, processId), processId, 0x101200, ["gpuPriority"]);
+
+    internal static ProcessTarget ReceiveGpu(long value)
+    {
+        if (value <= 0) throw new InvalidDataException("Invalid retained process handle.");
+        var handle = new ProcessHandle(new IntPtr(value));
+        var pid = GetProcessId(handle);
+        if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, 0x101200); }
+        return new(handle, checked((int)pid), 0x101200, ["gpuPriority"]);
+    }
+
+    internal long CopyTo(ProcessHandle destination)
+    {
+        if (!DuplicateHandle(new IntPtr(-1), _handle, destination, out var copy, 0, false, 2)) Fail("DuplicateHandle");
+        return copy.ToInt64();
+    }
+
+    internal static ProcessHandle OpenReceiver(RunningProcess identity)
+    {
+        var handle = CpuApi.OpenWithoutPrivileges(0x101040, identity.ProcessId);
+        try { using var target = new ProcessTarget(handle, identity.ProcessId, 0x101040, [], true); identity.Verify(target.Identity()); return handle; }
+        catch { handle.Dispose(); throw; }
+    }
+
+    internal ProcessTarget Borrow(IEnumerable<string>? writable = null)
+    {
+        var fields = (writable ?? []).ToHashSet(StringComparer.Ordinal);
+        if (!fields.IsSubsetOf(_writable)) throw new InvalidOperationException("The retained handle does not authorize these controls.");
+        return new(_handle, _pid, _access, fields, true);
+    }
 
     public ProcessTarget(int processId, IEnumerable<string>? writable = null, IEnumerable<string>? readControls = null)
     {
@@ -273,7 +311,7 @@ public sealed class ProcessTarget : IDisposable
         ? ulong.Parse(text[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture) : ulong.Parse(text, CultureInfo.InvariantCulture);
     private static string PriorityName(uint value) => value switch { 0x40 => "Idle", 0x4000 => "BelowNormal", 0x20 => "Normal", 0x8000 => "AboveNormal", 0x80 => "High", 0x100 => "Realtime", _ => throw new InvalidDataException("Unknown CPU priority class.") };
     private static uint PriorityValue(string name) => name switch { "Idle" => 0x40, "BelowNormal" => 0x4000, "Normal" => 0x20, "AboveNormal" => 0x8000, "High" => 0x80, "Realtime" => 0x100, _ => throw new InvalidDataException("Unknown CPU priority class.") };
-    public void Dispose() => _handle.Dispose();
+    public void Dispose() { if (!_borrowed) _handle.Dispose(); }
 
     private sealed class NtFailure(string api, int status, uint access) : Exception(api + " failed with NTSTATUS 0x" + unchecked((uint)status).ToString("X8"))
     {
@@ -283,6 +321,8 @@ public sealed class ProcessTarget : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct NativePower { public uint Version, ControlMask, StateMask; }
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern uint GetProcessId(ProcessHandle process);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool DuplicateHandle(IntPtr source, ProcessHandle handle, ProcessHandle destination, out IntPtr copy, uint access, bool inherit, uint options);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(ProcessHandle process, uint milliseconds);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern uint GetPriorityClass(ProcessHandle process);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetPriorityClass(ProcessHandle process, uint value);

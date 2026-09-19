@@ -3,6 +3,8 @@ using System.Diagnostics;
 using Roo.OptimizationSuite.Models;
 using Roo.OptimizationSuite.Services;
 
+if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
+
 var repo = Path.GetFullPath(args[0]);
 var fixture = Path.Combine(Path.GetTempPath(), "roo-client-boundary-" + Guid.NewGuid().ToString("N"));
 var previousRoot = Environment.GetEnvironmentVariable("ROO_BACKEND_ROOT");
