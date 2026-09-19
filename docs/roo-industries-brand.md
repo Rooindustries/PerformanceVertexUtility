@@ -49,7 +49,7 @@ Use `modules\brand_manifest.json` as the app-facing theme contract.
 
 | Theme | Source attribute | Purpose | Short version |
 |---|---:|---|---|
-| Roo Blue | `default` | Main brand theme | Deep navy, cyan, electric performance feel |
+| Roo Industries Blue | `default` | Main brand theme | Deep navy, cyan, electric performance feel |
 | Blackout Gold | `dark` | Premium alternate | Black graphite surfaces, silver text, gold accents |
 
 Both themes are dark. Do not add a plain light mode unless it is designed separately.
