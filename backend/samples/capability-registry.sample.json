@@ -26,7 +26,7 @@
         },
         {
             "name": "system-optimizations",
-            "capabilityCount": 11
+            "capabilityCount": 12
         }
     ],
     "capabilities":  [
@@ -4618,25 +4618,93 @@
                                  ],
                                  "unavailableReason": null
                              }
+                         },
+                         {
+                             "capabilityId": "system-optimizations.windows-settings",
+                             "family": "system-optimizations",
+                             "displayName": "Privacy and Explorer settings",
+                             "technicalName": "Typed Windows registry preferences with deduplicated profiles and transactional recovery",
+                             "source": "roo-industries-native",
+                             "implementedBy": "roo-industries-native",
+                             "frontendLabel": "Windows settings",
+                             "frontendTab": "Windows settings",
+                             "riskLevel": "medium",
+                             "approvalRequired": true,
+                             "availability": {
+                                 "detection": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/bin/optimizer/Optimizer.Host.dll"
+                                     }
+                                 ],
+                                 "notes": "Twelve individually defined preferences and policies. Applicability is checked per setting and Windows build/edition. Restoring a profile releases its claims without overriding other active profiles."
+                             },
+                             "preview": {
+                                 "status": "implemented",
+                                 "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+                                 "actionId": "settings.preview"
+                             },
+                             "apply": {
+                                 "status": "fixture-proven",
+                                 "mode": "reviewed-native-registry-transaction",
+                                 "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+                                 "actionId": "settings.apply",
+                                 "gates": [
+                                     "confirm-apply",
+                                     "exact-target-allowlist",
+                                     "backup-completed"
+                                 ],
+                                 "notes": "The native registry adapter is executable. File fixtures verify planning and recovery; real-target visible Windows effects are separate from registry readback."
+                             },
+                             "restore": {
+                                 "status": "fixture-proven",
+                                 "mode": "reviewed-last-owner-restoration",
+                                 "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+                                 "actionId": "settings.restore"
+                             },
+                             "unavailableReason": null,
+                             "testEvidence": [
+                                 {
+                                     "test": "backend/scripts/Test-Tweaks.ps1",
+                                     "proves": "Canonical target deduplication, profile conflicts, shared ownership, exact-value recovery, concurrency and interruption in an atomic file fixture; native registry fixture requires explicit approval."
+                                 }
+                             ],
+                             "resolvedAvailability": {
+                                 "available": false,
+                                 "checkedRules": [
+                                     {
+                                         "method": "file-exists",
+                                         "target": "backend/bin/optimizer/Optimizer.Host.dll",
+                                         "resolvedTarget": "%REPO_ROOT%\\backend\\bin\\optimizer\\Optimizer.Host.dll",
+                                         "passed": false,
+                                         "evidence": {
+                                             "exists": false,
+                                             "error": null
+                                         },
+                                         "reason": "file-not-found"
+                                     }
+                                 ],
+                                 "unavailableReason": "helper-packaging-pending"
+                             }
                          }
                      ],
     "summary":  {
-        "totalCapabilities": 56,
+        "totalCapabilities": 57,
         "byFamily": {
             "cleanup-uninstall": 10,
             "drivers-gpu-tools": 25,
             "process-controls": 10,
-            "system-optimizations": 11
+            "system-optimizations": 12
         },
         "byApplyStatus": {
             "allowlist-shim": 2,
-            "fixture-proven": 3,
+            "fixture-proven": 4,
             "helper-contract": 1,
             "live": 10,
             "not-implemented": 26,
             "preview-only": 14
         },
         "availableCount": 44,
-        "unavailableCount": 12
+        "unavailableCount": 13
     }
 }

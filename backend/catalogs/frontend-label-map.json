@@ -469,6 +469,19 @@
           "applyStatus": "preview-only"
         }
       ]
+    },
+    {
+      "tab": "Windows settings",
+      "capabilities": [
+        {
+          "capabilityId": "system-optimizations.windows-settings",
+          "frontendLabel": "Windows settings",
+          "displayName": "Privacy and Explorer settings",
+          "riskLevel": "medium",
+          "approvalRequired": true,
+          "applyStatus": "fixture-proven"
+        }
+      ]
     }
   ]
 }

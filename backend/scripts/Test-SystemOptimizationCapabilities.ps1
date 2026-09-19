@@ -252,7 +252,7 @@ $allowedApplyStatus = @('live', 'fixture-proven', 'allowlist-shim', 'helper-cont
 $allowedRestoreStatus = @('live', 'fixture-proven', 'manifest-ready', 'not-applicable', 'not-implemented')
 $allowedDetectionMethod = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature')
 $allowedUnavailableReason = @('tool-not-present', 'hardware-not-present', 'requires-admin-token', 'requires-helper-manifest', 'helper-packaging-pending', 'blocked-by-acl', 'cli-unsupported', 'not-safely-executable-yet')
-$allowedFrontendTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel')
+$allowedFrontendTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel', 'Windows settings')
 $allowedLiveCapabilityIds = @(
     'system-optimizations.timer-resolution',
     'system-optimizations.power-plan'

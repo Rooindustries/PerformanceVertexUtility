@@ -291,6 +291,43 @@
         "reason": "Catalog detection changes no system state",
         "nextRequiredStep": "No restore is needed."
       }
+    },
+    {
+      "capabilityId": "system-optimizations.windows-settings",
+      "preview": {
+        "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+        "args": [
+          "-Action",
+          "Preview"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 60
+      },
+      "apply": {
+        "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+        "args": [
+          "-Action",
+          "Apply",
+          "-ConfirmApply"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "data.changed",
+        "restorableEvidencePath": "data.restorable"
+      },
+      "restore": {
+        "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
+        "args": [
+          "-Action",
+          "Restore",
+          "-ConfirmApply"
+        ],
+        "requestPathParam": "-RequestPath",
+        "timeoutSeconds": 60,
+        "changedEvidencePath": "data.changed",
+        "restorableEvidencePath": "data.restorable"
+      },
+      "notes": "Preview without a request returns the catalog. Execution accepts only named setting IDs and the exact review hash, owner, store and current state revision."
     }
   ]
 }

@@ -40,6 +40,11 @@ public static class OperationFiles
         file.ReadExactly(bytes);
         if (expectedHash is not null && !string.Equals(Hash(bytes), expectedHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Reviewed operation bytes changed. Create a new preview.");
+        return Deserialize<T>(bytes);
+    }
+
+    public static T Deserialize<T>(byte[] bytes)
+    {
         using var document = JsonDocument.Parse(bytes);
         CheckProperties(document.RootElement);
         return document.RootElement.Deserialize<T>(Json) ?? throw new InvalidDataException("Operation data is empty.");
