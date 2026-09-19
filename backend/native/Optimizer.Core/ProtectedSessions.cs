@@ -158,6 +158,7 @@ public sealed class ProtectedSessions
             };
             Save(root, state);
             ProcessJob? job = null;
+            LaunchGpuHandles? gpuHandles = null;
             try
             {
                 startWatch(root, plan.OperationId);
@@ -166,6 +167,12 @@ public sealed class ProtectedSessions
                 state.JobStatus = "created"; Save(root, state);
                 AwaitWatch(root, state, true);
                 VerifyLaunch(plan);
+                if (plan.Controls.ContainsKey("gpuPriority") && LaunchGpuHandles.Supported)
+                {
+                    var watcher = OperationFiles.Read<ProtectedWatchReady>(Path.Combine(root, "watch.json"));
+                    gpuHandles = new(root, state, watcher.Watcher);
+                    gpuHandles.Start();
+                }
                 state.JobStatus = "attachIntent"; Save(root, state);
                 job.Attach(plan.Launcher);
                 job.SetAffinity(ProcessTarget.ParseMask(state.DesiredAffinity.Mask)); state.JobStatus = "applied"; Save(root, state);
@@ -184,13 +191,14 @@ public sealed class ProtectedSessions
                 {
                     if (!Alive(plan.Launcher)) break;
                     CheckWatch(root, state);
+                    gpuHandles?.Check();
                     if (ReadCommand(root, state, job)) break;
                     launch.VerifyApplied();
                     MaintainLauncher(state);
                     if (job.ReadAffinity() != ProcessTarget.ParseMask(state.DesiredAffinity.Mask)) throw new InvalidOperationException("The job affinity changed outside this session.");
                     var gameFile = new FileInfo(plan.GamePath);
                     if (!gameFile.Exists || gameFile.Length != plan.GameLength || gameFile.LastWriteTimeUtc != plan.GameModifiedAtUtc) throw new InvalidOperationException("The game binary changed; review its updated launch settings.");
-                    ObserveGames(root, state, job);
+                    ObserveGames(root, state, job, gpuHandles);
                     state.Status = state.Games.All(game => game.Exited) ? "armed" : state.Games.Where(game => !game.Exited).All(game => game.Fields.All(field => field.Status == "applied")) ? "active" : "partial";
                     Save(root, state);
                     cancellation.WaitHandle.WaitOne(2000);
@@ -199,15 +207,17 @@ public sealed class ProtectedSessions
             catch (Exception error) { state.Errors.Add(error.Message); Save(root, state); }
             finally
             {
-                try { Release(root, state, job); }
-                finally { job?.Dispose(); File.Delete(CommandPath(root)); }
+                try { Release(root, state, job, gpuHandles); }
+                finally { gpuHandles?.Dispose(); job?.Dispose(); File.Delete(CommandPath(root)); }
             }
             return state;
         }
         finally { imageLease.ReleaseMutex(); }
     }
 
-    public ProtectedSessionState Recover(string root, string operationId)
+    public ProtectedSessionState Recover(string root, string operationId) => Recover(root, operationId, null);
+
+    private ProtectedSessionState Recover(string root, string operationId, LaunchGpuHandles? gpuHandles)
     {
         var initial = ReadState(root);
         if (Alive(initial.Host)) throw new InvalidOperationException("The worker is still running; request stop first.");
@@ -221,7 +231,7 @@ public sealed class ProtectedSessions
         try
         {
             using var job = ProcessJob.Open(operationId);
-            Release(root, state, job);
+            Release(root, state, job, gpuHandles);
         }
         finally { imageLease.ReleaseMutex(); }
         return state;
@@ -234,6 +244,7 @@ public sealed class ProtectedSessions
         using var imageReference = ImageMutex(state.Preview.GamePath);
         using var self = new ProcessTarget(Environment.ProcessId);
         var ready = new ProtectedWatchReady(OperationOwner.Current(), operationId, state.Host, self.Identity(), false);
+        using var gpuHandles = state.Preview.Controls.ContainsKey("gpuPriority") && LaunchGpuHandles.Supported ? new LaunchGpuHandles(root, state, ready.Watcher) : null;
         OperationFiles.Write(Path.Combine(root, "watch.json"), ready);
         ProcessJob? retained = null;
         try
@@ -242,6 +253,7 @@ public sealed class ProtectedSessions
             {
                 var current = ReadState(root);
                 if (current.Preview.OperationId != operationId || current.Host != state.Host) throw new InvalidDataException("The watched session was replaced.");
+                gpuHandles?.Receive();
                 if (retained is null && current.JobStatus is not "pending")
                 {
                     retained = ProcessJob.Open(operationId);
@@ -249,7 +261,8 @@ public sealed class ProtectedSessions
                 }
                 Thread.Sleep(250);
             }
-            OperationFiles.Write(Path.Combine(root, "recovery-result.json"), Recover(root, operationId));
+            gpuHandles?.Receive();
+            OperationFiles.Write(Path.Combine(root, "recovery-result.json"), Recover(root, operationId, gpuHandles));
         }
         catch (Exception error) { OperationFiles.Write(Path.Combine(root, "recovery-error.json"), new { operationId, error = error.Message }); throw; }
         finally { retained?.Dispose(); }
@@ -272,7 +285,7 @@ public sealed class ProtectedSessions
         }
     }
 
-    private void ObserveGames(string root, ProtectedSessionState state, ProcessJob job)
+    private void ObserveGames(string root, ProtectedSessionState state, ProcessJob job, LaunchGpuHandles? gpuHandles)
     {
         foreach (var old in state.Games.Where(game => !game.Exited)) if (!Alive(old.Identity)) old.Exited = true;
         foreach (var processId in Processes(state.Preview.GamePath))
@@ -297,7 +310,14 @@ public sealed class ProtectedSessions
             {
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
                 if (field.Route == "native" && (field.Status is "unavailable" or "conflict")) continue;
-                field.Observed = target.Read(field.Name);
+                var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(identity) : null;
+                if (field.Name == "gpuPriority" && gpuHandles is not null && retained is null)
+                {
+                    field.Status = "unavailable"; field.Error = "No launch handle was retained for this game instance."; continue;
+                }
+                var reader = retained ?? target;
+                var controls = retained is null ? _controls : _controls.WithTarget(retained);
+                field.Observed = reader.Read(field.Name);
                 if (field.Route != "native")
                 {
                     field.Status = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? "applied" : "notApplied";
@@ -305,15 +325,17 @@ public sealed class ProtectedSessions
                 }
                 try
                 {
+                    if (field.Name == "gpuPriority" && LaunchGpuHandles.Initializing(field.Observed, identity)) { field.Status = "initializing"; continue; }
                     if (!field.Observed.Known) { field.Status = "unavailable"; field.Error = field.Observed.Error?.Message ?? "Original value unavailable."; continue; }
                     if (field.JournalPath is null)
                     {
+                        if (retained is not null && !gpuHandles!.RecoveryMatches(identity, field.Observed)) { field.Status = "awaitingRecovery"; continue; }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
-                        var preview = _controls.Preview(processId, new() { [field.Name] = desired });
+                        var preview = controls.Preview(processId, new() { [field.Name] = desired });
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
                         field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
-                        var result = _controls.Apply(path, OperationFiles.HashFile(path), field.JournalPath);
+                        var result = controls.Apply(path, OperationFiles.HashFile(path), field.JournalPath);
                         if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Changes.Select(change => change.Error)));
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
@@ -322,12 +344,12 @@ public sealed class ProtectedSessions
                         var preview = OperationFiles.Read<ProcessControlPreview>(journal.PreviewPath, journal.ReviewHash);
                         identity.Verify(preview.Identity);
                         if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), preview.Original[field.Name].Require())) throw new InvalidOperationException("The observed control differs from both the original and requested values.");
-                        using var writable = new ProcessTarget(processId, [field.Name]); identity.Verify(writable.Identity());
+                        using var writable = retained?.Borrow([field.Name]) ?? new ProcessTarget(processId, [field.Name]); identity.Verify(writable.Identity());
                         field.Status = "reapplyIntent"; Save(root, state);
                         if (!ProcessTarget.Equivalent(field.Name, writable.Read(field.Name).Require(), preview.Original[field.Name].Require())) throw new InvalidOperationException("The control changed before reapplication.");
                         writable.Write(field.Name, desired); field.Reapplications++;
                     }
-                    field.Observed = target.Read(field.Name);
+                    field.Observed = reader.Read(field.Name);
                     if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired)) throw new InvalidOperationException("Native readback differs from requested priority.");
                     field.Status = "applied"; field.Error = null;
                 }
@@ -337,7 +359,7 @@ public sealed class ProtectedSessions
         }
     }
 
-    private void Release(string root, ProtectedSessionState state, ProcessJob? job)
+    private void Release(string root, ProtectedSessionState state, ProcessJob? job, LaunchGpuHandles? gpuHandles)
     {
         var errors = new List<string>();
         foreach (var game in state.Games)
@@ -345,7 +367,8 @@ public sealed class ProtectedSessions
             foreach (var field in game.Fields.Where(field => field.JournalPath is not null && File.Exists(field.JournalPath)))
                 try { var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
                     if (saved.Preview.Desired.Count != 1 || !saved.Preview.Desired.TryGetValue(field.Name, out var savedDesired) || !ProcessTarget.Equivalent(field.Name, savedDesired, state.Preview.Controls[field.Name])) throw new InvalidDataException("Native recovery belongs to another control.");
-                    var result = _controls.Restore(field.JournalPath!); field.Status = result.Status;
+                    var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(game.Identity) : null;
+                    var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }

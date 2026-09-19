@@ -464,7 +464,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));
-    private static ControlOption[] Options(string name) => name switch
+    internal static ControlOption[] Options(string name) => name switch
     {
         "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value, value)).ToArray(),
         "ioPriority" => [Option("Very low", 0), Option("Low", 1), Option("Normal", 2), Option("High · Windows support varies", 3)],
