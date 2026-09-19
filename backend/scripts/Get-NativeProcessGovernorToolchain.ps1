@@ -43,7 +43,7 @@ function Get-DotnetCandidatePaths {
     $candidates = New-Object System.Collections.Generic.List[object]
     $seen = @{}
 
-    Add-DotnetCandidatePath $candidates $seen $env:ROO_DOTNET_EXE 'configured'
+    Add-DotnetCandidatePath $candidates $seen $env:ROO_INDUSTRIES_DOTNET_EXE 'configured'
     if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
         Add-DotnetCandidatePath $candidates $seen (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe') 'user-local'
     }
@@ -167,8 +167,8 @@ try {
     $result = [pscustomobject]@{
         actionId = 'performance.nativeGovernor.toolchain'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         selectedApproach = $selectedApproach
         workerClassification = $workerClassification
         workerIsTrueNative = $workerClassification -in @('cxx-native','nativeaot')
@@ -205,16 +205,16 @@ try {
         )
     }
 
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.nativeGovernor.toolchain'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         status = 'failed'
-        errors = @((New-RooIssue 'NATIVE_GOVERNOR_TOOLCHAIN_CHECK_FAILED' $_.Exception.Message 'error' 'performance.nativeGovernor' $PSCommandPath $true 'Inspect local compiler availability and retry.' $null))
+        errors = @((New-RooIndustriesIssue 'NATIVE_GOVERNOR_TOOLCHAIN_CHECK_FAILED' $_.Exception.Message 'error' 'performance.nativeGovernor' $PSCommandPath $true 'Inspect local compiler availability and retry.' $null))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

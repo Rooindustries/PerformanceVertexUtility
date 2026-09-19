@@ -12,10 +12,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'StutterOptimization.Common.ps1')
 
 function New-StandbyMemoryContract {
-    $memory = Get-RooStutterMemorySnapshot $MemorySnapshotPath
-    $total = Get-RooPropertyValue $memory 'totalPhysicalBytes' $null
-    $available = Get-RooPropertyValue $memory 'availableBytes' $null
-    $standby = Get-RooPropertyValue $memory 'standbyBytes' $null
+    $memory = Get-RooIndustriesStutterMemorySnapshot $MemorySnapshotPath
+    $total = Get-RooIndustriesPropertyValue $memory 'totalPhysicalBytes' $null
+    $available = Get-RooIndustriesPropertyValue $memory 'availableBytes' $null
+    $standby = Get-RooIndustriesPropertyValue $memory 'standbyBytes' $null
     $availableRatio = if ($null -ne $total -and [double]$total -gt 0 -and $null -ne $available) { [math]::Round(([double]$available / [double]$total), 4) } else { $null }
     $pressure = ($null -ne $availableRatio -and $availableRatio -lt 0.18)
     return [pscustomobject]@{
@@ -40,12 +40,12 @@ function New-StandbyMemoryContract {
             rollbackSupported = $false
             reason = 'Standby memory clear is transient and cannot be restored; only before/after evidence can be captured.'
         }
-        warnings = @((New-RooStutterIssue 'STANDBY_MEMORY_HELPER_APPROVAL_GATED' 'Standby memory clear has an owned helper source contract and remains product approval-gated because the purge is transient.' 'warning' 'standby-memory' $true 'Build the helper and run it only through the controlled real executor with before/after evidence.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'STANDBY_MEMORY_HELPER_APPROVAL_GATED' 'Standby memory clear has an owned helper source contract and remains product approval-gated because the purge is transient.' 'warning' 'standby-memory' $true 'Build the helper and run it only through the controlled real executor with before/after evidence.' $null))
     }
 }
 
 function New-TimerResolutionContract {
-    $timer = Get-RooStutterJsonInput $TimerSnapshotPath
+    $timer = Get-RooIndustriesStutterJsonInput $TimerSnapshotPath
     if ($null -eq $timer) {
         $timer = [pscustomobject]@{ source = 'not-probed'; current100ns = $null; minimum100ns = $null; maximum100ns = $null }
     }
@@ -67,12 +67,12 @@ function New-TimerResolutionContract {
             restoreAction = 'stop-owned-timer-session'
             implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'TIMER_RESOLUTION_APPROVAL_GATED' 'Timer resolution apply is available through the controlled bounded executor and remains approval-gated from preview.' 'warning' 'timer-resolution' $true 'Use Invoke-StutterOptimizationRealExecutor.ps1 for the bounded session path.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'TIMER_RESOLUTION_APPROVAL_GATED' 'Timer resolution apply is available through the controlled bounded executor and remains approval-gated from preview.' 'warning' 'timer-resolution' $true 'Use Invoke-StutterOptimizationRealExecutor.ps1 for the bounded session path.' $null))
     }
 }
 
 function New-PowerPlanContract {
-    $power = Get-RooStutterJsonInput $PowerPlanSnapshotPath
+    $power = Get-RooIndustriesStutterJsonInput $PowerPlanSnapshotPath
     if ($null -eq $power) {
         $power = [pscustomobject]@{ source = 'not-probed'; activeSchemeGuid = $null; activeSchemeName = $null; isLaptop = $null }
     }
@@ -91,18 +91,18 @@ function New-PowerPlanContract {
         }
         rollback = [pscustomobject]@{
             rollbackSupported = $true
-            restoreActiveSchemeGuid = Get-RooPropertyValue $power 'activeSchemeGuid' $null
+            restoreActiveSchemeGuid = Get-RooIndustriesPropertyValue $power 'activeSchemeGuid' $null
             restoreRequiredBeforeApply = $true
             implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'POWER_PLAN_APPROVAL_GATED' 'Power plan import/selection is available through the controlled temporary scheme executor and remains approval-gated from preview.' 'warning' 'power-plan' $true 'Review active scheme and laptop/thermal gates before invoking the reversible executor.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'POWER_PLAN_APPROVAL_GATED' 'Power plan import/selection is available through the controlled temporary scheme executor and remains approval-gated from preview.' 'warning' 'power-plan' $true 'Review active scheme and laptop/thermal gates before invoking the reversible executor.' $null))
     }
 }
 
 function New-ShaderCacheContract {
-    $items = @(Get-RooStutterShaderCacheItems $ShaderCacheRoot)
+    $items = @(Get-RooIndustriesStutterShaderCacheItems $ShaderCacheRoot)
     $bytes = [uint64]0
-    foreach ($item in $items) { $bytes += [uint64](Get-RooPropertyValue $item 'bytes' 0) }
+    foreach ($item in $items) { $bytes += [uint64](Get-RooIndustriesPropertyValue $item 'bytes' 0) }
     return [pscustomobject]@{
         optimizationId = 'shader-cache-cleanup'
         title = 'Game-aware shader cache cleanup'
@@ -126,14 +126,14 @@ function New-ShaderCacheContract {
             rollbackActionId = 'performance.stutterOptimization.restoreShaderCacheFixture'
             backupRequiredBeforeDelete = $true
         }
-        warnings = @((New-RooStutterIssue 'SHADER_CACHE_APPROVAL_GATED' 'Shader cache cleanup has real-path planning and disposable-fixture apply; real user cache deletion remains approval-gated.' 'warning' 'shader-cache-cleanup' $true 'Use the controlled real executor only with exact target approval and rollback evidence.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'SHADER_CACHE_APPROVAL_GATED' 'Shader cache cleanup has real-path planning and disposable-fixture apply; real user cache deletion remains approval-gated.' 'warning' 'shader-cache-cleanup' $true 'Use the controlled real executor only with exact target approval and rollback evidence.' $null))
     }
 }
 
 function New-ServicePauseContract {
-    $inventory = Get-RooStutterJsonInput $ServiceInventoryPath
-    $services = @(Get-RooPropertyArray $inventory 'services')
-    $candidates = @($services | Where-Object { [bool](Get-RooPropertyValue $_ 'allowPause' $false) -and -not [bool](Get-RooPropertyValue $_ 'protected' $true) })
+    $inventory = Get-RooIndustriesStutterJsonInput $ServiceInventoryPath
+    $services = @(Get-RooIndustriesPropertyArray $inventory 'services')
+    $candidates = @($services | Where-Object { [bool](Get-RooIndustriesPropertyValue $_ 'allowPause' $false) -and -not [bool](Get-RooIndustriesPropertyValue $_ 'protected' $true) })
     return [pscustomobject]@{
         optimizationId = 'service-pause-preview'
         title = 'Time-boxed service pause preview with strict allowlist'
@@ -141,7 +141,7 @@ function New-ServicePauseContract {
         backendStatus = 'service-runner-layer-ready'
         dryRun = $true
         evidence = [pscustomobject]@{
-            serviceInventoryPath = if ([string]::IsNullOrWhiteSpace($ServiceInventoryPath)) { $null } else { Resolve-RooPath $ServiceInventoryPath $ServiceInventoryPath }
+            serviceInventoryPath = if ([string]::IsNullOrWhiteSpace($ServiceInventoryPath)) { $null } else { Resolve-RooIndustriesPath $ServiceInventoryPath $ServiceInventoryPath }
             serviceCount = $services.Count
             candidateCount = $candidates.Count
             candidates = @($candidates)
@@ -157,12 +157,12 @@ function New-ServicePauseContract {
             stateBackupRequired = $true
             implementedNow = $true
         }
-        warnings = @((New-RooStutterIssue 'SERVICE_PAUSE_APPROVAL_GATED' 'Service pause has a controlled runner layer and remains approval-gated for real services.' 'warning' 'service-pause-preview' $true 'Require exact service allowlist, dependency review, backup, and restore evidence before pausing real services.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'SERVICE_PAUSE_APPROVAL_GATED' 'Service pause has a controlled runner layer and remains approval-gated for real services.' 'warning' 'service-pause-preview' $true 'Require exact service allowlist, dependency review, backup, and restore evidence before pausing real services.' $null))
     }
 }
 
 try {
-    $ids = if ($OptimizationId -eq 'all') { @($script:RooStutterOptimizationIds) } else { @($OptimizationId) }
+    $ids = if ($OptimizationId -eq 'all') { @($script:RooIndustriesStutterOptimizationIds) } else { @($OptimizationId) }
     $contracts = New-Object System.Collections.Generic.List[object]
     foreach ($id in $ids) {
         switch ($id) {
@@ -178,8 +178,8 @@ try {
     $result = [pscustomobject]@{
         actionId = 'performance.stutterOptimization.preview'
         schemaVersion = 1
-        productName = $script:RooStutterProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesStutterProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'preview'
         executionMode = 'preview-only'
@@ -195,17 +195,17 @@ try {
             willLaunchUtilities = $false
             willWriteState = $false
         }
-        warnings = @((New-RooStutterIssue 'STUTTER_OPTIMIZATION_PREVIEW_ONLY' 'Stutter optimization contracts were generated without system changes or utility launches.' 'info' $OptimizationId $false 'Use fixture apply only for shader-cache validation.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'STUTTER_OPTIMIZATION_PREVIEW_ONLY' 'Stutter optimization contracts were generated without system changes or utility launches.' 'info' $OptimizationId $false 'Use fixture apply only for shader-cache validation.' $null))
         errors = @()
-        logs = @((New-RooLog 'Stutter optimization preview completed without system changes.'))
+        logs = @((New-RooIndustriesLog 'Stutter optimization preview completed without system changes.'))
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.stutterOptimization.preview'
         schemaVersion = 1
-        productName = $script:RooStutterProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesStutterProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'failed'
         executionMode = 'preview-only'
@@ -213,9 +213,9 @@ try {
         contracts = @()
         summary = [pscustomobject]@{ willChangeSystem = $false; willLaunchUtilities = $false; willWriteState = $false }
         warnings = @()
-        errors = @((New-RooStutterIssue 'STUTTER_OPTIMIZATION_PREVIEW_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check fixture paths and optimization id.' $null))
-        logs = @((New-RooLog 'Stutter optimization preview failed.' 'error'))
+        errors = @((New-RooIndustriesStutterIssue 'STUTTER_OPTIMIZATION_PREVIEW_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check fixture paths and optimization id.' $null))
+        logs = @((New-RooIndustriesLog 'Stutter optimization preview failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

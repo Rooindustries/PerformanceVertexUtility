@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class FirmwareChecks
 {
@@ -73,7 +73,7 @@ Value =0A
         check(new FirmwareScript(contextual.Changes(new Dictionary<string, string> { [selectedContext.Id] = "01" })).Questions[0].Id == selectedContext.Id,
             "Question identity is stable when a reviewed question is exported into a minimal script");
 
-        var root = Path.Combine(Path.GetTempPath(), "roo-firmware-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-firmware-" + Guid.NewGuid().ToString("N"));
         try
         {
             var provider = new FixtureProvider(); var flow = new FirmwareWorkflow(provider, root);

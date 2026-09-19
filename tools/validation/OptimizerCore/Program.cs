@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 try
 {
@@ -14,6 +14,7 @@ void Check(bool condition, string message)
 if (args is ["--firmware-provider", var firmwareFixture]) { FirmwareProviderChecks.Run(Check, firmwareFixture); return; }
 if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
+if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
@@ -21,6 +22,7 @@ if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
+BrandCompatibilityChecks.Run(Check);
 using (var self = Process.GetCurrentProcess())
 {
     for (var index = 0; index < 64; index++) OperationOwner.Current();
@@ -75,7 +77,7 @@ foreach (var missing in new[] { "{\"stateMask\":1}", "{\"controlMask\":0}", "{}"
     Check(rejected, "Missing power-mask detail cannot be filled with system-managed defaults");
 }
 
-var root = Path.Combine(Path.GetTempPath(), "roo-core-" + Guid.NewGuid().ToString("N"));
+var root = Path.Combine(Path.GetTempPath(), "roo-industries-core-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 Process? probe = null;
 try

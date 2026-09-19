@@ -143,11 +143,11 @@ function Test-IdSetMatches {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $capabilityRoot = Join-Path $repoRoot 'backend\capabilities'
-$aggregatorPath = Join-Path $repoRoot 'backend\scripts\Get-RooCapabilityRegistry.ps1'
+$aggregatorPath = Join-Path $repoRoot 'backend\scripts\Get-RooIndustriesCapabilityRegistry.ps1'
 $labelMapPath = Join-Path $repoRoot 'backend\catalogs\frontend-label-map.json'
 $samplePath = Join-Path $repoRoot 'backend\samples\capability-registry.sample.json'
 $catalogPath = Join-Path $repoRoot 'backend\contracts\contract-catalog.json'
-$schemaPath = Join-Path $repoRoot 'backend\contracts\roo-backend-contracts.schema.json'
+$schemaPath = Join-Path $repoRoot 'backend\contracts\roo-industries-backend-contracts.schema.json'
 $validTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel')
 $requiredCatalogNames = @('capability entry', 'capability registry', 'frontend label map', 'utilities inventory detector')
 
@@ -302,7 +302,7 @@ if ($null -ne $catalog) {
     }
 }
 
-$schema = Read-JsonFile $schemaPath 'roo-backend-contracts.schema'
+$schema = Read-JsonFile $schemaPath 'roo-industries-backend-contracts.schema'
 if ($null -ne $schema) {
     $defs = Get-PropertyValue $schema '$defs' $null
     foreach ($defName in @('capabilityEntry', 'capabilityRegistry', 'frontendLabelMap')) {

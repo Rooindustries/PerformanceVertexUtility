@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $typeDefinition = @"
 using System;
 using System.Runtime.InteropServices;
-public static class RooTimerResolutionNative {
+public static class RooIndustriesTimerResolutionNative {
     [DllImport("ntdll.dll")]
     public static extern int NtQueryTimerResolution(out uint minimumResolution, out uint maximumResolution, out uint currentResolution);
     [DllImport("winmm.dll")]
@@ -24,7 +24,7 @@ function Get-TimerResolutionSnapshot {
     $min = 0
     $max = 0
     $current = 0
-    $status = [RooTimerResolutionNative]::NtQueryTimerResolution([ref]$min, [ref]$max, [ref]$current)
+    $status = [RooIndustriesTimerResolutionNative]::NtQueryTimerResolution([ref]$min, [ref]$max, [ref]$current)
     return [pscustomobject]@{
         ntStatus = $status
         minimum100ns = [uint32]$min
@@ -38,21 +38,21 @@ try {
     if ($PeriodMilliseconds -lt 1) { $PeriodMilliseconds = 1 }
     Add-Type -TypeDefinition $typeDefinition -ErrorAction Stop
     $before = Get-TimerResolutionSnapshot
-    $beginResult = [RooTimerResolutionNative]::timeBeginPeriod($PeriodMilliseconds)
+    $beginResult = [RooIndustriesTimerResolutionNative]::timeBeginPeriod($PeriodMilliseconds)
     $during = $null
     $endResult = $null
     try {
         Start-Sleep -Milliseconds $DurationMilliseconds
         $during = Get-TimerResolutionSnapshot
     } finally {
-        $endResult = [RooTimerResolutionNative]::timeEndPeriod($PeriodMilliseconds)
+        $endResult = [RooIndustriesTimerResolutionNative]::timeEndPeriod($PeriodMilliseconds)
     }
     $after = Get-TimerResolutionSnapshot
     $result = [pscustomobject]@{
         actionId = 'performance.timerResolution.session'
         schemaVersion = 1
         productName = 'Roo Industries Optimization Suite'
-        capturedAtUtc = Get-RooUtcStamp
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $false
         status = if ($beginResult -eq 0 -and $endResult -eq 0) { 'success' } else { 'capability-limited' }
         requestedPeriodMilliseconds = $PeriodMilliseconds
@@ -70,22 +70,22 @@ try {
         }
         warnings = @()
         errors = @()
-        logs = @((New-RooLog 'Bounded timer resolution session completed.'))
+        logs = @((New-RooIndustriesLog 'Bounded timer resolution session completed.'))
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.timerResolution.session'
         schemaVersion = 1
         productName = 'Roo Industries Optimization Suite'
-        capturedAtUtc = Get-RooUtcStamp
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         dryRun = $true
         status = 'failed'
         summary = [pscustomobject]@{ beginCalled = $false; endCalled = $false; restoreCalledOnExit = $false; willPersist = $false; nextEngineeringStep = 'Check WinMM/NtQueryTimerResolution API availability and run on Windows.' }
         warnings = @()
         errors = @([pscustomobject]@{ code = 'TIMER_RESOLUTION_SESSION_FAILED'; message = $_.Exception.Message; severity = 'error'; source = 'performance.timerResolution'; blocking = $true })
-        logs = @((New-RooLog 'Bounded timer resolution session failed.' 'error'))
+        logs = @((New-RooIndustriesLog 'Bounded timer resolution session failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

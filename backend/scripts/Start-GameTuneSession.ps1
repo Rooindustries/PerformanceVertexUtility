@@ -17,7 +17,7 @@ function Write-SessionState {
         [string]$SessionDirectory
     )
     if ([string]::IsNullOrWhiteSpace($SessionDirectory)) { return }
-    Write-RooGameTuneJsonFile $State (Join-Path $SessionDirectory 'session.json')
+    Write-RooIndustriesGameTuneJsonFile $State (Join-Path $SessionDirectory 'session.json')
 }
 
 try {
@@ -25,20 +25,20 @@ try {
     if ($MaxDurationSeconds -lt 1) { $MaxDurationSeconds = 1 }
 
     $defaultProfilePath = Join-Path $PSScriptRoot '..\profiles\game-session.profile.json'
-    $resolvedProfilePath = Resolve-RooPath $ProfilePath $defaultProfilePath
-    $profile = Read-RooJsonFile $resolvedProfilePath
-    $profileId = [string](Get-RooPropertyValue $profile 'profileId' 'game-session')
-    $sessionId = New-RooGameTuneSessionId $profileId
-    $startedAtUtc = Get-RooUtcStamp
+    $resolvedProfilePath = Resolve-RooIndustriesPath $ProfilePath $defaultProfilePath
+    $profile = Read-RooIndustriesJsonFile $resolvedProfilePath
+    $profileId = [string](Get-RooIndustriesPropertyValue $profile 'profileId' 'game-session')
+    $sessionId = New-RooIndustriesGameTuneSessionId $profileId
+    $startedAtUtc = Get-RooIndustriesUtcStamp
     $sessionDirectory = $null
     $sessionStatePath = $null
     $backupPath = $null
     $resolvedGameTuneStateRoot = $null
 
     if ($ConfirmApply) {
-        $resolvedGameTuneStateRoot = Resolve-RooGameTuneStateRoot $StateRoot
-        $sessionDirectory = Get-RooGameTuneSessionDirectory $resolvedGameTuneStateRoot $sessionId
-        Ensure-RooDirectory $sessionDirectory
+        $resolvedGameTuneStateRoot = Resolve-RooIndustriesGameTuneStateRoot $StateRoot
+        $sessionDirectory = Get-RooIndustriesGameTuneSessionDirectory $resolvedGameTuneStateRoot $sessionId
+        Ensure-RooIndustriesDirectory $sessionDirectory
         $sessionStatePath = Join-Path $sessionDirectory 'session.json'
     }
 
@@ -54,8 +54,8 @@ try {
 
     $backupManifest = [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        backupId = "game-tune-$profileId-$(Get-RooFileStamp)"
+        productName = $script:RooIndustriesProcessProductName
+        backupId = "game-tune-$profileId-$(Get-RooIndustriesFileStamp)"
         sessionId = $sessionId
         createdAtUtc = $startedAtUtc
         actionId = 'performance.gameTune.startSession'
@@ -65,16 +65,16 @@ try {
         snapshots = @()
     }
 
-    $logs.Add((New-RooLog "Game Tune session $sessionId started.")) | Out-Null
+    $logs.Add((New-RooIndustriesLog "Game Tune session $sessionId started.")) | Out-Null
     if (-not $ConfirmApply) {
-        $warnings.Add((New-RooIssue 'GAME_TUNE_DRY_RUN' 'Game Tune session ran in dry-run mode. No process priority changes were applied.' 'info' 'performance.gameTune' $profileId $false 'Rerun with -ConfirmApply only after reviewing the per-poll preview.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesIssue 'GAME_TUNE_DRY_RUN' 'Game Tune session ran in dry-run mode. No process priority changes were applied.' 'info' 'performance.gameTune' $profileId $false 'Rerun with -ConfirmApply only after reviewing the per-poll preview.' $null)) | Out-Null
     } else {
-        Add-RooGameTuneLogFileEntry $sessionDirectory (New-RooLog 'Confirmed Game Tune session state initialized.')
+        Add-RooIndustriesGameTuneLogFileEntry $sessionDirectory (New-RooIndustriesLog 'Confirmed Game Tune session state initialized.')
     }
 
     $state = [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         sessionId = $sessionId
         profileId = $profileId
         profilePath = $resolvedProfilePath
@@ -104,26 +104,26 @@ try {
     $pollIndex = 0
     while ($true) {
         $pollIndex++
-        $pollStartedAtUtc = Get-RooUtcStamp
+        $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $previewArgs = @{ ProfilePath = $resolvedProfilePath }
         if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
             $previewArgs['TargetGameProcessName'] = $TargetGameProcessName
         }
         $previewEnvelope = & (Join-Path $PSScriptRoot 'Preview-ProcessProfile.ps1') @previewArgs | ConvertFrom-Json
-        foreach ($warning in @(Get-RooPropertyArray $previewEnvelope 'warnings')) { $warnings.Add($warning) | Out-Null }
-        foreach ($errorItem in @(Get-RooPropertyArray $previewEnvelope 'errors')) { $errors.Add($errorItem) | Out-Null }
+        foreach ($warning in @(Get-RooIndustriesPropertyArray $previewEnvelope 'warnings')) { $warnings.Add($warning) | Out-Null }
+        foreach ($errorItem in @(Get-RooIndustriesPropertyArray $previewEnvelope 'errors')) { $errors.Add($errorItem) | Out-Null }
 
         $pollWouldApply = New-Object System.Collections.Generic.List[object]
         $pollChanged = New-Object System.Collections.Generic.List[object]
         $pollSkipped = New-Object System.Collections.Generic.List[object]
 
-        foreach ($entry in @(Get-RooPropertyArray $previewEnvelope 'preview')) {
-            $entryControlChanges = @(Get-RooPreviewControlChanges $entry)
+        foreach ($entry in @(Get-RooIndustriesPropertyArray $previewEnvelope 'preview')) {
+            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
             if ($entryControlChanges.Count -eq 0) { continue }
 
-            $allowed = Test-RooGameTuneEntryAllowed $entry
+            $allowed = Test-RooIndustriesGameTuneEntryAllowed $entry
             if (-not $allowed.allowed) {
-                $skip = New-RooGameTuneSkippedItem $entry $allowed.reason $pollIndex
+                $skip = New-RooIndustriesGameTuneSkippedItem $entry $allowed.reason $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
                 continue
@@ -131,72 +131,72 @@ try {
 
             if (-not $ConfirmApply) {
                 $wouldApply = [pscustomobject]@{
-                    processId = [int](Get-RooPropertyValue $entry 'processId' 0)
-                    processName = [string](Get-RooPropertyValue $entry 'processName' '')
-                    currentPriorityClass = Get-RooPropertyValue $entry 'currentPriorityClass' $null
-                    proposedPriorityClass = Get-RooPropertyValue $entry 'proposedPriorityClass' $null
-                    currentAffinityMask = Get-RooPropertyValue $entry 'currentAffinityMask' $null
-                    proposedAffinityMask = Get-RooPropertyValue $entry 'proposedAffinityMask' $null
-                    currentIoPriority = Get-RooPropertyValue $entry 'currentIoPriority' $null
-                    proposedIoPriority = Get-RooPropertyValue $entry 'proposedIoPriority' $null
-                    currentGpuPriority = Get-RooPropertyValue $entry 'currentGpuPriority' $null
-                    proposedGpuPriority = Get-RooPropertyValue $entry 'proposedGpuPriority' $null
+                    processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                    processName = [string](Get-RooIndustriesPropertyValue $entry 'processName' '')
+                    currentPriorityClass = Get-RooIndustriesPropertyValue $entry 'currentPriorityClass' $null
+                    proposedPriorityClass = Get-RooIndustriesPropertyValue $entry 'proposedPriorityClass' $null
+                    currentAffinityMask = Get-RooIndustriesPropertyValue $entry 'currentAffinityMask' $null
+                    proposedAffinityMask = Get-RooIndustriesPropertyValue $entry 'proposedAffinityMask' $null
+                    currentIoPriority = Get-RooIndustriesPropertyValue $entry 'currentIoPriority' $null
+                    proposedIoPriority = Get-RooIndustriesPropertyValue $entry 'proposedIoPriority' $null
+                    currentGpuPriority = Get-RooIndustriesPropertyValue $entry 'currentGpuPriority' $null
+                    proposedGpuPriority = Get-RooIndustriesPropertyValue $entry 'proposedGpuPriority' $null
                     controlChanges = @($entryControlChanges)
-                    ruleId = Get-RooPropertyValue $entry 'ruleId' $null
-                    reason = Get-RooPropertyValue $entry 'reason' $null
+                    ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' $null
+                    reason = Get-RooIndustriesPropertyValue $entry 'reason' $null
                 }
                 $pollWouldApply.Add($wouldApply) | Out-Null
-                $skip = New-RooGameTuneSkippedItem $entry 'Dry-run session; -ConfirmApply was not provided.' $pollIndex
+                $skip = New-RooIndustriesGameTuneSkippedItem $entry 'Dry-run session; -ConfirmApply was not provided.' $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
                 continue
             }
 
-            $identity = Get-RooGameTuneLiveProcessIdentity $entry
+            $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $entry
             if (-not $identity.exists -or -not $identity.matches) {
-                $skip = New-RooGameTuneSkippedItem $entry $identity.reason $pollIndex
+                $skip = New-RooIndustriesGameTuneSkippedItem $entry $identity.reason $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
                 continue
             }
 
-            $livePlan = Get-RooApplicableProcessControlChanges $entryControlChanges $identity.currentControlState
-            foreach ($skippedControl in @(Get-RooPropertyArray $livePlan 'skippedControls')) {
-                $skip = New-RooGameTuneSkippedItem $entry ([string](Get-RooPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
+            $livePlan = Get-RooIndustriesApplicableProcessControlChanges $entryControlChanges $identity.currentControlState
+            foreach ($skippedControl in @(Get-RooIndustriesPropertyArray $livePlan 'skippedControls')) {
+                $skip = New-RooIndustriesGameTuneSkippedItem $entry ([string](Get-RooIndustriesPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
             }
-            $entryControlChanges = @(Get-RooPropertyArray $livePlan 'changes')
+            $entryControlChanges = @(Get-RooIndustriesPropertyArray $livePlan 'changes')
             if ($entryControlChanges.Count -eq 0) {
                 continue
             }
 
-            $snapshotKey = "$([int](Get-RooPropertyValue $entry 'processId' 0))|$([string](Get-RooPropertyValue $entry 'processName' ''))|$([string](Get-RooPropertyValue $entry 'executablePath' ''))|$([string]$identity.processStartTimeUtc)"
+            $snapshotKey = "$([int](Get-RooIndustriesPropertyValue $entry 'processId' 0))|$([string](Get-RooIndustriesPropertyValue $entry 'processName' ''))|$([string](Get-RooIndustriesPropertyValue $entry 'executablePath' ''))|$([string]$identity.processStartTimeUtc)"
             $originalState = [pscustomobject]@{
-                priorityClass = Get-RooPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
-                affinityMask = Get-RooPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
-                ioPriority = Get-RooPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
-                gpuPriority = Get-RooPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
+                priorityClass = Get-RooIndustriesPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
+                affinityMask = Get-RooIndustriesPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
+                ioPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
+                gpuPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
             }
             if (-not $snapshotKeys.Contains($snapshotKey)) {
                 $snapshot = [pscustomobject]@{
-                    processId = [int](Get-RooPropertyValue $entry 'processId' 0)
-                    processName = [string](Get-RooPropertyValue $entry 'processName' '')
-                    executablePath = Get-RooPropertyValue $entry 'executablePath' $identity.currentPath
-                    originalPriorityClass = Get-RooPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
-                    proposedPriorityClass = Get-RooPropertyValue $entry 'proposedPriorityClass' $null
-                    originalAffinityMask = Get-RooPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
-                    proposedAffinityMask = Get-RooPropertyValue $entry 'proposedAffinityMask' $null
-                    originalIoPriority = Get-RooPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
-                    proposedIoPriority = Get-RooPropertyValue $entry 'proposedIoPriority' $null
-                    originalGpuPriority = Get-RooPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
-                    proposedGpuPriority = Get-RooPropertyValue $entry 'proposedGpuPriority' $null
+                    processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                    processName = [string](Get-RooIndustriesPropertyValue $entry 'processName' '')
+                    executablePath = Get-RooIndustriesPropertyValue $entry 'executablePath' $identity.currentPath
+                    originalPriorityClass = Get-RooIndustriesPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
+                    proposedPriorityClass = Get-RooIndustriesPropertyValue $entry 'proposedPriorityClass' $null
+                    originalAffinityMask = Get-RooIndustriesPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
+                    proposedAffinityMask = Get-RooIndustriesPropertyValue $entry 'proposedAffinityMask' $null
+                    originalIoPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
+                    proposedIoPriority = Get-RooIndustriesPropertyValue $entry 'proposedIoPriority' $null
+                    originalGpuPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
+                    proposedGpuPriority = Get-RooIndustriesPropertyValue $entry 'proposedGpuPriority' $null
                     controlChanges = @($entryControlChanges)
                     processStartTimeUtc = $identity.processStartTimeUtc
-                    capturedAtUtc = Get-RooUtcStamp
+                    capturedAtUtc = Get-RooIndustriesUtcStamp
                     profileId = $profileId
-                    ruleId = [string](Get-RooPropertyValue $entry 'ruleId' '')
-                    reason = [string](Get-RooPropertyValue $entry 'reason' '')
+                    ruleId = [string](Get-RooIndustriesPropertyValue $entry 'ruleId' '')
+                    reason = [string](Get-RooIndustriesPropertyValue $entry 'reason' '')
                     sessionId = $sessionId
                 }
                 $snapshots.Add($snapshot) | Out-Null
@@ -207,27 +207,27 @@ try {
             $failedControls = New-Object System.Collections.Generic.List[string]
             foreach ($change in $entryControlChanges) {
                 try {
-                    Invoke-RooProcessControlChange $identity.process $change
+                    Invoke-RooIndustriesProcessControlChange $identity.process $change
                     $appliedControls.Add($change) | Out-Null
                 } catch {
-                    $failedControls.Add("$([string](Get-RooPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
                 }
             }
 
             if ($appliedControls.Count -gt 0) {
-                $afterControls = Get-RooProcessControlState ([int](Get-RooPropertyValue $entry 'processId' 0)) $null
+                $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $entry 'processId' 0)) $null
                 $appliedState = [pscustomobject]@{
                     priorityClass = $afterControls.priorityClass
                     affinityMask = $afterControls.affinityMask
                     ioPriority = $afterControls.ioPriority
                     gpuPriority = $afterControls.gpuPriority
                 }
-                $changedItem = New-RooGameTuneChangedItem $entry $originalState $appliedState @($appliedControls.ToArray()) $pollIndex
+                $changedItem = New-RooIndustriesGameTuneChangedItem $entry $originalState $appliedState @($appliedControls.ToArray()) $pollIndex
                 $changed.Add($changedItem) | Out-Null
                 $pollChanged.Add($changedItem) | Out-Null
             }
             if ($failedControls.Count -gt 0) {
-                $skip = New-RooGameTuneSkippedItem $entry ($failedControls -join '; ') $pollIndex
+                $skip = New-RooIndustriesGameTuneSkippedItem $entry ($failedControls -join '; ') $pollIndex
                 $skipped.Add($skip) | Out-Null
                 $pollSkipped.Add($skip) | Out-Null
             }
@@ -236,20 +236,20 @@ try {
         $poll = [pscustomobject]@{
             pollIndex = $pollIndex
             capturedAtUtc = $pollStartedAtUtc
-            previewCount = @(Get-RooPropertyArray $previewEnvelope 'preview').Count
+            previewCount = @(Get-RooIndustriesPropertyArray $previewEnvelope 'preview').Count
             wouldApplyItems = @($pollWouldApply.ToArray())
             changedItems = @($pollChanged.ToArray())
             skippedItems = @($pollSkipped.ToArray())
         }
         $polls.Add($poll) | Out-Null
-        $logEntry = New-RooLog "Game Tune poll $pollIndex completed with $($pollChanged.Count) changed item(s), $($pollWouldApply.Count) dry-run item(s), and $($pollSkipped.Count) skipped item(s)."
+        $logEntry = New-RooIndustriesLog "Game Tune poll $pollIndex completed with $($pollChanged.Count) changed item(s), $($pollWouldApply.Count) dry-run item(s), and $($pollSkipped.Count) skipped item(s)."
         $logs.Add($logEntry) | Out-Null
         if ($ConfirmApply) {
-            Add-RooGameTuneLogFileEntry $sessionDirectory $logEntry
+            Add-RooIndustriesGameTuneLogFileEntry $sessionDirectory $logEntry
             if ($snapshots.Count -gt 0) {
                 $backupManifest.snapshots = @($snapshots.ToArray())
                 $backupPath = Join-Path $sessionDirectory 'backup.json'
-                Write-RooGameTuneJsonFile $backupManifest $backupPath
+                Write-RooIndustriesGameTuneJsonFile $backupManifest $backupPath
             }
             $state.pollCount = $pollIndex
             $state.changedItems = @($changed.ToArray())
@@ -276,14 +276,14 @@ try {
     } else {
         'preview'
     }
-    $completedAtUtc = Get-RooUtcStamp
-    $backupMetadata = if ($backupPath -and (Test-Path -LiteralPath $backupPath)) { New-RooGameTuneBackupMetadata $backupManifest $backupPath } else { $null }
+    $completedAtUtc = Get-RooIndustriesUtcStamp
+    $backupMetadata = if ($backupPath -and (Test-Path -LiteralPath $backupPath)) { New-RooIndustriesGameTuneBackupMetadata $backupManifest $backupPath } else { $null }
     $artifacts = New-Object System.Collections.Generic.List[object]
     if ($sessionStatePath) { $artifacts.Add([pscustomobject]@{ type = 'gameTuneSessionState'; path = $sessionStatePath }) | Out-Null }
     if ($backupPath) { $artifacts.Add([pscustomobject]@{ type = 'gameTuneSessionBackup'; path = $backupPath }) | Out-Null }
 
-    $result = New-RooGameTuneResult `
-        -ResultId ("game-tune-session-" + (Get-RooFileStamp)) `
+    $result = New-RooIndustriesGameTuneResult `
+        -ResultId ("game-tune-session-" + (Get-RooIndustriesFileStamp)) `
         -Status $resultStatus `
         -Summary "Game Tune session completed after $pollIndex poll(s) with $($changed.Count) changed item(s), $($skipped.Count) skipped item(s), and $($restored.Count) restored item(s)." `
         -ChangedItems @($changed.ToArray()) `
@@ -294,7 +294,7 @@ try {
     $envelope = [pscustomobject]@{
         actionId = 'performance.gameTune.startSession'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         correlationId = $sessionId
         sessionId = $sessionId
         dryRun = (-not $ConfirmApply)
@@ -339,12 +339,12 @@ try {
         Write-SessionState $state $sessionDirectory
     }
 
-    Write-RooJsonOutput $envelope $OutputPath
+    Write-RooIndustriesJsonOutput $envelope $OutputPath
 } catch {
     $errorEnvelope = [pscustomobject]@{
         actionId = 'performance.gameTune.startSession'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         correlationId = $null
         sessionId = $null
         dryRun = (-not $ConfirmApply)
@@ -354,7 +354,7 @@ try {
         status = 'failed'
         sessionStatus = 'failed'
         startedAtUtc = $null
-        completedAtUtc = Get-RooUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         pollIntervalSeconds = $PollIntervalSeconds
         maxDurationSeconds = $MaxDurationSeconds
         pollCount = 0
@@ -369,9 +369,9 @@ try {
         backup = $null
         result = $null
         warnings = @()
-        errors = @((New-RooIssue 'GAME_TUNE_SESSION_FAILED' $_.Exception.Message 'error' 'performance.gameTune' $ProfilePath $true 'Review profile path, permissions, and process inventory availability.' $null))
-        logs = @((New-RooLog 'Game Tune session failed.' 'error'))
+        errors = @((New-RooIndustriesIssue 'GAME_TUNE_SESSION_FAILED' $_.Exception.Message 'error' 'performance.gameTune' $ProfilePath $true 'Review profile path, permissions, and process inventory availability.' $null))
+        logs = @((New-RooIndustriesLog 'Game Tune session failed.' 'error'))
     }
-    Write-RooJsonOutput $errorEnvelope $OutputPath
+    Write-RooIndustriesJsonOutput $errorEnvelope $OutputPath
     exit 1
 }

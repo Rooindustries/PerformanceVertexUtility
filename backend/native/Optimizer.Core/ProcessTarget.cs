@@ -6,11 +6,11 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
-using ProcessHandle = Roo.Optimization.CpuSets.ProcessHandle;
-using CpuApi = Roo.Optimization.CpuSets.Native;
-using CpuFailure = Roo.Optimization.CpuSets.NativeFailure;
+using ProcessHandle = RooIndustries.Optimization.CpuSets.ProcessHandle;
+using CpuApi = RooIndustries.Optimization.CpuSets.Native;
+using CpuFailure = RooIndustries.Optimization.CpuSets.NativeFailure;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class ProcessTarget : IDisposable
 {
@@ -139,7 +139,7 @@ public sealed class ProcessTarget : IDisposable
         try
         {
             _handle.DangerousAddRef(ref retained);
-            return Roo.Optimization.CpuSets.TopologyReader.Read(_handle.DangerousGetHandle(), _access)
+            return RooIndustries.Optimization.CpuSets.TopologyReader.Read(_handle.DangerousGetHandle(), _access)
                 .Select(cpu => new LogicalCpu(cpu.id, cpu.group, cpu.logicalProcessorIndex, cpu.coreIndex,
                     cpu.lastLevelCacheIndex, cpu.numaNodeIndex, cpu.efficiencyClass, cpu.parked, cpu.allocated, cpu.allocatedToTargetProcess)).ToArray();
         }

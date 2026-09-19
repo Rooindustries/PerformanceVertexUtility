@@ -74,7 +74,7 @@ foreach ($relative in $requiredFiles) {
 }
 
 $stateBefore = Get-StateEntryCount
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-nvidia-nip-capability-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-nvidia-nip-capability-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -98,7 +98,7 @@ try {
         Add-Failure 'NVIDIA capability probe did not prove real hidden help/export capability'
     }
 
-    $outsidePath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('roo-rejected-export-' + [guid]::NewGuid().ToString('N') + '.nip')
+    $outsidePath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('roo-industries-rejected-export-' + [guid]::NewGuid().ToString('N') + '.nip')
     $blockedPath = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $outsidePath -AllowReadOnlyNvpiProbe)
     $tempGate = @($blockedPath.gates | Where-Object { $_.gateId -eq 'export-path-temp' }) | Select-Object -First 1
     if ($blockedPath.status -eq 'approval-or-input-required' -and $tempGate.blocking -eq $true -and $blockedPath.summary.processRunnerInvoked -eq $false) {

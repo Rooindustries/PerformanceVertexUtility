@@ -15,8 +15,8 @@ function Resolve-UtilitiesRoot {
     if (-not [string]::IsNullOrWhiteSpace($Value)) {
         return [System.IO.Path]::GetFullPath($Value)
     }
-    if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) {
-        return [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT)
+    if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ROOT)) {
+        return [System.IO.Path]::GetFullPath($env:ROO_INDUSTRIES_UTILITIES_ROOT)
     }
     return [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities'))
 }

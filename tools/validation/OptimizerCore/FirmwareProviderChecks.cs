@@ -1,4 +1,4 @@
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 using System.Diagnostics;
 
 static class FirmwareProviderChecks
@@ -6,15 +6,15 @@ static class FirmwareProviderChecks
     public static void Run(Action<bool, string> check, string fixture)
     {
         var authority = Path.Combine(fixture, "fixture-authority.txt");
-        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-firmware-cli-fixture/v1") throw new InvalidDataException("A disposable fixture directory is required.");
-        var root = Path.Combine(Path.GetTempPath(), "roo-firmware-provider-" + Guid.NewGuid().ToString("N"));
+        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-industries-firmware-cli-fixture/v1") throw new InvalidDataException("A disposable fixture directory is required.");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-firmware-provider-" + Guid.NewGuid().ToString("N"));
         try
         {
             var package = ScewinProvider.Inspect(fixture);
             check(package.Executable == "SCEWIN64.exe" && package.Signature == "NotSigned", "The adapter reports fixture package identity and signature without running it");
             var directory = ScewinProvider.SetUp(fixture, package, Path.Combine(root, "packages"));
             // The fixture refuses to run without this explicit marker, which is never a provider feature.
-            File.WriteAllText(Path.Combine(directory, "fixture-authority.txt"), "roo-firmware-cli-fixture/v1");
+            File.WriteAllText(Path.Combine(directory, "fixture-authority.txt"), "roo-industries-firmware-cli-fixture/v1");
             var provider = new ScewinProvider(directory);
             using (var held = Process.Start(new ProcessStartInfo(Path.Combine(directory, "SCEWIN64.exe"), "--hold") { UseShellExecute = false, CreateNoWindow = true })!)
             {

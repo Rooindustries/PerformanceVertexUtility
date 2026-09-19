@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 try
 {
@@ -28,9 +28,9 @@ static class GpuMeasurement
 {
     public static void Run(string repository, string dotnet, string output, int blocks, int seconds, uint vendorId, uint deviceId)
     {
-        using var lease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), "roo-gpu-measure"));
+        using var lease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), "roo-industries-gpu-measure"));
         if (File.Exists(output)) throw new IOException("Choose a new output file for this experiment.");
-        var root = Path.Combine(Path.GetTempPath(), "roo-gpu-measure-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-gpu-measure-" + Guid.NewGuid().ToString("N"));
         var hostPath = Path.Combine(repository, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         var binaries = new { benchmark = OperationFiles.HashFile(typeof(GpuMeasurement).Assembly.Location), host = OperationFiles.HashFile(hostPath),
             core = OperationFiles.HashFile(Path.Combine(Path.GetDirectoryName(hostPath)!, "Optimizer.Core.dll")),
@@ -44,8 +44,8 @@ static class GpuMeasurement
             var bin = Path.Combine(root, "bin"); Directory.CreateDirectory(bin);
             foreach (var file in Directory.GetFiles(Path.GetDirectoryName(Environment.ProcessPath)!))
                 File.Copy(file, Path.Combine(bin, Path.GetFileName(file)));
-            var foregroundExe = Path.Combine(bin, "RooGpuForeground.exe");
-            var backgroundExe = Path.Combine(bin, "RooGpuBackground.exe");
+            var foregroundExe = Path.Combine(bin, "RooIndustriesGpuForeground.exe");
+            var backgroundExe = Path.Combine(bin, "RooIndustriesGpuBackground.exe");
             File.Copy(Environment.ProcessPath!, foregroundExe); File.Copy(Environment.ProcessPath!, backgroundExe);
             var random = new Random(16092026);
             for (var block = 0; block < blocks; block++)
@@ -53,7 +53,7 @@ static class GpuMeasurement
                 foreach (var enabled in random.Next(2) == 0 ? new[] { false, true } : new[] { true, false })
                 {
                     var directory = Path.Combine(root, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
-                    var request = new WorkRequest(directory, "Local\\RooGpu-" + Guid.NewGuid().ToString("N"), seconds, vendorId, deviceId);
+                    var request = new WorkRequest(directory, "Local\\RooIndustriesGpu-" + Guid.NewGuid().ToString("N"), seconds, vendorId, deviceId);
                     var path = Path.Combine(directory, "request.json"); OperationFiles.Write(path, request);
                     using var start = new EventWaitHandle(false, EventResetMode.ManualReset, request.EventPrefix + "-start");
                     using var exit = new EventWaitHandle(false, EventResetMode.ManualReset, request.EventPrefix + "-exit");
@@ -131,7 +131,7 @@ static class GpuMeasurement
                         trials.Add(new { block, enabled, foregroundPriority = 2, backgroundPriority = enabled ? 1 : 2, restoredPriority = 2,
                             foreground = front, background = back, foregroundCpuSeconds, backgroundCpuSeconds });
                         OperationFiles.Write(output, new { status = "running", binaries, blocks, seconds, vendorId, deviceId, trials });
-                        Console.WriteLine($"GPU block {block + 1}/{blocks}: {(enabled ? "Roo rule" : "normal priority")}, foreground samples {front.Samples.Length}, background dispatches {back.Dispatches}");
+                        Console.WriteLine($"GPU block {block + 1}/{blocks}: {(enabled ? "Roo Industries rule" : "normal priority")}, foreground samples {front.Samples.Length}, background dispatches {back.Dispatches}");
                     }
                     finally
                     {

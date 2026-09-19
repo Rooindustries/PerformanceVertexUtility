@@ -26,10 +26,10 @@ Routes that cannot dispatch use a status-only section:
 {
   "statusOnly": true,
   "reason": "read-only budget measurement",
-  "nextRequiredStep": "Use preview to run Measure-RooBackendFootprint.ps1; this capability has no mutating apply path."
+  "nextRequiredStep": "Use preview to run Measure-RooIndustriesBackendFootprint.ps1; this capability has no mutating apply path."
 }
 ```
 
-Status-only sections never launch a script. Mutating `apply` and `restore` sections are dispatched only after `Invoke-RooCapability.ps1` receives `-ConfirmApply`, and the target script still keeps its own gates.
+Status-only sections never launch a script. Mutating `apply` and `restore` sections are dispatched only after `Invoke-RooIndustriesCapability.ps1` receives `-ConfirmApply`, and the target script still keeps its own gates.
 
 CPU Set and bulk uninstall requests retain the hashes of their reviewed preview files inside the typed request. The router preserves structured backend rejection evidence, including Windows API names and error codes. See [Optimization controls](../../../docs/optimization-controls.md) for the request fields and recovery behavior.

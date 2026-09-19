@@ -4,7 +4,7 @@ param(
     [ValidateRange(3,60)][int]$Seconds=9,
     [uint32]$VendorId=0x1002,
     [uint32]$DeviceId=0x7550,
-    [string]$DotNetPath=$env:ROO_DOTNET_EXE
+    [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}

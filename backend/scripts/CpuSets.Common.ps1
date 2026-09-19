@@ -1,18 +1,18 @@
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-function Initialize-RooCpuSets {
-    if ($null -eq ('Roo.Optimization.CpuSets.Target' -as [type])) {
-        Add-Type -Path (Join-Path $PSScriptRoot '..\native\CpuSets\RooCpuSets.cs')
+function Initialize-RooIndustriesCpuSets {
+    if ($null -eq ('RooIndustries.Optimization.CpuSets.Target' -as [type])) {
+        Add-Type -Path (Join-Path $PSScriptRoot '..\native\CpuSets\RooIndustriesCpuSets.cs')
     }
 }
 
-function Test-RooCpuSetIdsEqual {
+function Test-RooIndustriesCpuSetIdsEqual {
     param($Left, $Right)
     return ((@($Left | Sort-Object) -join ',') -ceq (@($Right | Sort-Object) -join ','))
 }
 
-function Assert-RooCpuSetIdentity {
+function Assert-RooIndustriesCpuSetIdentity {
     param($Expected, $Actual)
     if ($null -eq $Expected -or [int]$Expected.processId -ne $Actual.processId -or
         [string]$Expected.creationTimeFileTimeUtc -cne $Actual.creationTimeFileTimeUtc -or
@@ -21,11 +21,11 @@ function Assert-RooCpuSetIdentity {
     }
 }
 
-function Get-RooCpuSetProtection {
+function Get-RooIndustriesCpuSetProtection {
     param($Identity, $NativeProtection)
-    $catalog = Read-RooJsonFile (Join-Path $PSScriptRoot '..\profiles\protected-processes.json')
+    $catalog = Read-RooIndustriesJsonFile (Join-Path $PSScriptRoot '..\profiles\protected-processes.json')
     $process = [pscustomobject]@{ name=[IO.Path]::GetFileName($Identity.executablePath); executablePath=$Identity.executablePath; category='' }
-    $match = Get-RooProtectedCatalogMatch $process $catalog
+    $match = Get-RooIndustriesProtectedCatalogMatch $process $catalog
     return [pscustomobject]@{
         protected=($match.matched -or ($NativeProtection.known -and $NativeProtection.protectedProcess))
         catalogMatch=if ($match.matched) { $match.item.itemId } else { $null }
@@ -41,30 +41,30 @@ function Get-RooCpuSetProtection {
     }
 }
 
-function New-RooCpuSetPreview {
+function New-RooIndustriesCpuSetPreview {
     param([int]$TargetProcessId, [uint32[]]$CpuSetId)
-    $target = [Roo.Optimization.CpuSets.Target]::new($TargetProcessId,$false)
+    $target = [RooIndustries.Optimization.CpuSets.Target]::new($TargetProcessId,$false)
     try {
         $identity = $target.Identity()
         $topology = @($target.Topology())
-        $compatibility = Get-RooCpuSetProtection $identity ($target.Protection())
+        $compatibility = Get-RooIndustriesCpuSetProtection $identity ($target.Protection())
         if ($compatibility.protected) { throw 'The protected-process catalog or Windows protection level excludes this target.' }
         $available = @($topology | Where-Object { -not $_.allocated -or $_.allocatedToTargetProcess } | ForEach-Object { $_.id })
         if (@($CpuSetId | Select-Object -Unique).Count -ne $CpuSetId.Count) { throw 'Duplicate CPU Set IDs are invalid.' }
         foreach ($id in $CpuSetId) { if ($available -notcontains $id) { throw "CPU Set ID $id is unavailable or reserved for another process." } }
         return [pscustomobject]@{
             schemaVersion=1; kind='cpu-set-preview'; operationId=[guid]::NewGuid().ToString('N')
-            createdAtUtc=Get-RooUtcStamp; owner=Get-RooOperationOwner; identity=$identity
+            createdAtUtc=Get-RooIndustriesUtcStamp; owner=Get-RooIndustriesOperationOwner; identity=$identity
             originalCpuSetIds=@($target.Read()); desiredCpuSetIds=@($CpuSetId | Sort-Object)
             topology=$topology; compatibility=$compatibility
         }
     } finally { $target.Dispose() }
 }
 
-function Get-RooCpuSetError {
+function Get-RooIndustriesCpuSetError {
     param($Exception)
     while ($null -ne $Exception.InnerException) { $Exception=$Exception.InnerException }
-    $nativeType='Roo.Optimization.CpuSets.NativeFailure' -as [type]
+    $nativeType='RooIndustries.Optimization.CpuSets.NativeFailure' -as [type]
     $native = $null -ne $nativeType -and $nativeType.IsInstanceOfType($Exception)
     return [pscustomobject]@{
         code=if ($native) { 'WINDOWS_API_REJECTED' } else { 'CPU_SET_OPERATION_REJECTED' }

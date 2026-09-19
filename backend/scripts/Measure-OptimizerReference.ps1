@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory=$true)][string]$RecoveryHeartbeatPath,
     [ValidateRange(1,30)][int]$Blocks=10,
     [ValidateRange(3,60)][int]$Seconds=9,
-    [string]$DotNetPath=$env:ROO_DOTNET_EXE
+    [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference='Stop'
 if(Test-Path -LiteralPath $OutputPath){throw 'Choose a new result path for this experiment.'}

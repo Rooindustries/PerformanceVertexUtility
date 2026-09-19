@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class ReferenceGovernor
 {

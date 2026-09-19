@@ -5,13 +5,13 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class RetainedGpuChecks
 {
     sealed class CleanupSignal : Exception { }
     static readonly string Bin = Path.GetDirectoryName(typeof(RetainedGpuChecks).Assembly.Location)!;
-    static readonly string GamePath = Path.Combine(Bin, "RooLaunchPolicyProbe.exe");
+    static readonly string GamePath = Path.Combine(Bin, "RooIndustriesLaunchPolicyProbe.exe");
     static void Until(Func<bool> condition, string message, int seconds = 30)
     {
         var clock = Stopwatch.StartNew();
@@ -27,14 +27,14 @@ static class RetainedGpuChecks
     internal static void Run(string repo, string dotnet)
     {
         Environment.SetEnvironmentVariable("DOTNET_ROOT_X64", Path.GetDirectoryName(dotnet));
-        var root = Path.Combine(Path.GetTempPath(), "roo-retained-gpu-check-" + Guid.NewGuid().ToString("N"));
-        var launcherPath = Path.Combine(Bin, "RooRetainedLauncher.exe");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-retained-gpu-check-" + Guid.NewGuid().ToString("N"));
+        var launcherPath = Path.Combine(Bin, "RooIndustriesRetainedLauncher.exe");
         Directory.CreateDirectory(root); File.Copy(GamePath, launcherPath, false);
         var engine = new ProtectedSessions(_ => false);
         var states = new List<string>(); var workers = new List<Process>();
         var proof = new List<object>(); var passed = 0;
         void Check(bool result, string message) { if (!result) throw new InvalidOperationException(message); Console.WriteLine("PASS " + message); passed++; }
-        var classifier = typeof(ProtectedSessions).Assembly.GetType("Roo.Optimizer.LaunchGpuHandles")!
+        var classifier = typeof(ProtectedSessions).Assembly.GetType("RooIndustries.Optimizer.LaunchGpuHandles")!
             .GetMethod("Initializing", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .CreateDelegate<Func<ControlRead, RunningProcess, bool>>();
         ControlRead Failure(long code, string api = "D3DKMTGetProcessSchedulingPriorityClass", string kind = "ntstatus")
@@ -59,7 +59,7 @@ static class RetainedGpuChecks
                 OperationFiles.Write(previewPath, engine.Preview(launcher.Id, GamePath, new() { ["gpuPriority"] = JsonSerializer.SerializeToElement(3) }, true));
                 var request = Path.Combine(session, "request.json");
                 OperationFiles.Write(request, new { schemaVersion = 1, repoRoot = Path.GetFullPath(repo), sessionRoot = session, previewPath, reviewHash = OperationFiles.HashFile(previewPath), confirm = true });
-                var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "Roo.SessionHost.exe"), "run", request); workers.Add(worker);
+                var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", request); workers.Add(worker);
                 Until(() => File.Exists(Path.Combine(session, "session.json")) && State(session).Status == "armed", "GPU session did not arm.");
                 var gameRoot = Path.Combine(root, "game-" + trial); Directory.CreateDirectory(gameRoot);
                 OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = gameRoot, session });
@@ -72,7 +72,7 @@ static class RetainedGpuChecks
                 var locked = OperationFiles.Read<JsonElement>(Path.Combine(gameRoot, "locked.json")).GetProperty("atUtc").GetDateTime();
                 bool denied = false;
                 try { using var fresh = new ProcessTarget(game.Id, readControls: ["gpuPriority"]); denied = !fresh.Read("gpuPriority").Known; }
-                catch (Roo.Optimization.CpuSets.NativeFailure failure) when (failure.NativeErrorCode == 5) { denied = true; }
+                catch (RooIndustries.Optimization.CpuSets.NativeFailure failure) when (failure.NativeErrorCode == 5) { denied = true; }
                 Check(denied, "A fresh GPU control handle is denied on the disposable fixture");
                 if (trial is >= 4 and < 7)
                 {

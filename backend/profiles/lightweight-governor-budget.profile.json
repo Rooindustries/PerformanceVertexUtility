@@ -29,8 +29,8 @@
     "externalProcessGovernorDependencyRequired": false
   },
   "measurement": {
-    "script": "backend\\scripts\\Measure-RooBackendFootprint.ps1",
-    "residentHostScript": "backend\\scripts\\Start-RooResidentSessionHost.ps1",
+    "script": "backend\\scripts\\Measure-RooIndustriesBackendFootprint.ps1",
+    "residentHostScript": "backend\\scripts\\Start-RooIndustriesResidentSessionHost.ps1",
     "defaultSampleDurationSeconds": 3,
     "defaultPollIntervalMilliseconds": 1000,
     "requiresElevation": false,

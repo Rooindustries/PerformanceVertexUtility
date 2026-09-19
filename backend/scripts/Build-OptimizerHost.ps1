@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE,[string]$OutputPath='')
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[string]$OutputPath='')
 $ErrorActionPreference='Stop'
 if([string]::IsNullOrWhiteSpace($DotNetPath)){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-uninstall-apply-package-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-uninstall-apply-package-' + [guid]::NewGuid().ToString('N'))
 $applyScript = Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1'
 $restoreScript = Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1'
 function Assert([bool]$Condition, [string]$Message) {
@@ -85,8 +85,8 @@ try {
     try { $blocked=Read-Result (& $applyScript @a) } finally { $held.Dispose() }
     Assert ($blocked.status -eq 'failed' -and $blocked.dryRun -and (Test-Path $case.targets[0])) 'Concurrent operation lock fails before mutation'
     $case=New-Case 'vendor-changes-content'; $a=$case.args
-    $vendorExe=Join-Path $case.root 'Roo Vendor Fixture.exe'
-    Add-Type -TypeDefinition 'using System.IO; public class RooVendorFixture {public static int Main(string[] args) {File.WriteAllText(Path.Combine(args[0],"nested","data.txt"),"changed by vendor"); File.WriteAllText(Path.Combine(args[0],"new user file.txt"),"created during removal"); return 0;}}' -OutputAssembly $vendorExe -OutputType ConsoleApplication
+    $vendorExe=Join-Path $case.root 'Roo Industries Vendor Fixture.exe'
+    Add-Type -TypeDefinition 'using System.IO; public class RooIndustriesVendorFixture {public static int Main(string[] args) {File.WriteAllText(Path.Combine(args[0],"nested","data.txt"),"changed by vendor"); File.WriteAllText(Path.Combine(args[0],"new user file.txt"),"created during removal"); return 0;}}' -OutputAssembly $vendorExe -OutputType ConsoleApplication
     $case.official.commands[0].executable=$vendorExe
     $case.official.commands[0].arguments=@($case.targets[0])
     $a.AllowedOfficialExecutablePath=$vendorExe; Refresh-Hashes $case

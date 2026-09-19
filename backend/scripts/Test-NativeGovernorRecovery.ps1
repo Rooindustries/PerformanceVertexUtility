@@ -1,24 +1,24 @@
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Validation.Common.ps1')
-$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-governor-recovery-'+[Guid]::NewGuid().ToString('N'))
+$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-recovery-'+[Guid]::NewGuid().ToString('N'))
 $probe=$null
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
-    $worker=Join-Path $root 'RooGovernorRecoveryProbe.exe'
+    $worker=Join-Path $root 'RooIndustriesGovernorRecoveryProbe.exe'
     $build=(& (Join-Path $PSScriptRoot 'Build-NativeProcessGovernor.ps1') -OutputPath $worker -Force)|ConvertFrom-Json
     if($build.status -ne 'built'){throw 'Governor fixture did not build.'}
     $assembly=[Reflection.Assembly]::Load([IO.File]::ReadAllBytes($worker))
-    $type=$assembly.GetType('RooProcessGovernor')
+    $type=$assembly.GetType('RooIndustriesProcessGovernor')
     $flags=[Reflection.BindingFlags]'NonPublic,Static'
     $snapshotMethod=$type.GetMethod('SnapshotProcess',$flags)
     $buildChanges=$type.GetMethod('BuildControlChanges',$flags)
     $apply=$type.GetMethod('ApplyChanges',$flags)
     $restore=$type.GetMethod('RestoreSnapshot',$flags)
     $writeBackup=$type.GetMethod('WriteBackup',$flags)
-    $restraint=[RooProcessGovernor+GovernorRestraint]::new()
+    $restraint=[RooIndustriesProcessGovernor+GovernorRestraint]::new()
     $restraint.priorityClass='BelowNormal';$restraint.affinityMask=1;$restraint.ioPriority='Low';$restraint.gpuPriority='BelowNormal'
-    $unknown=[RooProcessGovernor+ProcessSnapshot]::new()
+    $unknown=[RooIndustriesProcessGovernor+ProcessSnapshot]::new()
     $changes=$buildChanges.Invoke($null,@($unknown,$restraint))
     Assert ($changes.Count -eq 4 -and @($changes|Where-Object {-not $_['blocked']}).Count -eq 0) 'Unknown originals cannot become executable native governor changes'
     $probe=Start-Process -FilePath $worker -ArgumentList '--probe sleep 0 120' -WindowStyle Hidden -PassThru
@@ -38,8 +38,8 @@ try {
         foreach($key in $values.Keys){$change.Add($key,$values[$key])}
         $changes.Add($change)
     }
-    $backup=[RooProcessGovernor+BackupSnapshot]::FromProcess($before,$probe,$changes,'recovery-fixture','fixture-session')
-    $snapshots=[Collections.Generic.List[RooProcessGovernor+BackupSnapshot]]::new();$snapshots.Add($backup)
+    $backup=[RooIndustriesProcessGovernor+BackupSnapshot]::FromProcess($before,$probe,$changes,'recovery-fixture','fixture-session')
+    $snapshots=[Collections.Generic.List[RooIndustriesProcessGovernor+BackupSnapshot]]::new();$snapshots.Add($backup)
     $path=Join-Path $root 'backup.json'
     $proof=[pscustomobject]@{beforeWrite=$false;afterWrite=$false}
     [Action]$checkpoint={

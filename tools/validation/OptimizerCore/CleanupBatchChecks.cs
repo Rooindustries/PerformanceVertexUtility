@@ -1,12 +1,12 @@
 using Microsoft.Win32;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class CleanupBatchChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-cleanup-batch-" + Guid.NewGuid().ToString("N"));
-        var registryRoot = "Software\\RooCleanupBatchTests\\" + Guid.NewGuid().ToString("N");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-batch-" + Guid.NewGuid().ToString("N"));
+        var registryRoot = "Software\\RooIndustriesCleanupBatchTests\\" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         var contexts = new Dictionary<string, CleanupContext>();
         var plans = new List<ApplicationCleanupPreview>();
@@ -16,13 +16,13 @@ static class CleanupBatchChecks
         ApplicationCleanup App(string source, string appId) => new(() => contexts[appId], [root], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
         try
         {
-            foreach (var name in new[] { "Roo Batch One", "Roo Batch Two" })
+            foreach (var name in new[] { "Roo Industries Batch One", "Roo Industries Batch Two" })
             {
                 var source = Path.Combine(root, name);
                 Directory.CreateDirectory(source);
                 File.WriteAllText(Path.Combine(source, "data.txt"), name + " file");
                 using (var key = hive.CreateSubKey(registryRoot + "\\" + name)) key.SetValue("Original", name + " registry");
-                var app = new CleanupApplication { AppId = "fixture:" + name, DisplayName = name, Publisher = "Roo", InstallLocation = source, PackageFamilyName = null };
+                var app = new CleanupApplication { AppId = "fixture:" + name, DisplayName = name, Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
                 var authority = new CleanupAuthority
                 {
                     AppId = app.AppId, ProviderIdentityHash = OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(name)), Owner = OperationOwner.Current(),
@@ -47,14 +47,14 @@ static class CleanupBatchChecks
             });
             var stopped = engineBatch.Apply(batchPath, hash, journalPath);
             check(stopped.Status == "stopped" && stopped.Entries[0].Status == "applied" && stopped.Entries[1].Status == "pending" &&
-                !Directory.Exists(Path.Combine(root, "Roo Batch One")) && Directory.Exists(Path.Combine(root, "Roo Batch Two")), "Batch cancellation finishes the current app and preserves the unstarted app's leftovers");
+                !Directory.Exists(Path.Combine(root, "Roo Industries Batch One")) && Directory.Exists(Path.Combine(root, "Roo Industries Batch Two")), "Batch cancellation finishes the current app and preserves the unstarted app's leftovers");
             var pendingRejected = false;
             try { engineBatch.Restore(journalPath, [plans[1].AppId]); }
             catch (InvalidDataException error) { pendingRejected = error.Message.Contains("no attempted cleanup"); }
             check(pendingRejected && !CleanupBatch.ReadJournal(journalPath).RestoreStarted, "Selecting an unattempted app cannot falsely begin recovery");
             var newer = CleanupBatch.Cancel(journalPath);
             var staleResume = engineBatch.Apply(batchPath, hash, journalPath, stopped.CancellationId);
-            check(staleResume.Status == "stopped" && staleResume.CancellationId == newer.CancellationId && Directory.Exists(Path.Combine(root, "Roo Batch Two")), "An old resume token cannot clear a newer cancellation request");
+            check(staleResume.Status == "stopped" && staleResume.CancellationId == newer.CancellationId && Directory.Exists(Path.Combine(root, "Roo Industries Batch Two")), "An old resume token cannot clear a newer cancellation request");
             var second = contexts[plans[1].AppId];
             contexts[plans[1].AppId] = second with { Authority = second.Authority with { RemoverRunning = true } };
             var blocked = engineBatch.Apply(batchPath, hash, journalPath, newer.CancellationId);
@@ -85,11 +85,11 @@ static class CleanupBatchChecks
             contexts[selectedId] = selectedContext;
             engineBatch = new CleanupBatch(App);
             var partial = engineBatch.Restore(journalPath, [selectedId]);
-            using (var firstKey = hive.OpenSubKey(registryRoot + "\\Roo Batch One"))
-            using (var secondKey = hive.OpenSubKey(registryRoot + "\\Roo Batch Two"))
+            using (var firstKey = hive.OpenSubKey(registryRoot + "\\Roo Industries Batch One"))
+            using (var secondKey = hive.OpenSubKey(registryRoot + "\\Roo Industries Batch Two"))
                 check(partial.Status == "partiallyRestored" && partial.RestoreStarted &&
-                    File.ReadAllText(Path.Combine(root, "Roo Batch One", "data.txt")) == "Roo Batch One file" &&
-                    firstKey?.GetValue("Original") as string == "Roo Batch One registry" && secondKey is null && !Directory.Exists(Path.Combine(root, "Roo Batch Two")),
+                    File.ReadAllText(Path.Combine(root, "Roo Industries Batch One", "data.txt")) == "Roo Industries Batch One file" &&
+                    firstKey?.GetValue("Original") as string == "Roo Industries Batch One registry" && secondKey is null && !Directory.Exists(Path.Combine(root, "Roo Industries Batch Two")),
                     "Selective recovery restores only the chosen application's files and registry data after restart");
             var partialBytes = File.ReadAllBytes(journalPath);
             try
@@ -102,13 +102,13 @@ static class CleanupBatchChecks
                 check(rejected, "A favorable partial status cannot override missing restoration evidence");
             }
             finally { File.WriteAllBytes(journalPath, partialBytes); }
-            check(engineBatch.Apply(batchPath, hash, journalPath).Status == "partiallyRestored" && Directory.Exists(Path.Combine(root, "Roo Batch One")),
+            check(engineBatch.Apply(batchPath, hash, journalPath).Status == "partiallyRestored" && Directory.Exists(Path.Combine(root, "Roo Industries Batch One")),
                 "Partial recovery permanently ends deletion for the entire batch");
-            File.WriteAllText(Path.Combine(root, "Roo Batch One", "data.txt"), "edited after recovery");
+            File.WriteAllText(Path.Combine(root, "Roo Industries Batch One", "data.txt"), "edited after recovery");
             check(engineBatch.Restore(journalPath, [selectedId]).Status == "partiallyRestored" &&
-                File.ReadAllText(Path.Combine(root, "Roo Batch One", "data.txt")) == "edited after recovery" && !Directory.Exists(Path.Combine(root, "Roo Batch Two")),
+                File.ReadAllText(Path.Combine(root, "Roo Industries Batch One", "data.txt")) == "edited after recovery" && !Directory.Exists(Path.Combine(root, "Roo Industries Batch Two")),
                 "Repeated selective recovery preserves later edits and leaves unselected apps untouched");
-            File.WriteAllText(Path.Combine(root, "Roo Batch One", "data.txt"), "Roo Batch One file");
+            File.WriteAllText(Path.Combine(root, "Roo Industries Batch One", "data.txt"), "Roo Industries Batch One file");
             var restored = new CleanupBatch(App).Restore(journalPath);
             check(restored.Status == "restored", "Batch recovery restores both application operations");
             foreach (var context in contexts.Values)
@@ -124,8 +124,8 @@ static class CleanupBatchChecks
             foreach (var plan in plans)
                 if (plan.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
             hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooCleanupBatchTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooCleanupBatchTests", false);
+            using (var parent = hive.OpenSubKey("Software\\RooIndustriesCleanupBatchTests"))
+                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesCleanupBatchTests", false);
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Batch validation removes its cancellation markers, receipts and data fixtures");

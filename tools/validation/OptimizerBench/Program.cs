@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 if (args.Length > 0 && args[0].StartsWith("--cpu-", StringComparison.Ordinal))
 {
@@ -14,8 +14,8 @@ if (args.Length != 3) throw new ArgumentException("Provide repository root, dotn
 var repo = Path.GetFullPath(args[0]);
 var dotnet = Path.GetFullPath(args[1]);
 var outputPath = Path.GetFullPath(args[2]);
-var root = Path.Combine(Path.GetTempPath(), "roo-policy-measure-" + Guid.NewGuid().ToString("N"));
-var probePath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooPolicyMeasureProbe.exe");
+var root = Path.Combine(Path.GetTempPath(), "roo-industries-policy-measure-" + Guid.NewGuid().ToString("N"));
+var probePath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "RooIndustriesPolicyMeasureProbe.exe");
 var store = new ProcessPolicyStore(Path.Combine(root, "policies"));
 var hostPath = Path.Combine(repo, "backend", "bin", "optimizer", "Optimizer.Host.dll");
 var measuredBinaries = new

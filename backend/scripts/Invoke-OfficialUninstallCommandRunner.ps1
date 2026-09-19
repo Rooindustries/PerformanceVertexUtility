@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-OfficialRunnerArguments {
     param([object]$Command)
-    $value = Get-RooUninstallPropertyValue $Command 'arguments' $null
+    $value = Get-RooIndustriesUninstallPropertyValue $Command 'arguments' $null
     if ($null -eq $value) { return @() }
     if ($value -is [System.Array]) { return @($value | ForEach-Object { [string]$_ }) }
     return @([string]$value)
@@ -32,26 +32,26 @@ function Test-RunnerPathInsideTemp {
 
 try {
     if ([string]::IsNullOrWhiteSpace($OfficialPreviewPath)) { throw 'OfficialPreviewPath is required.' }
-    $officialPreview = Read-RooUninstallJsonFile (Resolve-RooUninstallPath $OfficialPreviewPath $OfficialPreviewPath)
-    $commands = @(Get-RooUninstallPropertyArray $officialPreview 'commands')
+    $officialPreview = Read-RooIndustriesUninstallJsonFile (Resolve-RooIndustriesUninstallPath $OfficialPreviewPath $OfficialPreviewPath)
+    $commands = @(Get-RooIndustriesUninstallPropertyArray $officialPreview 'commands')
     if ($CommandIndex -lt 0 -or $CommandIndex -ge $commands.Count) { throw "CommandIndex $CommandIndex is outside command count $($commands.Count)." }
     $command = $commands[$CommandIndex]
-    $commandExecutable = Resolve-RooUninstallPath ([string](Get-RooUninstallPropertyValue $command 'executable' '')) ([string](Get-RooUninstallPropertyValue $command 'executable' ''))
-    $allowedExecutable = if ([string]::IsNullOrWhiteSpace($AllowedExecutablePath)) { '' } else { Resolve-RooUninstallPath $AllowedExecutablePath $AllowedExecutablePath }
+    $commandExecutable = Resolve-RooIndustriesUninstallPath ([string](Get-RooIndustriesUninstallPropertyValue $command 'executable' '')) ([string](Get-RooIndustriesUninstallPropertyValue $command 'executable' ''))
+    $allowedExecutable = if ([string]::IsNullOrWhiteSpace($AllowedExecutablePath)) { '' } else { Resolve-RooIndustriesUninstallPath $AllowedExecutablePath $AllowedExecutablePath }
     $arguments = Get-OfficialRunnerArguments $command
     $workingDirectoryResolved = if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) { '' } else { [System.IO.Path]::GetFullPath($WorkingDirectory) }
-    $cancelRequested = (-not [string]::IsNullOrWhiteSpace($CancellationSignalPath) -and (Test-Path -LiteralPath (Resolve-RooUninstallPath $CancellationSignalPath $CancellationSignalPath)))
+    $cancelRequested = (-not [string]::IsNullOrWhiteSpace($CancellationSignalPath) -and (Test-Path -LiteralPath (Resolve-RooIndustriesUninstallPath $CancellationSignalPath $CancellationSignalPath)))
     $executableMatchesAllowlist = (-not [string]::IsNullOrWhiteSpace($allowedExecutable) -and [System.IO.Path]::GetFullPath($commandExecutable).Equals([System.IO.Path]::GetFullPath($allowedExecutable), [System.StringComparison]::OrdinalIgnoreCase))
     $workingDirectorySafe = ([string]::IsNullOrWhiteSpace($workingDirectoryResolved) -or (Test-RunnerPathInsideTemp $workingDirectoryResolved))
 
     $gates = @(
-        (New-RooBackendExecutorGate 'confirm-apply' 'Confirmed harmless runner requested' $true ([bool]$ConfirmApply) 'The official command runner remains preview-only until -ConfirmApply is supplied.' $null),
-        (New-RooBackendExecutorGate 'harmless-shim-flag' 'Harmless shim execution allowed' $true ([bool]$AllowHarmlessShimExecution) 'Validation may run only a harmless shim executable, never a real app uninstaller.' $null),
-        (New-RooBackendExecutorGate 'explicit-user-approval' 'Explicit runner approval captured' $true ([bool]$UserApproved) 'The exact harmless command must be approved for validation.' $null),
-        (New-RooBackendExecutorGate 'executable-allowlist-match' 'Command executable matches harmless allowlist' $true $executableMatchesAllowlist 'The preview command executable must exactly match the supplied harmless shim path.' ([pscustomobject]@{ commandExecutable = $commandExecutable; allowedExecutablePath = $allowedExecutable })),
-        (New-RooBackendExecutorGate 'working-directory-temp' 'Working directory is empty or under temp' $true $workingDirectorySafe 'Harmless runner working directory must be omitted or isolated under temp.' ([pscustomobject]@{ workingDirectory = $workingDirectoryResolved })),
-        (New-RooBackendExecutorGate 'cancellation-not-requested' 'Cancellation signal absent' $true (-not $cancelRequested) 'A cancellation signal prevents process start.' ([pscustomobject]@{ cancellationSignalPath = $CancellationSignalPath })),
-        (New-RooBackendExecutorGate 'no-silent-real-app-uninstall' 'No silent real app uninstall path' $true $executableMatchesAllowlist 'Only the exact harmless shim executable can run.' $null)
+        (New-RooIndustriesBackendExecutorGate 'confirm-apply' 'Confirmed harmless runner requested' $true ([bool]$ConfirmApply) 'The official command runner remains preview-only until -ConfirmApply is supplied.' $null),
+        (New-RooIndustriesBackendExecutorGate 'harmless-shim-flag' 'Harmless shim execution allowed' $true ([bool]$AllowHarmlessShimExecution) 'Validation may run only a harmless shim executable, never a real app uninstaller.' $null),
+        (New-RooIndustriesBackendExecutorGate 'explicit-user-approval' 'Explicit runner approval captured' $true ([bool]$UserApproved) 'The exact harmless command must be approved for validation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'executable-allowlist-match' 'Command executable matches harmless allowlist' $true $executableMatchesAllowlist 'The preview command executable must exactly match the supplied harmless shim path.' ([pscustomobject]@{ commandExecutable = $commandExecutable; allowedExecutablePath = $allowedExecutable })),
+        (New-RooIndustriesBackendExecutorGate 'working-directory-temp' 'Working directory is empty or under temp' $true $workingDirectorySafe 'Harmless runner working directory must be omitted or isolated under temp.' ([pscustomobject]@{ workingDirectory = $workingDirectoryResolved })),
+        (New-RooIndustriesBackendExecutorGate 'cancellation-not-requested' 'Cancellation signal absent' $true (-not $cancelRequested) 'A cancellation signal prevents process start.' ([pscustomobject]@{ cancellationSignalPath = $CancellationSignalPath })),
+        (New-RooIndustriesBackendExecutorGate 'no-silent-real-app-uninstall' 'No silent real app uninstall path' $true $executableMatchesAllowlist 'Only the exact harmless shim executable can run.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canRun = ($blockingGates.Count -eq 0)
@@ -59,8 +59,8 @@ try {
     $status = if ($cancelRequested) { 'canceled' } elseif ($canRun) { 'success' } elseif ($ConfirmApply) { 'blocked' } else { 'preview' }
 
     if ($canRun) {
-        $runnerResult = Invoke-RooBackendHiddenProcess -FilePath $commandExecutable -Arguments $arguments -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $workingDirectoryResolved
-        if ([bool](Get-RooPropertyValue $runnerResult 'timedOut' $false) -or [int](Get-RooPropertyValue $runnerResult 'exitCode' -1) -ne 0) {
+        $runnerResult = Invoke-RooIndustriesBackendHiddenProcess -FilePath $commandExecutable -Arguments $arguments -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $workingDirectoryResolved
+        if ([bool](Get-RooIndustriesPropertyValue $runnerResult 'timedOut' $false) -or [int](Get-RooIndustriesPropertyValue $runnerResult 'exitCode' -1) -ne 0) {
             $status = 'failed'
         }
     }
@@ -68,17 +68,17 @@ try {
     $result = [pscustomobject]@{
         actionId = 'apps.officialUninstallCommandRunner'
         schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
+        productName = $script:RooIndustriesUninstallProductName
+        capturedAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = (-not $canRun)
         status = $status
         executionMode = if ($canRun) { 'harmless-shim-real-process' } else { 'preview-or-blocked' }
-        appId = Get-RooUninstallPropertyValue $command 'appId' $null
+        appId = Get-RooIndustriesUninstallPropertyValue $command 'appId' $null
         command = [pscustomobject]@{
             executable = $commandExecutable
             arguments = @($arguments)
-            rawCommand = Get-RooUninstallPropertyValue $command 'rawCommand' $null
-            commandLine = Join-RooBackendExecutorCommandLine $commandExecutable @($arguments)
+            rawCommand = Get-RooIndustriesUninstallPropertyValue $command 'rawCommand' $null
+            commandLine = Join-RooIndustriesBackendExecutorCommandLine $commandExecutable @($arguments)
             workingDirectory = $workingDirectoryResolved
         }
         gates = @($gates)
@@ -91,36 +91,36 @@ try {
             realAppUninstallBlocked = $true
         }
         summary = [pscustomobject]@{
-            processStarted = [bool](Get-RooPropertyValue $runnerResult 'processStarted' $false)
-            timedOut = [bool](Get-RooPropertyValue $runnerResult 'timedOut' $false)
-            exitCode = Get-RooPropertyValue $runnerResult 'exitCode' $null
-            stdoutCaptured = -not [string]::IsNullOrEmpty([string](Get-RooPropertyValue $runnerResult 'stdout' ''))
-            stderrCaptured = -not [string]::IsNullOrEmpty([string](Get-RooPropertyValue $runnerResult 'stderr' ''))
+            processStarted = [bool](Get-RooIndustriesPropertyValue $runnerResult 'processStarted' $false)
+            timedOut = [bool](Get-RooIndustriesPropertyValue $runnerResult 'timedOut' $false)
+            exitCode = Get-RooIndustriesPropertyValue $runnerResult 'exitCode' $null
+            stdoutCaptured = -not [string]::IsNullOrEmpty([string](Get-RooIndustriesPropertyValue $runnerResult 'stdout' ''))
+            stderrCaptured = -not [string]::IsNullOrEmpty([string](Get-RooIndustriesPropertyValue $runnerResult 'stderr' ''))
             cancellationRequested = $cancelRequested
-            focusStealPrevented = ([bool](Get-RooPropertyValue (Get-RooPropertyValue $runnerResult 'invocation' $null) 'focusStealPrevented' $true))
+            focusStealPrevented = ([bool](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $runnerResult 'invocation' $null) 'focusStealPrevented' $true))
             willRunRealUninstaller = $false
             blockingGateCount = $blockingGates.Count
         }
-        warnings = @((New-RooUninstallIssue 'OFFICIAL_RUNNER_HARMLESS_ONLY' 'Official uninstall command runner executed only when the command executable matches the harmless shim allowlist.' 'info' 'apps.officialUninstallCommandRunner' (Get-RooUninstallPropertyValue $command 'appId' $null) $false 'Use this runner proof before wiring real uninstall approval gates.' $null))
+        warnings = @((New-RooIndustriesUninstallIssue 'OFFICIAL_RUNNER_HARMLESS_ONLY' 'Official uninstall command runner executed only when the command executable matches the harmless shim allowlist.' 'info' 'apps.officialUninstallCommandRunner' (Get-RooIndustriesUninstallPropertyValue $command 'appId' $null) $false 'Use this runner proof before wiring real uninstall approval gates.' $null))
         errors = @()
-        logs = @((New-RooUninstallLog 'Official uninstall harmless process runner evaluated.'))
+        logs = @((New-RooIndustriesUninstallLog 'Official uninstall harmless process runner evaluated.'))
     }
-    Write-RooUninstallJsonOutput $result $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'apps.officialUninstallCommandRunner'
         schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
+        productName = $script:RooIndustriesUninstallProductName
+        capturedAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = $true
         status = 'failed'
         executionMode = 'blocked'
         result = $null
         summary = [pscustomobject]@{ processStarted = $false; willRunRealUninstaller = $false; nextEngineeringStep = 'Check official preview command, harmless allowlist path, working directory, and timeout.' }
         warnings = @()
-        errors = @((New-RooUninstallIssue 'OFFICIAL_RUNNER_FAILED' $_.Exception.Message 'error' 'apps.officialUninstallCommandRunner' $null $true 'Check official preview command, harmless allowlist path, working directory, and timeout.' $null))
-        logs = @((New-RooUninstallLog 'Official uninstall harmless process runner failed.' 'error'))
+        errors = @((New-RooIndustriesUninstallIssue 'OFFICIAL_RUNNER_FAILED' $_.Exception.Message 'error' 'apps.officialUninstallCommandRunner' $null $true 'Check official preview command, harmless allowlist path, working directory, and timeout.' $null))
+        logs = @((New-RooIndustriesUninstallLog 'Official uninstall harmless process runner failed.' 'error'))
     }
-    Write-RooUninstallJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $errorResult $OutputPath
     exit 1
 }

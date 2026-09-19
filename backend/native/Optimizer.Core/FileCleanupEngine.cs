@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 {
@@ -195,7 +195,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     private static void RestoreFile(FileBackupEntry entry, string journalPath, FileCleanupJournal journal)
     {
-        entry.RestoreStagingPath ??= Path.Combine(Path.GetDirectoryName(entry.Original.Path)!, ".roo-restore-" + Guid.NewGuid().ToString("N"));
+        entry.RestoreStagingPath ??= Path.Combine(Path.GetDirectoryName(entry.Original.Path)!, ".roo-industries-restore-" + Guid.NewGuid().ToString("N"));
         Save(journalPath, journal);
         FileLease? staging = null;
         var created = false;
@@ -271,7 +271,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 throw new InvalidDataException("A recovery entry changed its original file binding.");
             if (original.Roots.Any(root => Within(entry.BackupPath, root))) throw new InvalidDataException("Backup data overlaps a deletion target.");
             if (entry.RestoreStagingPath is not null && (!string.Equals(Path.GetDirectoryName(entry.RestoreStagingPath), Path.GetDirectoryName(entry.Original.Path), StringComparison.OrdinalIgnoreCase) ||
-                !Path.GetFileName(entry.RestoreStagingPath).StartsWith(".roo-restore-", StringComparison.Ordinal)))
+                !BrandCompatibility.IsRestoreStage(Path.GetFileName(entry.RestoreStagingPath))))
                 throw new InvalidDataException("Restore staging path is outside its bound destination parent.");
         }
         return journal;

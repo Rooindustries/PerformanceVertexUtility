@@ -2,7 +2,7 @@
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record FirmwareIdentity(
     [property: JsonRequired] string MachineId, [property: JsonRequired] string Board,

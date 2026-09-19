@@ -4,7 +4,7 @@ using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record OperationOwner([property: JsonRequired] string Machine, [property: JsonRequired] string UserSid)
 {

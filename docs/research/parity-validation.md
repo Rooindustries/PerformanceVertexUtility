@@ -109,7 +109,7 @@ ProBalance's documented mechanism is temporary, selective background priority re
 
 Record exact executable/configuration hashes, OS build, driver, topology, power plan, display refresh/VRR/frame cap, graphics settings, GPU scheduling mode, background load, temperature and clock range. Pin measurement-tool versions and capture options. Save raw per-run data outside the tracked source tree.
 
-Use four conditions: **neither controller**, **Roo only**, **Lasso only**, and **both intentionally active**. The fourth measures interference, not additive performance. Compare equivalent explicit rules separately from each product's documented default adaptive mode. Lasso's governor can run without its GUI; verify process/service state and persistent settings before labeling a baseline clean. Preserve operator configuration and restore it after any authorized trial. [Lasso architecture](https://bitsum.com/apps/process-lasso/docs/).
+Use four conditions: **neither controller**, **Roo Industries only**, **Lasso only**, and **both intentionally active**. The fourth measures interference, not additive performance. Compare equivalent explicit rules separately from each product's documented default adaptive mode. Lasso's governor can run without its GUI; verify process/service state and persistent settings before labeling a baseline clean. Preserve operator configuration and restore it after any authorized trial. [Lasso architecture](https://bitsum.com/apps/process-lasso/docs/).
 
 | Workload | Foreground measurement | Competing-work measurement |
 |---|---|---|
@@ -137,21 +137,21 @@ The following are proposed engineering gates, not vendor guarantees:
 
 A run completed at **2026-09-15 19:14 UTC** on the i5-14600K/9070 XT test PC, Windows 11 build 26200. Ten paired blocks used randomized order with seed `16092026`; each condition ran for nine seconds. A separate earlier two-block pilot was excluded from these estimates.
 
-The workload pinned two busy background threads and a periodic foreground worker to logical CPU 0. Every 20 ms, the foreground worker performed 500,000 dependent integer-mix iterations. Both fixture processes disabled dynamic priority boosts. The normal condition had no Roo worker; the treatment used the real saved-rule host to lower only the background process from Normal to BelowNormal. This did not reserve the CPU against other software. The existing Ultimate Performance plan and Lasso configuration were left unchanged; Lasso process identities and binary hashes matched before and after the experiment.
+The workload pinned two busy background threads and a periodic foreground worker to logical CPU 0. Every 20 ms, the foreground worker performed 500,000 dependent integer-mix iterations. Both fixture processes disabled dynamic priority boosts. The normal condition had no Roo Industries worker; the treatment used the real saved-rule host to lower only the background process from Normal to BelowNormal. This did not reserve the CPU against other software. The existing Ultimate Performance plan and Lasso configuration were left unchanged; Lasso process identities and binary hashes matched before and after the experiment.
 
 | Measurement | Result |
 |---|---|
 | Valid paired blocks | 10; 450 timing samples per condition per block |
-| Median of per-run p99 scheduled-to-finish time | Normal: 63.327 ms; Roo rule: 1.937 ms |
+| Median of per-run p99 scheduled-to-finish time | Normal: 63.327 ms; Roo Industries rule: 1.937 ms |
 | Paired p99 ratio, rule / normal | 0.0376; 95% bootstrap interval 0.0261–0.0560 |
 | Paired background-throughput ratio, rule / normal | 0.9881; 95% bootstrap interval 0.9860–0.9902 |
-| Median per-run fraction exceeding the 20 ms interval | Normal: 15.22%; Roo rule: 0.22% |
+| Median per-run fraction exceeding the 20 ms interval | Normal: 15.22%; Roo Industries rule: 0.22% |
 
 Ratios use the geometric mean of paired run ratios. Confidence intervals resample whole paired blocks 10,000 times with seed `20260916`; individual bursts are not treated as independent runs. The predeclared gate required ten blocks, a p99-ratio upper bound below 1, and a background-throughput lower bound of at least 0.80. This run met that gate.
 
 Independent Windows process APIs checked CPU time, priority, affinity and boost state; the original priority was restored before each fixture exited. A deliberately ineffective rule failed the native readback gate and left its result incomplete. The analysis also rejects contradictory controls, missing work, changed controller identity and incomplete recovery; a faster foreground result cannot override excessive background slowdown.
 
-This establishes an effect of Roo's background-priority rule in this synthetic workload. The timing includes timer wakeup, scheduling and work completion. It is not a measurement of CPU ready time, input latency or game frame time. Lasso stayed active in both conditions, so it is not an isolated comparison against Windows or a separately configured Lasso rule. Effective-clock/temperature traces, storage/GPU contention and protected-game trials are not covered by this result.
+This establishes an effect of Roo Industries's background-priority rule in this synthetic workload. The timing includes timer wakeup, scheduling and work completion. It is not a measurement of CPU ready time, input latency or game frame time. Lasso stayed active in both conditions, so it is not an isolated comparison against Windows or a separately configured Lasso rule. Effective-clock/temperature traces, storage/GPU contention and protected-game trials are not covered by this result.
 
 Raw JSON remains outside source control. Its SHA-256 is `b2c6b4706195eb236ff2dba6c383f34a7455ee051ff108b8d79b6c578c87c203`; the measured benchmark assembly SHA-256 is `02613e0f56070efcd27b20c6c175726232b5323d92be262fe1d1232f943cfe29`. The JSON also records the host/core binary hashes and complete per-run samples. Reproduce with `Measure-OptimizerCpu.ps1` and `tools/validation/analyze_cpu_measurement.py`.
 
@@ -197,27 +197,27 @@ Raw JSON SHA-256: `defb3304c617a549ec6553f450244fa70f087253f0f0f174b14524b0d81ff
 
 ## Stock-reference CPU comparison
 
-The final run completed on **2026-09-16 at 06:42 UTC** on the same 9070 XT/i5-14600K PC. Ten randomized blocks contained normal priority, Roo and stock Process Lasso conditions, each lasting nine seconds with 450 foreground samples. Both controllers set only the disposable background process to BelowNormal. Their configured polling interval was 500 ms; Lasso used the current `Performance.UpdateSpeedCore` setting. The original governor service was temporarily stopped under an approved recovery guard, then restored with its startup mode, executable path and configuration hash unchanged. The existing Lasso GUI remained open in all conditions.
+The final run completed on **2026-09-16 at 06:42 UTC** on the same 9070 XT/i5-14600K PC. Ten randomized blocks contained normal priority, Roo Industries and stock Process Lasso conditions, each lasting nine seconds with 450 foreground samples. Both controllers set only the disposable background process to BelowNormal. Their configured polling interval was 500 ms; Lasso used the current `Performance.UpdateSpeedCore` setting. The original governor service was temporarily stopped under an approved recovery guard, then restored with its startup mode, executable path and configuration hash unchanged. The existing Lasso GUI remained open in all conditions.
 
 The reference was the publisher's signed **18.3.0.34** governor, SHA-256 `EA338D4C47F61BB3AA107A26DE3614D112F19DA9438291B3A8212F21BB01D495`. Its installer was extracted without installation. Private Windows-written INI files and unquoted short paths established working rule application; the benchmark does not alter the installed Lasso configuration. The publisher documents private configuration paths. The current engine key was also checked against the verified binary and the installed configuration; the older online INI example's `UpdateSpeed` key must not be treated as the current core setting. [Command-line reference](https://bitsum.com/apps/process-lasso/docs/reference/command-lines/), [INI reference](https://bitsum.com/apps/process-lasso/docs/reference/ini-config/).
 
 | Measurement | Result |
 |---|---|
-| Median per-run foreground p99 | Normal: 74.594 ms; Roo: 2.902 ms; Lasso: 1.419 ms |
-| Paired Roo / normal p99 ratio | 0.04149; 95% interval 0.02676–0.06581 |
+| Median per-run foreground p99 | Normal: 74.594 ms; Roo Industries: 2.902 ms; Lasso: 1.419 ms |
+| Paired Roo Industries / normal p99 ratio | 0.04149; 95% interval 0.02676–0.06581 |
 | Paired Lasso / normal p99 ratio | 0.02357; 95% interval 0.01632–0.03906 |
-| Paired Roo / Lasso p99 ratio | 1.76054; 95% interval 0.85000–3.21704 |
-| Background throughput retained versus normal | Roo: 98.21%; Lasso: 97.89% (paired geometric ratios) |
-| Paired Roo / Lasso background-throughput ratio | 1.00325; 95% interval 0.98931–1.02132 |
-| Controller CPU accumulated over ten measured windows | Roo: 3.53125 s; Lasso: 0.15625 s, across 90 s per condition |
-| Controller private bytes, nearest-rank p50 | Roo: 14.21 MB; Lasso: 3.71 MB (decimal MB) |
-| Roo versus Lasso improvement / 5% non-regression gates | Neither established |
+| Paired Roo Industries / Lasso p99 ratio | 1.76054; 95% interval 0.85000–3.21704 |
+| Background throughput retained versus normal | Roo Industries: 98.21%; Lasso: 97.89% (paired geometric ratios) |
+| Paired Roo Industries / Lasso background-throughput ratio | 1.00325; 95% interval 0.98931–1.02132 |
+| Controller CPU accumulated over ten measured windows | Roo Industries: 3.53125 s; Lasso: 0.15625 s, across 90 s per condition |
+| Controller private bytes, nearest-rank p50 | Roo Industries: 14.21 MB; Lasso: 3.71 MB (decimal MB) |
+| Roo Industries versus Lasso improvement / 5% non-regression gates | Neither established |
 
-Both explicit rules improved this synthetic workload versus normal priority while retaining background progress. **The comparison does not establish a Roo latency advantage or its predeclared 5% non-regression bound against Lasso.** The wide interval also does not establish that the point-estimate slowdown is repeatable. Roo used more observed controller CPU and private memory. Process CPU counters were quantized; an individual zero sample is not zero CPU use. These short windows follow fresh controller starts and are not a sustained-idle overhead measurement. Startup-to-apply includes configuration preparation and remains separate from workload timing.
+Both explicit rules improved this synthetic workload versus normal priority while retaining background progress. **The comparison does not establish a Roo Industries latency advantage or its predeclared 5% non-regression bound against Lasso.** The wide interval also does not establish that the point-estimate slowdown is repeatable. Roo Industries used more observed controller CPU and private memory. Process CPU counters were quantized; an individual zero sample is not zero CPU use. These short windows follow fresh controller starts and are not a sustained-idle overhead measurement. Startup-to-apply includes configuration preparation and remains separate from workload timing.
 
 All final runs were retained. Earlier pilots and a run using the outdated polling-key name were excluded from this matched estimate before interpretation; their raw evidence remains separate. The final build includes the [measured allocation reduction](process-polling.md). That component improvement does not establish a game or controller-latency speedup. Effective-clock/temperature traces were not captured, and these offscreen CPU workers do not measure presented frames, input latency or an adaptive ProBalance comparison.
 
-A competing installed governor was rejected before measurement. An intentionally unmatched reference rule failed the independent Windows priority readback and left the result incomplete. Each completed trial checked placement, boost state, original-priority restoration and controller isolation. Lasso fixture priority was restored by the harness after terminating its exact owned reference instance; Roo restored its own journaled change. Analysis rejects missing conditions, altered reference identity, contradictory control/recovery data and background starvation.
+A competing installed governor was rejected before measurement. An intentionally unmatched reference rule failed the independent Windows priority readback and left the result incomplete. Each completed trial checked placement, boost state, original-priority restoration and controller isolation. Lasso fixture priority was restored by the harness after terminating its exact owned reference instance; Roo Industries restored its own journaled change. Analysis rejects missing conditions, altered reference identity, contradictory control/recovery data and background starvation.
 
 Raw final JSON SHA-256: `dbaa4bf2b20d6533753662c0f9d09104be49b500e92f57a1bb5a15697873f410`. Benchmark assembly SHA-256: `533484A12A0D4A0582BC47104A7FEBCAF0760DF7EE9C60902615A16E878BFFD3`; Host: `67DB9F639AC73FC6039F0DD055BC44DBB5CF99106272F3A381E3ECFBB35B3A14`; Core: `70E306FBD9F021C4DD32A8EC1E02755AD214EA71BB88A76FB5370B09B826B876`. Reproduce with `Measure-OptimizerReference.ps1` and `analyze_reference_measurement.py` under an approved service-recovery guard.
 

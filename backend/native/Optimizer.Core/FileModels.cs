@@ -1,7 +1,7 @@
 #nullable enable
 using System.Text.Json.Serialization;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record FileIdentity([property: JsonRequired] ulong Volume, [property: JsonRequired] string Id);
 public sealed record FileStreamDigest(string Name, long Length, string Sha256);

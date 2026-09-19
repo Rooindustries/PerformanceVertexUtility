@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class RegistryConflictChecks
 {
@@ -30,8 +30,8 @@ static class RegistryConflictChecks
 
     public static void Run(Action<bool, string> check)
     {
-        var keyPath = "Software\\RooRegistryConflict-" + Guid.NewGuid().ToString("N");
-        var root = Path.Combine(Path.GetTempPath(), "roo-registry-conflicts-" + Guid.NewGuid().ToString("N"));
+        var keyPath = "Software\\RooIndustriesRegistryConflict-" + Guid.NewGuid().ToString("N");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-registry-conflicts-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         using var user = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         using var machine64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);

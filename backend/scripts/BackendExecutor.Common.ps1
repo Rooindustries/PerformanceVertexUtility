@@ -1,39 +1,39 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-function ConvertTo-RooBackendExecutorQuotedArgument {
+function ConvertTo-RooIndustriesBackendExecutorQuotedArgument {
     param([string]$Value)
-    return ConvertTo-RooWindowsArgument $Value
+    return ConvertTo-RooIndustriesWindowsArgument $Value
 }
 
-function Join-RooBackendExecutorCommandLine {
+function Join-RooIndustriesBackendExecutorCommandLine {
     param(
         [string]$FilePath,
         [string[]]$Arguments
     )
     $parts = New-Object System.Collections.Generic.List[string]
-    $parts.Add((ConvertTo-RooBackendExecutorQuotedArgument $FilePath)) | Out-Null
-    foreach ($arg in @(Get-RooArray $Arguments)) {
-        $parts.Add((ConvertTo-RooBackendExecutorQuotedArgument ([string]$arg))) | Out-Null
+    $parts.Add((ConvertTo-RooIndustriesBackendExecutorQuotedArgument $FilePath)) | Out-Null
+    foreach ($arg in @(Get-RooIndustriesArray $Arguments)) {
+        $parts.Add((ConvertTo-RooIndustriesBackendExecutorQuotedArgument ([string]$arg))) | Out-Null
     }
     return ($parts.ToArray() -join ' ')
 }
 
-function Join-RooBackendExecutorArguments {
+function Join-RooIndustriesBackendExecutorArguments {
     param([string[]]$Arguments)
     $parts = New-Object System.Collections.Generic.List[string]
-    foreach ($arg in @(Get-RooArray $Arguments)) {
-        $parts.Add((ConvertTo-RooBackendExecutorQuotedArgument ([string]$arg))) | Out-Null
+    foreach ($arg in @(Get-RooIndustriesArray $Arguments)) {
+        $parts.Add((ConvertTo-RooIndustriesBackendExecutorQuotedArgument ([string]$arg))) | Out-Null
     }
     return ($parts.ToArray() -join ' ')
 }
 
-function Resolve-RooPowerShellExePath {
+function Resolve-RooIndustriesPowerShellExePath {
     $candidate = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     if (Test-Path -LiteralPath $candidate) { return $candidate }
     return 'powershell.exe'
 }
 
-function Invoke-RooBackendHiddenProcess {
+function Invoke-RooIndustriesBackendHiddenProcess {
     param(
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
@@ -45,18 +45,18 @@ function Invoke-RooBackendHiddenProcess {
     )
 
     if ($TimeoutSeconds -lt 1) { $TimeoutSeconds = 1 }
-    $startedAt = Get-RooUtcStamp
+    $startedAt = Get-RooIndustriesUtcStamp
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $FilePath
     if ($PSBoundParameters.ContainsKey('RawArguments')) {
         $startInfo.Arguments = $RawArguments
     } elseif ($null -ne $startInfo.ArgumentList) {
-        foreach ($arg in @(Get-RooArray $Arguments)) {
+        foreach ($arg in @(Get-RooIndustriesArray $Arguments)) {
             [void]$startInfo.ArgumentList.Add([string]$arg)
         }
     } else {
-        $startInfo.Arguments = Join-RooBackendExecutorArguments @(Get-RooArray $Arguments)
+        $startInfo.Arguments = Join-RooIndustriesBackendExecutorArguments @(Get-RooIndustriesArray $Arguments)
     }
     if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
         $startInfo.WorkingDirectory = $WorkingDirectory
@@ -113,12 +113,12 @@ function Invoke-RooBackendHiddenProcess {
 
     return [pscustomobject]@{
         startedAtUtc = $startedAt
-        completedAtUtc = Get-RooUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         durationMilliseconds = [int][math]::Round($watch.Elapsed.TotalMilliseconds)
         filePath = $FilePath
-        arguments = @(Get-RooArray $Arguments)
+        arguments = @(Get-RooIndustriesArray $Arguments)
         rawArguments = if ($PSBoundParameters.ContainsKey('RawArguments')) { $RawArguments } else { $null }
-        commandLine = if ($PSBoundParameters.ContainsKey('RawArguments')) { (ConvertTo-RooWindowsArgument $FilePath) + ' ' + $RawArguments } else { Join-RooBackendExecutorCommandLine $FilePath @(Get-RooArray $Arguments) }
+        commandLine = if ($PSBoundParameters.ContainsKey('RawArguments')) { (ConvertTo-RooIndustriesWindowsArgument $FilePath) + ' ' + $RawArguments } else { Join-RooIndustriesBackendExecutorCommandLine $FilePath @(Get-RooIndustriesArray $Arguments) }
         processStarted = $started
         startError = $startError
         exitCode = $exitCode
@@ -139,7 +139,7 @@ function Invoke-RooBackendHiddenProcess {
     }
 }
 
-function Invoke-RooBackendPowerShellShim {
+function Invoke-RooIndustriesBackendPowerShellShim {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ShimPath,
@@ -148,20 +148,20 @@ function Invoke-RooBackendPowerShellShim {
         [string]$WorkingDirectory = '',
         [hashtable]$Environment = @{}
     )
-    $resolvedShim = Resolve-RooPath $ShimPath $ShimPath
+    $resolvedShim = Resolve-RooIndustriesPath $ShimPath $ShimPath
     if (-not (Test-Path -LiteralPath $resolvedShim)) {
         throw "Mock shim not found: $resolvedShim"
     }
-    $shimArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $resolvedShim) + @(Get-RooArray $Arguments)
-    return Invoke-RooBackendHiddenProcess `
-        -FilePath (Resolve-RooPowerShellExePath) `
+    $shimArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $resolvedShim) + @(Get-RooIndustriesArray $Arguments)
+    return Invoke-RooIndustriesBackendHiddenProcess `
+        -FilePath (Resolve-RooIndustriesPowerShellExePath) `
         -Arguments $shimArgs `
         -TimeoutSeconds $TimeoutSeconds `
         -WorkingDirectory $WorkingDirectory `
         -Environment $Environment
 }
 
-function New-RooBackendExecutorGate {
+function New-RooIndustriesBackendExecutorGate {
     param(
         [string]$GateId,
         [string]$Name,

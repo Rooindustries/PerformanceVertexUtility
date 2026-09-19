@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>RooLaunchPolicyProbe</AssemblyName><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>RooIndustriesLaunchPolicyProbe</AssemblyName><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj"/><PackageReference Include="Vortice.Direct3D11" Version="3.8.3"/><PackageReference Include="Vortice.D3DCompiler" Version="3.8.3"/><Compile Include="../OptimizerGpuBench/GpuWorkload.cs" Link="GpuWorkload.cs"/></ItemGroup>
 </Project>

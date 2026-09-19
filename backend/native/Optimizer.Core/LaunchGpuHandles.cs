@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 internal sealed record GpuHandleTransfer(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, RunningProcess Target, long Handle);
 internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, ControlRead Original);
@@ -129,7 +129,7 @@ internal sealed class LaunchGpuHandles : IDisposable
                         target = null;
                     }
                     catch (ProcessEndedException) { }
-                    catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+                    catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
                     finally { target?.Dispose(); }
                 }
                 if (_targets.Values.Any(target => !target.HasExited)) _stop.Token.WaitHandle.WaitOne(50);

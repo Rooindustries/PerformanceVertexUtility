@@ -15,10 +15,10 @@ function Get-OfficialCommandPreview {
         [object]$App,
         [object]$Classification
     )
-    $sourceType = [string](Get-RooUninstallPropertyValue $App 'sourceType' '')
-    $uninstallString = Get-RooUninstallPropertyValue $App 'uninstallString' $null
-    $quietUninstallString = Get-RooUninstallPropertyValue $App 'quietUninstallString' $null
-    $packageId = Get-RooUninstallPropertyValue $App 'packageId' $null
+    $sourceType = [string](Get-RooIndustriesUninstallPropertyValue $App 'sourceType' '')
+    $uninstallString = Get-RooIndustriesUninstallPropertyValue $App 'uninstallString' $null
+    $quietUninstallString = Get-RooIndustriesUninstallPropertyValue $App 'quietUninstallString' $null
+    $packageId = Get-RooIndustriesUninstallPropertyValue $App 'packageId' $null
     $commandType = 'unavailable'
     $rawCommand = $uninstallString
     $quietCommand = $quietUninstallString
@@ -55,39 +55,39 @@ function Get-OfficialCommandPreview {
         }
     }
 
-    $parsed = Split-RooUninstallCommandLine $rawCommand
-    $parsedQuiet = Split-RooUninstallCommandLine $quietCommand
-    $blocked = [bool](Get-RooUninstallPropertyValue $Classification 'blockByDefault' $false)
-    $protected = [bool](Get-RooUninstallPropertyValue $Classification 'protected' $false)
+    $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand
+    $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand
+    $blocked = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'blockByDefault' $false)
+    $protected = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'protected' $false)
     $warnings = New-Object System.Collections.Generic.List[object]
     if ($blocked) {
-        $warnings.Add((New-RooUninstallIssue 'REMOVAL_REVIEW_REQUIRED' 'This app route needs review before it can run.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $true 'Review the exact app, route, and cleanup list before applying anything.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesUninstallIssue 'REMOVAL_REVIEW_REQUIRED' 'This app route needs review before it can run.' 'warning' 'apps.officialUninstall' ([string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')) $true 'Review the exact app, route, and cleanup list before applying anything.' $null)) | Out-Null
     }
     if ([string]::IsNullOrWhiteSpace([string]$rawCommand)) {
-        $warnings.Add((New-RooUninstallIssue 'ROO_INDUSTRIES_ROUTE_REQUIRED' 'The app did not publish its own removal command. Roo Industries can still build the run from app traces and leftovers.' 'warning' 'apps.officialUninstall' ([string](Get-RooUninstallPropertyValue $App 'appId' '')) $false 'Scan leftovers and build the Roo Industries removal run before applying anything.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesUninstallIssue 'ROO_INDUSTRIES_ROUTE_REQUIRED' 'The app did not publish its own removal command. Roo Industries can still build the run from app traces and leftovers.' 'warning' 'apps.officialUninstall' ([string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')) $false 'Scan leftovers and build the Roo Industries removal run before applying anything.' $null)) | Out-Null
     }
 
     return [pscustomobject]@{
-        appId = [string](Get-RooUninstallPropertyValue $App 'appId' '')
-        displayName = [string](Get-RooUninstallPropertyValue $App 'displayName' '')
-        publisher = Get-RooUninstallPropertyValue $App 'publisher' $null
+        appId = [string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')
+        displayName = [string](Get-RooIndustriesUninstallPropertyValue $App 'displayName' '')
+        publisher = Get-RooIndustriesUninstallPropertyValue $App 'publisher' $null
         sourceType = $sourceType
         packageId = $packageId
-        sourceIdentity = Get-RooUninstallPropertyValue $App 'sourceIdentity' $null
-        primaryClassification = [string](Get-RooUninstallPropertyValue $Classification 'primaryClassification' '')
+        sourceIdentity = Get-RooIndustriesUninstallPropertyValue $App 'sourceIdentity' $null
+        primaryClassification = [string](Get-RooIndustriesUninstallPropertyValue $Classification 'primaryClassification' '')
         commandType = $commandType
         rawCommand = $rawCommand
-        executable = Get-RooUninstallPropertyValue $parsed 'executable' $null
-        arguments = Get-RooUninstallPropertyValue $parsed 'arguments' $null
+        executable = Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null
+        arguments = Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null
         quietRawCommand = $quietCommand
-        quietExecutable = Get-RooUninstallPropertyValue $parsedQuiet 'executable' $null
-        quietArguments = Get-RooUninstallPropertyValue $parsedQuiet 'arguments' $null
+        quietExecutable = Get-RooIndustriesUninstallPropertyValue $parsedQuiet 'executable' $null
+        quietArguments = Get-RooIndustriesUninstallPropertyValue $parsedQuiet 'arguments' $null
         hasQuietCommand = (-not [string]::IsNullOrWhiteSpace([string]$quietCommand))
         requiresElevation = $true
         protected = $protected
-        reviewRequired = [bool](Get-RooUninstallPropertyValue $Classification 'reviewRequired' $true)
+        reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'reviewRequired' $true)
         blocked = $blocked
-        risk = [string](Get-RooUninstallPropertyValue $Classification 'risk' 'medium')
+        risk = [string](Get-RooIndustriesUninstallPropertyValue $Classification 'risk' 'medium')
         confidence = if ([string]::IsNullOrWhiteSpace([string]$rawCommand)) { 'low' } else { 'high' }
         executionAllowed = $false
         executionMode = 'preview-only'
@@ -102,30 +102,30 @@ function Get-OfficialCommandPreview {
 }
 
 try {
-    $inventory = Get-RooInstalledAppInventory $InventoryPath
-    $policy = Read-RooUninstallPolicy $PolicyPath
-    $protectedCatalog = Read-RooProtectedAppsCatalog $ProtectedAppsPath
+    $inventory = Get-RooIndustriesInstalledAppInventory $InventoryPath
+    $policy = Read-RooIndustriesUninstallPolicy $PolicyPath
+    $protectedCatalog = Read-RooIndustriesProtectedAppsCatalog $ProtectedAppsPath
     $commands = New-Object System.Collections.Generic.List[object]
     $errors = New-Object System.Collections.Generic.List[object]
 
     foreach ($id in $AppId) {
-        $app = Find-RooInstalledApp $inventory $id
+        $app = Find-RooIndustriesInstalledApp $inventory $id
         if ($null -eq $app) {
-            $errors.Add((New-RooUninstallIssue 'APP_NOT_FOUND' "App id not found in inventory: $id" 'error' 'apps.officialUninstall' $id $true 'Refresh inventory and retry.' $null)) | Out-Null
+            $errors.Add((New-RooIndustriesUninstallIssue 'APP_NOT_FOUND' "App id not found in inventory: $id" 'error' 'apps.officialUninstall' $id $true 'Refresh inventory and retry.' $null)) | Out-Null
             continue
         }
-        $classification = Get-RooAppClassification $app $protectedCatalog $policy
+        $classification = Get-RooIndustriesAppClassification $app $protectedCatalog $policy
         $commands.Add((Get-OfficialCommandPreview $app $classification)) | Out-Null
     }
 
     $result = [pscustomobject]@{
         actionId = 'apps.previewOfficialUninstall'
         schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
+        productName = $script:RooIndustriesUninstallProductName
+        capturedAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = $true
         status = if ($errors.Count -gt 0 -and $commands.Count -eq 0) { 'failed' } elseif ($errors.Count -gt 0) { 'partial' } else { 'preview' }
-        policyPath = Get-RooUninstallPolicyPath $PolicyPath
+        policyPath = Get-RooIndustriesUninstallPolicyPath $PolicyPath
         commands = @($commands.ToArray())
         summary = [pscustomobject]@{
             requestedCount = @($AppId).Count
@@ -134,26 +134,26 @@ try {
             executionAllowedCount = 0
             willRunUninstallers = $false
         }
-        warnings = @((New-RooUninstallIssue 'REMOVAL_PATH_PREVIEW_ONLY' 'Removal path metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Review the path, scan leftovers, and build the Roo Industries removal plan before apply.' $null))
+        warnings = @((New-RooIndustriesUninstallIssue 'REMOVAL_PATH_PREVIEW_ONLY' 'Removal path metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Review the path, scan leftovers, and build the Roo Industries removal plan before apply.' $null))
         errors = @($errors.ToArray())
-        logs = @((New-RooUninstallLog 'Removal path preview completed without command execution.'))
+        logs = @((New-RooIndustriesUninstallLog 'Removal path preview completed without command execution.'))
     }
-    Write-RooUninstallJsonOutput $result $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $result $OutputPath
     if ($errors.Count -gt 0 -and $commands.Count -eq 0) { exit 1 }
 } catch {
     $result = [pscustomobject]@{
         actionId = 'apps.previewOfficialUninstall'
         schemaVersion = 1
-        productName = $script:RooUninstallProductName
-        capturedAtUtc = Get-RooUninstallUtcStamp
+        productName = $script:RooIndustriesUninstallProductName
+        capturedAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = $true
         status = 'failed'
         commands = @()
         summary = [pscustomobject]@{ requestedCount = @($AppId).Count; commandPreviewCount = 0; executionAllowedCount = 0; willRunUninstallers = $false }
         warnings = @()
-        errors = @((New-RooUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_FAILED' $_.Exception.Message 'error' 'apps.officialUninstall' $null $true 'Check selected app ids and inventory path.' $null))
-        logs = @((New-RooUninstallLog 'Removal path preview failed.' 'error'))
+        errors = @((New-RooIndustriesUninstallIssue 'OFFICIAL_UNINSTALL_PREVIEW_FAILED' $_.Exception.Message 'error' 'apps.officialUninstall' $null $true 'Check selected app ids and inventory path.' $null))
+        logs = @((New-RooIndustriesUninstallLog 'Removal path preview failed.' 'error'))
     }
-    Write-RooUninstallJsonOutput $result $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $result $OutputPath
     exit 1
 }

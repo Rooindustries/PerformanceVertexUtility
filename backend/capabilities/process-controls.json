@@ -8,7 +8,7 @@
       "displayName": "CPU Priority",
       "technicalName": "SetPriorityClass / System.Diagnostics.Process.PriorityClass",
       "source": "process-lasso",
-      "implementedBy": "roo-native",
+      "implementedBy": "roo-industries-native",
       "frontendLabel": "CPU Priority",
       "frontendTab": "Game Tune",
       "riskLevel": "low",
@@ -62,7 +62,7 @@
       "displayName": "I/O Priority",
       "technicalName": "NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
       "source": "process-lasso",
-      "implementedBy": "roo-native",
+      "implementedBy": "roo-industries-native",
       "frontendLabel": "I/O Priority",
       "frontendTab": "Game Tune",
       "riskLevel": "low",
@@ -117,7 +117,7 @@
       "displayName": "GPU Priority",
       "technicalName": "D3DKMTSetProcessSchedulingPriorityClass",
       "source": "process-lasso",
-      "implementedBy": "roo-native",
+      "implementedBy": "roo-industries-native",
       "frontendLabel": "GPU Priority",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",
@@ -172,7 +172,7 @@
       "displayName": "CPU Affinity",
       "technicalName": "SetProcessAffinityMask / System.Diagnostics.Process.ProcessorAffinity",
       "source": "process-lasso",
-      "implementedBy": "roo-native",
+      "implementedBy": "roo-industries-native",
       "frontendLabel": "CPU Affinity",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",
@@ -227,7 +227,7 @@
       "displayName": "ProBalance Restraint",
       "technicalName": "SetPriorityClass + NtSetInformationProcess(ProcessIoPriorityInformationClass=33)",
       "source": "process-lasso",
-      "implementedBy": "roo-native",
+      "implementedBy": "roo-industries-native",
       "frontendLabel": "ProBalance Restraint",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",
@@ -290,7 +290,7 @@
       "displayName": "Per-Game Rules",
       "technicalName": "profile rules -> SetPriorityClass / SetProcessAffinityMask / NtSetInformationProcess / D3DKMTSetProcessSchedulingPriorityClass",
       "source": "process-lasso",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Per-Game Rules",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",
@@ -348,8 +348,8 @@
       "family": "process-controls",
       "displayName": "Process Control Restore",
       "technicalName": "Stop-GameTuneSession.ps1 / Stop-ProcessGovernorSession.ps1 / Stop-ProcessPolicySession.ps1 backup snapshot restore",
-      "source": "roo-native",
-      "implementedBy": "roo-script",
+      "source": "roo-industries-native",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Process Control Restore",
       "frontendTab": "Game Tune",
       "riskLevel": "low",
@@ -412,9 +412,9 @@
       "capabilityId": "process-controls.lightweight-governor-budget",
       "family": "process-controls",
       "displayName": "Lightweight Governor Budget",
-      "technicalName": "Measure-RooBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
-      "source": "roo-native",
-      "implementedBy": "roo-script",
+      "technicalName": "Measure-RooIndustriesBackendFootprint.ps1 + lightweight-governor-budget.profile.json",
+      "source": "roo-industries-native",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Governor Budget (read-only)",
       "frontendTab": "Game Tune",
       "riskLevel": "safe",
@@ -427,20 +427,20 @@
           },
           {
             "method": "file-exists",
-            "target": "backend/scripts/Measure-RooBackendFootprint.ps1"
+            "target": "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1"
           }
         ],
         "notes": "Budget profile constrains resident/backend CPU, memory, state growth, frontend dependency, and session duration."
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
+        "script": "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
         "actionId": "backend.measureFootprint"
       },
       "apply": {
         "status": "preview-only",
         "mode": "read-only-budget-measurement",
-        "script": "backend/scripts/Measure-RooBackendFootprint.ps1",
+        "script": "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1",
         "actionId": "backend.measureFootprint",
         "gates": []
       },
@@ -453,7 +453,7 @@
       "unavailableReason": null,
       "testEvidence": [
         {
-          "test": "backend/scripts/Test-RooResidentBackendRuntime.ps1",
+          "test": "backend/scripts/Test-RooIndustriesResidentBackendRuntime.ps1",
           "proves": "footprint measurement and bounded resident host stay within lightweight budget and leave backend/state empty"
         }
       ]
@@ -513,8 +513,8 @@
       "family": "process-controls",
       "displayName": "CPU Sets",
       "technicalName": "Minimal-rights CPU Set apply/readback/restore on disposable processes",
-      "source": "roo-native",
-      "implementedBy": "roo-script",
+      "source": "roo-industries-native",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "CPU Sets",
       "frontendTab": "Game Tune",
       "riskLevel": "medium",

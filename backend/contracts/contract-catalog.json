@@ -4,469 +4,469 @@
   "contracts": [
     {
       "name": "common action envelope",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "all",
       "summary": "Shared preview, apply, rollback, warning, error, and log wrapper for backend actions.",
       "status": "draft"
     },
     {
       "name": "action preview",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionPreview",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionPreview",
       "workflow": "all",
       "summary": "Single proposed change shown before an action applies.",
       "status": "draft"
     },
     {
       "name": "action result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionResult",
       "workflow": "all",
       "summary": "Structured outcome for previews, applies, partial applies, failures, and rollbacks.",
       "status": "draft"
     },
     {
       "name": "progress event",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/progressEvent",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/progressEvent",
       "workflow": "all",
       "summary": "Incremental status event for long-running backend work.",
       "status": "draft"
     },
     {
       "name": "error and warning model",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/issueModel",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/issueModel",
       "workflow": "all",
       "summary": "User-facing warning and error structure with blocking state and remediation guidance.",
       "status": "draft"
     },
     {
       "name": "backup and rollback metadata",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/backupRollbackMetadata",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/backupRollbackMetadata",
       "workflow": "all",
       "summary": "Saved state, restore-point status, and rollback action metadata.",
       "status": "draft"
     },
     {
       "name": "protected item model",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/protectedItemModel",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/protectedItemModel",
       "workflow": "all",
       "summary": "Protected processes, services, drivers, apps, tasks, devices, and paths.",
       "status": "draft"
     },
     {
       "name": "manual review app catalog",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/protectedAppCatalog",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/protectedAppCatalog",
       "workflow": "uninstall cleanup",
       "summary": "App and dependency rules that require manual review in bulk uninstall previews.",
       "status": "draft"
     },
     {
       "name": "process inventory",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processInventory",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processInventory",
       "workflow": "process profiles",
       "summary": "Read-only process list with workload category, memory pressure, and safety classification.",
       "status": "draft"
     },
     {
       "name": "process classification",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processClassification",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processClassification",
       "workflow": "process profiles",
       "summary": "Game-session-aware process classification with protected, companion, target, safe-candidate, and demotion-candidate buckets.",
       "status": "draft"
     },
     {
       "name": "performance profile",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/performanceProfile",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/performanceProfile",
       "workflow": "process profiles",
       "summary": "Versioned priority, affinity, demotion, telemetry, and rollback profile.",
       "status": "draft"
     },
     {
       "name": "game session profile",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processSessionProfile",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processSessionProfile",
       "workflow": "process profiles",
       "summary": "Overwatch, OBS, Discord, and stream-focused profile shape.",
       "status": "draft"
     },
     {
       "name": "process rule preview/apply result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processRulePreviewApplyResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processRulePreviewApplyResult",
       "workflow": "process profiles",
       "summary": "Per-rule preview or apply outcome for process scheduling changes.",
       "status": "draft"
     },
     {
       "name": "process profile backup manifest",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processProfileBackupManifest",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processProfileBackupManifest",
       "workflow": "process profiles",
       "summary": "Saved original process priority state used for rollback after confirmed profile apply.",
       "status": "draft"
     },
     {
       "name": "game tune session start result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/gameTuneSessionEnvelope",
       "workflow": "game tune runtime",
       "summary": "Bounded Game Tune runtime session result with dry-run poll previews, confirmed priority changes, skips, backup metadata, warnings, errors, and logs.",
       "status": "draft"
     },
     {
       "name": "game tune session status",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionStatus",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/gameTuneSessionStatus",
       "workflow": "game tune runtime",
       "summary": "Frontend-readable status for the latest or selected Game Tune session, including active, completed, failed, and restorable state.",
       "status": "draft"
     },
     {
       "name": "game tune session stop result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTuneSessionRestoreEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/gameTuneSessionRestoreEnvelope",
       "workflow": "game tune runtime",
       "summary": "Game Tune stop or restore result with preview-by-default behavior and confirmed priority rollback details.",
       "status": "draft"
     },
     {
       "name": "process governor profile",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorProfile",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorProfile",
       "workflow": "process governor",
       "summary": "ProBalance-style process governor thresholds, restraint controls, protected process references, foreground exclusion, and candidate selectors.",
       "status": "draft"
     },
     {
       "name": "process governor preview",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorPreviewEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorPreviewEnvelope",
       "workflow": "process governor",
       "summary": "Dry-run process governor CPU-pressure sample with would-restrain entries and protected or foreground skip reasons.",
       "status": "draft"
     },
     {
       "name": "process governor session start result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorSessionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorSessionEnvelope",
       "workflow": "process governor",
       "summary": "Bounded process governor session result with sustained offender detection, confirmed temporary restraint, calm restore, backup metadata, warnings, errors, and logs.",
       "status": "draft"
     },
     {
       "name": "process governor session status",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorSessionStatus",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorSessionStatus",
       "workflow": "process governor",
       "summary": "Frontend-readable status for the latest or selected process governor session, including active, completed, failed, and restorable state.",
       "status": "draft"
     },
     {
       "name": "process governor stop result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processGovernorRestoreEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorRestoreEnvelope",
       "workflow": "process governor",
       "summary": "Process governor stop or restore result with preview-by-default behavior and confirmed restoration of temporary restraints.",
       "status": "draft"
     },
     {
       "name": "persistent process policy profile",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyProfile",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processPolicyProfile",
       "workflow": "persistent process policy",
       "summary": "Saved process policy rules with process-name, wildcard, path, category, command-line, protected exclusion, scenario tag, and process-control targets.",
       "status": "draft"
     },
     {
       "name": "persistent process policy preview",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyPreviewEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processPolicyPreviewEnvelope",
       "workflow": "persistent process policy",
       "summary": "Dry-run process policy preview with matched rule IDs, current state, proposed state, protected skips, and no-op cases.",
       "status": "draft"
     },
     {
       "name": "persistent process policy session start result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicySessionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processPolicySessionEnvelope",
       "workflow": "persistent process policy",
       "summary": "Bounded persistent policy session result with launch watcher applications, backup snapshots, active applications, skipped entries, warnings, errors, and logs.",
       "status": "draft"
     },
     {
       "name": "persistent process policy session status",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicySessionStatus",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processPolicySessionStatus",
       "workflow": "persistent process policy",
       "summary": "Frontend-readable status for the latest or selected persistent process policy session, including active, completed, failed, and restorable state.",
       "status": "draft"
     },
     {
       "name": "persistent process policy stop result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/processPolicyRestoreEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processPolicyRestoreEnvelope",
       "workflow": "persistent process policy",
       "summary": "Persistent process policy stop or restore result with preview-by-default behavior and confirmed process-control rollback details.",
       "status": "draft"
     },
     {
       "name": "backend footprint result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/backendFootprintResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/backendFootprintResult",
       "workflow": "resident backend",
       "summary": "Read-only backend process count, PowerShell host memory, CPU delta, handle count, elapsed time, and budget evaluation.",
       "status": "draft"
     },
     {
       "name": "lightweight governor budget",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/lightweightGovernorBudgetProfile",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/lightweightGovernorBudgetProfile",
       "workflow": "resident backend",
       "summary": "Acceptance budget for idle CPU, backend PowerShell memory, persistent UI absence, and bounded backend state.",
       "status": "draft"
     },
     {
       "name": "resident host status",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/residentHostStatus",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/residentHostStatus",
       "workflow": "resident backend",
       "summary": "Bounded foreground resident host status with self footprint, service-ready metadata, state proof, and dependency proof.",
       "status": "draft"
     },
     {
       "name": "all-control policy validation result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/allControlPolicyValidationResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/allControlPolicyValidationResult",
       "workflow": "persistent process policy",
       "summary": "Disposable-probe validation of priority, CPU affinity, I/O priority, and GPU scheduling priority with unsupported statuses when needed.",
       "status": "draft"
     },
     {
       "name": "uninstall app inventory",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/uninstallAppInventory",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/uninstallAppInventory",
       "workflow": "uninstall cleanup",
       "summary": "Installed application list from registry, MSI, Appx, winget, or manual catalog sources.",
       "status": "draft"
     },
     {
       "name": "app classification result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/appClassificationResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/appClassificationResult",
       "workflow": "uninstall cleanup",
       "summary": "Read-only classification of installed apps into normal, launcher, overlay, vendor, runtime, driver, security, Store/WebView2, anti-cheat, OBS/Discord dependency, and Windows review buckets.",
       "status": "draft"
     },
     {
       "name": "uninstall queue",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/uninstallQueue",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/uninstallQueue",
       "workflow": "uninstall cleanup",
       "summary": "Selected apps and policy gates for official uninstall followed by leftover scanning.",
       "status": "draft"
     },
     {
       "name": "official uninstall command preview",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/officialUninstallCommandPreview",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/officialUninstallCommandPreview",
       "workflow": "uninstall cleanup",
       "summary": "Official uninstall command metadata returned without executing uninstallers.",
       "status": "draft"
     },
     {
       "name": "leftover scan result",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/leftoverScanResult",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/leftoverScanResult",
       "workflow": "uninstall cleanup",
       "summary": "Preview of files, folders, services, tasks, startup entries, and registry references.",
       "status": "draft"
     },
     {
       "name": "cleanup deletion manifest",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cleanupDeletionManifest",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/cleanupDeletionManifest",
       "workflow": "uninstall cleanup",
       "summary": "Confirmed cleanup manifest with rollback/export metadata.",
       "status": "draft"
     },
     {
       "name": "cleanup rollback/export metadata",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cleanupRollbackExportMetadata",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/cleanupRollbackExportMetadata",
       "workflow": "uninstall cleanup",
       "summary": "File backup, registry export, service state, scheduled task, startup entry, restore point, and rollback metadata for cleanup manifests.",
       "status": "draft"
     },
     {
       "name": "uninstall cleanup fixture execution",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
       "summary": "Guarded fixture execution envelope for approved cleanup manifests with file/folder backup, deletion, and restore validation; real app uninstall requires the controlled official runner allowlist.",
       "status": "draft"
     },
     {
       "name": "uninstall cleanup controlled runners",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
       "summary": "Official-uninstaller and leftover-deletion runner envelope with backup/export, exact executable and target allowlists, manifest approval, rollback manifest, hidden invocation, and real controlled runner gates.",
       "status": "draft"
     },
     {
       "name": "official uninstall harmless process runner",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
       "summary": "Real hidden process-runner proof for official uninstall commands using an exact harmless executable allowlist, working-directory isolation, timeout cancellation, stdout/stderr capture, and no silent real app uninstall gates.",
       "status": "draft"
     },
     {
       "name": "uninstall cleanup fixture rollback restore",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "uninstall cleanup",
       "summary": "Disposable fixture restore envelope that validates copied file and folder backups from cleanup rollback manifests without touching real user data.",
       "status": "draft"
     },
     {
       "name": "driver hardware inventory",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverHardwareInventory",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/driverHardwareInventory",
       "workflow": "drivers and profiles",
       "summary": "Read-only machine, CPU, memory, GPU, and network hardware inventory.",
       "status": "draft"
     },
     {
       "name": "installed driver info",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/installedDriverInfo",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/installedDriverInfo",
       "workflow": "drivers and profiles",
       "summary": "Installed device driver metadata for recommendation matching.",
       "status": "draft"
     },
     {
       "name": "driver recommendation catalog",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/driverRecommendationCatalog",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/driverRecommendationCatalog",
       "workflow": "drivers and profiles",
       "summary": "Game-aware and hardware-aware driver recommendation entries.",
       "status": "draft"
     },
     {
       "name": "game tag metadata",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/gameTagMetadata",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/gameTagMetadata",
       "workflow": "drivers and profiles",
       "summary": "Game process names, launchers, and optimization focus tags.",
       "status": "draft"
     },
     {
       "name": "NVIDIA profile catalog entry",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/nvidiaProfileCatalogEntry",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/nvidiaProfileCatalogEntry",
       "workflow": "drivers and profiles",
       "summary": "NVIDIA Profile Inspector profile metadata and manual-apply gate.",
       "status": "draft"
     },
     {
       "name": "NVIDIA NIP profile preview",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "drivers and profiles",
       "summary": "NVIDIA Profile Inspector export/import command preview with hardware, export-before-import, approval, benchmark, and no-auto-apply gates.",
       "status": "draft"
     },
     {
       "name": "NVIDIA NIP apply and restore scaffold",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "drivers and profiles",
       "summary": "Blocked apply/restore scaffold for NIP import and rollback commands; real NVPI process launch is absent unless a future audited executor is added.",
       "status": "draft"
     },
     {
       "name": "NVIDIA NIP controlled executor",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "drivers and profiles",
       "summary": "Mock NVPI export/import and restore executor envelope with NVIDIA hardware, benchmark, approval, export-before-import, rollback manifest, timeout, hidden invocation, and real NVPI import kept behind explicit product approval gates.",
       "status": "draft"
     },
     {
       "name": "NVIDIA NIP real read-only capability probe",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "drivers and profiles",
       "summary": "Real hidden NVPI process runner for file-version, help, and temp export probes with stdout/stderr/exit-code/timeout capture, temp export validation, and no import path.",
       "status": "draft"
     },
     {
       "name": "stutter optimization preview contracts",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
       "summary": "Preview contracts for standby memory, timer resolution, power plans, shader cache cleanup, and service pause candidates.",
       "status": "draft"
     },
     {
       "name": "shader cache fixture apply and restore",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
       "summary": "Disposable fixture shader cache backup/delete/restore envelope; real user-cache deletion is approval-gated and uses the controlled real executor planning path.",
       "status": "draft"
     },
     {
       "name": "stutter optimization controlled executor",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
       "summary": "Mock, disposable-fixture, and real controlled executor envelope for standby memory helper contracts, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore.",
       "status": "draft"
     },
     {
       "name": "stutter optimization real and detection executors",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "{source} and WinUtil parity",
       "summary": "Controlled real/detection executor envelope for bounded timer resolution sessions, temporary power-plan duplicate/select/restore/delete, standby memory helper build/elevation planning, real shader-cache readiness planning, and service status/dependency analysis.",
       "status": "draft"
     },
     {
       "name": "capability entry",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityEntry",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/capabilityEntry",
       "workflow": "unified control plane",
       "summary": "Single static optimization capability with preview, apply, restore, detection metadata, test evidence, and optional resolved availability.",
       "status": "draft"
     },
     {
       "name": "capability registry",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRegistry",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/capabilityRegistry",
       "workflow": "unified control plane",
       "summary": "Read-only unified registry envelope combining all capability fragments with current-machine availability resolution and summary counts.",
       "status": "draft"
     },
     {
       "name": "capability router response",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRouterResponse",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/capabilityRouterResponse",
       "workflow": "unified control plane",
-      "summary": "Complete response envelope returned by Invoke-RooCapability.ps1 for status, explain, preview, apply, and restore actions.",
+      "summary": "Complete response envelope returned by Invoke-RooIndustriesCapability.ps1 for status, explain, preview, apply, and restore actions.",
       "status": "draft"
     },
     {
       "name": "capability route manifest",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/capabilityRouteManifest",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/capabilityRouteManifest",
       "workflow": "unified control plane",
       "summary": "Per-family router manifest mapping capability IDs to dispatch or status-only preview, apply, and restore sections.",
       "status": "draft"
     },
     {
       "name": "frontend label map",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/frontendLabelMap",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/frontendLabelMap",
       "workflow": "unified control plane",
       "summary": "Derived tab and label mapping for all backend capabilities using frontend-facing names without duplicating capability logic.",
       "status": "draft"
     },
     {
       "name": "utilities inventory detector",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "unified control plane",
       "summary": "Read-only utilities-folder detector envelope for external optimization tools, packages, and prerequisite installers.",
       "status": "draft"
     },
     {
       "name": "utilities bundle catalog",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "unified control plane",
       "summary": "Read-only Utilities.zip metadata catalog covering executable, script, configuration, driver payload, and prerequisite entries without archive extraction or utility execution.",
       "status": "draft"
     },
     {
       "name": "validation temp artifact audit",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/actionEnvelope",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "backend validation hygiene",
-      "summary": "Read-only by default audit of old Roo validation artifacts under temp, with explicit cleanup flag and protected active roots.",
+      "summary": "Read-only by default audit of old Roo Industries validation artifacts under temp, with explicit cleanup flag and protected active roots.",
       "status": "draft"
     },
     {
       "name": "telemetry snapshot",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/telemetrySnapshot",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/telemetrySnapshot",
       "workflow": "telemetry and reports",
       "summary": "Point-in-time performance, process, provider, and quality data.",
       "status": "draft"
     },
     {
       "name": "report summary",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/reportSummary",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/reportSummary",
       "workflow": "telemetry and reports",
       "summary": "User-facing findings, metrics, recommended actions, and artifacts.",
       "status": "draft"
     },
     {
       "name": "CPU Set operations",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/cpuSetOperation",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/cpuSetOperation",
       "workflow": "optimization priorities",
       "summary": "Supported process-default CPU Set detection, reviewed apply and conflict-aware restore.",
       "status": "draft"
     },
     {
       "name": "Bulk uninstall operations",
-      "definitionRef": "roo-backend-contracts.schema.json#/$defs/bulkUninstallOperation",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/bulkUninstallOperation",
       "workflow": "optimization priorities",
       "summary": "Durable sequential vendor removal with explicit reconciliation and a separate cleanup review.",
       "status": "draft"

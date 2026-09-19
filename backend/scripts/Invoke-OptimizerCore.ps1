@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('protected-session-preview','protected-session-check','protected-session-run','protected-session-status','protected-session-stop','protected-session-affinity','protected-session-recover','protected-session-watch','process-status','process-preview','process-apply','process-restore','rules-list','rule-save','rule-delete','policy-run','policy-stop','policy-status',
         'cleanup-authority','cleanup-scan','cleanup-preview','cleanup-apply','cleanup-restore','cleanup-batch-preview','cleanup-batch-apply','cleanup-batch-cancel','cleanup-batch-restore')][string]$Action,
     [Parameter(Mandatory=$true)][string]$RequestPath,
-    [string]$DotNetPath=$env:ROO_DOTNET_EXE,
+    [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$HostDirectory=''
 )
 $ErrorActionPreference='Stop'

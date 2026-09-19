@@ -5,6 +5,7 @@ param(
     [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $repoRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimizer'}
 $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
@@ -13,7 +14,7 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe';
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
-    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-session-request-'+[guid]::NewGuid().ToString('N'))
+    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-session-request-'+[guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($directory)|Out-Null
     try {
         $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
@@ -41,16 +42,16 @@ $SessionRoot=[IO.Path]::GetFullPath($SessionRoot)
 $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $sha=[Security.Cryptography.SHA256]::Create()
 try{$suffix=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($SessionRoot.ToLowerInvariant())))).Replace('-','').Substring(0,16)}finally{$sha.Dispose()}
-$taskName='Roo Protected Session '+$suffix
-$description='Roo protected game session | '+$owner+' | '+$SessionRoot
-$task=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if($task -and $task.Description -cne $description){throw 'The scheduled task belongs to another session or user.'}
+$taskName='Roo Industries Protected Session '+$suffix
+$description='Roo Industries protected game session | '+$owner+' | '+$SessionRoot
+$task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIdentity.gameTask+$suffix) $description ($script:RooIndustriesLegacyIdentity.gameDescription+$owner+' | '+$SessionRoot)
+if($task){$taskName=$task.TaskName;$description=$task.Description}
 if($Action -eq 'Start'){
     if(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json')){throw 'This session already has recovery state. Stop/recover it, then create a new preview and session directory.'}
     [IO.Directory]::CreateDirectory($SessionRoot)|Out-Null
     $requestPath=Join-Path $SessionRoot 'worker-request.json'
     [IO.File]::WriteAllText($requestPath,(@{schemaVersion=1;repoRoot=$repoRoot;sessionRoot=$SessionRoot;previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash;confirm=$true}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
-    $workerExe=Join-Path $HostDirectory 'session\Roo.SessionHost.exe'
+    $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'Build-OptimizerHost.ps1 must package the background session executable.'}
     $execute=New-ScheduledTaskAction -Execute $workerExe -Argument ('run "'+$requestPath+'"') -WorkingDirectory (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest

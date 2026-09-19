@@ -9,7 +9,7 @@ analyze = runpy.run_path(str(Path(__file__).with_name("analyze_reference_measure
 def experiment(blocks=2):
     trials = []
     for block in range(blocks):
-        for controller, delay, recovery in (("normal", 8, "unchanged"), ("roo", 1, "controller"), ("lasso", 2, "harnessAfterReferenceExit")):
+        for controller, delay, recovery in (("normal", 8, "unchanged"), ("roo-industries", 1, "controller"), ("lasso", 2, "harnessAfterReferenceExit")):
             active = controller != "normal"
             trials.append({"block": block, "controller": controller, "enabled": active, "restoration": recovery,
                            "backgroundPriority": "BelowNormal" if active else "Normal", "foregroundPriority": "Normal", "restoredPriority": "Normal",
@@ -27,8 +27,8 @@ def experiment(blocks=2):
 class ReferenceMeasurementChecks(unittest.TestCase):
     def test_independent_three_condition_ratios(self):
         result = analyze(experiment())
-        self.assertEqual(result["p99RooToLassoRatio"], {"estimate": .5, "lower95": .5, "upper95": .5})
-        self.assertAlmostEqual(result["versusNormal"]["roo"]["p99RuleToNormalRatio"]["estimate"], .125)
+        self.assertEqual(result["p99RooIndustriesToLassoRatio"], {"estimate": .5, "lower95": .5, "upper95": .5})
+        self.assertAlmostEqual(result["versusNormal"]["roo-industries"]["p99RuleToNormalRatio"]["estimate"], .125)
         self.assertAlmostEqual(result["versusNormal"]["lasso"]["p99RuleToNormalRatio"]["estimate"], .25)
         self.assertFalse(result["improvementGateMet"])
         self.assertTrue(analyze(experiment(10))["improvementGateMet"])
@@ -46,7 +46,7 @@ class ReferenceMeasurementChecks(unittest.TestCase):
     def test_fast_result_cannot_override_starvation(self):
         data = experiment(10)
         for trial in data["trials"]:
-            if trial["controller"] == "roo":
+            if trial["controller"] == "roo-industries":
                 trial["background"]["operations"] = 100
         result = analyze(data)
         self.assertFalse(result["improvementGateMet"])
@@ -59,7 +59,7 @@ class ReferenceMeasurementChecks(unittest.TestCase):
             (lambda d: d.update(referencePollRequestMilliseconds=1500), "polling"),
             (lambda d: d.update(referencePollRequestKey="Performance.UpdateSpeed"), "polling"),
             (lambda d: d["trials"].pop(), "complete"),
-            (lambda d: d["trials"][2].update(controller="roo"), "distinct"),
+            (lambda d: d["trials"][2].update(controller="roo-industries"), "distinct"),
             (lambda d: d["trials"][2].update(enabled=False), "contradicts"),
             (lambda d: d["trials"][2].update(backgroundPriority="Normal"), "controls"),
             (lambda d: d["trials"][2].update(restoration="controller"), "restoration"),

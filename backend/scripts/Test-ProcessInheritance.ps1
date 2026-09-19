@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE)
 $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent

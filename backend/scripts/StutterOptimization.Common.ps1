@@ -1,7 +1,7 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-$script:RooStutterProductName = 'Roo Industries Optimization Suite'
-$script:RooStutterOptimizationIds = @(
+$script:RooIndustriesStutterProductName = 'Roo Industries Optimization Suite'
+$script:RooIndustriesStutterOptimizationIds = @(
     'standby-memory',
     'timer-resolution',
     'power-plan',
@@ -9,7 +9,7 @@ $script:RooStutterOptimizationIds = @(
     'service-pause-preview'
 )
 
-function New-RooStutterIssue {
+function New-RooIndustriesStutterIssue {
     param(
         [string]$Code,
         [string]$Message,
@@ -31,7 +31,7 @@ function New-RooStutterIssue {
     }
 }
 
-function New-RooStutterGate {
+function New-RooIndustriesStutterGate {
     param(
         [string]$GateId,
         [string]$Name,
@@ -51,7 +51,7 @@ function New-RooStutterGate {
     }
 }
 
-function Test-RooStutterPathInsideRoot {
+function Test-RooIndustriesStutterPathInsideRoot {
     param(
         [string]$Path,
         [string]$Root
@@ -63,7 +63,7 @@ function Test-RooStutterPathInsideRoot {
     return ($fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or $fullPath.StartsWith($rootWithSlash, [System.StringComparison]::OrdinalIgnoreCase))
 }
 
-function Test-RooStutterPathInsideTemp {
+function Test-RooIndustriesStutterPathInsideTemp {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
@@ -71,15 +71,15 @@ function Test-RooStutterPathInsideTemp {
     return $fullPath.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-function Get-RooStutterJsonInput {
+function Get-RooIndustriesStutterJsonInput {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-    return Read-RooJsonFile (Resolve-RooPath $Path $Path)
+    return Read-RooIndustriesJsonFile (Resolve-RooIndustriesPath $Path $Path)
 }
 
-function Get-RooStutterMemorySnapshot {
+function Get-RooIndustriesStutterMemorySnapshot {
     param([string]$MemorySnapshotPath)
-    $provided = Get-RooStutterJsonInput $MemorySnapshotPath
+    $provided = Get-RooIndustriesStutterJsonInput $MemorySnapshotPath
     if ($provided) { return $provided }
 
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
@@ -103,7 +103,7 @@ function Get-RooStutterMemorySnapshot {
     }
 }
 
-function Get-RooStutterShaderCacheItems {
+function Get-RooIndustriesStutterShaderCacheItems {
     param([string]$ShaderCacheRoot)
     $items = New-Object System.Collections.Generic.List[object]
     if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot) -or -not (Test-Path -LiteralPath $ShaderCacheRoot)) {
@@ -128,8 +128,8 @@ function Get-RooStutterShaderCacheItems {
     return @($items.ToArray())
 }
 
-function New-RooStutterRollbackManifestId {
+function New-RooIndustriesStutterRollbackManifestId {
     param([string]$OptimizationId)
-    return 'stutter-' + (($OptimizationId.ToLowerInvariant() -replace '[^a-z0-9]+','-').Trim('-')) + '-rollback-' + (Get-RooFileStamp)
+    return 'stutter-' + (($OptimizationId.ToLowerInvariant() -replace '[^a-z0-9]+','-').Trim('-')) + '-rollback-' + (Get-RooIndustriesFileStamp)
 }
 

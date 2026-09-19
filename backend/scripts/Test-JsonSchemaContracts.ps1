@@ -1,4 +1,4 @@
-param([string]$PythonPath = $env:ROO_PYTHON_EXE)
+param([string]$PythonPath = $env:ROO_INDUSTRIES_PYTHON_EXE)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 if ([string]::IsNullOrWhiteSpace($PythonPath)) {
@@ -7,6 +7,6 @@ if ([string]::IsNullOrWhiteSpace($PythonPath)) {
         if ($command -and $command.Source -and $command.Source -notmatch 'Microsoft\\WindowsApps') { $PythonPath = $command.Source; break }
     }
 }
-if ([string]::IsNullOrWhiteSpace($PythonPath)) { throw 'Install Python 3.10+ with tools/validation/requirements.txt, or set ROO_PYTHON_EXE to the validation interpreter.' }
+if ([string]::IsNullOrWhiteSpace($PythonPath)) { throw 'Install Python 3.10+ with tools/validation/requirements.txt, or set ROO_INDUSTRIES_PYTHON_EXE to the validation interpreter.' }
 & $PythonPath (Join-Path $repoRoot 'tools\validation\check_baseline.py') --contracts-only
 if ($LASTEXITCODE -ne 0) { throw "JSON Schema validation failed with exit code $LASTEXITCODE." }

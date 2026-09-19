@@ -1,13 +1,13 @@
 param(
     [string]$Configuration = 'Debug',
-    [string]$DotNetPath = $env:ROO_DOTNET_EXE
+    [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$projectPath = Join-Path $repoRoot 'docs\internal\frontend\Roo.OptimizationSuite.App\Roo.OptimizationSuite.App.csproj'
+$projectPath = Join-Path $repoRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
 
 function Resolve-DotNetSdk {
     param([string]$RequestedPath)
@@ -37,7 +37,7 @@ function Resolve-DotNetSdk {
         }
     }
 
-    throw 'No dotnet executable with an installed SDK was found. Set ROO_DOTNET_EXE or pass -DotNetPath to a dotnet.exe that has an SDK.'
+    throw 'No dotnet executable with an installed SDK was found. Set ROO_INDUSTRIES_DOTNET_EXE or pass -DotNetPath to a dotnet.exe that has an SDK.'
 }
 
 if (-not (Test-Path -LiteralPath $projectPath)) {

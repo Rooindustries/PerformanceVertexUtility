@@ -82,7 +82,7 @@ function Measure-ProcessControlProcess {
         cpuSeconds = [math]::Round($cpuDelta, 6)
         totalCpuSeconds = [math]::Round([double]$latest.cpuSeconds, 6)
         elapsedSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
-        sampledAtUtc = Get-RooUtcStamp
+        sampledAtUtc = Get-RooIndustriesUtcStamp
     }
 }
 
@@ -202,7 +202,7 @@ function Resolve-ProcessControlBaselinePath {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
-        $resolved = Resolve-RooPath $RequestedPath $RepoRoot
+        $resolved = Resolve-RooIndustriesPath $RequestedPath $RepoRoot
         if (Test-Path -LiteralPath $resolved) { return $resolved }
         return $null
     }
@@ -251,11 +251,11 @@ function ConvertTo-ProcessControlBaselineMeasurement {
 
     if (-not ($candidate.PSObject.Properties.Name -contains 'workingSetBytes')) { return $null }
     return [pscustomobject]@{
-        tool = Get-RooPropertyValue $candidate 'tool' $null
-        workingSetBytes = [uint64](Get-RooPropertyValue $candidate 'workingSetBytes' 0)
-        peakWorkingSetBytes = [uint64](Get-RooPropertyValue $candidate 'peakWorkingSetBytes' 0)
-        cpuSeconds = [double](Get-RooPropertyValue $candidate 'cpuSeconds' 0)
-        sampledAtUtc = Get-RooPropertyValue $candidate 'sampledAtUtc' $null
+        tool = Get-RooIndustriesPropertyValue $candidate 'tool' $null
+        workingSetBytes = [uint64](Get-RooIndustriesPropertyValue $candidate 'workingSetBytes' 0)
+        peakWorkingSetBytes = [uint64](Get-RooIndustriesPropertyValue $candidate 'peakWorkingSetBytes' 0)
+        cpuSeconds = [double](Get-RooIndustriesPropertyValue $candidate 'cpuSeconds' 0)
+        sampledAtUtc = Get-RooIndustriesPropertyValue $candidate 'sampledAtUtc' $null
     }
 }
 
@@ -266,14 +266,14 @@ try {
     if ($PollIntervalMilliseconds -gt 5000) { $PollIntervalMilliseconds = 5000 }
 
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-process-control-footprint-$([guid]::NewGuid().ToString('N'))"
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-process-control-footprint-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     $process = $null
     $measurement = $null
     $usedNativeWorker = $false
     $cleanupDone = $false
     try {
-        $nativeWorker = Join-Path $repoRoot 'backend\bin\RooProcessGovernor.exe'
+        $nativeWorker = Join-Path $repoRoot 'backend\bin\RooIndustriesProcessGovernor.exe'
         if (Test-Path -LiteralPath $nativeWorker) {
             $policyPath = Join-Path $tempRoot 'native-footprint-policy.json'
             $nativeOutput = Join-Path $tempRoot 'native-footprint-output.json'
@@ -347,7 +347,7 @@ try {
         $result = [pscustomobject]@{
             actionId = 'performance.processControls.measureFootprint'
             schemaVersion = 1
-            productName = $script:RooProcessProductName
+            productName = $script:RooIndustriesProcessProductName
             status = 'completed'
             dryRun = $true
             tool = $measurement.tool
@@ -362,9 +362,9 @@ try {
             tempStateCleaned = $cleanupDone
             warnings = @()
             errors = @()
-            logs = @((New-RooLog 'Process-control footprint measurement completed without live process-control changes.'))
+            logs = @((New-RooIndustriesLog 'Process-control footprint measurement completed without live process-control changes.'))
         }
-        Write-RooJsonOutput $result $OutputPath
+        Write-RooIndustriesJsonOutput $result $OutputPath
     } finally {
         if ($process -and -not $process.HasExited) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
@@ -378,23 +378,23 @@ try {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.processControls.measureFootprint'
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         status = 'failed'
         dryRun = $true
         tool = $null
         workingSetBytes = $null
         peakWorkingSetBytes = $null
         cpuSeconds = $null
-        sampledAtUtc = Get-RooUtcStamp
+        sampledAtUtc = Get-RooIndustriesUtcStamp
         target = $null
         usedNativeWorker = $false
         baseline = $null
         comparison = $null
         tempStateCleaned = $null
         warnings = @()
-        errors = @((New-RooIssue 'PROCESS_CONTROL_FOOTPRINT_MEASURE_FAILED' $_.Exception.Message 'error' 'performance.processControls' $PSCommandPath $true 'Review worker/session launch conditions and retry.' $null))
-        logs = @((New-RooLog 'Process-control footprint measurement failed.' 'error'))
+        errors = @((New-RooIndustriesIssue 'PROCESS_CONTROL_FOOTPRINT_MEASURE_FAILED' $_.Exception.Message 'error' 'performance.processControls' $PSCommandPath $true 'Review worker/session launch conditions and retry.' $null))
+        logs = @((New-RooIndustriesLog 'Process-control footprint measurement failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

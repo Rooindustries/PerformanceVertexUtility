@@ -1,13 +1,13 @@
 using System.Text.Json;
 using System.Diagnostics;
-using Roo.OptimizationSuite.Models;
-using Roo.OptimizationSuite.Services;
+using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
 
 var repo = Path.GetFullPath(args[0]);
-var fixture = Path.Combine(Path.GetTempPath(), "roo-client-boundary-" + Guid.NewGuid().ToString("N"));
-var previousRoot = Environment.GetEnvironmentVariable("ROO_BACKEND_ROOT");
+var fixture = Path.Combine(Path.GetTempPath(), "roo-industries-client-boundary-" + Guid.NewGuid().ToString("N"));
+var previousRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT");
 string? recoveryRoot = null;
 LiveDataService? service = null;
 void Check(bool condition, string message)
@@ -33,7 +33,7 @@ try
     File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(official));
     object Manifest(string target) => new { manifestId = "client-review", appId, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(original)));
-    Environment.SetEnvironmentVariable("ROO_BACKEND_ROOT", fixture);
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", fixture);
     service = new LiveDataService(new BackendLocator());
     Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null, "Client reads the reviewed removal route");
     Check(await service.GetCleanupManifestAsync(appId) is not null, "Client reads the reviewed cleanup list");
@@ -98,7 +98,7 @@ try
 }
 finally
 {
-    Environment.SetEnvironmentVariable("ROO_BACKEND_ROOT", previousRoot);
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previousRoot);
     recoveryRoot ??= service?.LastCleanupRollbackPath is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);

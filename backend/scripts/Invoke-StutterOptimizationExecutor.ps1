@@ -31,11 +31,11 @@ function Test-StutterExactAllowlist {
     )
     if (@($Targets).Count -eq 0) { return $false }
     $allowed = @{}
-    foreach ($target in @(Get-RooArray $Allowlist)) {
+    foreach ($target in @(Get-RooIndustriesArray $Allowlist)) {
         if ([string]::IsNullOrWhiteSpace([string]$target)) { continue }
         $allowed[[System.IO.Path]::GetFullPath([string]$target).ToLowerInvariant()] = $true
     }
-    foreach ($target in @(Get-RooArray $Targets)) {
+    foreach ($target in @(Get-RooIndustriesArray $Targets)) {
         if ([string]::IsNullOrWhiteSpace([string]$target)) { return $false }
         $full = [System.IO.Path]::GetFullPath([string]$target).ToLowerInvariant()
         if (-not $allowed.ContainsKey($full)) { return $false }
@@ -48,7 +48,7 @@ function Invoke-StutterMockRunner {
         [string[]]$Arguments,
         [int]$Timeout
     )
-    return Invoke-RooBackendPowerShellShim -ShimPath $ShimPath -Arguments $Arguments -TimeoutSeconds $Timeout
+    return Invoke-RooIndustriesBackendPowerShellShim -ShimPath $ShimPath -Arguments $Arguments -TimeoutSeconds $Timeout
 }
 
 function Add-StutterMockStep {
@@ -61,7 +61,7 @@ function Add-StutterMockStep {
         [int]$Timeout
     )
     $result = Invoke-StutterMockRunner -ShimPath $ShimPath -Arguments $Arguments -Timeout $Timeout
-    $completed = ((-not [bool](Get-RooPropertyValue $result 'timedOut' $false)) -and [int](Get-RooPropertyValue $result 'exitCode' -1) -eq 0)
+    $completed = ((-not [bool](Get-RooIndustriesPropertyValue $result 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $result 'exitCode' -1) -eq 0)
     $Sequence.Add([pscustomobject]@{
         order = $Order
         step = $Step
@@ -77,29 +77,29 @@ try {
     $fixtureMode = ($ExecutorMode -eq 'Fixture')
     $realMode = ($ExecutorMode -eq 'Real')
     $executeRequested = ($ExecutorMode -ne 'Preview')
-    $mockRunnerPresent = (-not [string]::IsNullOrWhiteSpace($MockRunnerPath) -and (Test-Path -LiteralPath (Resolve-RooPath $MockRunnerPath $MockRunnerPath)))
-    $shaderItems = if ($OptimizationId -eq 'shader-cache-cleanup' -and -not [string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { @(Get-RooStutterShaderCacheItems $ShaderCacheRoot) } else { @() }
-    $shaderTargets = @($shaderItems | ForEach-Object { [string](Get-RooPropertyValue $_ 'path' '') })
+    $mockRunnerPresent = (-not [string]::IsNullOrWhiteSpace($MockRunnerPath) -and (Test-Path -LiteralPath (Resolve-RooIndustriesPath $MockRunnerPath $MockRunnerPath)))
+    $shaderItems = if ($OptimizationId -eq 'shader-cache-cleanup' -and -not [string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { @(Get-RooIndustriesStutterShaderCacheItems $ShaderCacheRoot) } else { @() }
+    $shaderTargets = @($shaderItems | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'path' '') })
     $pathTargets = switch ($OptimizationId) {
         'shader-cache-cleanup' { $shaderTargets }
         'power-plan' { if ([string]::IsNullOrWhiteSpace($PowerPlanPath)) { @() } else { @($PowerPlanPath) } }
         default { @() }
     }
     $exactTargetsApproved = if ($pathTargets.Count -gt 0) { Test-StutterExactAllowlist $pathTargets $ExactTargetAllowlist } else { $true }
-    $fixtureRootIsTemp = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $false } else { Test-RooStutterPathInsideTemp $ShaderCacheRoot }
+    $fixtureRootIsTemp = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $false } else { Test-RooIndustriesStutterPathInsideTemp $ShaderCacheRoot }
 
     $gates = @(
-        (New-RooBackendExecutorGate 'confirm-apply' 'Confirmed execution requested' $true ([bool]$ConfirmApply) 'Executor remains preview-only until -ConfirmApply is supplied.' $null),
-        (New-RooBackendExecutorGate 'executor-mode-selected' 'Executor mode selected' $true $executeRequested 'ExecutorMode must be Mock, Fixture, or Real to run.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
-        (New-RooBackendExecutorGate 'explicit-user-approval' 'Explicit user approval evidence captured' $true ([bool]$UserApproved) 'Execution requires user approval evidence for the exact optimization and targets.' $null),
-        (New-RooBackendExecutorGate 'backup-completed' 'Backup or restore metadata completed' $true ([bool]$BackupCompleted) 'System-changing optimizations require backup or restore metadata before execution.' $null),
-        (New-RooBackendExecutorGate 'mock-runner-present' 'Mock runner present' $mockMode ((-not $mockMode) -or $mockRunnerPresent) 'Mock validation requires a runner shim path.' ([pscustomobject]@{ mockRunnerPath = $MockRunnerPath })),
-        (New-RooBackendExecutorGate 'exact-target-allowlist' 'Exact target allowlist covers path targets' ($pathTargets.Count -gt 0) $exactTargetsApproved 'Path-based optimizations require exact target allowlist coverage.' ([pscustomobject]@{ targetCount = $pathTargets.Count; allowlistCount = @(Get-RooArray $ExactTargetAllowlist).Count })),
-        (New-RooBackendExecutorGate 'fixture-mode-shader-only' 'Fixture mode limited to shader cache' $fixtureMode ((-not $fixtureMode) -or $OptimizationId -eq 'shader-cache-cleanup') 'Disposable fixture execution is only implemented for shader cache cleanup.' $null),
-        (New-RooBackendExecutorGate 'fixture-root-temp' 'Fixture root is inside temp' $fixtureMode ((-not $fixtureMode) -or $fixtureRootIsTemp) 'Shader cache fixture root must be under the OS temp path.' ([pscustomobject]@{ shaderCacheRoot = $ShaderCacheRoot })),
-        (New-RooBackendExecutorGate 'fixture-explicit-flag' 'Disposable fixture flag supplied' $fixtureMode ((-not $fixtureMode) -or [bool]$AllowDisposableFixtureApply) 'Fixture execution requires -AllowDisposableFixtureApply beyond confirmation.' $null),
-        (New-RooBackendExecutorGate 'real-system-explicit-flag' 'Real-system explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealSystemExecution) 'Real system-changing execution requires -AllowRealSystemExecution beyond confirmation.' $null),
-        (New-RooBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $true 'Per-action real, reversible, read-only, or helper-contract executors are implemented in Invoke-StutterOptimizationRealExecutor.ps1.' $null)
+        (New-RooIndustriesBackendExecutorGate 'confirm-apply' 'Confirmed execution requested' $true ([bool]$ConfirmApply) 'Executor remains preview-only until -ConfirmApply is supplied.' $null),
+        (New-RooIndustriesBackendExecutorGate 'executor-mode-selected' 'Executor mode selected' $true $executeRequested 'ExecutorMode must be Mock, Fixture, or Real to run.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
+        (New-RooIndustriesBackendExecutorGate 'explicit-user-approval' 'Explicit user approval evidence captured' $true ([bool]$UserApproved) 'Execution requires user approval evidence for the exact optimization and targets.' $null),
+        (New-RooIndustriesBackendExecutorGate 'backup-completed' 'Backup or restore metadata completed' $true ([bool]$BackupCompleted) 'System-changing optimizations require backup or restore metadata before execution.' $null),
+        (New-RooIndustriesBackendExecutorGate 'mock-runner-present' 'Mock runner present' $mockMode ((-not $mockMode) -or $mockRunnerPresent) 'Mock validation requires a runner shim path.' ([pscustomobject]@{ mockRunnerPath = $MockRunnerPath })),
+        (New-RooIndustriesBackendExecutorGate 'exact-target-allowlist' 'Exact target allowlist covers path targets' ($pathTargets.Count -gt 0) $exactTargetsApproved 'Path-based optimizations require exact target allowlist coverage.' ([pscustomobject]@{ targetCount = $pathTargets.Count; allowlistCount = @(Get-RooIndustriesArray $ExactTargetAllowlist).Count })),
+        (New-RooIndustriesBackendExecutorGate 'fixture-mode-shader-only' 'Fixture mode limited to shader cache' $fixtureMode ((-not $fixtureMode) -or $OptimizationId -eq 'shader-cache-cleanup') 'Disposable fixture execution is only implemented for shader cache cleanup.' $null),
+        (New-RooIndustriesBackendExecutorGate 'fixture-root-temp' 'Fixture root is inside temp' $fixtureMode ((-not $fixtureMode) -or $fixtureRootIsTemp) 'Shader cache fixture root must be under the OS temp path.' ([pscustomobject]@{ shaderCacheRoot = $ShaderCacheRoot })),
+        (New-RooIndustriesBackendExecutorGate 'fixture-explicit-flag' 'Disposable fixture flag supplied' $fixtureMode ((-not $fixtureMode) -or [bool]$AllowDisposableFixtureApply) 'Fixture execution requires -AllowDisposableFixtureApply beyond confirmation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'real-system-explicit-flag' 'Real-system explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealSystemExecution) 'Real system-changing execution requires -AllowRealSystemExecution beyond confirmation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'real-system-runner-implemented' 'Real-system runner implemented' $realMode $true 'Per-action real, reversible, read-only, or helper-contract executors are implemented in Invoke-StutterOptimizationRealExecutor.ps1.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canExecute = ($blockingGates.Count -eq 0)
@@ -132,12 +132,12 @@ try {
             }
             'service-pause-preview' {
                 $order = 1
-                foreach ($svc in @(Get-RooArray $ServiceName)) {
+                foreach ($svc in @(Get-RooIndustriesArray $ServiceName)) {
                     $stepOk = Add-StutterMockStep $sequence $order 'service-pause' @('service-pause', [string]$svc) $MockRunnerPath $TimeoutSeconds
                     if (-not $stepOk) { $ok = $false }
                     $order++
                 }
-                foreach ($svc in @(Get-RooArray $ServiceName)) {
+                foreach ($svc in @(Get-RooIndustriesArray $ServiceName)) {
                     $stepOk = Add-StutterMockStep $sequence $order 'service-restore' @('service-restore', [string]$svc) $MockRunnerPath $TimeoutSeconds
                     if (-not $stepOk) { $ok = $false }
                     $order++
@@ -153,7 +153,7 @@ try {
             -ConfirmApply `
             -AllowDisposableFixtureApply
         $fixtureResult = ($fixtureOutput -join [Environment]::NewLine) | ConvertFrom-Json
-        $status = [string](Get-RooPropertyValue $fixtureResult 'status' 'failed')
+        $status = [string](Get-RooIndustriesPropertyValue $fixtureResult 'status' 'failed')
         $sequence.Add([pscustomobject]@{
             order = 1
             step = 'shader-cache-fixture-apply'
@@ -168,10 +168,10 @@ try {
         if ($ConfirmApply) { $realParams['ConfirmApply'] = $true }
         if ($AllowRealSystemExecution) { $realParams['AllowRealSystemExecution'] = $true }
         if (-not [string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $realParams['ShaderCacheRoot'] = $ShaderCacheRoot }
-        if (@(Get-RooArray $ServiceName).Count -gt 0) { $realParams['ServiceName'] = @(Get-RooArray $ServiceName) }
+        if (@(Get-RooIndustriesArray $ServiceName).Count -gt 0) { $realParams['ServiceName'] = @(Get-RooIndustriesArray $ServiceName) }
         $realOutput = & (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') @realParams
         $realResult = ($realOutput -join [Environment]::NewLine) | ConvertFrom-Json
-        $status = [string](Get-RooPropertyValue $realResult 'status' 'failed')
+        $status = [string](Get-RooIndustriesPropertyValue $realResult 'status' 'failed')
         $sequence.Add([pscustomobject]@{
             order = 1
             step = 'stutter-real-controlled-executor'
@@ -182,30 +182,30 @@ try {
 
     $runs = @($sequence.ToArray())
     $rollbackManifest = [pscustomobject]@{
-        manifestId = New-RooStutterRollbackManifestId $OptimizationId
+        manifestId = New-RooIndustriesStutterRollbackManifestId $OptimizationId
         schemaVersion = 1
-        productName = $script:RooStutterProductName
+        productName = $script:RooIndustriesStutterProductName
         actionId = 'performance.stutterOptimization.rollback'
         optimizationId = $OptimizationId
-        createdAtUtc = Get-RooUtcStamp
+        createdAtUtc = Get-RooIndustriesUtcStamp
         realSystemRollback = $false
-        exactTargetAllowlist = @(Get-RooArray $ExactTargetAllowlist)
+        exactTargetAllowlist = @(Get-RooIndustriesArray $ExactTargetAllowlist)
         backupCompleted = [bool]$BackupCompleted
         runnerResults = $runs
-        fixtureRollback = if ($fixtureResult) { Get-RooPropertyValue $fixtureResult 'rollback' $null } else { $null }
+        fixtureRollback = if ($fixtureResult) { Get-RooIndustriesPropertyValue $fixtureResult 'rollback' $null } else { $null }
     }
     $resolvedRollbackManifestPath = $null
     if ($canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
-        $resolvedRollbackManifestPath = Resolve-RooPath $RollbackManifestPath $RollbackManifestPath
-        Ensure-RooDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
+        $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
+        Ensure-RooIndustriesDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
         ($rollbackManifest | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $resolvedRollbackManifestPath -Encoding UTF8
     }
 
     $result = [pscustomobject]@{
         actionId = 'performance.stutterOptimization.executor'
         schemaVersion = 1
-        productName = $script:RooStutterProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesStutterProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         optimizationId = $OptimizationId
         dryRun = (-not $canExecute)
         status = $status
@@ -236,17 +236,17 @@ try {
             focusStealPrevented = (@($runs | Where-Object { $_.result.invocation.focusStealPrevented -eq $false }).Count -eq 0)
             blockingGateCount = $blockingGates.Count
         }
-        warnings = @((New-RooStutterIssue 'STUTTER_EXECUTOR_CONTROLLED' 'Stutter optimization executor abstraction evaluated with mock, fixture, or real controlled per-action runner gates.' 'info' $OptimizationId $false 'Use real mode only with exact approval, helper, backup, and restore evidence.' $null))
+        warnings = @((New-RooIndustriesStutterIssue 'STUTTER_EXECUTOR_CONTROLLED' 'Stutter optimization executor abstraction evaluated with mock, fixture, or real controlled per-action runner gates.' 'info' $OptimizationId $false 'Use real mode only with exact approval, helper, backup, and restore evidence.' $null))
         errors = @()
-        logs = @((New-RooLog 'Stutter optimization executor abstraction completed.'))
+        logs = @((New-RooIndustriesLog 'Stutter optimization executor abstraction completed.'))
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'performance.stutterOptimization.executor'
         schemaVersion = 1
-        productName = $script:RooStutterProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesStutterProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         optimizationId = $OptimizationId
         dryRun = $true
         status = 'failed'
@@ -254,9 +254,9 @@ try {
         executionSequence = @()
         summary = [pscustomobject]@{ willRunMockRunner = $false; willRunFixtureApply = $false; willRunRealSystemAction = $false }
         warnings = @()
-        errors = @((New-RooStutterIssue 'STUTTER_EXECUTOR_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check executor mode, mock shim, target allowlist, and backup gates.' $null))
-        logs = @((New-RooLog 'Stutter optimization executor abstraction failed.' 'error'))
+        errors = @((New-RooIndustriesStutterIssue 'STUTTER_EXECUTOR_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check executor mode, mock shim, target allowlist, and backup gates.' $null))
+        logs = @((New-RooIndustriesLog 'Stutter optimization executor abstraction failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

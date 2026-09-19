@@ -25,7 +25,7 @@ WinUtil's repository declares MIT licensing. {source} declares {license}. The in
 | Reliable bulk removal | Exact installed identity, frozen commands, executable/registration checks, durable ordered queue, cancellation and reconciliation | Uncertain attempts remain unresolved until evidence supports completion; vendor uninstall cannot be rolled back |
 | Cleanup after a vendor remover | Fresh content review; old deletion approval is no longer reused | Shared ownership, registry/service leftovers and native file-handle deletion need further work |
 | Correct existing process restoration | Native and PowerShell governors restore recorded controls while preserving conflicting external values | Windows has no atomic compare-and-set across independent process-control writers |
-| Settings coverage | Queryable source inventory with explicit risks and inferred/source-confirmed evidence | Metadata does not turn an upstream tweak into a tested Roo capability |
+| Settings coverage | Queryable source inventory with explicit risks and inferred/source-confirmed evidence | Metadata does not turn an upstream tweak into a tested Roo Industries capability |
 
 ## Work proposed at the research baseline
 

@@ -1,39 +1,39 @@
-if (-not (Get-Command Get-RooProcessPolicyPreview -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command Get-RooIndustriesProcessPolicyPreview -ErrorAction SilentlyContinue)) {
     . (Join-Path $PSScriptRoot 'ProcessPolicy.Common.ps1')
 }
 
-$script:RooProcessPolicyRuleStoreFolderName = 'process-policy-rules'
-$script:RooProcessPolicyAuditFolderName = 'process-policy-audit'
-$script:RooProcessPolicyRuleBackupFolderName = 'process-policy-rule-backups'
+$script:RooIndustriesProcessPolicyRuleStoreFolderName = 'process-policy-rules'
+$script:RooIndustriesProcessPolicyAuditFolderName = 'process-policy-audit'
+$script:RooIndustriesProcessPolicyRuleBackupFolderName = 'process-policy-rule-backups'
 
-function Resolve-RooProcessPolicyRuntimeStateRoot {
+function Resolve-RooIndustriesProcessPolicyRuntimeStateRoot {
     param([string]$StateRoot)
     if (-not [string]::IsNullOrWhiteSpace($StateRoot)) {
-        return Resolve-RooPath $StateRoot $StateRoot
+        return Resolve-RooIndustriesPath $StateRoot $StateRoot
     }
-    $envRoot = [Environment]::GetEnvironmentVariable('ROO_PROCESS_POLICY_STATE_ROOT')
+    $envRoot = [Environment]::GetEnvironmentVariable('ROO_INDUSTRIES_PROCESS_POLICY_STATE_ROOT')
     if (-not [string]::IsNullOrWhiteSpace($envRoot)) {
         return [System.IO.Path]::GetFullPath($envRoot)
     }
-    return [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) 'roo-optimization-suite\process-policy-runtime'))
+    return [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) 'roo-industries-optimization-suite\process-policy-runtime'))
 }
 
-function Get-RooProcessPolicyRuleStorePath {
+function Get-RooIndustriesProcessPolicyRuleStorePath {
     param([string]$StateRoot)
-    return Join-Path (Join-Path (Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot) $script:RooProcessPolicyRuleStoreFolderName) 'rules.json'
+    return Join-Path (Join-Path (Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot) $script:RooIndustriesProcessPolicyRuleStoreFolderName) 'rules.json'
 }
 
-function Get-RooProcessPolicyAuditPath {
+function Get-RooIndustriesProcessPolicyAuditPath {
     param([string]$StateRoot)
-    return Join-Path (Join-Path (Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot) $script:RooProcessPolicyAuditFolderName) 'audit.jsonl'
+    return Join-Path (Join-Path (Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot) $script:RooIndustriesProcessPolicyAuditFolderName) 'audit.jsonl'
 }
 
-function Get-RooProcessPolicyRuleBackupRoot {
+function Get-RooIndustriesProcessPolicyRuleBackupRoot {
     param([string]$StateRoot)
-    return Join-Path (Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot) $script:RooProcessPolicyRuleBackupFolderName
+    return Join-Path (Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot) $script:RooIndustriesProcessPolicyRuleBackupFolderName
 }
 
-function Set-RooProcessPolicyObjectProperty {
+function Set-RooIndustriesProcessPolicyObjectProperty {
     param(
         [object]$Object,
         [string]$Name,
@@ -47,60 +47,60 @@ function Set-RooProcessPolicyObjectProperty {
     }
 }
 
-function Read-RooProcessPolicyRuleStore {
+function Read-RooIndustriesProcessPolicyRuleStore {
     param([string]$StateRoot)
-    $path = Get-RooProcessPolicyRuleStorePath $StateRoot
+    $path = Get-RooIndustriesProcessPolicyRuleStorePath $StateRoot
     if (Test-Path -LiteralPath $path) {
-        $store = Read-RooJsonFile $path
+        $store = Read-RooIndustriesJsonFile $path
         if ($null -eq $store.PSObject.Properties['rules']) {
-            Set-RooProcessPolicyObjectProperty $store 'rules' @()
+            Set-RooIndustriesProcessPolicyObjectProperty $store 'rules' @()
         }
         return $store
     }
     return [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         storeId = 'process-policy-rule-store'
-        createdAtUtc = Get-RooUtcStamp
+        createdAtUtc = Get-RooIndustriesUtcStamp
         updatedAtUtc = $null
         rules = @()
     }
 }
 
-function Write-RooProcessPolicyRuleStore {
+function Write-RooIndustriesProcessPolicyRuleStore {
     param(
         [string]$StateRoot,
         [object]$Store
     )
-    Set-RooProcessPolicyObjectProperty $Store 'updatedAtUtc' (Get-RooUtcStamp)
-    Write-RooProcessPolicyJsonFile $Store (Get-RooProcessPolicyRuleStorePath $StateRoot)
+    Set-RooIndustriesProcessPolicyObjectProperty $Store 'updatedAtUtc' (Get-RooIndustriesUtcStamp)
+    Write-RooIndustriesProcessPolicyJsonFile $Store (Get-RooIndustriesProcessPolicyRuleStorePath $StateRoot)
 }
 
-function Get-RooProcessPolicyStoredRule {
+function Get-RooIndustriesProcessPolicyStoredRule {
     param(
         [string]$StateRoot,
         [string]$RuleId
     )
-    $store = Read-RooProcessPolicyRuleStore $StateRoot
-    foreach ($rule in @(Get-RooPropertyArray $store 'rules')) {
-        if ([string](Get-RooPropertyValue $rule 'id' '') -eq $RuleId -or [string](Get-RooPropertyValue $rule 'ruleId' '') -eq $RuleId) {
+    $store = Read-RooIndustriesProcessPolicyRuleStore $StateRoot
+    foreach ($rule in @(Get-RooIndustriesPropertyArray $store 'rules')) {
+        if ([string](Get-RooIndustriesPropertyValue $rule 'id' '') -eq $RuleId -or [string](Get-RooIndustriesPropertyValue $rule 'ruleId' '') -eq $RuleId) {
             return $rule
         }
     }
     return $null
 }
 
-function Set-RooProcessPolicyStoredRule {
+function Set-RooIndustriesProcessPolicyStoredRule {
     param(
         [string]$StateRoot,
         [object]$Rule
     )
-    $store = Read-RooProcessPolicyRuleStore $StateRoot
-    $ruleId = [string](Get-RooPropertyValue $Rule 'id' (Get-RooPropertyValue $Rule 'ruleId' ''))
+    $store = Read-RooIndustriesProcessPolicyRuleStore $StateRoot
+    $ruleId = [string](Get-RooIndustriesPropertyValue $Rule 'id' (Get-RooIndustriesPropertyValue $Rule 'ruleId' ''))
     $rules = New-Object System.Collections.Generic.List[object]
     $replaced = $false
-    foreach ($existing in @(Get-RooPropertyArray $store 'rules')) {
-        $existingId = [string](Get-RooPropertyValue $existing 'id' (Get-RooPropertyValue $existing 'ruleId' ''))
+    foreach ($existing in @(Get-RooIndustriesPropertyArray $store 'rules')) {
+        $existingId = [string](Get-RooIndustriesPropertyValue $existing 'id' (Get-RooIndustriesPropertyValue $existing 'ruleId' ''))
         if ($existingId -eq $ruleId) {
             $rules.Add($Rule) | Out-Null
             $replaced = $true
@@ -109,143 +109,143 @@ function Set-RooProcessPolicyStoredRule {
         }
     }
     if (-not $replaced) { $rules.Add($Rule) | Out-Null }
-    Set-RooProcessPolicyObjectProperty $store 'rules' @($rules.ToArray())
-    Write-RooProcessPolicyRuleStore $StateRoot $store
+    Set-RooIndustriesProcessPolicyObjectProperty $store 'rules' @($rules.ToArray())
+    Write-RooIndustriesProcessPolicyRuleStore $StateRoot $store
     return $store
 }
 
-function Get-RooProcessPolicyRuleControlValue {
+function Get-RooIndustriesProcessPolicyRuleControlValue {
     param(
         [object]$Controls,
         [string]$Name,
         [string[]]$Aliases = @()
     )
-    $value = Get-RooPropertyValue $Controls $Name $null
+    $value = Get-RooIndustriesPropertyValue $Controls $Name $null
     if ($null -ne $value) { return $value }
-    foreach ($alias in @(Get-RooArray $Aliases)) {
-        $value = Get-RooPropertyValue $Controls ([string]$alias) $null
+    foreach ($alias in @(Get-RooIndustriesArray $Aliases)) {
+        $value = Get-RooIndustriesPropertyValue $Controls ([string]$alias) $null
         if ($null -ne $value) { return $value }
     }
     return $null
 }
 
-function ConvertTo-RooProcessPolicyStoredRule {
+function ConvertTo-RooIndustriesProcessPolicyStoredRule {
     param(
         [object]$Rule,
         [string]$CreatedBy = 'local-user',
         [object]$ExistingRule = $null
     )
-    $ruleId = [string](Get-RooPropertyValue $Rule 'id' (Get-RooPropertyValue $Rule 'ruleId' ''))
+    $ruleId = [string](Get-RooIndustriesPropertyValue $Rule 'id' (Get-RooIndustriesPropertyValue $Rule 'ruleId' ''))
     if ([string]::IsNullOrWhiteSpace($ruleId)) {
         throw 'Process policy rule requires an id or ruleId.'
     }
-    $match = Get-RooPropertyValue $Rule 'match' $Rule
-    $controls = Get-RooPropertyValue $Rule 'requestedControls' (Get-RooPropertyValue $Rule 'controls' $null)
+    $match = Get-RooIndustriesPropertyValue $Rule 'match' $Rule
+    $controls = Get-RooIndustriesPropertyValue $Rule 'requestedControls' (Get-RooIndustriesPropertyValue $Rule 'controls' $null)
     if ($null -eq $controls) { $controls = [pscustomobject]@{} }
-    $now = Get-RooUtcStamp
-    $existingTimestamps = Get-RooPropertyValue $ExistingRule 'timestamps' $null
-    $existingApproval = Get-RooPropertyValue $ExistingRule 'approval' $null
-    $createdAt = Get-RooPropertyValue $existingTimestamps 'createdAtUtc' (Get-RooPropertyValue $Rule 'createdAtUtc' $now)
+    $now = Get-RooIndustriesUtcStamp
+    $existingTimestamps = Get-RooIndustriesPropertyValue $ExistingRule 'timestamps' $null
+    $existingApproval = Get-RooIndustriesPropertyValue $ExistingRule 'approval' $null
+    $createdAt = Get-RooIndustriesPropertyValue $existingTimestamps 'createdAtUtc' (Get-RooIndustriesPropertyValue $Rule 'createdAtUtc' $now)
 
     return [pscustomobject]@{
         schemaVersion = 1
         id = $ruleId
         ruleId = $ruleId
         match = [pscustomobject]@{
-            processNames = @(Get-RooPropertyArray $match 'processNames') + @(Get-RooPropertyArray $match 'names')
-            namePatterns = @(Get-RooPropertyArray $match 'namePatterns')
-            pathPatterns = @(Get-RooPropertyArray $match 'pathPatterns')
-            publisherNames = @(Get-RooPropertyArray $match 'publisherNames') + @(Get-RooPropertyArray $match 'publishers')
-            publisherPatterns = @(Get-RooPropertyArray $match 'publisherPatterns')
-            processCategories = @(Get-RooPropertyArray $match 'processCategories') + @(Get-RooPropertyArray $match 'categories')
-            commandLinePatterns = @(Get-RooPropertyArray $match 'commandLinePatterns')
-            excludeProcessNames = @(Get-RooPropertyArray $match 'excludeProcessNames')
-            excludeNamePatterns = @(Get-RooPropertyArray $match 'excludeNamePatterns')
-            excludePathPatterns = @(Get-RooPropertyArray $match 'excludePathPatterns')
-            excludePublisherNames = @(Get-RooPropertyArray $match 'excludePublisherNames')
-            excludePublisherPatterns = @(Get-RooPropertyArray $match 'excludePublisherPatterns')
-            excludeProcessCategories = @(Get-RooPropertyArray $match 'excludeProcessCategories')
-            excludeCommandLinePatterns = @(Get-RooPropertyArray $match 'excludeCommandLinePatterns')
+            processNames = @(Get-RooIndustriesPropertyArray $match 'processNames') + @(Get-RooIndustriesPropertyArray $match 'names')
+            namePatterns = @(Get-RooIndustriesPropertyArray $match 'namePatterns')
+            pathPatterns = @(Get-RooIndustriesPropertyArray $match 'pathPatterns')
+            publisherNames = @(Get-RooIndustriesPropertyArray $match 'publisherNames') + @(Get-RooIndustriesPropertyArray $match 'publishers')
+            publisherPatterns = @(Get-RooIndustriesPropertyArray $match 'publisherPatterns')
+            processCategories = @(Get-RooIndustriesPropertyArray $match 'processCategories') + @(Get-RooIndustriesPropertyArray $match 'categories')
+            commandLinePatterns = @(Get-RooIndustriesPropertyArray $match 'commandLinePatterns')
+            excludeProcessNames = @(Get-RooIndustriesPropertyArray $match 'excludeProcessNames')
+            excludeNamePatterns = @(Get-RooIndustriesPropertyArray $match 'excludeNamePatterns')
+            excludePathPatterns = @(Get-RooIndustriesPropertyArray $match 'excludePathPatterns')
+            excludePublisherNames = @(Get-RooIndustriesPropertyArray $match 'excludePublisherNames')
+            excludePublisherPatterns = @(Get-RooIndustriesPropertyArray $match 'excludePublisherPatterns')
+            excludeProcessCategories = @(Get-RooIndustriesPropertyArray $match 'excludeProcessCategories')
+            excludeCommandLinePatterns = @(Get-RooIndustriesPropertyArray $match 'excludeCommandLinePatterns')
         }
         requestedControls = [pscustomobject]@{
-            priorityClass = Get-RooProcessPolicyRuleControlValue $controls 'priorityClass' @('priority')
-            affinityMask = Get-RooProcessPolicyRuleControlValue $controls 'affinityMask' @('affinity')
-            ioPriority = Get-RooProcessPolicyRuleControlValue $controls 'ioPriority' @('io')
-            gpuPriority = Get-RooProcessPolicyRuleControlValue $controls 'gpuPriority' @('gpu')
-            restraint = Get-RooProcessPolicyRuleControlValue $controls 'restraint' @('restraintMode')
+            priorityClass = Get-RooIndustriesProcessPolicyRuleControlValue $controls 'priorityClass' @('priority')
+            affinityMask = Get-RooIndustriesProcessPolicyRuleControlValue $controls 'affinityMask' @('affinity')
+            ioPriority = Get-RooIndustriesProcessPolicyRuleControlValue $controls 'ioPriority' @('io')
+            gpuPriority = Get-RooIndustriesProcessPolicyRuleControlValue $controls 'gpuPriority' @('gpu')
+            restraint = Get-RooIndustriesProcessPolicyRuleControlValue $controls 'restraint' @('restraintMode')
         }
-        protectionCategory = [string](Get-RooPropertyValue $Rule 'protectionCategory' (Get-RooPropertyValue $Rule 'category' 'backgroundApp'))
-        createdBy = [string](Get-RooPropertyValue $Rule 'createdBy' $CreatedBy)
-        status = [string](Get-RooPropertyValue $ExistingRule 'status' 'previewed')
+        protectionCategory = [string](Get-RooIndustriesPropertyValue $Rule 'protectionCategory' (Get-RooIndustriesPropertyValue $Rule 'category' 'backgroundApp'))
+        createdBy = [string](Get-RooIndustriesPropertyValue $Rule 'createdBy' $CreatedBy)
+        status = [string](Get-RooIndustriesPropertyValue $ExistingRule 'status' 'previewed')
         timestamps = [pscustomobject]@{
             createdAtUtc = $createdAt
             updatedAtUtc = $now
-            previewedAtUtc = Get-RooPropertyValue $existingTimestamps 'previewedAtUtc' $null
-            approvedAtUtc = Get-RooPropertyValue $existingTimestamps 'approvedAtUtc' $null
-            appliedAtUtc = Get-RooPropertyValue $existingTimestamps 'appliedAtUtc' $null
-            restoredAtUtc = Get-RooPropertyValue $existingTimestamps 'restoredAtUtc' $null
-            removedAtUtc = Get-RooPropertyValue $existingTimestamps 'removedAtUtc' $null
+            previewedAtUtc = Get-RooIndustriesPropertyValue $existingTimestamps 'previewedAtUtc' $null
+            approvedAtUtc = Get-RooIndustriesPropertyValue $existingTimestamps 'approvedAtUtc' $null
+            appliedAtUtc = Get-RooIndustriesPropertyValue $existingTimestamps 'appliedAtUtc' $null
+            restoredAtUtc = Get-RooIndustriesPropertyValue $existingTimestamps 'restoredAtUtc' $null
+            removedAtUtc = Get-RooIndustriesPropertyValue $existingTimestamps 'removedAtUtc' $null
         }
         approval = $existingApproval
-        allowConfirmedApply = [bool](Get-RooPropertyValue $Rule 'allowConfirmedApply' (Get-RooPropertyValue $ExistingRule 'allowConfirmedApply' $false))
-        safety = Get-RooPropertyValue $Rule 'safety' (Get-RooPropertyValue $ExistingRule 'safety' $null)
-        reason = [string](Get-RooPropertyValue $Rule 'reason' (Get-RooPropertyValue $ExistingRule 'reason' 'Persistent process policy rule.'))
-        reasonCodes = @(Get-RooPropertyArray $Rule 'reasonCodes')
-        tags = @(Get-RooPropertyArray $Rule 'tags') + @(Get-RooPropertyArray $Rule 'scenarioTags')
-        risk = [string](Get-RooPropertyValue $Rule 'risk' (Get-RooPropertyValue $ExistingRule 'risk' 'low'))
-        lastPreview = Get-RooPropertyValue $ExistingRule 'lastPreview' $null
-        activeEffects = @(Get-RooPropertyArray $ExistingRule 'activeEffects')
-        backupManifestPaths = @(Get-RooPropertyArray $ExistingRule 'backupManifestPaths')
-        removed = [bool](Get-RooPropertyValue $ExistingRule 'removed' $false)
+        allowConfirmedApply = [bool](Get-RooIndustriesPropertyValue $Rule 'allowConfirmedApply' (Get-RooIndustriesPropertyValue $ExistingRule 'allowConfirmedApply' $false))
+        safety = Get-RooIndustriesPropertyValue $Rule 'safety' (Get-RooIndustriesPropertyValue $ExistingRule 'safety' $null)
+        reason = [string](Get-RooIndustriesPropertyValue $Rule 'reason' (Get-RooIndustriesPropertyValue $ExistingRule 'reason' 'Persistent process policy rule.'))
+        reasonCodes = @(Get-RooIndustriesPropertyArray $Rule 'reasonCodes')
+        tags = @(Get-RooIndustriesPropertyArray $Rule 'tags') + @(Get-RooIndustriesPropertyArray $Rule 'scenarioTags')
+        risk = [string](Get-RooIndustriesPropertyValue $Rule 'risk' (Get-RooIndustriesPropertyValue $ExistingRule 'risk' 'low'))
+        lastPreview = Get-RooIndustriesPropertyValue $ExistingRule 'lastPreview' $null
+        activeEffects = @(Get-RooIndustriesPropertyArray $ExistingRule 'activeEffects')
+        backupManifestPaths = @(Get-RooIndustriesPropertyArray $ExistingRule 'backupManifestPaths')
+        removed = [bool](Get-RooIndustriesPropertyValue $ExistingRule 'removed' $false)
     }
 }
 
-function ConvertTo-RooProcessPolicyRuleForProfile {
+function ConvertTo-RooIndustriesProcessPolicyRuleForProfile {
     param([object]$StoredRule)
     return [pscustomobject]@{
-        ruleId = [string](Get-RooPropertyValue $StoredRule 'id' '')
-        enabled = (-not [bool](Get-RooPropertyValue $StoredRule 'removed' $false))
-        allowConfirmedApply = [bool](Get-RooPropertyValue $StoredRule 'allowConfirmedApply' $false)
-        safety = Get-RooPropertyValue $StoredRule 'safety' $null
-        match = Get-RooPropertyValue $StoredRule 'match' $null
-        controls = Get-RooPropertyValue $StoredRule 'requestedControls' $null
-        reason = [string](Get-RooPropertyValue $StoredRule 'reason' 'Persistent process policy rule.')
-        reasonCodes = @(Get-RooPropertyArray $StoredRule 'reasonCodes')
-        scenarioTags = @(Get-RooPropertyArray $StoredRule 'tags')
-        risk = [string](Get-RooPropertyValue $StoredRule 'risk' 'low')
+        ruleId = [string](Get-RooIndustriesPropertyValue $StoredRule 'id' '')
+        enabled = (-not [bool](Get-RooIndustriesPropertyValue $StoredRule 'removed' $false))
+        allowConfirmedApply = [bool](Get-RooIndustriesPropertyValue $StoredRule 'allowConfirmedApply' $false)
+        safety = Get-RooIndustriesPropertyValue $StoredRule 'safety' $null
+        match = Get-RooIndustriesPropertyValue $StoredRule 'match' $null
+        controls = Get-RooIndustriesPropertyValue $StoredRule 'requestedControls' $null
+        reason = [string](Get-RooIndustriesPropertyValue $StoredRule 'reason' 'Persistent process policy rule.')
+        reasonCodes = @(Get-RooIndustriesPropertyArray $StoredRule 'reasonCodes')
+        scenarioTags = @(Get-RooIndustriesPropertyArray $StoredRule 'tags')
+        risk = [string](Get-RooIndustriesPropertyValue $StoredRule 'risk' 'low')
     }
 }
 
-function New-RooProcessPolicyProfileForRule {
+function New-RooIndustriesProcessPolicyProfileForRule {
     param(
         [object]$Profile,
         [object]$StoredRule
     )
-    $policy = Get-RooProcessPolicyProfileRoot $Profile
+    $policy = Get-RooIndustriesProcessPolicyProfileRoot $Profile
     return [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        profileId = [string](Get-RooPropertyValue $Profile 'profileId' 'persistent-policy')
+        productName = $script:RooIndustriesProcessProductName
+        profileId = [string](Get-RooIndustriesPropertyValue $Profile 'profileId' 'persistent-policy')
         profileKind = 'persistent-process-policy'
-        risk = [string](Get-RooPropertyValue $StoredRule 'risk' (Get-RooPropertyValue $Profile 'risk' 'medium'))
-        protectedCatalogPath = Get-RooPropertyValue $Profile 'protectedCatalogPath' 'protected-processes.json'
+        risk = [string](Get-RooIndustriesPropertyValue $StoredRule 'risk' (Get-RooIndustriesPropertyValue $Profile 'risk' 'medium'))
+        protectedCatalogPath = Get-RooIndustriesPropertyValue $Profile 'protectedCatalogPath' 'protected-processes.json'
         policy = [pscustomobject]@{
-            session = Get-RooPropertyValue $policy 'session' $null
-            safety = Get-RooPropertyValue $policy 'safety' (Get-RooPropertyValue $Profile 'safety' $null)
-            protectedProcesses = @(Get-RooPropertyArray $policy 'protectedProcesses')
-            rules = @((ConvertTo-RooProcessPolicyRuleForProfile $StoredRule))
+            session = Get-RooIndustriesPropertyValue $policy 'session' $null
+            safety = Get-RooIndustriesPropertyValue $policy 'safety' (Get-RooIndustriesPropertyValue $Profile 'safety' $null)
+            protectedProcesses = @(Get-RooIndustriesPropertyArray $policy 'protectedProcesses')
+            rules = @((ConvertTo-RooIndustriesProcessPolicyRuleForProfile $StoredRule))
         }
-        protectedProcesses = @(Get-RooPropertyArray $Profile 'protectedProcesses')
-        protectedCompanions = @(Get-RooPropertyArray $Profile 'protectedCompanions')
+        protectedProcesses = @(Get-RooIndustriesPropertyArray $Profile 'protectedProcesses')
+        protectedCompanions = @(Get-RooIndustriesPropertyArray $Profile 'protectedCompanions')
     }
 }
 
-function New-RooProcessPolicyTargetIdentity {
+function New-RooIndustriesProcessPolicyTargetIdentity {
     param([object]$Target)
-    $processId = Get-RooPropertyValue $Target 'processId' (Get-RooPropertyValue $Target 'pid' $null)
-    $processName = [string](Get-RooPropertyValue $Target 'processName' (Get-RooPropertyValue $Target 'name' ''))
-    $path = Get-RooPropertyValue $Target 'executablePath' $null
-    $publisher = Get-RooPropertyValue $Target 'publisher' $null
+    $processId = Get-RooIndustriesPropertyValue $Target 'processId' (Get-RooIndustriesPropertyValue $Target 'pid' $null)
+    $processName = [string](Get-RooIndustriesPropertyValue $Target 'processName' (Get-RooIndustriesPropertyValue $Target 'name' ''))
+    $path = Get-RooIndustriesPropertyValue $Target 'executablePath' $null
+    $publisher = Get-RooIndustriesPropertyValue $Target 'publisher' $null
     $identity = if ($null -ne $processId -and -not [string]::IsNullOrWhiteSpace($processName)) {
         "$processName`:$processId"
     } elseif (-not [string]::IsNullOrWhiteSpace($processName)) {
@@ -262,7 +262,7 @@ function New-RooProcessPolicyTargetIdentity {
     }
 }
 
-function New-RooProcessPolicyAuditRow {
+function New-RooIndustriesProcessPolicyAuditRow {
     param(
         [string]$Action,
         [string]$RuleId = $null,
@@ -279,11 +279,11 @@ function New-RooProcessPolicyAuditRow {
         [bool]$DryRun = $true,
         [string]$Source = 'processPolicyRuleLifecycle'
     )
-    $targetIdentity = New-RooProcessPolicyTargetIdentity $Target
+    $targetIdentity = New-RooIndustriesProcessPolicyTargetIdentity $Target
     return [pscustomobject]@{
         schemaVersion = 1
         auditId = "process-policy-audit-$([guid]::NewGuid().ToString('N'))"
-        timestampUtc = Get-RooUtcStamp
+        timestampUtc = Get-RooIndustriesUtcStamp
         action = $Action
         source = $Source
         ruleId = $RuleId
@@ -304,24 +304,24 @@ function New-RooProcessPolicyAuditRow {
     }
 }
 
-function Add-RooProcessPolicyAuditRows {
+function Add-RooIndustriesProcessPolicyAuditRows {
     param(
         [string]$StateRoot,
         [object[]]$Rows
     )
-    $items = @(Get-RooArray $Rows)
+    $items = @(Get-RooIndustriesArray $Rows)
     if ($items.Count -eq 0) { return $null }
-    $path = Get-RooProcessPolicyAuditPath $StateRoot
-    Ensure-RooDirectory (Split-Path $path -Parent)
+    $path = Get-RooIndustriesProcessPolicyAuditPath $StateRoot
+    Ensure-RooIndustriesDirectory (Split-Path $path -Parent)
     foreach ($row in $items) {
         ($row | ConvertTo-Json -Depth 24 -Compress) | Add-Content -LiteralPath $path -Encoding UTF8
     }
     return $path
 }
 
-function Read-RooProcessPolicyAuditRows {
+function Read-RooIndustriesProcessPolicyAuditRows {
     param([string]$StateRoot)
-    $path = Get-RooProcessPolicyAuditPath $StateRoot
+    $path = Get-RooIndustriesProcessPolicyAuditPath $StateRoot
     $rows = New-Object System.Collections.Generic.List[object]
     if (-not (Test-Path -LiteralPath $path)) { return @() }
     foreach ($line in @(Get-Content -LiteralPath $path)) {
@@ -331,42 +331,42 @@ function Read-RooProcessPolicyAuditRows {
     return @($rows.ToArray())
 }
 
-function Get-RooProcessPolicyBackupManifestPath {
+function Get-RooIndustriesProcessPolicyBackupManifestPath {
     param(
         [string]$StateRoot,
         [string]$BackupId
     )
-    return Join-Path (Get-RooProcessPolicyRuleBackupRoot $StateRoot) "$BackupId.json"
+    return Join-Path (Get-RooIndustriesProcessPolicyRuleBackupRoot $StateRoot) "$BackupId.json"
 }
 
-function New-RooProcessPolicyRuleBackupManifest {
+function New-RooIndustriesProcessPolicyRuleBackupManifest {
     param(
         [string]$StateRoot,
         [object]$Rule,
         [string]$ActionId,
         [object[]]$Snapshots
     )
-    $ruleId = [string](Get-RooPropertyValue $Rule 'id' '')
-    $backupId = "process-policy-rule-$ruleId-$(Get-RooFileStamp)-$([guid]::NewGuid().ToString('N').Substring(0,8))"
-    $path = Get-RooProcessPolicyBackupManifestPath $StateRoot $backupId
+    $ruleId = [string](Get-RooIndustriesPropertyValue $Rule 'id' '')
+    $backupId = "process-policy-rule-$ruleId-$(Get-RooIndustriesFileStamp)-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    $path = Get-RooIndustriesProcessPolicyBackupManifestPath $StateRoot $backupId
     $manifest = [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         manifestKind = 'processControlBackupManifest'
         backupId = $backupId
         actionId = $ActionId
         ruleId = $ruleId
-        createdAtUtc = Get-RooUtcStamp
-        stateRoot = Resolve-RooProcessPolicyRuntimeStateRoot $StateRoot
+        createdAtUtc = Get-RooIndustriesUtcStamp
+        stateRoot = Resolve-RooIndustriesProcessPolicyRuntimeStateRoot $StateRoot
         dryRun = $false
         restore = [pscustomobject]@{
             available = $true
             status = 'available'
             path = $path
         }
-        snapshots = @(Get-RooArray $Snapshots)
+        snapshots = @(Get-RooIndustriesArray $Snapshots)
     }
-    Write-RooProcessPolicyJsonFile $manifest $path
+    Write-RooIndustriesProcessPolicyJsonFile $manifest $path
     return [pscustomobject]@{
         manifest = $manifest
         path = $path

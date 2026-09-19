@@ -66,7 +66,7 @@ foreach ($relative in $requiredFiles) {
 }
 
 $stateBefore = Get-StateEntryCount
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-stutter-real-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-stutter-real-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -98,7 +98,7 @@ try {
     }
     $standbyBuildPlan = $standby.capabilities.helperBuildPlan
     if ($standbyBuildPlan.capabilities.toolchainDetected -eq $true) {
-        $helperOutput = Join-Path $tempRoot 'standby-helper\RooStandbyMemoryHelper.exe'
+        $helperOutput = Join-Path $tempRoot 'standby-helper\RooIndustriesStandbyMemoryHelper.exe'
         $helperBuild = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Build-StandbyMemoryHelper.ps1') -Build -HelperOutputPath $helperOutput -TimeoutSeconds 30)
         if ($helperBuild.status -eq 'success' -and $helperBuild.capabilities.buildSucceeded -eq $true -and $helperBuild.capabilities.helperLaunchAttempted -eq $false -and (Test-Path -LiteralPath $helperOutput)) {
             Add-Pass 'Standby memory helper builds to a disposable temp executable when csc toolchain is present'

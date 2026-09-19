@@ -166,9 +166,9 @@ function Invoke-RouterStatus {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
-$registryPath = Join-Path $repoRoot 'backend\scripts\Get-RooCapabilityRegistry.ps1'
-$schemaPath = Join-Path $repoRoot 'backend\contracts\roo-backend-contracts.schema.json'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
+$registryPath = Join-Path $repoRoot 'backend\scripts\Get-RooIndustriesCapabilityRegistry.ps1'
+$schemaPath = Join-Path $repoRoot 'backend\contracts\roo-industries-backend-contracts.schema.json'
 $catalogPath = Join-Path $repoRoot 'backend\contracts\contract-catalog.json'
 $routingRoot = Join-Path $repoRoot 'backend\capabilities\routing'
 $samplesRoot = Join-Path $repoRoot 'backend\samples'
@@ -246,8 +246,8 @@ if ($null -ne $schema) {
 $catalog = Read-JsonFile $catalogPath 'contract catalog'
 if ($null -ne $catalog) {
     $requiredEntries = @{
-        'capability router response' = 'roo-backend-contracts.schema.json#/$defs/capabilityRouterResponse'
-        'capability route manifest' = 'roo-backend-contracts.schema.json#/$defs/capabilityRouteManifest'
+        'capability router response' = 'roo-industries-backend-contracts.schema.json#/$defs/capabilityRouterResponse'
+        'capability route manifest' = 'roo-industries-backend-contracts.schema.json#/$defs/capabilityRouteManifest'
     }
 
     foreach ($name in @($requiredEntries.Keys)) {

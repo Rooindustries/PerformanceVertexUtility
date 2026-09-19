@@ -19,7 +19,7 @@
   "backendScriptProcess": {
     "processId": 12000,
     "processName": "powershell",
-    "scriptPath": "backend\\scripts\\Measure-RooBackendFootprint.ps1",
+    "scriptPath": "backend\\scripts\\Measure-RooIndustriesBackendFootprint.ps1",
     "workingSetBytes": 68157440,
     "privateBytes": 49283072,
     "cpuTimeSecondsBefore": 0.3125,

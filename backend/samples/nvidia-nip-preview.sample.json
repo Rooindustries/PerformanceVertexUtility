@@ -38,7 +38,7 @@
       "arguments": [
         "-exportProfile",
         "Base Profile",
-        "%TEMP%\\roo-nvidia-nip-export-base-profile-before.nip"
+        "%TEMP%\\roo-industries-nvidia-nip-export-base-profile-before.nip"
       ],
       "launchAllowedNow": false,
       "processStarted": false

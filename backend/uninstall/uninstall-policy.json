@@ -60,7 +60,7 @@
     "requireScheduledTaskExport": true,
     "requireStartupEntryExport": true,
     "rollbackActionId": "apps.rollbackCleanup",
-    "backupRoot": "C:\\ProgramData\\RooOptimizationSuite\\backups\\cleanup"
+    "backupRoot": "C:\\ProgramData\\RooIndustriesOptimizationSuite\\backups\\cleanup"
   },
   "executionDesign": {
     "previewOnly": true,

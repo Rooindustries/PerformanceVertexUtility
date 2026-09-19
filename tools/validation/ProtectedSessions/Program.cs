@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 if(args is ["--retained-launcher",var retainedRoot]) { RetainedGpuChecks.Launcher(retainedRoot); return; }
 if(args is ["--retained-game",var retainedGame,var retainedSession]) { RetainedGpuChecks.Game(retainedGame,retainedSession); return; }
@@ -11,10 +11,10 @@ if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); r
 if(args is ["--game",var gameRoot,var hardware]) { Fixtures.Game(gameRoot,hardware=="gpu"); return; }
 if(args.Length is < 2 or > 3)throw new ArgumentException("Provide repository, dotnet executable, and optionally --hardware-gpu.");
 var repo=Path.GetFullPath(args[0]);var dotnet=Path.GetFullPath(args[1]);bool hardwareGpu=args.Length==3&&args[2]=="--hardware-gpu";
-var workerExe=Path.Combine(repo,"backend","bin","optimizer","session","Roo.SessionHost.exe");
-var root=Path.Combine(Path.GetTempPath(),"roo-protected-session-validation-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+var workerExe=Path.Combine(repo,"backend","bin","optimizer","session","RooIndustries.SessionHost.exe");
+var root=Path.Combine(Path.GetTempPath(),"roo-industries-protected-session-validation-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
 var bin=Path.GetDirectoryName(typeof(Fixtures).Assembly.Location)!;
-var gamePath=Path.Combine(bin,"RooLaunchPolicyProbe.exe");var launcherPath=Path.Combine(bin,"RooProtectedLauncher.exe");
+var gamePath=Path.Combine(bin,"RooIndustriesLaunchPolicyProbe.exe");var launcherPath=Path.Combine(bin,"RooIndustriesProtectedLauncher.exe");
 File.Copy(gamePath,launcherPath,false);
 ulong originalMask=0,firstMask=0,secondMask=0;
 Process? launcher=null,worker=null;var activeRoots=new List<string>();var session=new ProtectedSessions(_=>false);int passed=0;
@@ -29,9 +29,9 @@ Process Run(string preview,string target){Directory.CreateDirectory(target);acti
 ProtectedSessionState State(string target)=>session.Status(target).State??throw new Exception("Session state missing");
 Process Launch(int number){var gameRoot=Path.Combine(root,"game-"+number);Directory.CreateDirectory(gameRoot);OperationFiles.Write(Path.Combine(root,"launch.json"),new{root=gameRoot,hardware=hardwareGpu?"gpu":"none"});Until(()=>File.Exists(Path.Combine(gameRoot,"ready.json")),"Game fixture did not start");var data=OperationFiles.Read<JsonElement>(Path.Combine(gameRoot,"ready.json"));return Process.GetProcessById(data.GetProperty("pid").GetInt32());}
 void CheckGame(Process game,int number){Check(game.WaitForExit(20000)&&game.ExitCode==0,"Owned game fixture exits successfully");if(hardwareGpu){var result=OperationFiles.Read<JsonElement>(Path.Combine(root,"game-"+number,"gpu-result.json"));Check(result.GetProperty("Adapter").GetProperty("VendorId").GetInt32()==0x1002&&result.GetProperty("Adapter").GetProperty("DeviceId").GetInt32()==0x7550&&result.GetProperty("Dispatches").GetInt64()>0&&result.GetProperty("verified").GetArrayLength()==4,"Actual RX9070XT GPU work and independent output checks completed");}}
-void Restored(string target){Until(()=>File.Exists(Path.Combine(target,"recovery-result.json")),"Recovery watcher did not finish");var state=State(target);Check(state.Status=="stopped"&&state.RegistryStatus=="restored"&&state.JobStatus=="cleared","Recovery reports cleared job and restored launch state");using var key=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooLaunchPolicyProbe.exe");Check(key is null,"Approved fixture IFEO image key is absent after restoration");Check(Oracle.Affinity(launcher!)==originalMask&&Oracle.Io(launcher!)==1&&Oracle.Memory(launcher!)==2,"Independent launcher oracle returns original controls");}
+void Restored(string target){Until(()=>File.Exists(Path.Combine(target,"recovery-result.json")),"Recovery watcher did not finish");var state=State(target);Check(state.Status=="stopped"&&state.RegistryStatus=="restored"&&state.JobStatus=="cleared","Recovery reports cleared job and restored launch state");using var key=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesLaunchPolicyProbe.exe");Check(key is null,"Approved fixture IFEO image key is absent after restoration");Check(Oracle.Affinity(launcher!)==originalMask&&Oracle.Io(launcher!)==1&&Oracle.Memory(launcher!)==2,"Independent launcher oracle returns original controls");}
 try{
- using(var existing=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooLaunchPolicyProbe.exe")){if(existing is not null)throw new InvalidOperationException("Fixture registry key already exists; do not overwrite it.");}
+ using(var existing=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesLaunchPolicyProbe.exe")){if(existing is not null)throw new InvalidOperationException("Fixture registry key already exists; do not overwrite it.");}
  launcher=Start(launcherPath,"--launcher",root);Until(()=>File.Exists(Path.Combine(root,"launcher-ready.json")),"Launcher fixture did not start");
  originalMask=Oracle.Affinity(launcher);firstMask=originalMask&(~originalMask+1);secondMask=originalMask^firstMask;
  if(secondMask==0)throw new InvalidOperationException("At least two allowed logical processors are required for the affinity-switch fixture.");
@@ -107,7 +107,7 @@ try{
 }
 
 static class Fixtures{
- public static void Launcher(string root){using var self=Process.GetCurrentProcess();Oracle.SetIo(self,1);Oracle.SetMemory(self,2);File.WriteAllText(Path.Combine(root,"launcher-ready.json"),JsonSerializer.Serialize(new{pid=self.Id}));var children=new List<Process>();try{var until=DateTime.UtcNow.AddMinutes(10);while(!File.Exists(Path.Combine(root,"stop-launcher"))&&DateTime.UtcNow<until){var path=Path.Combine(root,"launch.json");if(File.Exists(path)){using var doc=JsonDocument.Parse(File.ReadAllText(path));File.Delete(path);var info=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(typeof(Fixtures).Assembly.Location)!,"RooLaunchPolicyProbe.exe")){UseShellExecute=false,CreateNoWindow=true};info.ArgumentList.Add("--game");info.ArgumentList.Add(doc.RootElement.GetProperty("root").GetString()!);info.ArgumentList.Add(doc.RootElement.GetProperty("hardware").GetString()!);children.Add(Process.Start(info)!);}Thread.Sleep(50);}}finally{foreach(var child in children){if(!child.HasExited){child.Kill();child.WaitForExit();}child.Dispose();}}}
+ public static void Launcher(string root){using var self=Process.GetCurrentProcess();Oracle.SetIo(self,1);Oracle.SetMemory(self,2);File.WriteAllText(Path.Combine(root,"launcher-ready.json"),JsonSerializer.Serialize(new{pid=self.Id}));var children=new List<Process>();try{var until=DateTime.UtcNow.AddMinutes(10);while(!File.Exists(Path.Combine(root,"stop-launcher"))&&DateTime.UtcNow<until){var path=Path.Combine(root,"launch.json");if(File.Exists(path)){using var doc=JsonDocument.Parse(File.ReadAllText(path));File.Delete(path);var info=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(typeof(Fixtures).Assembly.Location)!,"RooIndustriesLaunchPolicyProbe.exe")){UseShellExecute=false,CreateNoWindow=true};info.ArgumentList.Add("--game");info.ArgumentList.Add(doc.RootElement.GetProperty("root").GetString()!);info.ArgumentList.Add(doc.RootElement.GetProperty("hardware").GetString()!);children.Add(Process.Start(info)!);}Thread.Sleep(50);}}finally{foreach(var child in children){if(!child.HasExited){child.Kill();child.WaitForExit();}child.Dispose();}}}
  public static void Game(string root,bool hardware){using var self=Process.GetCurrentProcess();using var gpu=hardware?new GpuWorkload(0x1002,0x7550,16384,256):null;File.WriteAllText(Path.Combine(root,"ready.json"),JsonSerializer.Serialize(new{pid=self.Id,adapter=gpu?.Adapter}));var until=DateTime.UtcNow.AddMinutes(8);while(!File.Exists(Path.Combine(root,"stop"))&&DateTime.UtcNow<until){gpu?.Run(1);Thread.Sleep(10);}if(gpu is not null)File.WriteAllText(Path.Combine(root,"gpu-result.json"),JsonSerializer.Serialize(new{gpu.Adapter,gpu.Dispatches,verified=gpu.VerifyOutput()}));}
 }
 static class Oracle{

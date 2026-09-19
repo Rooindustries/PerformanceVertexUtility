@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 internal static class WindowsPermissions
 {

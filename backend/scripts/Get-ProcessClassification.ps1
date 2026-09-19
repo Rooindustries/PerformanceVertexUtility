@@ -10,16 +10,16 @@ $ErrorActionPreference = 'Stop'
 
 try {
     $defaultProfilePath = Join-Path $PSScriptRoot '..\profiles\game-session.profile.json'
-    $resolvedProfilePath = Resolve-RooPath $ProfilePath $defaultProfilePath
-    $profile = Read-RooJsonFile $resolvedProfilePath
+    $resolvedProfilePath = Resolve-RooIndustriesPath $ProfilePath $defaultProfilePath
+    $profile = Read-RooIndustriesJsonFile $resolvedProfilePath
 
-    $catalogPathValue = [string](Get-RooPropertyValue $profile 'protectedCatalogPath' 'protected-processes.json')
+    $catalogPathValue = [string](Get-RooIndustriesPropertyValue $profile 'protectedCatalogPath' 'protected-processes.json')
     if ([System.IO.Path]::IsPathRooted($catalogPathValue)) {
         $protectedCatalogPath = $catalogPathValue
     } else {
         $protectedCatalogPath = [System.IO.Path]::GetFullPath((Join-Path (Split-Path $resolvedProfilePath -Parent) $catalogPathValue))
     }
-    $protectedCatalog = Read-RooJsonFile $protectedCatalogPath
+    $protectedCatalog = Read-RooIndustriesJsonFile $protectedCatalogPath
 
     $inventoryScript = Join-Path $PSScriptRoot 'Get-ProcessInventory.ps1'
     if ($IncludeCommandLine) {
@@ -29,17 +29,17 @@ try {
     }
 
     $classified = New-Object System.Collections.Generic.List[object]
-    foreach ($proc in @(Get-RooPropertyArray $inventory 'processes')) {
-        $info = Get-RooProcessClassificationInfo $proc $profile $protectedCatalog $TargetGameProcessName
+    foreach ($proc in @(Get-RooIndustriesPropertyArray $inventory 'processes')) {
+        $info = Get-RooIndustriesProcessClassificationInfo $proc $profile $protectedCatalog $TargetGameProcessName
         $classified.Add([pscustomobject]@{
-            pid = [int](Get-RooPropertyValue $proc 'pid' 0)
-            name = [string](Get-RooPropertyValue $proc 'name' '')
-            displayName = Get-RooPropertyValue $proc 'displayName' $null
-            executablePath = Get-RooPropertyValue $proc 'executablePath' $null
-            publisher = Get-RooPropertyValue $proc 'publisher' $null
-            commandLine = if ($IncludeCommandLine) { Get-RooPropertyValue $proc 'commandLine' $null } else { $null }
-            category = [string](Get-RooPropertyValue $proc 'category' 'unknown')
-            protection = [string](Get-RooPropertyValue $proc 'protection' 'unknown')
+            pid = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
+            name = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
+            displayName = Get-RooIndustriesPropertyValue $proc 'displayName' $null
+            executablePath = Get-RooIndustriesPropertyValue $proc 'executablePath' $null
+            publisher = Get-RooIndustriesPropertyValue $proc 'publisher' $null
+            commandLine = if ($IncludeCommandLine) { Get-RooIndustriesPropertyValue $proc 'commandLine' $null } else { $null }
+            category = [string](Get-RooIndustriesPropertyValue $proc 'category' 'unknown')
+            protection = [string](Get-RooIndustriesPropertyValue $proc 'protection' 'unknown')
             classification = $info.classification
             reasonCodes = @($info.reasonCodes)
             matchedRuleId = $info.matchedRuleId
@@ -49,14 +49,14 @@ try {
             profileMatched = [bool]$info.profileMatched
             blocked = [bool]$info.blocked
             protected = [bool]$info.protected
-            sessionId = Get-RooPropertyValue $proc 'sessionId' $null
-            priorityClass = Get-RooPropertyValue $proc 'priorityClass' $null
-            cpuPercent = Get-RooPropertyValue $proc 'cpuPercent' $null
-            workingSetBytes = [uint64](Get-RooPropertyValue $proc 'workingSetBytes' 0)
-            privateBytes = Get-RooPropertyValue $proc 'privateBytes' $null
-            gpuDedicatedBytes = Get-RooPropertyValue $proc 'gpuDedicatedBytes' $null
-            gpuSharedBytes = Get-RooPropertyValue $proc 'gpuSharedBytes' $null
-            isForegroundCandidate = [bool](Get-RooPropertyValue $proc 'isForegroundCandidate' $false)
+            sessionId = Get-RooIndustriesPropertyValue $proc 'sessionId' $null
+            priorityClass = Get-RooIndustriesPropertyValue $proc 'priorityClass' $null
+            cpuPercent = Get-RooIndustriesPropertyValue $proc 'cpuPercent' $null
+            workingSetBytes = [uint64](Get-RooIndustriesPropertyValue $proc 'workingSetBytes' 0)
+            privateBytes = Get-RooIndustriesPropertyValue $proc 'privateBytes' $null
+            gpuDedicatedBytes = Get-RooIndustriesPropertyValue $proc 'gpuDedicatedBytes' $null
+            gpuSharedBytes = Get-RooIndustriesPropertyValue $proc 'gpuSharedBytes' $null
+            isForegroundCandidate = [bool](Get-RooIndustriesPropertyValue $proc 'isForegroundCandidate' $false)
             canChangePriority = [bool]$info.canChangePriority
             risk = $info.risk
         }) | Out-Null
@@ -70,10 +70,10 @@ try {
 
     $result = [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         source = 'local-process-inventory'
-        profileId = [string](Get-RooPropertyValue $profile 'profileId' '')
+        profileId = [string](Get-RooIndustriesPropertyValue $profile 'profileId' '')
         profilePath = $resolvedProfilePath
         protectedCatalogPath = $protectedCatalogPath
         targetGameProcessName = if ([string]::IsNullOrWhiteSpace($TargetGameProcessName)) { $null } else { $TargetGameProcessName }
@@ -86,17 +86,17 @@ try {
             gameTargetCount = @($processArray | Where-Object { $_.classification -eq 'gameTarget' }).Count
             workingSetBytes = [uint64](($processArray | Measure-Object workingSetBytes -Sum).Sum)
             privateBytes = [uint64](($processArray | Measure-Object privateBytes -Sum).Sum)
-            sourceInventorySummary = Get-RooPropertyValue $inventory 'summary' $null
+            sourceInventorySummary = Get-RooIndustriesPropertyValue $inventory 'summary' $null
         }
         processes = $processArray
     }
 
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         schemaVersion = 1
-        productName = $script:RooProcessProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesProcessProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         source = 'local-process-inventory'
         profileId = $null
         profilePath = $ProfilePath
@@ -115,9 +115,9 @@ try {
         }
         processes = @()
         errors = @(
-            (New-RooIssue 'PROCESS_CLASSIFICATION_FAILED' $_.Exception.Message 'error' 'performance.classification' $ProfilePath $true 'Check the profile and protected process catalog paths.' $null)
+            (New-RooIndustriesIssue 'PROCESS_CLASSIFICATION_FAILED' $_.Exception.Message 'error' 'performance.classification' $ProfilePath $true 'Check the profile and protected process catalog paths.' $null)
         )
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

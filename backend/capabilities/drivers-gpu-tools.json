@@ -11,7 +11,7 @@
       "displayName": "NVIDIA Profile Preview",
       "technicalName": "Preview-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -exportProfile/-importProfile command metadata without process launch",
       "source": "nvpi",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "NVIDIA Profile Preview",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "medium",
@@ -62,7 +62,7 @@
       "displayName": "NVIDIA Profile Export Probe",
       "technicalName": "nvidiaProfileInspector.exe -exportProfile read-only probe to a temp .nip path",
       "source": "nvpi",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Profile Export",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "low",
@@ -113,7 +113,7 @@
       "displayName": "NVIDIA Profile Gated Import",
       "technicalName": "nvidiaProfileInspector.exe -importProfile through Invoke-NvidiaNipExecutor.ps1 export-before-import gate",
       "source": "nvpi",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "NVIDIA Profile Import",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "medium",
@@ -172,7 +172,7 @@
       "displayName": "NVIDIA Profile Restore Manifest",
       "technicalName": "Restore-NvidiaNipProfile.ps1 builds nvidiaProfileInspector.exe -importProfile rollback command metadata from prior export",
       "source": "nvpi",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "Profile Restore Manifest",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "medium",
@@ -219,7 +219,7 @@
       "displayName": "Base NIP Profile Catalog",
       "technicalName": "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\base-profile.nip",
       "source": "nvpi",
-      "implementedBy": "roo-script",
+      "implementedBy": "roo-industries-script",
       "frontendLabel": "NVIDIA Profile Catalog",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "medium",
@@ -289,7 +289,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -335,7 +335,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -381,7 +381,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -423,7 +423,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -465,7 +465,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -507,7 +507,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -549,7 +549,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -591,7 +591,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -633,7 +633,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -679,7 +679,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -721,7 +721,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -763,7 +763,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -805,7 +805,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -847,7 +847,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -889,7 +889,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -931,7 +931,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -973,7 +973,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -1015,7 +1015,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -1061,7 +1061,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {
@@ -1107,7 +1107,7 @@
       },
       "preview": {
         "status": "implemented",
-        "script": "backend/scripts/Get-RooUtilitiesInventory.ps1",
+        "script": "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
         "actionId": "drivers.utilities.inventory"
       },
       "apply": {

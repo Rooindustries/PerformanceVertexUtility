@@ -12,52 +12,52 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'NvidiaNip.Common.ps1')
 
 try {
-    $catalog = Read-RooNvidiaNipCatalog $CatalogPath
-    $profile = Get-RooNvidiaNipProfile $catalog $ProfileId
-    $hardware = Get-RooNvidiaHardwareEvidence $HardwareInventoryPath
-    $toolAsset = Get-RooPropertyValue $catalog 'toolAsset' $null
-    $profileName = [string](Get-RooPropertyValue $profile 'profileNameInNip' (Get-RooPropertyValue $profile 'name' $ProfileId))
+    $catalog = Read-RooIndustriesNvidiaNipCatalog $CatalogPath
+    $profile = Get-RooIndustriesNvidiaNipProfile $catalog $ProfileId
+    $hardware = Get-RooIndustriesNvidiaHardwareEvidence $HardwareInventoryPath
+    $toolAsset = Get-RooIndustriesPropertyValue $catalog 'toolAsset' $null
+    $profileName = [string](Get-RooIndustriesPropertyValue $profile 'profileNameInNip' (Get-RooIndustriesPropertyValue $profile 'name' $ProfileId))
     if ([string]::IsNullOrWhiteSpace($NvpiExecutablePath)) {
-        $NvpiExecutablePath = [string](Get-RooPropertyValue $toolAsset 'archivePath' 'Utilities\Other\NVPI\nvidiaProfileInspector.exe')
+        $NvpiExecutablePath = [string](Get-RooIndustriesPropertyValue $toolAsset 'archivePath' 'Utilities\Other\NVPI\nvidiaProfileInspector.exe')
     }
     if ([string]::IsNullOrWhiteSpace($NipSourcePath)) {
-        $NipSourcePath = [string](Get-RooPropertyValue $profile 'sourceFile' '')
+        $NipSourcePath = [string](Get-RooIndustriesPropertyValue $profile 'sourceFile' '')
     }
     if ([string]::IsNullOrWhiteSpace($ExportPath)) {
-        $ExportPath = Join-Path ([System.IO.Path]::GetTempPath()) ("roo-nvidia-nip-export-{0}-{1}.nip" -f (ConvertTo-RooNvidiaSafeId $ProfileId), (Get-RooFileStamp))
+        $ExportPath = Join-Path ([System.IO.Path]::GetTempPath()) ("roo-industries-nvidia-nip-export-{0}-{1}.nip" -f (ConvertTo-RooIndustriesNvidiaSafeId $ProfileId), (Get-RooIndustriesFileStamp))
     }
 
-    $exportCommand = New-RooNvidiaNipCommand -Operation 'export' -ExecutablePath $NvpiExecutablePath -ProfileName $profileName -NipPath $NipSourcePath -ExportPath $ExportPath
-    $importCommand = New-RooNvidiaNipCommand -Operation 'import' -ExecutablePath $NvpiExecutablePath -ProfileName $profileName -NipPath $NipSourcePath -ExportPath $ExportPath
-    $rollback = New-RooNvidiaNipRollbackManifest -Profile $profile -ExportCommand $exportCommand -ExportPath $ExportPath
+    $exportCommand = New-RooIndustriesNvidiaNipCommand -Operation 'export' -ExecutablePath $NvpiExecutablePath -ProfileName $profileName -NipPath $NipSourcePath -ExportPath $ExportPath
+    $importCommand = New-RooIndustriesNvidiaNipCommand -Operation 'import' -ExecutablePath $NvpiExecutablePath -ProfileName $profileName -NipPath $NipSourcePath -ExportPath $ExportPath
+    $rollback = New-RooIndustriesNvidiaNipRollbackManifest -Profile $profile -ExportCommand $exportCommand -ExportPath $ExportPath
 
     $gates = @(
-        (New-RooNvidiaNipGate 'nvidia-hardware-present' 'NVIDIA hardware detected' $true ([bool]$hardware.nvidiaGpuPresent) 'NIP profile import is NVIDIA-only.' $hardware),
-        (New-RooNvidiaNipGate 'export-before-import' 'Current NVIDIA profile export completed' $true $false 'The current profile must be exported before any import can be considered.' ([pscustomobject]@{ exportPath = $ExportPath; exportCommand = $exportCommand.commandLine })),
-        (New-RooNvidiaNipGate 'explicit-user-approval' 'Explicit profile import approval captured' $true $false 'A future apply path must capture fresh approval for this exact profile and export path.' $null),
-        (New-RooNvidiaNipGate 'future-nvpi-execution-flag' 'Future NVPI execution flag supplied' $true $false 'Backend validation and normal previews must not launch NVIDIA Profile Inspector.' $null),
-        (New-RooNvidiaNipGate 'local-benchmark-evidence' 'Local benchmark evidence attached' $true $false 'Profile recommendations require before/after benchmark evidence.' ([pscustomobject]@{ benchmarkStatus = Get-RooPropertyValue $profile 'benchmarkStatus' $null }))
+        (New-RooIndustriesNvidiaNipGate 'nvidia-hardware-present' 'NVIDIA hardware detected' $true ([bool]$hardware.nvidiaGpuPresent) 'NIP profile import is NVIDIA-only.' $hardware),
+        (New-RooIndustriesNvidiaNipGate 'export-before-import' 'Current NVIDIA profile export completed' $true $false 'The current profile must be exported before any import can be considered.' ([pscustomobject]@{ exportPath = $ExportPath; exportCommand = $exportCommand.commandLine })),
+        (New-RooIndustriesNvidiaNipGate 'explicit-user-approval' 'Explicit profile import approval captured' $true $false 'A future apply path must capture fresh approval for this exact profile and export path.' $null),
+        (New-RooIndustriesNvidiaNipGate 'future-nvpi-execution-flag' 'Future NVPI execution flag supplied' $true $false 'Backend validation and normal previews must not launch NVIDIA Profile Inspector.' $null),
+        (New-RooIndustriesNvidiaNipGate 'local-benchmark-evidence' 'Local benchmark evidence attached' $true $false 'Profile recommendations require before/after benchmark evidence.' ([pscustomobject]@{ benchmarkStatus = Get-RooIndustriesPropertyValue $profile 'benchmarkStatus' $null }))
     )
 
     $result = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.previewProfile'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         profileId = $ProfileId
         dryRun = $true
         status = if ($hardware.nvidiaGpuPresent) { 'preview' } else { 'blocked' }
         executionMode = 'preview-only'
-        catalogPath = Get-RooNvidiaNipCatalogPath $CatalogPath
+        catalogPath = Get-RooIndustriesNvidiaNipCatalogPath $CatalogPath
         profile = [pscustomobject]@{
-            profileId = [string](Get-RooPropertyValue $profile 'profileId' '')
-            name = [string](Get-RooPropertyValue $profile 'name' '')
+            profileId = [string](Get-RooIndustriesPropertyValue $profile 'profileId' '')
+            name = [string](Get-RooIndustriesPropertyValue $profile 'name' '')
             profileNameInNip = $profileName
             sourceFile = $NipSourcePath
-            sourceSha256 = Get-RooPropertyValue $profile 'sourceSha256' $null
-            settingCount = Get-RooPropertyValue $profile 'settingCount' $null
-            supportedHardware = @(Get-RooPropertyArray $profile 'supportedHardware')
-            risk = Get-RooPropertyValue $profile 'risk' 'medium'
+            sourceSha256 = Get-RooIndustriesPropertyValue $profile 'sourceSha256' $null
+            settingCount = Get-RooIndustriesPropertyValue $profile 'settingCount' $null
+            supportedHardware = @(Get-RooIndustriesPropertyArray $profile 'supportedHardware')
+            risk = Get-RooIndustriesPropertyValue $profile 'risk' 'medium'
         }
         hardwareGate = $hardware
         commands = [pscustomobject]@{
@@ -76,28 +76,28 @@ try {
             rollbackManifestReady = $true
             blockingGateCount = @($gates | Where-Object { $_.blocking }).Count
         }
-        warnings = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_PREVIEW_ONLY' 'NVPI command metadata and rollback manifest were built without launching NVIDIA Profile Inspector.' 'info' $ProfileId $false 'Use this preview to review export/import gates before a future explicitly-enabled executor.' $null))
+        warnings = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_PREVIEW_ONLY' 'NVPI command metadata and rollback manifest were built without launching NVIDIA Profile Inspector.' 'info' $ProfileId $false 'Use this preview to review export/import gates before a future explicitly-enabled executor.' $null))
         errors = @()
-        logs = @((New-RooLog 'NVIDIA NIP profile preview completed without process launch.'))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP profile preview completed without process launch.'))
     }
 
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.previewProfile'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         profileId = $ProfileId
         dryRun = $true
         status = 'failed'
         executionMode = 'preview-only'
         summary = [pscustomobject]@{ willRunNvpi = $false; willImportProfile = $false; willWriteState = $false }
         warnings = @()
-        errors = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_PREVIEW_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check the catalog, profile id, and hardware inventory path.' $null))
-        logs = @((New-RooLog 'NVIDIA NIP profile preview failed.' 'error'))
+        errors = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_PREVIEW_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check the catalog, profile id, and hardware inventory path.' $null))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP profile preview failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }
 

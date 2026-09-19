@@ -54,7 +54,7 @@ On Windows, run the complete suite in an isolated source copy:
 .\tools\scripts\Test-Baseline.ps1 -BuildFrontend
 ```
 
-Set `ROO_PYTHON_EXE` or `ROO_DOTNET_EXE` when the development interpreters are outside `PATH`. Desktop compilation needs the .NET 8 SDK. The suite invokes Windows PowerShell 5.1, captures one log per test and a JSON summary under ignored `artifacts/validation`, and checks that `backend/state` is empty. It does not launch the WinUI app.
+Set `ROO_INDUSTRIES_PYTHON_EXE` or `ROO_INDUSTRIES_DOTNET_EXE` when the development interpreters are outside `PATH`. Desktop compilation needs the .NET 8 SDK. The suite invokes Windows PowerShell 5.1, captures one log per test and a JSON summary under ignored `artifacts/validation`, and checks that `backend/state` is empty. It does not launch the WinUI app.
 
 Run individual regressions with `-TestName`:
 

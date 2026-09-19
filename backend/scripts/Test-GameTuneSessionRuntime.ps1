@@ -141,15 +141,15 @@ try {
 }
 
 try {
-    $liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-game-tune-live-$([guid]::NewGuid().ToString('N'))"
+    $liveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-game-tune-live-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $liveRoot -Force | Out-Null
-    $probeExe = Join-Path $liveRoot 'RooTuneProbe.exe'
+    $probeExe = Join-Path $liveRoot 'RooIndustriesTuneProbe.exe'
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
     $probe = $null
     try {
         $probe = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 800
-        $before = Get-RooProcessControlState $probe.Id $null
+        $before = Get-RooIndustriesProcessControlState $probe.Id $null
         $targetAffinity = if (($before.affinityMask -band 1) -eq 1 -and [int64]$before.affinityMask -ne 1) { 1 } elseif (($before.affinityMask -band 2) -eq 2) { 2 } else { $before.affinityMask }
         $profilePath = Join-Path $liveRoot 'live-profile.json'
         $stateRoot = Join-Path $liveRoot 'state'
@@ -163,7 +163,7 @@ try {
             protectedCatalogPath = (Join-Path $repoRoot 'backend\profiles\protected-processes.json')
             foregroundGame = [pscustomobject]@{
                 ruleId = 'live-probe-controls'
-                processNames = @('RooTuneProbe.exe')
+                processNames = @('RooIndustriesTuneProbe.exe')
                 priorityClass = 'AboveNormal'
                 affinityMask = [int64]$targetAffinity
                 ioPriority = 'Low'
@@ -192,12 +192,12 @@ try {
 
         $start = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') `
             -ProfilePath $profilePath `
-            -TargetGameProcessName 'RooTuneProbe.exe' `
+            -TargetGameProcessName 'RooIndustriesTuneProbe.exe' `
             -PollIntervalSeconds 1 `
             -MaxDurationSeconds 1 `
             -StateRoot $stateRoot `
             -ConfirmApply | ConvertFrom-Json
-        $afterApply = Get-RooProcessControlState $probe.Id $null
+        $afterApply = Get-RooIndustriesProcessControlState $probe.Id $null
 
         if ($start.dryRun -eq $false -and $start.status -eq 'completed' -and @($start.changedItems).Count -ge 1) {
             Add-Pass 'Live Game Tune session applied process controls to disposable probe'
@@ -233,7 +233,7 @@ try {
         }
 
         $restorePreview = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath | ConvertFrom-Json
-        $afterPreview = Get-RooProcessControlState $probe.Id $null
+        $afterPreview = Get-RooIndustriesProcessControlState $probe.Id $null
         if ($restorePreview.dryRun -eq $true -and $afterPreview.priorityClass -eq 'AboveNormal' -and $afterPreview.ioPriority -eq 'Low' -and $afterPreview.gpuPriority -eq 'AboveNormal') {
             Add-Pass 'Live Game Tune restore preview did not change the probe'
         } else {
@@ -241,7 +241,7 @@ try {
         }
 
         $restore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply | ConvertFrom-Json
-        $afterRestore = Get-RooProcessControlState $probe.Id $null
+        $afterRestore = Get-RooIndustriesProcessControlState $probe.Id $null
         if ($restore.dryRun -eq $false -and $restore.status -eq 'completed' -and @($restore.restoredItems).Count -ge 1) {
             Add-Pass 'Live Game Tune restore confirmed against disposable probe'
         } else {
@@ -253,7 +253,7 @@ try {
             Add-Failure "Live probe restore mismatch: priority $($afterRestore.priorityClass)/$($before.priorityClass), affinity $($afterRestore.affinityMask)/$($before.affinityMask), I/O $($afterRestore.ioPriority)/$($before.ioPriority), GPU $($afterRestore.gpuPriority)/$($before.gpuPriority)"
         }
     } finally {
-        if ($probe) { Stop-RooValidationProcess $probe }
+        if ($probe) { Stop-RooIndustriesValidationProcess $probe }
         $tempRoot = [System.IO.Path]::GetTempPath()
         $fullLiveRoot = [System.IO.Path]::GetFullPath($liveRoot)
         if ($fullLiveRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullLiveRoot)) {

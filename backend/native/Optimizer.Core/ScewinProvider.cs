@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record FirmwarePackageFile([property: JsonRequired] string Name, [property: JsonRequired] string Hash);
 public sealed record FirmwarePackage([property: JsonRequired] string Executable, [property: JsonRequired] string Version,

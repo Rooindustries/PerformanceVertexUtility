@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record CleanupApplication
 {

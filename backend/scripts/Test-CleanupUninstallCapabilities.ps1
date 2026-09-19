@@ -68,8 +68,8 @@ function Get-StateEntryCount {
 }
 
 function Resolve-UtilitiesRoot {
-    if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) {
-        return [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT)
+    if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ROOT)) {
+        return [System.IO.Path]::GetFullPath($env:ROO_INDUSTRIES_UTILITIES_ROOT)
     }
     return [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities'))
 }
@@ -138,8 +138,8 @@ function Invoke-DetectionRule {
 $stateBefore = Get-StateEntryCount
 
 $allowedFamilies = @('process-controls', 'cleanup-uninstall', 'drivers-gpu-tools', 'system-optimizations')
-$allowedSources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-native')
-$allowedImplementedBy = @('roo-native', 'roo-script', 'external-tool', 'not-implemented')
+$allowedSources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-industries-native')
+$allowedImplementedBy = @('roo-industries-native', 'roo-industries-script', 'external-tool', 'not-implemented')
 $allowedRiskLevels = @('safe', 'low', 'medium', 'high', 'critical')
 $allowedPreviewStatuses = @('implemented', 'not-implemented')
 $allowedApplyStatuses = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')

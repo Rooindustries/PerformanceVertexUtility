@@ -10,7 +10,7 @@ CPU selections can use logical processors, performance/efficiency classes, one t
 
 **Saved rules** can be edited, paused or deleted. They store semantic CPU selection and a topology fingerprint, resolving fresh opaque IDs for each process instance. Hard-affinity rules also bind the reviewed topology. Rules apply only to the current Windows user's matching processes. Exact executable-path matching is the default; filename matching and executable-file hash binding are explicit options. An external field change suspends that instance rather than repeatedly overriding it.
 
-The rule worker runs separately from the desktop. **Enable at sign-in** registers a task for the current user; **Stop and restore** verifies restoration of still-owned controls. Closing the desktop does not stop an enabled worker. Rules and recovery state live under `%LOCALAPPDATA%\RooOptimizationSuite\process-rules`.
+The rule worker runs separately from the desktop. **Enable at sign-in** registers a task for the current user; **Stop and restore** verifies restoration of still-owned controls. Closing the desktop does not stop an enabled worker. Rules and recovery state live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\process-rules`.
 
 In **Apps & Cleanup → Remove apps**, select applications and review their published removal commands. The queue runs sequentially. Stop queue lets the current remover finish; Resume runs only untouched entries. Unknown outcomes require reconciliation. A restart requirement is satisfied only by a Windows boot after that remover's recorded creation time; an older reboot of a resumed queue is insufficient.
 
@@ -18,7 +18,7 @@ After removal, scan one app or all completed removals. Ownership checks retain t
 
 Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
 
-Desktop operations and backups live under `%LOCALAPPDATA%\RooOptimizationSuite\operations`. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
+Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
 
 ## Native helper
 
@@ -73,8 +73,8 @@ Inspect the topology and a target before selecting IDs:
 Create a preview using IDs from the current topology. The example paths are caller-owned operation storage, not temporary deletion targets:
 
 ```powershell
-$preview = 'C:\RooOperations\game-cpu-preview.json'
-$journal = 'C:\RooOperations\game-cpu-journal.json'
+$preview = 'C:\RooIndustriesOperations\game-cpu-preview.json'
+$journal = 'C:\RooIndustriesOperations\game-cpu-journal.json'
 .\backend\scripts\Invoke-ProcessCpuSets.ps1 -Action Preview `
     -TargetProcessId $targetId -CpuSetId $selectedIds -OutputPath $preview
 ```
@@ -104,7 +104,7 @@ The existing native and PowerShell governors now also limit restoration to recor
 ```powershell
 .\backend\scripts\Get-InstalledAppInventory.ps1
 .\backend\scripts\New-BulkUninstallPlan.ps1 -AppId $selectedAppIds `
-    -OutputPath 'C:\RooOperations\bulk-preview.json'
+    -OutputPath 'C:\RooIndustriesOperations\bulk-preview.json'
 ```
 
 `-Quiet` uses a published quiet command for registry applications. It does not invent silent switches. A saved inventory may be used for preview, but presence and registration bindings are checked against the actual Windows registry or Appx inventory before execution. Winget text rows without an exact installed identity have no removal adapter in this queue.
@@ -112,14 +112,14 @@ The existing native and PowerShell governors now also limit restoration to recor
 After review, execute the exact plan and retain its journal:
 
 ```powershell
-$plan = 'C:\RooOperations\bulk-preview.json'
-$journal = 'C:\RooOperations\bulk-journal.json'
+$plan = 'C:\RooIndustriesOperations\bulk-preview.json'
+$journal = 'C:\RooIndustriesOperations\bulk-journal.json'
 $reviewHash = (Get-FileHash -LiteralPath $plan -Algorithm SHA256).Hash
 .\backend\scripts\Invoke-BulkUninstall.ps1 -Action Apply -InputPath $plan `
     -ReviewSha256 $reviewHash -JournalPath $journal -ConfirmApply
 ```
 
-Selections requiring dependency review also need `-ManualReviewApproved`. Protected selections remain excluded. An executable read lease prevents replacement between the final executable hash check and process launch. The exact registration fingerprint must still match the preview. A durable per-app claim prevents another queue from relaunching an unresolved removal. Real claims live under the current user's `LocalApplicationData\RooOptimizationSuite\uninstall-claims`; fixture claims remain beneath their disposable root.
+Selections requiring dependency review also need `-ManualReviewApproved`. Protected selections remain excluded. An executable read lease prevents replacement between the final executable hash check and process launch. The exact registration fingerprint must still match the preview. A durable per-app claim prevents another queue from relaunching an unresolved removal. Real claims live under the current user's `LocalApplicationData\RooIndustriesOptimizationSuite\uninstall-claims`; fixture claims remain beneath their disposable root.
 
 The queue writes dispatch intent before launching each command. It retains PID and process creation time while observing the remover. Exit zero is not enough: the selected app registration must also be absent. This verifies registration removal, not every file, service, dependency or shared component that the app used.
 
@@ -154,7 +154,7 @@ The queue ends with `cleanup-review-required` and never deletes leftovers. Run a
 ```powershell
 .\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Scan `
     -QueueJournalPath $journal -AppId $appId
-$cleanupPreview = 'C:\RooOperations\leftover-review.json'
+$cleanupPreview = 'C:\RooIndustriesOperations\leftover-review.json'
 .\backend\scripts\Invoke-RemovalLeftovers.ps1 -Action Preview `
     -QueueJournalPath $journal -AppId $appId -ItemId $selectedLeftoverIds -OutputPath $cleanupPreview
 $cleanupHash = (Get-FileHash -LiteralPath $cleanupPreview -Algorithm SHA256).Hash
@@ -170,12 +170,12 @@ File-only cleanup continues through the existing exact-target allowlist, backup 
 
 ## Cleanup exclusions
 
-`Invoke-CleanupExclusions.ps1` manages the current Windows user's exclusions for Roo's application cleanup. Each entry protects a local path and its descendants, a registry subtree, or one named registry value. A selected folder or whole key containing an excluded item is also protected. Discovery explains the exclusion in the item's evidence.
+`Invoke-CleanupExclusions.ps1` manages the current Windows user's exclusions for Roo Industries's application cleanup. Each entry protects a local path and its descendants, a registry subtree, or one named registry value. A selected folder or whole key containing an excluded item is also protected. Discovery explains the exclusion in the item's evidence.
 
 ```powershell
 $current = .\backend\scripts\Invoke-CleanupExclusions.ps1 -Action Status | ConvertFrom-Json
 .\backend\scripts\Invoke-CleanupExclusions.ps1 -Action Save `
-    -InputPath 'C:\RooOperations\exclusions.json' `
+    -InputPath 'C:\RooIndustriesOperations\exclusions.json' `
     -ExpectedRevision $current.data.revision -ConfirmApply
 ```
 
@@ -200,7 +200,7 @@ Paths must be absolute local paths beneath a drive root. Registry entries use `C
 
 The saved document is bound to the Windows user and machine. Saving requires the revision returned by the latest read; a stale editor cannot overwrite another update. Canonical file and native registry identities prevent short-path and shared-view aliases from bypassing exclusions. Missing future paths are resolved through their existing ancestors. Unreadable or unsupported identities produce an error for review.
 
-Native application cleanup, cleanup batches, and the older file cleanup manifest/apply commands enforce exclusions. Apply checks the current list again, so adding an exclusion after preview stops further deletion. Already completed changes remain in their recovery journals. Restoration remains available if the exclusion list changes or becomes unreadable. Vendor removal executables control their own changes; these exclusions govern Roo's subsequent cleanup.
+Native application cleanup, cleanup batches, and the older file cleanup manifest/apply commands enforce exclusions. Apply checks the current list again, so adding an exclusion after preview stops further deletion. Already completed changes remain in their recovery journals. Restoration remains available if the exclusion list changes or becomes unreadable. Vendor removal executables control their own changes; these exclusions govern Roo Industries's subsequent cleanup.
 
 ## Restore selected applications
 
@@ -209,8 +209,8 @@ The native `cleanup-batch-restore` request accepts `restoreAppIds`, an array of 
 ```json
 {
   "schemaVersion": 1,
-  "repoRoot": "C:\\RooOptimizationSuite",
-  "journalPath": "C:\\RooOperations\\cleanup-batch-journal.json",
+  "repoRoot": "C:\\RooIndustriesOptimizationSuite",
+  "journalPath": "C:\\RooIndustriesOperations\\cleanup-batch-journal.json",
   "restoreAppIds": ["the-exact-app-id-from-the-batch"],
   "confirm": true
 }
@@ -231,8 +231,8 @@ The capability IDs are `process-controls.cpu-sets`, `cleanup-uninstall.bulk-remo
 | Bulk apply | `inputPath`, `reviewSha256`, `journalPath`; optional `manualReviewApproved`, `timeoutSeconds`, `outputPath` |
 
 ```powershell
-.\backend\scripts\Invoke-RooCapability.ps1 -CapabilityId process-controls.cpu-sets `
-    -Action preview -RequestPath 'C:\RooOperations\request.json'
+.\backend\scripts\Invoke-RooIndustriesCapability.ps1 -CapabilityId process-controls.cpu-sets `
+    -Action preview -RequestPath 'C:\RooIndustriesOperations\request.json'
 ```
 
 Mutating router actions additionally require `-ConfirmApply`. Router errors preserve the nested backend evidence. Default CPU Sets preview without a request detects topology; bulk preview without a request describes its required selection. A vendor uninstall has no restore route. Keep journals and reviewed inputs separate from output files.
@@ -259,7 +259,7 @@ The inventory contains 376 setting/control records, 267 application/package reco
 
 `Measure-OptimizerGpu.ps1 -OutputPath <new-file>` compares normal and BelowNormal background GPU priority using owned offscreen compute workloads. The default adapter IDs select the 9070 XT; `-VendorId` and `-DeviceId` must identify the intended hardware. It verifies adapter identity, GPU output and priority recovery, keeping CPU completion timing separate from GPU timestamps. Analyze with `python tools/validation/analyze_gpu_measurement.py <file> --output <summary>`; `Test-GpuMeasurementAnalysis.ps1` checks its guards. The [measured GPU result](research/parity-validation.md#measured-gpu-contention-result) did not establish a benefit for that workload.
 
-`Measure-OptimizerReference.ps1 -ReferenceGovernorPath <verified-exe> -RecoveryHeartbeatPath <active-guard-heartbeat> -OutputPath <new-file>` adds separate normal, Roo and stock Process Lasso CPU conditions. The installed governor must already be stopped under an approved recovery guard; the measurement command does not stop services. It accepts only the pinned signed 18.3.0.34 reference, writes private settings, and rejects competing governors or unapplied rules. Both engines request 500 ms polling (`Performance.UpdateSpeedCore` for Lasso). Analyze with `tools/validation/analyze_reference_measurement.py`; its negative cases run through `Test-CpuMeasurementAnalysis.ps1`. Reference launch requires a space-free configuration path resolved through Windows short names. The benchmark installs no vendor software.
+`Measure-OptimizerReference.ps1 -ReferenceGovernorPath <verified-exe> -RecoveryHeartbeatPath <active-guard-heartbeat> -OutputPath <new-file>` adds separate normal, Roo Industries and stock Process Lasso CPU conditions. The installed governor must already be stopped under an approved recovery guard; the measurement command does not stop services. It accepts only the pinned signed 18.3.0.34 reference, writes private settings, and rejects competing governors or unapplied rules. Both engines request 500 ms polling (`Performance.UpdateSpeedCore` for Lasso). Analyze with `tools/validation/analyze_reference_measurement.py`; its negative cases run through `Test-CpuMeasurementAnalysis.ps1`. Reference launch requires a space-free configuration path resolved through Windows short names. The benchmark installs no vendor software.
 
 New reusable checks are `Test-ProcessCpuSets.ps1`, `Test-BulkUninstall.ps1`, `Test-InstalledAppIdentity.ps1`, `Test-NativeGovernorRestoreOwnership.ps1` and `Test-UpstreamSettingsCatalog.ps1`. The combined cleanup regression now includes a vendor fixture that changes an existing file and creates a new file. Tests use disposable processes, registrations represented by fixture markers, and isolated journals; actual installed applications are inventoried read-only.
 

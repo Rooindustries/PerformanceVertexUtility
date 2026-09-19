@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed class RegistryApiException(string api, int status) : Win32Exception(status, api + " failed with registry status " + status + ": " + new Win32Exception(status).Message)
 {

@@ -1,10 +1,10 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
-$env:ROO_DOTNET_EXE=$DotNetPath
-$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-exclusion-host-'+[Guid]::NewGuid().ToString('N'))
-$policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\cleanup-exclusions.json'
+$env:ROO_INDUSTRIES_DOTNET_EXE=$DotNetPath
+$root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-exclusion-host-'+[Guid]::NewGuid().ToString('N'))
+$policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
 $before=if(Test-Path $policy){[IO.File]::ReadAllBytes($policy)}else{$null}
 $ownedRevision=$null
 $command=Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1'
@@ -19,7 +19,7 @@ try {
     [IO.File]::WriteAllText($sentinel,'independent legacy sentinel')
     $exclusionInput=Join-Path $root 'exclusions.json'
     $exclusions=@{paths=@($original.data.exclusions.paths)+@($sentinel);registry=@($original.data.exclusions.registry)}
-    Write-RooOperationJson $exclusions $exclusionInput
+    Write-RooIndustriesOperationJson $exclusions $exclusionInput
     $unconfirmed=$false
     try {& $command -Action Save -InputPath $exclusionInput -DotNetPath $DotNetPath|Out-Null} catch {if($_.Exception.Message -notlike '*Confirm the new cleanup exclusion list*'){throw};$unconfirmed=$true}
     Assert $unconfirmed 'Public exclusion updates require explicit confirmation'
@@ -41,9 +41,9 @@ try {
     $manifestPath=Join-Path $root 'manifest.json'
     $scanPath=Join-Path $root 'scan.json'
     $item=@{itemId='folder';type='folder';target=$target;protected=$false;defaultSelected=$true}
-    Write-RooOperationJson @{status='preview';commands=@(@{appId='fixture:exclusion';executable=$null;blocked=$false;protected=$false;reviewRequired=$false});errors=@()} $officialPath
-    Write-RooOperationJson @{appId='fixture:exclusion';manifestId='fixture-exclusion';items=@($item);errors=@()} $manifestPath
-    Write-RooOperationJson @{appId='fixture:exclusion';scanId='fixture-scan';items=@($item);errors=@()} $scanPath
+    Write-RooIndustriesOperationJson @{status='preview';commands=@(@{appId='fixture:exclusion';executable=$null;blocked=$false;protected=$false;reviewRequired=$false});errors=@()} $officialPath
+    Write-RooIndustriesOperationJson @{appId='fixture:exclusion';manifestId='fixture-exclusion';items=@($item);errors=@()} $manifestPath
+    Write-RooIndustriesOperationJson @{appId='fixture:exclusion';scanId='fixture-scan';items=@($item);errors=@()} $scanPath
     $manifest=(& (Join-Path $PSScriptRoot 'New-CleanupDeletionManifest.ps1') -ScanPath $scanPath -ItemId @('folder'))|ConvertFrom-Json
     Assert (@($manifest.errors).Count -eq 1 -and $manifest.errors[0].message -like '*Excluded path:*') 'Legacy manifest creation respects native cleanup exclusions'
     $arguments=@{OfficialPreviewPath=$officialPath;CleanupManifestPath=$manifestPath;ApprovedAppId='fixture:exclusion';ExecutorMode='Real';

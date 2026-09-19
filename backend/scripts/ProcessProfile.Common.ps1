@@ -1,29 +1,29 @@
-$script:RooProcessProductName = 'Roo Industries Optimization Suite'
-$script:RooAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High')
-$script:RooAllowedIoPriorities = @('VeryLow', 'Low', 'Normal')
-$script:RooAllowedGpuPriorities = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High', 'Realtime')
+$script:RooIndustriesProcessProductName = 'Roo Industries Optimization Suite'
+$script:RooIndustriesAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High')
+$script:RooIndustriesAllowedIoPriorities = @('VeryLow', 'Low', 'Normal')
+$script:RooIndustriesAllowedGpuPriorities = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High', 'Realtime')
 
-function ConvertTo-RooWindowsArgument {
+function ConvertTo-RooIndustriesWindowsArgument {
     param([string]$Value)
     $escaped = [regex]::Replace($Value, '(\\*)"', '$1$1\"')
     $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
     return '"' + $escaped + '"'
 }
 
-function Join-RooWindowsArguments {
+function Join-RooIndustriesWindowsArguments {
     param([string[]]$Arguments)
-    return (@($Arguments | ForEach-Object { ConvertTo-RooWindowsArgument $_ }) -join ' ')
+    return (@($Arguments | ForEach-Object { ConvertTo-RooIndustriesWindowsArgument $_ }) -join ' ')
 }
 
-function Get-RooUtcStamp {
+function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
-function Get-RooFileStamp {
+function Get-RooIndustriesFileStamp {
     return (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
 }
 
-function Resolve-RooPath {
+function Resolve-RooIndustriesPath {
     param(
         [string]$Path,
         [string]$DefaultPath
@@ -37,7 +37,7 @@ function Resolve-RooPath {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
 }
 
-function Read-RooJsonFile {
+function Read-RooIndustriesJsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "JSON file not found: $Path"
@@ -45,7 +45,7 @@ function Read-RooJsonFile {
     return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
 }
 
-function Ensure-RooDirectory {
+function Ensure-RooIndustriesDirectory {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return }
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -53,27 +53,27 @@ function Ensure-RooDirectory {
     }
 }
 
-function Write-RooJsonOutput {
+function Write-RooIndustriesJsonOutput {
     param(
         [object]$Value,
         [string]$OutputPath
     )
     $json = $Value | ConvertTo-Json -Depth 24
     if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-        $resolved = Resolve-RooPath $OutputPath (Join-Path (Get-Location) $OutputPath)
-        Ensure-RooDirectory (Split-Path $resolved -Parent)
+        $resolved = Resolve-RooIndustriesPath $OutputPath (Join-Path (Get-Location) $OutputPath)
+        Ensure-RooIndustriesDirectory (Split-Path $resolved -Parent)
         $json | Set-Content -LiteralPath $resolved -Encoding UTF8
     }
     return $json
 }
 
-function Get-RooArray {
+function Get-RooIndustriesArray {
     param([object]$Value)
     if ($null -eq $Value) { return @() }
     return @($Value)
 }
 
-function Get-RooPropertyArray {
+function Get-RooIndustriesPropertyArray {
     param(
         [object]$Object,
         [string]$Name
@@ -81,10 +81,10 @@ function Get-RooPropertyArray {
     if ($null -eq $Object) { return @() }
     $prop = $Object.PSObject.Properties[$Name]
     if ($null -eq $prop) { return @() }
-    return @(Get-RooArray $prop.Value)
+    return @(Get-RooIndustriesArray $prop.Value)
 }
 
-function Get-RooPropertyValue {
+function Get-RooIndustriesPropertyValue {
     param(
         [object]$Object,
         [string]$Name,
@@ -97,7 +97,7 @@ function Get-RooPropertyValue {
     return $prop.Value
 }
 
-function Get-RooNormalizedProcessName {
+function Get-RooIndustriesNormalizedProcessName {
     param([string]$Name)
     if ([string]::IsNullOrWhiteSpace($Name)) { return '' }
     $n = $Name.Trim().ToLowerInvariant()
@@ -107,38 +107,38 @@ function Get-RooNormalizedProcessName {
     return $n
 }
 
-function Test-RooProcessNameEquals {
+function Test-RooIndustriesProcessNameEquals {
     param(
         [string]$Left,
         [string]$Right
     )
-    return (Get-RooNormalizedProcessName $Left) -eq (Get-RooNormalizedProcessName $Right)
+    return (Get-RooIndustriesNormalizedProcessName $Left) -eq (Get-RooIndustriesNormalizedProcessName $Right)
 }
 
-function Test-RooAnyNameMatch {
+function Test-RooIndustriesAnyNameMatch {
     param(
         [string]$ProcessName,
         [object[]]$Names
     )
-    foreach ($name in @(Get-RooArray $Names)) {
-        if (Test-RooProcessNameEquals $ProcessName ([string]$name)) { return $true }
+    foreach ($name in @(Get-RooIndustriesArray $Names)) {
+        if (Test-RooIndustriesProcessNameEquals $ProcessName ([string]$name)) { return $true }
     }
     return $false
 }
 
-function Test-RooAnyWildcardMatch {
+function Test-RooIndustriesAnyWildcardMatch {
     param(
         [string]$Value,
         [object[]]$Patterns
     )
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-    foreach ($pattern in @(Get-RooArray $Patterns)) {
+    foreach ($pattern in @(Get-RooIndustriesArray $Patterns)) {
         if ($Value -like [string]$pattern) { return $true }
     }
     return $false
 }
 
-function Test-RooProcessMatch {
+function Test-RooIndustriesProcessMatch {
     param(
         [object]$Process,
         [object]$Match
@@ -153,32 +153,32 @@ function Test-RooProcessMatch {
     $category = [string]$Process.category
 
     $names = @()
-    $names += Get-RooPropertyArray $Match 'names'
-    $names += Get-RooPropertyArray $Match 'processNames'
+    $names += Get-RooIndustriesPropertyArray $Match 'names'
+    $names += Get-RooIndustriesPropertyArray $Match 'processNames'
     if ($names.Count -gt 0) {
         $hasPositiveSelector = $true
-        if (Test-RooAnyNameMatch $processName $names) { $matched = $true }
+        if (Test-RooIndustriesAnyNameMatch $processName $names) { $matched = $true }
     }
 
-    $namePatterns = Get-RooPropertyArray $Match 'namePatterns'
+    $namePatterns = Get-RooIndustriesPropertyArray $Match 'namePatterns'
     if ($namePatterns.Count -gt 0) {
         $hasPositiveSelector = $true
-        if (Test-RooAnyWildcardMatch $processName $namePatterns) { $matched = $true }
+        if (Test-RooIndustriesAnyWildcardMatch $processName $namePatterns) { $matched = $true }
     }
 
-    $pathPatterns = Get-RooPropertyArray $Match 'pathPatterns'
+    $pathPatterns = Get-RooIndustriesPropertyArray $Match 'pathPatterns'
     if ($pathPatterns.Count -gt 0) {
         $hasPositiveSelector = $true
-        if (Test-RooAnyWildcardMatch $processPath $pathPatterns) { $matched = $true }
+        if (Test-RooIndustriesAnyWildcardMatch $processPath $pathPatterns) { $matched = $true }
     }
 
-    $commandLinePatterns = Get-RooPropertyArray $Match 'commandLinePatterns'
+    $commandLinePatterns = Get-RooIndustriesPropertyArray $Match 'commandLinePatterns'
     if ($commandLinePatterns.Count -gt 0) {
         $hasPositiveSelector = $true
-        if (Test-RooAnyWildcardMatch $commandLine $commandLinePatterns) { $matched = $true }
+        if (Test-RooIndustriesAnyWildcardMatch $commandLine $commandLinePatterns) { $matched = $true }
     }
 
-    $categories = Get-RooPropertyArray $Match 'processCategories'
+    $categories = Get-RooIndustriesPropertyArray $Match 'processCategories'
     if ($categories.Count -gt 0) {
         $hasPositiveSelector = $true
         foreach ($candidate in $categories) {
@@ -188,13 +188,13 @@ function Test-RooProcessMatch {
 
     if (-not $hasPositiveSelector -or -not $matched) { return $false }
 
-    $excludeNames = Get-RooPropertyArray $Match 'excludeProcessNames'
-    if ($excludeNames.Count -gt 0 -and (Test-RooAnyNameMatch $processName $excludeNames)) { return $false }
+    $excludeNames = Get-RooIndustriesPropertyArray $Match 'excludeProcessNames'
+    if ($excludeNames.Count -gt 0 -and (Test-RooIndustriesAnyNameMatch $processName $excludeNames)) { return $false }
 
-    $excludeNamePatterns = Get-RooPropertyArray $Match 'excludeNamePatterns'
-    if ($excludeNamePatterns.Count -gt 0 -and (Test-RooAnyWildcardMatch $processName $excludeNamePatterns)) { return $false }
+    $excludeNamePatterns = Get-RooIndustriesPropertyArray $Match 'excludeNamePatterns'
+    if ($excludeNamePatterns.Count -gt 0 -and (Test-RooIndustriesAnyWildcardMatch $processName $excludeNamePatterns)) { return $false }
 
-    $excludeCategories = Get-RooPropertyArray $Match 'excludeProcessCategories'
+    $excludeCategories = Get-RooIndustriesPropertyArray $Match 'excludeProcessCategories'
     foreach ($candidate in $excludeCategories) {
         if ($category -eq [string]$candidate) { return $false }
     }
@@ -202,77 +202,77 @@ function Test-RooProcessMatch {
     return $true
 }
 
-function Get-RooProtectedCatalogMatch {
+function Get-RooIndustriesProtectedCatalogMatch {
     param(
         [object]$Process,
         [object]$ProtectedCatalog
     )
-    foreach ($item in @(Get-RooPropertyArray $ProtectedCatalog 'protectedProcesses')) {
+    foreach ($item in @(Get-RooIndustriesPropertyArray $ProtectedCatalog 'protectedProcesses')) {
         $match = [pscustomobject]@{
-            names = @(Get-RooPropertyArray $item 'names')
-            namePatterns = @(Get-RooPropertyArray $item 'namePatterns')
-            pathPatterns = @(Get-RooPropertyArray $item 'pathPatterns')
-            processCategories = @(Get-RooPropertyArray $item 'processCategories')
+            names = @(Get-RooIndustriesPropertyArray $item 'names')
+            namePatterns = @(Get-RooIndustriesPropertyArray $item 'namePatterns')
+            pathPatterns = @(Get-RooIndustriesPropertyArray $item 'pathPatterns')
+            processCategories = @(Get-RooIndustriesPropertyArray $item 'processCategories')
         }
-        if (Test-RooProcessMatch $Process $match) {
+        if (Test-RooIndustriesProcessMatch $Process $match) {
             return [pscustomobject]@{ matched = $true; item = $item }
         }
     }
     return [pscustomobject]@{ matched = $false; item = $null }
 }
 
-function Get-RooProtectedCompanionMatch {
+function Get-RooIndustriesProtectedCompanionMatch {
     param(
         [object]$Process,
         [object]$Profile
     )
-    foreach ($item in @(Get-RooPropertyArray $Profile 'protectedCompanions')) {
+    foreach ($item in @(Get-RooIndustriesPropertyArray $Profile 'protectedCompanions')) {
         $match = [pscustomobject]@{
-            names = @(Get-RooPropertyArray $item 'names')
-            processNames = @([string](Get-RooPropertyValue $item 'name' ''))
+            names = @(Get-RooIndustriesPropertyArray $item 'names')
+            processNames = @([string](Get-RooIndustriesPropertyValue $item 'name' ''))
         }
-        if (Test-RooProcessMatch $Process $match) {
+        if (Test-RooIndustriesProcessMatch $Process $match) {
             return [pscustomobject]@{ matched = $true; item = $item }
         }
     }
     return [pscustomobject]@{ matched = $false; item = $null }
 }
 
-function Get-RooTargetGameMatch {
+function Get-RooIndustriesTargetGameMatch {
     param(
         [object]$Process,
         [object]$Profile,
         [string]$TargetGameProcessName
     )
     if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
-        if (Test-RooProcessNameEquals ([string]$Process.name) $TargetGameProcessName) {
+        if (Test-RooIndustriesProcessNameEquals ([string]$Process.name) $TargetGameProcessName) {
             return [pscustomobject]@{
                 matched = $true
-                ruleId = (Get-RooPropertyValue (Get-RooPropertyValue $Profile 'foregroundGame' $null) 'ruleId' 'boost-foreground-game')
+                ruleId = (Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null) 'ruleId' 'boost-foreground-game')
                 reasonCodes = @('TARGET_GAME_PARAMETER')
             }
         }
     }
 
-    $foregroundGame = Get-RooPropertyValue $Profile 'foregroundGame' $null
+    $foregroundGame = Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null
     if ($foregroundGame) {
-        $match = [pscustomobject]@{ processNames = @(Get-RooPropertyArray $foregroundGame 'processNames') }
-        if (Test-RooProcessMatch $Process $match) {
+        $match = [pscustomobject]@{ processNames = @(Get-RooIndustriesPropertyArray $foregroundGame 'processNames') }
+        if (Test-RooIndustriesProcessMatch $Process $match) {
             return [pscustomobject]@{
                 matched = $true
-                ruleId = (Get-RooPropertyValue $foregroundGame 'ruleId' 'boost-foreground-game')
-                reasonCodes = @(Get-RooPropertyArray $foregroundGame 'reasonCodes')
+                ruleId = (Get-RooIndustriesPropertyValue $foregroundGame 'ruleId' 'boost-foreground-game')
+                reasonCodes = @(Get-RooIndustriesPropertyArray $foregroundGame 'reasonCodes')
             }
         }
     }
 
-    foreach ($game in @(Get-RooPropertyArray $Profile 'targetGames')) {
-        $match = [pscustomobject]@{ processNames = @(Get-RooPropertyArray $game 'processNames') }
-        if (Test-RooProcessMatch $Process $match) {
+    foreach ($game in @(Get-RooIndustriesPropertyArray $Profile 'targetGames')) {
+        $match = [pscustomobject]@{ processNames = @(Get-RooIndustriesPropertyArray $game 'processNames') }
+        if (Test-RooIndustriesProcessMatch $Process $match) {
             return [pscustomobject]@{
                 matched = $true
-                ruleId = (Get-RooPropertyValue (Get-RooPropertyValue $Profile 'foregroundGame' $null) 'ruleId' 'boost-foreground-game')
-                reasonCodes = @(Get-RooPropertyArray $game 'reasonCodes')
+                ruleId = (Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null) 'ruleId' 'boost-foreground-game')
+                reasonCodes = @(Get-RooIndustriesPropertyArray $game 'reasonCodes')
             }
         }
     }
@@ -280,52 +280,52 @@ function Get-RooTargetGameMatch {
     return [pscustomobject]@{ matched = $false; ruleId = $null; reasonCodes = @() }
 }
 
-function Get-RooRuleMatch {
+function Get-RooIndustriesRuleMatch {
     param(
         [object]$Process,
         [object]$Profile,
         [string[]]$ActionTypes
     )
-    foreach ($rule in @(Get-RooPropertyArray $Profile 'rules')) {
-        $enabled = [bool](Get-RooPropertyValue $rule 'enabled' $true)
+    foreach ($rule in @(Get-RooIndustriesPropertyArray $Profile 'rules')) {
+        $enabled = [bool](Get-RooIndustriesPropertyValue $rule 'enabled' $true)
         if (-not $enabled) { continue }
-        $action = Get-RooPropertyValue $rule 'action' $null
-        $actionType = [string](Get-RooPropertyValue $action 'actionType' '')
+        $action = Get-RooIndustriesPropertyValue $rule 'action' $null
+        $actionType = [string](Get-RooIndustriesPropertyValue $action 'actionType' '')
         if ($ActionTypes.Count -gt 0 -and $actionType -notin $ActionTypes) { continue }
-        if (Test-RooProcessMatch $Process (Get-RooPropertyValue $rule 'match' $null)) {
+        if (Test-RooIndustriesProcessMatch $Process (Get-RooIndustriesPropertyValue $rule 'match' $null)) {
             return [pscustomobject]@{ matched = $true; rule = $rule }
         }
     }
     return [pscustomobject]@{ matched = $false; rule = $null }
 }
 
-function Get-RooSafeCandidateMatch {
+function Get-RooIndustriesSafeCandidateMatch {
     param(
         [object]$Process,
         [object]$Profile
     )
-    foreach ($rule in @(Get-RooPropertyArray $Profile 'safeCandidates')) {
-        if (Test-RooProcessMatch $Process (Get-RooPropertyValue $rule 'match' $null)) {
+    foreach ($rule in @(Get-RooIndustriesPropertyArray $Profile 'safeCandidates')) {
+        if (Test-RooIndustriesProcessMatch $Process (Get-RooIndustriesPropertyValue $rule 'match' $null)) {
             return [pscustomobject]@{ matched = $true; rule = $rule }
         }
     }
     return [pscustomobject]@{ matched = $false; rule = $null }
 }
 
-function Test-RooProtectedPreviewName {
+function Test-RooIndustriesProtectedPreviewName {
     param(
         [object]$Process,
         [object]$Profile
     )
-    return Test-RooAnyNameMatch ([string]$Process.name) @(Get-RooPropertyArray $Profile 'protectedPreviewProcessNames')
+    return Test-RooIndustriesAnyNameMatch ([string]$Process.name) @(Get-RooIndustriesPropertyArray $Profile 'protectedPreviewProcessNames')
 }
 
-function Add-RooReasonCode {
+function Add-RooIndustriesReasonCode {
     param(
         [System.Collections.Generic.List[string]]$ReasonCodes,
         [object]$Values
     )
-    foreach ($value in @(Get-RooArray $Values)) {
+    foreach ($value in @(Get-RooIndustriesArray $Values)) {
         if ($null -eq $value) { continue }
         $text = [string]$value
         if (-not [string]::IsNullOrWhiteSpace($text) -and -not $ReasonCodes.Contains($text)) {
@@ -334,7 +334,7 @@ function Add-RooReasonCode {
     }
 }
 
-function Get-RooProcessClassificationInfo {
+function Get-RooIndustriesProcessClassificationInfo {
     param(
         [object]$Process,
         [object]$Profile,
@@ -350,85 +350,85 @@ function Get-RooProcessClassificationInfo {
     $sessionProfileMatched = $false
     $blocked = $false
     $protected = $false
-    $risk = [string](Get-RooPropertyValue $Process 'risk' 'low')
+    $risk = [string](Get-RooIndustriesPropertyValue $Process 'risk' 'low')
 
-    $companionMatch = Get-RooProtectedCompanionMatch $Process $Profile
+    $companionMatch = Get-RooIndustriesProtectedCompanionMatch $Process $Profile
     if ($companionMatch.matched) {
         $classification = 'protectedCompanion'
-        $matchedProfileItemId = [string](Get-RooPropertyValue $companionMatch.item 'itemId' '')
+        $matchedProfileItemId = [string](Get-RooIndustriesPropertyValue $companionMatch.item 'itemId' '')
         $profileMatched = $true
         $sessionProfileMatched = $true
         $blocked = $true
         $protected = $true
         $risk = 'protected'
-        Add-RooReasonCode $reasonCodes (Get-RooPropertyArray $companionMatch.item 'reasonCodes')
+        Add-RooIndustriesReasonCode $reasonCodes (Get-RooIndustriesPropertyArray $companionMatch.item 'reasonCodes')
     } else {
-        $protectedMatch = Get-RooProtectedCatalogMatch $Process $ProtectedCatalog
+        $protectedMatch = Get-RooIndustriesProtectedCatalogMatch $Process $ProtectedCatalog
         if ($protectedMatch.matched) {
-            $catalogClassification = [string](Get-RooPropertyValue $protectedMatch.item 'classification' 'protected')
+            $catalogClassification = [string](Get-RooIndustriesPropertyValue $protectedMatch.item 'classification' 'protected')
             if ($catalogClassification -eq 'protectedCompanion') {
                 $classification = 'protectedCompanion'
             } else {
                 $classification = 'protected'
             }
-            $matchedProtectedItemId = [string](Get-RooPropertyValue $protectedMatch.item 'itemId' '')
-            $sessionProfileMatched = Test-RooProtectedPreviewName $Process $Profile
+            $matchedProtectedItemId = [string](Get-RooIndustriesPropertyValue $protectedMatch.item 'itemId' '')
+            $sessionProfileMatched = Test-RooIndustriesProtectedPreviewName $Process $Profile
             $blocked = $true
             $protected = $true
             $risk = 'protected'
-            Add-RooReasonCode $reasonCodes (Get-RooPropertyArray $protectedMatch.item 'reasonCodes')
+            Add-RooIndustriesReasonCode $reasonCodes (Get-RooIndustriesPropertyArray $protectedMatch.item 'reasonCodes')
         } else {
-            $targetMatch = Get-RooTargetGameMatch $Process $Profile $TargetGameProcessName
+            $targetMatch = Get-RooIndustriesTargetGameMatch $Process $Profile $TargetGameProcessName
             if ($targetMatch.matched) {
                 $classification = 'gameTarget'
                 $matchedRuleId = [string]$targetMatch.ruleId
                 $profileMatched = $true
                 $sessionProfileMatched = $true
                 $risk = 'medium'
-                Add-RooReasonCode $reasonCodes $targetMatch.reasonCodes
-                Add-RooReasonCode $reasonCodes @('GAME_TARGET')
+                Add-RooIndustriesReasonCode $reasonCodes $targetMatch.reasonCodes
+                Add-RooIndustriesReasonCode $reasonCodes @('GAME_TARGET')
             } else {
-                $demotionMatch = Get-RooRuleMatch $Process $Profile @('setPriority')
+                $demotionMatch = Get-RooIndustriesRuleMatch $Process $Profile @('setPriority')
                 if ($demotionMatch.matched) {
-                    $rulePriority = [string](Get-RooPropertyValue (Get-RooPropertyValue $demotionMatch.rule 'action' $null) 'priorityClass' '')
+                    $rulePriority = [string](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $demotionMatch.rule 'action' $null) 'priorityClass' '')
                     if ($rulePriority -eq 'BelowNormal' -or $rulePriority -eq 'Idle') {
                         $classification = 'demotionCandidate'
-                        $matchedRuleId = [string](Get-RooPropertyValue $demotionMatch.rule 'ruleId' '')
+                        $matchedRuleId = [string](Get-RooIndustriesPropertyValue $demotionMatch.rule 'ruleId' '')
                         $profileMatched = $true
                         $sessionProfileMatched = $true
-                        $risk = [string](Get-RooPropertyValue $demotionMatch.rule 'risk' 'low')
-                        Add-RooReasonCode $reasonCodes @('BACKGROUND_DEMOTION_CANDIDATE')
+                        $risk = [string](Get-RooIndustriesPropertyValue $demotionMatch.rule 'risk' 'low')
+                        Add-RooIndustriesReasonCode $reasonCodes @('BACKGROUND_DEMOTION_CANDIDATE')
                     }
                 }
 
                 if ($classification -eq 'unknown') {
-                    $safeMatch = Get-RooSafeCandidateMatch $Process $Profile
+                    $safeMatch = Get-RooIndustriesSafeCandidateMatch $Process $Profile
                     if ($safeMatch.matched) {
                         $classification = 'safeCandidate'
-                        $matchedRuleId = [string](Get-RooPropertyValue $safeMatch.rule 'ruleId' '')
+                        $matchedRuleId = [string](Get-RooIndustriesPropertyValue $safeMatch.rule 'ruleId' '')
                         $profileMatched = $true
                         $sessionProfileMatched = $true
-                        $risk = [string](Get-RooPropertyValue $safeMatch.rule 'risk' 'low')
-                        Add-RooReasonCode $reasonCodes (Get-RooPropertyArray $safeMatch.rule 'reasonCodes')
+                        $risk = [string](Get-RooIndustriesPropertyValue $safeMatch.rule 'risk' 'low')
+                        Add-RooIndustriesReasonCode $reasonCodes (Get-RooIndustriesPropertyArray $safeMatch.rule 'reasonCodes')
                     }
                 }
 
-                if ($classification -eq 'unknown' -and [string](Get-RooPropertyValue $Process 'protection' '') -eq 'protected') {
+                if ($classification -eq 'unknown' -and [string](Get-RooIndustriesPropertyValue $Process 'protection' '') -eq 'protected') {
                     $classification = 'protected'
                     $blocked = $true
                     $protected = $true
                     $risk = 'protected'
-                    Add-RooReasonCode $reasonCodes @('INVENTORY_PROTECTED')
+                    Add-RooIndustriesReasonCode $reasonCodes @('INVENTORY_PROTECTED')
                 }
             }
         }
     }
 
     if ($reasonCodes.Count -eq 0) {
-        Add-RooReasonCode $reasonCodes @('NO_PROFILE_MATCH')
+        Add-RooIndustriesReasonCode $reasonCodes @('NO_PROFILE_MATCH')
     }
 
-    $canChangePriority = [bool](Get-RooPropertyValue $Process 'canChangePriority' $false)
+    $canChangePriority = [bool](Get-RooIndustriesPropertyValue $Process 'canChangePriority' $false)
     if ($protected -or $blocked) { $canChangePriority = $false }
 
     return [pscustomobject]@{
@@ -446,18 +446,18 @@ function Get-RooProcessClassificationInfo {
     }
 }
 
-function Get-RooRuleById {
+function Get-RooIndustriesRuleById {
     param(
         [object]$Profile,
         [string]$RuleId
     )
-    foreach ($rule in @(Get-RooPropertyArray $Profile 'rules')) {
-        if ([string](Get-RooPropertyValue $rule 'ruleId' '') -eq $RuleId) { return $rule }
+    foreach ($rule in @(Get-RooIndustriesPropertyArray $Profile 'rules')) {
+        if ([string](Get-RooIndustriesPropertyValue $rule 'ruleId' '') -eq $RuleId) { return $rule }
     }
     return $null
 }
 
-function New-RooIssue {
+function New-RooIndustriesIssue {
     param(
         [string]$Code,
         [string]$Message,
@@ -480,19 +480,19 @@ function New-RooIssue {
     }
 }
 
-function New-RooLog {
+function New-RooIndustriesLog {
     param(
         [string]$Message,
         [string]$Level = 'info'
     )
     return [pscustomobject]@{
-        timestampUtc = Get-RooUtcStamp
+        timestampUtc = Get-RooIndustriesUtcStamp
         level = $Level
         message = $Message
     }
 }
 
-function New-RooActionResult {
+function New-RooIndustriesActionResult {
     param(
         [string]$ResultId,
         [string]$Status,
@@ -505,17 +505,17 @@ function New-RooActionResult {
         resultId = $ResultId
         status = $Status
         startedAtUtc = $null
-        completedAtUtc = Get-RooUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         summary = $Summary
-        changedItems = @(Get-RooArray $ChangedItems)
-        skippedItems = @(Get-RooArray $SkippedItems)
+        changedItems = @(Get-RooIndustriesArray $ChangedItems)
+        skippedItems = @(Get-RooIndustriesArray $SkippedItems)
         metricsBefore = $null
         metricsAfter = $null
-        artifacts = @(Get-RooArray $Artifacts)
+        artifacts = @(Get-RooIndustriesArray $Artifacts)
     }
 }
 
-function New-RooActionEnvelope {
+function New-RooIndustriesActionEnvelope {
     param(
         [string]$ActionId,
         [bool]$DryRun,
@@ -533,32 +533,32 @@ function New-RooActionEnvelope {
     return [pscustomobject]@{
         actionId = $ActionId
         schemaVersion = 1
-        productName = $script:RooProcessProductName
+        productName = $script:RooIndustriesProcessProductName
         correlationId = $CorrelationId
         dryRun = $DryRun
         risk = $Risk
         requiresElevation = $RequiresElevation
         status = $Status
-        preview = @(Get-RooArray $Preview)
+        preview = @(Get-RooIndustriesArray $Preview)
         backup = $Backup
         result = $Result
-        warnings = @(Get-RooArray $Warnings)
-        errors = @(Get-RooArray $Errors)
-        logs = @(Get-RooArray $Logs)
+        warnings = @(Get-RooIndustriesArray $Warnings)
+        errors = @(Get-RooIndustriesArray $Errors)
+        logs = @(Get-RooIndustriesArray $Logs)
     }
 }
 
-function Test-RooPriorityAllowed {
+function Test-RooIndustriesPriorityAllowed {
     param([string]$PriorityClass)
-    return $script:RooAllowedPriorityClasses -contains $PriorityClass
+    return $script:RooIndustriesAllowedPriorityClasses -contains $PriorityClass
 }
 
-function Ensure-RooNativeProcessControl {
-    if ('RooNativeProcessControl' -as [type]) { return }
+function Ensure-RooIndustriesNativeProcessControl {
+    if ('RooIndustriesNativeProcessControl' -as [type]) { return }
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class RooNativeProcessControl {
+public static class RooIndustriesNativeProcessControl {
     [DllImport("gdi32.dll")]
     public static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int priorityClass);
     [DllImport("gdi32.dll")]
@@ -571,7 +571,7 @@ public static class RooNativeProcessControl {
 "@
 }
 
-function Convert-RooIoPriorityToValue {
+function Convert-RooIndustriesIoPriorityToValue {
     param([string]$Priority)
     switch ($Priority) {
         'VeryLow' { return 0 }
@@ -582,7 +582,7 @@ function Convert-RooIoPriorityToValue {
     }
 }
 
-function Convert-RooIoPriorityFromValue {
+function Convert-RooIndustriesIoPriorityFromValue {
     param([int]$Value)
     switch ($Value) {
         0 { return 'VeryLow' }
@@ -592,7 +592,7 @@ function Convert-RooIoPriorityFromValue {
     }
 }
 
-function Convert-RooGpuPriorityToValue {
+function Convert-RooIndustriesGpuPriorityToValue {
     param([string]$Priority)
     switch ($Priority) {
         'Idle' { return 0 }
@@ -606,7 +606,7 @@ function Convert-RooGpuPriorityToValue {
     }
 }
 
-function Convert-RooGpuPriorityFromValue {
+function Convert-RooIndustriesGpuPriorityFromValue {
     param([int]$Value)
     switch ($Value) {
         0 { return 'Idle' }
@@ -619,17 +619,17 @@ function Convert-RooGpuPriorityFromValue {
     }
 }
 
-function Test-RooIoPriorityAllowed {
+function Test-RooIndustriesIoPriorityAllowed {
     param([string]$Priority)
-    return $null -ne (Convert-RooIoPriorityToValue $Priority)
+    return $null -ne (Convert-RooIndustriesIoPriorityToValue $Priority)
 }
 
-function Test-RooGpuPriorityAllowed {
+function Test-RooIndustriesGpuPriorityAllowed {
     param([string]$Priority)
-    return $null -ne (Convert-RooGpuPriorityToValue $Priority)
+    return $null -ne (Convert-RooIndustriesGpuPriorityToValue $Priority)
 }
 
-function Test-RooAffinityMaskAllowed {
+function Test-RooIndustriesAffinityMaskAllowed {
     param([object]$AffinityMask)
     if ($null -eq $AffinityMask) { return $false }
     try {
@@ -640,53 +640,53 @@ function Test-RooAffinityMaskAllowed {
     }
 }
 
-function Get-RooProcessIoPriority {
+function Get-RooIndustriesProcessIoPriority {
     param([System.Diagnostics.Process]$Process)
-    Ensure-RooNativeProcessControl
+    Ensure-RooIndustriesNativeProcessControl
     $value = 0
-    $status = [RooNativeProcessControl]::NtQueryInformationProcess($Process.Handle, 33, [ref]$value, 4, [IntPtr]::Zero)
+    $status = [RooIndustriesNativeProcessControl]::NtQueryInformationProcess($Process.Handle, 33, [ref]$value, 4, [IntPtr]::Zero)
     if ($status -ne 0) {
         return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
     }
-    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIoPriorityFromValue $value; status = $status }
+    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesIoPriorityFromValue $value; status = $status }
 }
 
-function Set-RooProcessIoPriority {
+function Set-RooIndustriesProcessIoPriority {
     param(
         [System.Diagnostics.Process]$Process,
         [string]$Priority
     )
-    Ensure-RooNativeProcessControl
-    $value = Convert-RooIoPriorityToValue $Priority
+    Ensure-RooIndustriesNativeProcessControl
+    $value = Convert-RooIndustriesIoPriorityToValue $Priority
     if ($null -eq $value) { throw "I/O priority '$Priority' is outside the allow-list." }
-    $status = [RooNativeProcessControl]::NtSetInformationProcess($Process.Handle, 33, [ref]$value, 4)
+    $status = [RooIndustriesNativeProcessControl]::NtSetInformationProcess($Process.Handle, 33, [ref]$value, 4)
     if ($status -ne 0) { throw "Failed to set I/O priority '$Priority' (NTSTATUS $status)." }
 }
 
-function Get-RooProcessGpuPriority {
+function Get-RooIndustriesProcessGpuPriority {
     param([System.Diagnostics.Process]$Process)
-    Ensure-RooNativeProcessControl
+    Ensure-RooIndustriesNativeProcessControl
     $value = 0
-    $status = [RooNativeProcessControl]::D3DKMTGetProcessSchedulingPriorityClass($Process.Handle, [ref]$value)
+    $status = [RooIndustriesNativeProcessControl]::D3DKMTGetProcessSchedulingPriorityClass($Process.Handle, [ref]$value)
     if ($status -ne 0) {
         return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
     }
-    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooGpuPriorityFromValue $value; status = $status }
+    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesGpuPriorityFromValue $value; status = $status }
 }
 
-function Set-RooProcessGpuPriority {
+function Set-RooIndustriesProcessGpuPriority {
     param(
         [System.Diagnostics.Process]$Process,
         [string]$Priority
     )
-    Ensure-RooNativeProcessControl
-    $value = Convert-RooGpuPriorityToValue $Priority
+    Ensure-RooIndustriesNativeProcessControl
+    $value = Convert-RooIndustriesGpuPriorityToValue $Priority
     if ($null -eq $value) { throw "GPU priority '$Priority' is outside the allow-list." }
-    $status = [RooNativeProcessControl]::D3DKMTSetProcessSchedulingPriorityClass($Process.Handle, $value)
+    $status = [RooIndustriesNativeProcessControl]::D3DKMTSetProcessSchedulingPriorityClass($Process.Handle, $value)
     if ($status -ne 0) { throw "Failed to set GPU priority '$Priority' (status $status)." }
 }
 
-function Get-RooProcessStartTimeUtc {
+function Get-RooIndustriesProcessStartTimeUtc {
     param([System.Diagnostics.Process]$Process)
     try {
         return $Process.StartTime.ToUniversalTime().ToString('o')
@@ -695,7 +695,7 @@ function Get-RooProcessStartTimeUtc {
     }
 }
 
-function Get-RooProcessControlState {
+function Get-RooIndustriesProcessControlState {
     param(
         [int]$ProcessId,
         [string]$FallbackPriorityClass = $null
@@ -718,9 +718,9 @@ function Get-RooProcessControlState {
     $affinity = $null
     try { $affinity = [int64]$live.ProcessorAffinity } catch { }
     $io = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
-    try { $io = Get-RooProcessIoPriority $live } catch { }
+    try { $io = Get-RooIndustriesProcessIoPriority $live } catch { }
     $gpu = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
-    try { $gpu = Get-RooProcessGpuPriority $live } catch { }
+    try { $gpu = Get-RooIndustriesProcessGpuPriority $live } catch { }
 
     return [pscustomobject]@{
         exists = $true
@@ -729,7 +729,7 @@ function Get-RooProcessControlState {
         affinityMask = $affinity
         ioPriority = if ($io.available) { $io.name } else { $null }
         gpuPriority = if ($gpu.available) { $gpu.name } else { $null }
-        startTimeUtc = Get-RooProcessStartTimeUtc $live
+        startTimeUtc = Get-RooIndustriesProcessStartTimeUtc $live
         ioPriorityAvailable = [bool]$io.available
         gpuPriorityAvailable = [bool]$gpu.available
         ioPriorityStatus = $io.status
@@ -737,7 +737,7 @@ function Get-RooProcessControlState {
     }
 }
 
-function New-RooControlChange {
+function New-RooIndustriesControlChange {
     param(
         [string]$Control,
         [object]$CurrentValue,
@@ -758,36 +758,36 @@ function New-RooControlChange {
     }
 }
 
-function Get-RooPreviewControlChanges {
+function Get-RooIndustriesPreviewControlChanges {
     param([object]$PreviewEntry)
-    $changes = @(Get-RooPropertyArray $PreviewEntry 'controlChanges')
+    $changes = @(Get-RooIndustriesPropertyArray $PreviewEntry 'controlChanges')
     if ($changes.Count -gt 0) { return $changes }
-    if ([string](Get-RooPropertyValue $PreviewEntry 'proposedAction' '') -eq 'setPriority') {
-        return @((New-RooControlChange `
+    if ([string](Get-RooIndustriesPropertyValue $PreviewEntry 'proposedAction' '') -eq 'setPriority') {
+        return @((New-RooIndustriesControlChange `
             -Control 'priorityClass' `
-            -CurrentValue (Get-RooPropertyValue $PreviewEntry 'currentPriorityClass' $null) `
-            -ProposedValue (Get-RooPropertyValue $PreviewEntry 'proposedPriorityClass' $null) `
+            -CurrentValue (Get-RooIndustriesPropertyValue $PreviewEntry 'currentPriorityClass' $null) `
+            -ProposedValue (Get-RooIndustriesPropertyValue $PreviewEntry 'proposedPriorityClass' $null) `
             -Action 'setPriority' `
-            -Reason (Get-RooPropertyValue $PreviewEntry 'reason' 'Set process priority.')))
+            -Reason (Get-RooIndustriesPropertyValue $PreviewEntry 'reason' 'Set process priority.')))
     }
     return @()
 }
 
-function Get-RooControlStateValue {
+function Get-RooIndustriesControlStateValue {
     param(
         [object]$State,
         [string]$Control
     )
     switch ($Control) {
-        'priorityClass' { return Get-RooPropertyValue $State 'priorityClass' $null }
-        'affinityMask' { return Get-RooPropertyValue $State 'affinityMask' $null }
-        'ioPriority' { return Get-RooPropertyValue $State 'ioPriority' $null }
-        'gpuPriority' { return Get-RooPropertyValue $State 'gpuPriority' $null }
+        'priorityClass' { return Get-RooIndustriesPropertyValue $State 'priorityClass' $null }
+        'affinityMask' { return Get-RooIndustriesPropertyValue $State 'affinityMask' $null }
+        'ioPriority' { return Get-RooIndustriesPropertyValue $State 'ioPriority' $null }
+        'gpuPriority' { return Get-RooIndustriesPropertyValue $State 'gpuPriority' $null }
         default { return $null }
     }
 }
 
-function Test-RooControlValueEqual {
+function Test-RooIndustriesControlValueEqual {
     param(
         [string]$Control,
         [object]$Left,
@@ -800,29 +800,29 @@ function Test-RooControlValueEqual {
     return [string]$Left -eq [string]$Right
 }
 
-function Get-RooControlChangeValidationReason {
+function Get-RooIndustriesControlChangeValidationReason {
     param(
         [object]$Change,
         [object]$CurrentState
     )
-    $control = [string](Get-RooPropertyValue $Change 'control' '')
-    $value = Get-RooPropertyValue $Change 'proposedValue' $null
+    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
+    $value = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null
     switch ($control) {
         'priorityClass' {
-            if (-not (Test-RooPriorityAllowed ([string]$value))) { return "Priority class '$value' is outside the allow-list." }
-            if ([string]::IsNullOrWhiteSpace([string](Get-RooControlStateValue $CurrentState $control))) { return 'Current priority class could not be read, so no priority change is proposed.' }
+            if (-not (Test-RooIndustriesPriorityAllowed ([string]$value))) { return "Priority class '$value' is outside the allow-list." }
+            if ([string]::IsNullOrWhiteSpace([string](Get-RooIndustriesControlStateValue $CurrentState $control))) { return 'Current priority class could not be read, so no priority change is proposed.' }
         }
         'affinityMask' {
-            if (-not (Test-RooAffinityMaskAllowed $value)) { return "Affinity mask '$value' is invalid." }
-            if ($null -eq (Get-RooControlStateValue $CurrentState $control)) { return 'Current CPU affinity could not be read, so no affinity change is proposed.' }
+            if (-not (Test-RooIndustriesAffinityMaskAllowed $value)) { return "Affinity mask '$value' is invalid." }
+            if ($null -eq (Get-RooIndustriesControlStateValue $CurrentState $control)) { return 'Current CPU affinity could not be read, so no affinity change is proposed.' }
         }
         'ioPriority' {
-            if (-not (Test-RooIoPriorityAllowed ([string]$value))) { return "I/O priority '$value' is outside the allow-list." }
-            if ([string]::IsNullOrWhiteSpace([string](Get-RooControlStateValue $CurrentState $control))) { return 'Current I/O priority could not be read, so no I/O priority change is proposed.' }
+            if (-not (Test-RooIndustriesIoPriorityAllowed ([string]$value))) { return "I/O priority '$value' is outside the allow-list." }
+            if ([string]::IsNullOrWhiteSpace([string](Get-RooIndustriesControlStateValue $CurrentState $control))) { return 'Current I/O priority could not be read, so no I/O priority change is proposed.' }
         }
         'gpuPriority' {
-            if (-not (Test-RooGpuPriorityAllowed ([string]$value))) { return "GPU priority '$value' is outside the allow-list." }
-            if (-not [bool](Get-RooPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) { return 'GPU scheduling priority is unavailable for this process.' }
+            if (-not (Test-RooIndustriesGpuPriorityAllowed ([string]$value))) { return "GPU priority '$value' is outside the allow-list." }
+            if (-not [bool](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) { return 'GPU scheduling priority is unavailable for this process.' }
         }
         default {
             return "Unsupported process control '$control'."
@@ -831,30 +831,30 @@ function Get-RooControlChangeValidationReason {
     return $null
 }
 
-function Get-RooApplicableProcessControlChanges {
+function Get-RooIndustriesApplicableProcessControlChanges {
     param(
         [object[]]$ControlChanges,
         [object]$CurrentState
     )
     $applicable = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
-    foreach ($change in @(Get-RooArray $ControlChanges)) {
-        $control = [string](Get-RooPropertyValue $change 'control' '')
-        if ([bool](Get-RooPropertyValue $change 'blocked' $false)) {
-            $reason = [string](Get-RooPropertyValue $change 'blockedReason' (Get-RooPropertyValue $change 'reason' 'Requested process control is blocked.'))
-            $skipped.Add([pscustomobject]@{ control = $control; reason = $reason; currentValue = Get-RooPropertyValue $change 'currentValue' $null; proposedValue = Get-RooPropertyValue $change 'proposedValue' $null; category = 'blocked' }) | Out-Null
+    foreach ($change in @(Get-RooIndustriesArray $ControlChanges)) {
+        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+            $reason = [string](Get-RooIndustriesPropertyValue $change 'blockedReason' (Get-RooIndustriesPropertyValue $change 'reason' 'Requested process control is blocked.'))
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $reason; currentValue = Get-RooIndustriesPropertyValue $change 'currentValue' $null; proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; category = 'blocked' }) | Out-Null
             continue
         }
 
-        $validationReason = Get-RooControlChangeValidationReason $change $CurrentState
+        $validationReason = Get-RooIndustriesControlChangeValidationReason $change $CurrentState
         if (-not [string]::IsNullOrWhiteSpace($validationReason)) {
-            $skipped.Add([pscustomobject]@{ control = $control; reason = $validationReason; currentValue = Get-RooControlStateValue $CurrentState $control; proposedValue = Get-RooPropertyValue $change 'proposedValue' $null; category = 'unavailable' }) | Out-Null
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $validationReason; currentValue = Get-RooIndustriesControlStateValue $CurrentState $control; proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; category = 'unavailable' }) | Out-Null
             continue
         }
 
-        $currentValue = Get-RooControlStateValue $CurrentState $control
-        $proposedValue = Get-RooPropertyValue $change 'proposedValue' $null
-        if (Test-RooControlValueEqual $control $currentValue $proposedValue) {
+        $currentValue = Get-RooIndustriesControlStateValue $CurrentState $control
+        $proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
+        if (Test-RooIndustriesControlValueEqual $control $currentValue $proposedValue) {
             $skipped.Add([pscustomobject]@{ control = $control; reason = "Process already has requested $control value."; currentValue = $currentValue; proposedValue = $proposedValue; category = 'no-change' }) | Out-Null
             continue
         }
@@ -867,32 +867,32 @@ function Get-RooApplicableProcessControlChanges {
     }
 }
 
-function Invoke-RooProcessControlChange {
+function Invoke-RooIndustriesProcessControlChange {
     param(
         [System.Diagnostics.Process]$Process,
         [object]$Change
     )
-    $control = [string](Get-RooPropertyValue $Change 'control' '')
-    $value = Get-RooPropertyValue $Change 'proposedValue' $null
+    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
+    $value = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null
     switch ($control) {
         'priorityClass' {
             $priority = [string]$value
-            if (-not (Test-RooPriorityAllowed $priority)) { throw "Priority class '$priority' is outside the allow-list." }
+            if (-not (Test-RooIndustriesPriorityAllowed $priority)) { throw "Priority class '$priority' is outside the allow-list." }
             $Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$priority
         }
         'affinityMask' {
-            if (-not (Test-RooAffinityMaskAllowed $value)) { throw "Affinity mask '$value' is invalid." }
+            if (-not (Test-RooIndustriesAffinityMaskAllowed $value)) { throw "Affinity mask '$value' is invalid." }
             $Process.ProcessorAffinity = [IntPtr]([int64]$value)
         }
         'ioPriority' {
             $priority = [string]$value
-            if (-not (Test-RooIoPriorityAllowed $priority)) { throw "I/O priority '$priority' is outside the allow-list." }
-            Set-RooProcessIoPriority $Process $priority
+            if (-not (Test-RooIndustriesIoPriorityAllowed $priority)) { throw "I/O priority '$priority' is outside the allow-list." }
+            Set-RooIndustriesProcessIoPriority $Process $priority
         }
         'gpuPriority' {
             $priority = [string]$value
-            if (-not (Test-RooGpuPriorityAllowed $priority)) { throw "GPU priority '$priority' is outside the allow-list." }
-            Set-RooProcessGpuPriority $Process $priority
+            if (-not (Test-RooIndustriesGpuPriorityAllowed $priority)) { throw "GPU priority '$priority' is outside the allow-list." }
+            Set-RooIndustriesProcessGpuPriority $Process $priority
         }
         default {
             throw "Unsupported process control '$control'."

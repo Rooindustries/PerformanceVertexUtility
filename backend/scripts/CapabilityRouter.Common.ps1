@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-function Get-RooUtcStamp {
+function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
@@ -26,12 +26,12 @@ function Convert-ToCleanString {
     return $text
 }
 
-function Resolve-RooUtilitiesRoot {
+function Resolve-RooIndustriesUtilitiesRoot {
     param([string]$Path)
 
     $candidate = $Path
     if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = $env:ROO_UTILITIES_ROOT
+        $candidate = $env:ROO_INDUSTRIES_UTILITIES_ROOT
     }
     if ([string]::IsNullOrWhiteSpace($candidate)) {
         $candidate = (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')
@@ -40,7 +40,7 @@ function Resolve-RooUtilitiesRoot {
     return [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($candidate))
 }
 
-function Resolve-RooDetectionFilePath {
+function Resolve-RooIndustriesDetectionFilePath {
     param(
         [string]$Target,
         [string]$RepoRoot,
@@ -56,7 +56,7 @@ function Resolve-RooDetectionFilePath {
     return [System.IO.Path]::GetFullPath($resolved)
 }
 
-function Convert-RooRegistryTarget {
+function Convert-RooIndustriesRegistryTarget {
     param([string]$Target)
 
     $parts = $Target -split '\|', 2
@@ -75,7 +75,7 @@ function Convert-RooRegistryTarget {
     }
 }
 
-function Test-RooFileTargetIsTool {
+function Test-RooIndustriesFileTargetIsTool {
     param([string]$Target)
 
     if ($Target -match '\{utilitiesRoot\}') { return $true }
@@ -86,7 +86,7 @@ function Test-RooFileTargetIsTool {
     return $false
 }
 
-function Get-RooFileEvidence {
+function Get-RooIndustriesFileEvidence {
     param([string]$ResolvedPath)
 
     $evidence = [ordered]@{
@@ -132,7 +132,7 @@ function Get-RooFileEvidence {
     }
 }
 
-function Get-RooGpuInventory {
+function Get-RooIndustriesGpuInventory {
     $controllers = @()
     $errorText = $null
     try {
@@ -147,7 +147,7 @@ function Get-RooGpuInventory {
     }
 }
 
-function Test-RooGpuVendor {
+function Test-RooIndustriesGpuVendor {
     param(
         [object]$Controller,
         [string]$Vendor
@@ -165,7 +165,7 @@ function Test-RooGpuVendor {
     }
 }
 
-function Resolve-RooDetectionRule {
+function Resolve-RooIndustriesDetectionRule {
     param(
         [object]$Rule,
         [string]$RepoRoot,
@@ -190,8 +190,8 @@ function Resolve-RooDetectionRule {
         }
         'file-exists' {
             try {
-                $resolvedTarget = Resolve-RooDetectionFilePath $target $RepoRoot $ResolvedUtilitiesRoot
-                $evidence = Get-RooFileEvidence $resolvedTarget
+                $resolvedTarget = Resolve-RooIndustriesDetectionFilePath $target $RepoRoot $ResolvedUtilitiesRoot
+                $evidence = Get-RooIndustriesFileEvidence $resolvedTarget
                 $passed = [bool]$evidence.exists
                 $repoPrefix = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\') + '\'
                 if ($resolvedTarget.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -209,7 +209,7 @@ function Resolve-RooDetectionRule {
             }
         }
         'registry-key' {
-            $registry = Convert-RooRegistryTarget $target
+            $registry = Convert-RooIndustriesRegistryTarget $target
             $resolvedTarget = $registry.path
             $exists = $false
             $errorText = $null
@@ -226,7 +226,7 @@ function Resolve-RooDetectionRule {
             }
         }
         'registry-value' {
-            $registry = Convert-RooRegistryTarget $target
+            $registry = Convert-RooIndustriesRegistryTarget $target
             $resolvedTarget = if ([string]::IsNullOrWhiteSpace($registry.name)) { $registry.path } else { "$($registry.path)|$($registry.name)" }
             $keyExists = $false
             $valuePresent = $false
@@ -304,16 +304,16 @@ function Resolve-RooDetectionRule {
         }
         'hardware-gpu-vendor' {
             if ($null -eq $GpuInventory) {
-                $GpuInventory = Get-RooGpuInventory
+                $GpuInventory = Get-RooIndustriesGpuInventory
             }
             $controllers = @($GpuInventory.controllers)
-            $matchedControllers = @($controllers | Where-Object { Test-RooGpuVendor $_ $target })
+            $matchedControllers = @($controllers | Where-Object { Test-RooIndustriesGpuVendor $_ $target })
             $passed = ($matchedControllers.Count -gt 0)
             $evidenceControllers = @($controllers | ForEach-Object {
                 [pscustomobject]@{
                     name = Convert-ToCleanString (Get-PropertyValue $_ 'Name' $null)
                     pnpDeviceId = Convert-ToCleanString (Get-PropertyValue $_ 'PNPDeviceID' $null)
-                    matched = [bool](Test-RooGpuVendor $_ $target)
+                    matched = [bool](Test-RooIndustriesGpuVendor $_ $target)
                 }
             })
             $evidence = [pscustomobject]@{
@@ -376,7 +376,7 @@ function Resolve-RooDetectionRule {
     }
 }
 
-function Get-RooUnavailableReason {
+function Get-RooIndustriesUnavailableReason {
     param(
         [object]$Capability,
         [object[]]$CheckedRules
@@ -389,7 +389,7 @@ function Get-RooUnavailableReason {
     if ($hardwareFailure) { return 'hardware-not-present' }
 
     $toolFileFailure = @($failedRules | Where-Object {
-        [string]$_.method -eq 'file-exists' -and (Test-RooFileTargetIsTool ([string]$_.target))
+        [string]$_.method -eq 'file-exists' -and (Test-RooIndustriesFileTargetIsTool ([string]$_.target))
     }) | Select-Object -First 1
     if ($toolFileFailure) { return 'tool-not-present' }
 
@@ -409,7 +409,7 @@ function Get-RooUnavailableReason {
     return "requirement-not-met: $([string]$firstFailure.method) $failureTarget"
 }
 
-function Resolve-RooCapabilityAvailability {
+function Resolve-RooIndustriesCapabilityAvailability {
     param(
         [object]$Capability,
         [string]$RepoRoot,
@@ -418,22 +418,22 @@ function Resolve-RooCapabilityAvailability {
     )
 
     if ([string]::IsNullOrWhiteSpace($ResolvedUtilitiesRoot)) {
-        $ResolvedUtilitiesRoot = Resolve-RooUtilitiesRoot ''
+        $ResolvedUtilitiesRoot = Resolve-RooIndustriesUtilitiesRoot ''
     }
     if ($null -eq $GpuInventory) {
-        $GpuInventory = Get-RooGpuInventory
+        $GpuInventory = Get-RooIndustriesGpuInventory
     }
 
     $checkedRules = @()
     $availability = Get-PropertyValue $Capability 'availability' $null
     foreach ($rule in @((Get-PropertyValue $availability 'detection' @()))) {
-        $checkedRules += Resolve-RooDetectionRule $rule $RepoRoot $ResolvedUtilitiesRoot $GpuInventory
+        $checkedRules += Resolve-RooIndustriesDetectionRule $rule $RepoRoot $ResolvedUtilitiesRoot $GpuInventory
     }
 
     $available = ($checkedRules.Count -gt 0 -and @($checkedRules | Where-Object { $_.passed -ne $true }).Count -eq 0)
     return [pscustomobject]@{
         available = [bool]$available
         checkedRules = @($checkedRules)
-        unavailableReason = Get-RooUnavailableReason $Capability $checkedRules
+        unavailableReason = Get-RooIndustriesUnavailableReason $Capability $checkedRules
     }
 }

@@ -41,7 +41,7 @@ foreach ($relative in $requiredFiles) {
 }
 
 $stateBefore = Get-StateEntryCount
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-uninstall-restore-$([guid]::NewGuid().ToString('N'))"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-uninstall-restore-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
 try {
     $folderTarget = Join-Path $tempRoot 'FakeAppCache'

@@ -267,7 +267,7 @@
                                                      "none"
                                                  ],
                                "restoreBackupRequirement":  "Not applicable because this updater is excluded from default integration.",
-                               "integrationPlan":  "Exclude from default driver strategy. Prefer Roo hardware-gated recommendations and manual driver packages.",
+                               "integrationPlan":  "Exclude from default driver strategy. Prefer Roo Industries hardware-gated recommendations and manual driver packages.",
                                "lengthBytes":  33267856,
                                "compressedLengthBytes":  33183912
                            },
@@ -12387,7 +12387,7 @@
                                                      "windows"
                                                  ],
                                "restoreBackupRequirement":  "Not required for manual diagnostic launch; native diagnostics should keep report artifacts user-visible.",
-                               "integrationPlan":  "Separate diagnostics section with transparent Roo plan recommendation after findings.",
+                               "integrationPlan":  "Separate diagnostics section with transparent Roo Industries plan recommendation after findings.",
                                "lengthBytes":  50465560,
                                "compressedLengthBytes":  49878882
                            },

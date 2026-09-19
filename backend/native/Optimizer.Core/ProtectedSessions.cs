@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record ProtectedSessionPreview
 {
@@ -134,7 +134,7 @@ public sealed class ProtectedSessions
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
-        using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), "roo-protected-launcher-" + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
+        using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
         using var imageLease = ImageMutex(plan.GamePath);
         AcquireImage(imageLease, recovering: false);
         try
@@ -292,7 +292,7 @@ public sealed class ProtectedSessions
         {
             try { Observe(processId); }
             catch (ProcessEndedException) { }
-            catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
         }
         void Observe(int processId)
         {
@@ -528,12 +528,12 @@ public sealed class ProtectedSessions
     {
         try { using var process = new ProcessTarget(identity.ProcessId); var actual = ReadIdentity(process); if (actual.CreationTimeFileTimeUtc != identity.CreationTimeFileTimeUtc) return false; identity.Verify(actual); return true; }
         catch (ProcessEndedException) { return false; }
-        catch (Roo.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
     }
     private static RunningProcess ReadIdentity(ProcessTarget process)
     {
         try { return process.Identity(); }
-        catch (Roo.Optimization.CpuSets.NativeFailure error)
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error)
         {
             if (error.Api == "QueryFullProcessImageName" && error.NativeErrorCode == 5)
             {
@@ -551,7 +551,7 @@ public sealed class ProtectedSessions
         var mask = ProcessTarget.ParseMask(value.Mask); var allowed = ProcessTarget.ParseMask(original.Mask);
         if (value.Group != original.Group || mask == 0 || (mask & ~allowed) != 0) throw new InvalidDataException("Affinity must be a nonempty subset of the launcher's reviewed processor group.");
     }
-    private static Mutex ImageMutex(string gamePath) => new(false, "Global\\RooLaunchPriorities-" + OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(Path.GetFileName(gamePath).ToUpperInvariant())));
+    private static Mutex ImageMutex(string gamePath) => new(false, BrandCompatibility.LaunchMutexPrefix + OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(Path.GetFileName(gamePath).ToUpperInvariant())));
     private static void AcquireImage(Mutex mutex, bool recovering)
     {
         try

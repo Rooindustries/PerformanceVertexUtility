@@ -8,11 +8,11 @@
   "rawSessionStatus": "completed",
   "sessionId": "process-policy-live-policy-validation-20260630-094100",
   "profileId": "live-policy-validation",
-  "profilePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\policy-session-profile.json",
+  "profilePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\policy-session-profile.json",
   "dryRun": false,
-  "stateRoot": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions",
-  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
-  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "stateRoot": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions",
+  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
   "restorable": true,
   "active": false,
   "completed": false,
@@ -32,8 +32,8 @@
   "activeApplications": [
     {
       "processId": 7404,
-      "processName": "RooPolicyExistingProbe.exe",
-      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-process-policy-live\\RooPolicyExistingProbe.exe",
+      "processName": "RooIndustriesPolicyExistingProbe.exe",
+      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\RooIndustriesPolicyExistingProbe.exe",
       "ruleId": "policy-existing-name-command",
       "appliedAtUtc": "2026-06-30T09:41:01.0000000Z"
     }

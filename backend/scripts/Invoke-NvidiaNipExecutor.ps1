@@ -30,12 +30,12 @@ function Invoke-NvidiaExecutorCommand {
         [string]$MockShim,
         [int]$Timeout
     )
-    $arguments = @(Get-RooPropertyArray $Command 'arguments')
+    $arguments = @(Get-RooIndustriesPropertyArray $Command 'arguments')
     if ($Mode -eq 'Mock') {
-        return Invoke-RooBackendPowerShellShim -ShimPath $MockShim -Arguments $arguments -TimeoutSeconds $Timeout
+        return Invoke-RooIndustriesBackendPowerShellShim -ShimPath $MockShim -Arguments $arguments -TimeoutSeconds $Timeout
     }
     if ($Mode -eq 'Real') {
-        return Invoke-RooBackendHiddenProcess -FilePath ([string](Get-RooPropertyValue $Command 'executablePath' '')) -Arguments $arguments -TimeoutSeconds $Timeout
+        return Invoke-RooIndustriesBackendHiddenProcess -FilePath ([string](Get-RooIndustriesPropertyValue $Command 'executablePath' '')) -Arguments $arguments -TimeoutSeconds $Timeout
     }
     return [pscustomobject]@{
         processStarted = $false
@@ -43,7 +43,7 @@ function Invoke-NvidiaExecutorCommand {
         timedOut = $false
         timeoutSeconds = $Timeout
         arguments = $arguments
-        commandLine = Get-RooPropertyValue $Command 'commandLine' $null
+        commandLine = Get-RooIndustriesPropertyValue $Command 'commandLine' $null
         invocation = [pscustomobject]@{
             useShellExecute = $false
             createNoWindow = $true
@@ -63,10 +63,10 @@ try {
         -NipSourcePath $NipSourcePath `
         -ExportPath $ExportPath) | ConvertFrom-Json
 
-    $commands = Get-RooPropertyValue $preview 'commands' $null
-    $rollbackManifest = Get-RooPropertyValue $preview 'rollbackManifest' $null
+    $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
+    $rollbackManifest = Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null
     if ($Operation -eq 'Restore') {
-        $effectiveRestoreExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
+        $effectiveRestoreExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
         $restorePreview = (& (Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1') `
             -ProfileId $ProfileId `
             -CatalogPath $CatalogPath `
@@ -75,20 +75,20 @@ try {
             -ExportPath $effectiveRestoreExportPath) | ConvertFrom-Json
     }
 
-    $hardwareSatisfied = [bool](Get-RooPropertyValue (Get-RooPropertyValue $preview 'hardwareGate' $null) 'nvidiaGpuPresent' $false)
-    $mockShimPresent = (-not [string]::IsNullOrWhiteSpace($MockNvpiShimPath) -and (Test-Path -LiteralPath (Resolve-RooPath $MockNvpiShimPath $MockNvpiShimPath)))
+    $hardwareSatisfied = [bool](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $preview 'hardwareGate' $null) 'nvidiaGpuPresent' $false)
+    $mockShimPresent = (-not [string]::IsNullOrWhiteSpace($MockNvpiShimPath) -and (Test-Path -LiteralPath (Resolve-RooIndustriesPath $MockNvpiShimPath $MockNvpiShimPath)))
     $realMode = ($ExecutorMode -eq 'Real')
     $mockMode = ($ExecutorMode -eq 'Mock')
     $executeRequested = ($ExecutorMode -ne 'Preview')
     $gates = @(
-        (New-RooBackendExecutorGate 'confirm-apply' 'Confirmed execution requested' $true ([bool]$ConfirmApply) 'Executor will not run from preview-only calls.' $null),
-        (New-RooBackendExecutorGate 'executor-mode-selected' 'Executor mode selected' $true $executeRequested 'ExecutorMode must be Mock or Real to run commands.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
-        (New-RooBackendExecutorGate 'nvidia-hardware-present' 'NVIDIA hardware detected' $true $hardwareSatisfied 'NIP execution is NVIDIA-only.' (Get-RooPropertyValue $preview 'hardwareGate' $null)),
-        (New-RooBackendExecutorGate 'explicit-user-approval' 'Explicit approval evidence captured' $true ([bool]$UserApproved) 'Execution requires user approval evidence for the exact profile.' $null),
-        (New-RooBackendExecutorGate 'no-auto-apply' 'No auto-apply path used' $true ($ConfirmApply -and $executeRequested) 'Default invocation remains preview-only.' ([pscustomobject]@{ confirmApply = [bool]$ConfirmApply; executorMode = $ExecutorMode })),
-        (New-RooBackendExecutorGate 'mock-shim-present' 'Mock NVPI shim present' $mockMode ((-not $mockMode) -or $mockShimPresent) 'Mock validation requires a shim path.' ([pscustomobject]@{ mockNvpiShimPath = $MockNvpiShimPath })),
-        (New-RooBackendExecutorGate 'real-nvpi-explicit-flag' 'Real NVPI explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealNvpiExecution) 'Real NVIDIA Profile Inspector execution requires -AllowRealNvpiExecution in addition to confirmation.' $null),
-        (New-RooBackendExecutorGate 'benchmark-evidence' 'Benchmark evidence attached' ($Operation -eq 'Apply') (($Operation -ne 'Apply') -or [bool]$BenchmarkEvidenceAttached) 'Profile apply requires benchmark evidence before recommendation.' $null)
+        (New-RooIndustriesBackendExecutorGate 'confirm-apply' 'Confirmed execution requested' $true ([bool]$ConfirmApply) 'Executor will not run from preview-only calls.' $null),
+        (New-RooIndustriesBackendExecutorGate 'executor-mode-selected' 'Executor mode selected' $true $executeRequested 'ExecutorMode must be Mock or Real to run commands.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
+        (New-RooIndustriesBackendExecutorGate 'nvidia-hardware-present' 'NVIDIA hardware detected' $true $hardwareSatisfied 'NIP execution is NVIDIA-only.' (Get-RooIndustriesPropertyValue $preview 'hardwareGate' $null)),
+        (New-RooIndustriesBackendExecutorGate 'explicit-user-approval' 'Explicit approval evidence captured' $true ([bool]$UserApproved) 'Execution requires user approval evidence for the exact profile.' $null),
+        (New-RooIndustriesBackendExecutorGate 'no-auto-apply' 'No auto-apply path used' $true ($ConfirmApply -and $executeRequested) 'Default invocation remains preview-only.' ([pscustomobject]@{ confirmApply = [bool]$ConfirmApply; executorMode = $ExecutorMode })),
+        (New-RooIndustriesBackendExecutorGate 'mock-shim-present' 'Mock NVPI shim present' $mockMode ((-not $mockMode) -or $mockShimPresent) 'Mock validation requires a shim path.' ([pscustomobject]@{ mockNvpiShimPath = $MockNvpiShimPath })),
+        (New-RooIndustriesBackendExecutorGate 'real-nvpi-explicit-flag' 'Real NVPI explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealNvpiExecution) 'Real NVIDIA Profile Inspector execution requires -AllowRealNvpiExecution in addition to confirmation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'benchmark-evidence' 'Benchmark evidence attached' ($Operation -eq 'Apply') (($Operation -ne 'Apply') -or [bool]$BenchmarkEvidenceAttached) 'Profile apply requires benchmark evidence before recommendation.' $null)
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canExecute = ($blockingGates.Count -eq 0)
@@ -98,9 +98,9 @@ try {
     $importCompleted = $false
 
     if ($canExecute -and $Operation -eq 'Apply') {
-        $exportCommand = Get-RooPropertyValue $commands 'exportCurrentProfile' $null
+        $exportCommand = Get-RooIndustriesPropertyValue $commands 'exportCurrentProfile' $null
         $exportResult = Invoke-NvidiaExecutorCommand -Command $exportCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-        $exportCompleted = ((-not [bool](Get-RooPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $exportResult 'exitCode' -1) -eq 0)
+        $exportCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $exportResult 'exitCode' -1) -eq 0)
         $sequence.Add([pscustomobject]@{
             order = 1
             operation = 'export'
@@ -109,9 +109,9 @@ try {
             completed = $exportCompleted
         }) | Out-Null
         if ($exportCompleted) {
-            $importCommand = Get-RooPropertyValue $commands 'importCandidateProfile' $null
+            $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
             $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-            $importCompleted = ((-not [bool](Get-RooPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $importResult 'exitCode' -1) -eq 0)
+            $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
             $sequence.Add([pscustomobject]@{
                 order = 2
                 operation = 'import'
@@ -130,9 +130,9 @@ try {
             }) | Out-Null
         }
     } elseif ($canExecute -and $Operation -eq 'Restore') {
-        $restoreCommand = Get-RooPropertyValue $restorePreview 'command' $null
+        $restoreCommand = Get-RooIndustriesPropertyValue $restorePreview 'command' $null
         $restoreResult = Invoke-NvidiaExecutorCommand -Command $restoreCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-        $importCompleted = ((-not [bool](Get-RooPropertyValue $restoreResult 'timedOut' $false)) -and [int](Get-RooPropertyValue $restoreResult 'exitCode' -1) -eq 0)
+        $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $restoreResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $restoreResult 'exitCode' -1) -eq 0)
         $sequence.Add([pscustomobject]@{
             order = 1
             operation = 'restore-import'
@@ -144,8 +144,8 @@ try {
     }
 
     if ($canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
-        $resolvedRollbackManifestPath = Resolve-RooPath $RollbackManifestPath $RollbackManifestPath
-        Ensure-RooDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
+        $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
+        Ensure-RooIndustriesDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
         $rollbackManifest.exportCompleted = $exportCompleted
         $rollbackManifest.nvpiExecutionAllowedNow = ($ExecutorMode -eq 'Real')
         ($rollbackManifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $resolvedRollbackManifestPath -Encoding UTF8
@@ -157,8 +157,8 @@ try {
     $result = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.executor'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         operation = $Operation
         profileId = $ProfileId
         dryRun = (-not $canExecute)
@@ -184,17 +184,17 @@ try {
             nonZeroExitCount = @($runs | Where-Object { $null -ne $_.result.exitCode -and [int]$_.result.exitCode -ne 0 }).Count
             blockingGateCount = $blockingGates.Count
         }
-        warnings = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_EXECUTOR_CONTROLLED' 'NVIDIA NIP executor abstraction evaluated with explicit mock or real execution gates.' 'info' $ProfileId $false 'Use mock mode for validation; real NVPI remains behind explicit flags.' $null))
+        warnings = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_EXECUTOR_CONTROLLED' 'NVIDIA NIP executor abstraction evaluated with explicit mock or real execution gates.' 'info' $ProfileId $false 'Use mock mode for validation; real NVPI remains behind explicit flags.' $null))
         errors = @()
-        logs = @((New-RooLog 'NVIDIA NIP executor abstraction completed.'))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP executor abstraction completed.'))
     }
-    Write-RooJsonOutput $result $OutputPath
+    Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
     $errorResult = [pscustomobject]@{
         actionId = 'drivers.nvidiaNip.executor'
         schemaVersion = 1
-        productName = $script:RooNvidiaNipProductName
-        capturedAtUtc = Get-RooUtcStamp
+        productName = $script:RooIndustriesNvidiaNipProductName
+        capturedAtUtc = Get-RooIndustriesUtcStamp
         operation = $Operation
         profileId = $ProfileId
         dryRun = $true
@@ -203,9 +203,9 @@ try {
         executionSequence = @()
         summary = [pscustomobject]@{ willRunNvpi = $false; willRunMockShim = $false; realNvpiInvoked = $false }
         warnings = @()
-        errors = @((New-RooNvidiaNipIssue 'NVIDIA_NIP_EXECUTOR_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check executor mode, mock shim, timeout, and profile inputs.' $null))
-        logs = @((New-RooLog 'NVIDIA NIP executor abstraction failed.' 'error'))
+        errors = @((New-RooIndustriesNvidiaNipIssue 'NVIDIA_NIP_EXECUTOR_FAILED' $_.Exception.Message 'error' $ProfileId $true 'Check executor mode, mock shim, timeout, and profile inputs.' $null))
+        logs = @((New-RooIndustriesLog 'NVIDIA NIP executor abstraction failed.' 'error'))
     }
-    Write-RooJsonOutput $errorResult $OutputPath
+    Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
 }

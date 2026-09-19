@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
-using Roo.OptimizationSuite.Models;
-using Roo.OptimizationSuite.Services;
-using Roo.Optimizer;
+using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
+using RooIndustries.Optimizer;
 
 static class GameSessionChecks
 {
@@ -42,15 +42,15 @@ static class GameSessionChecks
 
     public static async Task Run(string repo)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-game-session-client-" + Guid.NewGuid().ToString("N"));
-        var previous = Environment.GetEnvironmentVariable("ROO_BACKEND_ROOT");
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-game-session-client-" + Guid.NewGuid().ToString("N"));
+        var previous = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT");
         var bin = Path.Combine(repo, "tools", "validation", "ProtectedSessions", "bin", "publish");
-        var gamePath = Path.Combine(bin, "RooLaunchPolicyProbe.exe");
-        var launcherPath = Path.Combine(bin, "RooUiSessionLauncher.exe");
-        const string registryPath = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooLaunchPolicyProbe.exe";
+        var gamePath = Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe");
+        var launcherPath = Path.Combine(bin, "RooIndustriesUiSessionLauncher.exe");
+        const string registryPath = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesLaunchPolicyProbe.exe";
         Directory.CreateDirectory(root);
         File.Copy(gamePath, launcherPath, false);
-        Environment.SetEnvironmentVariable("ROO_BACKEND_ROOT", repo);
+        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", repo);
         var service = new OptimizerService(new BackendLocator(), Path.Combine(root, "operations"));
         Process? launcher = null, game = null;
         GameSessionReview? review = null;
@@ -97,7 +97,7 @@ static class GameSessionChecks
             catch (Exception error) when (error is InvalidOperationException or JsonException) { activeRecoveryRejected = true; }
             Check(activeRecoveryRejected && Gpu(game) == 3, "Recovery cannot take over a live worker or change its game");
             Check(!GameSessionDisplay.CoresMatch(active, "0x" + second.ToString("X")) && GameSessionDisplay.Title(active, "0x" + second.ToString("X")).StartsWith("Core switch pending"), "A queued core change cannot reuse the old active confirmation");
-            for (var i = 0; i < 8; i++) { Check(Gpu(game) == 3, "GPU class stays Above Normal between client polls"); await Task.Delay(300); }
+            for (var i = 0; i < 8; i++) { var observed = Gpu(game); Check(observed == 3, "GPU class stays Above Normal between client polls (observed " + observed + ")"); await Task.Delay(300); }
             await service.SwitchGameCoresAsync(review.SessionRoot, "0x" + second.ToString("X"));
             await Until(() => Task.FromResult(Affinity(game) == second), "Live core switch was not applied.");
             Check(Affinity(game) == second && Gpu(game) == 3, "Client switches cores while preserving actual GPU priority");
@@ -121,6 +121,16 @@ static class GameSessionChecks
             using (var key = Registry.LocalMachine.OpenSubKey(registryPath)) Check(key is null, "Integration finishes without an IFEO policy");
             Console.WriteLine("Game-session client assertions: " + passed);
         }
+        catch
+        {
+            if (review is not null && Directory.Exists(review.SessionRoot))
+            {
+                var evidence = Path.Combine(repo, "artifacts", "validation", "game-session-client-failure");
+                Directory.CreateDirectory(evidence);
+                foreach (var file in Directory.EnumerateFiles(review.SessionRoot, "*.json")) File.Copy(file, Path.Combine(evidence, Path.GetFileName(file)), true);
+            }
+            throw;
+        }
         finally
         {
             try
@@ -137,7 +147,7 @@ static class GameSessionChecks
                 if (game is not null && !game.HasExited) { game.Kill(); game.WaitForExit(10000); }
                 if (launcher is not null && !launcher.HasExited) { File.WriteAllText(Path.Combine(root, "stop-launcher"), ""); if (!launcher.WaitForExit(15000)) { launcher.Kill(); launcher.WaitForExit(10000); } }
                 game?.Dispose(); launcher?.Dispose();
-                Environment.SetEnvironmentVariable("ROO_BACKEND_ROOT", previous);
+                Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previous);
                 File.Delete(launcherPath);
             }
             if (review is not null && Directory.Exists(review.SessionRoot))

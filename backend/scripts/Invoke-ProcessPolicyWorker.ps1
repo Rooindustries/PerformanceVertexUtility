@@ -1,23 +1,24 @@
 param(
     [Parameter(Mandatory=$true)][ValidateSet('Status','Start','Stop','EnableLogon','DisableLogon','Remove')][string]$Action,
     [Parameter(Mandatory=$true)][string]$PolicyRoot,
-    [string]$DotNetPath=$env:ROO_DOTNET_EXE,
+    [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$HostDirectory='',
     [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if($Action -ne 'Status' -and -not $ConfirmApply){throw 'Confirm the saved-policy worker operation before changing it.'}
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $PolicyRoot=[IO.Path]::GetFullPath($PolicyRoot)
-$owner=Get-RooOperationOwner
+$owner=Get-RooIndustriesOperationOwner
 $hash=[Security.Cryptography.SHA256]::Create()
 try {$suffix=([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($owner.userSid+'|'+$PolicyRoot.ToUpperInvariant())))).Replace('-','').Substring(0,20)}
 finally {$hash.Dispose()}
-$taskName='RooOptimizationSuite.ProcessRules.'+$suffix
-$description='Roo process rules | '+$owner.userSid+' | '+$PolicyRoot
+$taskName='RooIndustriesOptimizationSuite.ProcessRules.'+$suffix
+$description='Roo Industries process rules | '+$owner.userSid+' | '+$PolicyRoot
 if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimizer'}
 $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build the policy worker with Build-OptimizerHost.ps1 before starting saved rules.'}
@@ -28,17 +29,17 @@ if(-not $DotNetPath){
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $requestPath=Join-Path $PolicyRoot 'worker-request.json'
-$task=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if($task -and $task.Description -cne $description){throw 'The scheduled task has a different owner or policy folder.'}
+$task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIdentity.policyTask+$suffix) $description ($script:RooIndustriesLegacyIdentity.policyDescription+$owner.userSid+' | '+$PolicyRoot)
+if($task){$taskName=$task.TaskName;$description=$task.Description}
 
 function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
-    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-policy-request-'+[Guid]::NewGuid().ToString('N'))
+    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-policy-request-'+[Guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($directory)|Out-Null
     $path=Join-Path $directory 'request.json'
     try {
         $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true}
         foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
-        Write-RooOperationJson $request $path
+        Write-RooIndustriesOperationJson $request $path
         $text=@(& $DotNetPath $hostDll $CoreAction $path) -join "`n"
         $exitCode=$LASTEXITCODE
         $result=$text|ConvertFrom-Json
@@ -66,7 +67,7 @@ function Stop-Worker {
 
 if($Action -in @('Start','EnableLogon','DisableLogon')) {
     [IO.Directory]::CreateDirectory($PolicyRoot)|Out-Null
-    Write-RooOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
+    Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
     $atLogon=($Action -eq 'EnableLogon' -or ($Action -eq 'Start' -and $task -and @($task.Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0))
     $arguments='"'+$hostDll+'" policy-run "'+$requestPath+'"'
     $execute=New-ScheduledTaskAction -Execute $DotNetPath -Argument $arguments -WorkingDirectory $HostDirectory

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $fragmentPath = Join-Path $repoRoot 'backend\capabilities\drivers-gpu-tools.json'
-$detectorPath = Join-Path $repoRoot 'backend\scripts\Get-RooUtilitiesInventory.ps1'
+$detectorPath = Join-Path $repoRoot 'backend\scripts\Get-RooIndustriesUtilitiesInventory.ps1'
 $failures = New-Object System.Collections.Generic.List[string]
 $passes = New-Object System.Collections.Generic.List[string]
 
@@ -174,8 +174,8 @@ if ($null -ne $fragment) {
         'testEvidence'
     )
     $families = @('process-controls', 'cleanup-uninstall', 'drivers-gpu-tools', 'system-optimizations')
-    $sources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-native')
-    $implementedByValues = @('roo-native', 'roo-script', 'external-tool', 'not-implemented')
+    $sources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-industries-native')
+    $implementedByValues = @('roo-industries-native', 'roo-industries-script', 'external-tool', 'not-implemented')
     $riskLevels = @('safe', 'low', 'medium', 'high', 'critical')
     $previewStatuses = @('implemented', 'not-implemented')
     $applyStatuses = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')
@@ -265,7 +265,7 @@ if ($null -ne $fragment) {
         Add-Check ([string](Get-PropertyValue (Get-PropertyValue $nvcleanstall[0] 'apply' $null) 'status' '') -eq 'not-implemented') 'NVCleanstall apply is not implemented' 'NVCleanstall apply status is not correct'
     }
 
-    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_UTILITIES_ROOT }
+    $utilitiesRoot = if ([string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ROOT)) { (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities') } else { $env:ROO_INDUSTRIES_UTILITIES_ROOT }
     $utilitiesRoot = [System.IO.Path]::GetFullPath($utilitiesRoot)
     $videoControllers = @()
     try {

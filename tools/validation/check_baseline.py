@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import re
+import runpy
 import sys
 import xml.etree.ElementTree as ET
 
@@ -47,6 +48,8 @@ def public_hygiene_text(relative: str, source: str):
 
 def validate(root: Path, contracts_only: bool = False):
     failures = []
+    if not contracts_only:
+        failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):
@@ -54,7 +57,7 @@ def validate(root: Path, contracts_only: bool = False):
                 documents[path.relative_to(root).as_posix()] = read_json(path)
             except (ValueError, OSError) as error:
                 failures.append(f'{path.relative_to(root)}: {error}')
-    schema = documents['backend/contracts/roo-backend-contracts.schema.json']
+    schema = documents['backend/contracts/roo-industries-backend-contracts.schema.json']
     Draft202012Validator.check_schema(schema)
     mapping = documents['backend/contracts/validation-map.json']
     cases = 0

@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_DOTNET_EXE)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE)
 $ErrorActionPreference='Stop'
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}

@@ -75,8 +75,8 @@ try {
     }
 
     $enumFamily = @('process-controls','cleanup-uninstall','drivers-gpu-tools','system-optimizations')
-    $enumSource = @('process-lasso','revo','nvpi','gaming-toggles','winutil','utilities-folder','roo-native')
-    $enumImplementedBy = @('roo-native','roo-script','external-tool','not-implemented')
+    $enumSource = @('process-lasso','revo','nvpi','gaming-toggles','winutil','utilities-folder','roo-industries-native')
+    $enumImplementedBy = @('roo-industries-native','roo-industries-script','external-tool','not-implemented')
     $enumRisk = @('safe','low','medium','high','critical')
     $enumPreviewStatus = @('implemented','not-implemented')
     $enumApplyStatus = @('live','fixture-proven','allowlist-shim','helper-contract','preview-only','not-implemented')
@@ -180,7 +180,7 @@ try {
             Add-Failure "$context has no availability detection rules"
         }
 
-        $utilitiesRoot = if (-not [string]::IsNullOrWhiteSpace($env:ROO_UTILITIES_ROOT)) { [System.IO.Path]::GetFullPath($env:ROO_UTILITIES_ROOT) } else { [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')) }
+        $utilitiesRoot = if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ROOT)) { [System.IO.Path]::GetFullPath($env:ROO_INDUSTRIES_UTILITIES_ROOT) } else { [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')) }
         foreach ($rule in $detections) {
             if ($enumDetectionMethod -notcontains [string]$rule.method) {
                 Add-Failure "$context has invalid detection method '$($rule.method)'"

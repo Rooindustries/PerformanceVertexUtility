@@ -97,7 +97,7 @@ The split should let the frontend be built as a professional Roo Industries WinU
 
 ### Visual Design
 
-- Roo Blue and Blackout Gold theme application.
+- Roo Industries Blue and Blackout Gold theme application.
 - Manrope font usage.
 - Logo placement.
 - Splash/loading polish.

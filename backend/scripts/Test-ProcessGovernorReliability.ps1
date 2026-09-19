@@ -28,8 +28,8 @@ function Get-ReliabilityProbeProcesses {
     return @(
         Get-Process -ErrorAction SilentlyContinue |
             Where-Object {
-                [string]$_.ProcessName -like 'RooGovernorReliabilityProbe*' -or
-                [string]$_.ProcessName -like 'RooGovernorRelaunchProbe*'
+                [string]$_.ProcessName -like 'RooIndustriesGovernorReliabilityProbe*' -or
+                [string]$_.ProcessName -like 'RooIndustriesGovernorRelaunchProbe*'
             }
     )
 }
@@ -41,7 +41,7 @@ function Stop-ReliabilityProbe {
 
     try { $Process.Refresh() } catch { }
     if (-not $Process.HasExited) {
-        Stop-RooValidationProcess $Process
+        Stop-RooIndustriesValidationProcess $Process
     }
 
     for ($attempt = 1; $attempt -le 10; $attempt++) {
@@ -199,28 +199,28 @@ if ($initialProbes.Count -eq 0) {
 $runResults = New-Object System.Collections.Generic.List[object]
 
 for ($runIndex = 1; $runIndex -le 3; $runIndex++) {
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-governor-reliability-$([guid]::NewGuid().ToString('N'))"
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-reliability-$([guid]::NewGuid().ToString('N'))"
     $probe = $null
     $cleanupDone = $false
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-        $probeName = "RooGovernorReliabilityProbe$runIndex.exe"
+        $probeName = "RooIndustriesGovernorReliabilityProbe$runIndex.exe"
         $probeExe = Join-Path $tempRoot $probeName
         Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
         $profilePath = Join-Path $tempRoot 'governor-profile.json'
         $stateRoot = Join-Path $tempRoot 'state'
         Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 90')) -WindowStyle Hidden -PassThru
+        $probe = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 90')) -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 800
-        $before = Get-RooProcessControlState $probe.Id $null
+        $before = Get-RooIndustriesProcessControlState $probe.Id $null
         $session = & (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1') `
             -ProfilePath $profilePath `
             -SampleIntervalMilliseconds 400 `
             -MaxDurationSeconds 16 `
             -StateRoot $stateRoot `
             -ConfirmApply | ConvertFrom-Json
-        $after = Get-RooProcessControlState $probe.Id $null
+        $after = Get-RooIndustriesProcessControlState $probe.Id $null
         $changed = @($session.changedItems | Where-Object { $_.processId -eq $probe.Id }) | Select-Object -First 1
         $restored = @($session.restoredItems | Where-Object { $_.processId -eq $probe.Id }) | Select-Object -First 1
         $activeCount = @($session.activeRestraints).Count
@@ -286,23 +286,23 @@ if ($runResults.Count -eq 3 -and @($runResults | Where-Object { $_.changed -and 
     Add-Failure "Repeated governor reliability did not complete 3 successful runs: successes=$(@($runResults | Where-Object { $_.changed -and $_.restored -and $_.activeRestraintCount -eq 0 }).Count)"
 }
 
-$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-governor-relaunch-$([guid]::NewGuid().ToString('N'))"
+$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-relaunch-$([guid]::NewGuid().ToString('N'))"
 $relaunchFirst = $null
 $relaunchSecond = $null
 $relaunchSessionProc = $null
 $relaunchCleanupDone = $false
 try {
     New-Item -ItemType Directory -Path $relaunchRoot -Force | Out-Null
-    $probeName = 'RooGovernorRelaunchProbe.exe'
+    $probeName = 'RooIndustriesGovernorRelaunchProbe.exe'
     $probeExe = Join-Path $relaunchRoot $probeName
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
     $profilePath = Join-Path $relaunchRoot 'governor-relaunch-profile.json'
     $stateRoot = Join-Path $relaunchRoot 'state'
     Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
+    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
-    $beforeFirst = Get-RooProcessControlState $relaunchFirst.Id $null
+    $beforeFirst = Get-RooIndustriesProcessControlState $relaunchFirst.Id $null
     $sessionOutput = Join-Path $relaunchRoot 'governor-relaunch-session-output.json'
     $sessionError = Join-Path $relaunchRoot 'governor-relaunch-session-error.txt'
     $sessionArgs = @(
@@ -321,10 +321,10 @@ try {
         $stateRoot,
         '-ConfirmApply'
     )
-    $relaunchSessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
+    $relaunchSessionProc = Start-Process -FilePath 'powershell.exe' -ArgumentList (Join-RooIndustriesWindowsArguments $sessionArgs) -WindowStyle Hidden -RedirectStandardOutput $sessionOutput -RedirectStandardError $sessionError -PassThru
 
     $firstChange = Wait-ReliabilitySessionChanged -StateRoot $stateRoot -ProcessId $relaunchFirst.Id -TimeoutSeconds 20
-    $afterFirstApply = Get-RooProcessControlState $relaunchFirst.Id $null
+    $afterFirstApply = Get-RooIndustriesProcessControlState $relaunchFirst.Id $null
     if ($firstChange.found -and $afterFirstApply.priorityClass -eq 'BelowNormal') {
         Add-Pass "Relaunch scenario restrained first same-name probe before exit: pid=$($relaunchFirst.Id) original=$($beforeFirst.priorityClass) applied=$($afterFirstApply.priorityClass)"
     } else {
@@ -335,11 +335,11 @@ try {
     $relaunchFirst = $null
     Start-Sleep -Milliseconds 700
 
-    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
+    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
-    $beforeSecond = Get-RooProcessControlState $relaunchSecond.Id $null
+    $beforeSecond = Get-RooIndustriesProcessControlState $relaunchSecond.Id $null
 
-    Wait-RooValidationProcess $relaunchSessionProc 35
+    Wait-RooIndustriesValidationProcess $relaunchSessionProc 35
     $relaunchSessionProc.Refresh()
     $sessionExitCode = $relaunchSessionProc.ExitCode
     $relaunchSessionProc = $null
@@ -359,7 +359,7 @@ try {
     }
 
     $restore = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $session.backupManifestPath -ConfirmApply | ConvertFrom-Json
-    $afterRestoreSecond = Get-RooProcessControlState $relaunchSecond.Id $null
+    $afterRestoreSecond = Get-RooIndustriesProcessControlState $relaunchSecond.Id $null
     $secondRestored = @($restore.restoredItems | Where-Object { [int]$_.processId -eq $relaunchSecond.Id }) | Select-Object -First 1
     $firstRestoreSkip = @($restore.skippedItems | Where-Object { [int]$_.processId -eq [int]$firstChange.changedItem.processId }) | Select-Object -First 1
     if (-not $secondRestored -and $firstRestoreSkip -and $afterRestoreSecond.priorityClass -eq $beforeSecond.priorityClass) {
@@ -396,7 +396,7 @@ try {
     Add-Failure "Relaunch reliability validation failed: $($_.Exception.Message)"
 } finally {
     if ($relaunchSessionProc -and -not $relaunchSessionProc.HasExited) {
-        Stop-RooValidationProcess $relaunchSessionProc
+        Stop-RooIndustriesValidationProcess $relaunchSessionProc
     }
     Stop-ReliabilityProbe -Process $relaunchFirst
     Stop-ReliabilityProbe -Process $relaunchSecond

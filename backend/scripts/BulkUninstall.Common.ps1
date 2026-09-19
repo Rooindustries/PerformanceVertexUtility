@@ -3,20 +3,20 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 . (Join-Path $PSScriptRoot 'UninstallOutcome.Common.ps1')
 
-function Assert-RooBulkFixtureRoot {
+function Assert-RooIndustriesBulkFixtureRoot {
     param([string]$Root)
     $full=[IO.Path]::GetFullPath($Root)
     $temp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')+'\'
-    if (-not $full.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase) -or (Test-RooCleanupReparsePath $full -Recurse)) {
+    if (-not $full.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase) -or (Test-RooIndustriesCleanupReparsePath $full -Recurse)) {
         throw 'Fixture execution requires an isolated directory beneath the current user temp folder, without reparse paths.'
     }
     return $full
 }
 
-function Assert-RooBulkIdentity {
+function Assert-RooIndustriesBulkIdentity {
     param($Identity,[string]$FixtureRoot='')
     if ($null -eq $Identity) {throw 'App identity is incomplete. Refresh inventory before preview.'}
-    $owner=Get-RooOperationOwner
+    $owner=Get-RooIndustriesOperationOwner
     switch ([string]$Identity.kind) {
         'registry' {
             if ($Identity.hive -notin @('LocalMachine','CurrentUser') -or $Identity.view -notin @('Registry32','Registry64') -or
@@ -28,16 +28,16 @@ function Assert-RooBulkIdentity {
                 $Identity.packageFullName -notmatch '^[^_]+_[^_]+_[^_]+_[^_]*_[^_]+$') {throw 'Invalid current-user Appx identity.'}
         }
         'fixture' {
-            if (-not $FixtureRoot -or -not (Test-RooCleanupPathWithin ([string]$Identity.presencePath) $FixtureRoot) -or
+            if (-not $FixtureRoot -or -not (Test-RooIndustriesCleanupPathWithin ([string]$Identity.presencePath) $FixtureRoot) -or
                 [IO.Path]::GetFullPath([string]$Identity.presencePath) -ieq $FixtureRoot) {throw 'Fixture identity is outside its declared fixture root.'}
         }
         default {throw 'No exact removal adapter is available for this app identity.'}
     }
 }
 
-function Test-RooBulkAppPresent {
+function Test-RooIndustriesBulkAppPresent {
     param($Identity,[string]$FixtureRoot='')
-    Assert-RooBulkIdentity $Identity $FixtureRoot
+    Assert-RooIndustriesBulkIdentity $Identity $FixtureRoot
     if ($Identity.kind -eq 'fixture') {return [IO.File]::Exists([string]$Identity.presencePath)}
     if ($Identity.kind -eq 'appx') {
         return @(Get-AppxPackage -ErrorAction Stop | Where-Object {$_.PackageFullName -ceq $Identity.packageFullName}).Count -gt 0
@@ -49,16 +49,16 @@ function Test-RooBulkAppPresent {
     finally {if($null -ne $key){$key.Dispose()};$base.Dispose()}
 }
 
-function Get-RooBulkExecutableHash {
+function Get-RooIndustriesBulkExecutableHash {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {throw 'Removal executable must be an existing absolute file path.'}
-    if (Test-RooCleanupReparsePath $Path) {throw 'Removal executable cannot be reached through a reparse path.'}
+    if (Test-RooIndustriesCleanupReparsePath $Path) {throw 'Removal executable cannot be reached through a reparse path.'}
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Get-RooBulkRegistrationState {
+function Get-RooIndustriesBulkRegistrationState {
     param($Identity,[string]$FixtureRoot='')
-    Assert-RooBulkIdentity $Identity $FixtureRoot
+    Assert-RooIndustriesBulkIdentity $Identity $FixtureRoot
     if($Identity.kind -eq 'fixture'){return [pscustomobject]@{fingerprint=(Get-FileHash -LiteralPath $Identity.presencePath -Algorithm SHA256).Hash.ToLowerInvariant();displayValues=$null}}
     $values=[ordered]@{identity=$Identity}
     $displayValues=@{}
@@ -79,17 +79,17 @@ function Get-RooBulkRegistrationState {
     finally {$sha.Dispose()}
 }
 
-function Get-RooBulkRegistrationFingerprint {
+function Get-RooIndustriesBulkRegistrationFingerprint {
     param($Identity,[string]$FixtureRoot='')
-    return (Get-RooBulkRegistrationState $Identity $FixtureRoot).fingerprint
+    return (Get-RooIndustriesBulkRegistrationState $Identity $FixtureRoot).fingerprint
 }
 
-function Assert-RooBulkInventoryBinding {
+function Assert-RooIndustriesBulkInventoryBinding {
     param($App,$Registration)
     if($App.sourceIdentity.kind -ne 'registry'){return}
     $mapping=@{displayName='DisplayName';version='DisplayVersion';publisher='Publisher';installLocation='InstallLocation';uninstallString='UninstallString';quietUninstallString='QuietUninstallString'}
     foreach($name in $mapping.Keys) {
-        if([string](Get-RooUninstallPropertyValue $App $name '') -cne [string]$Registration.displayValues[$mapping[$name]]) {
+        if([string](Get-RooIndustriesUninstallPropertyValue $App $name '') -cne [string]$Registration.displayValues[$mapping[$name]]) {
             throw 'Inventory differs from the current app registration. Refresh inventory before reviewing a removal command.'
         }
     }
@@ -98,25 +98,25 @@ function Assert-RooBulkInventoryBinding {
     if(($App.sourceType -eq 'msi') -ne $msi){throw 'Installer identity changed after inventory capture.'}
 }
 
-function Get-RooBulkClaimPath {
+function Get-RooIndustriesBulkClaimPath {
     param($Entry,[string]$FixtureRoot='')
-    $root=if($FixtureRoot){Join-Path $FixtureRoot '.removal-claims'}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooOptimizationSuite\uninstall-claims'}
+    $root=if($FixtureRoot){Join-Path $FixtureRoot '.removal-claims'}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\uninstall-claims'}
     $sha=[Security.Cryptography.SHA256]::Create()
     try {$id=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$Entry.appId)))).Replace('-','').ToLowerInvariant()}
     finally {$sha.Dispose()}
     return Join-Path $root ($id+'.json')
 }
 
-function Remove-RooBulkOwnedClaim {
+function Remove-RooIndustriesBulkOwnedClaim {
     param($Entry,$Plan,[string]$FixtureRoot='')
-    $path=Get-RooBulkClaimPath $Entry $FixtureRoot
-    $lease=Lock-RooOperation $path
+    $path=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
+    $lease=Lock-RooIndustriesOperation $path
     try {
-        if(Test-Path -LiteralPath $path){$claim=(Read-RooOperationJson $path).data;if($claim.queueId -ceq $Plan.queueId){Remove-Item -LiteralPath $path -Force}}
+        if(Test-Path -LiteralPath $path){$claim=(Read-RooIndustriesOperationJson $path).data;if($claim.queueId -ceq $Plan.queueId){Remove-Item -LiteralPath $path -Force}}
     } finally {$lease.Dispose()}
 }
 
-function Test-RooBulkInvocationLive {
+function Test-RooIndustriesBulkInvocationLive {
     param($Invocation)
     if ($null -eq $Invocation -or $null -eq $Invocation.processId) {return $false}
     $process=$null
@@ -127,35 +127,35 @@ function Test-RooBulkInvocationLive {
     finally {if($null -ne $process){$process.Dispose()}}
 }
 
-function Get-RooBulkBootTime {
+function Get-RooIndustriesBulkBootTime {
     # Preserve the reboot boundary separately from command/registration success.
     $system=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     return $system.LastBootUpTime.ToUniversalTime().ToString('o')
 }
 
-function Test-RooBulkRestartAfterInvocation {
+function Test-RooIndustriesBulkRestartAfterInvocation {
     param($Invocation)
     $createdFileTime=[long]0
     if($null -eq $Invocation -or -not [long]::TryParse([string]$Invocation.creationTimeFileTimeUtc,[ref]$createdFileTime) -or $createdFileTime -le 0){
         throw 'The remover creation time is missing; a later restart cannot be verified.'
     }
     $created=[datetime]::FromFileTimeUtc($createdFileTime)
-    $boot=[datetime]::Parse((Get-RooBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
     return $boot -gt $created
 }
 
-function Invoke-RooBulkEntry {
+function Invoke-RooIndustriesBulkEntry {
     param($Entry,$JournalEntry,$Journal,[string]$JournalPath,[int]$TimeoutSeconds,[string]$FixtureRoot='')
     $process=$null; $executableLease=$null; $claimLease=$null; $capture=$null
     try {
-        if($null -eq ('Roo.Optimization.ProcessOutput.Capture' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooProcessOutput.cs')}
-        $claimPath=Get-RooBulkClaimPath $Entry $FixtureRoot
-        $claimLease=Lock-RooOperation $claimPath
+        if($null -eq ('RooIndustries.Optimization.ProcessOutput.Capture' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessOutput.cs')}
+        $claimPath=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
+        $claimLease=Lock-RooIndustriesOperation $claimPath
         if(Test-Path -LiteralPath $claimPath) {
-            $claim=(Read-RooOperationJson $claimPath).data
+            $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }
-        if((Get-RooBulkRegistrationFingerprint $Entry.identity $FixtureRoot) -cne $Entry.registrationFingerprint){throw 'App registration changed after review. Create a fresh plan for the current installed version.'}
+        if((Get-RooIndustriesBulkRegistrationFingerprint $Entry.identity $FixtureRoot) -cne $Entry.registrationFingerprint){throw 'App registration changed after review. Create a fresh plan for the current installed version.'}
         # Retain a read lease through CreateProcess so the reviewed executable
         # cannot be replaced between its hash check and launch.
         $executableLease=[IO.File]::Open($Entry.executable,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
@@ -166,22 +166,22 @@ function Invoke-RooBulkEntry {
         $start.FileName=$Entry.executable; $start.WorkingDirectory=$Entry.workingDirectory
         $start.UseShellExecute=$false; $start.CreateNoWindow=$true
         $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
-        $start.Arguments=if($Entry.argumentMode -eq 'raw') {[string]$Entry.rawArguments} else {Join-RooWindowsArguments ([string[]]@($Entry.arguments))}
-        $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooUtcStamp
-        Write-RooOperationJson $Journal $JournalPath
-        Write-RooOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
+        $start.Arguments=if($Entry.argumentMode -eq 'raw') {[string]$Entry.rawArguments} else {Join-RooIndustriesWindowsArguments ([string[]]@($Entry.arguments))}
+        $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
+        Write-RooIndustriesOperationJson $Journal $JournalPath
+        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
         $process=[Diagnostics.Process]::new();$process.StartInfo=$start
         if(-not $process.Start()){throw 'CreateProcess returned false.'}
-        $capture=[Roo.Optimization.ProcessOutput.Capture]::new($process,65536)
+        $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
         $executableLease.Dispose();$executableLease=$null
-        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooUtcStamp}
-        $JournalEntry.state='running'; Write-RooOperationJson $Journal $JournalPath
+        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp}
+        $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
         if (-not $process.WaitForExit($TimeoutSeconds*1000)) {
             $JournalEntry.state='needs-reconciliation'
             $JournalEntry.error='Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'
             return
         }
-        $JournalEntry.outcome=Get-RooUninstallOutcome $Entry.exitCodePolicy $process.ExitCode
+        $JournalEntry.outcome=Get-RooIndustriesUninstallOutcome $Entry.exitCodePolicy $process.ExitCode
         $JournalEntry.state=$JournalEntry.outcome.state
         if(-not $capture.Complete(2000)) {
             $JournalEntry.state='needs-reconciliation'
@@ -198,7 +198,7 @@ function Invoke-RooBulkEntry {
         }
         if($null -ne $process){$process.Dispose()}
         if($null -ne $claimLease){$claimLease.Dispose()}
-        $JournalEntry.updatedAtUtc=Get-RooUtcStamp
-        Write-RooOperationJson $Journal $JournalPath
+        $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
+        Write-RooIndustriesOperationJson $Journal $JournalPath
     }
 }

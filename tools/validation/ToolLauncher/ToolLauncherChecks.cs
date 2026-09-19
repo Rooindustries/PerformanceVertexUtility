@@ -1,26 +1,26 @@
 using System.IO.Compression;
 using System.Text.Json;
-using Roo.OptimizationSuite.Services;
+using RooIndustries.OptimizationSuite.Services;
 
 static class ToolLauncherChecks
 {
     public static void Run(Action<bool, string> check, string fixture)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-tool-launcher-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-tool-launcher-" + Guid.NewGuid().ToString("N"));
         var id = "fixture-" + Guid.NewGuid().ToString("N");
-        var cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooOptimizationSuite", "tools");
+        var cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite", "tools");
         var cache = Path.Combine(cacheRoot, id);
-        var oldRoot = Environment.GetEnvironmentVariable("ROO_UTILITIES_ROOT");
+        var oldRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT");
         var relative = "Utilities/Other/Fixture/SCEWIN64.exe";
         var tool = new ToolDefinition(id, "File fixture", "File-only CLI", "Diagnostics", "https://example.invalid/", relative, [], "open", null);
         var authority = Path.Combine(fixture, "fixture-authority.txt");
-        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-firmware-cli-fixture/v1") throw new InvalidDataException("Tool launch requires the disposable CLI fixture.");
+        if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-industries-firmware-cli-fixture/v1") throw new InvalidDataException("Tool launch requires the disposable CLI fixture.");
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "vendor"));
             Directory.CreateDirectory(Path.Combine(root, "modules"));
             File.WriteAllText(Path.Combine(root, "modules", "tool-launchers.json"), JsonSerializer.Serialize(new { tools = new[] { tool } }));
-            Environment.SetEnvironmentVariable("ROO_UTILITIES_ROOT", Path.Combine(root, "absent"));
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", Path.Combine(root, "absent"));
             var service = new ToolLauncherService(root);
             check(service.ReadAsync().GetAwaiter().GetResult().Single().Name == "File fixture", "Tool launcher reads the named tool from its package catalog");
             check(service.Resolve(tool).Action == "Get", "A missing tool offers its download page rather than pretending to be installed");
@@ -51,7 +51,7 @@ static class ToolLauncherChecks
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ROO_UTILITIES_ROOT", oldRoot);
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", oldRoot);
             if (Directory.Exists(cache)) Directory.Delete(cache, recursive: true);
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }

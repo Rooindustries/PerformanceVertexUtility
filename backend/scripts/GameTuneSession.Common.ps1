@@ -1,21 +1,21 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
-$script:RooGameTuneStateFolderName = 'game-tune-sessions'
+$script:RooIndustriesGameTuneStateFolderName = 'game-tune-sessions'
 
-function Resolve-RooGameTuneStateRoot {
+function Resolve-RooIndustriesGameTuneStateRoot {
     param([string]$StateRoot)
     $defaultStateRoot = Join-Path $PSScriptRoot '..\state'
-    $resolvedStateRoot = Resolve-RooPath $StateRoot $defaultStateRoot
-    return [System.IO.Path]::GetFullPath((Join-Path $resolvedStateRoot $script:RooGameTuneStateFolderName))
+    $resolvedStateRoot = Resolve-RooIndustriesPath $StateRoot $defaultStateRoot
+    return [System.IO.Path]::GetFullPath((Join-Path $resolvedStateRoot $script:RooIndustriesGameTuneStateFolderName))
 }
 
-function New-RooGameTuneSessionId {
+function New-RooIndustriesGameTuneSessionId {
     param([string]$ProfileId)
     $safeProfileId = if ([string]::IsNullOrWhiteSpace($ProfileId)) { 'profile' } else { $ProfileId.ToLowerInvariant() -replace '[^a-z0-9\-]+', '-' }
-    return "game-tune-$safeProfileId-$(Get-RooFileStamp)"
+    return "game-tune-$safeProfileId-$(Get-RooIndustriesFileStamp)"
 }
 
-function Get-RooGameTuneSessionDirectory {
+function Get-RooIndustriesGameTuneSessionDirectory {
     param(
         [string]$ResolvedGameTuneStateRoot,
         [string]$SessionId
@@ -23,36 +23,36 @@ function Get-RooGameTuneSessionDirectory {
     return Join-Path $ResolvedGameTuneStateRoot $SessionId
 }
 
-function Write-RooGameTuneJsonFile {
+function Write-RooIndustriesGameTuneJsonFile {
     param(
         [object]$Value,
         [string]$Path
     )
-    Ensure-RooDirectory (Split-Path $Path -Parent)
+    Ensure-RooIndustriesDirectory (Split-Path $Path -Parent)
     ($Value | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
-function Add-RooGameTuneLogFileEntry {
+function Add-RooIndustriesGameTuneLogFileEntry {
     param(
         [string]$SessionDirectory,
         [object]$Entry
     )
     if ([string]::IsNullOrWhiteSpace($SessionDirectory)) { return }
-    Ensure-RooDirectory $SessionDirectory
+    Ensure-RooIndustriesDirectory $SessionDirectory
     ($Entry | ConvertTo-Json -Depth 12 -Compress) | Add-Content -LiteralPath (Join-Path $SessionDirectory 'events.jsonl') -Encoding UTF8
 }
 
-function Get-RooGameTuneSessionFileFromPath {
+function Get-RooIndustriesGameTuneSessionFileFromPath {
     param([string]$SessionPath)
     if ([string]::IsNullOrWhiteSpace($SessionPath)) { return $null }
-    $resolved = Resolve-RooPath $SessionPath $SessionPath
+    $resolved = Resolve-RooIndustriesPath $SessionPath $SessionPath
     if (Test-Path -LiteralPath $resolved -PathType Container) {
         return Join-Path $resolved 'session.json'
     }
     return $resolved
 }
 
-function Get-RooGameTuneLatestSessionFile {
+function Get-RooIndustriesGameTuneLatestSessionFile {
     param([string]$ResolvedGameTuneStateRoot)
     if (-not (Test-Path -LiteralPath $ResolvedGameTuneStateRoot)) { return $null }
     $latest = Get-ChildItem -LiteralPath $ResolvedGameTuneStateRoot -Filter 'session.json' -Recurse -File |
@@ -62,25 +62,25 @@ function Get-RooGameTuneLatestSessionFile {
     return $latest.FullName
 }
 
-function Resolve-RooGameTuneSessionFile {
+function Resolve-RooIndustriesGameTuneSessionFile {
     param(
         [string]$SessionId,
         [string]$SessionPath,
         [string]$StateRoot
     )
     if (-not [string]::IsNullOrWhiteSpace($SessionPath)) {
-        return Get-RooGameTuneSessionFileFromPath $SessionPath
+        return Get-RooIndustriesGameTuneSessionFileFromPath $SessionPath
     }
-    $resolvedStateRoot = Resolve-RooGameTuneStateRoot $StateRoot
+    $resolvedStateRoot = Resolve-RooIndustriesGameTuneStateRoot $StateRoot
     if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
-        return Join-Path (Get-RooGameTuneSessionDirectory $resolvedStateRoot $SessionId) 'session.json'
+        return Join-Path (Get-RooIndustriesGameTuneSessionDirectory $resolvedStateRoot $SessionId) 'session.json'
     }
-    return Get-RooGameTuneLatestSessionFile $resolvedStateRoot
+    return Get-RooIndustriesGameTuneLatestSessionFile $resolvedStateRoot
 }
 
-function Get-RooGameTuneLiveProcessIdentity {
+function Get-RooIndustriesGameTuneLiveProcessIdentity {
     param([object]$PreviewEntry)
-    $processId = [int](Get-RooPropertyValue $PreviewEntry 'processId' 0)
+    $processId = [int](Get-RooIndustriesPropertyValue $PreviewEntry 'processId' 0)
     $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if ($null -eq $live) {
         return [pscustomobject]@{
@@ -93,11 +93,11 @@ function Get-RooGameTuneLiveProcessIdentity {
         }
     }
 
-    $expectedName = [string](Get-RooPropertyValue $PreviewEntry 'processName' '')
-    $nameMatches = Test-RooProcessNameEquals $live.ProcessName $expectedName
+    $expectedName = [string](Get-RooIndustriesPropertyValue $PreviewEntry 'processName' '')
+    $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $currentPath = $null
     try { $currentPath = $live.Path } catch { $currentPath = $null }
-    $expectedPath = Get-RooPropertyValue $PreviewEntry 'executablePath' $null
+    $expectedPath = Get-RooIndustriesPropertyValue $PreviewEntry 'executablePath' $null
     $pathMatches = $true
     $pathReason = $null
     if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
@@ -112,7 +112,7 @@ function Get-RooGameTuneLiveProcessIdentity {
 
     $matches = ($nameMatches -and $pathMatches)
     $reason = if ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }
-    $controlState = Get-RooProcessControlState $processId $null
+    $controlState = Get-RooIndustriesProcessControlState $processId $null
     return [pscustomobject]@{
         exists = $true
         matches = $matches
@@ -128,33 +128,33 @@ function Get-RooGameTuneLiveProcessIdentity {
     }
 }
 
-function Test-RooGameTuneEntryAllowed {
+function Test-RooIndustriesGameTuneEntryAllowed {
     param([object]$PreviewEntry)
-    if ([bool](Get-RooPropertyValue $PreviewEntry 'protected' $false) -or [bool](Get-RooPropertyValue $PreviewEntry 'blocked' $false)) {
+    if ([bool](Get-RooIndustriesPropertyValue $PreviewEntry 'protected' $false) -or [bool](Get-RooIndustriesPropertyValue $PreviewEntry 'blocked' $false)) {
         return [pscustomobject]@{ allowed = $false; reason = 'Preview entry is protected or blocked.' }
     }
-    $changes = @(Get-RooPreviewControlChanges $PreviewEntry)
+    $changes = @(Get-RooIndustriesPreviewControlChanges $PreviewEntry)
     if ($changes.Count -eq 0) {
         return [pscustomobject]@{ allowed = $false; reason = 'Preview entry does not request a process control change.' }
     }
     foreach ($change in $changes) {
-        if ([bool](Get-RooPropertyValue $change 'blocked' $false)) {
-            return [pscustomobject]@{ allowed = $false; reason = [string](Get-RooPropertyValue $change 'blockedReason' 'A requested process control is blocked.') }
+        if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+            return [pscustomobject]@{ allowed = $false; reason = [string](Get-RooIndustriesPropertyValue $change 'blockedReason' 'A requested process control is blocked.') }
         }
-        $control = [string](Get-RooPropertyValue $change 'control' '')
-        $value = Get-RooPropertyValue $change 'proposedValue' $null
+        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        $value = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
         switch ($control) {
             'priorityClass' {
-                if (-not (Test-RooPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "Priority class '$value' is outside the allow-list." } }
+                if (-not (Test-RooIndustriesPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "Priority class '$value' is outside the allow-list." } }
             }
             'affinityMask' {
-                if (-not (Test-RooAffinityMaskAllowed $value)) { return [pscustomobject]@{ allowed = $false; reason = "Affinity mask '$value' is invalid." } }
+                if (-not (Test-RooIndustriesAffinityMaskAllowed $value)) { return [pscustomobject]@{ allowed = $false; reason = "Affinity mask '$value' is invalid." } }
             }
             'ioPriority' {
-                if (-not (Test-RooIoPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "I/O priority '$value' is outside the allow-list." } }
+                if (-not (Test-RooIndustriesIoPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "I/O priority '$value' is outside the allow-list." } }
             }
             'gpuPriority' {
-                if (-not (Test-RooGpuPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "GPU priority '$value' is outside the allow-list." } }
+                if (-not (Test-RooIndustriesGpuPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "GPU priority '$value' is outside the allow-list." } }
             }
             default {
                 return [pscustomobject]@{ allowed = $false; reason = "Unsupported process control '$control'." }
@@ -164,7 +164,7 @@ function Test-RooGameTuneEntryAllowed {
     return [pscustomobject]@{ allowed = $true; reason = $null }
 }
 
-function New-RooGameTuneChangedItem {
+function New-RooIndustriesGameTuneChangedItem {
     param(
         [object]$PreviewEntry,
         [object]$OriginalState,
@@ -173,70 +173,70 @@ function New-RooGameTuneChangedItem {
         [int]$PollIndex
     )
     return [pscustomobject]@{
-        processId = [int](Get-RooPropertyValue $PreviewEntry 'processId' 0)
-        processName = [string](Get-RooPropertyValue $PreviewEntry 'processName' '')
-        executablePath = Get-RooPropertyValue $PreviewEntry 'executablePath' $null
-        originalPriorityClass = Get-RooPropertyValue $OriginalState 'priorityClass' $null
-        appliedPriorityClass = Get-RooPropertyValue $AppliedState 'priorityClass' $null
-        originalAffinityMask = Get-RooPropertyValue $OriginalState 'affinityMask' $null
-        appliedAffinityMask = Get-RooPropertyValue $AppliedState 'affinityMask' $null
-        originalIoPriority = Get-RooPropertyValue $OriginalState 'ioPriority' $null
-        appliedIoPriority = Get-RooPropertyValue $AppliedState 'ioPriority' $null
-        originalGpuPriority = Get-RooPropertyValue $OriginalState 'gpuPriority' $null
-        appliedGpuPriority = Get-RooPropertyValue $AppliedState 'gpuPriority' $null
-        appliedControls = @(Get-RooArray $AppliedControls)
-        ruleId = [string](Get-RooPropertyValue $PreviewEntry 'ruleId' '')
-        reason = [string](Get-RooPropertyValue $PreviewEntry 'reason' '')
+        processId = [int](Get-RooIndustriesPropertyValue $PreviewEntry 'processId' 0)
+        processName = [string](Get-RooIndustriesPropertyValue $PreviewEntry 'processName' '')
+        executablePath = Get-RooIndustriesPropertyValue $PreviewEntry 'executablePath' $null
+        originalPriorityClass = Get-RooIndustriesPropertyValue $OriginalState 'priorityClass' $null
+        appliedPriorityClass = Get-RooIndustriesPropertyValue $AppliedState 'priorityClass' $null
+        originalAffinityMask = Get-RooIndustriesPropertyValue $OriginalState 'affinityMask' $null
+        appliedAffinityMask = Get-RooIndustriesPropertyValue $AppliedState 'affinityMask' $null
+        originalIoPriority = Get-RooIndustriesPropertyValue $OriginalState 'ioPriority' $null
+        appliedIoPriority = Get-RooIndustriesPropertyValue $AppliedState 'ioPriority' $null
+        originalGpuPriority = Get-RooIndustriesPropertyValue $OriginalState 'gpuPriority' $null
+        appliedGpuPriority = Get-RooIndustriesPropertyValue $AppliedState 'gpuPriority' $null
+        appliedControls = @(Get-RooIndustriesArray $AppliedControls)
+        ruleId = [string](Get-RooIndustriesPropertyValue $PreviewEntry 'ruleId' '')
+        reason = [string](Get-RooIndustriesPropertyValue $PreviewEntry 'reason' '')
         pollIndex = $PollIndex
-        changedAtUtc = Get-RooUtcStamp
+        changedAtUtc = Get-RooIndustriesUtcStamp
     }
 }
 
-function New-RooGameTuneSkippedItem {
+function New-RooIndustriesGameTuneSkippedItem {
     param(
         [object]$PreviewEntry,
         [string]$Reason,
         [int]$PollIndex
     )
     return [pscustomobject]@{
-        processId = Get-RooPropertyValue $PreviewEntry 'processId' $null
-        processName = Get-RooPropertyValue $PreviewEntry 'processName' $null
-        proposedPriorityClass = Get-RooPropertyValue $PreviewEntry 'proposedPriorityClass' $null
-        proposedAffinityMask = Get-RooPropertyValue $PreviewEntry 'proposedAffinityMask' $null
-        proposedIoPriority = Get-RooPropertyValue $PreviewEntry 'proposedIoPriority' $null
-        proposedGpuPriority = Get-RooPropertyValue $PreviewEntry 'proposedGpuPriority' $null
-        controlChanges = @(Get-RooPreviewControlChanges $PreviewEntry)
-        ruleId = Get-RooPropertyValue $PreviewEntry 'ruleId' $null
+        processId = Get-RooIndustriesPropertyValue $PreviewEntry 'processId' $null
+        processName = Get-RooIndustriesPropertyValue $PreviewEntry 'processName' $null
+        proposedPriorityClass = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedPriorityClass' $null
+        proposedAffinityMask = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedAffinityMask' $null
+        proposedIoPriority = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedIoPriority' $null
+        proposedGpuPriority = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedGpuPriority' $null
+        controlChanges = @(Get-RooIndustriesPreviewControlChanges $PreviewEntry)
+        ruleId = Get-RooIndustriesPropertyValue $PreviewEntry 'ruleId' $null
         reason = $Reason
         pollIndex = $PollIndex
-        skippedAtUtc = Get-RooUtcStamp
+        skippedAtUtc = Get-RooIndustriesUtcStamp
     }
 }
 
-function New-RooGameTuneBackupMetadata {
+function New-RooIndustriesGameTuneBackupMetadata {
     param(
         [object]$BackupManifest,
         [string]$BackupPath
     )
     $snapshots = New-Object System.Collections.Generic.List[object]
-    foreach ($snap in @(Get-RooPropertyArray $BackupManifest 'snapshots')) {
+    foreach ($snap in @(Get-RooIndustriesPropertyArray $BackupManifest 'snapshots')) {
         $snapshots.Add([pscustomobject]@{
             type = 'processControls'
-            target = "$([string](Get-RooPropertyValue $snap 'processName' ''))`:$([int](Get-RooPropertyValue $snap 'processId' 0))"
+            target = "$([string](Get-RooIndustriesPropertyValue $snap 'processName' ''))`:$([int](Get-RooIndustriesPropertyValue $snap 'processId' 0))"
             originalState = [pscustomobject]@{
-                priorityClass = Get-RooPropertyValue $snap 'originalPriorityClass' $null
-                affinityMask = Get-RooPropertyValue $snap 'originalAffinityMask' $null
-                ioPriority = Get-RooPropertyValue $snap 'originalIoPriority' $null
-                gpuPriority = Get-RooPropertyValue $snap 'originalGpuPriority' $null
-                executablePath = Get-RooPropertyValue $snap 'executablePath' $null
+                priorityClass = Get-RooIndustriesPropertyValue $snap 'originalPriorityClass' $null
+                affinityMask = Get-RooIndustriesPropertyValue $snap 'originalAffinityMask' $null
+                ioPriority = Get-RooIndustriesPropertyValue $snap 'originalIoPriority' $null
+                gpuPriority = Get-RooIndustriesPropertyValue $snap 'originalGpuPriority' $null
+                executablePath = Get-RooIndustriesPropertyValue $snap 'executablePath' $null
             }
         }) | Out-Null
     }
 
     return [pscustomobject]@{
-        backupId = [string](Get-RooPropertyValue $BackupManifest 'backupId' '')
+        backupId = [string](Get-RooIndustriesPropertyValue $BackupManifest 'backupId' '')
         scope = 'game-tune-session-process-controls'
-        createdAtUtc = [string](Get-RooPropertyValue $BackupManifest 'createdAtUtc' '')
+        createdAtUtc = [string](Get-RooIndustriesPropertyValue $BackupManifest 'createdAtUtc' '')
         location = $BackupPath
         restorePoint = [pscustomobject]@{
             requested = $false
@@ -253,7 +253,7 @@ function New-RooGameTuneBackupMetadata {
     }
 }
 
-function New-RooGameTuneResult {
+function New-RooIndustriesGameTuneResult {
     param(
         [string]$ResultId,
         [string]$Status,
@@ -267,11 +267,11 @@ function New-RooGameTuneResult {
         resultId = $ResultId
         status = $Status
         startedAtUtc = $null
-        completedAtUtc = Get-RooUtcStamp
+        completedAtUtc = Get-RooIndustriesUtcStamp
         summary = $Summary
-        changedItems = @(Get-RooArray $ChangedItems)
-        skippedItems = @(Get-RooArray $SkippedItems)
-        restoredItems = @(Get-RooArray $RestoredItems)
-        artifacts = @(Get-RooArray $Artifacts)
+        changedItems = @(Get-RooIndustriesArray $ChangedItems)
+        skippedItems = @(Get-RooIndustriesArray $SkippedItems)
+        restoredItems = @(Get-RooIndustriesArray $RestoredItems)
+        artifacts = @(Get-RooIndustriesArray $Artifacts)
     }
 }

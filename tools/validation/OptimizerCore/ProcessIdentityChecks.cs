@@ -1,13 +1,13 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using Roo.Optimizer;
+using RooIndustries.Optimizer;
 
 static class ProcessIdentityChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-image-path-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-image-path-" + Guid.NewGuid().ToString("N"));
         var directory = Path.Combine(root, new string('a', 100), new string('b', 100));
         ProcessInfo created = default;
         try

@@ -1,0 +1,19 @@
+<Application
+    x:Class="RooIndustries.OptimizationSuite.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <muxc:XamlControlsResources />
+                <ResourceDictionary Source="ms-appx:///Resources/Theme.BlackoutGold.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Brand.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Styles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/CapabilityTemplates.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,8 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$previousFixtureRoot = $env:ROO_CLEANUP_FIXTURE_ROOT
-$script:FixtureBase = Join-Path ([IO.Path]::GetTempPath()) ('roo-capability-router-cleanup-' + [guid]::NewGuid().ToString('N'))
-$env:ROO_CLEANUP_FIXTURE_ROOT = $script:FixtureBase
+$previousFixtureRoot = $env:ROO_INDUSTRIES_CLEANUP_FIXTURE_ROOT
+$script:FixtureBase = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-capability-router-cleanup-' + [guid]::NewGuid().ToString('N'))
+$env:ROO_INDUSTRIES_CLEANUP_FIXTURE_ROOT = $script:FixtureBase
 
 $passes = New-Object System.Collections.Generic.List[string]
 $failures = New-Object System.Collections.Generic.List[string]
@@ -147,7 +147,7 @@ function Invoke-Router {
 
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:RouterPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
-    $json = ConvertFrom-RouterJson $output "Invoke-RooCapability $($Arguments -join ' ')"
+    $json = ConvertFrom-RouterJson $output "Invoke-RooIndustriesCapability $($Arguments -join ' ')"
     return [pscustomobject]@{
         exitCode = [int]$exitCode
         output = ($output | Out-String).Trim()
@@ -363,7 +363,7 @@ function Write-InitialRollbackManifest {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooCapability.ps1'
+$script:RouterPath = Join-Path $repoRoot 'backend\scripts\Invoke-RooIndustriesCapability.ps1'
 $manifestPath = Join-Path $repoRoot 'backend\capabilities\routing\cleanup-uninstall.routes.json'
 $capabilityPath = Join-Path $repoRoot 'backend\capabilities\cleanup-uninstall.json'
 $statePath = Join-Path $repoRoot 'backend\state'
@@ -649,7 +649,7 @@ exit 0
 } catch {
     Add-Failure "Cleanup router validation threw: $($_.Exception.Message)"
 } finally {
-    $env:ROO_CLEANUP_FIXTURE_ROOT = $previousFixtureRoot
+    $env:ROO_INDUSTRIES_CLEANUP_FIXTURE_ROOT = $previousFixtureRoot
     if (-not [string]::IsNullOrWhiteSpace($tempBase)) {
         try {
             Remove-TempTree $tempBase

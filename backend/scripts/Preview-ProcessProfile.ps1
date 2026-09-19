@@ -12,8 +12,8 @@ function Get-ProfileSafeRuleById {
         [object]$Profile,
         [string]$RuleId
     )
-    foreach ($rule in @(Get-RooPropertyArray $Profile 'safeCandidates')) {
-        if ([string](Get-RooPropertyValue $rule 'ruleId' '') -eq $RuleId) { return $rule }
+    foreach ($rule in @(Get-RooIndustriesPropertyArray $Profile 'safeCandidates')) {
+        if ([string](Get-RooIndustriesPropertyValue $rule 'ruleId' '') -eq $RuleId) { return $rule }
     }
     return $null
 }
@@ -23,9 +23,9 @@ function Get-ProtectedReasonById {
         [object]$ProtectedCatalog,
         [string]$ItemId
     )
-    foreach ($item in @(Get-RooPropertyArray $ProtectedCatalog 'protectedProcesses')) {
-        if ([string](Get-RooPropertyValue $item 'itemId' '') -eq $ItemId) {
-            return [string](Get-RooPropertyValue $item 'reason' 'Protected process.')
+    foreach ($item in @(Get-RooIndustriesPropertyArray $ProtectedCatalog 'protectedProcesses')) {
+        if ([string](Get-RooIndustriesPropertyValue $item 'itemId' '') -eq $ItemId) {
+            return [string](Get-RooIndustriesPropertyValue $item 'reason' 'Protected process.')
         }
     }
     return 'Protected process.'
@@ -36,9 +36,9 @@ function Get-CompanionReasonById {
         [object]$Profile,
         [string]$ItemId
     )
-    foreach ($item in @(Get-RooPropertyArray $Profile 'protectedCompanions')) {
-        if ([string](Get-RooPropertyValue $item 'itemId' '') -eq $ItemId) {
-            return [string](Get-RooPropertyValue $item 'reason' 'Companion process needs review before changes.')
+    foreach ($item in @(Get-RooIndustriesPropertyArray $Profile 'protectedCompanions')) {
+        if ([string](Get-RooIndustriesPropertyValue $item 'itemId' '') -eq $ItemId) {
+            return [string](Get-RooIndustriesPropertyValue $item 'reason' 'Companion process needs review before changes.')
         }
     }
     return 'Companion process needs review before changes.'
@@ -51,115 +51,115 @@ function New-ProcessPreviewEntry {
         [object]$ProtectedCatalog
     )
 
-    $classification = [string](Get-RooPropertyValue $Process 'classification' 'unknown')
-    $ruleId = [string](Get-RooPropertyValue $Process 'matchedRuleId' '')
+    $classification = [string](Get-RooIndustriesPropertyValue $Process 'classification' 'unknown')
+    $ruleId = [string](Get-RooIndustriesPropertyValue $Process 'matchedRuleId' '')
     $reason = 'No process control change proposed.'
     $proposedAction = 'noChange'
-    $proposedPriority = Get-RooPropertyValue $Process 'priorityClass' $null
+    $proposedPriority = Get-RooIndustriesPropertyValue $Process 'priorityClass' $null
     $proposedAffinityMask = $null
     $proposedIoPriority = $null
     $proposedGpuPriority = $null
     $rollbackSupported = $false
-    $risk = [string](Get-RooPropertyValue $Process 'risk' 'low')
-    $blocked = [bool](Get-RooPropertyValue $Process 'blocked' $false)
-    $protected = [bool](Get-RooPropertyValue $Process 'protected' $false)
+    $risk = [string](Get-RooIndustriesPropertyValue $Process 'risk' 'low')
+    $blocked = [bool](Get-RooIndustriesPropertyValue $Process 'blocked' $false)
+    $protected = [bool](Get-RooIndustriesPropertyValue $Process 'protected' $false)
     $confidence = 'medium'
     $actionSource = $null
 
     if ($classification -eq 'gameTarget') {
-        $foregroundGame = Get-RooPropertyValue $Profile 'foregroundGame' $null
-        $ruleId = [string](Get-RooPropertyValue $foregroundGame 'ruleId' 'boost-foreground-game')
+        $foregroundGame = Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null
+        $ruleId = [string](Get-RooIndustriesPropertyValue $foregroundGame 'ruleId' 'boost-foreground-game')
         $actionSource = $foregroundGame
-        $proposedPriority = [string](Get-RooPropertyValue $foregroundGame 'priorityClass' 'AboveNormal')
-        $reason = [string](Get-RooPropertyValue $foregroundGame 'reason' 'Foreground game boost for frame-time stability.')
+        $proposedPriority = [string](Get-RooIndustriesPropertyValue $foregroundGame 'priorityClass' 'AboveNormal')
+        $reason = [string](Get-RooIndustriesPropertyValue $foregroundGame 'reason' 'Foreground game boost for frame-time stability.')
         $rollbackSupported = $true
         $risk = 'medium'
     } elseif ($classification -eq 'demotionCandidate') {
-        $rule = Get-RooRuleById $Profile $ruleId
-        $action = Get-RooPropertyValue $rule 'action' $null
+        $rule = Get-RooIndustriesRuleById $Profile $ruleId
+        $action = Get-RooIndustriesPropertyValue $rule 'action' $null
         $actionSource = $action
-        $proposedPriority = [string](Get-RooPropertyValue $action 'priorityClass' 'BelowNormal')
-        $reason = [string](Get-RooPropertyValue $action 'reason' 'Background priority demotion candidate.')
+        $proposedPriority = [string](Get-RooIndustriesPropertyValue $action 'priorityClass' 'BelowNormal')
+        $reason = [string](Get-RooIndustriesPropertyValue $action 'reason' 'Background priority demotion candidate.')
         $rollbackSupported = $true
-        $risk = [string](Get-RooPropertyValue $rule 'risk' 'low')
+        $risk = [string](Get-RooIndustriesPropertyValue $rule 'risk' 'low')
     } elseif ($classification -eq 'protectedCompanion') {
-        $reason = Get-CompanionReasonById $Profile ([string](Get-RooPropertyValue $Process 'matchedProfileItemId' ''))
+        $reason = Get-CompanionReasonById $Profile ([string](Get-RooIndustriesPropertyValue $Process 'matchedProfileItemId' ''))
         $blocked = $true
         $protected = $true
         $risk = 'protected'
         $confidence = 'high'
     } elseif ($classification -eq 'protected') {
-        $reason = Get-ProtectedReasonById $ProtectedCatalog ([string](Get-RooPropertyValue $Process 'matchedProtectedItemId' ''))
+        $reason = Get-ProtectedReasonById $ProtectedCatalog ([string](Get-RooIndustriesPropertyValue $Process 'matchedProtectedItemId' ''))
         $blocked = $true
         $protected = $true
         $risk = 'protected'
         $confidence = 'high'
     } elseif ($classification -eq 'safeCandidate') {
         $safeRule = Get-ProfileSafeRuleById $Profile $ruleId
-        $reason = [string](Get-RooPropertyValue $safeRule 'reason' 'Manual-review candidate; no automatic priority change.')
-        $risk = [string](Get-RooPropertyValue $safeRule 'risk' 'low')
+        $reason = [string](Get-RooIndustriesPropertyValue $safeRule 'reason' 'Manual-review candidate; no automatic priority change.')
+        $risk = [string](Get-RooIndustriesPropertyValue $safeRule 'risk' 'low')
     }
 
     if ($actionSource) {
-        $proposedAffinityMask = Get-RooPropertyValue $actionSource 'affinityMask' (Get-RooPropertyValue $actionSource 'processorAffinityMask' $null)
-        $proposedIoPriority = Get-RooPropertyValue $actionSource 'ioPriority' $null
-        $proposedGpuPriority = Get-RooPropertyValue $actionSource 'gpuPriority' $null
+        $proposedAffinityMask = Get-RooIndustriesPropertyValue $actionSource 'affinityMask' (Get-RooIndustriesPropertyValue $actionSource 'processorAffinityMask' $null)
+        $proposedIoPriority = Get-RooIndustriesPropertyValue $actionSource 'ioPriority' $null
+        $proposedGpuPriority = Get-RooIndustriesPropertyValue $actionSource 'gpuPriority' $null
     }
 
-    $processId = [int](Get-RooPropertyValue $Process 'pid' 0)
-    $processName = [string](Get-RooPropertyValue $Process 'name' '')
-    $currentControls = Get-RooProcessControlState $processId (Get-RooPropertyValue $Process 'priorityClass' $null)
+    $processId = [int](Get-RooIndustriesPropertyValue $Process 'pid' 0)
+    $processName = [string](Get-RooIndustriesPropertyValue $Process 'name' '')
+    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null)
     $currentPriority = $currentControls.priorityClass
     $currentAffinityMask = $currentControls.affinityMask
     $currentIoPriority = $currentControls.ioPriority
     $currentGpuPriority = $currentControls.gpuPriority
     $controlChanges = New-Object System.Collections.Generic.List[object]
-    $canChange = [bool](Get-RooPropertyValue $Process 'canChangePriority' $false)
+    $canChange = [bool](Get-RooIndustriesPropertyValue $Process 'canChangePriority' $false)
 
     if ($actionSource -and -not $protected -and -not $blocked -and $canChange) {
         if (-not [string]::IsNullOrWhiteSpace([string]$proposedPriority)) {
-            if (-not (Test-RooPriorityAllowed $proposedPriority)) {
+            if (-not (Test-RooIndustriesPriorityAllowed $proposedPriority)) {
                 $reason = "Priority class '$proposedPriority' is outside the allow-list."
             } elseif ($null -eq $currentPriority -or [string]::IsNullOrWhiteSpace([string]$currentPriority)) {
                 $reason = 'Current priority class could not be read, so no priority change is proposed.'
             } elseif ([string]$currentPriority -ne [string]$proposedPriority) {
-                $controlChanges.Add((New-RooControlChange 'priorityClass' $currentPriority $proposedPriority 'setPriority' $reason)) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $proposedPriority 'setPriority' $reason)) | Out-Null
             }
         }
 
         if ($null -ne $proposedAffinityMask) {
-            if (-not (Test-RooAffinityMaskAllowed $proposedAffinityMask)) {
+            if (-not (Test-RooIndustriesAffinityMaskAllowed $proposedAffinityMask)) {
                 $reason = "Affinity mask '$proposedAffinityMask' is invalid."
             } elseif ($null -eq $currentAffinityMask) {
                 $reason = 'Current CPU affinity could not be read, so no affinity change is proposed.'
             } elseif ([int64]$currentAffinityMask -ne [int64]$proposedAffinityMask) {
-                $controlChanges.Add((New-RooControlChange 'affinityMask' $currentAffinityMask ([int64]$proposedAffinityMask) 'setAffinity' 'Set process CPU affinity for the selected game profile.')) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinityMask ([int64]$proposedAffinityMask) 'setAffinity' 'Set process CPU affinity for the selected game profile.')) | Out-Null
             }
         }
 
         if (-not [string]::IsNullOrWhiteSpace([string]$proposedIoPriority)) {
-            if (-not (Test-RooIoPriorityAllowed $proposedIoPriority)) {
+            if (-not (Test-RooIndustriesIoPriorityAllowed $proposedIoPriority)) {
                 $reason = "I/O priority '$proposedIoPriority' is outside the allow-list."
             } elseif ([string]::IsNullOrWhiteSpace([string]$currentIoPriority)) {
                 $reason = 'Current I/O priority could not be read, so no I/O priority change is proposed.'
             } elseif ([string]$currentIoPriority -ne [string]$proposedIoPriority) {
-                $controlChanges.Add((New-RooControlChange 'ioPriority' $currentIoPriority $proposedIoPriority 'setIoPriority' 'Set process I/O priority for the selected game profile.')) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $proposedIoPriority 'setIoPriority' 'Set process I/O priority for the selected game profile.')) | Out-Null
             }
         }
 
         if (-not [string]::IsNullOrWhiteSpace([string]$proposedGpuPriority)) {
-            if (-not (Test-RooGpuPriorityAllowed $proposedGpuPriority)) {
+            if (-not (Test-RooIndustriesGpuPriorityAllowed $proposedGpuPriority)) {
                 $reason = "GPU priority '$proposedGpuPriority' is outside the allow-list."
                 $blocked = $true
                 $rollbackSupported = $false
-                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Requested GPU scheduling priority is outside the allow-list.' $true $reason)) | Out-Null
-            } elseif (-not [bool](Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false)) {
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Requested GPU scheduling priority is outside the allow-list.' $true $reason)) | Out-Null
+            } elseif (-not [bool](Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityAvailable' $false)) {
                 $reason = 'GPU scheduling priority is unavailable for this process.'
                 $blocked = $true
                 $rollbackSupported = $false
-                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Native GPU scheduling priority is unavailable for this process.' $true $reason)) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Native GPU scheduling priority is unavailable for this process.' $true $reason)) | Out-Null
             } elseif ([string]$currentGpuPriority -ne [string]$proposedGpuPriority) {
-                $controlChanges.Add((New-RooControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Set process GPU scheduling priority for the selected game profile.')) | Out-Null
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Set process GPU scheduling priority for the selected game profile.')) | Out-Null
             }
         }
     } elseif ($actionSource -and -not $canChange) {
@@ -172,14 +172,14 @@ function New-ProcessPreviewEntry {
         $proposedAction = 'noChange'
         $rollbackSupported = $false
     } elseif ($controlChanges.Count -gt 0) {
-        $proposedAction = if ($controlChanges.Count -eq 1 -and [string](Get-RooPropertyValue $controlChanges[0] 'action' '') -eq 'setPriority') { 'setPriority' } else { 'setProcessControls' }
+        $proposedAction = if ($controlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $controlChanges[0] 'action' '') -eq 'setPriority') { 'setPriority' } else { 'setProcessControls' }
         $rollbackSupported = $true
         foreach ($change in @($controlChanges.ToArray())) {
-            switch ([string](Get-RooPropertyValue $change 'control' '')) {
-                'priorityClass' { $proposedPriority = Get-RooPropertyValue $change 'proposedValue' $proposedPriority }
-                'affinityMask' { $proposedAffinityMask = Get-RooPropertyValue $change 'proposedValue' $proposedAffinityMask }
-                'ioPriority' { $proposedIoPriority = Get-RooPropertyValue $change 'proposedValue' $proposedIoPriority }
-                'gpuPriority' { $proposedGpuPriority = Get-RooPropertyValue $change 'proposedValue' $proposedGpuPriority }
+            switch ([string](Get-RooIndustriesPropertyValue $change 'control' '')) {
+                'priorityClass' { $proposedPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedPriority }
+                'affinityMask' { $proposedAffinityMask = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedAffinityMask }
+                'ioPriority' { $proposedIoPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedIoPriority }
+                'gpuPriority' { $proposedGpuPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedGpuPriority }
             }
         }
     } else {
@@ -197,10 +197,10 @@ function New-ProcessPreviewEntry {
         previewId = $previewId
         type = if ($controlChanges.Count -gt 1) { 'processControls' } else { 'processPriority' }
         target = "$processName`:$processId"
-        displayName = Get-RooPropertyValue $Process 'displayName' $processName
+        displayName = Get-RooIndustriesPropertyValue $Process 'displayName' $processName
         processId = $processId
         processName = $processName
-        executablePath = Get-RooPropertyValue $Process 'executablePath' $null
+        executablePath = Get-RooIndustriesPropertyValue $Process 'executablePath' $null
         currentPriorityClass = $currentPriority
         proposedPriorityClass = $proposedPriority
         currentAffinityMask = $currentAffinityMask
@@ -209,13 +209,13 @@ function New-ProcessPreviewEntry {
         proposedIoPriority = $proposedIoPriority
         currentGpuPriority = $currentGpuPriority
         proposedGpuPriority = $proposedGpuPriority
-        gpuPriorityAvailable = Get-RooPropertyValue $currentControls 'gpuPriorityAvailable' $false
-        gpuPriorityStatus = Get-RooPropertyValue $currentControls 'gpuPriorityStatus' $null
+        gpuPriorityAvailable = Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityAvailable' $false
+        gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
         ruleId = $ruleId
         reason = $reason
-        reasonCodes = @(Get-RooPropertyArray $Process 'reasonCodes')
+        reasonCodes = @(Get-RooIndustriesPropertyArray $Process 'reasonCodes')
         classification = $classification
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }
@@ -229,9 +229,9 @@ function New-ProcessPreviewEntry {
             affinityMask = $currentAffinityMask
             ioPriority = $currentIoPriority
             gpuPriority = $currentGpuPriority
-            workingSetBytes = Get-RooPropertyValue $Process 'workingSetBytes' 0
-            privateBytes = Get-RooPropertyValue $Process 'privateBytes' $null
-            cpuPercent = Get-RooPropertyValue $Process 'cpuPercent' $null
+            workingSetBytes = Get-RooIndustriesPropertyValue $Process 'workingSetBytes' 0
+            privateBytes = Get-RooIndustriesPropertyValue $Process 'privateBytes' $null
+            cpuPercent = Get-RooIndustriesPropertyValue $Process 'cpuPercent' $null
             classification = $classification
         }
         proposedState = [pscustomobject]@{
@@ -263,15 +263,15 @@ function New-ProcessPreviewEntry {
 
 try {
     $defaultProfilePath = Join-Path $PSScriptRoot '..\profiles\game-session.profile.json'
-    $resolvedProfilePath = Resolve-RooPath $ProfilePath $defaultProfilePath
-    $profile = Read-RooJsonFile $resolvedProfilePath
-    $catalogPathValue = [string](Get-RooPropertyValue $profile 'protectedCatalogPath' 'protected-processes.json')
+    $resolvedProfilePath = Resolve-RooIndustriesPath $ProfilePath $defaultProfilePath
+    $profile = Read-RooIndustriesJsonFile $resolvedProfilePath
+    $catalogPathValue = [string](Get-RooIndustriesPropertyValue $profile 'protectedCatalogPath' 'protected-processes.json')
     $protectedCatalogPath = if ([System.IO.Path]::IsPathRooted($catalogPathValue)) {
         $catalogPathValue
     } else {
         [System.IO.Path]::GetFullPath((Join-Path (Split-Path $resolvedProfilePath -Parent) $catalogPathValue))
     }
-    $protectedCatalog = Read-RooJsonFile $protectedCatalogPath
+    $protectedCatalog = Read-RooIndustriesJsonFile $protectedCatalogPath
 
     $classificationArgs = @{ ProfilePath = $resolvedProfilePath }
     if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
@@ -280,23 +280,23 @@ try {
     $classification = & (Join-Path $PSScriptRoot 'Get-ProcessClassification.ps1') @classificationArgs | ConvertFrom-Json
 
     $preview = New-Object System.Collections.Generic.List[object]
-    foreach ($proc in @(Get-RooPropertyArray $classification 'processes')) {
-        $className = [string](Get-RooPropertyValue $proc 'classification' 'unknown')
-        $include = ([bool](Get-RooPropertyValue $proc 'sessionProfileMatched' $false)) -or ($className -in @('gameTarget', 'demotionCandidate', 'protectedCompanion'))
+    foreach ($proc in @(Get-RooIndustriesPropertyArray $classification 'processes')) {
+        $className = [string](Get-RooIndustriesPropertyValue $proc 'classification' 'unknown')
+        $include = ([bool](Get-RooIndustriesPropertyValue $proc 'sessionProfileMatched' $false)) -or ($className -in @('gameTarget', 'demotionCandidate', 'protectedCompanion'))
         if (-not $include) { continue }
         $preview.Add((New-ProcessPreviewEntry $proc $profile $protectedCatalog)) | Out-Null
     }
 
     $warnings = New-Object System.Collections.Generic.List[object]
-    $warnings.Add((New-RooIssue 'PROCESS_PROFILE_PREVIEW_ONLY' 'Preview built without applying process priority changes.' 'info' 'performance.profile' ([string](Get-RooPropertyValue $profile 'profileId' '')) $false 'Run Apply-ProcessProfile.ps1 with -ConfirmApply only after reviewing the preview.' $null)) | Out-Null
+    $warnings.Add((New-RooIndustriesIssue 'PROCESS_PROFILE_PREVIEW_ONLY' 'Preview built without applying process priority changes.' 'info' 'performance.profile' ([string](Get-RooIndustriesPropertyValue $profile 'profileId' '')) $false 'Run Apply-ProcessProfile.ps1 with -ConfirmApply only after reviewing the preview.' $null)) | Out-Null
     if ($preview.Count -eq 0) {
-        $warnings.Add((New-RooIssue 'NO_MATCHING_PROCESSES' 'No running processes matched this profile.' 'warning' 'performance.profile' ([string](Get-RooPropertyValue $profile 'profileId' '')) $false 'Launch the target game or companion apps, then preview again.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesIssue 'NO_MATCHING_PROCESSES' 'No running processes matched this profile.' 'warning' 'performance.profile' ([string](Get-RooIndustriesPropertyValue $profile 'profileId' '')) $false 'Launch the target game or companion apps, then preview again.' $null)) | Out-Null
     }
 
-    $envelope = New-RooActionEnvelope `
+    $envelope = New-RooIndustriesActionEnvelope `
         -ActionId 'performance.previewProfile' `
         -DryRun $true `
-        -Risk ([string](Get-RooPropertyValue $profile 'risk' 'medium')) `
+        -Risk ([string](Get-RooIndustriesPropertyValue $profile 'risk' 'medium')) `
         -RequiresElevation $false `
         -Status 'preview' `
         -Preview @($preview.ToArray()) `
@@ -304,11 +304,11 @@ try {
         -Result $null `
         -Warnings @($warnings.ToArray()) `
         -Errors @() `
-        -Logs @((New-RooLog "Preview generated for profile $([string](Get-RooPropertyValue $profile 'profileId' ''))."))
+        -Logs @((New-RooIndustriesLog "Preview generated for profile $([string](Get-RooIndustriesPropertyValue $profile 'profileId' ''))."))
 
-    Write-RooJsonOutput $envelope $OutputPath
+    Write-RooIndustriesJsonOutput $envelope $OutputPath
 } catch {
-    $envelope = New-RooActionEnvelope `
+    $envelope = New-RooIndustriesActionEnvelope `
         -ActionId 'performance.previewProfile' `
         -DryRun $true `
         -Risk 'medium' `
@@ -318,8 +318,8 @@ try {
         -Backup $null `
         -Result $null `
         -Warnings @() `
-        -Errors @((New-RooIssue 'PROCESS_PROFILE_PREVIEW_FAILED' $_.Exception.Message 'error' 'performance.profile' $ProfilePath $true 'Check the profile path and process inventory script.' $null)) `
-        -Logs @((New-RooLog 'Preview failed.' 'error'))
-    Write-RooJsonOutput $envelope $OutputPath
+        -Errors @((New-RooIndustriesIssue 'PROCESS_PROFILE_PREVIEW_FAILED' $_.Exception.Message 'error' 'performance.profile' $ProfilePath $true 'Check the profile path and process inventory script.' $null)) `
+        -Logs @((New-RooIndustriesLog 'Preview failed.' 'error'))
+    Write-RooIndustriesJsonOutput $envelope $OutputPath
     exit 1
 }

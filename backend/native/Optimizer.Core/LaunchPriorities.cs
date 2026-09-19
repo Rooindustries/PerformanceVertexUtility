@@ -2,7 +2,7 @@
 using Microsoft.Win32;
 using System.Text.Json;
 
-namespace Roo.Optimizer;
+namespace RooIndustries.Optimizer;
 
 public sealed record LaunchPrioritySnapshot
 {

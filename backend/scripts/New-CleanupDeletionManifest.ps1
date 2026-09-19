@@ -18,7 +18,7 @@ function Get-ScanResult {
         [string]$InventoryPath
     )
     if (-not [string]::IsNullOrWhiteSpace($ScanPath)) {
-        return Read-RooUninstallJsonFile (Resolve-RooUninstallPath $ScanPath $ScanPath)
+        return Read-RooIndustriesUninstallJsonFile (Resolve-RooIndustriesUninstallPath $ScanPath $ScanPath)
     }
     if ([string]::IsNullOrWhiteSpace($AppId)) {
         throw 'Either -ScanPath or -AppId is required.'
@@ -35,12 +35,12 @@ function Test-ItemIncluded {
         [string[]]$ItemIds,
         [bool]$IncludeNonDefault
     )
-    if ([bool](Get-RooUninstallPropertyValue $Item 'protected' $false)) { return $false }
+    if ([bool](Get-RooIndustriesUninstallPropertyValue $Item 'protected' $false)) { return $false }
     if ($ItemIds.Count -gt 0) {
-        return ($ItemIds -contains [string](Get-RooUninstallPropertyValue $Item 'itemId' ''))
+        return ($ItemIds -contains [string](Get-RooIndustriesUninstallPropertyValue $Item 'itemId' ''))
     }
     if ($IncludeNonDefault) { return $true }
-    return [bool](Get-RooUninstallPropertyValue $Item 'defaultSelected' $false)
+    return [bool](Get-RooIndustriesUninstallPropertyValue $Item 'defaultSelected' $false)
 }
 
 function New-BackupRequirement {
@@ -49,9 +49,9 @@ function New-BackupRequirement {
         [string]$Mode
     )
     return [pscustomobject]@{
-        itemId = [string](Get-RooUninstallPropertyValue $Item 'itemId' '')
-        type = [string](Get-RooUninstallPropertyValue $Item 'type' '')
-        target = [string](Get-RooUninstallPropertyValue $Item 'target' '')
+        itemId = [string](Get-RooIndustriesUninstallPropertyValue $Item 'itemId' '')
+        type = [string](Get-RooIndustriesUninstallPropertyValue $Item 'type' '')
+        target = [string](Get-RooIndustriesUninstallPropertyValue $Item 'target' '')
         mode = $Mode
         required = $true
         completed = $false
@@ -60,23 +60,23 @@ function New-BackupRequirement {
 }
 
 try {
-    $policy = Read-RooUninstallPolicy $PolicyPath
+    $policy = Read-RooIndustriesUninstallPolicy $PolicyPath
     $scan = Get-ScanResult $ScanPath $AppId $InventoryPath
     $selected = New-Object System.Collections.Generic.List[object]
     $excluded = New-Object System.Collections.Generic.List[object]
-    foreach ($item in @(Get-RooUninstallPropertyArray $scan 'items')) {
+    foreach ($item in @(Get-RooIndustriesUninstallPropertyArray $scan 'items')) {
         if (Test-ItemIncluded $item $ItemId ([bool]$IncludeNonDefault)) {
             $selected.Add($item) | Out-Null
         } else {
             $excluded.Add([pscustomobject]@{
-                itemId = [string](Get-RooUninstallPropertyValue $item 'itemId' '')
-                target = [string](Get-RooUninstallPropertyValue $item 'target' '')
-                reason = if ([bool](Get-RooUninstallPropertyValue $item 'protected' $false)) { 'Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup.' } else { 'Left out until you approve the cleanup.' }
+                itemId = [string](Get-RooIndustriesUninstallPropertyValue $item 'itemId' '')
+                target = [string](Get-RooIndustriesUninstallPropertyValue $item 'target' '')
+                reason = if ([bool](Get-RooIndustriesUninstallPropertyValue $item 'protected' $false)) { 'Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup.' } else { 'Left out until you approve the cleanup.' }
             }) | Out-Null
         }
     }
 
-    Assert-RooCleanupExclusions @($selected.ToArray() | Where-Object { $_.type -in @('file','folder') } | ForEach-Object { [string]$_.target })
+    Assert-RooIndustriesCleanupExclusions @($selected.ToArray() | Where-Object { $_.type -in @('file','folder') } | ForEach-Object { [string]$_.target })
     $fileBackups = New-Object System.Collections.Generic.List[object]
     $registryExports = New-Object System.Collections.Generic.List[object]
     $serviceBackups = New-Object System.Collections.Generic.List[object]
@@ -84,7 +84,7 @@ try {
     $startupBackups = New-Object System.Collections.Generic.List[object]
 
     foreach ($item in @($selected.ToArray())) {
-        switch ([string](Get-RooUninstallPropertyValue $item 'type' '')) {
+        switch ([string](Get-RooIndustriesUninstallPropertyValue $item 'type' '')) {
             'file' { $fileBackups.Add((New-BackupRequirement $item 'copy-before-delete')) | Out-Null }
             'folder' { $fileBackups.Add((New-BackupRequirement $item 'copy-before-delete')) | Out-Null }
             'registryKey' { $registryExports.Add((New-BackupRequirement $item 'reg-export-before-delete')) | Out-Null }
@@ -95,23 +95,23 @@ try {
         }
     }
 
-    $manifestId = 'cleanup-manifest-preview-' + (ConvertTo-RooStableId ([string](Get-RooUninstallPropertyValue $scan 'appId' $AppId))) + '-' + (Get-RooUninstallFileStamp)
-    $backupRoot = [string](Get-RooUninstallPropertyValue (Get-RooUninstallPropertyValue $policy 'cleanupDeletion' $null) 'backupRoot' 'C:\ProgramData\RooOptimizationSuite\backups\cleanup')
+    $manifestId = 'cleanup-manifest-preview-' + (ConvertTo-RooIndustriesStableId ([string](Get-RooIndustriesUninstallPropertyValue $scan 'appId' $AppId))) + '-' + (Get-RooIndustriesUninstallFileStamp)
+    $backupRoot = [string](Get-RooIndustriesUninstallPropertyValue (Get-RooIndustriesUninstallPropertyValue $policy 'cleanupDeletion' $null) 'backupRoot' 'C:\ProgramData\RooIndustriesOptimizationSuite\backups\cleanup')
     $manifest = [pscustomobject]@{
         manifestId = $manifestId
-        productName = $script:RooUninstallProductName
+        productName = $script:RooIndustriesUninstallProductName
         schemaVersion = 1
-        appId = [string](Get-RooUninstallPropertyValue $scan 'appId' $AppId)
-        displayName = [string](Get-RooUninstallPropertyValue $scan 'displayName' '')
-        createdAtUtc = Get-RooUninstallUtcStamp
+        appId = [string](Get-RooIndustriesUninstallPropertyValue $scan 'appId' $AppId)
+        displayName = [string](Get-RooIndustriesUninstallPropertyValue $scan 'displayName' '')
+        createdAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = $true
         executionMode = 'preview-only'
-        sourceScanId = [string](Get-RooUninstallPropertyValue $scan 'scanId' '')
+        sourceScanId = [string](Get-RooIndustriesUninstallPropertyValue $scan 'scanId' '')
         items = @($selected.ToArray())
         excludedItems = @($excluded.ToArray())
         rollback = [pscustomobject]@{
             backupRoot = (Join-Path $backupRoot $manifestId)
-            rollbackActionId = [string](Get-RooUninstallPropertyValue (Get-RooUninstallPropertyValue $policy 'cleanupDeletion' $null) 'rollbackActionId' 'apps.rollbackCleanup')
+            rollbackActionId = [string](Get-RooIndustriesUninstallPropertyValue (Get-RooIndustriesUninstallPropertyValue $policy 'cleanupDeletion' $null) 'rollbackActionId' 'apps.rollbackCleanup')
             rollbackSupported = $true
             restorePoint = [pscustomobject]@{
                 requiredBeforeFutureApply = $true
@@ -142,18 +142,18 @@ try {
             willEditScheduledTasks = $false
             dryRunWritesState = $false
         }
-        warnings = @((New-RooUninstallIssue 'CLEANUP_MANIFEST_PREVIEW_ONLY' 'Delete plan is review-only. No files, folders, registry keys, services, tasks, or startup entries were changed.' 'info' 'apps.cleanupManifest' ([string](Get-RooUninstallPropertyValue $scan 'appId' $AppId)) $false 'Review the backup and restore-point plan before approving cleanup.' $null))
+        warnings = @((New-RooIndustriesUninstallIssue 'CLEANUP_MANIFEST_PREVIEW_ONLY' 'Delete plan is review-only. No files, folders, registry keys, services, tasks, or startup entries were changed.' 'info' 'apps.cleanupManifest' ([string](Get-RooIndustriesUninstallPropertyValue $scan 'appId' $AppId)) $false 'Review the backup and restore-point plan before approving cleanup.' $null))
         errors = @()
     }
 
-    Write-RooUninstallJsonOutput $manifest $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $manifest $OutputPath
 } catch {
     $manifest = [pscustomobject]@{
-        manifestId = 'cleanup-manifest-preview-' + (Get-RooUninstallFileStamp)
-        productName = $script:RooUninstallProductName
+        manifestId = 'cleanup-manifest-preview-' + (Get-RooIndustriesUninstallFileStamp)
+        productName = $script:RooIndustriesUninstallProductName
         schemaVersion = 1
         appId = $AppId
-        createdAtUtc = Get-RooUninstallUtcStamp
+        createdAtUtc = Get-RooIndustriesUninstallUtcStamp
         dryRun = $true
         executionMode = 'preview-only'
         items = @()
@@ -168,8 +168,8 @@ try {
         }
         summary = [pscustomobject]@{ itemCount = 0; willDeleteOnApply = $false; dryRunWritesState = $false }
         warnings = @()
-        errors = @((New-RooUninstallIssue 'CLEANUP_MANIFEST_PREVIEW_FAILED' $_.Exception.Message 'error' 'apps.cleanupManifest' $AppId $true 'Check the leftover scan path or selected app id.' $null))
+        errors = @((New-RooIndustriesUninstallIssue 'CLEANUP_MANIFEST_PREVIEW_FAILED' $_.Exception.Message 'error' 'apps.cleanupManifest' $AppId $true 'Check the leftover scan path or selected app id.' $null))
     }
-    Write-RooUninstallJsonOutput $manifest $OutputPath
+    Write-RooIndustriesUninstallJsonOutput $manifest $OutputPath
     exit 1
 }

@@ -38,10 +38,10 @@
                                                                {
                                                                    "method":  "file-exists",
                                                                    "target":  "{utilitiesRoot}\\Other\\NVPI\\nvidiaProfileInspector.exe",
-                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                    "passed":  true,
                                                                    "evidence":  {
-                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
+                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\NVPI\\nvidiaProfileInspector.exe",
                                                                                     "exists":  true,
                                                                                     "pathType":  "leaf",
                                                                                     "sizeBytes":  637440,
@@ -57,10 +57,10 @@
                                                                {
                                                                    "method":  "file-exists",
                                                                    "target":  "{utilitiesRoot}\\Other\\base-profile.nip",
-                                                                   "resolvedTarget":  "%ROO_UTILITIES_ROOT%\\Other\\base-profile.nip",
+                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                    "passed":  true,
                                                                    "evidence":  {
-                                                                                    "path":  "%ROO_UTILITIES_ROOT%\\Other\\base-profile.nip",
+                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                     "exists":  true,
                                                                                     "pathType":  "leaf",
                                                                                     "sizeBytes":  6037,
