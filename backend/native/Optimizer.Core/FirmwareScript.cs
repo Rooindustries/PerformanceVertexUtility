@@ -30,7 +30,7 @@ public sealed class FirmwareScript
             : bytes.AsSpan().StartsWith(new byte[] { 0xef, 0xbb, 0xbf }) ? (Encoding.UTF8, new byte[] { 0xef, 0xbb, 0xbf })
             : (Encoding.Latin1, Array.Empty<byte>());
         Text = _encoding.GetString(bytes, _preamble.Length, bytes.Length - _preamble.Length);
-        var crc = Regex.Matches(Text, @"(?mi)^[ \t]*HIICrc32[ \t]*=[ \t]*([0-9a-f]{8})[ \t]*\r?$");
+        var crc = Regex.Matches(Text, @"(?mi)^[ \t]*HIICrc32[ \t]*=[ \t]*([0-9a-f]{8})[ \t]*\r*$");
         if (crc.Count != 1) throw new InvalidDataException("The export needs one HII checksum. Export again with SCEWIN's verbose option.");
         Crc = crc[0].Groups[1].Value.ToUpperInvariant();
         var starts = QuestionStart.Matches(Text);
