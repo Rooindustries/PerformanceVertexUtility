@@ -376,11 +376,25 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 || ExtractString(root, "operation") != operation
                 || ExtractString(root, "profileId") != profileId
                 || !TryExtractBool(root, out var dryRun, "dryRun")
-                || dryRun) return false;
+                || !TryExtractInt(root, out var reportedBlocking, "summary", "blockingGateCount")
+                || !TryExtractBool(root, out var importAttempted, "summary", "importAttempted")
+                || !TryExtractBool(root, out var importCompleted, "summary", "importCompleted")) return false;
             var status = ExtractString(root, "status");
             if (status is not ("success" or "failed" or "blocked")) return false;
-            completed = status == "success"
-                && ExtractBool(root, "summary", "importCompleted");
+            var actualBlocking = BlockingGateCount(root);
+            var errors = ErrorCount(root);
+            if (actualBlocking < 0 || errors < 0 || reportedBlocking != actualBlocking
+                || importCompleted && !importAttempted
+                || status == "blocked" && (!dryRun || actualBlocking == 0 || importCompleted)
+                || (status is "success" or "failed") && dryRun
+                || status == "success" && (actualBlocking != 0 || errors != 0 || !importAttempted || !importCompleted)
+                || status == "failed" && importCompleted) return false;
+            if (operation == "Apply"
+                && (!TryExtractBool(root, out var exportCompleted, "summary", "exportCompleted")
+                    || importAttempted && !exportCompleted)) return false;
+            if (operation == "Restore"
+                && (!TryExtractBool(root, out var exportAttempted, "summary", "exportAttempted") || exportAttempted)) return false;
+            completed = status == "success";
             return true;
         }
         catch
@@ -450,4 +464,29 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         value = false;
         return false;
     }
+
+    private static bool TryExtractInt(JsonElement root, out int value, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                value = 0;
+                return false;
+            }
+        }
+        value = 0;
+        return current.ValueKind == JsonValueKind.Number && current.TryGetInt32(out value);
+    }
+
+    private static int BlockingGateCount(JsonElement root)
+        => root.TryGetProperty("gates", out var gates) && gates.ValueKind == JsonValueKind.Array
+            ? gates.EnumerateArray().Count(gate => ExtractBool(gate, "blocking"))
+            : -1;
+
+    private static int ErrorCount(JsonElement root)
+        => root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array
+            ? errors.GetArrayLength()
+            : -1;
 }
