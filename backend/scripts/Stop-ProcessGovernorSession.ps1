@@ -125,10 +125,19 @@ function New-GovernorRestorePreview {
 try {
     $session = $null
     $resolvedSessionPath = $null
-    if ([string]::IsNullOrWhiteSpace($BackupPath)) {
+    if (-not [string]::IsNullOrWhiteSpace($SessionId) -or -not [string]::IsNullOrWhiteSpace($SessionPath)) {
         $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+        if ([string]::IsNullOrWhiteSpace($resolvedSessionPath) -or -not (Test-Path -LiteralPath $resolvedSessionPath)) {
+            throw 'The selected process governor session file was not found.'
+        }
+        $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+    }
+    if ([string]::IsNullOrWhiteSpace($BackupPath)) {
+        if ($null -eq $session) {
+            $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+        }
         if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-            $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+            if ($null -eq $session) { $session = Read-RooIndustriesJsonFile $resolvedSessionPath }
             $BackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
         }
     }
@@ -137,8 +146,32 @@ try {
     }
     $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
     $backup = Read-RooIndustriesJsonFile $resolvedBackupPath
-    $sessionIdValue = [string](Get-RooIndustriesPropertyValue $backup 'sessionId' (Get-RooIndustriesPropertyValue $session 'sessionId' ''))
-    $profileId = [string](Get-RooIndustriesPropertyValue $backup 'profileId' (Get-RooIndustriesPropertyValue $session 'profileId' ''))
+    $sessionIdValue = [string](Get-RooIndustriesPropertyValue $backup 'sessionId' '')
+    $profileId = [string](Get-RooIndustriesPropertyValue $backup 'profileId' '')
+    if ([string]::IsNullOrWhiteSpace($sessionIdValue) -or [string]::IsNullOrWhiteSpace($profileId)) {
+        throw 'The process governor backup identity is incomplete.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SessionId) -and $SessionId -cne $sessionIdValue) {
+        throw 'The process governor session ID does not match the selected backup.'
+    }
+    if ($null -eq $session) {
+        $candidateSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $sessionIdValue '' $StateRoot
+        if ($candidateSessionPath -and (Test-Path -LiteralPath $candidateSessionPath)) {
+            $resolvedSessionPath = $candidateSessionPath
+            $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+        }
+    }
+    if ($null -ne $session) {
+        $sessionBackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
+        $recordedSessionPath = [string](Get-RooIndustriesPropertyValue $session 'sessionPath' '')
+        if ([string](Get-RooIndustriesPropertyValue $session 'sessionId' '') -cne $sessionIdValue -or
+            [string](Get-RooIndustriesPropertyValue $session 'profileId' '') -cne $profileId -or
+            [string]::IsNullOrWhiteSpace($sessionBackupPath) -or
+            -not [string]::Equals((Resolve-RooIndustriesPath $sessionBackupPath $sessionBackupPath), $resolvedBackupPath, [StringComparison]::OrdinalIgnoreCase) -or
+            (-not [string]::IsNullOrWhiteSpace($recordedSessionPath) -and -not [string]::Equals((Get-RooIndustriesProcessGovernorSessionFileFromPath $recordedSessionPath), $resolvedSessionPath, [StringComparison]::OrdinalIgnoreCase))) {
+            throw 'The process governor session and backup identity do not match.'
+        }
+    }
     $startedAtUtc = Get-RooIndustriesUtcStamp
 
     $preview = New-Object System.Collections.Generic.List[object]
