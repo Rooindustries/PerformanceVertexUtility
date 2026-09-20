@@ -34,11 +34,30 @@ public partial class WindowsTweakRow : ObservableObject
         "CurrentUser" => "This user", "Users" => "Sign-in screen", "LocalMachine" => "Entire PC", _ => "This PC",
     };
     public string Context => Topic + " · " + Scope;
-    public string Description => Presentation.Description ?? "";
+    public string Description => Presentation.Summary ?? Presentation.Description ?? "";
     public string Help => Presentation.Description ?? Definition.Description;
     public string Sources => string.Join(" · ", Definition.Sources.Select(source => source.Product).Distinct());
-    public string Refresh => Definition.Refresh.StartsWith("Policy supports live refresh", StringComparison.OrdinalIgnoreCase) || Definition.Refresh is "reopen affected apps" ? "" : Definition.Refresh switch { "none" => "", "restart" => "Restart Windows after applying", "sign-out" => "Sign out after applying", "explorer-refresh" => "Reopen Explorer after applying", "new-windows-or-sign-out" => "Reopen affected apps or sign out", _ => Definition.Refresh };
-    public string RefreshLabel => Definition.Refresh switch { "restart" => "Restart", "sign-out" => "Sign out", "explorer-refresh" => "Reopen Explorer", "new-windows-or-sign-out" => "Reopen apps or sign out", _ => Refresh };
+    public string Refresh => Definition.Refresh.StartsWith("Policy supports live refresh", StringComparison.OrdinalIgnoreCase) ? "" : Definition.Refresh switch { "none" => "", "restart" => "Restart Windows after applying", "sign-out" => "Sign out after applying", "reopen affected apps" => "Reopen affected apps after applying", "explorer-refresh" => "Reopen Explorer after applying", "new-windows-or-sign-out" => "Reopen affected apps or sign out", _ => Definition.Refresh };
+    public string RefreshLabel => Definition.Refresh switch
+    {
+        "restart" or "Restart Windows." or "Restart Windows to activate adapter DNS settings." => "Restart Windows",
+        "sign-out" => "Sign out",
+        "reopen affected apps" or "Restart apps already open when policy changed." => "Reopen apps",
+        "explorer-refresh" or "Refresh File Explorer." => "Reopen Explorer",
+        "new-windows-or-sign-out" => "Reopen apps or sign out",
+        "Browser restart required." => "Restart browser",
+        "Restart Outlook." => "Restart Outlook",
+        "Restart affected game." => "Restart game",
+        "Adapter capability and provider determine whether reconnection/restart is needed." => "May need reconnect/restart",
+        "Use input-settings refresh; verify effective cursor behavior." => "Refresh input settings",
+        "Notify shell and affected apps; recheck visible result." => "Refresh shell and apps",
+        "Sign out or restart Explorer as required by target build." => "Sign out/reopen Explorer",
+        "Next applicable crash screen; do not trigger a crash to test." => "Next crash screen",
+        "Next sign-in or sign-out." => "Next sign-in/out",
+        "Restart affected applications; some existing processes may require reboot." => "May need app/PC restart",
+        "Refresh taskbar." => "Refresh taskbar",
+        _ => Refresh.Length == 0 ? "" : "See details",
+    };
     public string ActionAutomationId => Id + ".value";
     public string SelectionAutomationId => Id + ".select";
     public string DetailsAutomationId => Id + ".details";
