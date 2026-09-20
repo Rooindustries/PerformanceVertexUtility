@@ -75,6 +75,17 @@ static class ActionChecks
         observed.ToggleOn = false;
         check(observed.Selected.Id.Length == 0 && observed.Current == "On",
             "Clearing a queued reset leaves the observed Windows state untouched");
+        observed.Observe(new(setting.Id, setting.Name, true, ["unknown-option"],
+            [new() { Address = address, NativeKey = @"\REGISTRY\USER\fixture\Software\RooIndustriesUiModelFixture", KeyExists = true,
+                Value = new("Suggestions", 4, [9, 0, 0, 0]), MissingKeys = [] }], null));
+        check(observed.Current == "Unknown value" && !observed.ToggleOn, "An unrecognized configured option remains explicit without queuing a change");
+        var notifications = new HashSet<string>();
+        observed.PropertyChanged += (_, args) => notifications.Add(args.PropertyName ?? "");
+        observed.Name = "Live service title";
+        check(observed.DetailsAccessibleName == "Live service title details" && observed.ActionAccessibleName == "Change Live service title to"
+            && observed.SelectionAccessibleName == "Select Live service title for review" && observed.CurrentAccessibleName == "Live service title: current value Unknown value"
+            && new[] { "DetailsAccessibleName", "ActionAccessibleName", "SelectionAccessibleName", "CurrentAccessibleName" }.All(notifications.Contains),
+            "Live titles update distinct details, pending-value, selection, and current-state accessibility names");
         observed.Observe(null);
         check(observed.Current == "Not read" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
             "A missing observation remains unknown without selecting a change");

@@ -22,7 +22,12 @@ public partial class WindowsTweakRow : ObservableObject
 {
     public TweakDefinition Definition { get; }
     public string Id => Definition.Id;
-    [ObservableProperty] private string _name;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailsAccessibleName))]
+    [NotifyPropertyChangedFor(nameof(ActionAccessibleName))]
+    [NotifyPropertyChangedFor(nameof(SelectionAccessibleName))]
+    [NotifyPropertyChangedFor(nameof(CurrentAccessibleName))]
+    private string _name;
     public string Category => Definition.Category;
     public TweakPresentation Presentation { get; }
     public string SectionId => Presentation.Section;
@@ -58,6 +63,11 @@ public partial class WindowsTweakRow : ObservableObject
         "Refresh taskbar." => "Refresh taskbar",
         _ => Refresh.Length == 0 ? "" : "See details",
     };
+    public string DetailsAccessibleName => Name + " details";
+    public string ActionAccessibleName => "Change " + Name + " to";
+    public string SelectionAccessibleName => "Select " + Name + " for review";
+    public string CurrentAccessibleName => Name + ": current value " + Current;
+    public string ScopeAndRefresh => RefreshLabel.Length == 0 ? Scope : Scope + " · " + RefreshLabel;
     public string ActionAutomationId => Id + ".value";
     public string SelectionAutomationId => Id + ".select";
     public string DetailsAutomationId => Id + ".details";
@@ -86,7 +96,9 @@ public partial class WindowsTweakRow : ObservableObject
             SyncToggle(); OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus));
         }
     }
-    [ObservableProperty] private string _current = "Not checked";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentAccessibleName))]
+    private string _current = "Not checked";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private bool _available;
     [ObservableProperty] private bool _toggleOn;
@@ -133,6 +145,7 @@ public partial class WindowsTweakRow : ObservableObject
         Current = status is null || status.Error is not null ? "Not read"
             : status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null) ? "No override"
             : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
+        if (Current.Length == 0) Current = "Unknown value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
