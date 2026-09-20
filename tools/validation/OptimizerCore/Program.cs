@@ -31,6 +31,7 @@ if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
+if (args is ["--batch-state"]) { CleanupBatchStateChecks.Run(Check); return; }
 if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
 BrandCompatibilityChecks.Run(Check);
 using (var self = Process.GetCurrentProcess())
