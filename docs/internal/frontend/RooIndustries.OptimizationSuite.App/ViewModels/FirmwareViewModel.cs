@@ -21,7 +21,7 @@ public partial class FirmwareViewModel : ObservableObject
     private readonly List<FirmwareSettingRow> _all = new();
     [ObservableProperty] private string _board = "Reading motherboard details…";
     [ObservableProperty] private string _bios = "";
-    [ObservableProperty] private string _packageText = "Choose the SCEWIN folder supplied for your motherboard.";
+    [ObservableProperty] private string _packageText = "No compatible package added. Add its folder to enable Load settings.";
     [ObservableProperty] private string _message = "";
     [ObservableProperty] private string _search = "";
     [ObservableProperty] private bool _busy;

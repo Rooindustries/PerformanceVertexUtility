@@ -52,6 +52,7 @@ try
     var review = model.ReviewCommand.ExecuteAsync(null); model.Rows[0].Selected = model.Rows[0].Choices[0]; pause.SetResult(); await review;
     model.Approved = true;
     Check(!model.HasReview && !model.CanApply && fixture.Applies == 0, "Changing selection while a review is loading invalidates the old response");
+    if (args is [var repo]) await SectionChecks.Run(root, Path.GetFullPath(repo), Check);
     Console.WriteLine($"Completed {count} Windows settings UI checks.");
 }
 finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

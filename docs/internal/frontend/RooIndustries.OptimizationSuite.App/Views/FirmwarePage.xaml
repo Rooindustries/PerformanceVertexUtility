@@ -31,11 +31,11 @@
                 <StackPanel Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
                     <Border Style="{StaticResource PanelBorderStyle}" Padding="20">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="Load your motherboard's settings" FontSize="18" FontWeight="SemiBold" />
-                            <TextBlock Text="Choose the SCEWIN folder, then load your motherboard settings. An original copy is saved before editing." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                            <TextBlock Text="Set up BIOS access" FontSize="18" FontWeight="SemiBold" />
+                            <TextBlock Text="Add the compatible SCEWIN package for this motherboard once. The app then handles loading, editing, backup, and import in this screen." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                             <TextBlock Text="{x:Bind ViewModel.PackageText, Mode=OneWay}" TextWrapping="Wrap" AutomationProperties.AutomationId="FirmwarePackageStatus" />
-                            <views:AdaptivePanel MinColumnWidth="170" MaxColumns="4" Compact="True">
-                                <Button Content="Choose SCEWIN folder" Click="ChoosePackage" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="ChooseFirmwarePackage" />
+                            <views:AdaptivePanel MinColumnWidth="220" MaxColumns="2" Compact="True">
+                                <Button Click="ChoosePackage" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="ChooseFirmwarePackage"><TextBlock Text="Add SCEWIN package" TextWrapping="Wrap"/></Button>
                                 <Button Content="Load settings" Click="LoadSettings" IsEnabled="{x:Bind ViewModel.CanLoad, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="LoadFirmwareSettings" />
                             </views:AdaptivePanel>
                             <TextBlock Text="SCEWIN checks firmware compatibility when it reads this PC. Its matching signed driver may be loaded during that step." FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />

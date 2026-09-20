@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using RooIndustries.OptimizationSuite.ViewModels;
@@ -16,6 +17,7 @@ public sealed partial class WindowsTweaksPage : Page
     private WindowsRestorePointReview? _pendingRestorePoint;
     public WindowsTweaksPage()
     {
+        ViewModel.SelectedSection = ViewModel.Sections.Single(section => section.Id == "network");
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.RefreshCommand.ExecuteAsync(null);
     }
@@ -29,7 +31,7 @@ public sealed partial class WindowsTweaksPage : Page
     }
     private void OpenAppGroup(object sender, RoutedEventArgs args)
     {
-        if (sender is MenuFlyoutItem { Tag: string group } && App.MainWindow is MainWindow window) window.OpenAppGroup(group);
+        if (sender is FrameworkElement { Tag: string group } && App.MainWindow is MainWindow window) window.OpenAppGroup(group);
     }
     private async void OpenWindowsTool(object sender, RoutedEventArgs args)
     {
@@ -66,7 +68,7 @@ public sealed partial class WindowsTweaksPage : Page
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
             var file = await picker.PickSingleFileAsync(); if (file is null) return;
             ViewModel.Busy = true; await App.Operations.ImportWindowsSettingsAsync(file.Path); ViewModel.Busy = false;
-            await ViewModel.RefreshCommand.ExecuteAsync(null); ViewModel.ShowAdvanced = true; ViewModel.Source = "Custom settings";
+            await ViewModel.RefreshCommand.ExecuteAsync(null); ViewModel.SelectedSection = ViewModel.Sections[0]; ViewModel.ShowAdvanced = true; ViewModel.Source = "Custom settings";
             ViewModel.Status = "Custom switches imported"; ViewModel.Detail = "Choose an imported preset or setting, then review before applying. Importing does not change Windows settings.";
         }
         catch (Exception error) { ViewModel.Status = "Couldn't import these switches."; ViewModel.Detail = error.Message; }

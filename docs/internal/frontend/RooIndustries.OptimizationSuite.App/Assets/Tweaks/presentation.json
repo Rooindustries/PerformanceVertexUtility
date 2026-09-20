@@ -1,0 +1,3869 @@
+{
+  "windows.e2c95b16cecfc711": {
+    "section": "privacy"
+  },
+  "windows.ebf4b29b6f2d80a2": {
+    "section": "privacy"
+  },
+  "windows.447cb476fb1e7015": {
+    "section": "debloat"
+  },
+  "windows.6195a41a25475f51": {
+    "section": "debloat"
+  },
+  "windows.48ec5642c5fc6917": {
+    "section": "apps"
+  },
+  "windows.a595bd2d751719e2": {
+    "section": "apps"
+  },
+  "windows.1e72211eb6d5298e": {
+    "section": "debloat"
+  },
+  "windows.f6ffcc0b282f5cce": {
+    "section": "debloat"
+  },
+  "windows.4dcb153f87654097": {
+    "section": "privacy"
+  },
+  "windows.916d599f77a7d5a9": {
+    "section": "debloat"
+  },
+  "windows.da25caceaf15204e": {
+    "section": "debloat"
+  },
+  "windows.87e3c0d51161c726": {
+    "section": "apps"
+  },
+  "windows.9a7f4d6928b21954": {
+    "section": "apps"
+  },
+  "windows.a62306ccd179d306": {
+    "section": "apps"
+  },
+  "windows.6b3aa23aaa157f74": {
+    "section": "apps"
+  },
+  "windows.d9e44f6da0aa2abf": {
+    "section": "apps"
+  },
+  "windows.2798eafc53775495": {
+    "section": "apps"
+  },
+  "windows.8b55b8d9de3ee04e": {
+    "section": "apps"
+  },
+  "windows.b74eb85ccfdd9af1": {
+    "section": "apps"
+  },
+  "windows.5d3b11f8a7c0b4de": {
+    "section": "apps"
+  },
+  "windows.4b3cbe4de1386404": {
+    "section": "apps"
+  },
+  "windows.a5176e23e48cf55f": {
+    "section": "apps"
+  },
+  "windows.533e90897d348df0": {
+    "section": "apps"
+  },
+  "windows.2dc8cb3bbd80b67d": {
+    "section": "apps"
+  },
+  "windows.7de1195d39166274": {
+    "section": "apps"
+  },
+  "windows.1946a0092224ebc5": {
+    "section": "apps"
+  },
+  "windows.280e9078b7513c41": {
+    "section": "apps"
+  },
+  "windows.f0f38d011623934f": {
+    "section": "privacy"
+  },
+  "windows.095160b4a46684a9": {
+    "section": "debloat"
+  },
+  "windows.fd89690969c8088a": {
+    "section": "debloat"
+  },
+  "windows.866ba99f43849189": {
+    "section": "debloat"
+  },
+  "windows.f5cc12ccd150df04": {
+    "section": "debloat"
+  },
+  "windows.06eb0a1d9bc5c633": {
+    "section": "debloat"
+  },
+  "windows.9aa56478632ece24": {
+    "section": "debloat"
+  },
+  "windows.aba86c73d2ecc9d9": {
+    "section": "debloat"
+  },
+  "windows.e62dbec0b81d06ff": {
+    "section": "privacy"
+  },
+  "windows.040d310c77bf8525": {
+    "section": "apps"
+  },
+  "windows.83d280faf1b4c217": {
+    "section": "apps"
+  },
+  "windows.07accde5aed0d526": {
+    "section": "apps"
+  },
+  "windows.e250acb00878bec0": {
+    "section": "apps"
+  },
+  "windows.38251a8ec07d237c": {
+    "section": "apps"
+  },
+  "windows.ce4c770ee541abcb": {
+    "section": "apps"
+  },
+  "windows.1aba5d3678f141eb": {
+    "section": "apps"
+  },
+  "windows.b550bb7319b8b418": {
+    "section": "apps"
+  },
+  "windows.bab173e50c956331": {
+    "section": "apps"
+  },
+  "windows.0e29582612b9ff5d": {
+    "section": "apps"
+  },
+  "windows.3c49771ddf437bdd": {
+    "section": "apps"
+  },
+  "windows.c2dadf9417c22858": {
+    "section": "apps"
+  },
+  "windows.fa9f9194bca27daa": {
+    "section": "apps"
+  },
+  "windows.4852ffda155a5221": {
+    "section": "privacy"
+  },
+  "windows.49d76828a1fab446": {
+    "section": "privacy"
+  },
+  "windows.86de99f56a36d087": {
+    "section": "debloat"
+  },
+  "windows.f381a35b70245c7e": {
+    "section": "debloat"
+  },
+  "windows.073ad206c8b209ae": {
+    "section": "apps"
+  },
+  "windows.703f710379b17b7e": {
+    "section": "apps"
+  },
+  "windows.417b00812daaed24": {
+    "section": "apps"
+  },
+  "windows.99c2a1357cd857d7": {
+    "section": "apps"
+  },
+  "windows.286e378b3dc1b4a3": {
+    "section": "apps"
+  },
+  "windows.e3ef244ee01b8fd7": {
+    "section": "apps"
+  },
+  "windows.0648f5f8cc4a96ff": {
+    "section": "debloat"
+  },
+  "windows.7c16faecacd490a8": {
+    "section": "debloat"
+  },
+  "windows.1378c5006588dcdc": {
+    "section": "apps"
+  },
+  "windows.43b4a7d53fb76bec": {
+    "section": "apps"
+  },
+  "windows.838702eeefd284c1": {
+    "section": "debloat"
+  },
+  "windows.f9e7f70de6e2a322": {
+    "section": "debloat"
+  },
+  "windows.0e88a09019f278b2": {
+    "section": "apps"
+  },
+  "windows.213a1f1d224879a7": {
+    "section": "apps"
+  },
+  "windows.00c26b935df2a291": {
+    "section": "apps"
+  },
+  "windows.d5d8c22d547e8d7e": {
+    "section": "apps"
+  },
+  "windows.73ac466e780e740f": {
+    "section": "apps"
+  },
+  "windows.933cbdfc946536bc": {
+    "section": "apps"
+  },
+  "windows.05ee423e1b299c2d": {
+    "section": "apps"
+  },
+  "windows.99ea59826b5ace8d": {
+    "section": "apps"
+  },
+  "windows.58032136455749d2": {
+    "section": "debloat"
+  },
+  "windows.a0168cf74cef3bbb": {
+    "section": "debloat"
+  },
+  "windows.c075970f84ec328b": {
+    "section": "apps"
+  },
+  "windows.ffb1454675fe0bab": {
+    "section": "apps"
+  },
+  "windows.a425bad7d74aa454": {
+    "section": "apps"
+  },
+  "windows.d690124dd0627ac2": {
+    "section": "apps"
+  },
+  "windows.347167ceccbc6470": {
+    "section": "privacy"
+  },
+  "windows.4ea410c40231a2f4": {
+    "section": "debloat"
+  },
+  "windows.bba5c1b83c82738d": {
+    "section": "privacy"
+  },
+  "windows.a8e0a325a5be77af": {
+    "section": "privacy"
+  },
+  "windows.73e784447d1e0d94": {
+    "section": "apps"
+  },
+  "windows.356708314386d957": {
+    "section": "apps"
+  },
+  "windows.6421eda76fe38b52": {
+    "section": "apps"
+  },
+  "windows.355df69f0addd1b9": {
+    "section": "debloat"
+  },
+  "windows.97e9968637a9d4c8": {
+    "section": "debloat"
+  },
+  "windows.6479a5bd8e9e5d9a": {
+    "section": "privacy"
+  },
+  "windows.16d7e93acb51a80d": {
+    "section": "apps"
+  },
+  "windows.d98a72c5f18faf64": {
+    "section": "apps"
+  },
+  "windows.917b760569e4c0c5": {
+    "section": "apps"
+  },
+  "windows.6479c1a3fd46255d": {
+    "section": "apps"
+  },
+  "windows.3b1c22af4ac2bf82": {
+    "section": "apps"
+  },
+  "windows.0c389a8455d307ab": {
+    "section": "apps"
+  },
+  "windows.c54200c456d6fc40": {
+    "section": "network",
+    "name": "Edge encrypted DNS",
+    "description": "Choose how Microsoft Edge protects website lookups.",
+    "topic": "DNS",
+    "choices": {
+      "choice-69d9dd0087e57584": "Off",
+      "choice-7bbba8299d221049": "Allow unencrypted fallback",
+      "choice-ab4922181cd7cec6": "Encrypted lookups only",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.d355c424243cb775": {
+    "section": "apps"
+  },
+  "windows.9ac78d838552487d": {
+    "section": "apps"
+  },
+  "windows.cae2c84b6fa9467a": {
+    "section": "apps"
+  },
+  "windows.3da77fb1035a066a": {
+    "section": "privacy"
+  },
+  "windows.3e2ef460aed7f8bd": {
+    "section": "privacy"
+  },
+  "windows.46da89b548fb96f6": {
+    "section": "privacy"
+  },
+  "windows.89995b6f4fcb8188": {
+    "section": "apps"
+  },
+  "windows.b8495a424da102fa": {
+    "section": "apps"
+  },
+  "windows.192bb156ce56a609": {
+    "section": "apps"
+  },
+  "windows.aa70e8c8b4d290db": {
+    "section": "apps"
+  },
+  "windows.c7adec178e29f944": {
+    "section": "privacy"
+  },
+  "windows.d23ad593d97d4a4e": {
+    "section": "privacy"
+  },
+  "windows.356f7584f9a21ae7": {
+    "section": "privacy"
+  },
+  "windows.3bcf54d03a596e7e": {
+    "section": "privacy"
+  },
+  "windows.5e0a51ace80cd71e": {
+    "section": "privacy"
+  },
+  "windows.d261f7a6d03a12dc": {
+    "section": "privacy"
+  },
+  "windows.8c7083a823121bf9": {
+    "section": "privacy"
+  },
+  "windows.a42538e5963cd812": {
+    "section": "apps"
+  },
+  "windows.e4584ea53ad4e467": {
+    "section": "apps"
+  },
+  "windows.a0f0376664a7f854": {
+    "section": "privacy"
+  },
+  "windows.eb0caeb7b0dd07c3": {
+    "section": "privacy"
+  },
+  "windows.68d5e4cbb2f5767a": {
+    "section": "apps"
+  },
+  "windows.e5817175374189b6": {
+    "section": "privacy"
+  },
+  "windows.8ad434232b2bc20b": {
+    "section": "apps"
+  },
+  "windows.e31751e63b55a150": {
+    "section": "apps"
+  },
+  "windows.2632d6968d10c632": {
+    "section": "apps"
+  },
+  "windows.f98cc25908828a2b": {
+    "section": "apps"
+  },
+  "windows.5f5dd02ad5d0a5ef": {
+    "section": "debloat"
+  },
+  "windows.2bd0260dde33b8a2": {
+    "section": "apps"
+  },
+  "windows.3430344b187dc5d0": {
+    "section": "apps"
+  },
+  "windows.7a5a7438fd4441bd": {
+    "section": "privacy"
+  },
+  "windows.a323a1cd44c333ce": {
+    "section": "apps"
+  },
+  "windows.3a1bf8961617d5d6": {
+    "section": "privacy"
+  },
+  "windows.67492e826e19151c": {
+    "section": "apps"
+  },
+  "windows.7c8b9bf95199812d": {
+    "section": "apps"
+  },
+  "windows.d20fac5871a0a634": {
+    "section": "apps"
+  },
+  "windows.2c56cc57717e19c9": {
+    "section": "apps"
+  },
+  "windows.3c421799a5643233": {
+    "section": "security"
+  },
+  "windows.83929f5248ff232b": {
+    "section": "debloat"
+  },
+  "windows.c8b5e2ce7d99478a": {
+    "section": "debloat"
+  },
+  "windows.504c0fc08dcf1b6c": {
+    "section": "debloat"
+  },
+  "windows.7107ec0d810b827d": {
+    "section": "debloat"
+  },
+  "windows.3be7901c508eaf73": {
+    "section": "privacy"
+  },
+  "windows.76660aa4f3c01856": {
+    "section": "privacy"
+  },
+  "windows.876963edb024d09a": {
+    "section": "privacy"
+  },
+  "windows.50bd3b2d47c9e7b3": {
+    "section": "apps"
+  },
+  "windows.9a844f36f7e1c568": {
+    "section": "privacy"
+  },
+  "windows.715fdaa011d9d01b": {
+    "section": "apps"
+  },
+  "windows.792e7aa52c2c8f54": {
+    "section": "apps"
+  },
+  "windows.193cbbce6c82b9b6": {
+    "section": "apps"
+  },
+  "windows.c64a4368b6d3a0f4": {
+    "section": "apps"
+  },
+  "windows.76d8992215c6e9f8": {
+    "section": "apps"
+  },
+  "windows.93762bc523740601": {
+    "section": "apps"
+  },
+  "windows.a48245dd81ad617c": {
+    "section": "debloat"
+  },
+  "windows.cdaff9fcf17b4fc2": {
+    "section": "debloat"
+  },
+  "windows.1a69d80726d2b2e9": {
+    "section": "windows"
+  },
+  "windows.b7b2aa3504d6d901": {
+    "section": "windows"
+  },
+  "windows.7bda9e5cfa89eefe": {
+    "section": "windows"
+  },
+  "windows.3ea6b90b43ac0657": {
+    "section": "windows"
+  },
+  "windows.7f840ab65f2480ca": {
+    "section": "windows"
+  },
+  "windows.25ac47d176b5aaa7": {
+    "section": "windows"
+  },
+  "windows.415e5f2812d356e8": {
+    "section": "windows"
+  },
+  "windows.73c0b56497d5ff67": {
+    "section": "windows"
+  },
+  "windows.7dfb60938b3f8d59": {
+    "section": "windows"
+  },
+  "windows.848ea9516f57bcaa": {
+    "section": "windows"
+  },
+  "windows.8e461c826e188da2": {
+    "section": "windows"
+  },
+  "windows.9f2a4b261c5e4738": {
+    "section": "windows"
+  },
+  "windows.b76e23a133f51587": {
+    "section": "windows"
+  },
+  "windows.c761d5bf4014a520": {
+    "section": "windows"
+  },
+  "windows.db6e67a5039ae167": {
+    "section": "windows"
+  },
+  "windows.edcd8bebaad068e7": {
+    "section": "windows"
+  },
+  "windows.f775a7ba4180e003": {
+    "section": "windows"
+  },
+  "windows.fdc66443254012ec": {
+    "section": "windows"
+  },
+  "windows.f83fa56ccd83bc69": {
+    "section": "windows"
+  },
+  "windows.4e6bfb30b8dfb004": {
+    "section": "windows"
+  },
+  "windows.d0d508fd6190fb3f": {
+    "section": "windows"
+  },
+  "windows.a587442ede22c7bd": {
+    "section": "windows"
+  },
+  "windows.0bec4fb74cb2a65a": {
+    "section": "windows"
+  },
+  "windows.77b147e14f1dabc7": {
+    "section": "windows"
+  },
+  "windows.3ace9a32873e249e": {
+    "section": "windows"
+  },
+  "windows.8af0b4fc90a8f16a": {
+    "section": "windows"
+  },
+  "windows.759094d42700331c": {
+    "section": "windows"
+  },
+  "windows.1269b601b083a41c": {
+    "section": "windows"
+  },
+  "windows.3d8a7ac1606c89b0": {
+    "section": "windows"
+  },
+  "windows.96b51b359cfc2ab5": {
+    "section": "windows"
+  },
+  "windows.e8d47a9189180b1e": {
+    "section": "windows"
+  },
+  "windows.a3ef1b9be546a49a": {
+    "section": "windows"
+  },
+  "windows.1fdae84413ebcc1d": {
+    "section": "windows"
+  },
+  "windows.d3364acdf643b11b": {
+    "section": "windows"
+  },
+  "windows.a88c1cc25dcd38c3": {
+    "section": "windows"
+  },
+  "windows.fed8ea1980feb6e6": {
+    "section": "windows"
+  },
+  "windows.d252a66306d764b3": {
+    "section": "debloat"
+  },
+  "windows.0b49273b328b977a": {
+    "section": "windows"
+  },
+  "windows.373d0bc9505f99f5": {
+    "section": "windows"
+  },
+  "windows.4bb03ab1a2d9e3f2": {
+    "section": "windows"
+  },
+  "windows.07df3877f89b977d": {
+    "section": "windows"
+  },
+  "windows.a16e4b9ad8756998": {
+    "section": "gaming"
+  },
+  "windows.ddf593f5b0b79658": {
+    "section": "gaming"
+  },
+  "windows.b3ed2a21f895b89b": {
+    "section": "gaming"
+  },
+  "windows.ff9ff1f1dc8c714b": {
+    "section": "windows"
+  },
+  "windows.e0e33ada9b3951f7": {
+    "section": "windows"
+  },
+  "windows.0119f1f1672952e8": {
+    "section": "windows"
+  },
+  "windows.3b6e921210fa0c03": {
+    "section": "windows"
+  },
+  "windows.8770c13a482bd972": {
+    "section": "security"
+  },
+  "windows.a327c0f376c71695": {
+    "section": "devices"
+  },
+  "windows.554e95a2edd62fbc": {
+    "section": "debloat"
+  },
+  "windows.d3198b83edc4ccc5": {
+    "section": "windows"
+  },
+  "windows.5d8ce44f627e4e3a": {
+    "section": "debloat"
+  },
+  "windows.13520c8b6440551c": {
+    "section": "windows"
+  },
+  "windows.a64761d842b05a5c": {
+    "section": "debloat"
+  },
+  "windows.8a38fb053db5c069": {
+    "section": "windows"
+  },
+  "windows.0689e69eedc05770": {
+    "section": "windows"
+  },
+  "windows.e0cd1103f0b6bb41": {
+    "section": "windows"
+  },
+  "windows.097b68b347ea5404": {
+    "section": "debloat"
+  },
+  "windows.c64a6158eaf84025": {
+    "section": "windows"
+  },
+  "windows.665b3c1700d0d9f2": {
+    "section": "windows"
+  },
+  "windows.82de3311ecbb8bfd": {
+    "section": "devices"
+  },
+  "windows.df96c882a075e686": {
+    "section": "devices"
+  },
+  "windows.f62996a1f8131f24": {
+    "section": "devices"
+  },
+  "windows.390a641655997ac5": {
+    "section": "devices"
+  },
+  "windows.8094fa90aef667a2": {
+    "section": "devices"
+  },
+  "windows.27dceacfb5f3bad8": {
+    "section": "devices"
+  },
+  "windows.f4f3fe6eec4af4da": {
+    "section": "devices"
+  },
+  "windows.e5bc23aaf240501d": {
+    "section": "devices"
+  },
+  "windows.0ff20ccca85cc838": {
+    "section": "devices"
+  },
+  "windows.06855e52439422dc": {
+    "section": "devices"
+  },
+  "windows.d26d5feeed9c86a7": {
+    "section": "devices"
+  },
+  "windows.4f15b51618f19faa": {
+    "section": "devices"
+  },
+  "windows.7c7f075549bd661a": {
+    "section": "devices"
+  },
+  "windows.5da29a7625715500": {
+    "section": "devices"
+  },
+  "windows.7b6387fb0beb29cc": {
+    "section": "devices"
+  },
+  "windows.64e2f577f966b91d": {
+    "section": "devices"
+  },
+  "windows.c2611ffceccdd511": {
+    "section": "devices"
+  },
+  "windows.c0992e387472e78f": {
+    "section": "devices"
+  },
+  "windows.2666ea7030872d52": {
+    "section": "devices"
+  },
+  "windows.09f86440438b2b8e": {
+    "section": "devices"
+  },
+  "windows.aaa540980436f504": {
+    "section": "devices"
+  },
+  "windows.7ef93bb6784cada0": {
+    "section": "devices"
+  },
+  "windows.b6502620eeb0dc2f": {
+    "section": "devices"
+  },
+  "windows.9c27a7fd3e10f9b8": {
+    "section": "devices"
+  },
+  "windows.1d01b65657d5e690": {
+    "section": "security"
+  },
+  "windows.a37f2d7904b12d56": {
+    "section": "security"
+  },
+  "windows.4507a73b6ce058e6": {
+    "section": "security"
+  },
+  "windows.d33d9e62cf06c4ab": {
+    "section": "devices"
+  },
+  "windows.9805af88309930ec": {
+    "section": "devices"
+  },
+  "windows.452a78b8ea406897": {
+    "section": "devices"
+  },
+  "windows.f736ec652cbeba77": {
+    "section": "devices"
+  },
+  "windows.28c1ddbf4b6316e4": {
+    "section": "devices"
+  },
+  "windows.408d7ecc4e0a4231": {
+    "section": "devices"
+  },
+  "windows.b9588d8d21303ffe": {
+    "section": "devices"
+  },
+  "windows.c55fa4621a954e21": {
+    "section": "devices"
+  },
+  "windows.079018f691b27542": {
+    "section": "devices"
+  },
+  "windows.ced5e140ccf6e55d": {
+    "section": "devices"
+  },
+  "windows.09240c8c2144ffde": {
+    "section": "devices"
+  },
+  "windows.791468133ef9ae2a": {
+    "section": "devices"
+  },
+  "windows.83d4b1b8f7a55f84": {
+    "section": "devices"
+  },
+  "windows.cbb760dab99a7a9b": {
+    "section": "devices"
+  },
+  "windows.12a2f7d075db4a7a": {
+    "section": "devices"
+  },
+  "windows.3ede215536675c06": {
+    "section": "devices"
+  },
+  "windows.dab45efcbee72768": {
+    "section": "devices"
+  },
+  "windows.f5b1784349813d36": {
+    "section": "devices"
+  },
+  "windows.c858b5629e74495c": {
+    "section": "devices"
+  },
+  "windows.ec9e19e8bc60c5bd": {
+    "section": "devices"
+  },
+  "windows.58861121bb8b3ad6": {
+    "section": "devices"
+  },
+  "windows.508bbe88d85212c0": {
+    "section": "devices"
+  },
+  "windows.3336fef5ce22df66": {
+    "section": "devices"
+  },
+  "windows.c229fc7278c1db76": {
+    "section": "devices"
+  },
+  "windows.d47c42ef436fb54a": {
+    "section": "security"
+  },
+  "windows.ae43ec1ad4d18806": {
+    "section": "security"
+  },
+  "windows.ebcb7d7c938e041a": {
+    "section": "security"
+  },
+  "windows.828d4b1f887bfaad": {
+    "section": "security"
+  },
+  "windows.bd24cb899aeebe80": {
+    "section": "security"
+  },
+  "windows.fc77ad1ae7fd45fa": {
+    "section": "security"
+  },
+  "windows.1a312f189b5815d5": {
+    "section": "security"
+  },
+  "windows.b10f431287eb9ff8": {
+    "section": "security"
+  },
+  "windows.ebdd8782dfaaa8f9": {
+    "section": "security"
+  },
+  "windows.22bf56124768d4a0": {
+    "section": "security"
+  },
+  "windows.3d74ed5a692c3882": {
+    "section": "security"
+  },
+  "windows.b048256362718da0": {
+    "section": "devices"
+  },
+  "windows.ffdaea0af733370b": {
+    "section": "devices"
+  },
+  "windows.692663b76fcc7c15": {
+    "section": "gaming"
+  },
+  "windows.f5c43d5a93e63c26": {
+    "section": "gaming"
+  },
+  "windows.de0e39e04f73dbfa": {
+    "section": "gaming"
+  },
+  "windows.afc9a1a923dc6c65": {
+    "section": "gaming"
+  },
+  "windows.670228df8894e32e": {
+    "section": "gaming"
+  },
+  "windows.dadbb9f2b31a9392": {
+    "section": "security"
+  },
+  "windows.2d6f1c41f1387e03": {
+    "section": "gaming"
+  },
+  "windows.f9418f64128dd350": {
+    "section": "gaming"
+  },
+  "windows.28a1d5c5280e79cc": {
+    "section": "gaming"
+  },
+  "windows.2fad674f85267c09": {
+    "section": "gaming"
+  },
+  "windows.6915144d3bff380d": {
+    "section": "gaming"
+  },
+  "windows.0d4a4a9622843707": {
+    "section": "network",
+    "name": "DNS provider · IPv6",
+    "description": "Choose the service used to find websites. Some providers also filter ads or unwanted content.",
+    "topic": "DNS",
+    "choices": {
+      "choice-c4697634bc8964cb": "Automatic (network default)",
+      "choice-64b2d3b65447798e": "Google",
+      "choice-e548679ce810e4b6": "Cloudflare",
+      "choice-f59382a21b307f5c": "Cloudflare Malware",
+      "choice-885e4905c7343c2d": "Cloudflare Malware Adult",
+      "choice-c52c315a685388b3": "OpenDNS",
+      "choice-b2aeffbff718bb16": "Quad9",
+      "choice-c7a26485d086238e": "AdGuard Ads Trackers",
+      "choice-c4c9ee4cbc2d70e6": "AdGuard Ads Trackers Malware Adult",
+      "choice-08de57407f931f66": "Mullvad",
+      "choice-b3781edaf0b24bef": "Mullvad Ads Trackers",
+      "choice-976e2e168f71997f": "Mullvad Ads Trackers Malware",
+      "choice-cfbec88323c51262": "Mullvad Ads Trackers Malware Social",
+      "choice-d456efd01d51d842": "Mullvad Ads Trackers Malware Adult Gambling",
+      "choice-683f5593ffb7bc7f": "Mullvad Ads Trackers Malware Adult Gambling Social"
+    }
+  },
+  "windows.1ebf12e827d8a37f": {
+    "section": "network",
+    "name": "DNS provider · IPv4",
+    "description": "Choose the service used to find websites. Some providers also filter ads or unwanted content.",
+    "topic": "DNS",
+    "choices": {
+      "choice-c4697634bc8964cb": "Automatic (network default)",
+      "choice-a28caeb3cc3240ce": "Google",
+      "choice-5873002431dce708": "Cloudflare",
+      "choice-c325cbcc65a23a94": "Cloudflare Malware",
+      "choice-6d6d5c327b3da072": "Cloudflare Malware Adult",
+      "choice-9042ae2dd105cc7a": "OpenDNS",
+      "choice-41179858f278d3ee": "Quad9",
+      "choice-efe2b236be442bbf": "AdGuard Ads Trackers",
+      "choice-26c388e304c64c64": "AdGuard Ads Trackers Malware Adult",
+      "choice-d56621b171400e5d": "Mullvad",
+      "choice-c66e460953cd3657": "Mullvad Ads Trackers",
+      "choice-a8ead485c82f3f9b": "Mullvad Ads Trackers Malware",
+      "choice-9afa59bf9867e9ba": "Mullvad Ads Trackers Malware Social",
+      "choice-59283a239f11cba6": "Mullvad Ads Trackers Malware Adult Gambling",
+      "choice-e21e769470acbc8f": "Mullvad Ads Trackers Malware Adult Gambling Social"
+    }
+  },
+  "windows.158f86e80c6bb50c": {
+    "section": "network",
+    "name": "Cloudflare · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.1a839efafd8c930e": {
+    "section": "network",
+    "name": "Quad9 · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.1ca6e8c2de3b2717": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.215e1751fdda8729": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.22503661b22ef79c": {
+    "section": "network",
+    "name": "Cloudflare · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.248afcb45c6e1e67": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.24f1256dd07e6f81": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.25a291302287de00": {
+    "section": "network",
+    "name": "Cloudflare · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.2a37d7e531746558": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.2c1a511330be50a1": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.2d0b0e41ee871158": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.31cb908d27059ec7": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.344def8a5b7e3f48": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.37c4bd79d9f63b13": {
+    "section": "network",
+    "name": "Quad9 · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.40d232ee0123e6c5": {
+    "section": "network",
+    "name": "Google · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.463324a5bddd88c0": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.49b62a3affe32668": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.4fe7155bb9a49ead": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.5903c56365108d3d": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.684319c89fa33d78": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.78e5d0bb801de34e": {
+    "section": "network",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.842f4837ac8d39a1": {
+    "section": "network",
+    "name": "Google · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.87b07ab1047f7280": {
+    "section": "network",
+    "name": "Quad9 · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.98aae842706b7bdd": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.9c5eb77edcaf73dd": {
+    "section": "network",
+    "name": "OpenDNS · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.9d42abb75895f3ae": {
+    "section": "network",
+    "name": "Cloudflare · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.b73db5e95eef4b10": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.ba85a8c6ea45cdcf": {
+    "section": "network",
+    "name": "Quad9 · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.bbdb1de2585358ad": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.c0401d02e66bc631": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.c2a6666b00f67b23": {
+    "section": "network",
+    "name": "Google · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.c39cb834d8df1274": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.c8cbc6e8bdf58c0a": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.cbce4f15de20a61d": {
+    "section": "network",
+    "name": "Google · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.cc0e2308a780ed4d": {
+    "section": "network",
+    "name": "OpenDNS · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.d22aa7500a23f60e": {
+    "section": "network",
+    "name": "OpenDNS · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.e30d437c9a80e965": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.e623580401553689": {
+    "section": "network",
+    "name": "OpenDNS · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.e941f52e02dabd5d": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.ec9900c4c0344603": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.f203ba48f9d7283d": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.f715cf49647720cf": {
+    "section": "network",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.fb5a32be2744c36e": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.fdea44489c23aab3": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted DNS preference",
+    "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8b25020aabc84b9a": "Use this preference"
+    }
+  },
+  "windows.150b88b3d0534e99": {
+    "section": "network",
+    "name": "IPv6 on active connections",
+    "description": "Use IPv6 on the active network adapters. Turning it off can interrupt apps or networks that depend on it.",
+    "topic": "Connection",
+    "choices": {
+      "choice-01c43a1bb3484ba2": "Disabled",
+      "choice-88665aca77848447": "Enabled"
+    }
+  },
+  "windows.2b2b452b1cad9dad": {
+    "section": "network",
+    "name": "Internet protocol preference",
+    "description": "Choose a connection compatibility preference. Disabling IPv6 can affect apps and networks that need it.",
+    "topic": "Connection",
+    "choices": {
+      "choice-21e10415fb773217": "Prefer IPv4",
+      "choice-95a6ed84299d0109": "Windows default",
+      "choice-6b253977ea5987f3": "Disable IPv6 tunnels",
+      "choice-baea08173082f2c8": "Disable IPv6 except loopback"
+    }
+  },
+  "windows.6e004d12fb8fbf31": {
+    "section": "network",
+    "name": "Local computer discovery",
+    "description": "Find nearby computers by name. Some local sharing setups need this feature.",
+    "topic": "Local network",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.7f3f80851197aecc": {
+    "section": "network",
+    "name": "Large upload handling",
+    "description": "Adjust how larger uploads are handled. Support and performance depend on the adapter.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-f40d62aa2aadc0be": "Enabled",
+      "choice-4435037fc46c3faa": "Disabled"
+    }
+  },
+  "windows.b2fe821a671c7c5d": {
+    "section": "network",
+    "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
+    "topic": "Firewall"
+  },
+  "windows.072ef6dbe40a0607": {
+    "section": "network",
+    "name": "Small transfer responsiveness",
+    "description": "Adjust responsiveness for apps that send frequent small updates. Applies to TCP connections.",
+    "topic": "Connection",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference",
+      "choice-6b253977ea5987f3": "Send small updates promptly"
+    }
+  },
+  "windows.dd1637f790d786c2": {
+    "section": "network",
+    "name": "Older network compatibility",
+    "description": "Support older PCs and shared devices. Disabling this can affect older local networks.",
+    "topic": "Local network",
+    "choices": {
+      "choice-95a6ed84299d0109": "Follow network configuration",
+      "choice-959723ea7b62f95c": "Disabled"
+    }
+  },
+  "windows.bcd77ad54a7accc0": {
+    "section": "network",
+    "name": "Download processing",
+    "description": "Balance download throughput and processor use on supported adapters.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-b24f2bcbf4bfae3b": "Enabled",
+      "choice-98142a1b6f5d471b": "Disabled"
+    }
+  },
+  "windows.5667587f88b039b3": {
+    "section": "network",
+    "name": "Connection response timing",
+    "description": "Adjust a response preference for latency-sensitive TCP apps.",
+    "topic": "Connection",
+    "choices": {
+      "choice-6b253977ea5987f3": "Prompt responses",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.bbf020b3eed0dc23": {
+    "section": "network",
+    "name": "Network processing",
+    "description": "Choose how network work is shared with your adapter. This can affect processor use and throughput.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference",
+      "choice-6b253977ea5987f3": "Use Windows processing"
+    }
+  },
+  "windows.c0ec8f1b47c9b3a1": {
+    "section": "network",
+    "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
+    "topic": "Firewall"
+  },
+  "windows.baef2bd52b7956ed": {
+    "section": "network",
+    "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
+    "topic": "Firewall"
+  },
+  "windows.1935dab2d2a59eb8": {
+    "section": "network",
+    "name": "Automatic Wi-Fi connections",
+    "description": "Control an older Windows Wi-Fi connection preference. Current Windows versions may no longer use it.",
+    "topic": "Wireless",
+    "choices": {
+      "choice-95a6ed84299d0109": "Disabled",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.545d278a6e57e1c7": {
+    "section": "network",
+    "name": "Wi-Fi sharing preferences",
+    "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
+    "topic": "Wireless",
+    "choices": {
+      "choice-b0dcd391282f6995": "Use this preference"
+    }
+  },
+  "windows.88fe51b11c7ae2aa": {
+    "section": "network",
+    "name": "Wi-Fi sharing preferences",
+    "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
+    "topic": "Wireless",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.09d74e279714979c": {
+    "section": "network",
+    "name": "Wi-Fi sharing preferences",
+    "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
+    "topic": "Wireless",
+    "choices": {
+      "choice-26504d957853e325": "Use this preference"
+    }
+  },
+  "windows.84b9401eabc25018": {
+    "section": "network",
+    "name": "Internet connection checks",
+    "description": "Let Windows check whether this PC has internet access. Some sign-in pages and apps rely on the result.",
+    "topic": "Connection",
+    "choices": {
+      "choice-6b253977ea5987f3": "Disable active checks",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "privacy.activity-feed": {
+    "section": "privacy"
+  },
+  "privacy.activity-publishing": {
+    "section": "privacy"
+  },
+  "privacy.activity-upload": {
+    "section": "privacy"
+  },
+  "privacy.advertising-id-policy": {
+    "section": "privacy"
+  },
+  "windows.974e4b8e98bab3ba": {
+    "section": "privacy"
+  },
+  "windows.f21513f9c6b27e2c": {
+    "section": "privacy"
+  },
+  "windows.90a8734c8441dceb": {
+    "section": "privacy"
+  },
+  "windows.5b374fa461c8115d": {
+    "section": "privacy"
+  },
+  "windows.f739575b5d709a81": {
+    "section": "privacy"
+  },
+  "windows.258781a95f00fef3": {
+    "section": "privacy"
+  },
+  "windows.28f2c73ea3182c44": {
+    "section": "privacy"
+  },
+  "windows.2b7700a02bd0f1e9": {
+    "section": "privacy"
+  },
+  "windows.7e0390656aa852dc": {
+    "section": "privacy"
+  },
+  "windows.882d304d8d3d810b": {
+    "section": "privacy"
+  },
+  "windows.a86666cd548bdbbf": {
+    "section": "privacy"
+  },
+  "windows.be67257ae643130f": {
+    "section": "privacy"
+  },
+  "windows.e91947068766d265": {
+    "section": "privacy"
+  },
+  "windows.1388ad1824605ce8": {
+    "section": "privacy"
+  },
+  "windows.1d1c29f00646cf6d": {
+    "section": "privacy"
+  },
+  "windows.bc15bdfb263a052e": {
+    "section": "privacy"
+  },
+  "windows.34d030fa8c2a41a4": {
+    "section": "privacy"
+  },
+  "windows.e6a205c984754fde": {
+    "section": "privacy"
+  },
+  "windows.9fd456871e2a6e02": {
+    "section": "privacy"
+  },
+  "windows.befaee1429ff3376": {
+    "section": "privacy"
+  },
+  "windows.e0b7a561e07c8967": {
+    "section": "privacy"
+  },
+  "windows.035280203d64209a": {
+    "section": "privacy"
+  },
+  "windows.13a13cd8ecd16386": {
+    "section": "privacy"
+  },
+  "windows.2fb0385b4295b2dc": {
+    "section": "privacy"
+  },
+  "windows.995311a9f76ae458": {
+    "section": "privacy"
+  },
+  "windows.7d61ae3b0dd08423": {
+    "section": "privacy"
+  },
+  "windows.e974c3ca0c5d2640": {
+    "section": "privacy"
+  },
+  "windows.7cb1f23f79832cec": {
+    "section": "privacy"
+  },
+  "windows.974209c6dc073e5d": {
+    "section": "privacy"
+  },
+  "windows.a36483ebf2ff7361": {
+    "section": "privacy"
+  },
+  "windows.c32fa71867cd3b25": {
+    "section": "privacy"
+  },
+  "windows.f141a691cb4d08a1": {
+    "section": "privacy"
+  },
+  "windows.a21af2181c4b3168": {
+    "section": "privacy"
+  },
+  "windows.bd054ad1ad462d0a": {
+    "section": "privacy"
+  },
+  "windows.cd78f6be50d1e19c": {
+    "section": "privacy"
+  },
+  "windows.eba7ba7bb8b47db9": {
+    "section": "privacy"
+  },
+  "windows.5157394a57ead19a": {
+    "section": "privacy"
+  },
+  "windows.9225d4b19a3fb9cf": {
+    "section": "privacy"
+  },
+  "windows.e1fbfcdb02022768": {
+    "section": "privacy"
+  },
+  "windows.f7838d4f7e2f97b5": {
+    "section": "privacy"
+  },
+  "windows.311ba785bce98904": {
+    "section": "privacy"
+  },
+  "windows.a84f27fbe1b430c4": {
+    "section": "privacy"
+  },
+  "windows.3f0b55801828c17a": {
+    "section": "privacy"
+  },
+  "windows.4dbfa039b86aaf69": {
+    "section": "privacy"
+  },
+  "windows.1b18a1d3cfd3a04e": {
+    "section": "privacy"
+  },
+  "windows.61754ea435eb7d5a": {
+    "section": "privacy"
+  },
+  "windows.1ee9cefaa1689f24": {
+    "section": "privacy"
+  },
+  "windows.a738331fcc9143f2": {
+    "section": "privacy"
+  },
+  "windows.b87d9bf9df965ca8": {
+    "section": "privacy"
+  },
+  "windows.f8431b310e49272b": {
+    "section": "privacy"
+  },
+  "windows.2fb02e6906a5b2d9": {
+    "section": "privacy"
+  },
+  "windows.80a5ea8077ed1144": {
+    "section": "privacy"
+  },
+  "windows.35d383864c1bd373": {
+    "section": "privacy"
+  },
+  "windows.6ef566663e3acd68": {
+    "section": "privacy"
+  },
+  "windows.10f837ef86cd962c": {
+    "section": "privacy"
+  },
+  "windows.bb3c289d7a69b6ca": {
+    "section": "privacy"
+  },
+  "windows.1d3040983902f499": {
+    "section": "privacy"
+  },
+  "windows.a4db61f6adf1892a": {
+    "section": "privacy"
+  },
+  "windows.5aab8224d9213b6e": {
+    "section": "privacy"
+  },
+  "windows.b9f5631feb4a5aea": {
+    "section": "privacy"
+  },
+  "windows.bf32a1112970772b": {
+    "section": "privacy"
+  },
+  "windows.d258fcb06968c350": {
+    "section": "privacy"
+  },
+  "windows.310b4c2d58ab61b0": {
+    "section": "privacy"
+  },
+  "windows.87ae359224f429b5": {
+    "section": "privacy"
+  },
+  "windows.7e09e160bbb9ced1": {
+    "section": "privacy"
+  },
+  "windows.f2efbebda44dd519": {
+    "section": "privacy"
+  },
+  "windows.b3dc6f6bc38d4201": {
+    "section": "privacy"
+  },
+  "windows.e8d8a56a3614f4d5": {
+    "section": "privacy"
+  },
+  "windows.7fa16c5ff56a179a": {
+    "section": "privacy"
+  },
+  "windows.441f950c394a9816": {
+    "section": "privacy"
+  },
+  "windows.2ce08c8197c4bfe6": {
+    "section": "privacy"
+  },
+  "windows.9ac2c769c5532348": {
+    "section": "privacy"
+  },
+  "windows.620784a60cb8b67d": {
+    "section": "privacy"
+  },
+  "windows.3573508cff572fb6": {
+    "section": "privacy"
+  },
+  "windows.73784935c80d1e84": {
+    "section": "privacy"
+  },
+  "windows.993f7724a331b009": {
+    "section": "privacy"
+  },
+  "windows.8dfda53eb7862ba5": {
+    "section": "privacy"
+  },
+  "windows.3b7506aee9968d0e": {
+    "section": "privacy"
+  },
+  "windows.e07ab726e81b26fd": {
+    "section": "privacy"
+  },
+  "windows.a781611c16e5f9a3": {
+    "section": "privacy"
+  },
+  "windows.f1a2171d9872b185": {
+    "section": "privacy"
+  },
+  "windows.98769dae8591ceca": {
+    "section": "privacy"
+  },
+  "windows.64fa499ec1b296bb": {
+    "section": "debloat"
+  },
+  "windows.273cdda587a1e343": {
+    "section": "privacy"
+  },
+  "windows.653ccb5ad8a90725": {
+    "section": "privacy"
+  },
+  "windows.093ca1254e69a658": {
+    "section": "privacy"
+  },
+  "windows.1dc3a809fce73a89": {
+    "section": "privacy"
+  },
+  "windows.6ca888cb300456cc": {
+    "section": "privacy"
+  },
+  "windows.76771b7c43e7cc3d": {
+    "section": "privacy"
+  },
+  "windows.a4929756b5111263": {
+    "section": "privacy"
+  },
+  "windows.261e34882090eb53": {
+    "section": "privacy"
+  },
+  "windows.c5558f6551fd76ac": {
+    "section": "privacy"
+  },
+  "windows.193616ceb9ea1efa": {
+    "section": "privacy"
+  },
+  "windows.37098fe0a068a0a0": {
+    "section": "privacy"
+  },
+  "windows.ea8a48526956e77c": {
+    "section": "privacy"
+  },
+  "windows.7e8b957efd09a014": {
+    "section": "privacy"
+  },
+  "windows.4707561753c300c6": {
+    "section": "privacy"
+  },
+  "privacy.feedback-prompts": {
+    "section": "privacy"
+  },
+  "windows.4674ffce1f8a21a1": {
+    "section": "privacy"
+  },
+  "windows.72165b4b671582a9": {
+    "section": "privacy"
+  },
+  "windows.c5a3463ac3fe7bce": {
+    "section": "privacy"
+  },
+  "windows.90d6e61ebdfaf38b": {
+    "section": "privacy"
+  },
+  "windows.9a3ceb91b2ff8afc": {
+    "section": "privacy"
+  },
+  "windows.eb94d28ca695e7f3": {
+    "section": "privacy"
+  },
+  "windows.138927f3578d1335": {
+    "section": "privacy"
+  },
+  "windows.3e245b699c965e1b": {
+    "section": "privacy"
+  },
+  "windows.d2bfe18a6b3f5d99": {
+    "section": "privacy"
+  },
+  "windows.2b15987a002cab36": {
+    "section": "privacy"
+  },
+  "windows.fd373f2fbc2a984f": {
+    "section": "privacy"
+  },
+  "windows.87d0b67905984a8c": {
+    "section": "privacy"
+  },
+  "windows.f71631d418697ad5": {
+    "section": "privacy"
+  },
+  "windows.fdc84180952cce98": {
+    "section": "privacy"
+  },
+  "windows.b592efe89b54a461": {
+    "section": "privacy"
+  },
+  "windows.d416ee4bae8ba18f": {
+    "section": "privacy"
+  },
+  "windows.b49fb692142135f1": {
+    "section": "privacy"
+  },
+  "windows.9ac7b8beee9e15e2": {
+    "section": "privacy"
+  },
+  "privacy.tailored-experiences": {
+    "section": "privacy"
+  },
+  "windows.4f9aba2eae2173b8": {
+    "section": "privacy"
+  },
+  "windows.9e7d9d9036a1bfcd": {
+    "section": "privacy"
+  },
+  "windows.ad3e95d5a579ca29": {
+    "section": "privacy"
+  },
+  "windows.e2c2d2eb065e5509": {
+    "section": "privacy"
+  },
+  "windows.0d245bad7bd32c01": {
+    "section": "privacy"
+  },
+  "windows.78a57719454b0c2e": {
+    "section": "privacy"
+  },
+  "windows.5d7add5cbb495d27": {
+    "section": "privacy"
+  },
+  "windows.ea7cf01cc96bc10b": {
+    "section": "privacy"
+  },
+  "windows.b67bf4e5d26076b7": {
+    "section": "privacy"
+  },
+  "windows.a160a2bd9b2fed0c": {
+    "section": "privacy"
+  },
+  "windows.4ef312bab5dad406": {
+    "section": "privacy"
+  },
+  "windows.aff6006ea07bc831": {
+    "section": "privacy"
+  },
+  "windows.e84e6eef2b8f1f18": {
+    "section": "privacy"
+  },
+  "windows.2958bfefedb486b3": {
+    "section": "privacy"
+  },
+  "windows.95eb01c8685f2e91": {
+    "section": "privacy"
+  },
+  "windows.d9059312ddd8f108": {
+    "section": "privacy"
+  },
+  "windows.b3c344f8330098ed": {
+    "section": "privacy"
+  },
+  "windows.19daf5595582cb07": {
+    "section": "privacy"
+  },
+  "windows.c255c7d793578204": {
+    "section": "privacy"
+  },
+  "windows.16a03834f6220999": {
+    "section": "privacy"
+  },
+  "windows.fe8867148d4e1c76": {
+    "section": "privacy"
+  },
+  "windows.4255f31ba2db28a0": {
+    "section": "privacy"
+  },
+  "windows.2243e2be8fa5675f": {
+    "section": "privacy"
+  },
+  "windows.65afa8cb8707f3d5": {
+    "section": "privacy"
+  },
+  "windows.b9857fd500cda45e": {
+    "section": "privacy"
+  },
+  "windows.fc114c63d38b67ea": {
+    "section": "privacy"
+  },
+  "windows.bdd1fe17695aecfa": {
+    "section": "privacy"
+  },
+  "windows.dee3ee0f79cb5707": {
+    "section": "privacy"
+  },
+  "windows.f969be7b48681833": {
+    "section": "privacy"
+  },
+  "windows.7cee8f8c4e3ef9e1": {
+    "section": "privacy"
+  },
+  "windows.9797e408c9157237": {
+    "section": "privacy"
+  },
+  "windows.3f759aee0234f2d2": {
+    "section": "privacy"
+  },
+  "windows.fe30793714ff504a": {
+    "section": "privacy"
+  },
+  "windows.f95f10f6a0cf2296": {
+    "section": "privacy"
+  },
+  "windows.1d5804d97f121868": {
+    "section": "privacy"
+  },
+  "windows.a8ba538fb8b2093b": {
+    "section": "privacy"
+  },
+  "windows.db6e3761767b28c6": {
+    "section": "privacy"
+  },
+  "windows.ae822398a59f3c91": {
+    "section": "privacy"
+  },
+  "windows.7c879da8cd8b0870": {
+    "section": "privacy"
+  },
+  "windows.2569c61643c6be82": {
+    "section": "privacy"
+  },
+  "windows.b8a8747c56c88065": {
+    "section": "privacy"
+  },
+  "windows.5629bfb0edf5730d": {
+    "section": "services"
+  },
+  "windows.fea576a6fc7dd013": {
+    "section": "services"
+  },
+  "windows.e1fcfa774c136605": {
+    "section": "services"
+  },
+  "windows.1bee5bf7806a6593": {
+    "section": "services"
+  },
+  "windows.48528fe51a747f21": {
+    "section": "services"
+  },
+  "windows.aeaece32413afc65": {
+    "section": "services"
+  },
+  "windows.c1ba6f2692812943": {
+    "section": "services"
+  },
+  "windows.c527d06f425d5d12": {
+    "section": "services"
+  },
+  "windows.211e651b383c2ee8": {
+    "section": "services"
+  },
+  "windows.60ff8c3066d98975": {
+    "section": "services"
+  },
+  "windows.8d670bbb91fedfb8": {
+    "section": "services"
+  },
+  "windows.8b30f1b439a11081": {
+    "section": "services"
+  },
+  "windows.f764194de531cdaf": {
+    "section": "services"
+  },
+  "windows.b3af6ecb456108cb": {
+    "section": "services"
+  },
+  "windows.4a802560253ab454": {
+    "section": "services"
+  },
+  "windows.9214cfadb5f28219": {
+    "section": "services"
+  },
+  "windows.1fada349dd1f718f": {
+    "section": "services"
+  },
+  "windows.f1edfabad5ece1fa": {
+    "section": "services"
+  },
+  "windows.784cc224da31a2ec": {
+    "section": "services"
+  },
+  "windows.a977f25c0c1fed82": {
+    "section": "services"
+  },
+  "windows.4ce49cc86d4a85fa": {
+    "section": "services"
+  },
+  "windows.eebc9f3fde48834c": {
+    "section": "security"
+  },
+  "windows.05719d3bbe469a81": {
+    "section": "security"
+  },
+  "windows.feed5b43081ccd87": {
+    "section": "security"
+  },
+  "windows.ff7c1955e9c48cfa": {
+    "section": "security"
+  },
+  "windows.6eec44b714e4d017": {
+    "section": "security"
+  },
+  "windows.4eea42c34823699b": {
+    "section": "security"
+  },
+  "windows.6b9cebfef5eca2fa": {
+    "section": "security"
+  },
+  "windows.bb5569870c963eee": {
+    "section": "security"
+  },
+  "windows.28146ee0c1c01a41": {
+    "section": "security"
+  },
+  "windows.425c7c122debad41": {
+    "section": "security"
+  },
+  "windows.4e370476ec7da1d5": {
+    "section": "security"
+  },
+  "windows.4f67b523391fa90d": {
+    "section": "security"
+  },
+  "windows.503faa10463becc1": {
+    "section": "security"
+  },
+  "windows.8888baaf939cd57c": {
+    "section": "security"
+  },
+  "windows.ce1a1856ab034ce4": {
+    "section": "security"
+  },
+  "windows.edfcc4d1ab758ab8": {
+    "section": "security"
+  },
+  "windows.f906140db3b12805": {
+    "section": "security"
+  },
+  "windows.fb2a5a0a4f1642de": {
+    "section": "security"
+  },
+  "windows.a71ca3e5541cb544": {
+    "section": "security"
+  },
+  "windows.f869659084b9cfa8": {
+    "section": "security"
+  },
+  "windows.e2faf6a5bc7f7fbf": {
+    "section": "security"
+  },
+  "windows.8522dcf3c460532d": {
+    "section": "services"
+  },
+  "windows.bdee78b3d81a9425": {
+    "section": "services"
+  },
+  "windows.63bc2ce4fde98aee": {
+    "section": "services"
+  },
+  "windows.ec62abcbf618aa2a": {
+    "section": "services"
+  },
+  "windows.f31a85ef7fe97d67": {
+    "section": "services"
+  },
+  "windows.d77e1b41f487b6ea": {
+    "section": "services"
+  },
+  "windows.776d14c10022638c": {
+    "section": "services"
+  },
+  "windows.82daf77812001f77": {
+    "section": "services"
+  },
+  "windows.bcdd0d66cb322fbd": {
+    "section": "services"
+  },
+  "windows.2722f6f421e43fd9": {
+    "section": "services"
+  },
+  "windows.8b6e05a6ab5429fe": {
+    "section": "services"
+  },
+  "windows.c89dd736043bfbba": {
+    "section": "services"
+  },
+  "windows.97587a8d03ce15bb": {
+    "section": "services"
+  },
+  "windows.5b261c9d45278a05": {
+    "section": "services"
+  },
+  "windows.ee005e4fd053d5d0": {
+    "section": "services"
+  },
+  "windows.d10ee968a64cb407": {
+    "section": "services"
+  },
+  "windows.14abe60db93e548c": {
+    "section": "services"
+  },
+  "windows.fc0d1582b10c1275": {
+    "section": "services"
+  },
+  "windows.e4a7740e3c9c6498": {
+    "section": "services"
+  },
+  "windows.14d85eecddef236e": {
+    "section": "services"
+  },
+  "windows.27c8d43c0f782d3f": {
+    "section": "services"
+  },
+  "windows.0df8fc52f51fd22f": {
+    "section": "services"
+  },
+  "windows.d4073a99f9f021c6": {
+    "section": "services"
+  },
+  "windows.5f23b9037245246c": {
+    "section": "services"
+  },
+  "windows.f9de8999172338d0": {
+    "section": "services"
+  },
+  "windows.1139b9fdbc57b3c0": {
+    "section": "services"
+  },
+  "windows.93816e8822b7949f": {
+    "section": "services"
+  },
+  "windows.77adaded4c3d3b29": {
+    "section": "services"
+  },
+  "windows.3be3dac3375bc5ab": {
+    "section": "services"
+  },
+  "windows.4e68d327eac6b266": {
+    "section": "services"
+  },
+  "windows.e9431a4d528324f7": {
+    "section": "services"
+  },
+  "windows.4bcc423bac2474c3": {
+    "section": "services"
+  },
+  "windows.35ed8baaa3efe2fa": {
+    "section": "services"
+  },
+  "windows.1b07de9b6f8daf59": {
+    "section": "services"
+  },
+  "windows.761eed6ebaa354b3": {
+    "section": "services"
+  },
+  "windows.1dfb3cf46d512707": {
+    "section": "services"
+  },
+  "windows.6e06fc405587d59e": {
+    "section": "services"
+  },
+  "windows.661f8ef2e0a68ba6": {
+    "section": "services"
+  },
+  "windows.3f496f83e2c4f002": {
+    "section": "services"
+  },
+  "windows.3966291246436a13": {
+    "section": "services"
+  },
+  "windows.a217816aa5452198": {
+    "section": "services"
+  },
+  "windows.44719ea2d01bac2e": {
+    "section": "services"
+  },
+  "windows.52b9a479a15ec080": {
+    "section": "services"
+  },
+  "windows.9c64d5c333e32f69": {
+    "section": "services"
+  },
+  "windows.2dbe283afcf3f9a2": {
+    "section": "network",
+    "name": "Network usage tracking",
+    "description": "Show data usage totals for your connections. Disabling tracking removes those totals.",
+    "topic": "Connection"
+  },
+  "windows.2134a1da089b9d9a": {
+    "section": "services"
+  },
+  "windows.08d2e9f59d7d1e81": {
+    "section": "services"
+  },
+  "windows.511c2307f4901073": {
+    "section": "services"
+  },
+  "windows.3d78147cf1648ed9": {
+    "section": "services"
+  },
+  "windows.78f9bc6062713ff5": {
+    "section": "services"
+  },
+  "windows.f87744724bd2655d": {
+    "section": "services"
+  },
+  "windows.763f9800d41f15b1": {
+    "section": "services"
+  },
+  "windows.b208b35d89a0adfd": {
+    "section": "services"
+  },
+  "windows.84352a3ed79569df": {
+    "section": "services"
+  },
+  "windows.6ed77afa5b4fc970": {
+    "section": "services"
+  },
+  "windows.bc7325471a9f3e32": {
+    "section": "services"
+  },
+  "windows.3ae4242402bcc856": {
+    "section": "services"
+  },
+  "windows.31d55b05261eb383": {
+    "section": "services"
+  },
+  "windows.5075a69c4ee25140": {
+    "section": "services"
+  },
+  "windows.5ddb5c8548643fe2": {
+    "section": "services"
+  },
+  "windows.9917437d6b66bdd6": {
+    "section": "services"
+  },
+  "windows.cc0004916929d965": {
+    "section": "services"
+  },
+  "windows.f485146a873ff289": {
+    "section": "services"
+  },
+  "windows.c0228ad89f9a90f0": {
+    "section": "services"
+  },
+  "windows.5de4032674887abd": {
+    "section": "services"
+  },
+  "windows.382404c438190eaa": {
+    "section": "services"
+  },
+  "windows.b903b39ef2236b86": {
+    "section": "services"
+  },
+  "windows.9e97fdf4a68041f6": {
+    "section": "services"
+  },
+  "windows.2207dd4904bd6489": {
+    "section": "services"
+  },
+  "windows.c2df703d691ec68f": {
+    "section": "services"
+  },
+  "windows.7d8fcb29bd58e61a": {
+    "section": "services"
+  },
+  "windows.aebfce7259b9cf2b": {
+    "section": "services"
+  },
+  "windows.0bd96dda6acb2575": {
+    "section": "services"
+  },
+  "windows.7de73f3fc8b3e924": {
+    "section": "services"
+  },
+  "windows.5ae5a10b0bcce611": {
+    "section": "services"
+  },
+  "windows.ec97b7beb5461afd": {
+    "section": "services"
+  },
+  "windows.bc1ab6a71ab85175": {
+    "section": "services"
+  },
+  "windows.6b7b3025800c883b": {
+    "section": "services"
+  },
+  "windows.96929e8ee9131ea0": {
+    "section": "services"
+  },
+  "windows.6a3f0125dea8d116": {
+    "section": "services"
+  },
+  "windows.f6e7858581751ba2": {
+    "section": "services"
+  },
+  "windows.505478578c02a1c3": {
+    "section": "services"
+  },
+  "windows.428835245afe32a9": {
+    "section": "services"
+  },
+  "windows.f373a904cea14365": {
+    "section": "services"
+  },
+  "windows.2119d80378e882fd": {
+    "section": "services"
+  },
+  "windows.378b3ed763fb8070": {
+    "section": "services"
+  },
+  "windows.8e36f8919bda1782": {
+    "section": "services"
+  },
+  "windows.a471d3972114c0b7": {
+    "section": "services"
+  },
+  "windows.6c0988ed580b0790": {
+    "section": "services"
+  },
+  "windows.76d2756e9145f855": {
+    "section": "services"
+  },
+  "windows.5d68094bfaf45933": {
+    "section": "services"
+  },
+  "windows.15b8022aa5731ae0": {
+    "section": "services"
+  },
+  "windows.16eacb3a83940a08": {
+    "section": "services"
+  },
+  "windows.c8556ba02cbdad4d": {
+    "section": "services"
+  },
+  "windows.fbd3d034296eea89": {
+    "section": "services"
+  },
+  "windows.088cf11051a91856": {
+    "section": "services"
+  },
+  "windows.4908e509a2ecb331": {
+    "section": "services"
+  },
+  "windows.053ffccac618fe06": {
+    "section": "services"
+  },
+  "windows.a6a910817c1b54d4": {
+    "section": "services"
+  },
+  "windows.165ea00dd6c8bc86": {
+    "section": "services"
+  },
+  "windows.5fb831618bc9ee6a": {
+    "section": "services"
+  },
+  "windows.3bf6fb1bcceddf55": {
+    "section": "services"
+  },
+  "windows.8198c0c003e72f8f": {
+    "section": "services"
+  },
+  "windows.712547119eadac9b": {
+    "section": "services"
+  },
+  "windows.96d86d6f0998a564": {
+    "section": "services"
+  },
+  "windows.037647b2189a7f10": {
+    "section": "services"
+  },
+  "windows.58e46d58de5a6878": {
+    "section": "services"
+  },
+  "windows.f56ff50598420c72": {
+    "section": "services"
+  },
+  "windows.93123dcf0f04e0bf": {
+    "section": "services"
+  },
+  "windows.4e3841a2d61ce3f9": {
+    "section": "services"
+  },
+  "windows.b356c3123766a188": {
+    "section": "services"
+  },
+  "windows.7915de08901892c2": {
+    "section": "services"
+  },
+  "windows.da72b07e3d2a16dd": {
+    "section": "services"
+  },
+  "windows.8ce94d090405fb68": {
+    "section": "services"
+  },
+  "windows.b32e21daa23cc39c": {
+    "section": "services"
+  },
+  "windows.c0a667fd464232a3": {
+    "section": "services"
+  },
+  "windows.842b1a2480afda71": {
+    "section": "services"
+  },
+  "windows.9cca7e2e95c39760": {
+    "section": "services"
+  },
+  "windows.76b88022d89dd2ad": {
+    "section": "services"
+  },
+  "windows.e2773303ac5de106": {
+    "section": "services"
+  },
+  "windows.2550745edbefe4ef": {
+    "section": "services"
+  },
+  "windows.b66a10a8f8aad7d0": {
+    "section": "services"
+  },
+  "windows.addec3dbb142146b": {
+    "section": "services"
+  },
+  "windows.7075204d5887e828": {
+    "section": "services"
+  },
+  "windows.77d94c7def15f721": {
+    "section": "services"
+  },
+  "windows.ee5ac5278ec1fb4e": {
+    "section": "services"
+  },
+  "windows.df0b31d3bbec7a1f": {
+    "section": "services"
+  },
+  "windows.d798bfa9c726ba9d": {
+    "section": "services"
+  },
+  "windows.bd7fff9ee3f55610": {
+    "section": "services"
+  },
+  "windows.20bf5f3158393740": {
+    "section": "services"
+  },
+  "windows.240e8370d208d6a5": {
+    "section": "services"
+  },
+  "windows.964f2e8b66410d70": {
+    "section": "services"
+  },
+  "windows.f268a50eba858d47": {
+    "section": "services"
+  },
+  "windows.0e25c1c25c792d50": {
+    "section": "services"
+  },
+  "windows.4d0285ad7fcb2077": {
+    "section": "services"
+  },
+  "windows.0266ff064f2b571a": {
+    "section": "services"
+  },
+  "windows.65a494abd30751df": {
+    "section": "services"
+  },
+  "windows.2a9bde13ddb649f3": {
+    "section": "services"
+  },
+  "windows.14ff050f1e4e53b5": {
+    "section": "gaming"
+  },
+  "windows.c150b935cde96fa8": {
+    "section": "windows"
+  },
+  "windows.6db1de7ba4f067b5": {
+    "section": "windows"
+  },
+  "windows.a0126e8a533d7bfd": {
+    "section": "windows"
+  },
+  "windows.13b6c0d8fb231462": {
+    "section": "windows"
+  },
+  "windows.c26219e8cf004354": {
+    "section": "windows"
+  },
+  "windows.7718959c45b75640": {
+    "section": "windows"
+  },
+  "windows.77d255299fc9edf3": {
+    "section": "windows"
+  },
+  "windows.153c5df229829507": {
+    "section": "windows"
+  },
+  "windows.26f25970a1d80ffb": {
+    "section": "windows"
+  },
+  "windows.d5ece40cbef88271": {
+    "section": "windows"
+  },
+  "windows.05ad0f0f96ac0c21": {
+    "section": "privacy"
+  },
+  "windows.11ccefd8a5ecdb61": {
+    "section": "windows"
+  },
+  "windows.481ea88a0a9d986a": {
+    "section": "windows"
+  },
+  "windows.de49cf9b77004f03": {
+    "section": "windows"
+  },
+  "windows.a42338997dc856a9": {
+    "section": "windows"
+  },
+  "windows.190ec8140565cdbe": {
+    "section": "windows"
+  },
+  "windows.75800f3d9de3671e": {
+    "section": "windows"
+  },
+  "windows.9dca98edb48f7d97": {
+    "section": "windows"
+  },
+  "windows.6d5218c2f3c4b252": {
+    "section": "windows"
+  },
+  "windows.2900a873e3dd1f50": {
+    "section": "windows"
+  },
+  "windows.71a5a58f9ef533e8": {
+    "section": "windows"
+  },
+  "windows.b8ab4d9909372281": {
+    "section": "debloat"
+  },
+  "windows.7fa910e0ec3eabf7": {
+    "section": "windows"
+  },
+  "windows.a6ed028872c1f39f": {
+    "section": "windows"
+  },
+  "windows.0c2df5b4c9887da8": {
+    "section": "security"
+  },
+  "windows.f5bf7a12d3552d6f": {
+    "section": "security"
+  },
+  "windows.59cff5b16fd42835": {
+    "section": "windows"
+  },
+  "windows.182c25d57c5b8a24": {
+    "section": "windows"
+  },
+  "windows.c104f89ba4e1b71b": {
+    "section": "privacy"
+  },
+  "windows.f1a56afdb6eea613": {
+    "section": "gaming"
+  },
+  "windows.a57c4c1f9946a175": {
+    "section": "windows"
+  },
+  "windows.c0e739468fe03a34": {
+    "section": "debloat"
+  },
+  "windows.96eb2b41306db7d1": {
+    "section": "windows"
+  },
+  "windows.754cf7d389bb7a2a": {
+    "section": "windows"
+  },
+  "windows.d09ccd0fee309f49": {
+    "section": "windows"
+  },
+  "windows.96a972dd72c00333": {
+    "section": "debloat"
+  },
+  "windows.9ba2fc5ad6c98df6": {
+    "section": "windows"
+  },
+  "windows.825435689ce8a6f7": {
+    "section": "debloat"
+  },
+  "windows.9a1341be5c227ea5": {
+    "section": "debloat"
+  },
+  "windows.8bab11eabec0449e": {
+    "section": "debloat"
+  },
+  "windows.6b0999518653afbb": {
+    "section": "debloat"
+  },
+  "windows.bb69229e99488d47": {
+    "section": "debloat"
+  },
+  "windows.e08ef6dac05f7084": {
+    "section": "debloat"
+  },
+  "windows.328d2c7da600d9ad": {
+    "section": "debloat"
+  },
+  "windows.8e26b01782e8e151": {
+    "section": "debloat"
+  },
+  "windows.e07cb76c6341674f": {
+    "section": "debloat"
+  },
+  "windows.781bd4af1a081c73": {
+    "section": "debloat"
+  },
+  "windows.a6fb793ffb6819d8": {
+    "section": "debloat"
+  },
+  "windows.dd578bc9f5bad261": {
+    "section": "debloat"
+  },
+  "windows.c8255ea426c327de": {
+    "section": "debloat"
+  },
+  "windows.d2453b772f501358": {
+    "section": "debloat"
+  },
+  "windows.9c089fe0eb5aaae7": {
+    "section": "debloat"
+  },
+  "windows.d34853125eca0ffe": {
+    "section": "debloat"
+  },
+  "windows.a09d16bae617f6f0": {
+    "section": "debloat"
+  },
+  "windows.0ec1c20fc59784bb": {
+    "section": "debloat"
+  },
+  "windows.4712976559ce2855": {
+    "section": "debloat"
+  },
+  "windows.3d5015d72a6c3cd9": {
+    "section": "debloat"
+  },
+  "windows.7da9d842f1209913": {
+    "section": "debloat"
+  },
+  "windows.ffd2d70f7cda8d03": {
+    "section": "debloat"
+  },
+  "windows.174bf8b5f5fffbd3": {
+    "section": "debloat"
+  },
+  "windows.270437977707027c": {
+    "section": "debloat"
+  },
+  "windows.848fb782581f4e85": {
+    "section": "debloat"
+  },
+  "windows.311675008d2800f1": {
+    "section": "debloat"
+  },
+  "windows.6ba5c5180890e48c": {
+    "section": "debloat"
+  },
+  "windows.a8268996c3eb9072": {
+    "section": "debloat"
+  },
+  "windows.d80fc3dc4f84a8a2": {
+    "section": "windows"
+  },
+  "windows.f6abc590f5f51017": {
+    "section": "windows"
+  },
+  "windows.1fc843db3914d26b": {
+    "section": "network",
+    "name": "Cloudflare · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-696e67767182f287": "Use this preference"
+    }
+  },
+  "windows.8208c998c8a458d9": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-1662c39b168c2df1": "Use this preference"
+    }
+  },
+  "windows.6efa3ba9f5d46285": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8ad85ab8ae0b1723": "Use this preference"
+    }
+  },
+  "windows.2c463a1ebb8644e1": {
+    "section": "network",
+    "name": "Cloudflare · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-696e67767182f287": "Use this preference"
+    }
+  },
+  "windows.5403fd16255c7f6c": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-1662c39b168c2df1": "Use this preference"
+    }
+  },
+  "windows.96880beb0cda92c1": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8ad85ab8ae0b1723": "Use this preference"
+    }
+  },
+  "windows.485ae250b9a25d16": {
+    "section": "network",
+    "name": "Quad9 · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-604d415f4705eb0b": "Use this preference"
+    }
+  },
+  "windows.a50f765dc32d561a": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-6097e7ad421643e2": "Use this preference"
+    }
+  },
+  "windows.08a4a6d4d800eb57": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-c1495c54080805a8": "Use this preference"
+    }
+  },
+  "windows.c35beb1398333f2b": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-78c89caf5de2e9f9": "Use this preference"
+    }
+  },
+  "windows.931dd6aaceafdc1a": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-9d99a466c7faca3e": "Use this preference"
+    }
+  },
+  "windows.93058f0a01f36f9a": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-6e42c2bf9a0bbce2": "Use this preference"
+    }
+  },
+  "windows.9bb8bf75bde204d2": {
+    "section": "network",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0d6e5b5d4f16e15a": "Use this preference"
+    }
+  },
+  "windows.e8bde2f9b55b5777": {
+    "section": "network",
+    "name": "Google · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0524ad4316c363b1": "Use this preference"
+    }
+  },
+  "windows.55c7e34207106885": {
+    "section": "network",
+    "name": "Google · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0524ad4316c363b1": "Use this preference"
+    }
+  },
+  "windows.050336cd659be06f": {
+    "section": "network",
+    "name": "OpenDNS · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-fc62936647a4ea30": "Use this preference"
+    }
+  },
+  "windows.7dedc17adcfa482f": {
+    "section": "network",
+    "name": "OpenDNS · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-fc62936647a4ea30": "Use this preference"
+    }
+  },
+  "windows.99fc768e912827aa": {
+    "section": "network",
+    "name": "Cloudflare · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-696e67767182f287": "Use this preference"
+    }
+  },
+  "windows.2ce72222b2dad012": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-1662c39b168c2df1": "Use this preference"
+    }
+  },
+  "windows.70589e77b90d4eb4": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8ad85ab8ae0b1723": "Use this preference"
+    }
+  },
+  "windows.3fb0eec8d707ecf1": {
+    "section": "network",
+    "name": "Cloudflare · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-696e67767182f287": "Use this preference"
+    }
+  },
+  "windows.3ea9ab20682fc611": {
+    "section": "network",
+    "name": "Cloudflare Malware · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-1662c39b168c2df1": "Use this preference"
+    }
+  },
+  "windows.7cd9da225aa6d256": {
+    "section": "network",
+    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-8ad85ab8ae0b1723": "Use this preference"
+    }
+  },
+  "windows.14300e89d47a528f": {
+    "section": "network",
+    "name": "OpenDNS · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-fc62936647a4ea30": "Use this preference"
+    }
+  },
+  "windows.907affb94edff3d7": {
+    "section": "network",
+    "name": "OpenDNS · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-fc62936647a4ea30": "Use this preference"
+    }
+  },
+  "windows.be56eca0a275ca30": {
+    "section": "network",
+    "name": "Quad9 · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-604d415f4705eb0b": "Use this preference"
+    }
+  },
+  "windows.a550397cede16b37": {
+    "section": "network",
+    "name": "Quad9 · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-604d415f4705eb0b": "Use this preference"
+    }
+  },
+  "windows.4da4ca6a0aa1ee63": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-6097e7ad421643e2": "Use this preference"
+    }
+  },
+  "windows.ad1a26908324284c": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-c1495c54080805a8": "Use this preference"
+    }
+  },
+  "windows.3438f9c0e53303ac": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-78c89caf5de2e9f9": "Use this preference"
+    }
+  },
+  "windows.a26031160d6083f5": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-9d99a466c7faca3e": "Use this preference"
+    }
+  },
+  "windows.2252872dffd46844": {
+    "section": "network",
+    "name": "Mullvad shared · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-6e42c2bf9a0bbce2": "Use this preference"
+    }
+  },
+  "windows.8f68d5e3c09064e0": {
+    "section": "network",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0d6e5b5d4f16e15a": "Use this preference"
+    }
+  },
+  "windows.dd35b0559d8af40a": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-b89cb0141f7585a4": "Use this preference"
+    }
+  },
+  "windows.10d86e2d07c0b48b": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-b89cb0141f7585a4": "Use this preference"
+    }
+  },
+  "windows.8ce68502e69f1a8f": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-e5c2368a9d954511": "Use this preference"
+    }
+  },
+  "windows.1e405ac46a990dc9": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-e5c2368a9d954511": "Use this preference"
+    }
+  },
+  "windows.1ae61e2b2036d4b2": {
+    "section": "network",
+    "name": "Google · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0524ad4316c363b1": "Use this preference"
+    }
+  },
+  "windows.d0239e1369742570": {
+    "section": "network",
+    "name": "Google · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-0524ad4316c363b1": "Use this preference"
+    }
+  },
+  "windows.ec55a129b83d4bc9": {
+    "section": "network",
+    "name": "Quad9 · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-604d415f4705eb0b": "Use this preference"
+    }
+  },
+  "windows.ea84378379563551": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-b89cb0141f7585a4": "Use this preference"
+    }
+  },
+  "windows.f4792732b2191a88": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-e5c2368a9d954511": "Use this preference"
+    }
+  },
+  "windows.c2fead60d93a1fe7": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-b89cb0141f7585a4": "Use this preference"
+    }
+  },
+  "windows.4dff966b53312c40": {
+    "section": "network",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
+    "topic": "DNS",
+    "choices": {
+      "choice-e5c2368a9d954511": "Use this preference"
+    }
+  },
+  "windows.6ae403065279ea14": {
+    "section": "windows"
+  },
+  "windows.c600bcf7814d4fa0": {
+    "section": "windows"
+  },
+  "windows.96591faa81a94b46": {
+    "section": "windows"
+  },
+  "windows.fe3ec1ee9e1be966": {
+    "section": "privacy"
+  },
+  "windows.95045ac7eff337b5": {
+    "section": "windows"
+  },
+  "windows.153689e9c6791b27": {
+    "section": "windows"
+  },
+  "windows.e1226e6265b7dfce": {
+    "section": "network",
+    "name": "Work network firewall",
+    "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
+    "topic": "Firewall"
+  },
+  "windows.df796a6bd69f00d9": {
+    "section": "windows"
+  },
+  "windows.ecde31c4d826f41e": {
+    "section": "windows"
+  },
+  "windows.2a0ca22e7943f7cd": {
+    "section": "windows"
+  },
+  "windows.4bcc4643e31ed24e": {
+    "section": "windows"
+  },
+  "windows.487406904cd4e971": {
+    "section": "gaming"
+  },
+  "windows.15b4500b5894d602": {
+    "section": "network",
+    "name": "Ethernet power saving",
+    "description": "Reduce adapter power use when traffic is low. This can affect connection response.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-35f6c294c5ea5927": "Enabled",
+      "choice-8cb20470bb84925c": "Disabled"
+    }
+  },
+  "windows.faaeee4eb9a3c4a0": {
+    "section": "debloat"
+  },
+  "windows.c91ab90a915b7acb": {
+    "section": "debloat"
+  },
+  "windows.3106cb450f300287": {
+    "section": "windows"
+  },
+  "windows.2c7c4b59387c9e69": {
+    "section": "windows"
+  },
+  "windows.73bcbcde4dfccadd": {
+    "section": "network",
+    "name": "Real-time network traffic",
+    "description": "Adjust a connection preference used by apps that send frequent updates.",
+    "topic": "Connection",
+    "choices": {
+      "choice-dc3cfa3b87cfe8b7": "Use real-time preference",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.4df2b2965bb2564e": {
+    "section": "gaming"
+  },
+  "windows.9f626a72aa00c77a": {
+    "section": "windows"
+  },
+  "windows.ace5da5cbef46267": {
+    "section": "windows"
+  },
+  "windows.1d061001ad639f42": {
+    "section": "windows"
+  },
+  "windows.88eaa4f9f6eaf65c": {
+    "section": "windows"
+  },
+  "windows.f18928d6bc25be49": {
+    "section": "windows"
+  },
+  "windows.9e156c49a16c4ed9": {
+    "section": "gaming"
+  },
+  "windows.227f98c6268dbd3b": {
+    "section": "gaming"
+  },
+  "windows.1de64af71556fd46": {
+    "section": "gaming"
+  },
+  "windows.639577c6ae61d649": {
+    "section": "gaming"
+  },
+  "windows.54795381c942182c": {
+    "section": "gaming"
+  },
+  "windows.99d158fdd59c9dcf": {
+    "section": "gaming"
+  },
+  "windows.83a710923cb5a9bb": {
+    "section": "windows"
+  },
+  "windows.a3668514f1fcbbb9": {
+    "section": "windows"
+  },
+  "windows.f9609ebfa4139feb": {
+    "section": "debloat"
+  },
+  "windows.b8f4643cc27fe53f": {
+    "section": "debloat"
+  },
+  "windows.60368eefd3240936": {
+    "section": "debloat"
+  },
+  "windows.f621c6877f2af1d1": {
+    "section": "security"
+  },
+  "windows.69db91a7c17867c9": {
+    "section": "windows"
+  },
+  "windows.dd1e61e82d77e390": {
+    "section": "windows"
+  },
+  "windows.82b589168356cf7a": {
+    "section": "network",
+    "name": "Adapter responsiveness",
+    "description": "Balance connection responsiveness and processor use. The best choice depends on your adapter.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-c9d1eec61337f445": "Balanced",
+      "choice-6fd6a58eea0366f0": "Lower delay preference"
+    }
+  },
+  "windows.23108c069ccef14f": {
+    "section": "windows"
+  },
+  "windows.553b5f6e978fe382": {
+    "section": "gaming"
+  },
+  "windows.e01590b6f9a8983f": {
+    "section": "windows"
+  },
+  "windows.06a9c4e83ddd7585": {
+    "section": "network",
+    "name": "Local computer discovery",
+    "description": "Find nearby computers by name. Some local sharing setups need this feature.",
+    "topic": "Local network",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference",
+      "choice-95a6ed84299d0109": "Disabled"
+    }
+  },
+  "windows.7926759d2704ce3c": {
+    "section": "windows"
+  },
+  "windows.a773a727307cc063": {
+    "section": "windows"
+  },
+  "windows.502838d154ef3c8b": {
+    "section": "windows"
+  },
+  "windows.3c1b3b1e527115f3": {
+    "section": "windows"
+  },
+  "windows.b60cdb1b7fdbc4f3": {
+    "section": "windows"
+  },
+  "windows.239439d2ee35c20d": {
+    "section": "windows"
+  },
+  "windows.3e8ff04043ea07d7": {
+    "section": "windows"
+  },
+  "windows.e3deaa46306542cb": {
+    "section": "windows"
+  },
+  "windows.83e3708115254202": {
+    "section": "windows"
+  },
+  "windows.006a0aa2f4cbb5f5": {
+    "section": "windows"
+  },
+  "windows.959d3b09b1fa7945": {
+    "section": "windows"
+  },
+  "windows.8087a9e9861a78cc": {
+    "section": "windows"
+  },
+  "windows.1415c84f33814e2f": {
+    "section": "windows"
+  },
+  "windows.ff1910b572a794ab": {
+    "section": "windows"
+  },
+  "windows.389efb50bc4b96f7": {
+    "section": "windows"
+  },
+  "windows.71e22a554a5cb947": {
+    "section": "debloat"
+  },
+  "windows.5abdb03e30b7ebc9": {
+    "section": "windows"
+  },
+  "windows.63a95f04415d6c33": {
+    "section": "windows"
+  },
+  "windows.c7158276464d2b3b": {
+    "section": "windows"
+  },
+  "windows.538c50e18580f0eb": {
+    "section": "windows"
+  },
+  "windows.8a056ef3cb1f5187": {
+    "section": "windows"
+  },
+  "windows.208f277331a01853": {
+    "section": "windows"
+  },
+  "windows.0cb99b0cc047ea67": {
+    "section": "windows"
+  },
+  "windows.b294e4f6418de80b": {
+    "section": "gaming"
+  },
+  "windows.85d652fd4834d729": {
+    "section": "devices"
+  },
+  "windows.5def080487a3a583": {
+    "section": "devices"
+  },
+  "windows.d0b3259eb0b79e83": {
+    "section": "windows"
+  },
+  "windows.b6042cd24df652b4": {
+    "section": "windows"
+  },
+  "windows.06086057572c648a": {
+    "section": "network",
+    "name": "Network traffic scheduling",
+    "description": "Adjust how Windows balances network traffic with games and media.",
+    "topic": "Connection",
+    "choices": {
+      "choice-58acca08b103278c": "Windows balance",
+      "choice-9c7e371fb9f33b0d": "No traffic limit"
+    }
+  },
+  "windows.04b6d7dda595eb7e": {
+    "section": "debloat"
+  },
+  "windows.1685f7eddddce555": {
+    "section": "debloat"
+  },
+  "windows.681b49e3861a2c3a": {
+    "section": "windows"
+  },
+  "windows.3930ea399edfeff6": {
+    "section": "windows"
+  },
+  "windows.4ce4621fc1e01c88": {
+    "section": "windows"
+  },
+  "windows.fceb1c004ef4fefa": {
+    "section": "windows"
+  },
+  "windows.ef71ce44f921c073": {
+    "section": "windows"
+  },
+  "windows.5b5220a0b941cdf3": {
+    "section": "windows"
+  },
+  "windows.5236cfe23fdff9a2": {
+    "section": "network",
+    "name": "Ethernet power saving",
+    "description": "Reduce adapter power use when traffic is low. This can affect connection response.",
+    "topic": "Adapter",
+    "choices": {
+      "choice-35f6c294c5ea5927": "Enabled",
+      "choice-8cb20470bb84925c": "Disabled"
+    }
+  },
+  "windows.61cf12348a344df9": {
+    "section": "windows"
+  },
+  "windows.0a85950fc55556a6": {
+    "section": "windows"
+  },
+  "windows.a894e40e5ac5eb92": {
+    "section": "windows"
+  },
+  "windows.e82cec73ed1eef02": {
+    "section": "windows"
+  },
+  "windows.f744b6c91545d37f": {
+    "section": "windows"
+  },
+  "windows.23891a8f4150bdb4": {
+    "section": "windows"
+  },
+  "windows.ea9dc3a0a50603bd": {
+    "section": "windows"
+  },
+  "windows.169ee58afdbed5c3": {
+    "section": "windows"
+  },
+  "windows.11243d7df1bc16e9": {
+    "section": "windows"
+  },
+  "windows.11e21021c5b87f32": {
+    "section": "windows"
+  },
+  "windows.531f68e7ec2c7d3f": {
+    "section": "windows"
+  },
+  "windows.84e71c6249426e01": {
+    "section": "windows"
+  },
+  "windows.889dcbbabc31d686": {
+    "section": "windows"
+  },
+  "windows.9f5d0c20d26e85b5": {
+    "section": "windows"
+  },
+  "windows.fb0f0d44df21e700": {
+    "section": "windows"
+  },
+  "windows.7624ffa91ac7eb6d": {
+    "section": "windows"
+  },
+  "windows.fa20d77fa97e6954": {
+    "section": "windows"
+  },
+  "windows.b8af8c7582a46c98": {
+    "section": "windows"
+  },
+  "windows.5f53ba393b95f096": {
+    "section": "windows"
+  },
+  "windows.16775bf1b44a5304": {
+    "section": "windows"
+  },
+  "windows.dbbbac27259f4d9c": {
+    "section": "network",
+    "name": "Trusted network firewall",
+    "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
+    "topic": "Firewall"
+  },
+  "windows.2a7d3beec5a82a37": {
+    "section": "network",
+    "name": "Public network firewall",
+    "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
+    "topic": "Firewall"
+  },
+  "windows.11faeaecf4572970": {
+    "section": "network",
+    "name": "App bandwidth reservations",
+    "description": "Choose whether apps can reserve part of your connection.",
+    "topic": "Connection",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference",
+      "choice-95a6ed84299d0109": "No app reservations"
+    }
+  },
+  "windows.e9102b9b50352aad": {
+    "section": "windows"
+  },
+  "windows.f69bc8602fbe13ca": {
+    "section": "windows"
+  },
+  "windows.8b62dd6b9bb40df7": {
+    "section": "debloat"
+  },
+  "windows.03b826347901331c": {
+    "section": "debloat"
+  },
+  "windows.7abdd021ee8986ee": {
+    "section": "debloat"
+  },
+  "windows.83a4b4decc92792a": {
+    "section": "debloat"
+  },
+  "windows.415ba36c2179d998": {
+    "section": "windows"
+  },
+  "windows.ca21070803421d26": {
+    "section": "windows"
+  },
+  "windows.bdb2fcaa93d521b5": {
+    "section": "windows"
+  },
+  "windows.ff6351da031763ff": {
+    "section": "windows"
+  },
+  "windows.858f06d3db1fb866": {
+    "section": "windows"
+  },
+  "windows.cde03decc5211e85": {
+    "section": "windows"
+  },
+  "windows.5e360dcb6120e4a7": {
+    "section": "windows"
+  },
+  "windows.b552e2ba24974f87": {
+    "section": "windows"
+  },
+  "windows.6328d156158e222b": {
+    "section": "windows"
+  },
+  "windows.9ae9540102e581c2": {
+    "section": "windows"
+  },
+  "windows.66be056c99469aa0": {
+    "section": "windows"
+  },
+  "windows.75fdb214335c930b": {
+    "section": "windows"
+  },
+  "windows.c42e43f48e34ee37": {
+    "section": "windows"
+  },
+  "windows.ebda84142a90506d": {
+    "section": "windows"
+  },
+  "windows.5b6338893c88ce9b": {
+    "section": "windows"
+  },
+  "windows.d564e4921d5ee555": {
+    "section": "windows"
+  },
+  "windows.4799dd60dfc02e8c": {
+    "section": "windows"
+  },
+  "windows.bf1b150bac3cf83a": {
+    "section": "debloat"
+  },
+  "windows.1510a0dd530390cd": {
+    "section": "windows"
+  },
+  "windows.3b7aa640e30330a1": {
+    "section": "windows"
+  },
+  "windows.177ff091dcee9c8d": {
+    "section": "windows"
+  },
+  "windows.7d1ed6f8e55d8ea3": {
+    "section": "security"
+  },
+  "windows.804fcde3694bf6f8": {
+    "section": "windows"
+  },
+  "windows.e9d78835a38cf818": {
+    "section": "gaming"
+  },
+  "windows.b3d0b20abe365fce": {
+    "section": "windows"
+  },
+  "windows.8c7a398b0e1a5c1d": {
+    "section": "devices"
+  },
+  "windows.b73eb3c11fcab9be": {
+    "section": "devices"
+  },
+  "windows.4f4a7db22a77ee0d": {
+    "section": "windows"
+  },
+  "windows.bf0f086a2b33a080": {
+    "section": "windows"
+  },
+  "windows.a04802fbe692cf4f": {
+    "section": "windows"
+  },
+  "windows.7c5340de3a206b04": {
+    "section": "windows"
+  },
+  "windows.33d78e9bdcd0a86c": {
+    "section": "windows"
+  },
+  "windows.11f19fdb926f9d81": {
+    "section": "windows"
+  },
+  "windows.ad6fb424404e94c0": {
+    "section": "privacy"
+  },
+  "windows.c3ff4641d275bd79": {
+    "section": "privacy"
+  },
+  "windows.171a004ed11767da": {
+    "section": "privacy"
+  },
+  "windows.2cc6f805d9290289": {
+    "section": "privacy"
+  },
+  "windows.945ba365c1bdd7de": {
+    "section": "network",
+    "name": "Game network compatibility",
+    "description": "Support multiplayer and party connections that need this compatibility feature. Turning it off can affect those apps.",
+    "topic": "Connection",
+    "choices": {
+      "choice-67be079d14255d63": "Disabled",
+      "choice-0d3a235d95139d66": "Windows default"
+    }
+  },
+  "windows.49ea7f201fc534f5": {
+    "section": "devices"
+  },
+  "windows.905192de9fe11660": {
+    "section": "devices"
+  },
+  "windows.e1a6b211ff0b9ce4": {
+    "section": "windows"
+  },
+  "windows.ed2018dc997830ac": {
+    "section": "windows"
+  },
+  "windows.541bd8afc6cb07ff": {
+    "section": "debloat"
+  },
+  "windows.9d3ad55111499035": {
+    "section": "debloat"
+  },
+  "windows.79d29edbcebdf8a9": {
+    "section": "windows"
+  },
+  "windows.6b1268a8aaf21c3f": {
+    "section": "windows"
+  },
+  "windows.12d1544036e1a7c4": {
+    "section": "windows"
+  },
+  "windows.5df582a036223787": {
+    "section": "windows"
+  },
+  "windows.03ccdfd10dd6bbc6": {
+    "section": "security"
+  },
+  "windows.53f9e4a99f6dcaac": {
+    "section": "security"
+  },
+  "windows.bcf993da8ddf0da3": {
+    "section": "security"
+  },
+  "windows.f6deda9293f22576": {
+    "section": "security"
+  },
+  "windows.209394b3339a463a": {
+    "section": "security"
+  },
+  "windows.0765f2bafa20be4c": {
+    "section": "debloat"
+  },
+  "windows.36a7c29bfe1ea35e": {
+    "section": "windows"
+  },
+  "windows.d321f50cec571b04": {
+    "section": "windows"
+  },
+  "windows.2bed5dfcc012b1f5": {
+    "section": "security"
+  },
+  "windows.c5ba086823fe2391": {
+    "section": "privacy"
+  },
+  "windows.1ecb9a0c041afd72": {
+    "section": "privacy"
+  },
+  "windows.6691cc82d008cb17": {
+    "section": "privacy"
+  },
+  "windows.94caf9dc9f3af63e": {
+    "section": "privacy"
+  },
+  "windows.71fc02eeb7937865": {
+    "section": "privacy"
+  },
+  "windows.e7790726f7b93d3f": {
+    "section": "privacy"
+  },
+  "windows.247e2d0768d0c4d6": {
+    "section": "privacy"
+  },
+  "windows.637e98d8557d7382": {
+    "section": "privacy"
+  },
+  "windows.4cf208d1b7f068f2": {
+    "section": "privacy"
+  },
+  "windows.4f7aa92582f348b6": {
+    "section": "privacy"
+  },
+  "windows.4465a16836885dd9": {
+    "section": "privacy"
+  },
+  "windows.3c9ad96209a9da2f": {
+    "section": "windows"
+  },
+  "windows.677967b3c07b235d": {
+    "section": "privacy"
+  },
+  "windows.8d7bb78335c08201": {
+    "section": "windows"
+  },
+  "windows.84ddfaeffd385d50": {
+    "section": "windows"
+  },
+  "windows.7e4d51c150a7613c": {
+    "section": "windows"
+  },
+  "windows.f70cb08b28f96d33": {
+    "section": "gaming"
+  },
+  "explorer.app-theme": {
+    "section": "windows"
+  },
+  "explorer.file-extensions": {
+    "section": "windows"
+  },
+  "explorer.hidden-files": {
+    "section": "windows"
+  },
+  "explorer.task-view": {
+    "section": "windows"
+  },
+  "explorer.taskbar-alignment": {
+    "section": "windows"
+  },
+  "explorer.system-theme": {
+    "section": "windows"
+  },
+  "windows.72fcf05d8d3eb1d2": {
+    "section": "updates"
+  },
+  "windows.bdfb246641247eca": {
+    "section": "updates"
+  },
+  "windows.70e9af4619936877": {
+    "section": "updates"
+  },
+  "windows.583497ca75548150": {
+    "section": "updates"
+  },
+  "windows.4a788482e013cb6a": {
+    "section": "updates"
+  },
+  "windows.d6ff5322b126fdac": {
+    "section": "updates"
+  },
+  "windows.11f32cc92c4077e9": {
+    "section": "updates"
+  },
+  "windows.953a30d8b6c2c8a5": {
+    "section": "updates"
+  },
+  "windows.cd3a5c8c22ddf9f4": {
+    "section": "updates"
+  },
+  "windows.4adc092144059c89": {
+    "section": "updates"
+  },
+  "windows.5379ec11938b3fbb": {
+    "section": "updates"
+  },
+  "windows.0704072cf44450b6": {
+    "section": "network",
+    "name": "Share update downloads",
+    "description": "Choose whether Windows shares update downloads with other PCs. Sharing can use upload bandwidth.",
+    "topic": "Connection",
+    "choices": {
+      "choice-c4697634bc8964cb": "Remove this preference",
+      "choice-95a6ed84299d0109": "Direct downloads only",
+      "choice-dc6b5cc8eae3dd25": "Share across the internet"
+    }
+  },
+  "windows.a14cd3ba30a7851b": {
+    "section": "updates"
+  },
+  "windows.8ae84d84732b8516": {
+    "section": "network",
+    "name": "Share update downloads",
+    "description": "Choose whether Windows shares update downloads with other PCs. Sharing can use upload bandwidth.",
+    "topic": "Connection",
+    "choices": {
+      "choice-95a6ed84299d0109": "Direct downloads only",
+      "choice-c4697634bc8964cb": "Remove this preference"
+    }
+  },
+  "windows.7a260b5a14f039b4": {
+    "section": "updates"
+  },
+  "windows.f79843a4002353db": {
+    "section": "updates"
+  },
+  "windows.7d53c771d00d0e0c": {
+    "section": "updates"
+  },
+  "windows.67abb85af8c72539": {
+    "section": "updates"
+  },
+  "windows.bdc41efe78544606": {
+    "section": "updates"
+  },
+  "windows.a550d8f52be3bc63": {
+    "section": "updates"
+  },
+  "windows.89bbc1696582864f": {
+    "section": "updates"
+  },
+  "windows.2aa35b0763b8ab21": {
+    "section": "updates"
+  },
+  "windows.07ce36f4c739e760": {
+    "section": "updates"
+  },
+  "windows.740bca53ad424a02": {
+    "section": "updates"
+  },
+  "windows.8183f0272ad775b9": {
+    "section": "updates"
+  },
+  "windows.a2ce55a371665d20": {
+    "section": "updates"
+  },
+  "windows.2a1931b173ebdd03": {
+    "section": "updates"
+  },
+  "windows.688e74d55d4d1c6a": {
+    "section": "updates"
+  },
+  "windows.e9532baa5070c199": {
+    "section": "updates"
+  },
+  "windows.9ab8a7d6d516ec18": {
+    "section": "updates"
+  },
+  "windows.5120499998cf3635": {
+    "section": "updates"
+  },
+  "windows.f310d2c0307c90b8": {
+    "section": "updates"
+  },
+  "windows.bd78ca0b9b86c256": {
+    "section": "updates"
+  },
+  "windows.b30781766994f66e": {
+    "section": "updates"
+  },
+  "windows.fdc1e005c788730e": {
+    "section": "updates"
+  },
+  "windows.47547b7aa50a1068": {
+    "section": "updates"
+  },
+  "windows.3485f5f04d4517e9": {
+    "section": "updates"
+  },
+  "windows.227d16767c511a3f": {
+    "section": "updates"
+  },
+  "windows.530f71b023bac5c5": {
+    "section": "updates"
+  },
+  "windows.f635b875351ae484": {
+    "section": "updates"
+  },
+  "windows.adc94ec3386b09e3": {
+    "section": "updates"
+  }
+}
