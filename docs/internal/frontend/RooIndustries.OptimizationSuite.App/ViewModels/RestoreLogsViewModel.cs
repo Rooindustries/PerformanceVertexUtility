@@ -71,21 +71,21 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     {
         HistoryRows.Clear();
 
-        foreach (var item in session?.ChangedItems ?? new List<SessionChangedItem>())
+        foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
         {
             HistoryRows.Add(new AuditRow("Recent", "Applied", "low", DisplayName(item),
                 "CPU  " + Priority(item.OriginalPriorityClass) + " → " + Priority(item.AppliedPriorityClass),
                 "Reversible", "low"));
         }
 
-        foreach (var item in session?.RestoredItems ?? new List<SessionChangedItem>())
+        foreach (var item in session is { DryRun: false } ? session.RestoredItems ?? [] : [])
         {
             HistoryRows.Add(new AuditRow("Recent", "Restored", "safe", DisplayName(item),
                 "CPU  " + Priority(item.AppliedPriorityClass) + " → " + Priority(item.RestoredPriorityClass),
                 "Done", "safe"));
         }
 
-        var restraints = governor?.ActiveRestraints?.Count ?? 0;
+        var restraints = governor is { DryRun: false } ? governor.ActiveRestraints?.Count ?? 0 : 0;
         if (restraints > 0)
         {
             HistoryRows.Add(new AuditRow("Recent", "Restrained", "medium",
