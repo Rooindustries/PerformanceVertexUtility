@@ -383,6 +383,24 @@ if (args is [] or ["history"])
     Check(!history.HasHistory && history.HistoryRows.Count == 0,
         "Dry-run changed, restored, and restraint arrays do not become applied history");
 
+    App.Live.GameStatusModel = new GameTuneSessionStatus
+    {
+        Status = "active",
+        Restorable = true,
+        ChangedItems = [changed],
+        RestoredItems = [changed],
+    };
+    App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus
+    {
+        Status = "active",
+        Restorable = true,
+        ActiveRestraints = [new ActiveRestraint { ProcessId = 11, ProcessName = "fixture-background", RuleId = "fixture" }],
+    };
+    history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(!history.HasHistory && history.RestoreRows.Take(2).All(row => row.Value == "Status unavailable"),
+        "Missing dry-run flags keep populated session history and recovery status unknown");
+
     App.Live.GameStatusModel.DryRun = false;
     App.Live.GameStatusModel.Status = "completed";
     App.Live.GovernorStatusModel.DryRun = false;

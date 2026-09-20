@@ -30,8 +30,8 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         try { windows = await App.Operations.ReadWindowsRecoveryAsync(); } catch (Exception) { }
 
         BuildRestore(
-            session is { DryRun: true } ? null : RecoveryAvailable(session?.Status, session?.Restorable),
-            governor is { DryRun: true } ? null : RecoveryAvailable(governor?.Status, governor?.Restorable), games, windows);
+            session?.DryRun == false ? RecoveryAvailable(session.Status, session.Restorable) : null,
+            governor?.DryRun == false ? RecoveryAvailable(governor.Status, governor.Restorable) : null, games, windows);
         BuildHistory(session, governor, games, windows);
         IsEmpty = false;
     }
