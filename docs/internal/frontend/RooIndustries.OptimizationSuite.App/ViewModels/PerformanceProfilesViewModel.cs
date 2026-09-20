@@ -127,7 +127,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.PreviewProcessProfileResultAsync();
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 ActionTitle = "Plan not confirmed";
                 ActionDetail = response.Error ?? "The process plan returned no result.";
@@ -170,7 +170,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 ActionDetail = error;
                 return;
             }
-            var changed = CountArray(result, "result", "changedItems") ?? CountArray(result, "changedItems") ?? 0;
+            var changed = CountArray(result, "result", "changedItems");
             var status = ExtractString(result, "status") ?? "unknown";
             var backup = VerifiedBackup(result);
             if (backup is not null)
@@ -178,6 +178,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 _lastBackupPath = backup;
                 RestoreAvailable = true;
                 RestoreHint = "Restore is ready";
+            }
+            if (response.Error is not null || changed is null)
+            {
+                ActionTitle = "Process priorities not confirmed";
+                ActionDetail = response.Error ?? "The process action did not report which items changed.";
+                return;
             }
             if (status == "success" && changed == 0)
             {
@@ -220,7 +226,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RestoreProcessProfileResultAsync(backup);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 ActionTitle = "Restore not confirmed";
                 ActionDetail = response.Error ?? "The restore returned no result.";

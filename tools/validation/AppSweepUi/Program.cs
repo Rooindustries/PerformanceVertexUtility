@@ -171,6 +171,14 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     Check(!profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities unchanged",
         "A valid no-op process apply remains successful without inventing restore evidence");
 
+    App.Live.OperationError = "Controlled command exit failure";
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(profiles.ActionTitle == "Process priorities not confirmed", "Successful-looking process output cannot override a command failure");
+    App.Live.OperationError = null;
+    App.Live.ProcessApplyText = JsonSerializer.Serialize(new { actionId = "performance.applyProfile", dryRun = false, status = "success" });
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(profiles.ActionTitle == "Process priorities not confirmed", "Missing changed-item evidence cannot become a successful no-op");
+
     App.Live.ProcessApplyText = JsonSerializer.Serialize(new
     {
         actionId = "performance.applyProfile",
@@ -248,6 +256,18 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     Check(monitoring.StutterActionTitle == "Cache cleanup not confirmed" && !monitoring.ShaderRestoreAvailable,
         "A missing cache response cannot claim a cleanup check or create restore evidence");
 
+    App.Live.OperationError = "Controlled command exit failure";
+    App.Live.NvidiaProbeText = "{}";
+    await drivers.CheckNvidiaToolCommand.ExecuteAsync(null);
+    Check(drivers.NvidiaActionTitle == "Tool check not confirmed", "NVIDIA output cannot override a command failure");
+    App.Live.TimerText = "{}";
+    await monitoring.RunTimerSessionCommand.ExecuteAsync(null);
+    Check(monitoring.StutterActionTitle == "Latency session not confirmed", "Timer output cannot override a command failure");
+    App.Live.ShaderText = "{}";
+    await monitoring.PrepareShaderCacheCommand.ExecuteAsync(null);
+    Check(monitoring.StutterActionTitle == "Cache cleanup not confirmed", "Cache output cannot override a command failure");
+    App.Live.OperationError = null;
+
     var shaderRollback = Path.Combine(Path.GetTempPath(), "shader-rollback-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(shaderRollback, "{}");
     try
@@ -294,6 +314,11 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     Check(cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState.Contains("No leftover targets", StringComparison.Ordinal),
         "A successful empty leftover scan remains distinct from no response");
+    App.Live.OperationError = "Controlled scan exit failure";
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(!cleanup.LeftoverScanCompleted, "Successful-looking empty scan cannot override a command failure");
+    App.Live.OperationError = null;
+
 
     App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(new LeftoverScan
     {

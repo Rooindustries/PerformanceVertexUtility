@@ -377,7 +377,7 @@ public sealed class LiveDataService
                 LastError = error;
                 return new(null, error);
             }
-            LastError = null;
+            LastError = result.Error;
             return result;
         }
         catch (Exception ex)
@@ -388,7 +388,10 @@ public sealed class LiveDataService
         }
     }
     public async Task<string?> RunBackendScriptTextAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
-        => (await RunBackendScriptResultAsync(scriptFile, ct, extraArgs)).Value;
+    {
+        var result = await RunBackendScriptResultAsync(scriptFile, ct, extraArgs);
+        return result.Error is null ? result.Value : null;
+    }
 
     public Task<ProcessProfileEnvelope?> GetProcessProfilePreviewAsync(CancellationToken ct = default)
         => RunAsync<ProcessProfileEnvelope>("Preview-ProcessProfile.ps1", ct);
@@ -405,7 +408,7 @@ public sealed class LiveDataService
     private async Task<LiveDataResult<T>> RunResultAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
     {
         var text = await RunBackendScriptResultAsync(scriptFile, ct, extraArgs).ConfigureAwait(false);
-        if (text.Value is null) return new(null, text.Error);
+        if (text.Value is null || text.Error is not null) return new(null, text.Error);
         try
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
@@ -426,7 +429,7 @@ public sealed class LiveDataService
 
     private LiveDataResult<T> DeserializeResult<T>(LiveDataResult<string> text) where T : class
     {
-        if (text.Value is null) return new(null, text.Error);
+        if (text.Value is null || text.Error is not null) return new(null, text.Error);
         try
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
@@ -611,6 +614,11 @@ public sealed class LiveDataService
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
+        if (process.ExitCode != 0)
+        {
+            var detail = string.IsNullOrWhiteSpace(stderr) ? "" : ": " + stderr.Trim();
+            return new(stdout, Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode + detail);
+        }
         if (string.IsNullOrWhiteSpace(stdout) && !string.IsNullOrWhiteSpace(stderr))
         {
             return new(null, stderr.Trim());
