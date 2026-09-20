@@ -294,7 +294,8 @@
       "choice-7bbba8299d221049": "Allow unencrypted fallback",
       "choice-ab4922181cd7cec6": "Encrypted lookups only",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Protect website lookups in Microsoft Edge."
   },
   "windows.d355c424243cb775": {
     "section": "apps"
@@ -890,7 +891,8 @@
       "choice-cfbec88323c51262": "Mullvad Ads Trackers Malware Social",
       "choice-d456efd01d51d842": "Mullvad Ads Trackers Malware Adult Gambling",
       "choice-683f5593ffb7bc7f": "Mullvad Ads Trackers Malware Adult Gambling Social"
-    }
+    },
+    "summary": "Choose DNS lookup and content-filtering services."
   },
   "windows.1ebf12e827d8a37f": {
     "section": "network",
@@ -913,7 +915,8 @@
       "choice-9afa59bf9867e9ba": "Mullvad Ads Trackers Malware Social",
       "choice-59283a239f11cba6": "Mullvad Ads Trackers Malware Adult Gambling",
       "choice-e21e769470acbc8f": "Mullvad Ads Trackers Malware Adult Gambling Social"
-    }
+    },
+    "summary": "Choose DNS lookup and content-filtering services."
   },
   "windows.158f86e80c6bb50c": {
     "section": "network",
@@ -922,7 +925,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.1a839efafd8c930e": {
     "section": "network",
@@ -931,7 +935,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.1ca6e8c2de3b2717": {
     "section": "network",
@@ -940,7 +945,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.215e1751fdda8729": {
     "section": "network",
@@ -949,7 +955,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.22503661b22ef79c": {
     "section": "network",
@@ -958,7 +965,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.248afcb45c6e1e67": {
     "section": "network",
@@ -967,7 +975,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.24f1256dd07e6f81": {
     "section": "network",
@@ -976,7 +985,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.25a291302287de00": {
     "section": "network",
@@ -985,7 +995,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.2a37d7e531746558": {
     "section": "network",
@@ -994,7 +1005,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.2c1a511330be50a1": {
     "section": "network",
@@ -1003,7 +1015,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.2d0b0e41ee871158": {
     "section": "network",
@@ -1012,7 +1025,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.31cb908d27059ec7": {
     "section": "network",
@@ -1021,7 +1035,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.344def8a5b7e3f48": {
     "section": "network",
@@ -1030,7 +1045,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.37c4bd79d9f63b13": {
     "section": "network",
@@ -1039,7 +1055,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.40d232ee0123e6c5": {
     "section": "network",
@@ -1048,7 +1065,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.463324a5bddd88c0": {
     "section": "network",
@@ -1057,7 +1075,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.49b62a3affe32668": {
     "section": "network",
@@ -1066,7 +1085,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.4fe7155bb9a49ead": {
     "section": "network",
@@ -1075,7 +1095,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.5903c56365108d3d": {
     "section": "network",
@@ -1084,7 +1105,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.684319c89fa33d78": {
     "section": "network",
@@ -1093,7 +1115,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.78e5d0bb801de34e": {
     "section": "network",
@@ -1102,7 +1125,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.842f4837ac8d39a1": {
     "section": "network",
@@ -1111,7 +1135,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.87b07ab1047f7280": {
     "section": "network",
@@ -1120,7 +1145,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.98aae842706b7bdd": {
     "section": "network",
@@ -1129,7 +1155,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.9c5eb77edcaf73dd": {
     "section": "network",
@@ -1138,7 +1165,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.9d42abb75895f3ae": {
     "section": "network",
@@ -1147,7 +1175,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.b73db5e95eef4b10": {
     "section": "network",
@@ -1156,7 +1185,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.ba85a8c6ea45cdcf": {
     "section": "network",
@@ -1165,7 +1195,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.bbdb1de2585358ad": {
     "section": "network",
@@ -1174,7 +1205,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.c0401d02e66bc631": {
     "section": "network",
@@ -1183,7 +1215,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.c2a6666b00f67b23": {
     "section": "network",
@@ -1192,7 +1225,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.c39cb834d8df1274": {
     "section": "network",
@@ -1201,7 +1235,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.c8cbc6e8bdf58c0a": {
     "section": "network",
@@ -1210,7 +1245,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.cbce4f15de20a61d": {
     "section": "network",
@@ -1219,7 +1255,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.cc0e2308a780ed4d": {
     "section": "network",
@@ -1228,7 +1265,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.d22aa7500a23f60e": {
     "section": "network",
@@ -1237,7 +1275,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.e30d437c9a80e965": {
     "section": "network",
@@ -1246,7 +1285,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.e623580401553689": {
     "section": "network",
@@ -1255,7 +1295,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.e941f52e02dabd5d": {
     "section": "network",
@@ -1264,7 +1305,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.ec9900c4c0344603": {
     "section": "network",
@@ -1273,7 +1315,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.f203ba48f9d7283d": {
     "section": "network",
@@ -1282,7 +1325,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.f715cf49647720cf": {
     "section": "network",
@@ -1291,7 +1335,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.fb5a32be2744c36e": {
     "section": "network",
@@ -1300,7 +1345,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.fdea44489c23aab3": {
     "section": "network",
@@ -1309,7 +1355,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8b25020aabc84b9a": "Use this preference"
-    }
+    },
+    "summary": "Prefer encryption for the selected DNS provider."
   },
   "windows.150b88b3d0534e99": {
     "section": "network",
@@ -1319,7 +1366,8 @@
     "choices": {
       "choice-01c43a1bb3484ba2": "Disabled",
       "choice-88665aca77848447": "Enabled"
-    }
+    },
+    "summary": "Turning off can interrupt apps that need IPv6."
   },
   "windows.2b2b452b1cad9dad": {
     "section": "network",
@@ -1331,7 +1379,8 @@
       "choice-95a6ed84299d0109": "Windows default",
       "choice-6b253977ea5987f3": "Disable IPv6 tunnels",
       "choice-baea08173082f2c8": "Disable IPv6 except loopback"
-    }
+    },
+    "summary": "Disabling IPv6 can affect apps and connectivity."
   },
   "windows.6e004d12fb8fbf31": {
     "section": "network",
@@ -1340,7 +1389,8 @@
     "topic": "Local network",
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Some local sharing setups need name discovery."
   },
   "windows.7f3f80851197aecc": {
     "section": "network",
@@ -1350,12 +1400,14 @@
     "choices": {
       "choice-f40d62aa2aadc0be": "Enabled",
       "choice-4435037fc46c3faa": "Disabled"
-    }
+    },
+    "summary": "Upload handling depends on adapter support."
   },
   "windows.b2fe821a671c7c5d": {
     "section": "network",
     "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "2022 blocklist; may interrupt Microsoft services."
   },
   "windows.072ef6dbe40a0607": {
     "section": "network",
@@ -1365,7 +1417,8 @@
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference",
       "choice-6b253977ea5987f3": "Send small updates promptly"
-    }
+    },
+    "summary": "Response behavior for small TCP transfers."
   },
   "windows.dd1637f790d786c2": {
     "section": "network",
@@ -1375,7 +1428,8 @@
     "choices": {
       "choice-95a6ed84299d0109": "Follow network configuration",
       "choice-959723ea7b62f95c": "Disabled"
-    }
+    },
+    "summary": "Disabling can affect older local networks."
   },
   "windows.bcd77ad54a7accc0": {
     "section": "network",
@@ -1385,7 +1439,8 @@
     "choices": {
       "choice-b24f2bcbf4bfae3b": "Enabled",
       "choice-98142a1b6f5d471b": "Disabled"
-    }
+    },
+    "summary": "Balance download throughput and CPU use."
   },
   "windows.5667587f88b039b3": {
     "section": "network",
@@ -1395,7 +1450,8 @@
     "choices": {
       "choice-6b253977ea5987f3": "Prompt responses",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Response timing for latency-sensitive TCP apps."
   },
   "windows.bbf020b3eed0dc23": {
     "section": "network",
@@ -1405,17 +1461,20 @@
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference",
       "choice-6b253977ea5987f3": "Use Windows processing"
-    }
+    },
+    "summary": "Can affect CPU use and throughput."
   },
   "windows.c0ec8f1b47c9b3a1": {
     "section": "network",
     "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "2022 blocklist; may interrupt Microsoft services."
   },
   "windows.baef2bd52b7956ed": {
     "section": "network",
     "description": "Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "2022 blocklist; may interrupt Microsoft services."
   },
   "windows.1935dab2d2a59eb8": {
     "section": "network",
@@ -1425,7 +1484,8 @@
     "choices": {
       "choice-95a6ed84299d0109": "Disabled",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Legacy Wi-Fi preference; may have no effect."
   },
   "windows.545d278a6e57e1c7": {
     "section": "network",
@@ -1434,7 +1494,8 @@
     "topic": "Wireless",
     "choices": {
       "choice-b0dcd391282f6995": "Use this preference"
-    }
+    },
+    "summary": "Legacy sharing features absent in current Windows."
   },
   "windows.88fe51b11c7ae2aa": {
     "section": "network",
@@ -1443,7 +1504,8 @@
     "topic": "Wireless",
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Legacy sharing features absent in current Windows."
   },
   "windows.09d74e279714979c": {
     "section": "network",
@@ -1452,7 +1514,8 @@
     "topic": "Wireless",
     "choices": {
       "choice-26504d957853e325": "Use this preference"
-    }
+    },
+    "summary": "Legacy sharing features absent in current Windows."
   },
   "windows.84b9401eabc25018": {
     "section": "network",
@@ -1462,7 +1525,8 @@
     "choices": {
       "choice-6b253977ea5987f3": "Disable active checks",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Some sign-in pages rely on these internet checks."
   },
   "privacy.activity-feed": {
     "section": "privacy"
@@ -2212,7 +2276,8 @@
     "section": "network",
     "name": "Network usage tracking",
     "description": "Show data usage totals for your connections. Disabling tracking removes those totals.",
-    "topic": "Connection"
+    "topic": "Connection",
+    "summary": "Disabling tracking removes network usage totals."
   },
   "windows.2134a1da089b9d9a": {
     "section": "services"
@@ -2704,7 +2769,8 @@
     "topic": "DNS",
     "choices": {
       "choice-696e67767182f287": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.8208c998c8a458d9": {
     "section": "network",
@@ -2713,7 +2779,8 @@
     "topic": "DNS",
     "choices": {
       "choice-1662c39b168c2df1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.6efa3ba9f5d46285": {
     "section": "network",
@@ -2722,7 +2789,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8ad85ab8ae0b1723": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.2c463a1ebb8644e1": {
     "section": "network",
@@ -2731,7 +2799,8 @@
     "topic": "DNS",
     "choices": {
       "choice-696e67767182f287": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.5403fd16255c7f6c": {
     "section": "network",
@@ -2740,7 +2809,8 @@
     "topic": "DNS",
     "choices": {
       "choice-1662c39b168c2df1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.96880beb0cda92c1": {
     "section": "network",
@@ -2749,7 +2819,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8ad85ab8ae0b1723": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.485ae250b9a25d16": {
     "section": "network",
@@ -2758,7 +2829,8 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.a50f765dc32d561a": {
     "section": "network",
@@ -2767,7 +2839,8 @@
     "topic": "DNS",
     "choices": {
       "choice-6097e7ad421643e2": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.08a4a6d4d800eb57": {
     "section": "network",
@@ -2776,7 +2849,8 @@
     "topic": "DNS",
     "choices": {
       "choice-c1495c54080805a8": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.c35beb1398333f2b": {
     "section": "network",
@@ -2785,7 +2859,8 @@
     "topic": "DNS",
     "choices": {
       "choice-78c89caf5de2e9f9": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.931dd6aaceafdc1a": {
     "section": "network",
@@ -2794,7 +2869,8 @@
     "topic": "DNS",
     "choices": {
       "choice-9d99a466c7faca3e": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.93058f0a01f36f9a": {
     "section": "network",
@@ -2803,7 +2879,8 @@
     "topic": "DNS",
     "choices": {
       "choice-6e42c2bf9a0bbce2": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.9bb8bf75bde204d2": {
     "section": "network",
@@ -2812,7 +2889,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0d6e5b5d4f16e15a": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.e8bde2f9b55b5777": {
     "section": "network",
@@ -2821,7 +2899,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.55c7e34207106885": {
     "section": "network",
@@ -2830,7 +2909,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.050336cd659be06f": {
     "section": "network",
@@ -2839,7 +2919,8 @@
     "topic": "DNS",
     "choices": {
       "choice-fc62936647a4ea30": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.7dedc17adcfa482f": {
     "section": "network",
@@ -2848,7 +2929,8 @@
     "topic": "DNS",
     "choices": {
       "choice-fc62936647a4ea30": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.99fc768e912827aa": {
     "section": "network",
@@ -2857,7 +2939,8 @@
     "topic": "DNS",
     "choices": {
       "choice-696e67767182f287": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.2ce72222b2dad012": {
     "section": "network",
@@ -2866,7 +2949,8 @@
     "topic": "DNS",
     "choices": {
       "choice-1662c39b168c2df1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.70589e77b90d4eb4": {
     "section": "network",
@@ -2875,7 +2959,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8ad85ab8ae0b1723": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.3fb0eec8d707ecf1": {
     "section": "network",
@@ -2884,7 +2969,8 @@
     "topic": "DNS",
     "choices": {
       "choice-696e67767182f287": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.3ea9ab20682fc611": {
     "section": "network",
@@ -2893,7 +2979,8 @@
     "topic": "DNS",
     "choices": {
       "choice-1662c39b168c2df1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.7cd9da225aa6d256": {
     "section": "network",
@@ -2902,7 +2989,8 @@
     "topic": "DNS",
     "choices": {
       "choice-8ad85ab8ae0b1723": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.14300e89d47a528f": {
     "section": "network",
@@ -2911,7 +2999,8 @@
     "topic": "DNS",
     "choices": {
       "choice-fc62936647a4ea30": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.907affb94edff3d7": {
     "section": "network",
@@ -2920,7 +3009,8 @@
     "topic": "DNS",
     "choices": {
       "choice-fc62936647a4ea30": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.be56eca0a275ca30": {
     "section": "network",
@@ -2929,7 +3019,8 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.a550397cede16b37": {
     "section": "network",
@@ -2938,7 +3029,8 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.4da4ca6a0aa1ee63": {
     "section": "network",
@@ -2947,7 +3039,8 @@
     "topic": "DNS",
     "choices": {
       "choice-6097e7ad421643e2": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.ad1a26908324284c": {
     "section": "network",
@@ -2956,7 +3049,8 @@
     "topic": "DNS",
     "choices": {
       "choice-c1495c54080805a8": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.3438f9c0e53303ac": {
     "section": "network",
@@ -2965,7 +3059,8 @@
     "topic": "DNS",
     "choices": {
       "choice-78c89caf5de2e9f9": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.a26031160d6083f5": {
     "section": "network",
@@ -2974,7 +3069,8 @@
     "topic": "DNS",
     "choices": {
       "choice-9d99a466c7faca3e": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.2252872dffd46844": {
     "section": "network",
@@ -2983,7 +3079,8 @@
     "topic": "DNS",
     "choices": {
       "choice-6e42c2bf9a0bbce2": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.8f68d5e3c09064e0": {
     "section": "network",
@@ -2992,7 +3089,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0d6e5b5d4f16e15a": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.dd35b0559d8af40a": {
     "section": "network",
@@ -3001,7 +3099,8 @@
     "topic": "DNS",
     "choices": {
       "choice-b89cb0141f7585a4": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.10d86e2d07c0b48b": {
     "section": "network",
@@ -3010,7 +3109,8 @@
     "topic": "DNS",
     "choices": {
       "choice-b89cb0141f7585a4": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.8ce68502e69f1a8f": {
     "section": "network",
@@ -3019,7 +3119,8 @@
     "topic": "DNS",
     "choices": {
       "choice-e5c2368a9d954511": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.1e405ac46a990dc9": {
     "section": "network",
@@ -3028,7 +3129,8 @@
     "topic": "DNS",
     "choices": {
       "choice-e5c2368a9d954511": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.1ae61e2b2036d4b2": {
     "section": "network",
@@ -3037,7 +3139,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.d0239e1369742570": {
     "section": "network",
@@ -3046,7 +3149,8 @@
     "topic": "DNS",
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.ec55a129b83d4bc9": {
     "section": "network",
@@ -3055,7 +3159,8 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.ea84378379563551": {
     "section": "network",
@@ -3064,7 +3169,8 @@
     "topic": "DNS",
     "choices": {
       "choice-b89cb0141f7585a4": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.f4792732b2191a88": {
     "section": "network",
@@ -3073,7 +3179,8 @@
     "topic": "DNS",
     "choices": {
       "choice-e5c2368a9d954511": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.c2fead60d93a1fe7": {
     "section": "network",
@@ -3082,7 +3189,8 @@
     "topic": "DNS",
     "choices": {
       "choice-b89cb0141f7585a4": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.4dff966b53312c40": {
     "section": "network",
@@ -3091,7 +3199,8 @@
     "topic": "DNS",
     "choices": {
       "choice-e5c2368a9d954511": "Use this preference"
-    }
+    },
+    "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.6ae403065279ea14": {
     "section": "windows"
@@ -3115,7 +3224,8 @@
     "section": "network",
     "name": "Work network firewall",
     "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "Turning this off reduces network protection."
   },
   "windows.df796a6bd69f00d9": {
     "section": "windows"
@@ -3140,7 +3250,8 @@
     "choices": {
       "choice-35f6c294c5ea5927": "Enabled",
       "choice-8cb20470bb84925c": "Disabled"
-    }
+    },
+    "summary": "Lower power use can affect connection response."
   },
   "windows.faaeee4eb9a3c4a0": {
     "section": "debloat"
@@ -3162,7 +3273,8 @@
     "choices": {
       "choice-dc3cfa3b87cfe8b7": "Use real-time preference",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Connection behavior for frequent app updates."
   },
   "windows.4df2b2965bb2564e": {
     "section": "gaming"
@@ -3232,7 +3344,8 @@
     "choices": {
       "choice-c9d1eec61337f445": "Balanced",
       "choice-6fd6a58eea0366f0": "Lower delay preference"
-    }
+    },
+    "summary": "Trade off connection delay and CPU use."
   },
   "windows.23108c069ccef14f": {
     "section": "windows"
@@ -3251,7 +3364,8 @@
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference",
       "choice-95a6ed84299d0109": "Disabled"
-    }
+    },
+    "summary": "Some local sharing setups need name discovery."
   },
   "windows.7926759d2704ce3c": {
     "section": "windows"
@@ -3345,7 +3459,8 @@
     "choices": {
       "choice-58acca08b103278c": "Windows balance",
       "choice-9c7e371fb9f33b0d": "No traffic limit"
-    }
+    },
+    "summary": "Balance network traffic with games and media."
   },
   "windows.04b6d7dda595eb7e": {
     "section": "debloat"
@@ -3379,7 +3494,8 @@
     "choices": {
       "choice-35f6c294c5ea5927": "Enabled",
       "choice-8cb20470bb84925c": "Disabled"
-    }
+    },
+    "summary": "Lower power use can affect connection response."
   },
   "windows.61cf12348a344df9": {
     "section": "windows"
@@ -3445,13 +3561,15 @@
     "section": "network",
     "name": "Trusted network firewall",
     "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "Turning this off reduces network protection."
   },
   "windows.2a7d3beec5a82a37": {
     "section": "network",
     "name": "Public network firewall",
     "description": "Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.",
-    "topic": "Firewall"
+    "topic": "Firewall",
+    "summary": "Turning this off reduces network protection."
   },
   "windows.11faeaecf4572970": {
     "section": "network",
@@ -3461,7 +3579,8 @@
     "choices": {
       "choice-c4697634bc8964cb": "Remove this preference",
       "choice-95a6ed84299d0109": "No app reservations"
-    }
+    },
+    "summary": "Control app bandwidth reservations."
   },
   "windows.e9102b9b50352aad": {
     "section": "windows"
@@ -3600,7 +3719,8 @@
     "choices": {
       "choice-67be079d14255d63": "Disabled",
       "choice-0d3a235d95139d66": "Windows default"
-    }
+    },
+    "summary": "Some multiplayer and party features need this."
   },
   "windows.49ea7f201fc534f5": {
     "section": "devices"
@@ -3770,7 +3890,8 @@
       "choice-c4697634bc8964cb": "Remove this preference",
       "choice-95a6ed84299d0109": "Direct downloads only",
       "choice-dc6b5cc8eae3dd25": "Share across the internet"
-    }
+    },
+    "summary": "Sharing updates uses upload bandwidth."
   },
   "windows.a14cd3ba30a7851b": {
     "section": "updates"
@@ -3783,7 +3904,8 @@
     "choices": {
       "choice-95a6ed84299d0109": "Direct downloads only",
       "choice-c4697634bc8964cb": "Remove this preference"
-    }
+    },
+    "summary": "Sharing updates uses upload bandwidth."
   },
   "windows.7a260b5a14f039b4": {
     "section": "updates"

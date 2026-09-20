@@ -30,6 +30,34 @@ NATIVE_NETWORK = {
     ('teredo', 'type'): ('Game network compatibility', 'Support multiplayer and party connections that need this compatibility feature. Turning it off can affect those apps.', 'Connection'),
 }
 SECTIONS = {'Privacy': 'privacy', 'Apps and browsers': 'apps', 'Services': 'services', 'Devices': 'devices', 'Network': 'network', 'Desktop and File Explorer': 'windows', 'Windows & Explorer': 'windows', 'Windows Update': 'updates', 'Scheduled tasks': 'services', 'Security': 'security', 'Gaming and display': 'gaming', 'System': 'windows'}
+NETWORK_SUMMARIES = {
+    ('value', 'NetworkThrottlingIndex'): 'Balance network traffic with games and media.',
+    ('value', 'FastSendDatagramThreshold'): 'Connection behavior for frequent app updates.',
+    ('value', 'NonBestEffortLimit'): 'Control app bandwidth reservations.',
+    ('value', '*EEE'): 'Lower power use can affect connection response.',
+    ('value', '*InterruptModeration'): 'Trade off connection delay and CPU use.',
+    ('value', 'DisableTaskOffload'): 'Can affect CPU use and throughput.',
+    ('value', 'TCPNoDelay'): 'Response behavior for small TCP transfers.',
+    ('value', 'TcpAckFrequency'): 'Response timing for latency-sensitive TCP apps.',
+    ('value', 'NetbiosOptions'): 'Disabling can affect older local networks.',
+    ('value', 'EnableMulticast'): 'Some local sharing setups need name discovery.',
+    ('value', 'DisabledComponents'): 'Disabling IPv6 can affect apps and connectivity.',
+    ('value', 'NoActiveProbe'): 'Some sign-in pages rely on these internet checks.',
+    ('value', 'AutoConnectAllowedOEM'): 'Legacy Wi-Fi preference; may have no effect.',
+    ('value', 'FeatureStates'): 'Legacy sharing features absent in current Windows.',
+    ('value', 'DODownloadMode'): 'Sharing updates uses upload bandwidth.',
+    ('value', 'DnsOverHttpsMode'): 'Protect website lookups in Microsoft Edge.',
+    ('value', 'NameServer'): 'Choose DNS lookup and content-filtering services.',
+    ('value', 'DohFlags'): 'Prefer encryption for the selected DNS provider.',
+    ('network-adapter', 'lso'): 'Upload handling depends on adapter support.',
+    ('network-adapter', 'rsc'): 'Balance download throughput and CPU use.',
+    ('network-adapter', 'ipv6-binding'): 'Turning off can interrupt apps that need IPv6.',
+    ('teredo', 'type'): 'Some multiplayer and party features need this.',
+    ('service', 'Ndu'): 'Disabling tracking removes network usage totals.',
+    ('dns-over-https', 'configuration'): 'Enable encrypted DNS; select the provider separately.',
+    ('firewall-profile', 'enabled'): 'Turning this off reduces network protection.',
+    ('firewall-blocklist', 'rule'): '2022 blocklist; may interrupt Microsoft services.',
+}
 
 
 def compile_presentation():
@@ -104,6 +132,9 @@ def compile_presentation():
             entry.update(section='network', description='Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.', topic='Firewall')
         if entry['section'] == 'network' and not entry.get('description'):
             raise ValueError('Missing network description: ' + setting['id'])
+        if entry['section'] == 'network':
+            summary_key = (kind, value_name if kind == 'value' else address.get('target') if kind == 'service' else prop)
+            entry['summary'] = NETWORK_SUMMARIES[summary_key]
         result[setting['id']] = entry
     if len(result) != len(catalog['settings']):
         raise ValueError('Setting identity is not unique')

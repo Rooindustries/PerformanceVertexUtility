@@ -103,7 +103,7 @@
                                     <Button.Flyout><Flyout><ScrollViewer MaxHeight="360"><ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource SettingDetailsTemplate}"/></ScrollViewer></Flyout></Button.Flyout>
                                 </Button>
                             </Grid>
-                            <TextBlock Text="{x:Bind Description}" FontSize="12" MaxLines="1" TextTrimming="WordEllipsis" ToolTipService.ToolTip="{x:Bind Description}" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
+                            <TextBlock Text="{x:Bind Description}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="{x:Bind Scope}" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                                 <TextBlock Text="{x:Bind RefreshLabel}" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind RefreshLabel, Converter={StaticResource StringToVisibility}}"/>
