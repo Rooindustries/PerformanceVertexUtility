@@ -41,6 +41,7 @@ public sealed partial class FirmwarePage : Page
         catch (Exception ex) { ViewModel.Message = ex.Message; }
     }
     private async void LoadSettings(object sender, RoutedEventArgs e) => await ViewModel.LoadAsync();
+    private void CancelSetup(object sender, RoutedEventArgs e) => ViewModel.CancelSetup();
     private async void Review(object sender, RoutedEventArgs e) => await ViewModel.ReviewAsync();
     private void Edit(object sender, RoutedEventArgs e) => ViewModel.EditAgain();
     private async void Apply(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();

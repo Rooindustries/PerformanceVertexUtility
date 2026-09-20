@@ -12,6 +12,13 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 if (args is ["--firmware-provider", var firmwareFixture]) { FirmwareProviderChecks.Run(Check, firmwareFixture); return; }
+if (args is ["--firmware-setup", var setupFixture]) { await ScewinSetupChecks.Run(Check, setupFixture); return; }
+if (args is ["--firmware-download", var downloadDirectory])
+{
+    var directory = await new ScewinSetup().InstallAsync(downloadDirectory, new Progress<string>(Console.WriteLine));
+    Console.WriteLine(JsonSerializer.Serialize(new { packageDirectory = directory, package = OperationFiles.Read<FirmwarePackage>(Path.Combine(directory, "package.json")) }, OperationFiles.Json));
+    return;
+}
 if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }

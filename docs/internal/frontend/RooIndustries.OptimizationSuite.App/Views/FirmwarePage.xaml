@@ -31,14 +31,17 @@
                 <StackPanel Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
                     <Border Style="{StaticResource PanelBorderStyle}" Padding="20">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="Set up BIOS access" FontSize="18" FontWeight="SemiBold" />
-                            <TextBlock Text="Add the compatible SCEWIN package for this motherboard once. The app then handles loading, editing, backup, and import in this screen." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                            <TextBlock Text="Load your BIOS settings" FontSize="18" FontWeight="SemiBold" />
+                            <TextBlock Text="SCEWIN is downloaded and prepared automatically. Edit settings here, review your changes, then apply them. Your original settings are saved before you make changes." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                             <TextBlock Text="{x:Bind ViewModel.PackageText, Mode=OneWay}" TextWrapping="Wrap" AutomationProperties.AutomationId="FirmwarePackageStatus" />
                             <views:AdaptivePanel MinColumnWidth="220" MaxColumns="2" Compact="True">
-                                <Button Click="ChoosePackage" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="ChooseFirmwarePackage"><TextBlock Text="Add SCEWIN package" TextWrapping="Wrap"/></Button>
-                                <Button Content="Load settings" Click="LoadSettings" IsEnabled="{x:Bind ViewModel.CanLoad, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="LoadFirmwareSettings" />
+                                <Button Content="{x:Bind ViewModel.LoadLabel, Mode=OneWay}" Click="LoadSettings" IsEnabled="{x:Bind ViewModel.CanLoad, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="LoadFirmwareSettings" />
+                                <Button Content="Cancel download" Click="CancelSetup" Visibility="{x:Bind ViewModel.CanCancelSetup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CancelFirmwareSetup" />
                             </views:AdaptivePanel>
-                            <TextBlock Text="SCEWIN checks firmware compatibility when it reads this PC. Its matching signed driver may be loaded during that step." FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />
+                            <TextBlock Text="Loading checks whether this BIOS supports SCEWIN. Restart is only needed after applying changes." FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />
+                            <Expander Header="Use an existing SCEWIN package" HorizontalAlignment="Stretch">
+                                <Button Content="Choose package folder" Click="ChoosePackage" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="ChooseFirmwarePackage" />
+                            </Expander>
                         </StackPanel>
                     </Border>
                     <StackPanel Spacing="8">
