@@ -156,6 +156,9 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = ReadJournal(journalPath);
+        if (journal.Status == "restored") return journal;
+        if (!HasRestorableOperation(journal))
+            throw new InvalidDataException("This application cleanup has no attempted operation with recovery data.");
         var preview = journal.Preview;
         journal.Status = "restoring";
         journal.RestoreStarted = true;
@@ -193,6 +196,15 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         Save(journalPath, journal);
         return journal;
     }
+
+    public static bool HasRestorableOperation(ApplicationCleanupJournal journal)
+        => PartCanRestore(journal.Preview.Files, journal.FileStatus)
+            || PartCanRestore(journal.Preview.Registry, journal.RegistryStatus);
+
+    private static bool PartCanRestore(CleanupPart? part, string? status)
+        => part is not null
+            && status is ("applying" or "applied" or "needsReconciliation")
+            && File.Exists(part.JournalPath);
 
     private LeftoverDiscoveryResult Scan(CleanupContext context, CancellationToken cancellationToken)
     {
@@ -233,6 +245,9 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         Validate(journal.Preview);
         if (journal.SchemaVersion != 1 || journal.Status is not ("prepared" or "applied" or "needsReconciliation" or "restoring" or "restored"))
             throw new InvalidDataException("Unknown application cleanup state.");
+        if (!journal.RestoreStarted && journal.Status is ("restoring" or "restored")
+            || journal.RestoreStarted && journal.Status is ("prepared" or "applied"))
+            throw new InvalidDataException("Application cleanup recovery phase contradicts its restore state.");
         var original = OperationFiles.Read<ApplicationCleanupPreview>(journal.PreviewPath, journal.ReviewHash);
         if (System.Text.Json.JsonSerializer.Serialize(original, OperationFiles.Json) != System.Text.Json.JsonSerializer.Serialize(journal.Preview, OperationFiles.Json))
             throw new InvalidDataException("The cleanup journal changed its reviewed operation binding.");
