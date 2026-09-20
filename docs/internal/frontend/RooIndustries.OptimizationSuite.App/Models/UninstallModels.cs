@@ -243,6 +243,7 @@ public sealed class OfficialUninstallPreview
 {
     public bool DryRun { get; set; }
     public List<UninstallCommand>? Commands { get; set; }
+    public List<IssueModel>? Errors { get; set; }
 }
 
 public sealed class UninstallCommand
@@ -268,6 +269,7 @@ public sealed class LeftoverScan
     public bool DryRun { get; set; }
     public LeftoverScanSummary? Summary { get; set; }
     public List<LeftoverItem>? Items { get; set; }
+    public List<IssueModel>? Errors { get; set; }
 }
 
 public sealed class LeftoverScanSummary
@@ -302,6 +304,7 @@ public sealed class CleanupManifest
     public List<LeftoverItem>? Items { get; set; }
     public CleanupRollback? Rollback { get; set; }
     public CleanupManifestSummary? Summary { get; set; }
+    public List<IssueModel>? Errors { get; set; }
 }
 
 public sealed class CleanupManifestSummary
