@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -10,33 +11,35 @@ using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record ProcessProfileRecovery(string Path, string Id);
-public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
-public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath);
+public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
 
 public sealed class LiveDataService
 {
     private readonly BackendLocator _locator;
     private readonly string _recoveryDirectory;
+    private readonly string _recoveryKey;
+    private static readonly ConcurrentDictionary<string, ProcessProfileRecovery> VolatileProcessRecovery = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, NvidiaProfileRecovery> VolatileNvidiaRecovery = new(StringComparer.OrdinalIgnoreCase);
     private string ProcessRecoveryPath => Path.Combine(_recoveryDirectory, "process-profile-recovery.json");
+    private string ProcessOperationPath => Path.Combine(_recoveryDirectory, "process-profile-operation");
+    private string ProcessGenerationPath => Path.Combine(_recoveryDirectory, "process-profile-operation-generation.json");
+    private string NvidiaOperationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation");
+    private string NvidiaGenerationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation-generation.json");
     public ProcessProfileRecovery? ProcessProfileRecovery
     {
         get
         {
-            try { return RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath); }
-            catch (Exception error) when (error is IOException or JsonException or InvalidOperationException) { return null; }
+            var generation = ReadGeneration(ProcessGenerationPath);
+            if (VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current)
+                && current.Valid() && SameGeneration(current.Generation, generation)) return current;
+            try
+            {
+                var recovery = RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath);
+                return recovery.Valid() && SameGeneration(recovery.Generation, generation) ? recovery : null;
+            }
+            catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or UnauthorizedAccessException) { return null; }
         }
-        set
-        {
-            if (value is null) throw new ArgumentNullException(nameof(value));
-            using var lease = RooIndustries.Optimizer.OperationFiles.Lock(ProcessRecoveryPath);
-            RooIndustries.Optimizer.OperationFiles.Write(ProcessRecoveryPath, value);
-        }
-    }
-    public void ClearProcessProfileRecovery(string path, string id)
-    {
-        using var lease = RooIndustries.Optimizer.OperationFiles.Lock(ProcessRecoveryPath);
-        if (ProcessProfileRecovery == new ProcessProfileRecovery(path, id)) File.Delete(ProcessRecoveryPath);
     }
     private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
     private sealed record PreparedCleanupInputs(
@@ -62,6 +65,7 @@ public sealed class LiveDataService
     {
         _locator = locator;
         _recoveryDirectory = recoveryDirectory ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings");
+        _recoveryKey = Path.GetFullPath(_recoveryDirectory);
     }
 
     public string? ScriptsDirectory => _locator.RepoRoot is null
@@ -82,11 +86,77 @@ public sealed class LiveDataService
     public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
 
-    public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply");
+    public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
+    {
+        using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
+        if (operation is null) return new(null, leaseError);
+        var previousGeneration = ReadGeneration(ProcessGenerationPath);
+        var generation = Guid.NewGuid().ToString("N");
+        if (!TryWriteGeneration(ProcessGenerationPath, generation, "process profile", out var generationError))
+            return new(null, generationError);
+        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply").ConfigureAwait(false);
+        var recovery = ProcessProfileRecovery.FromApply(result.Value, generation);
+        if (recovery is null)
+        {
+            if (result.Error is null && ProcessApplyNoChange(result.Value))
+            {
+                try { RestoreGeneration(ProcessGenerationPath, previousGeneration); }
+                catch (Exception error)
+                {
+                    return result with { Error = "The no-change process action completed, but its operation generation could not be restored: " + error.Message };
+                }
+            }
+            return result;
+        }
+        VolatileProcessRecovery[_recoveryKey] = recovery;
+        try
+        {
+            RooIndustries.Optimizer.OperationFiles.Write(ProcessRecoveryPath, recovery);
+            return result with { RecoveryPath = recovery.Path, RecoveryGeneration = recovery.Generation };
+        }
+        catch (Exception error)
+        {
+            return result with
+            {
+                Error = AppendError(result.Error, "The process backup exists, but its recovery reference could not be saved: " + error.Message),
+                RecoveryPath = recovery.Path,
+                RecoveryGeneration = recovery.Generation,
+            };
+        }
+    }
 
-    public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(string backupPath, CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Restore-ProcessProfileBackup.ps1", ct, "-BackupPath " + QuotePowerShell(backupPath) + " -ConfirmApply");
+    public async Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken ct = default)
+    {
+        using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
+        if (operation is null) return new(null, leaseError);
+        var current = ProcessProfileRecovery;
+        if (!recovery.Valid() || current != recovery)
+            return new(null, "The selected process recovery is no longer current.");
+        if (!TryWriteGeneration(ProcessGenerationPath, recovery.Generation!, "process profile", out var generationError))
+            return new(null, generationError);
+        var result = await RunBackendScriptResultAsync(
+            "Restore-ProcessProfileBackup.ps1",
+            ct,
+            "-BackupPath " + QuotePowerShell(recovery.Path) + " -ConfirmApply").ConfigureAwait(false);
+        if (result.Error is null && recovery.RestoreCompleted(result.Value))
+        {
+            try
+            {
+                ClearProcessRecovery(recovery);
+                return result;
+            }
+            catch (Exception error)
+            {
+                return result with
+                {
+                    Error = "The process restore completed, but its saved recovery reference could not be cleared: " + error.Message,
+                    RecoveryPath = recovery.Path,
+                    RecoveryGeneration = recovery.Generation,
+                };
+            }
+        }
+        return result with { RecoveryPath = recovery.Path, RecoveryGeneration = recovery.Generation };
+    }
 
     public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
     {
@@ -168,13 +238,23 @@ public sealed class LiveDataService
         bool benchmarkEvidenceAttached,
         CancellationToken ct = default)
     {
+        using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
+        if (operation is null) return new(null, leaseError);
         var realApplyApproved = exportReviewed && userApproved && benchmarkEvidenceAttached;
+        var previousGeneration = ReadGeneration(NvidiaGenerationPath);
+        string? generation = null;
+        if (realApplyApproved)
+        {
+            generation = Guid.NewGuid().ToString("N");
+            if (!TryWriteGeneration(NvidiaGenerationPath, generation, "NVIDIA profile", out var generationError))
+                return new(null, generationError);
+        }
         string? recoveryRoot = null;
         string? exportPath = null;
         string? rollbackManifestPath = null;
         if (realApplyApproved)
         {
-            recoveryRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "nvidia-profile-recovery", Guid.NewGuid().ToString("N"));
+            recoveryRoot = Path.Combine(_recoveryDirectory, "nvidia-profile-recovery", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(recoveryRoot);
             exportPath = Path.Combine(recoveryRoot, "before.nip");
             rollbackManifestPath = Path.Combine(recoveryRoot, "rollback.json");
@@ -200,19 +280,45 @@ public sealed class LiveDataService
         }
 
         var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
-        var recovery = realApplyApproved ? ReadNvidiaRecoveryFromApply(profileId, rollbackManifestPath!, exportPath!) : null;
-        if (recovery is not null) SaveNvidiaRecovery(recovery);
-        return result with { RecoveryPath = recovery?.RollbackManifestPath };
+        var recovery = realApplyApproved ? ReadNvidiaRecoveryFromApply(profileId, rollbackManifestPath!, exportPath!, generation!) : null;
+        if (realApplyApproved && recovery is null && NvidiaApplyNoImport(result.Value, profileId, rollbackManifestPath!, exportPath!))
+        {
+            try { RestoreGeneration(NvidiaGenerationPath, previousGeneration); }
+            catch (Exception error)
+            {
+                return result with { Error = AppendError(result.Error, "The no-import NVIDIA action completed, but its operation generation could not be restored: " + error.Message) };
+            }
+        }
+        if (recovery is not null)
+        {
+            VolatileNvidiaRecovery[_recoveryKey] = recovery;
+            try { SaveNvidiaRecovery(recovery); }
+            catch (Exception error)
+            {
+                return result with
+                {
+                    Error = AppendError(result.Error, "The NVIDIA rollback export exists, but its recovery reference could not be saved: " + error.Message),
+                    RecoveryPath = recovery.RollbackManifestPath,
+                    RecoveryGeneration = recovery.Generation,
+                };
+            }
+        }
+        return result with { RecoveryPath = recovery?.RollbackManifestPath, RecoveryGeneration = recovery?.Generation };
     }
 
     public Task<NvidiaProfileRecovery?> ReadNvidiaProfileRecoveryAsync(string profileId)
     {
+        var generation = ReadGeneration(NvidiaGenerationPath);
+        if (VolatileNvidiaRecovery.TryGetValue(_recoveryKey, out var volatileRecovery)
+            && ValidateNvidiaRecovery(volatileRecovery, profileId)
+            && SameGeneration(volatileRecovery.Generation, generation)) return Task.FromResult<NvidiaProfileRecovery?>(volatileRecovery);
         var path = NvidiaRecoveryIndexPath;
         if (!File.Exists(path)) return Task.FromResult<NvidiaProfileRecovery?>(null);
         try
         {
             var recovery = RooIndustries.Optimizer.OperationFiles.Read<NvidiaProfileRecovery>(path);
-            return Task.FromResult(ValidateNvidiaRecovery(recovery, profileId) ? recovery : null);
+            return Task.FromResult(ValidateNvidiaRecovery(recovery, profileId)
+                && SameGeneration(recovery.Generation, generation) ? recovery : null);
         }
         catch
         {
@@ -220,10 +326,33 @@ public sealed class LiveDataService
         }
     }
 
+    public static NvidiaProfileRecovery? NvidiaRecoveryFromApplyResult(string profileId, string? json, string? rollbackManifestPath, string? generation)
+    {
+        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(rollbackManifestPath)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (NvidiaString(root, "actionId") != "drivers.nvidiaNip.executor"
+                || NvidiaString(root, "operation") != "Apply"
+                || NvidiaString(root, "profileId") != profileId
+                || !PathsEqual(NvidiaString(root, "rollbackManifestPath"), rollbackManifestPath)) return null;
+            var exportPath = NvidiaString(root, "rollbackManifest", "exportPath");
+            var recovery = string.IsNullOrWhiteSpace(exportPath) ? null : new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath, generation);
+            return ValidateNvidiaRecovery(recovery, profileId) ? recovery : null;
+        }
+        catch { return null; }
+    }
+
     public async Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken ct = default)
     {
-        if (!ValidateNvidiaRecovery(recovery, recovery.ProfileId))
-            return new(null, "The NVIDIA rollback artifact is missing or does not match this profile.");
+        using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
+        if (operation is null) return new(null, leaseError);
+        var current = await ReadNvidiaProfileRecoveryAsync(recovery.ProfileId).ConfigureAwait(false);
+        if (!ValidateNvidiaRecovery(recovery, recovery.ProfileId) || current != recovery)
+            return new(null, "The selected NVIDIA recovery is no longer current.");
+        if (!TryWriteGeneration(NvidiaGenerationPath, recovery.Generation!, "NVIDIA profile", out var generationError))
+            return new(null, generationError);
         var args = "-Operation Restore -ProfileId " + QuotePowerShell(recovery.ProfileId)
             + " -ExecutorMode " + (userApproved ? "Real" : "Preview")
             + " -ExportPath " + QuotePowerShell(recovery.ExportPath)
@@ -235,8 +364,24 @@ public sealed class LiveDataService
         }
 
         var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
-        if (result.Error is null && NvidiaRestoreCompleted(result.Value, recovery)) ClearNvidiaRecovery(recovery);
-        return result;
+        if (result.Error is null && NvidiaRestoreCompleted(result.Value, recovery))
+        {
+            try
+            {
+                ClearNvidiaRecovery(recovery);
+                return result;
+            }
+            catch (Exception error)
+            {
+                return result with
+                {
+                    Error = "The NVIDIA restore completed, but its saved recovery reference could not be cleared: " + error.Message,
+                    RecoveryPath = recovery.RollbackManifestPath,
+                    RecoveryGeneration = recovery.Generation,
+                };
+            }
+        }
+        return result with { RecoveryPath = recovery.RollbackManifestPath, RecoveryGeneration = recovery.Generation };
     }
 
     public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken ct = default)
@@ -498,15 +643,134 @@ public sealed class LiveDataService
 
     private string NvidiaRecoveryIndexPath => Path.Combine(_recoveryDirectory, "nvidia-profile-recovery.json");
 
-    private static NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string rollbackManifestPath, string exportPath)
+    private static FileStream? TryOperationLease(string path, string kind, out string? operationError)
     {
-        var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath);
+        try
+        {
+            var lease = RooIndustries.Optimizer.OperationFiles.Lock(path);
+            operationError = null;
+            return lease;
+        }
+        catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33)
+        {
+            operationError = "Another " + kind + " action is already in progress.";
+            return null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            operationError = "The " + kind + " action lock could not be opened: " + error.Message;
+            return null;
+        }
+    }
+
+    private static string AppendError(string? current, string error)
+        => string.IsNullOrWhiteSpace(current) ? error : current + Environment.NewLine + error;
+
+    private static string? ReadGeneration(string path)
+    {
+        try { return RooIndustries.Optimizer.OperationFiles.Read<RecoveryOperationGeneration>(path).Id; }
+        catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static bool SameGeneration(string? recoveryGeneration, string? currentGeneration)
+        => !string.IsNullOrWhiteSpace(recoveryGeneration)
+            && !string.IsNullOrWhiteSpace(currentGeneration)
+            && string.Equals(recoveryGeneration, currentGeneration, StringComparison.Ordinal);
+
+    private static bool TryWriteGeneration(string path, string generation, string kind, out string? operationError)
+    {
+        try
+        {
+            RooIndustries.Optimizer.OperationFiles.Write(path, new RecoveryOperationGeneration(generation));
+            operationError = null;
+            return true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            operationError = "The " + kind + " operation generation could not be recorded before dispatch: " + error.Message;
+            return false;
+        }
+    }
+
+    private static void RestoreGeneration(string path, string? generation)
+    {
+        if (generation is null)
+        {
+            if (File.Exists(path)) File.Delete(path);
+            return;
+        }
+        RooIndustries.Optimizer.OperationFiles.Write(path, new RecoveryOperationGeneration(generation));
+    }
+
+    private static bool ProcessApplyNoChange(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            return NvidiaString(root, "actionId") == "performance.applyProfile"
+                && NvidiaBool(root, "dryRun") == false
+                && NvidiaString(root, "status") == "success"
+                && NvidiaString(root, "result", "status") == "success"
+                && root.TryGetProperty("result", out var result)
+                && result.TryGetProperty("changedItems", out var changed)
+                && changed.ValueKind == JsonValueKind.Array
+                && changed.GetArrayLength() == 0
+                && root.TryGetProperty("errors", out var errors)
+                && errors.ValueKind == JsonValueKind.Array
+                && !errors.EnumerateArray().Any(error => NvidiaBool(error, "blocking") == true);
+        }
+        catch { return false; }
+    }
+
+    private static bool NvidiaApplyNoImport(string? json, string profileId, string rollbackManifestPath, string exportPath)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (NvidiaString(root, "actionId") != "drivers.nvidiaNip.executor"
+                || NvidiaString(root, "operation") != "Apply"
+                || NvidiaString(root, "profileId") != profileId
+                || NvidiaString(root, "status") is not ("blocked" or "failed")
+                || !TryNvidiaInt(root, out var reportedBlocking, "summary", "blockingGateCount")
+                || reportedBlocking != NvidiaBlockingGates(root)
+                || NvidiaBool(root, "summary", "importAttempted") != false
+                || NvidiaBool(root, "summary", "importCompleted") != false
+                || NvidiaBool(root, "summary", "exportAttempted") is not { } exportAttempted
+                || !root.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array) return false;
+            if (!File.Exists(rollbackManifestPath)) return !exportAttempted;
+            using var manifestDocument = JsonDocument.Parse(File.ReadAllText(rollbackManifestPath));
+            var manifest = manifestDocument.RootElement;
+            return NvidiaString(manifest, "actionId") == "drivers.nvidiaNip.rollbackManifest"
+                && NvidiaString(manifest, "restoreActionId") == "drivers.nvidiaNip.restoreProfile"
+                && NvidiaString(manifest, "profileId") == profileId
+                && PathsEqual(NvidiaString(manifest, "exportPath"), exportPath)
+                && NvidiaBool(manifest, "importAttempted") == false
+                && NvidiaBool(manifest, "importCompleted") == false;
+        }
+        catch { return false; }
+    }
+
+    private void ClearProcessRecovery(ProcessProfileRecovery recovery)
+    {
+        if (ProcessProfileRecovery == recovery && File.Exists(ProcessRecoveryPath)) File.Delete(ProcessRecoveryPath);
+        if (File.Exists(ProcessGenerationPath)) File.Delete(ProcessGenerationPath);
+        if (VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current) && current == recovery)
+            VolatileProcessRecovery.TryRemove(_recoveryKey, out _);
+    }
+
+    private static NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string rollbackManifestPath, string exportPath, string generation)
+    {
+        var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath, generation);
         return ValidateNvidiaRecovery(recovery, profileId) ? recovery : null;
     }
 
     private static bool ValidateNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
     {
-        if (recovery is null || recovery.ProfileId != profileId
+        if (recovery is null || recovery.ProfileId != profileId || string.IsNullOrWhiteSpace(recovery.Generation)
             || !File.Exists(recovery.RollbackManifestPath) || !File.Exists(recovery.ExportPath)) return false;
         try
         {
@@ -566,15 +830,10 @@ public sealed class LiveDataService
     private void ClearNvidiaRecovery(NvidiaProfileRecovery recovery)
     {
         var path = NvidiaRecoveryIndexPath;
-        try
-        {
-            if (!File.Exists(path)) return;
-            var current = RooIndustries.Optimizer.OperationFiles.Read<NvidiaProfileRecovery>(path);
-            if (current == recovery) File.Delete(path);
-        }
-        catch
-        {
-        }
+        if (File.Exists(path)) File.Delete(path);
+        if (File.Exists(NvidiaGenerationPath)) File.Delete(NvidiaGenerationPath);
+        if (VolatileNvidiaRecovery.TryGetValue(_recoveryKey, out var current) && current == recovery)
+            VolatileNvidiaRecovery.TryRemove(_recoveryKey, out _);
     }
 
     private static string? NvidiaString(JsonElement root, params string[] path)
