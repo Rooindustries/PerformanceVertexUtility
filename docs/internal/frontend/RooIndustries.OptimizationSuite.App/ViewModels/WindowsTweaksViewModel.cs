@@ -294,7 +294,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     private void RowChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (_loading || !CanEdit || args.PropertyName != nameof(WindowsTweakRow.Selected)) return;
+        if (_loading || HasPendingRecovery || args.PropertyName != nameof(WindowsTweakRow.Selected)) return;
         Invalidate();
         SetSelectionStatus("Selection changed", "Review the current selection before applying.");
     }
