@@ -388,7 +388,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         dryRun = false,
         status = "success",
         backup = (object?)null,
-        result = new { summary = "No changes were needed.", changedItems = Array.Empty<object>() },
+        result = new { status = "success", summary = "No changes were needed.", changedItems = Array.Empty<object>() },
     });
     App.Live.LastError = null;
     await profiles.ApplyProfileCommand.ExecuteAsync(null);
@@ -425,7 +425,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         "A dry-run process response cannot claim a real apply");
 
     var currentBackup = Path.Combine(Path.GetTempPath(), "current-process-backup-" + Guid.NewGuid().ToString("N") + ".json");
-    File.WriteAllText(currentBackup, "{}");
+    File.WriteAllText(currentBackup, JsonSerializer.Serialize(new { actionId = "performance.applyProfile", backupId = "current", profileId = "fixture-profile", dryRun = false, snapshots = new[] { new { processId = 123, processStartTimeUtc = "2026-09-20T00:00:00Z" } } }));
     try
     {
         App.Live.ProcessApplyText = JsonSerializer.Serialize(new
@@ -434,11 +434,27 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             dryRun = false,
             status = "success",
             backup = new { backupId = "current", location = currentBackup, rollbackSupported = true },
-            result = new { summary = "One change applied.", changedItems = new[] { new { name = "fixture" } } },
+            result = new { status = "success", summary = "One change applied.", changedItems = new[] { new { name = "fixture" } } },
         });
         await profiles.ApplyProfileCommand.ExecuteAsync(null);
         Check(profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities applied",
             "A process apply enables restore only from its explicit current backup");
+        App.Live.Classification = new ProcessClassification { Processes = [new ProcessItem { Name = "Fixture", Category = "backgroundApp" }] };
+        var reopenedProfiles = new PerformanceProfilesViewModel();
+        await reopenedProfiles.ReloadAsync();
+        Check(reopenedProfiles.RestoreAvailable, "Reopening process profiles preserves the operation-bound recovery artifact");
+        var validBackup = File.ReadAllText(currentBackup);
+        File.WriteAllText(currentBackup, "{}");
+        var invalidBackupModel = new PerformanceProfilesViewModel();
+        await invalidBackupModel.ApplyProfileCommand.ExecuteAsync(null);
+        Check(!invalidBackupModel.RestoreAvailable, "An empty file cannot serve as a process recovery artifact");
+        File.WriteAllText(currentBackup, validBackup.Replace("current", "unrelated", StringComparison.Ordinal));
+        await invalidBackupModel.ApplyProfileCommand.ExecuteAsync(null);
+        Check(!invalidBackupModel.RestoreAvailable, "An unrelated process backup ID cannot enable restore");
+        File.WriteAllText(currentBackup, validBackup);
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "success", backup = new { location = oldBackup, backupId = "other" }, result = new { status = "success", changedItems = Array.Empty<object>() } });
+        await profiles.RestoreProfileCommand.ExecuteAsync(null);
+        Check(profiles.RestoreAvailable && profiles.ActionTitle != "Restore complete", "A restore receipt for another artifact cannot clear recovery");
         App.Live.ProcessRestoreText = null;
         App.Live.LastError = "Controlled process restore failure";
         await profiles.RestoreProfileCommand.ExecuteAsync(null);

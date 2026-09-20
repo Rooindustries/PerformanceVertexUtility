@@ -30,6 +30,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? LastError { get; set; }
         public string? OperationError { get; set; }
         public string? LatestProcessBackup { get; set; }
+        public (string Path, string Id)? ProcessProfileRecovery { get; set; }
         public string? LastCleanupRollbackPath { get; set; }
         public string? CleanupRecoveryPath { get; set; }
         public string? ProcessPreviewText { get; set; }
