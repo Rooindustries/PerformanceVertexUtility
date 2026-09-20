@@ -62,6 +62,7 @@ public sealed partial class WindowsTweaksPage : Page
     }
     private async void ImportSettings(object sender, RoutedEventArgs args)
     {
+        if (!ViewModel.CanEdit) return;
         try
         {
             var picker = new FileOpenPicker(); picker.FileTypeFilter.Add(".json");

@@ -197,7 +197,10 @@ public partial class WindowsTweaksViewModel : ObservableObject
         _focusedSetting = null; Search = ""; Category = "All groups"; UpdateTopics(); Filter(); FilterPresets("");
         foreach (var name in new[] { nameof(SectionTitle), nameof(SectionDescription), nameof(SectionIcon), nameof(IsDebloat) }) OnPropertyChanged(name);
     }
-    public bool CanEdit => !Busy;
+    public bool CanRefresh => !Busy;
+    public bool CanEdit => !Busy && !HasPendingRecovery;
+    public bool CanReviewRecovery => !Busy && HasPendingRecovery;
+    public bool CanApproveReview => !Busy && (!HasPendingRecovery || _reviewingRecovery);
     public bool ShowProfileName => !ProfileId.StartsWith("file-permissions-", StringComparison.Ordinal) && !ProfileId.StartsWith("restore-point-", StringComparison.Ordinal);
     public bool CanReview => !Busy && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && (_inspection is not null || _all.Any(row => row.Selected.Id.Length > 0)) && (_all.Any(row => row.Selected.Id.Length > 0) || _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true || _savedChoices?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true);
     public bool CanApply => !Busy && (_review is not null || _reviewedChoices is not null || _reviewingRecovery && _recovery?.Pending is not null) && Approved && (!HasDataLoss || AcceptedDataLoss);
@@ -226,14 +229,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     partial void OnSelectedProfileChanged(WindowsProfileChoice? value)
     {
-        if (_loading || value is null) return;
+        if (_loading || value is null || !CanEdit) return;
         ProfileId = value.Id;
         LoadProfile();
         SetSelectionStatus("Profile loaded", "Review this profile before applying or restoring settings.");
     }
     partial void OnSelectedPresetChanged(TweakChoice? value)
     {
-        if (_loading || value is null || _catalog is null) return;
+        if (_loading || value is null || _catalog is null || !CanEdit) return;
         var preset = _catalog.Presets.Single(item => item.Id == value.Id);
         var available = preset.Selections.Where(selection => _all.Any(row => row.Id == selection.SettingId && row.Choices.Any(choice => choice.Id == selection.OptionId))).ToArray();
         var conflicts = available.GroupBy(selection => selection.SettingId).Where(group => group.Select(selection => selection.OptionId).Distinct().Count() > 1).ToArray();
@@ -295,8 +298,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             FilterPresets("");
             SelectedPreset = null; _loading = false;
             LoadProfile(); Filter();
-            Status = _all.Count + " settings";
-            Detail = inspection.State?.Notices.Length > 0 ? string.Join("\n", inspection.State.Notices) : "Choose settings, review the changes, then apply.";
+            SetLoadedStatus(inspection);
             Summary = "Windows build " + inspection.Context.WindowsBuild + " · " + inspection.Context.Edition;
         }
         catch (Exception error) { _inspection = null; foreach (var row in _all) row.Observe(null); LoadProfile(); Filter(); Status = "Couldn't load Windows settings."; Detail = error.Message; }
@@ -315,7 +317,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     private void RowChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (_loading || args.PropertyName != nameof(WindowsTweakRow.Selected)) return;
+        if (_loading || !CanEdit || args.PropertyName != nameof(WindowsTweakRow.Selected)) return;
         Invalidate();
         SetSelectionStatus("Selection changed", "Review the current selection before applying.");
     }
@@ -343,7 +345,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [RelayCommand]
     private void ClearSelection()
     {
-        if (Busy) return;
+        if (!CanEdit) return;
         _loading = true; foreach (var row in _all) row.Selected = row.Choices[0]; SelectedPreset = null; _loading = false; Invalidate(); Notify();
         if (!ShowProfileName && _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId) != true) ProfileId = "my-settings";
         SetSelectionStatus("Nothing selected", "Choose settings, review the changes, then apply.");
@@ -437,7 +439,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [RelayCommand]
     private void ReviewRecovery()
     {
-        if (Busy || _recovery?.Pending is not { } pending) return;
+        if (!CanReviewRecovery || _recovery?.Pending is not { } pending) return;
         Invalidate(); _reviewingRecovery = true;
         if (!CheckingRestart) foreach (var change in pending.Plan.Controls!.Changes.Take(pending.Attempted))
             AddNativeChange(new(change.Before with { Value = change.After }, change.Before.Value));
@@ -528,7 +530,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     public async Task ReviewOwnershipAsync(string path)
     {
-        if (Busy) return;
+        if (!CanEdit) return;
         Busy = true; Invalidate();
         try
         {
@@ -545,6 +547,22 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void Notify()
     {
         UpdateSections();
-        foreach (var name in new[] { nameof(HasValueChanges), nameof(ShowEmpty), nameof(CanEdit), nameof(ShowProfileName), nameof(CanReview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(HasDataLoss), nameof(DataLossText), nameof(ApplyLabel), nameof(SelectionText) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasValueChanges), nameof(ShowEmpty), nameof(CanRefresh), nameof(CanEdit), nameof(CanReviewRecovery), nameof(CanApproveReview), nameof(ShowProfileName), nameof(CanReview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(HasDataLoss), nameof(DataLossText), nameof(ApplyLabel), nameof(SelectionText) }) OnPropertyChanged(name);
+    }
+
+    private void SetLoadedStatus(TweakInspection inspection)
+    {
+        if (_recovery?.Pending is { } pending)
+        {
+            Status = pending.Phase == "awaiting-restart"
+                ? "Restart required to finish Windows settings recovery"
+                : "Windows settings recovery needs review";
+            Detail = pending.Phase == "awaiting-restart"
+                ? "Restart Windows, then refresh and review recovery before selecting more settings."
+                : "An earlier Windows settings change was interrupted. Review recovery before selecting more settings.";
+            return;
+        }
+        Status = _all.Count + " settings";
+        Detail = inspection.State?.Notices.Length > 0 ? string.Join("\n", inspection.State.Notices) : "Choose settings, review the changes, then apply.";
     }
 }
