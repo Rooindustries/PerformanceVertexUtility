@@ -33,7 +33,8 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string _resultStatus = "";
     [ObservableProperty] private int _changedCount;
     public ObservableCollection<FirmwareSettingRow> Settings { get; } = new();
-    public ObservableCollection<FirmwareSettingRow> TestedUnchangedSettings { get; } = new();
+    public ObservableCollection<FirmwareSettingRow> ExperimentalSettings { get; } = new();
+    [ObservableProperty] private bool _allowExperimentalEdits;
     public ObservableCollection<FirmwareChange> Changes { get; } = new();
     public ObservableCollection<FirmwareHistoryRow> History { get; } = new();
     public bool IsSetup => Stage == "setup";
@@ -61,8 +62,13 @@ public partial class FirmwareViewModel : ObservableObject
     public string StepText => Stage switch { "setup" => "1  Set up  ·  2  Edit  ·  3  Review  ·  4  Restart", "edit" => "2  Edit settings", "review" => "3  Review changes", _ => "4  Verify and restart" };
     public string HistoryHelp => History.Count == 0 ? "No saved sessions yet. Load settings to create the first export." : "Reopen a session to verify after restart or review an undo.";
     public string ApplyLabel => "Apply " + Changes.Count + (Changes.Count == 1 ? " change" : " changes");
-    public bool HasTestedUnchangedSettings => TestedUnchangedSettings.Count > 0;
-    public string TestedUnchangedSummary => "Did not change (" + TestedUnchangedSettings.Count + (TestedUnchangedSettings.Count == 1 ? " setting)" : " settings)");
+    public bool HasExperimentalSettings => ExperimentalSettings.Count > 0;
+    public string ExperimentalSummary => "Experimental (" + ExperimentalSettings.Count + (ExperimentalSettings.Count == 1 ? " setting)" : " settings)");
+    partial void OnAllowExperimentalEditsChanged(bool value)
+    {
+        foreach (var row in _all) row.CanEdit = !row.IsReadOnly && (value || !IsExperimentalRow(row));
+        _reviewHash = null;
+    }
     partial void OnBusyChanged(bool value) { RefreshActions(); OnPropertyChanged(nameof(ResultHeadline)); }
     partial void OnStageChanged(string value)
     {
@@ -154,6 +160,8 @@ public partial class FirmwareViewModel : ObservableObject
             row.PropertyChanged += SettingChanged;
             _all.Add(row);
         }
+        foreach (var skipped in script.ExcludedQuestions) _all.Add(FirmwareSettingRow.ReadOnly(skipped));
+        AllowExperimentalEdits = false;
         ChangedCount = 0; Stage = "edit"; ResultStatus = ""; Search = ""; ChangedOnly = false; Filter();
         await LoadVerificationAsync(script, _sessionDirectory);
     }
@@ -164,6 +172,7 @@ public partial class FirmwareViewModel : ObservableObject
         ChangedCount = _all.Count(r => r.Changed);
         foreach (var row in _all)
         {
+            if (row.IsExperimental) continue;
             if (row.Changed)
                 row.SetVerification("Not tested", "This selected value has not been tested.", false);
             else if (_verificationMatches.TryGetValue(row.Question.Id, out var match))
@@ -174,15 +183,24 @@ public partial class FirmwareViewModel : ObservableObject
     private void Filter()
     {
         Settings.Clear();
-        TestedUnchangedSettings.Clear();
+        ExperimentalSettings.Clear();
         foreach (var row in _all.Where(row => MatchesFilter(row, Search, ChangedOnly)))
         {
-            if (ShouldCollapse(row)) TestedUnchangedSettings.Add(row);
+            row.CanEdit = !row.IsReadOnly && (AllowExperimentalEdits || !IsExperimentalRow(row));
+            if (IsExperimentalRow(row)) ExperimentalSettings.Add(row);
             else Settings.Add(row);
         }
-        OnPropertyChanged(nameof(HasTestedUnchangedSettings));
-        OnPropertyChanged(nameof(TestedUnchangedSummary));
+        OnPropertyChanged(nameof(HasExperimentalSettings));
+        OnPropertyChanged(nameof(ExperimentalSummary));
     }
+    public static bool IsExperimentalRow(FirmwareSettingRow row) => row.IsExperimental || ShouldCollapse(row);
+    public static (FirmwareSettingRow[] Normal, FirmwareSettingRow[] Experimental) Split(IEnumerable<FirmwareSettingRow> rows)
+    {
+        var all = rows.ToArray();
+        return (all.Where(row => !IsExperimentalRow(row)).ToArray(), all.Where(IsExperimentalRow).ToArray());
+    }
+    public static Dictionary<string, string> ReviewSelections(IEnumerable<FirmwareSettingRow> rows, Func<FirmwareSettingRow, bool> changed, bool allowExperimental)
+        => rows.Where(row => !row.IsReadOnly && (allowExperimental || !row.IsExperimental) && changed(row)).ToDictionary(row => row.Question.Id, row => row.Selection);
     public static bool MatchesFilter(FirmwareSettingRow row, string search, bool changedOnly)
         => (!changedOnly || row.Changed) && (row.Name + " " + row.Help).Contains(search.Trim(), StringComparison.OrdinalIgnoreCase);
     public static bool ShouldCollapse(FirmwareSettingRow row) => row.IsTestedUnchanged && !row.Changed;
@@ -192,7 +210,7 @@ public partial class FirmwareViewModel : ObservableObject
         if (_sessionDirectory is null) return;
         var workflow = Workflow();
         var script = workflow.Read(_sessionDirectory);
-        var selected = _all.Where(r => script.Validate(r.Question, r.Selection) != script.Validate(r.Question, r.Question.Current)).ToDictionary(r => r.Question.Id, r => r.Selection);
+        var selected = ReviewSelections(_all, r => script.Validate(r.Question, r.Selection) != script.Validate(r.Question, r.Question.Current), AllowExperimentalEdits);
         _reviewHash = await Task.Run(() => workflow.Review(_sessionDirectory, selected));
         ShowReview();
     });
@@ -294,6 +312,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         var description = DescribeVerification(match, row.Question);
         row.SetVerification(description.Status, description.Reason, description.CanCollapse && !row.Changed);
+        row.IsExperimental = description.Experimental;
     }
     public static FirmwareVerificationPresentation DescribeVerification(FirmwareVerificationMatch match, FirmwareQuestion question)
     {
@@ -308,7 +327,9 @@ public partial class FirmwareViewModel : ObservableObject
             FirmwareTrialStatuses.ActualBehaviorVerified when trial.ConfirmedUnchanged => new("Did not change", "Tested " + value + "; no behavior change was observed and the original value was restored.", true),
             FirmwareTrialStatuses.ActualBehaviorVerified when trial.EffectVerified => new("Effect verified", "Tested " + value + ". " + (string.IsNullOrWhiteSpace(behavior?.Output) ? "The observed effect was recorded." : behavior.Output), false),
             FirmwareTrialStatuses.ActualBehaviorVerified => new("Not tested", "The behavior evidence was incomplete or inconclusive.", false),
+            FirmwareTrialStatuses.UnchangedImmediately when trial.RestorationComplete => new("Did not change", "Tested " + value + "; SCEWIN accepted it but the BIOS kept the old value.", false, true),
             FirmwareTrialStatuses.UnchangedImmediately => new("Not tested", "Tested " + value + "; the value did not change before restart, so testing is incomplete.", false),
+            FirmwareTrialStatuses.WriteRejected when trial.RestorationComplete => new("Can't be changed here", "SCEWIN could not write tested value " + value + " on this motherboard.", false, true),
             FirmwareTrialStatuses.WriteRejected => new("Not tested", "The write for tested value " + value + " was rejected.", false),
             FirmwareTrialStatuses.Inconclusive => new("Not tested", "The test for value " + value + " was inconclusive.", false),
             _ => new("Not tested", "This setting has not been tested.", false)
@@ -352,7 +373,7 @@ public partial class FirmwareViewModel : ObservableObject
 }
 public sealed record FirmwareWorkspace(string PackageDirectory);
 public sealed record FirmwareHistoryRow(string Directory, string Label);
-public sealed record FirmwareVerificationPresentation(string Status, string Reason, bool CanCollapse);
+public sealed record FirmwareVerificationPresentation(string Status, string Reason, bool CanCollapse, bool Experimental = false);
 
 public partial class FirmwareSettingRow : ObservableObject
 {
@@ -374,8 +395,18 @@ public partial class FirmwareSettingRow : ObservableObject
     [ObservableProperty] private string _verificationStatus = "Not tested";
     [ObservableProperty] private string _verificationReason = "This setting has not been tested.";
     [ObservableProperty] private bool _isTestedUnchanged;
+    [ObservableProperty] private bool _isExperimental;
+    [ObservableProperty] private bool _canEdit = true;
+    public bool IsReadOnly { get; private init; }
     [ObservableProperty] private string _selection;
     public FirmwareSettingRow(FirmwareQuestion question) { Question = question; _selection = question.Current; }
+    public static FirmwareSettingRow ReadOnly(FirmwareExcludedQuestion skipped)
+    {
+        var row = new FirmwareSettingRow(new FirmwareQuestion("excluded:" + skipped.Name, skipped.Name, skipped.Help, "Not available", "hex", 1, [], "", "")) { IsReadOnly = true };
+        row.SetVerification("Can't be changed here", skipped.Reason, false);
+        row.IsExperimental = true; row.CanEdit = false;
+        return row;
+    }
     public void SetVerification(string status, string reason, bool testedUnchanged)
     {
         VerificationStatus = status;

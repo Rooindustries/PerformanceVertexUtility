@@ -12,6 +12,8 @@ public sealed record FirmwareQuestion(string Id, string Name, string Help, strin
     public string DisplayValue(string value) => Options.FirstOrDefault(o => o.Value == value)?.Label ?? value;
 }
 
+public sealed record FirmwareExcludedQuestion(string Name, string Help, string Reason);
+
 public sealed class FirmwareScript
 {
     private static readonly Regex QuestionStart = new(@"(?m)^[ \t]*Setup Question[ \t]*=", RegexOptions.CultureInvariant);
@@ -23,6 +25,7 @@ public sealed class FirmwareScript
     public string Text { get; }
     public string Crc { get; }
     public IReadOnlyList<FirmwareQuestion> Questions { get; }
+    public IReadOnlyList<FirmwareExcludedQuestion> ExcludedQuestions { get; }
 
     public FirmwareScript(byte[] bytes)
     {
@@ -43,6 +46,7 @@ public sealed class FirmwareScript
         var firstQuestion = starts.Count == 0 ? Text.Length : starts[0].Index;
         _header = NativeHeader(Text[..(headerLine >= 0 ? lines[headerLine].Start : firstQuestion)], NewLine(Text));
         var questions = new List<FirmwareQuestion>();
+        var excluded = new List<FirmwareExcludedQuestion>();
         for (var i = 0; i < starts.Count; i++)
         {
             var begin = starts[i].Index;
@@ -56,7 +60,11 @@ public sealed class FirmwareScript
             var token = Field(block, "Token");
             var offset = Field(block, "Offset");
             var widthText = Field(block, "Width");
-            if (name.Length == 0 || !Hex(token) || !Hex(offset) || !int.TryParse(widthText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var width) || width is < 1 or > 8) continue;
+            if (name.Length == 0 || !Hex(token) || !Hex(offset) || !int.TryParse(widthText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var width) || width is < 1 or > 8)
+            {
+                if (name.Length > 0) excluded.Add(new(name, Field(block, "Help String"), "This is text or a data block, not a single value SCEWIN can write."));
+                continue;
+            }
             var choices = Choice.Matches(block);
             var options = choices.Select(m => new FirmwareOption(m.Groups["value"].Value.ToUpperInvariant(), Clean(m.Groups["label"].Value))).ToArray();
             var selected = choices.Where(m => m.Groups["selected"].Success).ToArray();
@@ -67,7 +75,13 @@ public sealed class FirmwareScript
             { kind = "decimal"; current = Field(block, "Value").Trim('<', '>'); }
             else if (choices.Count == 0 && Hex(Field(block, "Value")))
             { kind = "hex"; current = Field(block, "Value").ToUpperInvariant(); }
-            else continue;
+            else
+            {
+                excluded.Add(new(name, Field(block, "Help String"), options.Length > 1 && selected.Length != 1 ? "The export does not show one selected value for this setting."
+                    : options.Length > 1 ? "Two of this setting's choices share the same value, so a choice cannot be written reliably."
+                    : "The export does not give this setting a value SCEWIN can write."));
+                continue;
+            }
             var id = OperationFiles.Hash(Encoding.UTF8.GetBytes(context.Public + "\n" + token.ToUpperInvariant() + ":" + offset.ToUpperInvariant() + ":" + name));
             questions.Add(new(id, name, Field(block, "Help String"), current, kind, width, options, context.Public, nativeBlock, storage.Guid, storage.Name));
             if (!_sources.TryAdd(id, new QuestionSource(NormalizeLineEndings(context.Import, NewLine(Text)), nativeBlock)))
@@ -76,6 +90,7 @@ public sealed class FirmwareScript
         if (questions.Count == 0) throw new InvalidDataException("No editable choices or numeric settings were found in this BIOS export.");
         if (questions.Select(q => q.Id).Distinct().Count() != questions.Count) throw new InvalidDataException("The export contains ambiguous duplicate settings. Use a board-specific SCEWIN package.");
         Questions = questions;
+        ExcludedQuestions = excluded;
     }
 
     private static Dictionary<int, ContextSnapshot> BuildContexts(string text, IReadOnlyList<SourceLine> lines, HashSet<int> questionLines)
