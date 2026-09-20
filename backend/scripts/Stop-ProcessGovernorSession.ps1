@@ -315,7 +315,7 @@ try {
         completedAtUtc = Get-RooIndustriesUtcStamp
         sessionPath = $resolvedSessionPath
         backupManifestPath = $resolvedBackupPath
-        restorable = (-not $ConfirmApply)
+        restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed'))
         preview = @($preview.ToArray())
         changedItems = @($changed.ToArray())
         skippedItems = @($skipped.ToArray())
@@ -331,7 +331,7 @@ try {
         $session = Read-RooIndustriesJsonFile $resolvedSessionPath
         $session.sessionStatus = $sessionStatus
         $session.status = $sessionStatus
-        $session.restorable = $false
+        $session.restorable = ($status -in @('partial', 'failed'))
         $session.activeRestraints = @()
         $session.restoredItems = @($restored.ToArray())
         $session.skippedItems = @($skipped.ToArray())
