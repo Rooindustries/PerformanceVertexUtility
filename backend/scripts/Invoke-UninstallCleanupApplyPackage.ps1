@@ -294,7 +294,7 @@ $records = @(if ($null -ne $journal) { Get-RooIndustriesUninstallPropertyArray $
 $restoreReady = $executionStarted -and $null -ne $journal -and (Test-Path -LiteralPath $resolvedRollbackManifestPath) -and $records.Count -gt 0
 $result = [pscustomobject]@{
     actionId = 'apps.invokeUninstallCleanupApplyPackage'; schemaVersion = 1; productName = $script:RooIndustriesUninstallProductName
-    capturedAtUtc = Get-RooIndustriesUninstallUtcStamp; dryRun = (-not $executionStarted); status = $status; executionMode = $ExecutorMode.ToLowerInvariant()
+    capturedAtUtc = Get-RooIndustriesUninstallUtcStamp; dryRun = (-not $executionStarted -and -not ($canApply -and $status -eq 'success')); status = $status; executionMode = $ExecutorMode.ToLowerInvariant()
     appId = $appId; gates = @($gates); executionSequence = @($sequence.ToArray()); executionReused = $reused
     approval = [pscustomobject]@{ appId = $appId; officialPreviewSha256 = Get-RooIndustriesUninstallPropertyValue $officialInput 'sha256' ''; cleanupManifestSha256 = Get-RooIndustriesUninstallPropertyValue $cleanupInput 'sha256' ''; reviewRequired = $reviewRequired }
     postUninstallReview = Get-RooIndustriesUninstallPropertyValue $journal 'postUninstallReview' $null
