@@ -70,6 +70,13 @@ try {
             Add-Check ($invalidResult.ExitCode -ne 0 -and $invalidResult.Json.status -eq 'failed' -and (Get-FileHash -LiteralPath $a.SessionPath -Algorithm SHA256).Hash -eq $aSessionHash) "$kind rejects $invalid backup before updating the session" "$kind accepted $invalid backup"
             [IO.File]::WriteAllBytes($a.BackupPath, $backupBytes)
         }
+        $retry = New-SessionFixture $tempRoot $kind "$kind-retry" "$kind-retry-profile"
+        $retryBackup = Get-Content -LiteralPath $retry.BackupPath -Raw | ConvertFrom-Json
+        $retryBackup.snapshots = @([pscustomobject]@{ processId=2147483646; processName='RooIndustriesAbsentSessionFixture'; executablePath=(Join-Path $tempRoot 'never-created.exe'); originalPriorityClass='Normal'; processStartTimeUtc='2000-01-01T00:00:00Z' })
+        Write-Json $retry.BackupPath $retryBackup
+        $failedRestore = Invoke-Stop $script $retry.SessionId $retry.SessionPath $retry.BackupPath (Join-Path $tempRoot "$kind-incomplete.json") -Confirm
+        $retrySaved = Get-Content -LiteralPath $retry.SessionPath -Raw | ConvertFrom-Json
+        Add-Check ($failedRestore.Json.result.status -eq 'failed' -and $failedRestore.Json.restorable -and $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0) "$kind incomplete restore preserves its recovery record without changing a process" "$kind incomplete restore discarded recovery evidence"
         $confirmedOutput = Join-Path $tempRoot "$kind-confirmed.json"
         $confirmed = Invoke-Stop $script $a.SessionId $a.SessionPath $a.BackupPath $confirmedOutput -Confirm
         $saved = Get-Content -LiteralPath $a.SessionPath -Raw | ConvertFrom-Json
