@@ -273,10 +273,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RunGameTuneSessionResultAsync(false, 3, 1);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null
+                || !SessionEnvelopeMatches(response.Value, "performance.gameTune.startSession", true))
             {
                 MatchTuneStatus = "Game priority check not confirmed";
-                MatchTuneDetail = response.Error ?? "The game priority check returned no result.";
+                MatchTuneDetail = response.Error ?? "The game priority check returned invalid preview evidence.";
                 return;
             }
             MatchTuneStatus = "Game priorities checked";
@@ -304,16 +305,18 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RunGameTuneSessionResultAsync(true, 12, 2);
-            if (response.Value is null)
+            var observedRecovery = ReadSessionRestoreEvidence(response.Value, "gameTune");
+            if (response.Value is null || response.Error is not null
+                || !SessionEnvelopeMatches(response.Value, "performance.gameTune.startSession", false))
             {
                 MatchTuneStatus = "Game priorities not confirmed";
-                MatchTuneDetail = response.Error ?? "The game priority session returned no result.";
-                SetMatchTuneRestore(_matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null);
+                MatchTuneDetail = response.Error ?? "The game priority session returned invalid operation evidence.";
+                SetMatchTuneRestore(observedRecovery ?? (_matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null));
                 return;
             }
             MatchTuneStatus = SessionStatusTitle(response.Value, "Game priorities finished");
             MatchTuneDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the game priorities and wrote a restore point when anything changed.");
-            SetMatchTuneRestore(ReadSessionRestoreEvidence(response.Value, "gameTune"));
+            SetMatchTuneRestore(observedRecovery);
             RestoreHint = MatchTuneRestoreAvailable ? "Session restore is available" : "No verified game-session backup";
         }
         finally
@@ -383,10 +386,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RunProcessGovernorSessionResultAsync(false, 3, 1, 250);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null
+                || !SessionEnvelopeMatches(response.Value, "performance.governor.startSession", true))
             {
                 GovernorStatus = "Background limit check not confirmed";
-                GovernorDetail = response.Error ?? "The background limit check returned no result.";
+                GovernorDetail = response.Error ?? "The background limit check returned invalid preview evidence.";
                 return;
             }
             GovernorStatus = "Background limits checked";
@@ -408,16 +412,18 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RunProcessGovernorSessionResultAsync(true, 12, 2, 250);
-            if (response.Value is null)
+            var observedRecovery = ReadSessionRestoreEvidence(response.Value, "governor");
+            if (response.Value is null || response.Error is not null
+                || !SessionEnvelopeMatches(response.Value, "performance.governor.startSession", false))
             {
                 GovernorStatus = "Background limits not confirmed";
-                GovernorDetail = response.Error ?? "The background limit session returned no result.";
-                SetGovernorRestore(_governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null);
+                GovernorDetail = response.Error ?? "The background limit session returned invalid operation evidence.";
+                SetGovernorRestore(observedRecovery ?? (_governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null));
                 return;
             }
             GovernorStatus = SessionStatusTitle(response.Value, "Background limits finished");
             GovernorDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the background limits and restored priorities after CPU use dropped.");
-            SetGovernorRestore(ReadSessionRestoreEvidence(response.Value, "governor"));
+            SetGovernorRestore(observedRecovery);
         }
         finally
         {
@@ -519,18 +525,24 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private async Task RefreshSessionStatusesAsync()
     {
         var game = await App.Live.GetGameTuneSessionStatusResultAsync();
-        MatchTuneStatus = game.Value is null ? "Game priorities unavailable" : SessionStatusTitle(game.Value, "No active game priorities");
-        MatchTuneDetail = game.Value is null
-            ? game.Error ?? "The game-session status returned no result."
-            : SummarizeSessionAction(game.Value, "No game priorities has changed this PC yet.");
-        SetMatchTuneRestore(ReadSessionRestoreEvidence(game.Value, "gameTune"));
+        var gameValid = game.Value is not null && game.Error is null
+            && SessionEnvelopeMatches(game.Value, "performance.gameTune.sessionStatus", null);
+        MatchTuneStatus = gameValid ? SessionStatusTitle(game.Value, "No active game priorities") : "Game priorities unavailable";
+        MatchTuneDetail = gameValid
+            ? SummarizeSessionAction(game.Value, "No game priorities has changed this PC yet.")
+            : game.Error ?? "The game-session status returned invalid evidence.";
+        var gameRecovery = ReadSessionRestoreEvidence(game.Value, "gameTune");
+        SetMatchTuneRestore(gameRecovery ?? (!gameValid && _matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null));
 
         var governor = await App.Live.GetProcessGovernorSessionStatusResultAsync();
-        GovernorStatus = governor.Value is null ? "Background limits unavailable" : SessionStatusTitle(governor.Value, "No active background limits");
-        GovernorDetail = governor.Value is null
-            ? governor.Error ?? "The background-session status returned no result."
-            : SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.");
-        SetGovernorRestore(ReadSessionRestoreEvidence(governor.Value, "governor"));
+        var governorValid = governor.Value is not null && governor.Error is null
+            && SessionEnvelopeMatches(governor.Value, "performance.governor.sessionStatus", null);
+        GovernorStatus = governorValid ? SessionStatusTitle(governor.Value, "No active background limits") : "Background limits unavailable";
+        GovernorDetail = governorValid
+            ? SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.")
+            : governor.Error ?? "The background-session status returned invalid evidence.";
+        var governorRecovery = ReadSessionRestoreEvidence(governor.Value, "governor");
+        SetGovernorRestore(governorRecovery ?? (!governorValid && _governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null));
     }
 
     private static bool TryProcessAction(string json, string expectedAction, out JsonElement result, out string error)
@@ -709,6 +721,25 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         _governorRestore = evidence;
         GovernorRestoreAvailable = evidence is not null;
+    }
+
+    private static bool SessionEnvelopeMatches(string json, string expectedAction, bool? expectedDryRun)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (ExtractString(root, "actionId") != expectedAction) return false;
+            var status = ExtractString(root, "status") ?? ExtractString(root, "sessionStatus");
+            if (string.IsNullOrWhiteSpace(status)) return false;
+            if (status == "notFound" && expectedDryRun is null) return true;
+            return TryExtractBool(root, out var dryRun, "dryRun")
+                && (expectedDryRun is null || dryRun == expectedDryRun.Value);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static SessionRestoreEvidence? ReadSessionRestoreEvidence(string? json, string kind)
