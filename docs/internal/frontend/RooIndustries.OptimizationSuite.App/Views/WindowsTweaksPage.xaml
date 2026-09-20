@@ -18,6 +18,10 @@
                 </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
             </StackPanel>
         </DataTemplate>
+        <Style x:Key="SettingChoiceItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="{ThemeResource ComboBoxItemThemePadding}"/>
+        </Style>
     </Page.Resources>
     <Grid x:Name="PageLayout" Padding="{StaticResource RooIndustriesPageMargin}" RowSpacing="12">
         <VisualStateManager.VisualStateGroups><VisualStateGroup>
@@ -129,8 +133,8 @@
                             <TextBlock x:Name="RowActionLabel" Text="CHANGE TO" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
-                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
-                                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" MaxWidth="150"/></DataTemplate></ComboBox.ItemTemplate>
+                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
+                                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" HorizontalAlignment="Stretch" TextAlignment="Left"/></DataTemplate></ComboBox.ItemTemplate>
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
                             <TextBlock Text="{x:Bind Action.Name, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" Visibility="{x:Bind HasValuePicker, Converter={StaticResource InverseBoolToVisibility}}">
