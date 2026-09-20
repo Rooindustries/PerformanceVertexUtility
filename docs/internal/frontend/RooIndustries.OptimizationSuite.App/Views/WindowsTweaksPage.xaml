@@ -128,13 +128,13 @@
                         </Grid>
                         <StackPanel x:Name="RowCurrent" Grid.Column="2" VerticalAlignment="Center" Spacing="4">
                             <TextBlock x:Name="RowCurrentLabel" Text="CURRENT" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
-                            <Grid MinHeight="{Binding ActualHeight, ElementName=ActionControls}">
+                            <Grid>
                                 <TextBlock Text="{x:Bind Current, Mode=OneWay}" AutomationProperties.Name="{x:Bind CurrentAccessibleName, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                             </Grid>
                         </StackPanel>
                         <StackPanel x:Name="RowActions" Grid.Column="3" Spacing="4" VerticalAlignment="Center">
                             <TextBlock x:Name="RowActionLabel" Text="CHANGE TO" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
-                            <Grid x:Name="ActionControls" ColumnSpacing="10">
+                            <Grid x:Name="ActionControls" ColumnSpacing="10" SizeChanged="ActionControlsSizeChanged">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
                             <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Center" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
                                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" HorizontalAlignment="Stretch" TextAlignment="Left"/></DataTemplate></ComboBox.ItemTemplate>
