@@ -131,6 +131,185 @@ if (args is [] or ["startup"])
         "A populated classification projects its independent startup counts");
 }
 
+if (args is [] or ["sessions"])
+{
+    async Task RefreshSessions(PerformanceProfilesViewModel model)
+    {
+        var method = typeof(PerformanceProfilesViewModel).GetMethod("RefreshSessionStatusesAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("RefreshSessionStatusesAsync is missing.");
+        await ((Task?)method.Invoke(model, null) ?? throw new InvalidOperationException("RefreshSessionStatusesAsync did not return a task."));
+    }
+
+    (string Root, string SessionPath, string BackupPath) SessionFiles(
+        string kind,
+        string sessionId,
+        string profileId,
+        bool restorable = true,
+        string? backupSessionId = null)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "app-sweep-session-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var sessionPath = Path.Combine(root, "session.json");
+        var backupPath = Path.Combine(root, "backup.json");
+        var actionId = kind == "gameTune" ? "performance.gameTune.startSession" : "performance.governor.startSession";
+        File.WriteAllText(backupPath, JsonSerializer.Serialize(new
+        {
+            actionId,
+            backupId = kind + "-backup",
+            sessionId = backupSessionId ?? sessionId,
+            profileId,
+            dryRun = false,
+            snapshots = new[] { new { processId = 10, processName = "fixture" } },
+        }));
+        File.WriteAllText(sessionPath, JsonSerializer.Serialize(new
+        {
+            sessionId,
+            profileId,
+            dryRun = false,
+            restorable,
+            backupManifestPath = backupPath,
+        }));
+        return (root, sessionPath, backupPath);
+    }
+
+    string SessionResponse(
+        string kind,
+        string action,
+        string sessionId,
+        string profileId,
+        string? sessionPath,
+        string? backupPath,
+        bool dryRun,
+        bool restorable,
+        string status)
+        => JsonSerializer.Serialize(new
+        {
+            actionId = "performance." + (kind == "gameTune" ? "gameTune" : "governor") + "." + action,
+            dryRun,
+            status,
+            sessionStatus = status,
+            sessionId,
+            profileId,
+            sessionPath,
+            backupManifestPath = backupPath,
+            restorable,
+            summary = new { changedItemCount = 1 },
+            changedItems = new[] { new { processId = 10 } },
+        });
+
+    App.Live.GameTuneText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.gameTune.startSession",
+        dryRun = false,
+        status = "active",
+        sessionStatus = "active",
+        sessionId = "game-session-without-backup",
+        restorable = false,
+        summary = new { changedItemCount = 1 },
+        changedItems = new[] { new { processId = 10 } },
+    });
+    var sessions = new PerformanceProfilesViewModel { HasGameRunning = true };
+    await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+    Check(!sessions.MatchTuneRestoreAvailable,
+        "An active game session with changed items but no restore evidence stays unavailable");
+
+    var game = SessionFiles("gameTune", "game-session", "game-profile");
+    var governor = SessionFiles("governor", "governor-session", "governor-profile");
+    var wrongBackup = SessionFiles("gameTune", "wrong-response-session", "game-profile", backupSessionId: "different-session");
+    try
+    {
+        App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, true, true, "completed");
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(!sessions.MatchTuneRestoreAvailable, "A dry-run game session cannot expose restore even with favorable files");
+
+        App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, false, "active");
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(!sessions.MatchTuneRestoreAvailable, "Changed items and active status cannot override restorable false");
+
+        App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, null, false, true, "failed");
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(!sessions.MatchTuneRestoreAvailable, "Restorable true without an explicit backup path remains unavailable");
+
+        App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "wrong-response-session", "game-profile", wrongBackup.SessionPath, wrongBackup.BackupPath, false, true, "failed");
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(!sessions.MatchTuneRestoreAvailable, "A backup for a different session cannot enable game restore");
+
+        App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, true, "failed");
+        App.Live.GameTuneResultError = "Session script reported a partial failure";
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(sessions.MatchTuneRestoreAvailable, "A failed game session retains restore when explicit current backup evidence is valid");
+
+        App.Live.GameTuneText = null;
+        App.Live.GameTuneResultError = null;
+        App.Live.LastError = "Controlled replacement session failure";
+        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        Check(sessions.MatchTuneRestoreAvailable,
+            "A lost replacement-session response preserves the previously verified recovery artifact");
+
+        App.Live.GameTuneRestoreText = null;
+        App.Live.LastError = "Controlled game restore failure";
+        await sessions.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Check(sessions.MatchTuneRestoreAvailable
+                && sessions.MatchTuneStatus == "Game restore not confirmed"
+                && App.Live.LastGameRestoreRequest == ("game-session", game.SessionPath, game.BackupPath),
+            "A missing game restore response preserves and requests the exact verified session artifact");
+
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.gameTune.stopSession",
+            sessionId = "game-session",
+            sessionPath = game.SessionPath,
+            backupManifestPath = game.BackupPath,
+            dryRun = false,
+            status = "completed",
+            result = new { status = "rolledBack", restoredItems = new[] { new { processId = 10 } } },
+        });
+        App.Live.LastError = null;
+        App.Live.GameTuneRestoreError = "Restore script exited with an error";
+        await sessions.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Check(sessions.MatchTuneRestoreAvailable && sessions.MatchTuneStatus == "Game restore needs attention",
+            "A restore response paired with an operation error cannot clear the current artifact");
+        App.Live.GameTuneRestoreError = null;
+        await sessions.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Check(!sessions.MatchTuneRestoreAvailable && sessions.MatchTuneStatus == "Game priorities restored",
+            "An identity-bound confirmed game restore clears only its current artifact");
+
+        App.Live.GovernorText = SessionResponse("governor", "startSession", "governor-session", "governor-profile", governor.SessionPath, governor.BackupPath, false, false, "active");
+        await sessions.StartGovernorCommand.ExecuteAsync(null);
+        Check(!sessions.GovernorRestoreAvailable, "An active governor session alone cannot enable restore");
+
+        App.Live.GovernorText = SessionResponse("governor", "startSession", "governor-session", "governor-profile", governor.SessionPath, governor.BackupPath, false, true, "active");
+        await sessions.StartGovernorCommand.ExecuteAsync(null);
+        Check(sessions.GovernorRestoreAvailable, "An active governor session with explicit verified recovery evidence can restore");
+
+        App.Live.GovernorRestoreText = null;
+        App.Live.LastError = "Controlled governor restore failure";
+        await sessions.RestoreGovernorCommand.ExecuteAsync(null);
+        Check(sessions.GovernorRestoreAvailable
+                && App.Live.LastGovernorRestoreRequest == ("governor-session", governor.SessionPath, governor.BackupPath),
+            "A missing governor restore response preserves and requests its exact verified artifact");
+
+        App.Live.GameTuneStatusText = SessionResponse("gameTune", "sessionStatus", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, true, "failed");
+        App.Live.GovernorStatusText = SessionResponse("governor", "sessionStatus", "governor-session", "governor-profile", governor.SessionPath, governor.BackupPath, false, true, "restorable");
+        var loaded = new PerformanceProfilesViewModel();
+        await RefreshSessions(loaded);
+        Check(loaded.MatchTuneRestoreAvailable && loaded.GovernorRestoreAvailable,
+            "Loaded session status restores availability from each exact verified artifact");
+
+        App.Live.GameTuneStatusText = null;
+        App.Live.LastError = "Controlled game status failure";
+        await RefreshSessions(loaded);
+        Check(!loaded.MatchTuneRestoreAvailable && loaded.MatchTuneDetail.Contains("Controlled game status failure", StringComparison.Ordinal),
+            "A missing session-status response clears restore availability and surfaces its operation error");
+    }
+    finally
+    {
+        Directory.Delete(game.Root, true);
+        Directory.Delete(governor.Root, true);
+        Directory.Delete(wrongBackup.Root, true);
+    }
+}
+
 if (args is [] or ["responses"] or ["cleanup"] or ["race"])
 {
     if (args is not (["cleanup"] or ["race"]))

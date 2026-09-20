@@ -70,7 +70,7 @@ public sealed class LiveDataService
     public async Task<string?> RestoreProcessProfileTextAsync(string backupPath, CancellationToken ct = default)
         => (await RestoreProcessProfileResultAsync(backupPath, ct)).Value;
 
-    public Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
+    public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
     {
         var args = "-MaxDurationSeconds " + maxDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                    " -PollIntervalSeconds " + pollIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -79,19 +79,33 @@ public sealed class LiveDataService
             args += " -ConfirmApply";
         }
 
-        return RunBackendScriptTextAsync("Start-GameTuneSession.ps1", ct, args);
+        return RunBackendScriptResultAsync("Start-GameTuneSession.ps1", ct, args);
     }
+    public async Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
+        => (await RunGameTuneSessionResultAsync(confirmApply, maxDurationSeconds, pollIntervalSeconds, ct)).Value;
 
-    public Task<string?> RestoreGameTuneSessionTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Stop-GameTuneSession.ps1", ct, "-ConfirmApply");
+    public Task<LiveDataResult<string>> RestoreGameTuneSessionResultAsync(
+        string sessionId,
+        string sessionPath,
+        string backupManifestPath,
+        CancellationToken ct = default)
+        => RunBackendScriptResultAsync(
+            "Stop-GameTuneSession.ps1",
+            ct,
+            "-SessionId " + QuotePowerShell(sessionId)
+                + " -SessionPath " + QuotePowerShell(sessionPath)
+                + " -BackupPath " + QuotePowerShell(backupManifestPath)
+                + " -ConfirmApply");
 
-    public Task<string?> GetGameTuneSessionStatusTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Get-GameTuneSessionStatus.ps1", ct);
+    public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct);
+    public async Task<string?> GetGameTuneSessionStatusTextAsync(CancellationToken ct = default)
+        => (await GetGameTuneSessionStatusResultAsync(ct)).Value;
 
     public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct);
 
-    public Task<string?> RunProcessGovernorSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
+    public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
     {
         var args = "-MaxDurationSeconds " + maxDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                    " -PollIntervalSeconds " + pollIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
@@ -101,20 +115,31 @@ public sealed class LiveDataService
             args += " -ConfirmApply";
         }
 
-        return RunBackendScriptTextAsync("Start-ProcessGovernorSession.ps1", ct, args);
+        return RunBackendScriptResultAsync("Start-ProcessGovernorSession.ps1", ct, args);
     }
+    public async Task<string?> RunProcessGovernorSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
+        => (await RunProcessGovernorSessionResultAsync(confirmApply, maxDurationSeconds, pollIntervalSeconds, sampleIntervalMilliseconds, ct)).Value;
 
-    public Task<string?> RestoreProcessGovernorSessionTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Stop-ProcessGovernorSession.ps1", ct, "-ConfirmApply");
+    public Task<LiveDataResult<string>> RestoreProcessGovernorSessionResultAsync(
+        string sessionId,
+        string sessionPath,
+        string backupManifestPath,
+        CancellationToken ct = default)
+        => RunBackendScriptResultAsync(
+            "Stop-ProcessGovernorSession.ps1",
+            ct,
+            "-SessionId " + QuotePowerShell(sessionId)
+                + " -SessionPath " + QuotePowerShell(sessionPath)
+                + " -BackupPath " + QuotePowerShell(backupManifestPath)
+                + " -ConfirmApply");
 
-    public Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Get-ProcessGovernorSessionStatus.ps1", ct);
+    public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Get-ProcessGovernorSessionStatus.ps1", ct);
+    public async Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken ct = default)
+        => (await GetProcessGovernorSessionStatusResultAsync(ct)).Value;
 
     public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<ProcessGovernorSessionStatus>("Get-ProcessGovernorSessionStatus.ps1", ct);
-
-    public Task<GameTuneRestorePreview?> GetGameTuneRestorePreviewAsync(CancellationToken ct = default)
-        => RunAsync<GameTuneRestorePreview>("Stop-GameTuneSession.ps1", ct);
 
     public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default)
         => RunAsync<DriverHardwareSummary>("Get-DriverHardwareSummary.ps1", ct);
