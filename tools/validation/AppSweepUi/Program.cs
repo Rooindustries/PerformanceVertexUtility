@@ -197,6 +197,42 @@ if (args is [] or ["sessions"])
             changedItems = new[] { new { processId = 10 } },
         });
 
+    var sessions = new PerformanceProfilesViewModel { HasGameRunning = true };
+    App.Live.GameTuneText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.gameTune.startSession",
+        dryRun = false,
+        status = "completed",
+    });
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    Check(sessions.MatchTuneStatus == "Game priority check not confirmed",
+        "A non-dry response cannot be presented as a game priority check");
+    App.Live.GameTuneText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.gameTune.startSession",
+        dryRun = true,
+        status = "preview",
+    });
+    App.Live.GameTuneResultError = "Preview script exited with an error";
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    Check(sessions.MatchTuneStatus == "Game priority check not confirmed" && sessions.MatchTuneDetail.Contains("Preview script exited with an error", StringComparison.Ordinal),
+        "A game preview value paired with an operation error cannot claim completion");
+    App.Live.GameTuneResultError = null;
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    Check(sessions.MatchTuneStatus == "Game priorities checked", "An identity-bound dry-run game preview is reported as checked");
+
+    App.Live.GovernorText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.governor.startSession",
+        dryRun = true,
+        status = "preview",
+    });
+    App.Live.GovernorResultError = "Governor preview script exited with an error";
+    await sessions.CheckGovernorCommand.ExecuteAsync(null);
+    Check(sessions.GovernorStatus == "Background limit check not confirmed",
+        "A governor preview value paired with an operation error cannot claim completion");
+    App.Live.GovernorResultError = null;
+
     App.Live.GameTuneText = JsonSerializer.Serialize(new
     {
         actionId = "performance.gameTune.startSession",
@@ -208,7 +244,6 @@ if (args is [] or ["sessions"])
         summary = new { changedItemCount = 1 },
         changedItems = new[] { new { processId = 10 } },
     });
-    var sessions = new PerformanceProfilesViewModel { HasGameRunning = true };
     await sessions.StartMatchTuneCommand.ExecuteAsync(null);
     Check(!sessions.MatchTuneRestoreAvailable,
         "An active game session with changed items but no restore evidence stays unavailable");
@@ -296,11 +331,21 @@ if (args is [] or ["sessions"])
         Check(loaded.MatchTuneRestoreAvailable && loaded.GovernorRestoreAvailable,
             "Loaded session status restores availability from each exact verified artifact");
 
-        App.Live.GameTuneStatusText = null;
+        App.Live.GameTuneStatusError = "Controlled game status failure";
         App.Live.LastError = "Controlled game status failure";
         await RefreshSessions(loaded);
-        Check(!loaded.MatchTuneRestoreAvailable && loaded.MatchTuneDetail.Contains("Controlled game status failure", StringComparison.Ordinal),
-            "A missing session-status response clears restore availability and surfaces its operation error");
+        Check(loaded.MatchTuneRestoreAvailable && loaded.MatchTuneStatus == "Game priorities unavailable"
+                && loaded.MatchTuneDetail.Contains("Controlled game status failure", StringComparison.Ordinal),
+            "A failed status query preserves previously verified recovery and surfaces its operation error");
+
+        App.Live.GameTuneStatusText = null;
+        App.Live.GameTuneStatusError = null;
+        App.Live.GovernorStatusText = null;
+        App.Live.LastError = "Controlled fresh status failure";
+        var fresh = new PerformanceProfilesViewModel();
+        await RefreshSessions(fresh);
+        Check(!fresh.MatchTuneRestoreAvailable && !fresh.GovernorRestoreAvailable,
+            "A fresh missing status query cannot invent session recovery");
     }
     finally
     {
