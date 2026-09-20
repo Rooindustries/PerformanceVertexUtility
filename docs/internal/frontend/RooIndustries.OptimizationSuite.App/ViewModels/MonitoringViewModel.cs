@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Linq;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
@@ -158,15 +161,16 @@ public partial class MonitoringViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.CheckShaderCacheCleanupResultAsync(ShaderCacheApproved);
+            var recovery = ShaderRecovery(response.Value);
+            if (recovery is not null) _lastShaderRollbackPath = recovery;
+            ShaderRestoreAvailable = ValidShaderBackup(_lastShaderRollbackPath);
             if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Cache cleanup not confirmed";
                 StutterActionDetail = response.Error ?? "The cache cleanup check returned no result.";
                 return;
             }
-            _lastShaderRollbackPath = ExtractStringFromJson(response.Value, "rollback", "rollbackManifestPath")
-                ?? ExtractStringFromJson(response.Value, "capabilities", "rollbackManifestPath");
-            ShaderRestoreAvailable = !string.IsNullOrWhiteSpace(_lastShaderRollbackPath);
+
             ShaderRestoreHint = ShaderRestoreAvailable ? "Cache rollback is ready." : "No cache rollback file was written.";
             StutterActionTitle = "Cache cleanup checked";
             StutterActionDetail = SummarizeStutterAction(response.Value, "Cache cleanup checked. Nothing changed.");
@@ -185,7 +189,7 @@ public partial class MonitoringViewModel : PageViewModelBase
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_lastShaderRollbackPath))
+        if (!ValidShaderBackup(_lastShaderRollbackPath))
         {
             StutterActionTitle = "No cache restore yet";
             StutterActionDetail = "Roo Industries only restores shader cache after a cleanup run writes a rollback file.";
@@ -199,7 +203,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         StutterActionDetail = "Roo Industries is reading the rollback file and putting cache files back.";
         try
         {
-            var response = await App.Live.RestoreShaderCacheCleanupResultAsync(_lastShaderRollbackPath);
+            var response = await App.Live.RestoreShaderCacheCleanupResultAsync(_lastShaderRollbackPath!);
             if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Cache restore not confirmed";
@@ -217,22 +221,36 @@ public partial class MonitoringViewModel : PageViewModelBase
         }
     }
 
-    private static string? ExtractStringFromJson(string? json, params string[] path)
+    private static string? ShaderRecovery(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            return ExtractString(doc.RootElement, path);
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (ExtractString(root, "optimizationId") != "shader-cache-cleanup"
+                || ExtractString(root, "actionId") is not ("performance.stutterOptimization.apply" or "performance.stutterOptimization.realExecutor")) return null;
+            var path = ExtractString(root, "rollback", "rollbackManifestPath") ?? ExtractString(root, "capabilities", "rollbackManifestPath");
+            return ValidShaderBackup(path) ? path : null;
         }
-        catch
+        catch { return null; }
+    }
+
+    private static bool ValidShaderBackup(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        try
         {
-            return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            return ExtractString(root, "actionId") == "performance.stutterOptimization.restoreShaderCacheFixture"
+                && ExtractString(root, "optimizationId") == "shader-cache-cleanup"
+                && !string.IsNullOrWhiteSpace(ExtractString(root, "manifestId"))
+                && ExtractBool(root, "restoreSupported")
+                && root.TryGetProperty("fileBackups", out var files) && files.ValueKind == JsonValueKind.Array && files.GetArrayLength() > 0
+                && files.EnumerateArray().All(file => !string.IsNullOrWhiteSpace(ExtractString(file, "source")) && File.Exists(ExtractString(file, "backupPath")));
         }
+        catch { return false; }
     }
 
     private static string CleanDevice(string? name)
