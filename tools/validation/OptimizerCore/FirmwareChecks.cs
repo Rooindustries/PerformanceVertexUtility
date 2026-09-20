@@ -48,6 +48,29 @@ Value =0A
             check(rejected, message);
         }
         var script = new FirmwareScript(Encoding.UTF8.GetBytes(ExportText));
+        const string diagnostic = "AMISCE Utility. Ver 5.05.01.0002\r\nWARNING: Duplicate questions found. Only one question will be enabled in the script.\r\nScript file exported successfully.\r\n";
+        check(new FirmwareCommandResult(0, "", diagnostic).Succeeded, "A successful SCEWIN export may report its banner and warning on stderr");
+        check(!new FirmwareCommandResult(23, "", diagnostic).Succeeded, "Success text cannot override a nonzero SCEWIN exit status");
+        foreach (var error in new[] { "ERROR: variable update failed", "13 - Error: invalid script", "Failed to load driver", "Failure: checksum differs" })
+            check(!new FirmwareCommandResult(0, error, diagnostic).Succeeded && !new FirmwareCommandResult(0, "Script file exported successfully.", error).Succeeded,
+                "Reported errors on either stream independently reject a zero exit: " + error);
+        foreach (var incomplete in new[] { "{\"output\":\"\",\"error\":\"\"}", "{\"exitCode\":0,\"error\":\"\"}", "{\"exitCode\":0,\"output\":\"\"}" })
+        {
+            var rejected = false;
+            try { _ = System.Text.Json.JsonSerializer.Deserialize<FirmwareCommandResult>(incomplete, OperationFiles.Json); }
+            catch (System.Text.Json.JsonException) { rejected = true; }
+            check(rejected, "A saved firmware result cannot infer success from a missing exit status or output stream");
+        }
+        check(!new FirmwareCommandResult(0, null!, "").Succeeded && !new FirmwareCommandResult(0, "", null!).Succeeded,
+            "Null command output remains unknown rather than a successful firmware operation");
+        var doubled = ExportText.Replace("HIICrc32 = A1B2C3D4\n", "HIICrc32= A1B2C3D4\r\r\n", StringComparison.Ordinal);
+        var actualFormat = new FirmwareScript(Encoding.Latin1.GetBytes(doubled));
+        check(actualFormat.Crc == "A1B2C3D4" && actualFormat.Text == doubled && actualFormat.SameValues(script),
+            "The actual SCEWIN doubled-carriage-return checksum line parses without rewriting the original export");
+        Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(doubled + "\nHIICrc32= 12345678\r\r\n")),
+            "Accepting SCEWIN line endings does not permit a second checksum");
+        Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(doubled.Replace("A1B2C3D4", "A1B2C3D4extra", StringComparison.Ordinal))),
+            "Accepting SCEWIN line endings does not permit trailing checksum data");
         check(script.Questions.Count == 3 && script.Questions[0].Options.Length == 3, "BIOS parser reads choices and decimal/hex fields while leaving commented questions untouched");
         var mode = script.Questions.Single(q => q.Name == "Performance mode");
         var delay = script.Questions.Single(q => q.Name == "Startup delay");

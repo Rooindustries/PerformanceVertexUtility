@@ -16,6 +16,7 @@ An optional **Use an existing SCEWIN package** section retains manual package se
 - Review produces a change-only script and an exact before/after list. Apply regenerates that script, checks the reviewed hashes and identities, then exports current settings again to detect intervening changes.
 - An import-intent journal is written before launching the helper. A second apply of the same review returns the existing journal without importing again. A shared operation lock serializes the app, and an existing SCEWIN process blocks another command.
 - A nonzero exit, reported error, uncertain result or mismatched re-export remains `needsAttention`. Verification cannot silently clear a prior import failure. A clean import plus matching values is `restartRequired`; a subsequent changed boot identity plus matching values is `applied`.
+- SCEWIN writes normal status and warnings to stderr. Success requires its zero exit status and no reported error on either stream; missing saved result fields remain invalid. The parser accepts the helper's doubled carriage return after `HIICrc32` while retaining the original bytes and requiring one complete checksum.
 - Restart has a separate confirmation and re-verifies settings first. Undo requires a fresh export and review; values changed by another actor are not overwritten.
 - Recovery exports are kept in `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\firmware\sessions`. They are not a guarantee of recovery from a PC that cannot boot or run SCEWIN.
 
@@ -27,7 +28,7 @@ The same command checks automatic acquisition against disposable nested archives
 
 `tools/scripts/Test-ToolLauncher.ps1` separately verifies catalog resolution, portable dependency extraction, archive path containment, atomic cache publication and launching a disposable executable.
 
-Real motherboard compatibility, driver loading, NVRAM writes and post-restart hardware behavior require a compatible vendor package and a separately approved settings review. They are not established by the file fixtures.
+The approved read on the 9070XT's Gigabyte B760M DS3H WIFI6E DDR4 GEN5, AMI F4, returned a real BIOS export with SCEWIN 5.05.01.0002. Its unchanged bytes parse into 4,693 supported settings. The helper removed its driver services after export, and Secure Boot and Memory Integrity remained enabled. Actual NVRAM imports and post-restart hardware behavior still require a separately approved settings review; file fixtures and a successful read do not establish those outcomes.
 
 ## References
 

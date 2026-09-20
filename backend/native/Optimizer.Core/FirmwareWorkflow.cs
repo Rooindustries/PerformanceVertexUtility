@@ -15,10 +15,11 @@ public sealed record FirmwareIdentity(
     }
     public bool SameFirmware(FirmwareIdentity other) => MachineId == other.MachineId && Board == other.Board && Bios == other.Bios;
 }
-public sealed record FirmwareCommandResult(int ExitCode, string Output, string Error)
+public sealed record FirmwareCommandResult([property: JsonRequired] int ExitCode,
+    [property: JsonRequired] string Output, [property: JsonRequired] string Error)
 {
-    [JsonIgnore] public bool Succeeded => ExitCode == 0 && string.IsNullOrWhiteSpace(Error)
-        && !Regex.IsMatch(Output, @"(?im)^\s*(?:\d+\s*-\s*)?(?:error|failed|failure)\b");
+    [JsonIgnore] public bool Succeeded => ExitCode == 0 && Output is not null && Error is not null
+        && !Regex.IsMatch(Output + "\n" + Error, @"(?im)^\s*(?:\d+\s*-\s*)?(?:error|failed|failure)\b");
 }
 public interface IFirmwareProvider
 {
