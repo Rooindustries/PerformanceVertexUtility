@@ -514,11 +514,61 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     drivers.NvidiaProfileApproved = true;
     drivers.NvidiaBenchmarkReady = true;
     await drivers.ApplyNvidiaProfileCommand.ExecuteAsync(null);
-    Check(drivers.NvidiaActionTitle == "Apply not confirmed",
-        "A missing NVIDIA apply response cannot claim completion");
+    Check(drivers.NvidiaActionTitle == "Apply not confirmed" && !drivers.CanRestoreNvidiaProfile,
+        "A missing NVIDIA apply response cannot claim completion or invent restore evidence");
     await drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null);
-    Check(drivers.NvidiaActionTitle == "Restore not confirmed",
-        "A missing NVIDIA restore response cannot claim completion");
+    Check(App.Live.LastNvidiaRestoreRecovery is null,
+        "NVIDIA restore cannot dispatch before an exact apply artifact is retained");
+
+    var nvidiaRoot = Path.Combine(Path.GetTempPath(), "nvidia-recovery-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(nvidiaRoot);
+    var nvidiaManifest = Path.Combine(nvidiaRoot, "rollback.json");
+    var nvidiaExport = Path.Combine(nvidiaRoot, "before.nip");
+    File.WriteAllText(nvidiaManifest, "{}");
+    File.WriteAllText(nvidiaExport, "fixture export");
+    try
+    {
+        var recovery = new RooIndustries.OptimizationSuite.Services.NvidiaProfileRecovery("framesync", nvidiaManifest, nvidiaExport);
+        App.Live.NvidiaRecovery = recovery;
+        App.Live.NvidiaApplyText = JsonSerializer.Serialize(new
+        {
+            actionId = "drivers.nvidiaNip.executor",
+            operation = "Apply",
+            profileId = "framesync",
+            dryRun = false,
+            status = "failed",
+            summary = new { exportCompleted = true, importAttempted = true, importCompleted = false },
+        });
+        App.Live.NvidiaApplyError = "Controlled NVIDIA import failure";
+        await drivers.ApplyNvidiaProfileCommand.ExecuteAsync(null);
+        Check(drivers.NvidiaActionTitle == "Apply not confirmed" && drivers.CanRestoreNvidiaProfile,
+            "A failed NVIDIA import retains its exact verified pre-import export without claiming apply success");
+
+        App.Live.NvidiaRestoreText = null;
+        App.Live.NvidiaRestoreError = null;
+        App.Live.LastError = "Controlled NVIDIA restore failure";
+        await drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null);
+        Check(drivers.NvidiaActionTitle == "Restore not confirmed" && drivers.CanRestoreNvidiaProfile
+                && App.Live.LastNvidiaRestoreRecovery == recovery,
+            "A missing NVIDIA restore response preserves and requests the exact retained artifact");
+
+        App.Live.NvidiaRestoreText = JsonSerializer.Serialize(new
+        {
+            actionId = "drivers.nvidiaNip.executor",
+            operation = "Restore",
+            profileId = "framesync",
+            dryRun = false,
+            status = "success",
+            rollbackManifestPath = nvidiaManifest,
+            summary = new { importCompleted = true },
+        });
+        App.Live.ClearNvidiaRecoveryOnRestore = true;
+        App.Live.LastError = null;
+        await drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null);
+        Check(drivers.NvidiaActionTitle == "Profile restored" && !drivers.CanRestoreNvidiaProfile,
+            "A confirmed identity-bound NVIDIA restore clears the retained artifact");
+    }
+    finally { Directory.Delete(nvidiaRoot, true); }
 
     App.Live.LastError = "Controlled stutter response failure";
     var monitoring = new MonitoringViewModel();

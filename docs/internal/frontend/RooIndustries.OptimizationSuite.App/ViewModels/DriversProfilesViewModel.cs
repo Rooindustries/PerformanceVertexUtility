@@ -57,6 +57,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [NotifyPropertyChangedFor(nameof(NvidiaGateSummary))]
     [NotifyPropertyChangedFor(nameof(CanApplyNvidiaProfile))]
     private bool _nvidiaBenchmarkReady;
+    private Services.NvidiaProfileRecovery? _nvidiaRecovery;
 
     public ObservableCollection<GpuInfo> Gpus { get; } = new();
     public ObservableCollection<NetworkAdapterInfo> NetworkAdapters { get; } = new();
@@ -66,7 +67,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     public bool CanCheckNvidiaAction => HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApproveNvidiaProfile => HasNvidia && HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApplyNvidiaProfile => CanApproveNvidiaProfile && NvidiaExportReviewed && NvidiaProfileApproved && NvidiaBenchmarkReady;
-    public bool CanRestoreNvidiaProfile => CanApproveNvidiaProfile && NvidiaProfileApproved;
+    public bool CanRestoreNvidiaProfile => CanApproveNvidiaProfile && NvidiaProfileApproved && _nvidiaRecovery is not null;
     public string NvidiaGateSummary => !HasNvidiaProfiles
         ? "No NVIDIA profile catalog found."
         : !HasNvidia
@@ -114,6 +115,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             NvidiaActionDetail = HasNvidia
                 ? "Preview the profile. Apply runs only after export, approval, and benchmark checks are selected."
                 : "This PC is not on NVIDIA graphics. Roo Industries can inspect the path, but apply stays locked.";
+            _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
+            OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
         }
 
         var catalog = await Data.GetDriverRecommendationsAsync();
@@ -215,13 +218,21 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 NvidiaExportReviewed,
                 NvidiaProfileApproved,
                 NvidiaBenchmarkReady);
-            if (response.Value is null)
+            _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
+            OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Apply not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA apply returned no result.";
                 return;
             }
-            NvidiaActionTitle = "Apply finished";
+            if (!NvidiaExecutorMatches(response.Value, "Apply", NvidiaProfileId, out var completed))
+            {
+                NvidiaActionTitle = "Apply not confirmed";
+                NvidiaActionDetail = "The NVIDIA apply response did not match this profile or requested operation.";
+                return;
+            }
+            NvidiaActionTitle = completed ? "Profile applied" : _nvidiaRecovery is not null ? "Apply needs attention" : "Apply held";
             NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Apply finished. No profile was imported.");
         }
         finally
@@ -238,6 +249,14 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             return;
         }
 
+        var recovery = _nvidiaRecovery;
+        if (recovery is null)
+        {
+            NvidiaActionTitle = "Restore unavailable";
+            NvidiaActionDetail = "Apply this profile with a verified rollback export before restoring it.";
+            return;
+        }
+
         NvidiaBusy = true;
         NvidiaActionTitle = NvidiaProfileApproved ? "Restoring " + NvidiaProfileName : "Checking restore approvals";
         NvidiaActionDetail = NvidiaProfileApproved
@@ -245,14 +264,22 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             : "Approve the exact profile first. Restore stays locked until that approval is selected.";
         try
         {
-            var response = await App.Live.RestoreNvidiaProfileResultAsync(NvidiaProfileId, NvidiaProfileApproved);
-            if (response.Value is null)
+            var response = await App.Live.RestoreNvidiaProfileResultAsync(recovery, NvidiaProfileApproved);
+            _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
+            OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Restore not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA restore returned no result.";
                 return;
             }
-            NvidiaActionTitle = "Restore finished";
+            if (!NvidiaExecutorMatches(response.Value, "Restore", NvidiaProfileId, out var completed) || !completed || _nvidiaRecovery is not null)
+            {
+                NvidiaActionTitle = "Restore not confirmed";
+                NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "The NVIDIA restore did not complete.");
+                return;
+            }
+            NvidiaActionTitle = "Profile restored";
             NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Restore finished. No profile was imported.");
         }
         finally
@@ -338,6 +365,30 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
     }
 
+    private static bool NvidiaExecutorMatches(string json, string operation, string profileId, out bool completed)
+    {
+        completed = false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (ExtractString(root, "actionId") != "drivers.nvidiaNip.executor"
+                || ExtractString(root, "operation") != operation
+                || ExtractString(root, "profileId") != profileId
+                || !TryExtractBool(root, out var dryRun, "dryRun")
+                || dryRun) return false;
+            var status = ExtractString(root, "status");
+            if (status is not ("success" or "failed" or "blocked")) return false;
+            completed = status == "success"
+                && ExtractBool(root, "summary", "importCompleted");
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string? ExtractString(JsonElement root, params string[] path)
     {
         var current = root;
@@ -378,5 +429,25 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
 
         return current.ValueKind == JsonValueKind.True;
+    }
+
+    private static bool TryExtractBool(JsonElement root, out bool value, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                value = false;
+                return false;
+            }
+        }
+        if (current.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            value = current.GetBoolean();
+            return true;
+        }
+        value = false;
+        return false;
     }
 }
