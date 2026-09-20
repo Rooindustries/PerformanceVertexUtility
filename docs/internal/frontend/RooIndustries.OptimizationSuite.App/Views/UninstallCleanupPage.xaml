@@ -81,7 +81,7 @@
                         </Grid.ColumnDefinitions>
                         <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/apps.svg" Style="{StaticResource PageHeaderIconStyle}" />
                         <StackPanel Grid.Column="1" Spacing="7">
-                            <TextBlock Text="Installed apps" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                            <TextBlock Text="Remove apps" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                             <TextBlock Text="Remove selected applications, then review leftover files and registry data." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooIndustriesTextMutedBrush}">
                                 <Run Text="{x:Bind BulkRemoval.ViewModel.InstalledAppCount, Mode=OneWay}" /><Run Text=" apps installed" />

@@ -47,8 +47,10 @@ public sealed partial class MainWindow : Window
         LogoImage.Source = BrandAssets.TryGetLogo();
         App.Theme.ThemeChanged += OnThemeChanged;
         App.Theme.EffectsChanged += ApplyEffects;
+        App.Theme.SimpleModeChanged += ApplySimpleMode;
         Closed += OnWindowClosed;
         ApplyEffects();
+        ApplySimpleMode();
         Nav.Loaded += OnNavLoaded;
     }
 
@@ -56,6 +58,7 @@ public sealed partial class MainWindow : Window
     {
         App.Theme.ThemeChanged -= OnThemeChanged;
         App.Theme.EffectsChanged -= ApplyEffects;
+        App.Theme.SimpleModeChanged -= ApplySimpleMode;
     }
 
     private void ConfigureTitleBar()
@@ -97,6 +100,12 @@ public sealed partial class MainWindow : Window
         }
 
         return fallback;
+    }
+
+    private void ApplySimpleMode()
+    {
+        var advanced = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var item in new[] { NavStartup, NavMemory, NavTimer }) item.Visibility = advanced;
     }
 
     private void ApplyEffects()

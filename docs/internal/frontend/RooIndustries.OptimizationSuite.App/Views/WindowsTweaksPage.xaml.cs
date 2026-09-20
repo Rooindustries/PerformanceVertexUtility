@@ -18,6 +18,7 @@ public sealed partial class WindowsTweaksPage : Page
     public WindowsTweaksPage()
     {
         ViewModel.SelectedSection = ViewModel.Sections.Single(section => section.Id == "network");
+        ViewModel.ShowAdvanced = !App.Theme.SimpleMode;
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.RefreshCommand.ExecuteAsync(null);
     }

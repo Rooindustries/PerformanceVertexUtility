@@ -10,6 +10,7 @@ public sealed partial class DashboardPage : Page
     public DashboardPage()
     {
         InitializeComponent();
+        TimerTile.Visibility = App.Theme.SimpleMode ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await ViewModel.ReloadAsync();
