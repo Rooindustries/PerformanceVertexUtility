@@ -38,6 +38,13 @@ try {
     $preview=Read-Result (& $applyScript -OfficialPreviewPath $a.OfficialPreviewPath -CleanupManifestPath $a.CleanupManifestPath)
     Assert ($preview.status -eq 'preview' -and (Test-Path $case.targets[0]) -and -not (Test-Path $a.BackupRoot)) 'Default preview writes no backup or deletion state'
     Assert ($preview.approval.officialPreviewSha256 -eq $a.OfficialPreviewSha256) 'Preview binds approval to the exact input bytes'
+    $vanished=New-Case 'targets-disappeared'; $vanishedArgs=$vanished.args
+    $reviewArgs=$vanishedArgs.Clone(); $reviewArgs.ExecutorMode='Preview'; $reviewArgs.ConfirmApply=$false
+    $reviewed=Read-Result (& $applyScript @reviewArgs)
+    Assert ($reviewed.status -eq 'preview' -and $reviewed.summary.approvalReady) 'Vanishing-target case begins with an approved preview'
+    Remove-Item -LiteralPath $vanished.targets -Recurse -Force
+    $unchanged=Read-Result (& $applyScript @vanishedArgs)
+    Assert ($unchanged.status -eq 'success' -and -not $unchanged.dryRun -and $unchanged.summary.deletedCount -eq 0 -and -not $unchanged.summary.restoreReady) 'Targets missing at apply produce a confirmed no-op without invented recovery'
     foreach ($scenario in @('missing-allowlist','wrong-app','mixed-app','stale-hash','manual-review','preview-error','overlap','backup-inside-target','duplicate-id','unsupported-type')) {
         $case=New-Case $scenario; $a=$case.args
         switch ($scenario) {
