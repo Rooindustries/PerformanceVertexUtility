@@ -98,7 +98,7 @@
                         <Image Source="{x:Bind Icon}" Width="28" Height="28" VerticalAlignment="Top" Margin="0,2,0,0"/>
                         <StackPanel Grid.Column="1" Spacing="4">
                             <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                 <Button Grid.Column="1" Content="Details" FontSize="11" MinHeight="24" Padding="6,2" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind Name}" AutomationProperties.HelpText="Setting details">
                                     <Button.Flyout><Flyout><ScrollViewer MaxHeight="360"><ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource SettingDetailsTemplate}"/></ScrollViewer></Flyout></Button.Flyout>
                                 </Button>
