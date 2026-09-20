@@ -59,6 +59,17 @@ try {
         $idMismatchOutput = Join-Path $tempRoot "$kind-id-mismatch.json"
         $idMismatch = Invoke-Stop $script $b.SessionId $a.SessionPath $a.BackupPath $idMismatchOutput
         Add-Check ($idMismatch.ExitCode -ne 0 -and $idMismatch.Json.status -eq 'failed' -and (Get-FileHash -LiteralPath $a.SessionPath -Algorithm SHA256).Hash -eq $aSessionHash) "$kind restore rejects a SessionId that disagrees with SessionPath and backup" "$kind restore accepted a mismatched SessionId"
+        $backupBytes = [IO.File]::ReadAllBytes($a.BackupPath)
+        foreach ($invalid in @('wrong-action','dry-run','missing-dry-run')) {
+            $changedBackup = Get-Content -LiteralPath $a.BackupPath -Raw | ConvertFrom-Json
+            if ($invalid -eq 'wrong-action') { $changedBackup.actionId = 'performance.applyProfile' }
+            elseif ($invalid -eq 'dry-run') { $changedBackup.dryRun = $true }
+            else { $changedBackup.PSObject.Properties.Remove('dryRun') }
+            Write-Json $a.BackupPath $changedBackup
+            $invalidResult = Invoke-Stop $script $a.SessionId $a.SessionPath $a.BackupPath (Join-Path $tempRoot "$kind-$invalid.json") -Confirm
+            Add-Check ($invalidResult.ExitCode -ne 0 -and $invalidResult.Json.status -eq 'failed' -and (Get-FileHash -LiteralPath $a.SessionPath -Algorithm SHA256).Hash -eq $aSessionHash) "$kind rejects $invalid backup before updating the session" "$kind accepted $invalid backup"
+            [IO.File]::WriteAllBytes($a.BackupPath, $backupBytes)
+        }
         $confirmedOutput = Join-Path $tempRoot "$kind-confirmed.json"
         $confirmed = Invoke-Stop $script $a.SessionId $a.SessionPath $a.BackupPath $confirmedOutput -Confirm
         $saved = Get-Content -LiteralPath $a.SessionPath -Raw | ConvertFrom-Json

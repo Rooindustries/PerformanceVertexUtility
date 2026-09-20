@@ -146,6 +146,10 @@ try {
     }
     $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
     $backup = Read-RooIndustriesJsonFile $resolvedBackupPath
+    $backupDryRun = Get-RooIndustriesPropertyValue $backup 'dryRun' $null
+    if ([string](Get-RooIndustriesPropertyValue $backup 'actionId' '') -cne 'performance.governor.startSession' -or $backupDryRun -isnot [bool] -or $backupDryRun) {
+        throw 'The process governor backup is not a confirmed backup for this session type.'
+    }
     $sessionIdValue = [string](Get-RooIndustriesPropertyValue $backup 'sessionId' '')
     $profileId = [string](Get-RooIndustriesPropertyValue $backup 'profileId' '')
     if ([string]::IsNullOrWhiteSpace($sessionIdValue) -or [string]::IsNullOrWhiteSpace($profileId)) {
