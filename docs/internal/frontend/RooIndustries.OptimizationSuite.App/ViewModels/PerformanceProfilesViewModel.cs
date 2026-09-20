@@ -117,9 +117,10 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         AppsCount = _all.Count;
         KeepCount = _all.Count(r => r.Plan == "Excluded");
         QuietCount = _all.Count(r => r.Plan == "Lower priority");
-        _lastBackupPath = null;
-        RestoreAvailable = false;
-        RestoreHint = "Apply creates a restore point";
+        var savedRecovery = App.Live.ProcessProfileRecovery;
+        _lastBackupPath = savedRecovery is { } saved && ValidProcessBackup(saved.Path, saved.Id) ? saved.Path : null;
+        RestoreAvailable = _lastBackupPath is not null;
+        RestoreHint = RestoreAvailable ? "Restore is ready" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 
         ApplyFilter();
@@ -185,13 +186,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (backup is not null)
             {
                 _lastBackupPath = backup;
+                App.Live.ProcessProfileRecovery = (backup, ExtractString(result, "backup", "backupId")!);
                 RestoreAvailable = true;
                 RestoreHint = "Restore is ready";
             }
-            if (response.Error is not null || changed is null)
+            if (response.Error is not null || changed is null || ProcessOutcomeBlocked(result))
             {
                 ActionTitle = "Process priorities not confirmed";
-                ActionDetail = response.Error ?? "The process action did not report which items changed.";
+                ActionDetail = response.Error ?? ExtractIssue(result, "errors") ?? "The process action did not return consistent change evidence.";
                 return;
             }
             if (status == "success" && changed == 0)
@@ -220,7 +222,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (ActionBusy) return;
         var backup = _lastBackupPath;
-        if (string.IsNullOrWhiteSpace(backup))
+        if (string.IsNullOrWhiteSpace(backup) || App.Live.ProcessProfileRecovery is not { } saved || !PathsEqual(saved.Path, backup) || !ValidProcessBackup(backup, saved.Id))
         {
             ActionTitle = "Nothing to restore";
             ActionDetail = "Apply process priorities first. Restore uses the saved original values.";
@@ -249,10 +251,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             var status = ExtractString(result, "status") ?? "unknown";
             ActionDetail = SummarizeProcessAction(response.Value, "The restore result needs review.");
-            if (status == "success")
+            if (status == "success" && !ProcessOutcomeBlocked(result) && CountArray(result, "result", "changedItems") is not null
+                && PathsEqual(ExtractString(result, "backup", "location"), backup)
+                && ExtractString(result, "backup", "backupId") == saved.Id)
             {
                 ActionTitle = "Restore complete";
                 _lastBackupPath = null;
+                App.Live.ProcessProfileRecovery = null;
                 RestoreAvailable = false;
                 RestoreHint = "No saved process settings";
             }
@@ -608,7 +613,32 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private static string? VerifiedBackup(JsonElement result)
     {
         var path = ExtractString(result, "backup", "location");
-        return ExtractBool(result, "backup", "rollbackSupported") && !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path) ? path : null;
+        var id = ExtractString(result, "backup", "backupId");
+        return ExtractBool(result, "backup", "rollbackSupported") && ValidProcessBackup(path, id) ? path : null;
+    }
+
+    private static bool ValidProcessBackup(string? path, string? id)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(id)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            var root = document.RootElement;
+            return ExtractString(root, "actionId") == "performance.applyProfile"
+                && ExtractString(root, "backupId") == id
+                && !string.IsNullOrWhiteSpace(ExtractString(root, "profileId"))
+                && TryExtractBool(root, out var dryRun, "dryRun") && !dryRun
+                && CountArray(root, "snapshots") is > 0;
+        }
+        catch { return false; }
+    }
+
+    private static bool ProcessOutcomeBlocked(JsonElement root)
+    {
+        var status = ExtractString(root, "status");
+        if (ExtractString(root, "result", "status") != status) return true;
+        return root.TryGetProperty("errors", out var errors) &&
+            (errors.ValueKind != JsonValueKind.Array || errors.EnumerateArray().Any(issue => ExtractBool(issue, "blocking")));
     }
 
     private static string SummarizeProcessAction(string? json, string fallback)

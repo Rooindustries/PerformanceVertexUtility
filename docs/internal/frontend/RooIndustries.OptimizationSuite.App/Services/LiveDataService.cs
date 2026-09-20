@@ -15,6 +15,7 @@ public sealed record LiveDataResult<T>(T? Value, string? Error, string? Recovery
 public sealed class LiveDataService
 {
     private readonly BackendLocator _locator;
+    public (string Path, string Id)? ProcessProfileRecovery { get; set; }
     private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
     private sealed record PreparedCleanupInputs(
         string DirectoryPath,
