@@ -22,6 +22,7 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
+    public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
 
     public sealed class FakeLiveDataService
@@ -58,6 +59,11 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? NvidiaPreviewText { get; set; }
         public string? NvidiaApplyText { get; set; }
         public string? NvidiaRestoreText { get; set; }
+        public string? NvidiaApplyError { get; set; }
+        public string? NvidiaRestoreError { get; set; }
+        public NvidiaProfileRecovery? NvidiaRecovery { get; set; }
+        public NvidiaProfileRecovery? LastNvidiaRestoreRecovery { get; private set; }
+        public bool ClearNvidiaRecoveryOnRestore { get; set; }
         public string? StutterPreviewText { get; set; }
         public string? TimerText { get; set; }
         public string? ShaderText { get; set; }
@@ -119,9 +125,15 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(NvidiaPreviewText, NvidiaPreviewText is null ? LastError : null));
         public Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(string profileId, bool exportReviewed, bool userApproved, bool benchmarkEvidenceAttached, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaApplyText, NvidiaApplyText is null ? LastError : null));
-        public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(string profileId, bool userApproved, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaRestoreText, NvidiaRestoreText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(NvidiaApplyText, NvidiaApplyError ?? (NvidiaApplyText is null ? LastError : null)));
+        public Task<NvidiaProfileRecovery?> ReadNvidiaProfileRecoveryAsync(string profileId)
+            => Task.FromResult(NvidiaRecovery?.ProfileId == profileId ? NvidiaRecovery : null);
+        public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken cancellationToken = default)
+        {
+            LastNvidiaRestoreRecovery = recovery;
+            if (ClearNvidiaRecoveryOnRestore) NvidiaRecovery = null;
+            return Task.FromResult(new LiveDataResult<string>(NvidiaRestoreText, NvidiaRestoreError ?? (NvidiaRestoreText is null ? LastError : null)));
+        }
         public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(StutterPreviewText, StutterPreviewText is null ? LastError : null));
         public Task<LiveDataResult<string>> CheckTimerResolutionResultAsync(bool userApproved, CancellationToken cancellationToken = default)

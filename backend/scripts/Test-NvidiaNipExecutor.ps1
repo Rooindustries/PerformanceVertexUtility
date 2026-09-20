@@ -171,13 +171,40 @@ try {
         Add-Failure 'NVIDIA NIP executor did not skip import after export timeout'
     }
 
-    $restoreExportPath = Join-Path $tempRoot 'restore-source.nip'
-    Set-Content -LiteralPath $restoreExportPath -Value 'mock restore source' -Encoding UTF8
-    $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $restoreExportPath -ConfirmApply -UserApproved)
-    if ($restore.status -eq 'success' -and $restore.summary.exportAttempted -eq $false -and $restore.summary.importAttempted -eq $true -and @($restore.executionSequence)[0].operation -eq 'restore-import') {
-        Add-Pass 'NVIDIA NIP restore executor exposes rollback import path through mock runner'
+    $missingManifestRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -ConfirmApply -UserApproved)
+    if ($missingManifestRestore.status -eq 'blocked' -and @($missingManifestRestore.executionSequence).Count -eq 0 -and (@($missingManifestRestore.gates | Where-Object { $_.gateId -eq 'rollback-manifest-bound' -and $_.blocking }).Count -eq 1)) {
+        Add-Pass 'NVIDIA NIP restore rejects an export without its exact rollback manifest'
     } else {
-        Add-Failure 'NVIDIA NIP restore executor did not run expected mock rollback import path'
+        Add-Failure 'NVIDIA NIP restore accepted an export without its rollback manifest'
+    }
+
+    $wrongManifestPath = Join-Path $tempRoot 'wrong-profile-rollback.json'
+    $wrongManifest = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
+    $wrongManifest.profileId = 'another-profile'
+    $wrongManifest | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $wrongManifestPath -Encoding UTF8
+    $wrongProfileRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $wrongManifestPath -ConfirmApply -UserApproved)
+    if ($wrongProfileRestore.status -eq 'blocked' -and @($wrongProfileRestore.executionSequence).Count -eq 0) {
+        Add-Pass 'NVIDIA NIP restore rejects a rollback manifest for another profile'
+    } else {
+        Add-Failure 'NVIDIA NIP restore accepted a rollback manifest for another profile'
+    }
+
+    $staleManifestPath = Join-Path $tempRoot 'stale-export-rollback.json'
+    $staleManifest = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
+    $staleManifest.exportPath = Join-Path $tempRoot 'missing-export.nip'
+    $staleManifest | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $staleManifestPath -Encoding UTF8
+    $staleRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $staleManifestPath -ConfirmApply -UserApproved)
+    if ($staleRestore.status -eq 'blocked' -and @($staleRestore.executionSequence).Count -eq 0 -and (@($staleRestore.gates | Where-Object { $_.gateId -eq 'rollback-export-present' -and $_.blocking }).Count -eq 1)) {
+        Add-Pass 'NVIDIA NIP restore rejects a rollback manifest whose export is missing'
+    } else {
+        Add-Failure 'NVIDIA NIP restore accepted a missing rollback export'
+    }
+
+    $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved)
+    if ($restore.status -eq 'success' -and $restore.summary.exportAttempted -eq $false -and $restore.summary.importAttempted -eq $true -and @($restore.executionSequence)[0].operation -eq 'restore-import') {
+        Add-Pass 'NVIDIA NIP restore executor imports only the exact manifest-bound rollback export'
+    } else {
+        Add-Failure 'NVIDIA NIP restore executor did not run the exact manifest-bound rollback import'
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
