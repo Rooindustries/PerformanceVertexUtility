@@ -22,11 +22,14 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
+    public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
 
     public sealed class FakeLiveDataService
     {
         public ProcessInventory? Inventory { get; set; }
         public ProcessClassification? Classification { get; set; }
+        public GameTuneSessionStatus? GameStatusModel { get; set; }
+        public ProcessGovernorSessionStatus? GovernorStatusModel { get; set; }
         public string? LastError { get; set; }
         public string? LatestProcessBackup { get; set; }
         public string? LastCleanupRollbackPath { get; set; }
@@ -67,6 +70,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<string, Task<string?>> CleanupRestore { get; set; } = _ => Task.FromResult<string?>(null);
         public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken cancellationToken = default) => Task.FromResult(Inventory);
         public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken cancellationToken = default) => Task.FromResult(Classification);
+        public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameStatusModel);
+        public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
         public Task<string?> PreviewProcessProfileTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(ProcessPreviewText);
         public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken cancellationToken = default)
@@ -169,6 +174,8 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed class FakeOptimizerService
     {
         public ProcessControlSnapshot? ProcessSnapshot { get; set; }
+        public GameSessionEntry[] GameSessions { get; set; } = [];
+        public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);
         public string? FindLastJournal(string kind) => null;
         public Task<ProcessControlSnapshot> ReadProcessControlsAsync(int processId)
             => Task.FromResult(ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
@@ -184,6 +191,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<JsonElement> DeleteRuleAsync(string ruleId) => Task.FromResult(JsonSerializer.SerializeToElement(new { }));
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
             => Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, new PolicyWorkerStatus(null, false, null)));
+        public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync() => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
     }
 }
 

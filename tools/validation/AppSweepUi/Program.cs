@@ -355,6 +355,50 @@ if (args is [] or ["sessions"])
     }
 }
 
+if (args is [] or ["history"])
+{
+    var changed = new SessionChangedItem
+    {
+        ProcessId = 10,
+        ProcessName = "fixture-game",
+        OriginalPriorityClass = "Normal",
+        AppliedPriorityClass = "AboveNormal",
+        RestoredPriorityClass = "Normal",
+    };
+    App.Live.GameStatusModel = new GameTuneSessionStatus
+    {
+        DryRun = true,
+        Status = "preview",
+        ChangedItems = [changed],
+        RestoredItems = [changed],
+    };
+    App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus
+    {
+        DryRun = true,
+        Status = "preview",
+        ActiveRestraints = [new ActiveRestraint { ProcessId = 11, ProcessName = "fixture-background", RuleId = "fixture" }],
+    };
+    var history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(!history.HasHistory && history.HistoryRows.Count == 0,
+        "Dry-run changed, restored, and restraint arrays do not become applied history");
+
+    App.Live.GameStatusModel.DryRun = false;
+    App.Live.GameStatusModel.Status = "completed";
+    App.Live.GovernorStatusModel.DryRun = false;
+    App.Live.GovernorStatusModel.Status = "active";
+    history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(history.HistoryRows.Select(row => row.Action).SequenceEqual(new[] { "Applied", "Restored", "Restrained" }),
+        "Confirmed non-dry session evidence retains applied, restored, and restraint history");
+
+    App.Live.GameStatusModel.DryRun = true;
+    history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(history.HistoryRows.Count == 1 && history.HistoryRows.Single().Action == "Restrained",
+        "Dry-run filtering is independent for game and governor session history");
+}
+
 if (args is [] or ["responses"] or ["cleanup"] or ["race"])
 {
     if (args is not (["cleanup"] or ["race"]))
