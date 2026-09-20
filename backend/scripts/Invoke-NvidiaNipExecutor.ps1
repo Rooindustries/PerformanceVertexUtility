@@ -55,6 +55,29 @@ function Invoke-NvidiaExecutorCommand {
 }
 
 try {
+    $persistedRollbackManifest = $null
+    $resolvedRequestedRollbackManifestPath = $null
+    $rollbackManifestBound = $false
+    $rollbackExportPresent = $false
+    if ($Operation -eq 'Restore' -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
+        $resolvedRequestedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
+        if (Test-Path -LiteralPath $resolvedRequestedRollbackManifestPath) {
+            $persistedRollbackManifest = Read-RooIndustriesJsonFile $resolvedRequestedRollbackManifestPath
+            $manifestExportPath = [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportPath' '')
+            $rollbackManifestBound = (
+                [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'actionId' '') -ceq 'drivers.nvidiaNip.rollbackManifest' -and
+                [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'restoreActionId' '') -ceq 'drivers.nvidiaNip.restoreProfile' -and
+                [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'profileId' '') -ceq $ProfileId -and
+                [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'rollbackSupported' $false) -and
+                [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportCompleted' $false) -and
+                -not [string]::IsNullOrWhiteSpace($manifestExportPath) -and
+                ([string]::IsNullOrWhiteSpace($ExportPath) -or (Resolve-RooIndustriesPath $ExportPath $ExportPath) -ceq (Resolve-RooIndustriesPath $manifestExportPath $manifestExportPath))
+            )
+            if ([string]::IsNullOrWhiteSpace($ExportPath)) { $ExportPath = $manifestExportPath }
+            $rollbackExportPresent = $rollbackManifestBound -and (Test-Path -LiteralPath (Resolve-RooIndustriesPath $manifestExportPath $manifestExportPath))
+        }
+    }
+
     $preview = (& (Join-Path $PSScriptRoot 'Preview-NvidiaNipProfile.ps1') `
         -ProfileId $ProfileId `
         -CatalogPath $CatalogPath `
@@ -64,7 +87,7 @@ try {
         -ExportPath $ExportPath) | ConvertFrom-Json
 
     $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
-    $rollbackManifest = Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null
+    $rollbackManifest = if ($Operation -eq 'Restore' -and $null -ne $persistedRollbackManifest) { $persistedRollbackManifest } else { Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null }
     if ($Operation -eq 'Restore') {
         $effectiveRestoreExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
         $restorePreview = (& (Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1') `
@@ -72,6 +95,7 @@ try {
             -CatalogPath $CatalogPath `
             -HardwareInventoryPath $HardwareInventoryPath `
             -NvpiExecutablePath $NvpiExecutablePath `
+            -RollbackManifestPath $resolvedRequestedRollbackManifestPath `
             -ExportPath $effectiveRestoreExportPath) | ConvertFrom-Json
     }
 
@@ -88,7 +112,9 @@ try {
         (New-RooIndustriesBackendExecutorGate 'no-auto-apply' 'No auto-apply path used' $true ($ConfirmApply -and $executeRequested) 'Default invocation remains preview-only.' ([pscustomobject]@{ confirmApply = [bool]$ConfirmApply; executorMode = $ExecutorMode })),
         (New-RooIndustriesBackendExecutorGate 'mock-shim-present' 'Mock NVPI shim present' $mockMode ((-not $mockMode) -or $mockShimPresent) 'Mock validation requires a shim path.' ([pscustomobject]@{ mockNvpiShimPath = $MockNvpiShimPath })),
         (New-RooIndustriesBackendExecutorGate 'real-nvpi-explicit-flag' 'Real NVPI explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealNvpiExecution) 'Real NVIDIA Profile Inspector execution requires -AllowRealNvpiExecution in addition to confirmation.' $null),
-        (New-RooIndustriesBackendExecutorGate 'benchmark-evidence' 'Benchmark evidence attached' ($Operation -eq 'Apply') (($Operation -ne 'Apply') -or [bool]$BenchmarkEvidenceAttached) 'Profile apply requires benchmark evidence before recommendation.' $null)
+        (New-RooIndustriesBackendExecutorGate 'benchmark-evidence' 'Benchmark evidence attached' ($Operation -eq 'Apply') (($Operation -ne 'Apply') -or [bool]$BenchmarkEvidenceAttached) 'Profile apply requires benchmark evidence before recommendation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'rollback-manifest-bound' 'Rollback manifest matches this profile' ($Operation -eq 'Restore') (($Operation -ne 'Restore') -or $rollbackManifestBound) 'Restore requires the exact rollback manifest written by the selected profile apply.' ([pscustomobject]@{ rollbackManifestPath = $resolvedRequestedRollbackManifestPath })),
+        (New-RooIndustriesBackendExecutorGate 'rollback-export-present' 'Rollback export is present' ($Operation -eq 'Restore') (($Operation -ne 'Restore') -or $rollbackExportPresent) 'Restore requires the exported profile named by the rollback manifest.' ([pscustomobject]@{ exportPath = $ExportPath }))
     )
     $blockingGates = @($gates | Where-Object { $_.blocking })
     $canExecute = ($blockingGates.Count -eq 0)
@@ -143,12 +169,14 @@ try {
         if (-not $importCompleted) { $status = 'failed' }
     }
 
-    if ($canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
+    if ($Operation -eq 'Apply' -and $canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
         $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
         Ensure-RooIndustriesDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
         $rollbackManifest.exportCompleted = $exportCompleted
         $rollbackManifest.nvpiExecutionAllowedNow = ($ExecutorMode -eq 'Real')
         ($rollbackManifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $resolvedRollbackManifestPath -Encoding UTF8
+    } elseif ($Operation -eq 'Restore' -and $rollbackManifestBound) {
+        $resolvedRollbackManifestPath = $resolvedRequestedRollbackManifestPath
     } else {
         $resolvedRollbackManifestPath = $null
     }

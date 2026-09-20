@@ -98,6 +98,8 @@ try {
     } else {
         Add-Failure 'NVIDIA NIP preview did not prove hardware/export gates'
     }
+    Set-Content -LiteralPath $preview.rollbackManifest.exportPath -Value 'mock exported NVIDIA profile' -Encoding UTF8
+    $preview.rollbackManifest.exportCompleted = $true
     ($preview.rollbackManifest | ConvertTo-Json -Depth 20) | Set-Content -LiteralPath $rollbackPath -Encoding UTF8
 
     $blockedHardware = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Preview-NvidiaNipProfile.ps1') -HardwareInventoryPath $nonNvidiaHardware -ExportPath (Join-Path $tempRoot 'before-intel.nip'))
@@ -116,8 +118,8 @@ try {
     }
 
     $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1') -RollbackManifestPath $rollbackPath -HardwareInventoryPath $nvidiaHardware)
-    if ($restore.status -eq 'preview' -and $restore.summary.willRunNvpi -eq $false -and $restore.command.commandLine -match 'importProfile') {
-        Add-Pass 'NVIDIA NIP restore preview constructs rollback import command without launching NVPI'
+    if ($restore.status -eq 'preview' -and $restore.summary.willRunNvpi -eq $false -and $restore.summary.restoreSupported -eq $true -and $restore.command.commandLine -match 'importProfile') {
+        Add-Pass 'NVIDIA NIP restore preview constructs a manifest-bound rollback import command without launching NVPI'
     } else {
         Add-Failure 'NVIDIA NIP restore preview did not expose the expected rollback command'
     }
