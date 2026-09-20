@@ -59,7 +59,7 @@ function New-NvpiMockShim {
     param(
         [string]$Path,
         [string]$LogPath,
-        [ValidateSet('Success','ExportFail','Timeout')]
+        [ValidateSet('Success','ExportFail','ImportFail','Timeout')]
         [string]$Behavior
     )
     $escapedLog = $LogPath.Replace("'", "''")
@@ -78,6 +78,7 @@ if (@($Rest).Count -gt 0 -and $Rest[0] -eq '-exportProfile') {
         Set-Content -LiteralPath $Rest[2] -Value 'mock exported profile' -Encoding UTF8
     }
 }
+if (@($Rest).Count -gt 0 -and $Rest[0] -eq '-importProfile' -and '__BEHAVIOR__' -eq 'ImportFail') { exit 19 }
 exit 0
 '@
     $content = $content.Replace('__LOG__', $escapedLog).Replace('__BEHAVIOR__', $Behavior)
@@ -119,9 +120,12 @@ try {
     $exportFailShim = Join-Path $tempRoot 'nvpi-export-fail.ps1'
     $timeoutLog = Join-Path $tempRoot 'nvpi-timeout.log'
     $timeoutShim = Join-Path $tempRoot 'nvpi-timeout.ps1'
+    $importFailLog = Join-Path $tempRoot 'nvpi-import-fail.log'
+    $importFailShim = Join-Path $tempRoot 'nvpi-import-fail.ps1'
     New-NvpiMockShim $successShim $successLog 'Success'
     New-NvpiMockShim $exportFailShim $exportFailLog 'ExportFail'
     New-NvpiMockShim $timeoutShim $timeoutLog 'Timeout'
+    New-NvpiMockShim $importFailShim $importFailLog 'ImportFail'
 
     $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -HardwareInventoryPath $nvidiaHardware)
     if ($preview.status -eq 'preview' -and $preview.summary.willRunNvpi -eq $false -and $preview.summary.willRunMockShim -eq $false -and @($preview.executionSequence).Count -eq 0) {
@@ -142,9 +146,10 @@ try {
     $rollbackPath = Join-Path $tempRoot 'nvidia-rollback.json'
     $success = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $successLogEntries = Read-MockLog $successLog
+    $writtenRollback = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
     $firstArgs = @($successLogEntries[0].args)
     $secondArgs = @($successLogEntries[1].args)
-    if ($success.status -eq 'success' -and $success.summary.willRunMockShim -eq $true -and $success.summary.willRunNvpi -eq $false -and $success.summary.realNvpiInvoked -eq $false -and $success.summary.exportCompleted -eq $true -and $success.summary.importCompleted -eq $true -and $firstArgs[0] -eq '-exportProfile' -and $secondArgs[0] -eq '-importProfile' -and (Test-Path -LiteralPath $exportPath) -and (Test-Path -LiteralPath $rollbackPath)) {
+    if ($success.status -eq 'success' -and $success.summary.willRunMockShim -eq $true -and $success.summary.willRunNvpi -eq $false -and $success.summary.realNvpiInvoked -eq $false -and $success.summary.exportCompleted -eq $true -and $success.summary.importCompleted -eq $true -and $writtenRollback.exportCompleted -eq $true -and $writtenRollback.importAttempted -eq $true -and $writtenRollback.importCompleted -eq $true -and $firstArgs[0] -eq '-exportProfile' -and $secondArgs[0] -eq '-importProfile' -and (Test-Path -LiteralPath $exportPath) -and (Test-Path -LiteralPath $rollbackPath)) {
         Add-Pass 'NVIDIA NIP mock executor exports before import, writes rollback manifest, and never reports real NVPI execution'
     } else {
         Add-Failure 'NVIDIA NIP mock executor did not prove export-before-import success path'
@@ -169,6 +174,16 @@ try {
         Add-Pass 'NVIDIA NIP executor skips import when export times out'
     } else {
         Add-Failure 'NVIDIA NIP executor did not skip import after export timeout'
+    }
+
+    $importFailExportPath = Join-Path $tempRoot 'before-import-fail.nip'
+    $importFailRollbackPath = Join-Path $tempRoot 'import-fail-rollback.json'
+    $importFail = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $importFailShim -HardwareInventoryPath $nvidiaHardware -ExportPath $importFailExportPath -RollbackManifestPath $importFailRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $importFailManifest = Get-Content -LiteralPath $importFailRollbackPath -Raw | ConvertFrom-Json
+    if ($importFail.status -eq 'failed' -and $importFail.summary.exportCompleted -eq $true -and $importFail.summary.importAttempted -eq $true -and $importFail.summary.importCompleted -eq $false -and $importFailManifest.exportCompleted -eq $true -and $importFailManifest.importAttempted -eq $true -and $importFailManifest.importCompleted -eq $false -and (Test-Path -LiteralPath $importFailExportPath)) {
+        Add-Pass 'NVIDIA NIP failed import retains durable exact rollback evidence'
+    } else {
+        Add-Failure 'NVIDIA NIP failed import did not retain durable exact rollback evidence'
     }
 
     $missingManifestRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -ConfirmApply -UserApproved)

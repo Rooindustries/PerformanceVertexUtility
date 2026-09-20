@@ -181,7 +181,8 @@ function New-RooIndustriesNvidiaNipRollbackManifest {
         rollbackSupported = $true
         exportBeforeImportRequired = $true
         exportCompleted = $false
+        importAttempted = $false
+        importCompleted = $false
         nvpiExecutionAllowedNow = $false
     }
 }
-

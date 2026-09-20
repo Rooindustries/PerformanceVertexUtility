@@ -195,9 +195,8 @@ public sealed class LiveDataService
         }
 
         var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
-        var recovery = realApplyApproved ? ReadNvidiaRecoveryFromApply(profileId, result.Value, rollbackManifestPath!, exportPath!) : null;
+        var recovery = realApplyApproved ? ReadNvidiaRecoveryFromApply(profileId, rollbackManifestPath!, exportPath!) : null;
         if (recovery is not null) SaveNvidiaRecovery(recovery);
-        else if (realApplyApproved && NvidiaImportAttempted(result.Value, profileId)) ClearNvidiaRecovery(profileId);
         return result with { RecoveryPath = recovery?.RollbackManifestPath };
     }
     public async Task<string?> ApplyNvidiaProfileTextAsync(
@@ -214,7 +213,7 @@ public sealed class LiveDataService
         if (!File.Exists(path)) return Task.FromResult<NvidiaProfileRecovery?>(null);
         try
         {
-            var recovery = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
+            var recovery = RooIndustries.Optimizer.OperationFiles.Read<NvidiaProfileRecovery>(path);
             return Task.FromResult(ValidateNvidiaRecovery(recovery, profileId) ? recovery : null);
         }
         catch
@@ -509,30 +508,10 @@ public sealed class LiveDataService
         "settings",
         "nvidia-profile-recovery.json");
 
-    private NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string? json, string rollbackManifestPath, string exportPath)
+    private static NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string rollbackManifestPath, string exportPath)
     {
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath);
-            return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
-                && NvidiaString(root, "operation") == "Apply"
-                && NvidiaString(root, "profileId") == profileId
-                && NvidiaBool(root, "dryRun") == false
-                && NvidiaBool(root, "summary", "exportCompleted") == true
-                && NvidiaBool(root, "summary", "importAttempted") == true
-                && PathsEqual(NvidiaString(root, "rollbackManifestPath"), rollbackManifestPath)
-                && PathsEqual(NvidiaString(root, "rollbackManifest", "exportPath"), exportPath)
-                && ValidateNvidiaRecovery(recovery, profileId)
-                    ? recovery
-                    : null;
-        }
-        catch
-        {
-            return null;
-        }
+        var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath);
+        return ValidateNvidiaRecovery(recovery, profileId) ? recovery : null;
     }
 
     private static bool ValidateNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
@@ -548,6 +527,7 @@ public sealed class LiveDataService
                 && NvidiaString(manifest, "profileId") == profileId
                 && NvidiaBool(manifest, "rollbackSupported") == true
                 && NvidiaBool(manifest, "exportCompleted") == true
+                && NvidiaBool(manifest, "importAttempted") == true
                 && PathsEqual(NvidiaString(manifest, "exportPath"), recovery.ExportPath);
         }
         catch
@@ -563,31 +543,22 @@ public sealed class LiveDataService
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (!TryNvidiaInt(root, out var reportedBlocking, "summary", "blockingGateCount")) return false;
+            var actualBlocking = NvidiaBlockingGates(root);
+            var importAttempted = NvidiaBool(root, "summary", "importAttempted");
+            var importCompleted = NvidiaBool(root, "summary", "importCompleted");
             return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
                 && NvidiaString(root, "operation") == "Restore"
                 && NvidiaString(root, "profileId") == recovery.ProfileId
                 && NvidiaBool(root, "dryRun") == false
                 && NvidiaString(root, "status") == "success"
-                && NvidiaBool(root, "summary", "importCompleted") == true
+                && reportedBlocking == 0
+                && actualBlocking == 0
+                && NvidiaErrorCount(root) == 0
+                && importAttempted == true
+                && importCompleted == true
+                && NvidiaBool(root, "summary", "exportAttempted") == false
                 && PathsEqual(NvidiaString(root, "rollbackManifestPath"), recovery.RollbackManifestPath);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool NvidiaImportAttempted(string? json, string profileId)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return false;
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
-                && NvidiaString(root, "operation") == "Apply"
-                && NvidiaString(root, "profileId") == profileId
-                && NvidiaBool(root, "summary", "importAttempted") == true;
         }
         catch
         {
@@ -599,7 +570,7 @@ public sealed class LiveDataService
     {
         var path = NvidiaRecoveryIndexPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(recovery, JsonOptions), new UTF8Encoding(false));
+        RooIndustries.Optimizer.OperationFiles.Write(path, recovery);
     }
 
     private void ClearNvidiaRecovery(NvidiaProfileRecovery recovery)
@@ -608,22 +579,8 @@ public sealed class LiveDataService
         try
         {
             if (!File.Exists(path)) return;
-            var current = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
+            var current = RooIndustries.Optimizer.OperationFiles.Read<NvidiaProfileRecovery>(path);
             if (current == recovery) File.Delete(path);
-        }
-        catch
-        {
-        }
-    }
-
-    private void ClearNvidiaRecovery(string profileId)
-    {
-        var path = NvidiaRecoveryIndexPath;
-        try
-        {
-            if (!File.Exists(path)) return;
-            var current = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
-            if (current?.ProfileId == profileId) File.Delete(path);
         }
         catch
         {
@@ -645,6 +602,31 @@ public sealed class LiveDataService
             if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current)) return null;
         return current.ValueKind is JsonValueKind.True or JsonValueKind.False ? current.GetBoolean() : null;
     }
+
+    private static bool TryNvidiaInt(JsonElement root, out int value, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                value = 0;
+                return false;
+            }
+        }
+        value = 0;
+        return current.ValueKind == JsonValueKind.Number && current.TryGetInt32(out value);
+    }
+
+    private static int NvidiaBlockingGates(JsonElement root)
+        => root.TryGetProperty("gates", out var gates) && gates.ValueKind == JsonValueKind.Array
+            ? gates.EnumerateArray().Count(gate => NvidiaBool(gate, "blocking") == true)
+            : -1;
+
+    private static int NvidiaErrorCount(JsonElement root)
+        => root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array
+            ? errors.GetArrayLength()
+            : -1;
 
     private static bool PathsEqual(string? first, string second)
     {
