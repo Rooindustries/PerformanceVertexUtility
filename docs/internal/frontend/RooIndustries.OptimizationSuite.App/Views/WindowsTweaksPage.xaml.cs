@@ -31,6 +31,7 @@ public sealed partial class WindowsTweaksPage : Page
         Grid.SetColumnSpan(title, compact ? 3 : 1);
         Grid.SetRow(current, compact ? 1 : 0); Grid.SetColumn(current, compact ? 1 : 2);
         Grid.SetRow(actions, compact ? 1 : 0); Grid.SetColumn(actions, compact ? 2 : 3); Grid.SetColumnSpan(actions, compact ? 2 : 1);
+        current.VerticalAlignment = actions.VerticalAlignment = compact ? VerticalAlignment.Top : VerticalAlignment.Center;
         current.Children[0].Visibility = actions.Children[0].Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         row.RowSpacing = compact ? 8 : 0;
         ColumnLabels.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
