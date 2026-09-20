@@ -20,8 +20,11 @@ namespace RooIndustries.OptimizationSuite.Services
         public bool Missing { get; set; } = true;
         public bool FailRead { get; set; }
         public bool FailApply { get; set; }
+        public TweakRecovery? Recovery { get; set; }
         public int Applies { get; private set; }
         public int Previews { get; private set; }
+        public int RecoveryReads { get; private set; }
+        public int OwnershipPreviews { get; private set; }
         public Func<Task>? BeforePreview { get; set; }
         public Action? AfterApply { get; set; }
         private readonly string _root;
@@ -43,7 +46,13 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync() => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
         public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromResult(Choices.Read());
         public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string id, TweakSelection[] selections, string? revision) => Task.FromResult(Choices.Save(catalog, id, selections, revision));
-        public Task<TweakRecovery> ReadWindowsRecoveryAsync() => FailRead ? Task.FromException<TweakRecovery>(new IOException("Controlled recovery read failure")) : Task.FromResult(new TweakRecovery(Windows.ReadState(), null, null));
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync()
+        {
+            RecoveryReads++;
+            return FailRead
+                ? Task.FromException<TweakRecovery>(new IOException("Controlled recovery read failure"))
+                : Task.FromResult(Recovery ?? new TweakRecovery(Windows.ReadState(), null, null));
+        }
         public Task<TweakInspection> ReadWindowsTweaksAsync()
         {
             var inspection = Engine.Detect();
@@ -63,6 +72,10 @@ namespace RooIndustries.OptimizationSuite.Services
             var result = Engine.Apply(review.Path, review.Hash, accepted); AfterApply?.Invoke(); return Task.FromResult(result);
         }
         public Task<JsonElement> RecoverWindowsTweaksAsync(string hash) => throw new InvalidOperationException("Unexpected recovery call");
-        public Task<WindowsTweakReview> PreviewOwnershipAsync(string path) => throw new InvalidOperationException("Unexpected ownership call");
+        public Task<WindowsTweakReview> PreviewOwnershipAsync(string path)
+        {
+            OwnershipPreviews++;
+            throw new InvalidOperationException("Unexpected ownership call");
+        }
     }
 }
