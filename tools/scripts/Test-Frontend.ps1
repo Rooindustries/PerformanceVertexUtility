@@ -6,3 +6,8 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';
 if($LASTEXITCODE -ne 0){throw 'Memory display checks failed'}
 & (Join-Path $PSScriptRoot 'Build-Frontend.ps1') -DotNetPath $DotNetPath
 if($LASTEXITCODE -ne 0){throw 'Frontend build failed'}
+
+& $DotNetPath run --project (Join-Path $root 'tools/validation/AppSweepUi/AppSweepUi.csproj') --configuration Release
+if($LASTEXITCODE -ne 0){throw 'App state checks failed'}
+& $DotNetPath run --project (Join-Path $root 'tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj') --configuration Release -- $root
+if($LASTEXITCODE -ne 0){throw 'Windows settings UI checks failed'}

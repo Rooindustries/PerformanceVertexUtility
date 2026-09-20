@@ -48,12 +48,21 @@ TweakCatalog TwoSettingCatalog()
         [new("Fixture", "fixture", "isolated UI validation")]);
     return new(1, "two-setting-fixture", [Setting("first", "First setting", "First"), Setting("second", "Second setting", "Second")], []);
 }
+if (args is ["--presentation", var presentationRepo])
+{
+    var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(presentationRepo), "backend/catalogs/windows-tweaks.json"));
+    ActionChecks.Run(catalog, Check);
+    IconChecks.Run(presentationRepo, catalog, Check);
+    Console.WriteLine($"Completed {count} presentation checks.");
+    return;
+}
 try
 {
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
         ActionChecks.Run(catalog, Check);
+        IconChecks.Run(catalogRepo, catalog, Check);
     }
     var fixture = new Fixture(Path.Combine(root, "missing")); var model = await Load(fixture);
     Check(model.Rows.Count == 1 && model.Rows[0].HasToggle && model.Rows[0].Choices.Length == 3, "Missing products retain every choice and an interactive toggle");

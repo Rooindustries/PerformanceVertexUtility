@@ -99,7 +99,8 @@
                         <StackPanel Grid.Column="1" Spacing="4">
                             <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" Content="Details" FontSize="11" MinHeight="24" Padding="6,2" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind Name}" AutomationProperties.HelpText="Setting details">
+                                <Button Grid.Column="1" MinHeight="28" MinWidth="28" Padding="5" ToolTipService.ToolTip="Setting details" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind Name, Mode=OneWay}" AutomationProperties.HelpText="Setting details">
+                                    <Image Source="ms-appx:///Assets/Icons/setting-details.svg" Width="16" Height="16"/>
                                     <Button.Flyout><Flyout><ScrollViewer MaxHeight="360"><ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource SettingDetailsTemplate}"/></ScrollViewer></Flyout></Button.Flyout>
                                 </Button>
                             </Grid>
@@ -114,14 +115,14 @@
                         <StackPanel Grid.Column="3" Spacing="4" VerticalAlignment="Center">
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
-                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind Name}" AutomationProperties.HelpText="{x:Bind Scope}">
+                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind Name, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
                                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" MaxWidth="150"/></DataTemplate></ComboBox.ItemTemplate>
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
                             <TextBlock Text="{x:Bind Action.Name, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" Visibility="{x:Bind HasValuePicker, Converter={StaticResource InverseBoolToVisibility}}">
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </TextBlock>
-                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind ToggleOn, Mode=TwoWay}" Width="44" MinWidth="0" OnContent="" OffContent="" AutomationProperties.AutomationId="{x:Bind SelectionAutomationId}" AutomationProperties.Name="{x:Bind Name}" AutomationProperties.HelpText="Select this change for review" Visibility="{x:Bind HasToggle, Converter={StaticResource BoolToVisibility}}">
+                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind ToggleOn, Mode=TwoWay}" Width="44" MinWidth="0" OnContent="" OffContent="" AutomationProperties.AutomationId="{x:Bind SelectionAutomationId}" AutomationProperties.Name="{x:Bind Name, Mode=OneWay}" AutomationProperties.HelpText="Select this change for review" Visibility="{x:Bind HasToggle, Converter={StaticResource BoolToVisibility}}">
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ToggleSwitch>
                             </Grid>
