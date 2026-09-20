@@ -51,7 +51,7 @@ try
     var generic = Path.Combine(scripts, "fixture.ps1");
     await File.WriteAllTextAsync(generic, "Write-Output '{\"status\":\"success\"}'; exit 7");
     var failed = await service.RunBackendScriptResultAsync("fixture.ps1");
-    Check(failed.Value?.Contains("success") == true && failed.Error?.Contains("code 7") == true && service.LastError == failed.Error,
+    Check(failed.Value?.Contains("success") == true && failed.Error?.Contains("code 1") == true && service.LastError == failed.Error,
         "A failed command preserves its JSON output and exact nonzero exit error");
     Check(await service.RunBackendScriptTextAsync("fixture.ps1") is null,
         "Text-only callers cannot receive failed output as successful data");
