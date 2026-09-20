@@ -54,6 +54,31 @@ function Invoke-NvidiaExecutorCommand {
     }
 }
 
+function Write-NvidiaRollbackManifest {
+    param(
+        [object]$Manifest,
+        [string]$Path,
+        [bool]$ExportCompleted,
+        [bool]$ImportAttempted,
+        [bool]$ImportCompleted,
+        [bool]$RealExecution
+    )
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    $resolved = Resolve-RooIndustriesPath $Path $Path
+    Ensure-RooIndustriesDirectory (Split-Path $resolved -Parent)
+    $Manifest.exportCompleted = $ExportCompleted
+    $Manifest.importAttempted = $ImportAttempted
+    $Manifest.importCompleted = $ImportCompleted
+    $Manifest.nvpiExecutionAllowedNow = $RealExecution
+    $temporary = $resolved + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        ($Manifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $temporary -Encoding UTF8
+        Move-Item -LiteralPath $temporary -Destination $resolved -Force
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 try {
     $persistedRollbackManifest = $null
     $resolvedRequestedRollbackManifestPath = $null
@@ -135,6 +160,7 @@ try {
             completed = $exportCompleted
         }) | Out-Null
         if ($exportCompleted) {
+            Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $RollbackManifestPath -ExportCompleted $true -ImportAttempted $true -ImportCompleted $false -RealExecution ($ExecutorMode -eq 'Real')
             $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
             $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
             $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
@@ -171,10 +197,7 @@ try {
 
     if ($Operation -eq 'Apply' -and $canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
         $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
-        Ensure-RooIndustriesDirectory (Split-Path $resolvedRollbackManifestPath -Parent)
-        $rollbackManifest.exportCompleted = $exportCompleted
-        $rollbackManifest.nvpiExecutionAllowedNow = ($ExecutorMode -eq 'Real')
-        ($rollbackManifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $resolvedRollbackManifestPath -Encoding UTF8
+        Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $resolvedRollbackManifestPath -ExportCompleted $exportCompleted -ImportAttempted (@($sequence | Where-Object { $_.operation -eq 'import' -and -not $_.skipped }).Count -gt 0) -ImportCompleted $importCompleted -RealExecution ($ExecutorMode -eq 'Real')
     } elseif ($Operation -eq 'Restore' -and $rollbackManifestBound) {
         $resolvedRollbackManifestPath = $resolvedRequestedRollbackManifestPath
     } else {
