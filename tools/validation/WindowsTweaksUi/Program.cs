@@ -58,6 +58,7 @@ if (args is ["--presentation", var presentationRepo])
 }
 try
 {
+    AppliedStateChecks.Run(Check);
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
@@ -156,7 +157,8 @@ try
     var first = model.Rows.Single(row => row.Id == "first");
     var second = model.Rows.Single(row => row.Id == "second");
     first.Selected = first.Choices.Single(choice => choice.Id == "off");
-    second.ToggleOn = false;
+    second.Selected = second.Choices[0];
+    Check(second.ToggleOn && second.IsApplied && !second.HasPendingChange, "An applied setting with no queued choice still shows on");
     await model.ReviewCommand.ExecuteAsync(null);
     Check(fixture.LastPreviewSelections?.OrderBy(selection => selection.SettingId).SequenceEqual(new[]
         {

@@ -29,7 +29,7 @@ static class SectionChecks
         var network = model.Rows.Single(row => row.Id == "windows.06086057572c648a"); network.Selected = network.Choices[1];
         model.SelectedSection = model.Sections.Single(section => section.Id == "debloat");
         var debloat = model.Rows.First(row => row.Available && row.Definition.Options[0].Changes is { Length: > 0 }); debloat.Selected = debloat.Choices[1];
-        check(model.Sections.Single(section => section.Id == "network").SelectedCount == 1 && model.SelectedSection.SelectedCount == 1 && model.SelectionText == "2 selected",
+        check(model.Sections.Single(section => section.Id == "network").SelectedCount == 1 && model.SelectedSection.SelectedCount == 1 && model.SelectionText == "2 changes",
             "Selections survive navigation and category badges distinguish selection from applied state");
         await model.ReviewCommand.ExecuteAsync(null);
         check(model.HasReview && model.Changes.Count >= 2 && model.Changes.All(change => !change.Target.Contains('\\') && !change.Target.Contains("LocalMachine", StringComparison.Ordinal)),
@@ -37,7 +37,7 @@ static class SectionChecks
         model.Approved = true; model.SelectedSection = model.Sections.Single(section => section.Id == "network");
         check(model.CanApply && network.Selected.Id == network.Choices[1].Id, "Changing sections preserves an already reviewed selection");
         network.Selected = null!;
-        check(model.CanApply && network.Selected.Id == network.Choices[1].Id && model.SelectionText == "2 selected",
+        check(model.CanApply && network.Selected.Id == network.Choices[1].Id && model.SelectionText == "2 changes",
             "A recycled choice control cannot clear its selection or approval through a transient null binding");
         model.FindSetting("timer");
         check(model.SelectedSection.Id == "all" && model.Rows.Any(row => row.Name.Contains("timer", StringComparison.OrdinalIgnoreCase)),
