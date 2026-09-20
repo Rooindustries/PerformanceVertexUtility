@@ -92,10 +92,6 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         DiagnosticRows.Add(new("UnparkCPU", "View and change CPU core parking.", "Open tools", "neutral"));
     }
 
-    private static async Task<T?> TrySample<T>(Func<Task<T>> load) where T : class
-    {
-        try { return await load(); } catch { return null; }
-    }
 }
 
 public sealed record DiagnosticRow(string Title, string Detail, string StateText, string State);

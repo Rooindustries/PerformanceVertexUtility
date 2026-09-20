@@ -55,10 +55,6 @@ public partial class StartupServicesViewModel : PageViewModelBase
     [RelayCommand]
     private Task RetryAsync() => ReloadAsync();
 
-    private static async Task<T?> TrySample<T>(Func<Task<T>> load) where T : class
-    {
-        try { return await load(); } catch { return null; }
-    }
 }
 
 public sealed record BackgroundRow(string Name, string Role, string Ram, string StateText, string State);
