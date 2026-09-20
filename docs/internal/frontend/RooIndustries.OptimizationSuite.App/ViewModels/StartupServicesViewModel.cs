@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
 
@@ -21,7 +22,8 @@ public partial class StartupServicesViewModel : PageViewModelBase
     protected override async Task LoadCoreAsync()
     {
         var classification = await App.Live.GetProcessClassificationAsync();
-        var processes = classification?.Processes ?? new List<ProcessItem>();
+        if (classification?.Processes is null) throw new InvalidOperationException(App.Live.LastError ?? "The background process list is unavailable.");
+        var processes = classification.Processes;
 
         var background = processes
             .Where(p => p.Category is "backgroundApp" or "launcher" or "vendorUtility" or "browserWebView")
@@ -49,6 +51,9 @@ public partial class StartupServicesViewModel : PageViewModelBase
 
         IsEmpty = false;
     }
+
+    [RelayCommand]
+    private Task RetryAsync() => ReloadAsync();
 
     private static async Task<T?> TrySample<T>(Func<Task<T>> load) where T : class
     {
