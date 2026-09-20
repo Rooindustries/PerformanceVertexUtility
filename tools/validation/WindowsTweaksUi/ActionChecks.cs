@@ -1,0 +1,82 @@
+using RooIndustries.OptimizationSuite.ViewModels;
+using RooIndustries.Optimizer;
+
+static class ActionChecks
+{
+    public static void Run(TweakCatalog catalog, Action<bool, string> check)
+    {
+        var definitions = catalog.Settings.ToDictionary(setting => setting.Id);
+        WindowsTweakRow Row(string id) => new(definitions[id], definitions, _ => { });
+        const string edgeResetId = "choice-c4697634bc8964cb";
+
+        foreach (var id in new[] { "windows.e2c95b16cecfc711", "windows.ebf4b29b6f2d80a2", "windows.447cb476fb1e7015", "windows.6195a41a25475f51" })
+        {
+            var row = Row(id);
+            check(row.Action.Name == "Off" && row.Selected.Id.Length == 0 && !row.ToggleOn,
+                row.Name + " presents Off without queuing it or the reset action");
+            row.ToggleOn = true;
+            check(row.Selected.Name == "Off", row.Name + " queues the action displayed beside its switch");
+            row.Action = row.ActionChoices.Single(choice => choice.Id == edgeResetId);
+            check(row.Selected.Id == edgeResetId && row.Selected.Name == "Use Windows default", row.Name + " requires an explicit reset selection");
+            row.ToggleOn = false;
+            check(row.Selected.Id.Length == 0 && row.Action.Id == edgeResetId, row.Name + " keeps the visible candidate while clearing pending intent");
+        }
+
+        var defaultRow = Row("windows.03b826347901331c");
+        defaultRow.Action = defaultRow.ActionChoices.Single(choice => choice.Name == "Windows default");
+        check(defaultRow.Selected.Id.Length == 0 && !defaultRow.ToggleOn, "Choosing Windows default does not queue it before the row switch is enabled");
+        defaultRow.ToggleOn = true;
+        check(defaultRow.Selected.Name == "Windows default", "Windows default remains a separate intentional queued action");
+
+        var inverted = catalog.Settings.First(setting => setting.Options[0].Name == "Remove this override" && setting.Options[1].Name.StartsWith("Value ", StringComparison.Ordinal));
+        var invertedRow = Row(inverted.Id);
+        check(invertedRow.Action.Id == inverted.Options[1].Id, "An inverted catalog pair shows the concrete action before its reset action");
+
+        var numeric = catalog.Settings.First(setting => setting.Options.Length > 2 && setting.Options.Count(option => option.Name.StartsWith("Value ", StringComparison.Ordinal)) > 1);
+        var numericRow = Row(numeric.Id);
+        check(numericRow.ActionChoices.Select(choice => choice.Id).SequenceEqual(numeric.Options.Select(option => option.Id)),
+            "Numeric choices preserve every catalog option and its identity");
+        numericRow.Action = numericRow.ActionChoices[^1];
+        numericRow.ToggleOn = true;
+        check(numericRow.Selected.Id == numeric.Options[^1].Id, "A numeric row queues the exact displayed choice");
+
+        var bandwidth = Row("windows.11faeaecf4572970");
+        check(bandwidth.Action.Id == "choice-95a6ed84299d0109" && bandwidth.Action.Name == "No app reservations",
+            "A presentation alias cannot make a bandwidth reset the initial action");
+        bool DeletesOverride(TweakOption option) => option.Changes.Length > 0 && (option.Controls?.Length ?? 0) == 0 &&
+            option.Changes.All(change => change.Dword is null && change.Value is null && change.Token is null && change.Bits is null && change.Formula is null);
+        var resetCandidates = catalog.Settings.Where(definition => definition.Options.Any(DeletesOverride) && definition.Options.Any(option => !DeletesOverride(option)))
+            .Where(definition => definition.Options.Any(option => option.Id == Row(definition.Id).Action.Id && DeletesOverride(option))).Select(definition => definition.Id).ToArray();
+        check(resetCandidates.Length == 0, "Every mixed catalog entry starts with a concrete action rather than deleting its override: " + string.Join(", ", resetCandidates));
+
+        var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Suggestions");
+        var setting = new TweakDefinition("action-contract", "Suggestions", "Windows", "Suggestion preferences", 10240, 26200, ["*"], "none",
+            [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)]), new("default", "Remove this override", [new(address, null)])],
+            [new("Fixture", "fixture", "Independent action-state contract")]);
+        var resetFirst = setting with { Options = [new("default", "Use Windows default", [new(address, null)]), new("off", "Off", [new(address, 0)])] };
+        var resetRow = new WindowsTweakRow(resetFirst, new Dictionary<string, TweakDefinition> { [setting.Id] = resetFirst }, _ => { });
+        check(resetRow.Action.Id == "off" && resetRow.Selected.Id.Length == 0,
+            "A directly named Windows-default option never becomes the initial action ahead of an explicit Off choice");
+        var observed = new WindowsTweakRow(setting, new Dictionary<string, TweakDefinition> { [setting.Id] = setting }, _ => { });
+        observed.Observe(new(setting.Id, setting.Name, true, ["on"],
+            [new() { Address = address, NativeKey = @"\REGISTRY\USER\fixture\Software\RooIndustriesUiModelFixture", KeyExists = true,
+                Value = new("Suggestions", 4, [1, 0, 0, 0]), MissingKeys = [] }], null, ["on", "off", "default"]));
+        check(observed.Current == "On" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
+            "An observed enabled setting never becomes a queued change");
+        observed.Selected = observed.Choices.Single(choice => choice.Id == "off");
+        check(observed.ToggleOn && observed.Action.Id == "off" && observed.Current == "On",
+            "Loading an explicit Off choice shows pending Off separately from current On");
+        observed.Selected = observed.Choices.Single(choice => choice.Id == "default");
+        check(observed.ToggleOn && observed.Action.Id == "default" && observed.Current == "On",
+            "Loading an explicit reset choice preserves its exact action and the observed current state");
+        observed.Action = null!;
+        check(observed.Action.Id == "default" && observed.Selected.Id == "default",
+            "A transient null action binding cannot replace a loaded choice");
+        observed.ToggleOn = false;
+        check(observed.Selected.Id.Length == 0 && observed.Current == "On",
+            "Clearing a queued reset leaves the observed Windows state untouched");
+        observed.Observe(null);
+        check(observed.Current == "Not read" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
+            "A missing observation remains unknown without selecting a change");
+    }
+}

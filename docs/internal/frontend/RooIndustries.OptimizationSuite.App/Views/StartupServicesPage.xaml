@@ -71,10 +71,17 @@
                             <TextBlock Text="This list shows running processes. Use Games &amp; processes to change priorities." FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource PanelBorderStyle}">
+                    <Border Style="{StaticResource PanelBorderStyle}" VerticalAlignment="Top">
                         <StackPanel Spacing="8">
                             <TextBlock Text="Startup apps" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Text="Open Autoruns from Tools to manage startup entries." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Image Source="ms-appx:///Assets/Tools/autoruns.png" Width="32" Height="32" VerticalAlignment="Top" AutomationProperties.AccessibilityView="Raw"/>
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock Text="Manage sign-in apps with Microsoft Autoruns." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                                    <Button Content="View Autoruns" Click="OpenAutoruns" HorizontalAlignment="Left" AutomationProperties.AutomationId="ViewAutoruns" />
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </views:AdaptivePanel>

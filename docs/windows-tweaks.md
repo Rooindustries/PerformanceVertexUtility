@@ -193,8 +193,11 @@ python3 tools/validation/check_baseline.py --contracts-only
 
 Windows settings includes search, categories, source filters, reusable profiles,
 presets, before/after review, apply, restore and interruption recovery. Every
-setting remains visible and selectable. Toggles select a setting's choice; settings
-with several values also provide a value picker. Choices for missing components
+setting remains visible and selectable. Each row separates the current reading
+from the proposed change. Choose a value, then turn on the row's switch to select
+that action for review. Turning it off keeps the current setting; it does not undo
+an applied change. Use Windows default explicitly removes the local override,
+and another policy may still control the setting. Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.

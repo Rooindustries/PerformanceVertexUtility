@@ -12,4 +12,8 @@ public sealed partial class StartupServicesPage : Page
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
+    private void OpenAutoruns(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (App.MainWindow is MainWindow window) window.FindTool("Autoruns");
+    }
 }

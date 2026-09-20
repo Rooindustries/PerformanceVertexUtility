@@ -34,9 +34,9 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Image Width="28" Height="28" Source="ms-appx:///Assets/Icons/game.svg" AutomationProperties.AccessibilityView="Raw" />
+                <Image Source="ms-appx:///Assets/Icons/game.svg" Style="{StaticResource PageHeaderIconStyle}" />
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Games &amp; processes" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="Games &amp; processes" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <TextBlock Text="Set priorities, choose CPU cores, and manage saved rules." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                 </StackPanel>
             </Grid>

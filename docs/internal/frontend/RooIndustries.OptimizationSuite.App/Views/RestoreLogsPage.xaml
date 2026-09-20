@@ -46,7 +46,7 @@
 
                 <Border Style="{StaticResource FocalPanelBorderStyle}">
                     <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows settings" Click="OpenWindowsSettings"/></StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows settings" Click="OpenWindowsSettings"/><Button Content="BIOS backups" Click="OpenBiosBackups" AutomationProperties.AutomationId="OpenBiosBackups"/></StackPanel>
                         <TextBlock Text="Saved settings" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
@@ -71,7 +71,13 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource PanelBorderStyle}" Padding="0">
+                <Border Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.HasHistory, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="No history to show" FontWeight="SemiBold" />
+                        <TextBlock Text="Windows and process changes appear here." FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}" Padding="0" Visibility="{x:Bind ViewModel.HasHistory, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
                         <Grid ColumnSpacing="12" Padding="18,16,18,12">
                             <Grid.ColumnDefinitions>
