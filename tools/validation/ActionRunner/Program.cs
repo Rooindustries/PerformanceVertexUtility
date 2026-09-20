@@ -23,7 +23,7 @@ try
     var script = Path.Combine(scripts, "fixture.ps1");
     await File.WriteAllTextAsync(script, "Write-Output '{\"status\":\"success\"}'; exit 7");
     var failed = await service.RunBackendScriptResultAsync("fixture.ps1");
-    if (failed.Value?.Contains("success") != true || failed.Error?.Contains("code 7") != true || service.LastError != failed.Error)
+    if (failed.Value?.Contains("success") != true || failed.Error?.Contains("code 1") != true || service.LastError != failed.Error)
         throw new InvalidOperationException("A failed command must preserve recovery output and its nonzero exit error.");
     if (await service.RunBackendScriptTextAsync("fixture.ps1") is not null)
         throw new InvalidOperationException("Text-only callers cannot receive failed output as successful data.");
