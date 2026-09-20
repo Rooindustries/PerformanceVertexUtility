@@ -35,16 +35,16 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ComboBox Header="Preferred CPU cores" ItemsSource="{x:Bind ViewModel.CpuModes}" SelectedItem="{x:Bind ViewModel.SelectedCpuMode, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="ProcessCpuMode" />
-                            <ComboBox Grid.Column="1" Header="Processor group" ItemsSource="{x:Bind ViewModel.TopologyChoices}" SelectedItem="{x:Bind ViewModel.SelectedTopology, Mode=TwoWay}" HorizontalAlignment="Stretch" Visibility="{x:Bind ViewModel.ShowTopology, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="ProcessTopology" />
+                            <ComboBox Header="Preferred CPU cores" ItemsSource="{x:Bind ViewModel.CpuModes}" SelectedItem="{x:Bind ViewModel.SelectedCpuMode, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEditCpuSelection, Mode=OneWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="ProcessCpuMode" />
+                            <ComboBox Grid.Column="1" Header="Processor group" ItemsSource="{x:Bind ViewModel.TopologyChoices}" SelectedItem="{x:Bind ViewModel.SelectedTopology, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEditCpuSelection, Mode=OneWay}" HorizontalAlignment="Stretch" Visibility="{x:Bind ViewModel.ShowTopology, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="ProcessTopology" />
                         </Grid>
-                        <CheckBox Content="One logical processor per physical core" IsChecked="{x:Bind ViewModel.OneThreadPerCore, Mode=TwoWay}" AutomationProperties.AutomationId="ProcessOneThread" />
-                        <CheckBox Content="Restrict this app to selected CPUs" IsChecked="{x:Bind ViewModel.SetHardAffinity, Mode=TwoWay}" AutomationProperties.AutomationId="ProcessHardAffinity" />
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SetHardAffinity, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <CheckBox Content="One logical processor per physical core" IsChecked="{x:Bind ViewModel.OneThreadPerCore, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEditCpuSelection, Mode=OneWay}" AutomationProperties.AutomationId="ProcessOneThread" />
+                        <CheckBox Content="Restrict this app to selected CPUs" IsChecked="{x:Bind ViewModel.SetHardAffinity, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEditAffinity, Mode=OneWay}" AutomationProperties.AutomationId="ProcessHardAffinity" />
+                        <StackPanel Spacing="8" IsEnabled="{x:Bind ViewModel.CanEditAffinity, Mode=OneWay}" Visibility="{x:Bind ViewModel.SetHardAffinity, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                             <TextBox Header="{x:Bind ViewModel.AffinityLabel, Mode=OneWay}" Text="{x:Bind ViewModel.AffinityMask, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="For example, 0x1 selects CPU 0" AutomationProperties.AutomationId="ProcessAffinityMask" />
                             <Button Content="Use selected CPUs" Command="{x:Bind ViewModel.UseCheckedAffinityCommand}" AutomationProperties.AutomationId="ProcessBuildAffinity" />
                         </StackPanel>
-                        <GridView ItemsSource="{x:Bind ViewModel.Cpus}" SelectionMode="None" MaxHeight="240" HorizontalAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Auto" Visibility="{x:Bind ViewModel.ShowLogicalCpus, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="ProcessCpuChoices">
+                        <GridView ItemsSource="{x:Bind ViewModel.Cpus}" SelectionMode="None" IsEnabled="{x:Bind ViewModel.CanEditCpuChoices, Mode=OneWay}" MaxHeight="240" HorizontalAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Auto" Visibility="{x:Bind ViewModel.ShowLogicalCpus, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="ProcessCpuChoices">
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:LogicalCpuChoice">
                                     <CheckBox IsChecked="{x:Bind Selected, Mode=TwoWay}" IsEnabled="{x:Bind Cpu.Available}" Width="194" AutomationProperties.Name="{x:Bind Label}">
