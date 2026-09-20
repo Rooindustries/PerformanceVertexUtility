@@ -108,8 +108,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         AppsCount = _all.Count;
         KeepCount = _all.Count(r => r.Plan == "Excluded");
         QuietCount = _all.Count(r => r.Plan == "Lower priority");
-        RestoreAvailable = App.Live.FindLatestProcessProfileBackup() is not null;
-        RestoreHint = RestoreAvailable ? "Restore is available from the latest apply" : "Apply creates a restore point";
+        _lastBackupPath = null;
+        RestoreAvailable = false;
+        RestoreHint = "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 
         ApplyFilter();
@@ -125,9 +126,21 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Reading the current process list and checking what Roo Industries can safely tune.";
         try
         {
-            var json = await App.Live.PreviewProcessProfileTextAsync();
+            var response = await App.Live.PreviewProcessProfileResultAsync();
+            if (response.Value is null)
+            {
+                ActionTitle = "Plan not confirmed";
+                ActionDetail = response.Error ?? "The process plan returned no result.";
+                return;
+            }
+            if (!TryProcessPreview(response.Value, out var error))
+            {
+                ActionTitle = "Plan not confirmed";
+                ActionDetail = error;
+                return;
+            }
             ActionTitle = "Plan ready";
-            ActionDetail = SummarizeProcessAction(json, "Check is ready. Roo Industries found the processes it can tune without changing anything.");
+            ActionDetail = SummarizeProcessAction(response.Value, "Check is ready. Roo Industries found the processes it can tune without changing anything.");
         }
         finally
         {
@@ -144,12 +157,42 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Roo Industries is applying reversible process controls to this session.";
         try
         {
-            var json = await App.Live.ApplyProcessProfileTextAsync();
-            _lastBackupPath = ExtractString(json, "backup", "location") ?? App.Live.FindLatestProcessProfileBackup();
-            RestoreAvailable = _lastBackupPath is not null || App.Live.FindLatestProcessProfileBackup() is not null;
-            RestoreHint = RestoreAvailable ? "Restore is ready" : "No process needed a restore point";
-            ActionTitle = "Process priorities applied";
-            ActionDetail = SummarizeProcessAction(json, "Roo Industries applied the process controls it could safely change.");
+            var response = await App.Live.ApplyProcessProfileResultAsync();
+            if (response.Value is null)
+            {
+                ActionTitle = "Process priorities not confirmed";
+                ActionDetail = response.Error ?? "The process apply returned no result.";
+                return;
+            }
+            if (!TryProcessAction(response.Value, "performance.applyProfile", out var result, out var error))
+            {
+                ActionTitle = "Process priorities not confirmed";
+                ActionDetail = error;
+                return;
+            }
+            var changed = CountArray(result, "result", "changedItems") ?? CountArray(result, "changedItems") ?? 0;
+            var status = ExtractString(result, "status") ?? "unknown";
+            var backup = VerifiedBackup(result);
+            if (backup is not null)
+            {
+                _lastBackupPath = backup;
+                RestoreAvailable = true;
+                RestoreHint = "Restore is ready";
+            }
+            if (status == "success" && changed == 0)
+            {
+                ActionTitle = "Process priorities unchanged";
+                ActionDetail = SummarizeProcessAction(response.Value, "No process priorities needed changing.");
+                return;
+            }
+            if (status == "success" && backup is not null)
+            {
+                ActionTitle = "Process priorities applied";
+                ActionDetail = SummarizeProcessAction(response.Value, "Roo Industries applied the reviewed process controls.");
+                return;
+            }
+            ActionTitle = "Process priorities need attention";
+            ActionDetail = SummarizeProcessAction(response.Value, "The process apply was not fully confirmed.");
         }
         finally
         {
@@ -161,7 +204,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private async Task RestoreProfileAsync()
     {
         if (ActionBusy) return;
-        var backup = _lastBackupPath ?? App.Live.FindLatestProcessProfileBackup();
+        var backup = _lastBackupPath;
         if (string.IsNullOrWhiteSpace(backup))
         {
             ActionTitle = "Nothing to restore";
@@ -176,11 +219,34 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Roo Industries is putting changed process controls back to their previous state.";
         try
         {
-            var json = await App.Live.RestoreProcessProfileTextAsync(backup);
-            ActionTitle = "Restore complete";
-            ActionDetail = SummarizeProcessAction(json, "Roo Industries restored the live process controls from the latest backup.");
-            RestoreAvailable = App.Live.FindLatestProcessProfileBackup() is not null;
-            RestoreHint = RestoreAvailable ? "Latest backup remains available" : "No saved process settings";
+            var response = await App.Live.RestoreProcessProfileResultAsync(backup);
+            if (response.Value is null)
+            {
+                ActionTitle = "Restore not confirmed";
+                ActionDetail = response.Error ?? "The restore returned no result.";
+                return;
+            }
+            if (!TryProcessAction(response.Value, "performance.rollbackProfile", out var result, out var error))
+            {
+                ActionTitle = "Restore not confirmed";
+                ActionDetail = error;
+                return;
+            }
+            var status = ExtractString(result, "status") ?? "unknown";
+            ActionDetail = SummarizeProcessAction(response.Value, "The restore result needs review.");
+            if (status == "success")
+            {
+                ActionTitle = "Restore complete";
+                _lastBackupPath = null;
+                RestoreAvailable = false;
+                RestoreHint = "No saved process settings";
+            }
+            else
+            {
+                ActionTitle = "Restore needs attention";
+                RestoreAvailable = true;
+                RestoreHint = "The reviewed backup remains available";
+            }
         }
         finally
         {
@@ -380,6 +446,66 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         GovernorRestoreAvailable = SessionCanRestore(governor);
     }
 
+    private static bool TryProcessAction(string json, string expectedAction, out JsonElement result, out string error)
+    {
+        result = default;
+        error = "The process action response could not be read.";
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            result = document.RootElement.Clone();
+            if (ExtractString(result, "actionId") != expectedAction) { error = "The process action identity did not match this request."; return false; }
+            if (!TryExtractBool(result, out var dryRun, "dryRun") || dryRun)
+            {
+                error = "The process action did not return explicit confirmed-change evidence.";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+    }
+
+    private static bool TryProcessPreview(string json, out string error)
+    {
+        error = "The process plan response could not be read.";
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var result = document.RootElement;
+            if (ExtractString(result, "actionId") != "performance.previewProfile")
+            {
+                error = "The process plan identity did not match this request.";
+                return false;
+            }
+            if (!TryExtractBool(result, out var dryRun, "dryRun") || !dryRun)
+            {
+                error = "The process plan did not return explicit preview evidence.";
+                return false;
+            }
+            if (string.Equals(ExtractString(result, "status"), "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                error = ExtractIssue(result, "errors") ?? "The process plan failed.";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+    }
+
+    private static string? VerifiedBackup(JsonElement result)
+    {
+        var path = ExtractString(result, "backup", "location");
+        return ExtractBool(result, "backup", "rollbackSupported") && !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path) ? path : null;
+    }
+
     private static string SummarizeProcessAction(string? json, string fallback)
     {
         if (string.IsNullOrWhiteSpace(json)) return fallback;
@@ -536,6 +662,38 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         return current.ValueKind == JsonValueKind.Array ? current.GetArrayLength() : null;
+    }
+
+    private static bool ExtractBool(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current)) return false;
+        }
+        return current.ValueKind == JsonValueKind.True || current.ValueKind == JsonValueKind.String && bool.TryParse(current.GetString(), out var value) && value;
+    }
+
+    private static bool TryExtractBool(JsonElement root, out bool value, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                value = false;
+                return false;
+            }
+        }
+
+        if (current.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            value = current.GetBoolean();
+            return true;
+        }
+        if (current.ValueKind == JsonValueKind.String && bool.TryParse(current.GetString(), out value)) return true;
+        value = false;
+        return false;
     }
 
     private static string? ExtractString(string? json, params string[] path)

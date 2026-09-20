@@ -95,9 +95,15 @@ public partial class MonitoringViewModel : PageViewModelBase
         StutterActionDetail = "Roo Industries is reading the plan. No timer, power, cache, or service setting changes from this.";
         try
         {
-            var json = await App.Live.PreviewStutterOptimizationTextAsync();
+            var response = await App.Live.PreviewStutterOptimizationResultAsync();
+            if (response.Value is null)
+            {
+                StutterActionTitle = "Settings review not confirmed";
+                StutterActionDetail = response.Error ?? "The timer and cache review returned no result.";
+                return;
+            }
             StutterActionTitle = "Settings reviewed";
-            StutterActionDetail = SummarizeStutterAction(json, "Roo Industries checked the timer and cache settings. Nothing changed.");
+            StutterActionDetail = SummarizeStutterAction(response.Value, "Roo Industries checked the timer and cache settings. Nothing changed.");
         }
         finally
         {
@@ -120,9 +126,15 @@ public partial class MonitoringViewModel : PageViewModelBase
             : "Approval is still missing, so Roo Industries will stop before changing the timer.";
         try
         {
-            var json = await App.Live.CheckTimerResolutionTextAsync(LatencySessionApproved);
+            var response = await App.Live.CheckTimerResolutionResultAsync(LatencySessionApproved);
+            if (response.Value is null)
+            {
+                StutterActionTitle = "Latency session not confirmed";
+                StutterActionDetail = response.Error ?? "The latency session returned no result.";
+                return;
+            }
             StutterActionTitle = "Latency session finished";
-            StutterActionDetail = SummarizeStutterAction(json, "Latency session finished. Nothing stayed changed.");
+            StutterActionDetail = SummarizeStutterAction(response.Value, "Latency session finished. Nothing stayed changed.");
         }
         finally
         {
@@ -145,13 +157,19 @@ public partial class MonitoringViewModel : PageViewModelBase
             : "Approval is still missing, so Roo Industries will stop before touching cache files.";
         try
         {
-            var json = await App.Live.CheckShaderCacheCleanupTextAsync(ShaderCacheApproved);
-            _lastShaderRollbackPath = ExtractStringFromJson(json, "rollback", "rollbackManifestPath")
-                ?? ExtractStringFromJson(json, "capabilities", "rollbackManifestPath");
+            var response = await App.Live.CheckShaderCacheCleanupResultAsync(ShaderCacheApproved);
+            if (response.Value is null)
+            {
+                StutterActionTitle = "Cache cleanup not confirmed";
+                StutterActionDetail = response.Error ?? "The cache cleanup check returned no result.";
+                return;
+            }
+            _lastShaderRollbackPath = ExtractStringFromJson(response.Value, "rollback", "rollbackManifestPath")
+                ?? ExtractStringFromJson(response.Value, "capabilities", "rollbackManifestPath");
             ShaderRestoreAvailable = !string.IsNullOrWhiteSpace(_lastShaderRollbackPath);
             ShaderRestoreHint = ShaderRestoreAvailable ? "Cache rollback is ready." : "No cache rollback file was written.";
             StutterActionTitle = "Cache cleanup checked";
-            StutterActionDetail = SummarizeStutterAction(json, "Cache cleanup checked. Nothing changed.");
+            StutterActionDetail = SummarizeStutterAction(response.Value, "Cache cleanup checked. Nothing changed.");
         }
         finally
         {
@@ -181,9 +199,16 @@ public partial class MonitoringViewModel : PageViewModelBase
         StutterActionDetail = "Roo Industries is reading the rollback file and putting cache files back.";
         try
         {
-            var json = await App.Live.RestoreShaderCacheCleanupTextAsync(_lastShaderRollbackPath);
+            var response = await App.Live.RestoreShaderCacheCleanupResultAsync(_lastShaderRollbackPath);
+            if (response.Value is null)
+            {
+                StutterActionTitle = "Cache restore not confirmed";
+                StutterActionDetail = response.Error ?? "The cache restore returned no result.";
+                ShaderRestoreHint = "The existing rollback remains available.";
+                return;
+            }
             StutterActionTitle = "Cache restore checked";
-            StutterActionDetail = SummarizeStutterAction(json, "Cache restore checked.");
+            StutterActionDetail = SummarizeStutterAction(response.Value, "Cache restore checked.");
             ShaderRestoreHint = "Restore path checked.";
         }
         finally
