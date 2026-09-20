@@ -5,14 +5,16 @@
     xmlns:views="using:RooIndustries.OptimizationSuite.Views">
     <Grid Padding="{StaticResource RooIndustriesPageMargin}" RowSpacing="12">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border Style="{StaticResource CommandHeaderBorderStyle}">
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Image Source="ms-appx:///Assets/Icons/windows.svg" Style="{StaticResource PageHeaderIconStyle}"/>
-            <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Windows settings" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="{x:Bind ViewModel.Summary, Mode=OneWay}" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/></StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Windows settings" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="Select settings, review the changes, then apply." FontSize="13" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}"/><TextBlock Text="{x:Bind ViewModel.Summary, Mode=OneWay}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/></StackPanel>
             <Button Grid.Column="2" Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" VerticalAlignment="Top" AutomationProperties.AutomationId="WindowsTweaksRefresh"/>
         </Grid>
-        <Expander Grid.Row="1" Header="Profiles and tools" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="WindowsTweaksProfileTools">
-            <StackPanel Spacing="12">
+        </Border>
+        <Expander Grid.Row="1" Header="Profiles, presets, and Windows tools" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="WindowsTweaksProfileTools">
+            <StackPanel Spacing="10" Padding="0,6,0,2">
         <views:AdaptivePanel MinColumnWidth="250" MaxColumns="3" IsHitTestVisible="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
             <ComboBox Header="Saved profiles" ItemsSource="{x:Bind ViewModel.Profiles}" SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}" PlaceholderText="Choose a profile" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksProfiles"/>
             <TextBox Header="Profile name" Text="{x:Bind ViewModel.ProfileId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" Visibility="{x:Bind ViewModel.ShowProfileName, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="WindowsTweaksProfileName"/>
@@ -47,7 +49,7 @@
             <ComboBox Grid.Column="2" ItemsSource="{x:Bind ViewModel.Sources}" SelectedItem="{x:Bind ViewModel.Source, Mode=TwoWay}" HorizontalAlignment="Stretch" PlaceholderText="All sources" AutomationProperties.AutomationId="WindowsTweaksSource" AutomationProperties.Name="Source tool"/>
         </Grid>
         <Grid Grid.Row="3" ColumnSpacing="16">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="176"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <ListView ItemsSource="{x:Bind ViewModel.Sections}" SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=TwoWay}" SelectionMode="Single" IsItemClickEnabled="False" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" AutomationProperties.AutomationId="WindowsTweakSections">
                 <ListView.ItemTemplate><DataTemplate x:DataType="vm:TweakSection">
                     <Grid Padding="5,9" ColumnSpacing="9"><Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -57,24 +59,23 @@
                     </Grid>
                 </DataTemplate></ListView.ItemTemplate>
             </ListView>
-            <Grid Grid.Column="1" RowSpacing="12">
+            <Grid Grid.Column="1" RowSpacing="8">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <Image Source="{x:Bind ViewModel.SectionIcon, Mode=OneWay}" Width="32" Height="32"/>
                     <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="{x:Bind ViewModel.SectionTitle, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" AutomationProperties.AutomationId="WindowsTweakSectionTitle"/><TextBlock Text="{x:Bind ViewModel.SectionDescription, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" FontSize="12"/></StackPanel>
                     <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.VisibleCount, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                 </Grid>
-                <views:AdaptivePanel Grid.Row="1" MinColumnWidth="140" MaxColumns="4" Visibility="{x:Bind ViewModel.IsDebloat, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsHitTestVisible="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
-                    <Button Content="Remove Widgets" Tag="widgets" Click="OpenAppGroup" AutomationProperties.AutomationId="DebloatWidgets"/>
-                    <Button Content="Remove Copilot" Tag="copilot" Click="OpenAppGroup" AutomationProperties.AutomationId="DebloatCopilot"/>
-                    <Button Content="Remove Edge" Tag="edge" Click="OpenAppGroup" AutomationProperties.AutomationId="DebloatEdge"/>
-                    <Button Content="Remove OneDrive" Tag="onedrive" Click="OpenAppGroup" AutomationProperties.AutomationId="DebloatOneDrive"/>
-                </views:AdaptivePanel>
+                <Grid Grid.Row="1" Padding="10,0,18,0" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="2" Text="CURRENT" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
+                    <TextBlock Grid.Column="3" Text="CHANGE" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
+                </Grid>
                 <Grid Grid.Row="2">
             <ListView IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" ItemsSource="{x:Bind ViewModel.Rows}" SelectionMode="None" HorizontalAlignment="Stretch" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" AutomationProperties.AutomationId="WindowsTweaksList">
                 <ListView.ItemTemplate><DataTemplate x:DataType="vm:WindowsTweakRow">
-                    <Grid Padding="10,10" ColumnSpacing="12" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="108"/><ColumnDefinition Width="205"/></Grid.ColumnDefinitions>
+                    <Grid Padding="10,8" ColumnSpacing="12" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
                         <Image Source="{x:Bind Icon}" Width="24" Height="24" VerticalAlignment="Top" Margin="0,2,0,0"/>
                         <StackPanel Grid.Column="1" Spacing="4">
                             <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
@@ -86,19 +87,24 @@
                                 <HyperlinkButton Command="{x:Bind OpenCommand}" Padding="0"><TextBlock Text="{x:Bind Name}" FontSize="12" TextWrapping="Wrap"/></HyperlinkButton>
                             </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                         </StackPanel>
-                        <StackPanel Grid.Column="2" Spacing="4" VerticalAlignment="Center"><TextBlock Text="Configured" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/><TextBlock Text="{x:Bind Current, Mode=OneWay}" TextWrapping="Wrap"/></StackPanel>
-                        <StackPanel Grid.Column="3" Spacing="6" VerticalAlignment="Center">
-                            <ToggleSwitch IsOn="{x:Bind ToggleOn, Mode=TwoWay}" AutomationProperties.Name="{x:Bind Name}" Visibility="{x:Bind HasToggle, Converter={StaticResource BoolToVisibility}}">
-                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
-                                <ToggleSwitch.OnContent><TextBlock Text="{x:Bind ToggleOnLabel}" TextWrapping="Wrap" MaxWidth="130"/></ToggleSwitch.OnContent>
-                                <ToggleSwitch.OffContent><TextBlock Text="{x:Bind ToggleOffLabel}" TextWrapping="Wrap" MaxWidth="130"/></ToggleSwitch.OffContent>
-                            </ToggleSwitch>
-                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind Choices}" SelectedItem="{x:Bind Selected, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}">
-                                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" MaxWidth="160"/></DataTemplate></ComboBox.ItemTemplate>
-                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
+                        <TextBlock Grid.Column="2" Text="{x:Bind Current, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Spacing="4" VerticalAlignment="Center">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}">
+                                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" MaxWidth="150"/></DataTemplate></ComboBox.ItemTemplate>
+                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
+                            <TextBlock Text="{x:Bind Action.Name, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" Visibility="{x:Bind HasValuePicker, Converter={StaticResource InverseBoolToVisibility}}">
+                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
+                            </TextBlock>
+                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind ToggleOn, Mode=TwoWay}" AutomationProperties.Name="{x:Bind Name}" Visibility="{x:Bind HasToggle, Converter={StaticResource BoolToVisibility}}">
+                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
+                                <ToggleSwitch.OnContent><TextBlock Text="{x:Bind ToggleOnLabel, Mode=OneWay}"/></ToggleSwitch.OnContent>
+                                <ToggleSwitch.OffContent><TextBlock Text="{x:Bind ToggleOffLabel}"/></ToggleSwitch.OffContent>
+                            </ToggleSwitch>
+                            </Grid>
                             <TextBlock Text="{x:Bind ChoiceStatus, Mode=OneWay}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ChoiceStatus, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
-                            <HyperlinkButton Content="Keep current" Command="{x:Bind KeepCurrentCommand}" FontSize="11" Padding="0" Visibility="{x:Bind ShowKeepCurrent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </Grid>
                 </DataTemplate></ListView.ItemTemplate>
@@ -108,10 +114,18 @@
         </Grid>
             </Grid>
         </Grid>
-        <Border Grid.Row="4" Style="{StaticResource PanelBorderStyle}">
-            <StackPanel Spacing="10">
-                <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="WindowsTweaksStatus"/>
-                <TextBlock Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="WindowsTweaksDetail"/>
+        <Border Grid.Row="4" Style="{StaticResource PanelBorderStyle}" Padding="12,10">
+            <StackPanel Spacing="8">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="3"><TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="WindowsTweaksStatus"/><TextBlock Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="WindowsTweaksDetail"/></StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesAccentBrush}"/>
+                        <Button Content="Clear" Command="{x:Bind ViewModel.ClearSelectionCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"/>
+                        <Button Content="Review selected" Command="{x:Bind ViewModel.ReviewCommand}" IsEnabled="{x:Bind ViewModel.CanReview, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksPreview"/>
+                        <Button Content="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}" Command="{x:Bind ViewModel.ApplyCommand}" IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" Style="{StaticResource NavCtaButtonStyle}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" AutomationProperties.AutomationId="WindowsTweaksApply"/>
+                    </StackPanel>
+                </Grid>
                 <Expander Header="Review changes" IsExpanded="True" Visibility="{x:Bind ViewModel.HasValueChanges, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="WindowsTweaksReview">
                     <ScrollViewer MaxHeight="180"><ItemsControl ItemsSource="{x:Bind ViewModel.Changes}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:WindowsChangeRow">
                         <StackPanel Padding="0,6" Spacing="4"><TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/><TextBlock TextWrapping="Wrap"><Run Text="{x:Bind Before}"/><Run Text=" → "/><Run Text="{x:Bind After}"/></TextBlock><TextBlock Text="{x:Bind Target}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/></StackPanel>
@@ -122,14 +136,11 @@
                     <TextBlock Text="{x:Bind ViewModel.DataLossText, Mode=OneWay}" TextWrapping="Wrap" Foreground="Orange"/>
                     <CheckBox Content="I understand that deleted data cannot be restored" IsChecked="{x:Bind ViewModel.AcceptedDataLoss, Mode=TwoWay}" AutomationProperties.AutomationId="WindowsTweaksDataLossApproval"/>
                 </StackPanel>
-                <views:AdaptivePanel MinColumnWidth="180" MaxColumns="4" Compact="True">
-                    <Button Content="Review selected" Command="{x:Bind ViewModel.ReviewCommand}" IsEnabled="{x:Bind ViewModel.CanReview, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksPreview"/>
-                    <Button Content="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}" Command="{x:Bind ViewModel.ApplyCommand}" IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" AutomationProperties.AutomationId="WindowsTweaksApply"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="Review restore" Command="{x:Bind ViewModel.ReviewRestoreCommand}" IsEnabled="{x:Bind ViewModel.CanRestore, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksRestore"/>
                     <Button Content="Review recovery" Command="{x:Bind ViewModel.ReviewRecoveryCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasPendingRecovery, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
-                    <Button Content="Clear selection" Command="{x:Bind ViewModel.ClearSelectionCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"/>
-                </views:AdaptivePanel>
-                <StackPanel Orientation="Horizontal" Spacing="16"><TextBlock Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/><CheckBox Content="Technical values" IsChecked="{x:Bind ViewModel.ShowAdvanced, Mode=TwoWay}"/></StackPanel>
+                    <CheckBox Content="Advanced settings" IsChecked="{x:Bind ViewModel.ShowAdvanced, Mode=TwoWay}" VerticalAlignment="Center"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

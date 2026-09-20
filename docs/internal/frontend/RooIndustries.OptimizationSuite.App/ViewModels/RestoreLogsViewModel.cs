@@ -19,6 +19,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     public ObservableCollection<StatusLine> RestoreRows { get; } = new();
     public ObservableCollection<AuditRow> HistoryRows { get; } = new();
+    public bool HasHistory => HistoryRows.Count > 0;
 
     protected override async Task LoadCoreAsync()
     {
@@ -45,7 +46,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         RestoreHeadline = restart ? "Windows feature changes are waiting for restart verification." : windows?.Pending is not null ? "A Windows settings change needs recovery. Open Windows settings to review it." : restorable
             ? "Saved settings are available. Open the matching section to restore them."
             : unavailable ? "Some recovery state could not be read. Reopen this page to retry."
-                : "No saved settings to restore.";
+                : "No Windows or process settings to restore.";
         RestoreState = windows?.Pending is not null ? "medium" : restorable ? "safe" : unavailable ? "medium" : "neutral";
 
         RestoreRows.Add(new StatusLine(
@@ -102,11 +103,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         foreach (var entry in (windows?.State?.History ?? []).Reverse())
             HistoryRows.Add(new AuditRow(entry.AtUtc.ToLocalTime().ToString("g"), "Windows settings", "neutral", entry.ProfileId,
                 (entry.Changes.Length + (entry.Controls?.Length ?? 0)) + " value changes", windows!.State!.Profiles.Any(profile => profile.Id == entry.ProfileId) ? "Review profile" : "No active profile", "neutral"));
-        if (HistoryRows.Count == 0)
-        {
-            HistoryRows.Add(new AuditRow("-", "Ready", "neutral", "No history entries loaded",
-                "Recorded changes appear here when session history is available", "-", "neutral"));
-        }
+        OnPropertyChanged(nameof(HasHistory));
     }
 
     private static string DisplayName(SessionChangedItem item)

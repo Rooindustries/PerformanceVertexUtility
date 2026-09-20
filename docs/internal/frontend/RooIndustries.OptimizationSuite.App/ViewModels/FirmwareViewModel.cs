@@ -226,7 +226,6 @@ public partial class FirmwareViewModel : ObservableObject
         _sessionDirectory = await Task.Run(() => workflow.ReviewUndo(_sessionDirectory));
         await LoadEditorAsync(workflow.Read(_sessionDirectory));
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));
-        // Load the inverse choices too, so going back to edit retains the proposed undo.
         var review = OperationFiles.Read<FirmwareReview>(Path.Combine(_sessionDirectory, "review.json"), _reviewHash);
         foreach (var change in review.Changes) _all.Single(r => r.Question.Id == change.Id).Selection = change.After;
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));

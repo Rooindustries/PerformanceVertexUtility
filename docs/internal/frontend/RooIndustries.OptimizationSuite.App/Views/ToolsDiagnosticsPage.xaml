@@ -4,10 +4,16 @@
       xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels">
     <Grid Padding="{StaticResource RooIndustriesPageMargin}" RowSpacing="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel Spacing="4">
-            <TextBlock Text="Tools" FontSize="24" FontWeight="SemiBold"/>
-            <TextBlock Text="Open a tool, or install it if it is not on this PC yet." Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap"/>
-        </StackPanel>
+        <Border Style="{StaticResource CommandHeaderBorderStyle}">
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Image Source="ms-appx:///Assets/Icons/tools.svg" Style="{StaticResource PageHeaderIconStyle}"/>
+                <StackPanel Grid.Column="1" Spacing="5">
+                    <TextBlock Text="Tools" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock Text="Open a tool, or install it if it is not on this PC yet." FontSize="13" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+        </Border>
         <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Padding="16,12">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

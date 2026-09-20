@@ -4,7 +4,7 @@
 
     <FontFamily x:Key="RooIndustriesFontFamily">ms-appx:///Assets/Fonts/roboto-flex-latin-opsz-normal.ttf#Roboto Flex</FontFamily>
 
-    <x:Double x:Key="RooIndustriesCardCornerRadius">8</x:Double>
-    <Thickness x:Key="RooIndustriesPageMargin">24,24,24,24</Thickness>
+    <x:Double x:Key="RooIndustriesCardCornerRadius">10</x:Double>
+    <Thickness x:Key="RooIndustriesPageMargin">22,18,22,20</Thickness>
 
 </ResourceDictionary>

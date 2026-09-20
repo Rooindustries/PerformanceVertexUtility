@@ -12,6 +12,11 @@ async Task<WindowsTweaksViewModel> Load(Fixture fixture)
 }
 try
 {
+    if (args is [var catalogRepo])
+    {
+        var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
+        ActionChecks.Run(catalog, Check);
+    }
     var fixture = new Fixture(Path.Combine(root, "missing")); var model = await Load(fixture);
     Check(model.Rows.Count == 1 && model.Rows[0].HasToggle && model.Rows[0].Choices.Length == 3, "Missing products retain every choice and an interactive toggle");
     model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null);
@@ -52,6 +57,37 @@ try
     var review = model.ReviewCommand.ExecuteAsync(null); model.Rows[0].Selected = model.Rows[0].Choices[0]; pause.SetResult(); await review;
     model.Approved = true;
     Check(!model.HasReview && !model.CanApply && fixture.Applies == 0, "Changing selection while a review is loading invalidates the old response");
+
+    fixture = new Fixture(Path.Combine(root, "action-review")) { Missing = false }; model = await Load(fixture);
+    var actionRow = model.Rows.Single();
+    actionRow.ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true;
+    Check(model.HasReview && model.CanApply, "A selected action reaches a confirmed review before the stale-action check");
+    actionRow.Action = actionRow.ActionChoices.Single(choice => choice.Id == "off");
+    Check(actionRow.Selected.Id == "off" && !model.HasReview && !model.CanApply && model.Status == "Selection changed" && fixture.Applies == 0,
+        "Changing the queued action invalidates the prior review without applying either choice");
+    await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; actionRow.ToggleOn = false;
+    Check(actionRow.Selected.Id.Length == 0 && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Selection changed" && fixture.Applies == 0,
+        "Switching a reviewed action off clears intent and approval without applying or restoring Windows");
+    actionRow.ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; model.ClearSelectionCommand.Execute(null);
+    Check(!model.HasReview && !model.Approved && !model.CanApply && model.Status == "Nothing selected" && fixture.Applies == 0,
+        "Clear selection removes a prior review, approval and ready status without applying settings");
+    actionRow.ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; model.ProfileId = "renamed-profile";
+    Check(!model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile name changed" && fixture.Applies == 0,
+        "Changing the profile name removes a prior review, approval and ready status without applying settings");
+    actionRow.ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; model.SelectedPreset = model.Presets.Single();
+    Check(actionRow.Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "1 preset choice added" && fixture.Applies == 0,
+        "Adding a preset replaces a prior review, approval and ready status without applying settings");
+
+    fixture.Choices.Save(fixture.Catalog, "my-settings", [new("setting", "off")], null); model = await Load(fixture);
+    Check(model.Rows.Single().Action.Id == "off" && model.Rows.Single().ToggleOn && !model.CanApply && fixture.Applies == 0,
+        "A saved Off choice reloads as the explicit pending action and still requires a new review");
+
+    fixture = new Fixture(Path.Combine(root, "profile-review")) { Missing = false };
+    fixture.Choices.Save(fixture.Catalog, "saved-off", [new("setting", "off")], null); model = await Load(fixture);
+    model.Rows.Single().ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true;
+    model.SelectedProfile = model.Profiles.Single(profile => profile.Id == "saved-off");
+    Check(model.Rows.Single().Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile loaded" && fixture.Applies == 0,
+        "Loading a profile replaces a prior review, approval and ready status without applying settings");
     if (args is [var repo]) await SectionChecks.Run(root, Path.GetFullPath(repo), Check);
     Console.WriteLine($"Completed {count} Windows settings UI checks.");
 }

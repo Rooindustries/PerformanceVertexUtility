@@ -40,9 +40,9 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Image Width="28" Height="28" Source="ms-appx:///Assets/Icons/home.svg" AutomationProperties.AccessibilityView="Raw" />
+                    <Image Source="ms-appx:///Assets/Icons/home.svg" Style="{StaticResource PageHeaderIconStyle}" />
                     <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock Text="Overview" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="Overview" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock Text="Hardware and running apps." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>

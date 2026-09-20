@@ -20,4 +20,10 @@ public sealed partial class RestoreLogsPage : Page
     {
         if (App.MainWindow is MainWindow window) window.SelectNav("profiles");
     }
+    private void OpenBiosBackups(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        var frame = Frame;
+        if (App.MainWindow is MainWindow window) window.SelectNav("tools");
+        frame.Navigate(typeof(FirmwarePage));
+    }
 }

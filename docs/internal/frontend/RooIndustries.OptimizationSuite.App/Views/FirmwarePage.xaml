@@ -26,18 +26,22 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <Border Style="{StaticResource CommandHeaderBorderStyle}">
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button Content="← Tools" Click="Back" VerticalAlignment="Top" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
-            <StackPanel Grid.Column="1" Spacing="3">
+            <Image Grid.Column="1" Source="ms-appx:///Assets/Icons/cpu.svg" Style="{StaticResource PageHeaderIconStyle}" />
+            <StackPanel Grid.Column="2" Spacing="3">
                 <TextBlock Text="BIOS settings" FontSize="24" FontWeight="SemiBold" />
                 <TextBlock Text="{x:Bind ViewModel.Board, Mode=OneWay}" FontSize="13" TextWrapping="Wrap" />
                 <TextBlock Text="{x:Bind ViewModel.Bios, Mode=OneWay}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
+        </Border>
         <Grid Grid.Row="1" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
