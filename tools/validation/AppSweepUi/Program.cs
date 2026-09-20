@@ -35,6 +35,26 @@ async Task ReadProcess(ProcessControlsViewModel model)
     await ((Task?)method.Invoke(model, [new CpuProcessChoice(123, "Fixture"), 0])
         ?? throw new InvalidOperationException("ReadProcessAsync did not return a task."));
 }
+InstalledApp AppItem(string id, string name) => new() { AppId = id, DisplayName = name, SourceType = "registry" };
+OfficialUninstallPreview EmptyOfficial() => new() { DryRun = true, Commands = [] };
+LeftoverScan EmptyScan(string id) => new() { AppId = id, DryRun = true, Items = [], Summary = new LeftoverScanSummary() };
+CleanupManifest EmptyManifest(string id) => new() { AppId = id, DryRun = true, Items = [], Summary = new CleanupManifestSummary() };
+UninstallCleanupExecutionPlan EmptyPlan(string id) => new()
+{
+    AppId = id,
+    DryRun = true,
+    Status = "review-ready",
+    Summary = new UninstallExecutionSummary { ExecutionReady = true, DisposableFixtureExecutionReady = true },
+};
+void ReadyCleanup(UninstallCleanupViewModel model, InstalledApp app)
+{
+    model.SelectedApp = app;
+    model.RemovalPathReviewed = true;
+    model.LeftoverScanCompleted = true;
+    model.CleanupPlanReady = true;
+    model.RemoverPathApproved = true;
+    model.CleanupListApproved = true;
+}
 
 if (args is [] or ["process"])
 {
@@ -107,6 +127,364 @@ if (args is [] or ["startup"])
     await startup.ReloadAsync();
     Check(startup.IsReady && startup.BackgroundCount == 2 && startup.LauncherCount == 1 && startup.ProtectedCount == 1 && startup.BackgroundRows.Count == 2,
         "A populated classification projects its independent startup counts");
+}
+
+if (args is [] or ["responses"] or ["cleanup"] or ["race"])
+{
+    if (args is not (["cleanup"] or ["race"]))
+    {
+    var oldBackup = Path.Combine(Path.GetTempPath(), "old-process-backup.json");
+    File.WriteAllText(oldBackup, "{}");
+    App.Live.LatestProcessBackup = oldBackup;
+    App.Live.ProcessPreviewText = null;
+    App.Live.LastError = "Controlled process preview failure";
+    var profiles = new PerformanceProfilesViewModel();
+    await profiles.PreviewPlanCommand.ExecuteAsync(null);
+    Check(profiles.ActionTitle == "Plan not confirmed" && profiles.ActionDetail.Contains("Controlled process preview failure", StringComparison.Ordinal),
+        "A missing process preview response cannot claim a ready plan");
+    App.Live.ProcessPreviewText = JsonSerializer.Serialize(new { actionId = "performance.previewProfile", status = "preview", preview = Array.Empty<object>() });
+    App.Live.LastError = null;
+    await profiles.PreviewPlanCommand.ExecuteAsync(null);
+    Check(profiles.ActionTitle == "Plan not confirmed", "A process preview without explicit dry-run evidence remains unknown");
+    App.Live.ProcessPreviewText = JsonSerializer.Serialize(new { actionId = "performance.previewProfile", dryRun = true, status = "preview", preview = Array.Empty<object>() });
+    await profiles.PreviewPlanCommand.ExecuteAsync(null);
+    Check(profiles.ActionTitle == "Plan ready", "An identity-bound dry-run process preview is accepted");
+
+    App.Live.ProcessApplyText = null;
+    App.Live.LastError = "Controlled process apply failure";
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(!profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities not confirmed" && profiles.ActionDetail.Contains("Controlled process apply failure", StringComparison.Ordinal),
+        "A missing process apply response cannot claim success or bind an unrelated backup");
+
+    App.Live.ProcessApplyText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.applyProfile",
+        dryRun = false,
+        status = "success",
+        backup = (object?)null,
+        result = new { summary = "No changes were needed.", changedItems = Array.Empty<object>() },
+    });
+    App.Live.LastError = null;
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(!profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities unchanged",
+        "A valid no-op process apply remains successful without inventing restore evidence");
+
+    App.Live.ProcessApplyText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.applyProfile",
+        status = "success",
+        result = new { changedItems = Array.Empty<object>() },
+    });
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(!profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities not confirmed",
+        "A process apply without explicit dry-run evidence remains unknown");
+
+    App.Live.ProcessApplyText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.applyProfile",
+        dryRun = true,
+        status = "success",
+        result = new { changedItems = new[] { new { name = "fixture" } } },
+    });
+    await profiles.ApplyProfileCommand.ExecuteAsync(null);
+    Check(!profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities not confirmed",
+        "A dry-run process response cannot claim a real apply");
+
+    var currentBackup = Path.Combine(Path.GetTempPath(), "current-process-backup-" + Guid.NewGuid().ToString("N") + ".json");
+    File.WriteAllText(currentBackup, "{}");
+    try
+    {
+        App.Live.ProcessApplyText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.applyProfile",
+            dryRun = false,
+            status = "success",
+            backup = new { backupId = "current", location = currentBackup, rollbackSupported = true },
+            result = new { summary = "One change applied.", changedItems = new[] { new { name = "fixture" } } },
+        });
+        await profiles.ApplyProfileCommand.ExecuteAsync(null);
+        Check(profiles.RestoreAvailable && profiles.ActionTitle == "Process priorities applied",
+            "A process apply enables restore only from its explicit current backup");
+        App.Live.ProcessRestoreText = null;
+        App.Live.LastError = "Controlled process restore failure";
+        await profiles.RestoreProfileCommand.ExecuteAsync(null);
+        Check(profiles.RestoreAvailable && profiles.ActionTitle == "Restore not confirmed" && App.Live.LastProcessRestorePath == currentBackup,
+            "A missing restore response preserves the exact current backup without claiming completion");
+    }
+    finally { File.Delete(currentBackup); }
+    File.Delete(oldBackup);
+
+    App.Live.LastError = "Controlled NVIDIA response failure";
+    var drivers = new DriversProfilesViewModel { HasNvidia = true, HasNvidiaProfiles = true };
+    await drivers.CheckNvidiaToolCommand.ExecuteAsync(null);
+    Check(drivers.NvidiaActionTitle == "Tool check not confirmed" && drivers.NvidiaActionDetail.Contains("Controlled NVIDIA response failure", StringComparison.Ordinal),
+        "A missing NVIDIA probe response cannot claim the tool check finished");
+    await drivers.PreviewNvidiaProfileCommand.ExecuteAsync(null);
+    Check(drivers.NvidiaActionTitle == "Profile plan not confirmed",
+        "A missing NVIDIA preview response cannot claim a ready plan");
+    drivers.NvidiaExportReviewed = true;
+    drivers.NvidiaProfileApproved = true;
+    drivers.NvidiaBenchmarkReady = true;
+    await drivers.ApplyNvidiaProfileCommand.ExecuteAsync(null);
+    Check(drivers.NvidiaActionTitle == "Apply not confirmed",
+        "A missing NVIDIA apply response cannot claim completion");
+    await drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null);
+    Check(drivers.NvidiaActionTitle == "Restore not confirmed",
+        "A missing NVIDIA restore response cannot claim completion");
+
+    App.Live.LastError = "Controlled stutter response failure";
+    var monitoring = new MonitoringViewModel();
+    await monitoring.CheckStutterPlanCommand.ExecuteAsync(null);
+    Check(monitoring.StutterActionTitle == "Settings review not confirmed" && monitoring.StutterActionDetail.Contains("Controlled stutter response failure", StringComparison.Ordinal),
+        "A missing timer and cache preview cannot claim settings were reviewed");
+    monitoring.LatencySessionApproved = true;
+    await monitoring.RunTimerSessionCommand.ExecuteAsync(null);
+    Check(monitoring.StutterActionTitle == "Latency session not confirmed",
+        "A missing timer response cannot claim the latency session finished");
+    monitoring.ShaderCacheApproved = true;
+    await monitoring.PrepareShaderCacheCommand.ExecuteAsync(null);
+    Check(monitoring.StutterActionTitle == "Cache cleanup not confirmed" && !monitoring.ShaderRestoreAvailable,
+        "A missing cache response cannot claim a cleanup check or create restore evidence");
+
+    var shaderRollback = Path.Combine(Path.GetTempPath(), "shader-rollback-" + Guid.NewGuid().ToString("N") + ".json");
+    File.WriteAllText(shaderRollback, "{}");
+    try
+    {
+        App.Live.LastError = null;
+        App.Live.ShaderText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.stutterOptimization.realExecutor",
+            optimizationId = "shader-cache-cleanup",
+            status = "success",
+            rollback = new { rollbackManifestPath = shaderRollback },
+        });
+        await monitoring.PrepareShaderCacheCommand.ExecuteAsync(null);
+        Check(monitoring.ShaderRestoreAvailable, "An explicit current shader rollback enables restore");
+        App.Live.ShaderRestoreText = null;
+        App.Live.LastError = "Controlled shader restore failure";
+        await monitoring.RestoreShaderCacheCommand.ExecuteAsync(null);
+        Check(monitoring.ShaderRestoreAvailable && monitoring.StutterActionTitle == "Cache restore not confirmed",
+            "A missing shader restore response preserves the current rollback without claiming completion");
+    }
+    finally { File.Delete(shaderRollback); }
+    }
+
+    var appA = AppItem("app-a", "App A");
+    var appB = AppItem("app-b", "App B");
+    var cleanup = new UninstallCleanupViewModel { SelectedApp = appA };
+    if (args is not ["race"])
+    {
+    App.Live.LastError = "Controlled route failure";
+    App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(null);
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("Controlled route failure", StringComparison.Ordinal),
+        "A null removal-route response remains unavailable with its operation error");
+
+    App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(cleanup.RemovalPathReviewed, "A successful empty removal route remains a valid Roo Industries route");
+    App.Live.LastError = "Controlled leftover failure";
+    App.Live.LeftoverScan = _ => Task.FromResult<LeftoverScan?>(null);
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(!cleanup.LeftoverScanCompleted && cleanup.LeftoverState.Contains("Controlled leftover failure", StringComparison.Ordinal),
+        "A null leftover scan cannot become a successful empty scan");
+    App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(EmptyScan(id));
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState.Contains("No leftover targets", StringComparison.Ordinal),
+        "A successful empty leftover scan remains distinct from no response");
+
+    App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(new LeftoverScan
+    {
+        AppId = id,
+        DryRun = true,
+        Items = [new LeftoverItem { ItemId = "candidate", Type = "folder", Target = @"C:\Fixture" }],
+        Summary = new LeftoverScanSummary { ItemCount = 1 },
+        Errors = [new IssueModel { Message = "Non-blocking scan note", Blocking = false }],
+    });
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(cleanup.LeftoverScanCompleted && cleanup.Leftovers.Single().ItemId == "candidate",
+        "A populated partial scan with only non-blocking issues remains reviewable");
+
+    App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(new LeftoverScan
+    {
+        AppId = id,
+        DryRun = true,
+        Items = [new LeftoverItem { ItemId = "untrusted", Type = "folder", Target = @"C:\Wrong" }],
+        Summary = new LeftoverScanSummary { ItemCount = 1 },
+        Errors = [new IssueModel { Message = "Controlled blocking scan error", Blocking = true }],
+    });
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(!cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState.Contains("Controlled blocking scan error", StringComparison.Ordinal),
+        "A favorable scan payload cannot override its blocking error");
+
+    App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(EmptyScan(id));
+    await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+
+    App.Live.LastError = "Controlled manifest failure";
+    App.Live.CleanupManifest = _ => Task.FromResult<CleanupManifest?>(null);
+    await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState.Contains("Controlled manifest failure", StringComparison.Ordinal),
+        "A null cleanup manifest cannot unlock the cleanup plan");
+    App.Live.CleanupManifest = id => Task.FromResult<CleanupManifest?>(new CleanupManifest
+    {
+        AppId = id,
+        DryRun = true,
+        Items = [],
+        Summary = new CleanupManifestSummary(),
+        Errors = [new IssueModel { Message = "Controlled blocking manifest error", Blocking = true }],
+    });
+    App.Live.LastError = null;
+    await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState.Contains("Controlled blocking manifest error", StringComparison.Ordinal),
+        "A favorable cleanup manifest cannot override its blocking error");
+    App.Live.CleanupManifest = id => Task.FromResult<CleanupManifest?>(EmptyManifest(id));
+    App.Live.LastError = "Controlled plan failure";
+    App.Live.CleanupPlan = _ => Task.FromResult<UninstallCleanupExecutionPlan?>(null);
+    await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    Check(!cleanup.CleanupPlanReady && cleanup.RemovalPlanDetail?.Contains("Controlled plan failure", StringComparison.Ordinal) == true,
+        "A null execution plan cannot mark an empty manifest ready");
+    App.Live.CleanupPlan = id => Task.FromResult<UninstallCleanupExecutionPlan?>(new UninstallCleanupExecutionPlan
+    {
+        AppId = id,
+        DryRun = true,
+        Status = "failed",
+        Summary = new UninstallExecutionSummary { ExecutionReady = true },
+    });
+    App.Live.LastError = null;
+    await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    Check(!cleanup.CleanupPlanReady, "A failed execution plan cannot unlock cleanup even with a favorable summary");
+    App.Live.CleanupPlan = id => Task.FromResult<UninstallCleanupExecutionPlan?>(EmptyPlan(id));
+    App.Live.LastError = null;
+    await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    Check(cleanup.CleanupPlanReady, "A successful empty manifest and execution plan can complete review");
+    cleanup.RemoverPathApproved = true;
+    cleanup.CleanupListApproved = true;
+    App.Live.CleanupApply = (_, _, _, _) => Task.FromResult<string?>(null);
+    App.Live.LastError = "Controlled final check failure";
+    await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
+    Check(!cleanup.FinalCheckPassed && cleanup.CleanupExecutionDetail?.Contains("Controlled final check failure", StringComparison.Ordinal) == true,
+        "A missing final-check response remains unapproved with its operation error");
+    App.Live.CleanupApply = (id, _, _, _) => Task.FromResult<string?>(JsonSerializer.Serialize(new
+    {
+        actionId = "apps.invokeUninstallCleanupApplyPackage",
+        appId = id,
+        dryRun = true,
+        status = "preview",
+        executionMode = "preview",
+        summary = new { approvalReady = true, cleanupItemCount = 0 },
+    }));
+    App.Live.LastError = null;
+    await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
+    Check(cleanup.FinalCheckPassed, "An identity-bound dry-run final check can approve the reviewed cleanup");
+    }
+
+    var routeA = new TaskCompletionSource<OfficialUninstallPreview?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    cleanup = new UninstallCleanupViewModel { SelectedApp = appA };
+    App.Live.OfficialPreview = id => id == appA.AppId ? routeA.Task : Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
+    var oldRoute = cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    cleanup.SelectedApp = appB;
+    routeA.SetResult(new OfficialUninstallPreview
+    {
+        Commands = [new UninstallCommand { AppId = appA.AppId, RawCommand = "A.exe /remove", CommandType = "registry-uninstall-string" }],
+    });
+    await oldRoute;
+    Check(cleanup.SelectedApp == appB && !cleanup.RemovalPathReviewed && !cleanup.ScanBusy && cleanup.OfficialCommand != "A.exe /remove",
+        "A late removal-route result cannot attach to a newly selected app");
+
+    var scanA1 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var scanB = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var scanA2 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var aCalls = 0;
+    App.Live.LeftoverScan = id => id == appB.AppId ? scanB.Task : ++aCalls == 1 ? scanA1.Task : scanA2.Task;
+    cleanup.SelectedApp = appA;
+    var firstA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    cleanup.SelectedApp = appB;
+    var currentB = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    cleanup.SelectedApp = appA;
+    var currentA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    scanA1.SetResult(EmptyScan(appA.AppId!));
+    await firstA;
+    scanB.SetResult(EmptyScan(appB.AppId!));
+    await currentB;
+    Check(cleanup.ScanBusy, "Old A and B completions cannot clear the newer A busy state");
+    scanA2.SetResult(new LeftoverScan
+    {
+        AppId = appA.AppId,
+        DryRun = true,
+        Items = [new LeftoverItem { ItemId = "current-a", Type = "folder", Target = @"C:\FixtureA" }],
+        Summary = new LeftoverScanSummary { ItemCount = 1 },
+    });
+    await currentA;
+    Check(!cleanup.ScanBusy && cleanup.SelectedApp == appA && cleanup.Leftovers.Single().ItemId == "current-a",
+        "A to B to A scan epochs retain only the newest A response");
+
+    var planA = new TaskCompletionSource<CleanupManifest?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    ReadyCleanup(cleanup, appA);
+    App.Live.CleanupManifest = _ => planA.Task;
+    var oldPlan = cleanup.BuildCleanupListCommand.ExecuteAsync(null);
+    cleanup.SelectedApp = appB;
+    planA.SetResult(EmptyManifest(appA.AppId!));
+    await oldPlan;
+    Check(!cleanup.CleanupPlanReady && cleanup.SelectedApp == appB, "A late cleanup-plan input cannot unlock another app");
+
+    var finalA = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    ReadyCleanup(cleanup, appA);
+    App.Live.CleanupApply = (_, _, _, _) => finalA.Task;
+    var oldFinal = cleanup.RunFinalCheckCommand.ExecuteAsync(null);
+    cleanup.SelectedApp = appB;
+    finalA.SetResult(JsonSerializer.Serialize(new { appId = appA.AppId, status = "preview", summary = new { approvalReady = true, cleanupItemCount = 0 } }));
+    await oldFinal;
+    Check(!cleanup.FinalCheckPassed && cleanup.SelectedApp == appB, "A late final-check response cannot approve another app");
+
+    var rollback = Path.Combine(Path.GetTempPath(), "cleanup-rollback-" + Guid.NewGuid().ToString("N") + ".json");
+    File.WriteAllText(rollback, JsonSerializer.Serialize(new
+    {
+        appId = appA.AppId,
+        executionStarted = true,
+        restoreSupported = true,
+        fileBackups = new[] { new { itemId = "current-a", backupPath = @"C:\FixtureBackup" } },
+    }));
+    try
+    {
+        var applyA = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReadyCleanup(cleanup, appA);
+        cleanup.FinalCheckPassed = true;
+        cleanup.RealCleanupApproved = true;
+        App.Live.CleanupApply = (_, _, _, _) => applyA.Task;
+        var oldApply = cleanup.ApplyCleanupCommand.ExecuteAsync(null);
+        cleanup.SelectedApp = appB;
+        applyA.SetResult(JsonSerializer.Serialize(new
+        {
+            actionId = "apps.invokeUninstallCleanupApplyPackage",
+            appId = appA.AppId,
+            status = "partial",
+            rollbackManifestPath = rollback,
+            summary = new { deletedCount = 1, restoreReady = true },
+        }));
+        await oldApply;
+        Check(!cleanup.CleanupRestoreAvailable && cleanup.SelectedApp == appB, "A late partial apply cannot expose A recovery on B");
+        cleanup.SelectedApp = appA;
+        Check(cleanup.CleanupRestoreAvailable, "A late partial apply preserves its exact recovery artifact for A");
+
+        var restoreA = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        App.Live.CleanupRestore = _ => restoreA.Task;
+        var oldRestore = cleanup.RestoreCleanupCommand.ExecuteAsync(null);
+        cleanup.SelectedApp = appB;
+        restoreA.SetResult(JsonSerializer.Serialize(new
+        {
+            actionId = "apps.restoreUninstallCleanupExecution",
+            dryRun = false,
+            status = "success",
+            rollbackManifestPath = rollback,
+            summary = new { restoredCount = 1 },
+        }));
+        await oldRestore;
+        Check(cleanup.SelectedApp == appB && !cleanup.CleanupExecutionState.StartsWith("Restore complete", StringComparison.Ordinal),
+            "A late restore response cannot report completion on another app");
+        cleanup.SelectedApp = appA;
+        Check(!cleanup.CleanupRestoreAvailable, "A completed stale restore clears only its initiating app recovery");
+    }
+    finally { File.Delete(rollback); }
 }
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");
