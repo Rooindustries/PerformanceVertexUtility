@@ -218,7 +218,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 NvidiaExportReviewed,
                 NvidiaProfileApproved,
                 NvidiaBenchmarkReady);
-            _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
+            _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId)
+                ?? Services.LiveDataService.NvidiaRecoveryFromApplyResult(NvidiaProfileId, response.Value, response.RecoveryPath, response.RecoveryGeneration);
             OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
             if (response.Value is null || response.Error is not null)
             {

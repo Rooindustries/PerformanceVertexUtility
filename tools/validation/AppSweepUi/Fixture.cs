@@ -21,10 +21,13 @@ namespace RooIndustries.OptimizationSuite.Services
     }
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
-    public sealed record ProcessProfileRecovery(string Path, string Id);
-    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
-    public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath);
+    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+    public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
+    public static class LiveDataService
+    {
+        public static NvidiaProfileRecovery? NvidiaRecoveryFromApplyResult(string profileId, string? json, string? rollbackManifestPath, string? generation) => null;
+    }
 
     public sealed class FakeLiveDataService
     {
@@ -36,10 +39,6 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? OperationError { get; set; }
         public string? LatestProcessBackup { get; set; }
         public ProcessProfileRecovery? ProcessProfileRecovery { get; set; }
-        public void ClearProcessProfileRecovery(string path, string id)
-        {
-            if (ProcessProfileRecovery == new ProcessProfileRecovery(path, id)) ProcessProfileRecovery = null;
-        }
         public string? LastCleanupRollbackPath { get; set; }
         public string? CleanupRecoveryPath { get; set; }
         public string? ProcessPreviewText { get; set; }
@@ -89,11 +88,18 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(ProcessPreviewText, OperationError ?? (ProcessPreviewText is null ? LastError : null)));
         public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null)));
-        public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(string backupPath, CancellationToken cancellationToken = default)
         {
-            LastProcessRestorePath = backupPath;
-            return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, OperationError ?? (ProcessRestoreText is null ? LastError : null)));
+            var recovery = ProcessProfileRecovery.FromApply(ProcessApplyText);
+            if (recovery is not null) ProcessProfileRecovery = recovery;
+            return Task.FromResult(new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null), recovery?.Path, recovery?.Generation));
+        }
+        public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken cancellationToken = default)
+        {
+            LastProcessRestorePath = recovery.Path;
+            var error = OperationError ?? (ProcessRestoreText is null ? LastError : null);
+            var completed = error is null && recovery.RestoreCompleted(ProcessRestoreText) && ProcessProfileRecovery == recovery;
+            if (completed) ProcessProfileRecovery = null;
+            return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, error, completed ? null : recovery.Path, completed ? null : recovery.Generation));
         }
         public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)));
