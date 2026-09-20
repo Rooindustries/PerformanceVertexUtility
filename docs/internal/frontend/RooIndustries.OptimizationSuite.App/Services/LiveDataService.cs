@@ -10,21 +10,27 @@ using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
+public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
+
 public sealed class LiveDataService
 {
     private readonly BackendLocator _locator;
     private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
+    private sealed record PreparedCleanupInputs(
+        string DirectoryPath,
+        string OfficialPreviewPath,
+        string CleanupManifestPath,
+        string OfficialSha256,
+        string CleanupSha256);
     private ReviewedCleanupInput? _officialReview;
     private ReviewedCleanupInput? _cleanupReview;
     private int _cleanupReviewGeneration;
-    public string? LastCleanupRollbackPath { get; private set; }
 
     public void DiscardCleanupReview()
     {
         Interlocked.Increment(ref _cleanupReviewGeneration);
         _officialReview = null;
         _cleanupReview = null;
-        LastCleanupRollbackPath = null;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
@@ -49,14 +55,20 @@ public sealed class LiveDataService
     public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
         => RunAsync<ProcessClassification>("Get-ProcessClassification.ps1", ct);
 
-    public Task<string?> PreviewProcessProfileTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Preview-ProcessProfile.ps1", ct);
+    public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
+    public async Task<string?> PreviewProcessProfileTextAsync(CancellationToken ct = default)
+        => (await PreviewProcessProfileResultAsync(ct)).Value;
 
-    public Task<string?> ApplyProcessProfileTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply");
+    public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply");
+    public async Task<string?> ApplyProcessProfileTextAsync(CancellationToken ct = default)
+        => (await ApplyProcessProfileResultAsync(ct)).Value;
 
-    public Task<string?> RestoreProcessProfileTextAsync(string backupPath, CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Restore-ProcessProfileBackup.ps1", ct, "-BackupPath " + QuotePowerShell(backupPath) + " -ConfirmApply");
+    public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(string backupPath, CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Restore-ProcessProfileBackup.ps1", ct, "-BackupPath " + QuotePowerShell(backupPath) + " -ConfirmApply");
+    public async Task<string?> RestoreProcessProfileTextAsync(string backupPath, CancellationToken ct = default)
+        => (await RestoreProcessProfileResultAsync(backupPath, ct)).Value;
 
     public Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
     {
@@ -107,14 +119,18 @@ public sealed class LiveDataService
     public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default)
         => RunAsync<DriverHardwareSummary>("Get-DriverHardwareSummary.ps1", ct);
 
-    public Task<string?> PreviewNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
+    public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
+    public async Task<string?> PreviewNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
+        => (await PreviewNvidiaProfileResultAsync(profileId, ct)).Value;
 
-    public Task<string?> ProbeNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Invoke-NvidiaNipCapabilityProbe.ps1", ct,
+    public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Invoke-NvidiaNipCapabilityProbe.ps1", ct,
             "-ProfileId " + QuotePowerShell(profileId) + " -AllowReadOnlyNvpiProbe");
+    public async Task<string?> ProbeNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
+        => (await ProbeNvidiaProfileResultAsync(profileId, ct)).Value;
 
-    public Task<string?> ApplyNvidiaProfileTextAsync(
+    public Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(
         string profileId,
         bool exportReviewed,
         bool userApproved,
@@ -140,10 +156,17 @@ public sealed class LiveDataService
             args += " -AllowRealNvpiExecution";
         }
 
-        return RunBackendScriptTextAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
+        return RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
     }
+    public async Task<string?> ApplyNvidiaProfileTextAsync(
+        string profileId,
+        bool exportReviewed,
+        bool userApproved,
+        bool benchmarkEvidenceAttached,
+        CancellationToken ct = default)
+        => (await ApplyNvidiaProfileResultAsync(profileId, exportReviewed, userApproved, benchmarkEvidenceAttached, ct)).Value;
 
-    public Task<string?> RestoreNvidiaProfileTextAsync(string profileId, bool userApproved, CancellationToken ct = default)
+    public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(string profileId, bool userApproved, CancellationToken ct = default)
     {
         var args = "-Operation Restore -ProfileId " + QuotePowerShell(profileId)
             + " -ExecutorMode " + (userApproved ? "Real" : "Preview")
@@ -153,13 +176,17 @@ public sealed class LiveDataService
             args += " -UserApproved -AllowRealNvpiExecution";
         }
 
-        return RunBackendScriptTextAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
+        return RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
     }
+    public async Task<string?> RestoreNvidiaProfileTextAsync(string profileId, bool userApproved, CancellationToken ct = default)
+        => (await RestoreNvidiaProfileResultAsync(profileId, userApproved, ct)).Value;
 
-    public Task<string?> PreviewStutterOptimizationTextAsync(CancellationToken ct = default)
-        => RunBackendScriptTextAsync("Preview-StutterOptimization.ps1", ct, "-OptimizationId all");
+    public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Preview-StutterOptimization.ps1", ct, "-OptimizationId all");
+    public async Task<string?> PreviewStutterOptimizationTextAsync(CancellationToken ct = default)
+        => (await PreviewStutterOptimizationResultAsync(ct)).Value;
 
-    public Task<string?> CheckTimerResolutionTextAsync(bool userApproved, CancellationToken ct = default)
+    public Task<LiveDataResult<string>> CheckTimerResolutionResultAsync(bool userApproved, CancellationToken ct = default)
     {
         var args = "-OptimizationId timer-resolution -ConfirmApply -AllowRealSystemExecution";
         if (userApproved)
@@ -167,10 +194,12 @@ public sealed class LiveDataService
             args += " -UserApproved";
         }
 
-        return RunBackendScriptTextAsync("Invoke-StutterOptimization.ps1", ct, args);
+        return RunBackendScriptResultAsync("Invoke-StutterOptimization.ps1", ct, args);
     }
+    public async Task<string?> CheckTimerResolutionTextAsync(bool userApproved, CancellationToken ct = default)
+        => (await CheckTimerResolutionResultAsync(userApproved, ct)).Value;
 
-    public Task<string?> CheckShaderCacheCleanupTextAsync(bool userApproved, CancellationToken ct = default)
+    public Task<LiveDataResult<string>> CheckShaderCacheCleanupResultAsync(bool userApproved, CancellationToken ct = default)
     {
         var args = "-OptimizationId shader-cache-cleanup -ConfirmApply -AllowRealSystemExecution";
         if (userApproved)
@@ -178,77 +207,93 @@ public sealed class LiveDataService
             args += " -UserApproved";
         }
 
-        return RunBackendScriptTextAsync("Invoke-StutterOptimization.ps1", ct, args);
+        return RunBackendScriptResultAsync("Invoke-StutterOptimization.ps1", ct, args);
     }
+    public async Task<string?> CheckShaderCacheCleanupTextAsync(bool userApproved, CancellationToken ct = default)
+        => (await CheckShaderCacheCleanupResultAsync(userApproved, ct)).Value;
 
-    public Task<string?> RestoreShaderCacheCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
-        => RunBackendScriptTextAsync(
+    public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
+        => RunBackendScriptResultAsync(
             "Restore-StutterOptimization.ps1",
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
+    public async Task<string?> RestoreShaderCacheCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
+        => (await RestoreShaderCacheCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
     public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false)
         => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "");
 
-    public Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken ct = default)
-        => RunAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken ct = default)
+        => RunResultAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public async Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken ct = default)
+        => (await GetLeftoverScanResultAsync(appId, ct)).Value;
 
+    public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken ct = default)
+    {
+        var generation = _cleanupReviewGeneration;
+        var text = await RunBackendScriptResultAsync("Preview-OfficialUninstall.ps1", ct, "-AppId " + QuotePowerShell(appId));
+        var result = DeserializeResult<OfficialUninstallPreview>(text);
+        if (result.Value is not null && text.Value is not null && generation == _cleanupReviewGeneration) _officialReview = new(appId, text.Value, generation);
+        return result;
+    }
     public async Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken ct = default)
+        => (await GetOfficialUninstallPreviewResultAsync(appId, ct)).Value;
+
+    public async Task<LiveDataResult<CleanupManifest>> GetCleanupManifestResultAsync(string appId, CancellationToken ct = default)
     {
         var generation = _cleanupReviewGeneration;
-        var json = await RunBackendScriptTextAsync("Preview-OfficialUninstall.ps1", ct, "-AppId " + QuotePowerShell(appId));
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        var result = JsonSerializer.Deserialize<OfficialUninstallPreview>(json, JsonOptions);
-        if (generation == _cleanupReviewGeneration) _officialReview = new(appId, json, generation);
+        var text = await RunBackendScriptResultAsync("New-CleanupDeletionManifest.ps1", ct, "-AppId " + QuotePowerShell(appId));
+        var result = DeserializeResult<CleanupManifest>(text);
+        if (result.Value is not null && text.Value is not null && generation == _cleanupReviewGeneration) _cleanupReview = new(appId, text.Value, generation);
         return result;
     }
-
     public async Task<CleanupManifest?> GetCleanupManifestAsync(string appId, CancellationToken ct = default)
-    {
-        var generation = _cleanupReviewGeneration;
-        var json = await RunBackendScriptTextAsync("New-CleanupDeletionManifest.ps1", ct, "-AppId " + QuotePowerShell(appId));
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        var result = JsonSerializer.Deserialize<CleanupManifest>(json, JsonOptions);
-        if (generation == _cleanupReviewGeneration) _cleanupReview = new(appId, json, generation);
-        return result;
-    }
+        => (await GetCleanupManifestResultAsync(appId, ct)).Value;
 
-    public Task<UninstallCleanupExecutionPlan?> GetUninstallCleanupExecutionPlanAsync(string appId, CancellationToken ct = default)
-        => RunAsync<UninstallCleanupExecutionPlan>("New-UninstallCleanupExecutionPlan.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public Task<LiveDataResult<UninstallCleanupExecutionPlan>> GetUninstallCleanupExecutionPlanResultAsync(string appId, CancellationToken ct = default)
+        => RunResultAsync<UninstallCleanupExecutionPlan>("New-UninstallCleanupExecutionPlan.ps1", ct, "-AppId " + QuotePowerShell(appId));
+    public async Task<UninstallCleanupExecutionPlan?> GetUninstallCleanupExecutionPlanAsync(string appId, CancellationToken ct = default)
+        => (await GetUninstallCleanupExecutionPlanResultAsync(appId, ct)).Value;
 
-    public async Task<string?> RequestUninstallCleanupApplyTextAsync(
+    public async Task<LiveDataResult<string>> RequestUninstallCleanupApplyResultAsync(
         string appId,
         bool officialUninstallCommandApproved,
         bool cleanupDeletionManifestApproved,
         bool realCleanupApproved,
         CancellationToken ct = default)
     {
-        var inputs = await PrepareUninstallCleanupInputsAsync(appId, ct).ConfigureAwait(false);
-        if (inputs is null)
-        {
-            return null;
-        }
-
+        PreparedCleanupInputs? inputs = null;
+        string? rollbackPath = null;
         try
         {
-            var cleanupTargets = ReadCleanupTargets(inputs.Value.CleanupManifestPath);
-            var officialExecutable = ReadOfficialExecutable(inputs.Value.OfficialPreviewPath);
+            var prepared = await PrepareUninstallCleanupInputsAsync(appId, ct).ConfigureAwait(false);
+            inputs = prepared.Value;
+            if (inputs is null)
+            {
+                return new(null, prepared.Error ?? "The reviewed cleanup inputs are unavailable.");
+            }
+
+            var cleanupTargets = ReadCleanupTargets(inputs.CleanupManifestPath);
+            var officialExecutable = ReadOfficialExecutable(inputs.OfficialPreviewPath);
             var runRoot = realCleanupApproved
                 ? Path.Combine(
                     RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot,
                     "cleanup-runs",
-                    Path.GetFileName(inputs.Value.DirectoryPath))
-                : Path.Combine(inputs.Value.DirectoryPath, "preview-run");
+                    Path.GetFileName(inputs.DirectoryPath))
+                : Path.Combine(inputs.DirectoryPath, "preview-run");
             Directory.CreateDirectory(runRoot);
 
-            if (realCleanupApproved) LastCleanupRollbackPath = Path.Combine(runRoot, "rollback-manifest.json");
-            var officialHash = inputs.Value.OfficialSha256;
-            var cleanupHash = inputs.Value.CleanupSha256;
+            if (realCleanupApproved)
+            {
+                rollbackPath = Path.Combine(runRoot, "rollback-manifest.json");
+            }
+            var officialHash = inputs.OfficialSha256;
+            var cleanupHash = inputs.CleanupSha256;
             var args = "-ApprovedAppId " + QuotePowerShell(appId) +
                 " -OfficialPreviewSha256 " + QuotePowerShell(officialHash) +
                 " -CleanupManifestSha256 " + QuotePowerShell(cleanupHash) +
-                " -OfficialPreviewPath " + QuotePowerShell(inputs.Value.OfficialPreviewPath) +
-                " -CleanupManifestPath " + QuotePowerShell(inputs.Value.CleanupManifestPath) +
+                " -OfficialPreviewPath " + QuotePowerShell(inputs.OfficialPreviewPath) +
+                " -CleanupManifestPath " + QuotePowerShell(inputs.CleanupManifestPath) +
                 " -ExecutorMode " + (realCleanupApproved ? "Real" : "Preview") +
                 " -ExactTargetAllowlist " + QuotePowerShellArray(cleanupTargets) +
                 " -BackupRoot " + QuotePowerShell(Path.Combine(runRoot, "backup")) +
@@ -275,67 +320,75 @@ public sealed class LiveDataService
                 args += " -ConfirmApply -UserApproved -AllowRealSystemExecution";
             }
 
-            return await RunBackendScriptTextAsync("Invoke-UninstallCleanupApplyPackage.ps1", ct, args).ConfigureAwait(false);
+            var result = await RunBackendScriptResultAsync("Invoke-UninstallCleanupApplyPackage.ps1", ct, args).ConfigureAwait(false);
+            return result with { RecoveryPath = rollbackPath };
+        }
+        catch (Exception error)
+        {
+            var operationError = "Invoke-UninstallCleanupApplyPackage.ps1: " + error.GetType().Name + ": " + error.Message;
+            LastError = operationError;
+            return new(null, operationError, rollbackPath);
         }
         finally
         {
-            TryDeleteDirectory(inputs.Value.DirectoryPath);
+            if (inputs is not null) TryDeleteDirectory(inputs.DirectoryPath);
         }
     }
+    public async Task<string?> RequestUninstallCleanupApplyTextAsync(
+        string appId,
+        bool officialUninstallCommandApproved,
+        bool cleanupDeletionManifestApproved,
+        bool realCleanupApproved,
+        CancellationToken ct = default)
+        => (await RequestUninstallCleanupApplyResultAsync(appId, officialUninstallCommandApproved, cleanupDeletionManifestApproved, realCleanupApproved, ct)).Value;
 
-    public Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
-        => RunBackendScriptTextAsync(
+    public Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
+        => RunBackendScriptResultAsync(
             "Restore-UninstallCleanupExecution.ps1",
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply -AllowRealSystemExecution -UserApproved");
+    public async Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
+        => (await RestoreUninstallCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
-    public string? FindLatestProcessProfileBackup()
-    {
-        var root = _locator.RepoRoot;
-        if (root is null)
-        {
-            return null;
-        }
-
-        var backupRoot = Path.Combine(root, "backend", "state", "process-profile-backups");
-        if (!Directory.Exists(backupRoot))
-        {
-            return null;
-        }
-
-        return Directory.EnumerateFiles(backupRoot, "backup.json", SearchOption.AllDirectories)
-            .Select(path => new FileInfo(path))
-            .OrderByDescending(file => file.LastWriteTimeUtc)
-            .Select(file => file.FullName)
-            .FirstOrDefault();
-    }
-
-    public async Task<string?> RunBackendScriptTextAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
+    public async Task<LiveDataResult<string>> RunBackendScriptResultAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
     {
         var dir = ScriptsDirectory;
         if (dir is null)
         {
-            LastError = "Repo root not resolved (RepoRoot=" + (RepoRoot ?? "null") + ")";
-            return null;
+            var error = "Repo root not resolved (RepoRoot=" + (RepoRoot ?? "null") + ")";
+            LastError = error;
+            return new(null, error);
         }
 
         var scriptPath = Path.Combine(dir, scriptFile);
         if (!File.Exists(scriptPath))
         {
-            LastError = "Script not found: " + scriptPath;
-            return null;
+            var error = "Script not found: " + scriptPath;
+            LastError = error;
+            return new(null, error);
         }
 
         try
         {
-            return await RunScriptAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
+            var result = await RunScriptResultAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(result.Value))
+            {
+                var error = result.Error ?? "Empty output from " + scriptFile;
+                LastError = error;
+                return new(null, error);
+            }
+            LastError = null;
+            return result;
         }
         catch (Exception ex)
         {
-            LastError = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
-            return null;
+            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            LastError = error;
+            return new(null, error);
         }
     }
+    public async Task<string?> RunBackendScriptTextAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
+        => (await RunBackendScriptResultAsync(scriptFile, ct, extraArgs)).Value;
 
     public Task<ProcessProfileEnvelope?> GetProcessProfilePreviewAsync(CancellationToken ct = default)
         => RunAsync<ProcessProfileEnvelope>("Preview-ProcessProfile.ps1", ct);
@@ -349,37 +402,44 @@ public sealed class LiveDataService
     public Task<StutterOptimizationPreview?> GetStutterOptimizationPreviewAsync(CancellationToken ct = default)
         => RunAsync<StutterOptimizationPreview>("Preview-StutterOptimization.ps1", ct);
 
-    private async Task<T?> RunAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
+    private async Task<LiveDataResult<T>> RunResultAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
     {
-        var dir = ScriptsDirectory;
-        if (dir is null)
-        {
-            LastError = "Repo root not resolved (RepoRoot=" + (RepoRoot ?? "null") + ")";
-            return null;
-        }
-
-        var scriptPath = Path.Combine(dir, scriptFile);
-        if (!File.Exists(scriptPath))
-        {
-            LastError = "Script not found: " + scriptPath;
-            return null;
-        }
-
+        var text = await RunBackendScriptResultAsync(scriptFile, ct, extraArgs).ConfigureAwait(false);
+        if (text.Value is null) return new(null, text.Error);
         try
         {
-            var json = await RunScriptAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                LastError = "Empty output from " + scriptFile;
-                return null;
-            }
-
-            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+            var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
+            if (value is not null) return new(value, null);
+            var error = "No data returned from " + scriptFile;
+            LastError = error;
+            return new(null, error);
         }
         catch (Exception ex)
         {
-            LastError = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
-            return null;
+            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            LastError = error;
+            return new(null, error);
+        }
+    }
+    private async Task<T?> RunAsync<T>(string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
+        => (await RunResultAsync<T>(scriptFile, ct, extraArgs)).Value;
+
+    private LiveDataResult<T> DeserializeResult<T>(LiveDataResult<string> text) where T : class
+    {
+        if (text.Value is null) return new(null, text.Error);
+        try
+        {
+            var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
+            if (value is not null) return new(value, null);
+            const string error = "The backend returned no operation data.";
+            LastError = error;
+            return new(null, error);
+        }
+        catch (Exception error)
+        {
+            var message = error.GetType().Name + ": " + error.Message;
+            LastError = message;
+            return new(null, message);
         }
     }
 
@@ -458,15 +518,16 @@ public sealed class LiveDataService
         return null;
     }
 
-    private async Task<(string DirectoryPath, string OfficialPreviewPath, string CleanupManifestPath, string OfficialSha256, string CleanupSha256)?> PrepareUninstallCleanupInputsAsync(string appId, CancellationToken ct)
+    private async Task<LiveDataResult<PreparedCleanupInputs>> PrepareUninstallCleanupInputsAsync(string appId, CancellationToken ct)
     {
         var official = _officialReview;
         var cleanup = _cleanupReview;
         var generation = _cleanupReviewGeneration;
         if (official?.AppId != appId || cleanup?.AppId != appId || official.Generation != generation || cleanup.Generation != generation)
         {
-            LastError = "Review this app's removal route and cleanup list before applying.";
-            return null;
+            var error = "Review this app's removal route and cleanup list before applying.";
+            LastError = error;
+            return new(null, error);
         }
         var dir = Path.Combine(Path.GetTempPath(), "RooIndustriesOptimizationSuite", "cleanup-inputs", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -486,12 +547,13 @@ public sealed class LiveDataService
         if (generation != _cleanupReviewGeneration)
         {
             TryDeleteDirectory(dir);
-            LastError = "The selected app changed; review its inputs again.";
-            return null;
+            var error = "The selected app changed; review its inputs again.";
+            LastError = error;
+            return new(null, error);
         }
         var officialHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(official.Json)));
         var cleanupHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(cleanup.Json)));
-        return (dir, officialPath, manifestPath, officialHash, cleanupHash);
+        return new(new(dir, officialPath, manifestPath, officialHash, cleanupHash), null);
     }
 
     private static void TryDeleteDirectory(string path)
@@ -508,7 +570,7 @@ public sealed class LiveDataService
         }
     }
 
-    private async Task<string?> RunScriptAsync(string scriptPath, string extraArgs, CancellationToken ct)
+    private async Task<LiveDataResult<string>> RunScriptResultAsync(string scriptPath, string extraArgs, CancellationToken ct)
     {
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var arguments =
@@ -529,7 +591,7 @@ public sealed class LiveDataService
         using var process = new Process { StartInfo = psi };
         if (!process.Start())
         {
-            return null;
+            return new(null, "Could not start " + Path.GetFileName(scriptPath));
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -544,18 +606,17 @@ public sealed class LiveDataService
         catch (OperationCanceledException)
         {
             TryKill(process);
-            LastError = "Timed out running " + Path.GetFileName(scriptPath);
-            return null;
+            return new(null, "Timed out running " + Path.GetFileName(scriptPath));
         }
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout) && !string.IsNullOrWhiteSpace(stderr))
         {
-            LastError = stderr.Trim();
+            return new(null, stderr.Trim());
         }
 
-        return stdout;
+        return new(stdout, null);
     }
 
     private static void TryKill(Process process)

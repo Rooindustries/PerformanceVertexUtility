@@ -149,9 +149,15 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         NvidiaActionDetail = "Roo Industries is running the read-only tool check. It will not import a profile.";
         try
         {
-            var json = await App.Live.ProbeNvidiaProfileTextAsync(NvidiaProfileId);
+            var response = await App.Live.ProbeNvidiaProfileResultAsync(NvidiaProfileId);
+            if (response.Value is null)
+            {
+                NvidiaActionTitle = "Tool check not confirmed";
+                NvidiaActionDetail = response.Error ?? "The NVIDIA tool check returned no result.";
+                return;
+            }
             NvidiaActionTitle = "Tool check finished";
-            NvidiaActionDetail = SummarizeNvidiaAction(json, "Read-only NVIDIA tool check finished. No profile was imported.");
+            NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Read-only NVIDIA tool check finished. No profile was imported.");
         }
         finally
         {
@@ -172,9 +178,15 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         NvidiaActionDetail = "Roo Industries is building the export and import plan without launching NVIDIA Profile Inspector.";
         try
         {
-            var json = await App.Live.PreviewNvidiaProfileTextAsync(NvidiaProfileId);
+            var response = await App.Live.PreviewNvidiaProfileResultAsync(NvidiaProfileId);
+            if (response.Value is null)
+            {
+                NvidiaActionTitle = "Profile plan not confirmed";
+                NvidiaActionDetail = response.Error ?? "The NVIDIA profile preview returned no result.";
+                return;
+            }
             NvidiaActionTitle = "Profile plan ready";
-            NvidiaActionDetail = SummarizeNvidiaAction(json, "Profile preview is ready. No profile was imported.");
+            NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Profile preview is ready. No profile was imported.");
         }
         finally
         {
@@ -198,13 +210,19 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             : NvidiaGateSummary;
         try
         {
-            var json = await App.Live.ApplyNvidiaProfileTextAsync(
+            var response = await App.Live.ApplyNvidiaProfileResultAsync(
                 NvidiaProfileId,
                 NvidiaExportReviewed,
                 NvidiaProfileApproved,
                 NvidiaBenchmarkReady);
+            if (response.Value is null)
+            {
+                NvidiaActionTitle = "Apply not confirmed";
+                NvidiaActionDetail = response.Error ?? "The NVIDIA apply returned no result.";
+                return;
+            }
             NvidiaActionTitle = "Apply finished";
-            NvidiaActionDetail = SummarizeNvidiaAction(json, "Apply finished. No profile was imported.");
+            NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Apply finished. No profile was imported.");
         }
         finally
         {
@@ -227,9 +245,15 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             : "Approve the exact profile first. Restore stays locked until that approval is selected.";
         try
         {
-            var json = await App.Live.RestoreNvidiaProfileTextAsync(NvidiaProfileId, NvidiaProfileApproved);
+            var response = await App.Live.RestoreNvidiaProfileResultAsync(NvidiaProfileId, NvidiaProfileApproved);
+            if (response.Value is null)
+            {
+                NvidiaActionTitle = "Restore not confirmed";
+                NvidiaActionDetail = response.Error ?? "The NVIDIA restore returned no result.";
+                return;
+            }
             NvidiaActionTitle = "Restore finished";
-            NvidiaActionDetail = SummarizeNvidiaAction(json, "Restore finished. No profile was imported.");
+            NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Restore finished. No profile was imported.");
         }
         finally
         {
