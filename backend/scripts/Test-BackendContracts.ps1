@@ -117,6 +117,7 @@ $requiredFiles = @(
     'backend\scripts\Stop-GameTuneSession.ps1',
     'backend\scripts\Get-GameTuneSessionStatus.ps1',
     'backend\scripts\Test-GameTuneSessionRuntime.ps1',
+    'backend\scripts\Test-SessionRestoreBinding.ps1',
     'backend\scripts\Test-ProcessProfileBackend.ps1',
     'backend\scripts\Get-InstalledAppInventory.ps1',
     'backend\scripts\UninstallCleanup.Common.ps1',
