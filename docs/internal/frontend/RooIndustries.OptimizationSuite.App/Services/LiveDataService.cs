@@ -10,12 +10,33 @@ using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
+public sealed record ProcessProfileRecovery(string Path, string Id);
 public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
 
 public sealed class LiveDataService
 {
     private readonly BackendLocator _locator;
-    public (string Path, string Id)? ProcessProfileRecovery { get; set; }
+    private readonly string _recoveryDirectory;
+    private string ProcessRecoveryPath => Path.Combine(_recoveryDirectory, "process-profile-recovery.json");
+    public ProcessProfileRecovery? ProcessProfileRecovery
+    {
+        get
+        {
+            try { return RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath); }
+            catch (Exception error) when (error is IOException or JsonException or InvalidOperationException) { return null; }
+        }
+        set
+        {
+            if (value is null) throw new ArgumentNullException(nameof(value));
+            using var lease = RooIndustries.Optimizer.OperationFiles.Lock(ProcessRecoveryPath);
+            RooIndustries.Optimizer.OperationFiles.Write(ProcessRecoveryPath, value);
+        }
+    }
+    public void ClearProcessProfileRecovery(string path, string id)
+    {
+        using var lease = RooIndustries.Optimizer.OperationFiles.Lock(ProcessRecoveryPath);
+        if (ProcessProfileRecovery == new ProcessProfileRecovery(path, id)) File.Delete(ProcessRecoveryPath);
+    }
     private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
     private sealed record PreparedCleanupInputs(
         string DirectoryPath,
@@ -36,9 +57,10 @@ public sealed class LiveDataService
 
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
 
-    public LiveDataService(BackendLocator locator)
+    public LiveDataService(BackendLocator locator, string? recoveryDirectory = null)
     {
         _locator = locator;
+        _recoveryDirectory = recoveryDirectory ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings");
     }
 
     public string? ScriptsDirectory => _locator.RepoRoot is null

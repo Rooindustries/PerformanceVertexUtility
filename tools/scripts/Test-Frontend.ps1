@@ -11,3 +11,5 @@ if($LASTEXITCODE -ne 0){throw 'Frontend build failed'}
 if($LASTEXITCODE -ne 0){throw 'App state checks failed'}
 & $DotNetPath run --project (Join-Path $root 'tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj') --configuration Release -- $root
 if($LASTEXITCODE -ne 0){throw 'Windows settings UI checks failed'}
+& $DotNetPath run --project (Join-Path $root 'tools/validation/ActionRunner/ActionRunner.csproj') --configuration Release
+if($LASTEXITCODE -ne 0){throw 'Native action runner checks failed'}

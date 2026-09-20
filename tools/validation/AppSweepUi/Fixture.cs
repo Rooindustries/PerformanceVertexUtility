@@ -21,6 +21,7 @@ namespace RooIndustries.OptimizationSuite.Services
     }
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
+    public sealed record ProcessProfileRecovery(string Path, string Id);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
 
@@ -33,7 +34,11 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? LastError { get; set; }
         public string? OperationError { get; set; }
         public string? LatestProcessBackup { get; set; }
-        public (string Path, string Id)? ProcessProfileRecovery { get; set; }
+        public ProcessProfileRecovery? ProcessProfileRecovery { get; set; }
+        public void ClearProcessProfileRecovery(string path, string id)
+        {
+            if (ProcessProfileRecovery == new ProcessProfileRecovery(path, id)) ProcessProfileRecovery = null;
+        }
         public string? LastCleanupRollbackPath { get; set; }
         public string? CleanupRecoveryPath { get; set; }
         public string? ProcessPreviewText { get; set; }

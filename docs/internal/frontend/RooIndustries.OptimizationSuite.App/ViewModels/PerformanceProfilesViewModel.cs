@@ -50,6 +50,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _governorRestoreAvailable;
 
     private string? _lastBackupPath;
+    private string? _lastBackupId;
     private SessionRestoreEvidence? _matchTuneRestore;
     private SessionRestoreEvidence? _governorRestore;
 
@@ -119,6 +120,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         QuietCount = _all.Count(r => r.Plan == "Lower priority");
         var savedRecovery = App.Live.ProcessProfileRecovery;
         _lastBackupPath = savedRecovery is { } saved && ValidProcessBackup(saved.Path, saved.Id) ? saved.Path : null;
+        _lastBackupId = _lastBackupPath is null ? null : savedRecovery?.Id;
         RestoreAvailable = _lastBackupPath is not null;
         RestoreHint = RestoreAvailable ? "Restore is ready" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
@@ -186,7 +188,16 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (backup is not null)
             {
                 _lastBackupPath = backup;
-                App.Live.ProcessProfileRecovery = (backup, ExtractString(result, "backup", "backupId")!);
+                _lastBackupId = ExtractString(result, "backup", "backupId");
+                try { App.Live.ProcessProfileRecovery = new(backup, _lastBackupId!); }
+                catch (Exception saveError)
+                {
+                    RestoreAvailable = true;
+                    RestoreHint = "Keep this window open to restore";
+                    ActionTitle = "Recovery record needs attention";
+                    ActionDetail = "The backup exists, but its saved reference could not be written: " + saveError.Message;
+                    return;
+                }
                 RestoreAvailable = true;
                 RestoreHint = "Restore is ready";
             }
@@ -222,7 +233,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (ActionBusy) return;
         var backup = _lastBackupPath;
-        if (string.IsNullOrWhiteSpace(backup) || App.Live.ProcessProfileRecovery is not { } saved || !PathsEqual(saved.Path, backup) || !ValidProcessBackup(backup, saved.Id))
+        if (string.IsNullOrWhiteSpace(backup) || !ValidProcessBackup(backup, _lastBackupId))
         {
             ActionTitle = "Nothing to restore";
             ActionDetail = "Apply process priorities first. Restore uses the saved original values.";
@@ -253,11 +264,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             ActionDetail = SummarizeProcessAction(response.Value, "The restore result needs review.");
             if (status == "success" && !ProcessOutcomeBlocked(result) && CountArray(result, "result", "changedItems") is not null
                 && PathsEqual(ExtractString(result, "backup", "location"), backup)
-                && ExtractString(result, "backup", "backupId") == saved.Id)
+                && ExtractString(result, "backup", "backupId") == _lastBackupId)
             {
                 ActionTitle = "Restore complete";
+                try { App.Live.ClearProcessProfileRecovery(backup, _lastBackupId!); }
+                catch (Exception saveError) { ActionDetail += " The saved recovery reference could not be cleared: " + saveError.Message; }
                 _lastBackupPath = null;
-                App.Live.ProcessProfileRecovery = null;
+                _lastBackupId = null;
                 RestoreAvailable = false;
                 RestoreHint = "No saved process settings";
             }
