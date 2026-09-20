@@ -47,6 +47,7 @@ public sealed partial class FirmwarePage : Page
     private async void Apply(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();
     private async void Verify(object sender, RoutedEventArgs e) => await ViewModel.VerifyAsync();
     private async void Undo(object sender, RoutedEventArgs e) => await ViewModel.UndoAsync();
+    private async void OpenSettings(object sender, RoutedEventArgs e) => await ViewModel.OpenSettingsAsync();
     private async void OpenHistory(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is FirmwareHistoryRow row) await ViewModel.OpenHistoryAsync(row);

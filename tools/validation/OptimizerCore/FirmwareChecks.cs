@@ -8,6 +8,12 @@ static class FirmwareChecks
 // Fixture export; no physical firmware is used.
 HIICrc32 = A1B2C3D4
 
+// FORM SET
+// GUID = 11111111-1111-1111-1111-111111111111
+// Title = Setup
+// FORM
+// GUID = 22222222-2222-2222-2222-222222222222
+// Variable = Setup
 Setup Question = Performance mode
 Help String = Select the platform mode.
 Token =10 // Do NOT change this line
@@ -67,6 +73,14 @@ Value =0A
         var actualFormat = new FirmwareScript(Encoding.Latin1.GetBytes(doubled));
         check(actualFormat.Crc == "A1B2C3D4" && actualFormat.Text == doubled && actualFormat.SameValues(script),
             "The actual SCEWIN doubled-carriage-return checksum line parses without rewriting the original export");
+        foreach (var digits in new[] { "A", "A1B", "A1B2C3", "A1B2C3D", "A1B2C3D4" })
+        {
+            var parsed = new FirmwareScript(Encoding.Latin1.GetBytes(ExportText.Replace("A1B2C3D4", digits, StringComparison.Ordinal)));
+            check(parsed.Crc == digits.PadLeft(8, '0'), "A " + digits.Length + "-digit SCEWIN checksum is normalized without rewriting the export");
+        }
+        Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(ExportText.Replace("A1B2C3D4", "", StringComparison.Ordinal))), "An empty checksum is rejected");
+        Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(ExportText.Replace("A1B2C3D4", "G123", StringComparison.Ordinal))), "A non-hex checksum is rejected");
+        Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(ExportText.Replace("A1B2C3D4", "A1B2C3D45", StringComparison.Ordinal))), "A checksum longer than eight digits is rejected");
         Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(doubled + "\nHIICrc32= 12345678\r\r\n")),
             "Accepting SCEWIN line endings does not permit a second checksum");
         Reject(() => new FirmwareScript(Encoding.Latin1.GetBytes(doubled.Replace("A1B2C3D4", "A1B2C3D4extra", StringComparison.Ordinal))),

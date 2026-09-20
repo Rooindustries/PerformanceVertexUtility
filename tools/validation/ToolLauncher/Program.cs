@@ -3,6 +3,11 @@ using RooIndustries.Optimizer;
 
 try
 {
+    FirmwareEditorChecks.Run((success, message) =>
+    {
+        if (!success) throw new InvalidOperationException(message);
+        Console.WriteLine("PASS " + message);
+    });
     var firmware = new FirmwareViewModel();
     if (!firmware.CanLoad || firmware.LoadLabel != "Set up and load settings" || firmware.CanCancelSetup)
         throw new InvalidOperationException("First-use BIOS setup must be available without a package folder.");
