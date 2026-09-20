@@ -36,6 +36,13 @@ public sealed partial class WindowsTweaksPage : Page
         row.RowSpacing = compact ? 8 : 0;
         ColumnLabels.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
     }
+    private void ActionControlsSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var controls = (Grid)sender;
+        var row = (Grid)((StackPanel)controls.Parent).Parent;
+        var current = (StackPanel)row.Children.OfType<FrameworkElement>().Single(child => child.Name == "RowCurrent");
+        ((Grid)current.Children[1]).MinHeight = args.NewSize.Height;
+    }
     private void PresetTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput) ViewModel.FilterPresets(sender.Text);
