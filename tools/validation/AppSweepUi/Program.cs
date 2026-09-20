@@ -560,7 +560,25 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             dryRun = false,
             status = "success",
             rollbackManifestPath = nvidiaManifest,
-            summary = new { importCompleted = true },
+            gates = new[] { new { gateId = "contradiction", blocking = true } },
+            errors = Array.Empty<object>(),
+            summary = new { blockingGateCount = 1, exportAttempted = false, importAttempted = true, importCompleted = true },
+        });
+        await drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null);
+        Check(drivers.NvidiaActionTitle == "Restore not confirmed" && drivers.CanRestoreNvidiaProfile,
+            "A nominal NVIDIA restore success with a blocking gate cannot clear recovery");
+
+        App.Live.NvidiaRestoreText = JsonSerializer.Serialize(new
+        {
+            actionId = "drivers.nvidiaNip.executor",
+            operation = "Restore",
+            profileId = "framesync",
+            dryRun = false,
+            status = "success",
+            rollbackManifestPath = nvidiaManifest,
+            gates = Array.Empty<object>(),
+            errors = Array.Empty<object>(),
+            summary = new { blockingGateCount = 0, exportAttempted = false, importAttempted = true, importCompleted = true },
         });
         App.Live.ClearNvidiaRecoveryOnRestore = true;
         App.Live.LastError = null;
