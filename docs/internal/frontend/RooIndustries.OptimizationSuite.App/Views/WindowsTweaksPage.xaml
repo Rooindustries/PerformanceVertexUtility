@@ -78,7 +78,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
                         <Image Source="{x:Bind Icon}" Width="24" Height="24" VerticalAlignment="Top" Margin="0,2,0,0"/>
                         <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                             <TextBlock Text="{x:Bind Description}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
                             <TextBlock Text="{x:Bind Context}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                             <TextBlock Text="{x:Bind Detail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
