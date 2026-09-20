@@ -14,6 +14,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/MonitoringViewModel.cs" Link="MonitoringViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/PerformanceProfilesViewModel.cs" Link="PerformanceProfilesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/ProcessControlsViewModel.cs" Link="ProcessControlsViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/RestoreLogsViewModel.cs" Link="RestoreLogsViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/StartupServicesViewModel.cs" Link="StartupServicesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/UninstallCleanupViewModel.cs" Link="UninstallCleanupViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/UiModels.cs" Link="UiModels.cs" />
