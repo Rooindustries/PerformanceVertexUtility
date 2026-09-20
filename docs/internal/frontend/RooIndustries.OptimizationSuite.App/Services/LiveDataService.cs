@@ -12,6 +12,7 @@ namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record ProcessProfileRecovery(string Path, string Id);
 public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null);
+public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath);
 
 public sealed class LiveDataService
 {
@@ -178,7 +179,7 @@ public sealed class LiveDataService
     public async Task<string?> ProbeNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
         => (await ProbeNvidiaProfileResultAsync(profileId, ct)).Value;
 
-    public Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(
+    public async Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(
         string profileId,
         bool exportReviewed,
         bool userApproved,
@@ -186,6 +187,16 @@ public sealed class LiveDataService
         CancellationToken ct = default)
     {
         var realApplyApproved = exportReviewed && userApproved && benchmarkEvidenceAttached;
+        string? recoveryRoot = null;
+        string? exportPath = null;
+        string? rollbackManifestPath = null;
+        if (realApplyApproved)
+        {
+            recoveryRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "nvidia-profile-recovery", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(recoveryRoot);
+            exportPath = Path.Combine(recoveryRoot, "before.nip");
+            rollbackManifestPath = Path.Combine(recoveryRoot, "rollback.json");
+        }
         var args = "-Operation Apply -ProfileId " + QuotePowerShell(profileId)
             + " -ExecutorMode " + (realApplyApproved ? "Real" : "Preview")
             + " -ConfirmApply";
@@ -201,10 +212,16 @@ public sealed class LiveDataService
 
         if (realApplyApproved)
         {
-            args += " -AllowRealNvpiExecution";
+            args += " -AllowRealNvpiExecution"
+                + " -ExportPath " + QuotePowerShell(exportPath!)
+                + " -RollbackManifestPath " + QuotePowerShell(rollbackManifestPath!);
         }
 
-        return RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
+        var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
+        var recovery = realApplyApproved ? ReadNvidiaRecoveryFromApply(profileId, result.Value, rollbackManifestPath!, exportPath!) : null;
+        if (recovery is not null) SaveNvidiaRecovery(recovery);
+        else if (realApplyApproved && NvidiaImportAttempted(result.Value, profileId)) ClearNvidiaRecovery(profileId);
+        return result with { RecoveryPath = recovery?.RollbackManifestPath };
     }
     public async Task<string?> ApplyNvidiaProfileTextAsync(
         string profileId,
@@ -214,20 +231,39 @@ public sealed class LiveDataService
         CancellationToken ct = default)
         => (await ApplyNvidiaProfileResultAsync(profileId, exportReviewed, userApproved, benchmarkEvidenceAttached, ct)).Value;
 
-    public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(string profileId, bool userApproved, CancellationToken ct = default)
+    public Task<NvidiaProfileRecovery?> ReadNvidiaProfileRecoveryAsync(string profileId)
     {
-        var args = "-Operation Restore -ProfileId " + QuotePowerShell(profileId)
+        var path = NvidiaRecoveryIndexPath;
+        if (!File.Exists(path)) return Task.FromResult<NvidiaProfileRecovery?>(null);
+        try
+        {
+            var recovery = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
+            return Task.FromResult(ValidateNvidiaRecovery(recovery, profileId) ? recovery : null);
+        }
+        catch
+        {
+            return Task.FromResult<NvidiaProfileRecovery?>(null);
+        }
+    }
+
+    public async Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken ct = default)
+    {
+        if (!ValidateNvidiaRecovery(recovery, recovery.ProfileId))
+            return new(null, "The NVIDIA rollback artifact is missing or does not match this profile.");
+        var args = "-Operation Restore -ProfileId " + QuotePowerShell(recovery.ProfileId)
             + " -ExecutorMode " + (userApproved ? "Real" : "Preview")
+            + " -ExportPath " + QuotePowerShell(recovery.ExportPath)
+            + " -RollbackManifestPath " + QuotePowerShell(recovery.RollbackManifestPath)
             + " -ConfirmApply";
         if (userApproved)
         {
             args += " -UserApproved -AllowRealNvpiExecution";
         }
 
-        return RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args);
+        var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
+        if (result.Error is null && NvidiaRestoreCompleted(result.Value, recovery)) ClearNvidiaRecovery(recovery);
+        return result;
     }
-    public async Task<string?> RestoreNvidiaProfileTextAsync(string profileId, bool userApproved, CancellationToken ct = default)
-        => (await RestoreNvidiaProfileResultAsync(profileId, userApproved, ct)).Value;
 
     public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-StutterOptimization.ps1", ct, "-OptimizationId all");
@@ -492,6 +528,155 @@ public sealed class LiveDataService
             LastError = message;
             return new(null, message);
         }
+    }
+
+    private string NvidiaRecoveryIndexPath => Path.Combine(
+        RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot,
+        "settings",
+        "nvidia-profile-recovery.json");
+
+    private NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string? json, string rollbackManifestPath, string exportPath)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath);
+            return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
+                && NvidiaString(root, "operation") == "Apply"
+                && NvidiaString(root, "profileId") == profileId
+                && NvidiaBool(root, "dryRun") == false
+                && NvidiaBool(root, "summary", "exportCompleted") == true
+                && NvidiaBool(root, "summary", "importAttempted") == true
+                && PathsEqual(NvidiaString(root, "rollbackManifestPath"), rollbackManifestPath)
+                && PathsEqual(NvidiaString(root, "rollbackManifest", "exportPath"), exportPath)
+                && ValidateNvidiaRecovery(recovery, profileId)
+                    ? recovery
+                    : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool ValidateNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
+    {
+        if (recovery is null || recovery.ProfileId != profileId
+            || !File.Exists(recovery.RollbackManifestPath) || !File.Exists(recovery.ExportPath)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(recovery.RollbackManifestPath));
+            var manifest = doc.RootElement;
+            return NvidiaString(manifest, "actionId") == "drivers.nvidiaNip.rollbackManifest"
+                && NvidiaString(manifest, "restoreActionId") == "drivers.nvidiaNip.restoreProfile"
+                && NvidiaString(manifest, "profileId") == profileId
+                && NvidiaBool(manifest, "rollbackSupported") == true
+                && NvidiaBool(manifest, "exportCompleted") == true
+                && PathsEqual(NvidiaString(manifest, "exportPath"), recovery.ExportPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool NvidiaRestoreCompleted(string? json, NvidiaProfileRecovery recovery)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
+                && NvidiaString(root, "operation") == "Restore"
+                && NvidiaString(root, "profileId") == recovery.ProfileId
+                && NvidiaBool(root, "dryRun") == false
+                && NvidiaString(root, "status") == "success"
+                && NvidiaBool(root, "summary", "importCompleted") == true
+                && PathsEqual(NvidiaString(root, "rollbackManifestPath"), recovery.RollbackManifestPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool NvidiaImportAttempted(string? json, string profileId)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
+                && NvidiaString(root, "operation") == "Apply"
+                && NvidiaString(root, "profileId") == profileId
+                && NvidiaBool(root, "summary", "importAttempted") == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void SaveNvidiaRecovery(NvidiaProfileRecovery recovery)
+    {
+        var path = NvidiaRecoveryIndexPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(recovery, JsonOptions), new UTF8Encoding(false));
+    }
+
+    private void ClearNvidiaRecovery(NvidiaProfileRecovery recovery)
+    {
+        var path = NvidiaRecoveryIndexPath;
+        try
+        {
+            if (!File.Exists(path)) return;
+            var current = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
+            if (current == recovery) File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ClearNvidiaRecovery(string profileId)
+    {
+        var path = NvidiaRecoveryIndexPath;
+        try
+        {
+            if (!File.Exists(path)) return;
+            var current = JsonSerializer.Deserialize<NvidiaProfileRecovery>(File.ReadAllText(path), JsonOptions);
+            if (current?.ProfileId == profileId) File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private static string? NvidiaString(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current)) return null;
+        return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
+    }
+
+    private static bool? NvidiaBool(JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var segment in path)
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current)) return null;
+        return current.ValueKind is JsonValueKind.True or JsonValueKind.False ? current.GetBoolean() : null;
+    }
+
+    private static bool PathsEqual(string? first, string second)
+    {
+        if (string.IsNullOrWhiteSpace(first)) return false;
+        try { return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
     }
 
     private static string QuotePowerShell(string value)
