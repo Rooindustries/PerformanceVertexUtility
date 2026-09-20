@@ -97,7 +97,7 @@
                     <ComboBox x:Name="CompactSectionPicker" Grid.Column="1" Visibility="Collapsed" ItemsSource="{x:Bind ViewModel.Sections}" SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Settings category" AutomationProperties.AutomationId="WindowsTweakCompactSection"/>
                     <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.VisibleCount, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                 </Grid>
-                <Grid x:Name="ColumnLabels" Grid.Row="1" Padding="10,0,18,0" ColumnSpacing="12">
+                <Grid x:Name="ColumnLabels" Grid.Row="1" Padding="10,0" ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="2" Text="CURRENT" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                     <Grid Grid.Column="3" ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
@@ -113,18 +113,19 @@
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Image Source="{x:Bind Icon}" Width="28" Height="28" VerticalAlignment="Top" Margin="0,2,0,0"/>
-                        <StackPanel x:Name="RowName" Grid.Column="1" Spacing="4">
-                            <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Grid x:Name="RowName" Grid.Column="1" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
                                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" MinHeight="28" MinWidth="28" Padding="5" ToolTipService.ToolTip="Setting details" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind DetailsAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="Setting details">
-                                    <Image Source="ms-appx:///Assets/Icons/setting-details.svg" Width="16" Height="16"/>
-                                    <Button.Flyout><Flyout><ScrollViewer MaxHeight="360"><ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource SettingDetailsTemplate}"/></ScrollViewer></Flyout></Button.Flyout>
-                                </Button>
-                            </Grid>
-                            <TextBlock Text="{x:Bind Description}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
-                            <TextBlock Text="{x:Bind ScopeAndRefresh}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
-                            <TextBlock Text="{x:Bind Detail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
-                        </StackPanel>
+                                <TextBlock Text="{x:Bind Description}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
+                                <TextBlock Text="{x:Bind ScopeAndRefresh}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
+                                <TextBlock Text="{x:Bind Detail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" VerticalAlignment="Center" MinHeight="28" MinWidth="28" Padding="5" ToolTipService.ToolTip="Setting details" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind DetailsAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="Setting details">
+                                <Image Source="ms-appx:///Assets/Icons/setting-details.svg" Width="16" Height="16"/>
+                                <Button.Flyout><Flyout><ScrollViewer MaxHeight="360"><ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource SettingDetailsTemplate}"/></ScrollViewer></Flyout></Button.Flyout>
+                            </Button>
+                        </Grid>
                         <StackPanel x:Name="RowCurrent" Grid.Column="2" VerticalAlignment="Center" Spacing="4">
                             <TextBlock x:Name="RowCurrentLabel" Text="CURRENT" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
                             <TextBlock Text="{x:Bind Current, Mode=OneWay}" AutomationProperties.Name="{x:Bind CurrentAccessibleName, Mode=OneWay}" TextWrapping="Wrap"/>
@@ -133,7 +134,7 @@
                             <TextBlock x:Name="RowActionLabel" Text="CHANGE TO" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
-                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
+                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Center" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
                                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" HorizontalAlignment="Stretch" TextAlignment="Left"/></DataTemplate></ComboBox.ItemTemplate>
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
