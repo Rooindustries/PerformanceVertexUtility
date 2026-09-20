@@ -117,6 +117,10 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
             .Select(part => part.Preview.OperationId).ToHashSet(StringComparer.Ordinal);
         if (appIds is not null && journal.Entries.Any(entry => selected.Contains(entry.OperationId) && entry.Status == "pending"))
             throw new InvalidDataException("A selected application has no attempted cleanup to restore.");
+        var selectedEntries = journal.Entries.Where(entry => selected.Contains(entry.OperationId)).ToArray();
+        if (selectedEntries.Length > 0 && selectedEntries.All(entry => entry.Status == "restored")) return journal;
+        if (!HasRestorableEntries(journal, appIds))
+            throw new InvalidDataException("This cleanup batch has no attempted cleanup with recovery data.");
         journal.RestoreStarted = true;
         journal.Status = "restoring";
         Save(journalPath, journal);
@@ -137,6 +141,16 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
             : journal.Entries.Any(entry => entry.Status is "needsReconciliation" or "applying" or "restoring") ? "needsReconciliation" : "partiallyRestored";
         Save(journalPath, journal);
         return journal;
+    }
+
+    public static bool HasRestorableEntries(CleanupBatchJournal journal, string[]? appIds = null)
+    {
+        var selected = journal.Preview.Parts
+            .Where(part => appIds is null || appIds.Contains(part.Preview.AppId, StringComparer.Ordinal))
+            .ToDictionary(part => part.Preview.OperationId, part => part.Operation.JournalPath, StringComparer.Ordinal);
+        return journal.Entries.Any(entry => selected.TryGetValue(entry.OperationId, out var recoveryPath)
+            && entry.Status is ("applying" or "applied" or "needsReconciliation" or "restoring")
+            && File.Exists(recoveryPath));
     }
 
     private static CleanupBatchCancellation? Cancellation(string path, string batchId)

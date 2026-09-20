@@ -39,6 +39,7 @@ public sealed record RemovedAppChoice(string Id, string Name, string JournalPath
 
 public sealed record CleanupHistoryChoice(CleanupBatchSession Session)
 {
+    public bool CanRestore => CleanupBatch.HasRestorableEntries(Session.State);
     public override string ToString() => Session.State.UpdatedAtUtc.ToLocalTime().ToString("g") + " · " + Session.Review.Plan.Parts.Length + " apps · " + StatusLabel(Session.State.Status);
     public static string StatusLabel(string status) => status switch
     {
@@ -103,7 +104,7 @@ public partial class BulkRemovalViewModel : ObservableObject
     public bool CanScanFiles => !Busy && (ScanAllApps ? RemovedApps.Count > 0 : SelectedRemovedApp is not null);
     public bool CanPreviewFiles => !Busy && Leftovers.Any(item => item.Selected && item.CanSelect) && (!HasSelectedKeys || AcceptKeyRecreation);
     public bool CanApplyFiles => !Busy && FileReviewReady && FilesReviewed;
-    public bool CanRestoreFiles => !Busy && SelectedCleanupHistory is not null;
+    public bool CanRestoreFiles => !Busy && SelectedCleanupHistory?.CanRestore == true;
     public bool CanRestoreLegacyFiles => !Busy && FileRestoreAvailable;
     public bool CanCancelCleanup => _cleanupRunning && _cleanupObserved;
     public bool CanCancelScan => _scanCancellation is not null;
