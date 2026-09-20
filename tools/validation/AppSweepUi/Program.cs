@@ -27,7 +27,9 @@ Dictionary<string, ControlRead> Controls(ControlRead cpuSets, ControlRead affini
     ["affinity"] = affinity,
 };
 ProcessControlSnapshot Snapshot(ControlRead cpuSets, ControlRead affinity) => new(
-    new RunningProcess(123, "1", @"C:\Fixture.exe"), Read(0xfffffffeu), [], Controls(cpuSets, affinity));
+    new RunningProcess(123, "1", @"C:\Fixture.exe"), Read(0xfffffffeu),
+    [new LogicalCpu(103, 0, 0, 0, 0, 0, 0, false, false, false), new LogicalCpu(104, 0, 1, 1, 0, 0, 0, false, false, false)],
+    Controls(cpuSets, affinity));
 async Task ReadProcess(ProcessControlsViewModel model)
 {
     var method = typeof(ProcessControlsViewModel).GetMethod("ReadProcessAsync", BindingFlags.Instance | BindingFlags.NonPublic)
