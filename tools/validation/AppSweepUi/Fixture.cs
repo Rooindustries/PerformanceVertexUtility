@@ -28,6 +28,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public ProcessInventory? Inventory { get; set; }
         public ProcessClassification? Classification { get; set; }
         public string? LastError { get; set; }
+        public string? OperationError { get; set; }
         public string? LatestProcessBackup { get; set; }
         public string? LastCleanupRollbackPath { get; set; }
         public string? CleanupRecoveryPath { get; set; }
@@ -56,10 +57,10 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
         public Task<string?> PreviewProcessProfileTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(ProcessPreviewText);
         public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ProcessPreviewText, ProcessPreviewText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(ProcessPreviewText, OperationError ?? (ProcessPreviewText is null ? LastError : null)));
         public Task<string?> ApplyProcessProfileTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(ProcessApplyText);
         public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ProcessApplyText, ProcessApplyText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null)));
         public Task<string?> RestoreProcessProfileTextAsync(string backupPath, CancellationToken cancellationToken = default)
         {
             LastProcessRestorePath = backupPath;
@@ -68,7 +69,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(string backupPath, CancellationToken cancellationToken = default)
         {
             LastProcessRestorePath = backupPath;
-            return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, ProcessRestoreText is null ? LastError : null));
+            return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, OperationError ?? (ProcessRestoreText is null ? LastError : null)));
         }
         public Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         public Task<string?> RestoreGameTuneSessionTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
@@ -78,58 +79,58 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default) => Task.FromResult(DriverHardware);
         public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, NvidiaProbeText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, OperationError ?? (NvidiaProbeText is null ? LastError : null)));
         public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaPreviewText, NvidiaPreviewText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(NvidiaPreviewText, OperationError ?? (NvidiaPreviewText is null ? LastError : null)));
         public Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(string profileId, bool exportReviewed, bool userApproved, bool benchmarkEvidenceAttached, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaApplyText, NvidiaApplyText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(NvidiaApplyText, OperationError ?? (NvidiaApplyText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(string profileId, bool userApproved, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaRestoreText, NvidiaRestoreText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(NvidiaRestoreText, OperationError ?? (NvidiaRestoreText is null ? LastError : null)));
         public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(StutterPreviewText, StutterPreviewText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(StutterPreviewText, OperationError ?? (StutterPreviewText is null ? LastError : null)));
         public Task<LiveDataResult<string>> CheckTimerResolutionResultAsync(bool userApproved, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(TimerText, TimerText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(TimerText, OperationError ?? (TimerText is null ? LastError : null)));
         public Task<LiveDataResult<string>> CheckShaderCacheCleanupResultAsync(bool userApproved, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ShaderText, ShaderText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(ShaderText, OperationError ?? (ShaderText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, ShaderRestoreText is null ? LastError : null));
+            => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, OperationError ?? (ShaderRestoreText is null ? LastError : null)));
         public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false) => Task.FromResult(InstalledApps);
         public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken cancellationToken = default) => OfficialPreview(appId);
         public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken cancellationToken = default)
         {
             var value = await OfficialPreview(appId);
-            return new(value, value is null ? LastError : null);
+            return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public Task<LeftoverScan?> GetLeftoverScanAsync(string appId, CancellationToken cancellationToken = default) => LeftoverScan(appId);
         public async Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken cancellationToken = default)
         {
             var value = await LeftoverScan(appId);
-            return new(value, value is null ? LastError : null);
+            return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public Task<CleanupManifest?> GetCleanupManifestAsync(string appId, CancellationToken cancellationToken = default) => CleanupManifest(appId);
         public async Task<LiveDataResult<CleanupManifest>> GetCleanupManifestResultAsync(string appId, CancellationToken cancellationToken = default)
         {
             var value = await CleanupManifest(appId);
-            return new(value, value is null ? LastError : null);
+            return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public Task<UninstallCleanupExecutionPlan?> GetUninstallCleanupExecutionPlanAsync(string appId, CancellationToken cancellationToken = default) => CleanupPlan(appId);
         public async Task<LiveDataResult<UninstallCleanupExecutionPlan>> GetUninstallCleanupExecutionPlanResultAsync(string appId, CancellationToken cancellationToken = default)
         {
             var value = await CleanupPlan(appId);
-            return new(value, value is null ? LastError : null);
+            return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public Task<string?> RequestUninstallCleanupApplyTextAsync(string appId, bool officialApproved, bool cleanupApproved, bool realApproved, CancellationToken cancellationToken = default)
             => CleanupApply(appId, officialApproved, cleanupApproved, realApproved);
         public async Task<LiveDataResult<string>> RequestUninstallCleanupApplyResultAsync(string appId, bool officialApproved, bool cleanupApproved, bool realApproved, CancellationToken cancellationToken = default)
         {
             var value = await CleanupApply(appId, officialApproved, cleanupApproved, realApproved);
-            return new(value, value is null ? LastError : null, realApproved ? CleanupRecoveryPath : null);
+            return new(value, OperationError ?? (value is null ? LastError : null), realApproved ? CleanupRecoveryPath : null);
         }
         public Task<string?> RestoreUninstallCleanupTextAsync(string rollbackPath, CancellationToken cancellationToken = default) => CleanupRestore(rollbackPath);
         public async Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackPath, CancellationToken cancellationToken = default)
         {
             var value = await CleanupRestore(rollbackPath);
-            return new(value, value is null ? LastError : null);
+            return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public void DiscardCleanupReview() => LastCleanupRollbackPath = null;
     }

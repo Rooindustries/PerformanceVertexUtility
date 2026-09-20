@@ -259,7 +259,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             var result = await App.Live.GetOfficialUninstallPreviewResultAsync(app.AppId!);
             if (!IsCurrent(app, generation)) return;
             var preview = result.Value;
-            if (preview?.Commands is null || !preview.DryRun || HasBlockingErrors(preview.Errors))
+            if (result.Error is not null || preview?.Commands is null || !preview.DryRun || HasBlockingErrors(preview.Errors))
             {
                 OfficialPreviewState = "Couldn't check this path: " + (result.Error ?? FirstError(preview?.Errors) ?? "The route response was incomplete.");
                 RemovalPathReviewed = false;
@@ -331,7 +331,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             var result = await App.Live.GetLeftoverScanResultAsync(app.AppId!);
             if (!IsCurrent(app, generation)) return;
             var scan = result.Value;
-            if (scan?.Items is null || scan.Summary is null || !scan.DryRun
+            if (result.Error is not null || scan?.Items is null || scan.Summary is null || !scan.DryRun
                 || !string.Equals(scan.AppId, app.AppId, StringComparison.Ordinal)
                 || HasBlockingErrors(scan.Errors))
             {
@@ -393,7 +393,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             var manifestResult = await App.Live.GetCleanupManifestResultAsync(app.AppId!);
             if (!IsCurrent(app, generation)) return;
             var manifest = manifestResult.Value;
-            if (manifest?.Items is null || manifest.Summary is null || !manifest.DryRun
+            if (manifestResult.Error is not null || manifest?.Items is null || manifest.Summary is null || !manifest.DryRun
                 || !string.Equals(manifest.AppId, app.AppId, StringComparison.Ordinal)
                 || HasBlockingErrors(manifest.Errors))
             {
@@ -412,7 +412,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             var planResult = await App.Live.GetUninstallCleanupExecutionPlanResultAsync(app.AppId!);
             if (!IsCurrent(app, generation)) return;
             var plan = planResult.Value;
-            if (plan?.Summary is null || !plan.DryRun
+            if (planResult.Error is not null || plan?.Summary is null || !plan.DryRun
                 || !string.Equals(plan.AppId, app.AppId, StringComparison.Ordinal)
                 || string.Equals(plan.Status, "failed", StringComparison.OrdinalIgnoreCase)
                 || HasBlockingErrors(plan.Errors))
@@ -527,7 +527,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         try
         {
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
-            var restored = IsSuccessfulRestore(result.Value, rollbackPath);
+            var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
             if (restored && _cleanupRecoveryByApp.TryGetValue(app.AppId!, out var retained)
                 && string.Equals(retained, rollbackPath, StringComparison.Ordinal))
             {
@@ -609,7 +609,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private void SummarizeCleanupExecution(string? json, string expectedAppId, string? operationError, bool applied)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(json) || operationError is not null)
         {
             CleanupExecutionState = applied ? "Cleanup result was not confirmed." : "Final check did not return a result.";
             CleanupExecutionDetail = operationError ?? (applied
@@ -716,9 +716,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private void SummarizeCleanupRestore(string? json, string? operationError, bool restoreSucceeded)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(json) || operationError is not null)
         {
-            CleanupExecutionState = "Restore did not return a result.";
+            CleanupExecutionState = "Restore was not confirmed.";
             CleanupExecutionDetail = operationError ?? "The recovery record remains available.";
             return;
         }

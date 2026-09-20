@@ -96,7 +96,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.PreviewStutterOptimizationResultAsync();
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Settings review not confirmed";
                 StutterActionDetail = response.Error ?? "The timer and cache review returned no result.";
@@ -127,7 +127,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.CheckTimerResolutionResultAsync(LatencySessionApproved);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Latency session not confirmed";
                 StutterActionDetail = response.Error ?? "The latency session returned no result.";
@@ -158,7 +158,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.CheckShaderCacheCleanupResultAsync(ShaderCacheApproved);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Cache cleanup not confirmed";
                 StutterActionDetail = response.Error ?? "The cache cleanup check returned no result.";
@@ -200,7 +200,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RestoreShaderCacheCleanupResultAsync(_lastShaderRollbackPath);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 StutterActionTitle = "Cache restore not confirmed";
                 StutterActionDetail = response.Error ?? "The cache restore returned no result.";

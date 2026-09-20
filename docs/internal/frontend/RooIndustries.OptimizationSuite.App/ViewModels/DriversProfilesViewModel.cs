@@ -150,7 +150,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.ProbeNvidiaProfileResultAsync(NvidiaProfileId);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Tool check not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA tool check returned no result.";
@@ -179,7 +179,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.PreviewNvidiaProfileResultAsync(NvidiaProfileId);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Profile plan not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA profile preview returned no result.";
@@ -215,7 +215,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 NvidiaExportReviewed,
                 NvidiaProfileApproved,
                 NvidiaBenchmarkReady);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Apply not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA apply returned no result.";
@@ -246,7 +246,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.RestoreNvidiaProfileResultAsync(NvidiaProfileId, NvidiaProfileApproved);
-            if (response.Value is null)
+            if (response.Value is null || response.Error is not null)
             {
                 NvidiaActionTitle = "Restore not confirmed";
                 NvidiaActionDetail = response.Error ?? "The NVIDIA restore returned no result.";
