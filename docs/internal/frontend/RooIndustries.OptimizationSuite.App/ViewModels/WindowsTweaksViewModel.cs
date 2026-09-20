@@ -38,6 +38,10 @@ public partial class WindowsTweakRow : ObservableObject
     public string Help => Presentation.Description ?? Definition.Description;
     public string Sources => string.Join(" · ", Definition.Sources.Select(source => source.Product).Distinct());
     public string Refresh => Definition.Refresh.StartsWith("Policy supports live refresh", StringComparison.OrdinalIgnoreCase) || Definition.Refresh is "reopen affected apps" ? "" : Definition.Refresh switch { "none" => "", "restart" => "Restart Windows after applying", "sign-out" => "Sign out after applying", "explorer-refresh" => "Reopen Explorer after applying", "new-windows-or-sign-out" => "Reopen affected apps or sign out", _ => Definition.Refresh };
+    public string RefreshLabel => Definition.Refresh switch { "restart" => "Restart", "sign-out" => "Sign out", "explorer-refresh" => "Reopen Explorer", "new-windows-or-sign-out" => "Reopen apps or sign out", _ => Refresh };
+    public string ActionAutomationId => Id + ".value";
+    public string SelectionAutomationId => Id + ".select";
+    public string DetailsAutomationId => Id + ".details";
     public TweakChoice[] Choices { get; }
     public TweakChoice[] ActionChoices { get; }
     public TweakAlternative[] Alternatives { get; }
