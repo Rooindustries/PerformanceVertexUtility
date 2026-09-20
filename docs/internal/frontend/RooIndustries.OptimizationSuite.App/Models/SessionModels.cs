@@ -12,7 +12,7 @@ public sealed class GameTuneSessionStatus
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
     [JsonPropertyName("profileId")] public string? ProfileId { get; set; }
     [JsonPropertyName("targetGameProcessName")] public string? TargetGameProcessName { get; set; }
-    [JsonPropertyName("dryRun")] public bool DryRun { get; set; }
+    [JsonPropertyName("dryRun")] public bool? DryRun { get; set; }
     [JsonPropertyName("restorable")] public bool Restorable { get; set; }
     [JsonPropertyName("active")] public bool Active { get; set; }
     [JsonPropertyName("completed")] public bool Completed { get; set; }
@@ -28,7 +28,7 @@ public sealed class GameTuneSessionStatus
 public sealed class GameTuneRestorePreview
 {
     [JsonPropertyName("actionId")] public string? ActionId { get; set; }
-    [JsonPropertyName("dryRun")] public bool DryRun { get; set; }
+    [JsonPropertyName("dryRun")] public bool? DryRun { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
     [JsonPropertyName("sessionStatus")] public string? SessionStatus { get; set; }
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
@@ -48,7 +48,7 @@ public sealed class ProcessGovernorSessionStatus
     [JsonPropertyName("rawSessionStatus")] public string? RawSessionStatus { get; set; }
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
     [JsonPropertyName("profileId")] public string? ProfileId { get; set; }
-    [JsonPropertyName("dryRun")] public bool DryRun { get; set; }
+    [JsonPropertyName("dryRun")] public bool? DryRun { get; set; }
     [JsonPropertyName("restorable")] public bool Restorable { get; set; }
     [JsonPropertyName("active")] public bool Active { get; set; }
     [JsonPropertyName("completed")] public bool Completed { get; set; }
