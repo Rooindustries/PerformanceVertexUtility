@@ -20,9 +20,6 @@ static class PowerShellControls
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
         };
         foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes("$source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ROO_INDUSTRIES_CONTROL_HELPER)); & ([ScriptBlock]::Create($source))")) }) start.ArgumentList.Add(argument);
-        using var map = assembly.GetManifestResourceStream("Optimizer.Core.WindowsMitigations.json") ?? throw new FileNotFoundException("The mitigation field map is missing.");
-        using var mapReader = new StreamReader(map);
-        start.Environment["ROO_INDUSTRIES_MITIGATIONS"] = mapReader.ReadToEnd();
         start.Environment["ROO_INDUSTRIES_CONTROL_HELPER"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(reader.ReadToEnd()));
         start.Environment["ROO_INDUSTRIES_CONTROL_REQUEST"] = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request, OperationFiles.Json));
         using var process = Process.Start(start) ?? throw new IOException("Could not start the Windows control helper.");

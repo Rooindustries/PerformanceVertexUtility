@@ -20,6 +20,13 @@ static class SelectionChecks
         var selected = new TweakAssignment(address, 0, Selector: new(1, "", "primary-interfaces", true));
         var resolved = store.Resolve(selected);
         check(resolved.Length == 1 && resolved[0].Address.KeyPath.EndsWith(@"\{ABC}"), "Dynamic network selection binds the identified interface and excludes other adapters");
+        var primaryDevice = selected with { Selector = new(1, "", "primary-network-devices", false) };
+        var deviceTargets = RegistrySelections.Resolve(primaryDevice, _ => ["0000", "Properties"], key =>
+        {
+            if (key.KeyPath.EndsWith("Properties", StringComparison.Ordinal)) throw new UnauthorizedAccessException("Protected class metadata is not an adapter");
+            return new() { Address = key, NativeKey = prefix + "\\0000", KeyExists = true, MissingKeys = [], Value = key.ValueName == "NetCfgInstanceId" ? new("NetCfgInstanceId", 1, Encoding.Unicode.GetBytes("{ABC}\0")) : null };
+        }, () => ["ABC"]);
+        check(deviceTargets.Length == 1 && deviceTargets[0].Address.KeyPath.EndsWith("0000", StringComparison.Ordinal), "Primary adapter selection skips protected class metadata before attempting a registry read");
         OperationFiles.Write(path, fixture with { PrimaryInterfaces = [] });
         reject(() => store.Resolve(selected), "Missing primary-interface evidence cannot become a wildcard selection");
         OperationFiles.Write(path, fixture);

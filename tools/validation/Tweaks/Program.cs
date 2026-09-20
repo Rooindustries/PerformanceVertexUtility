@@ -55,6 +55,11 @@ void Put(string name, RegistryAddress address, RegistryValueData data)
 }
 try
 {
+    if (args is [_, "--catalog-matrix", var matrixOutput]) { CatalogMatrixChecks.Run(root, catalog, matrixOutput); return; }
+    if (args is [_, "--preset-matrix", var presetOutput]) { CatalogMatrixChecks.Presets(root, catalog, presetOutput); return; }
+    if (args is [_, "--restore-point-fixture", var restoreEvidence]) { RestorePointChecks.Native(restoreEvidence, Check); Console.WriteLine($"Completed {count} native restore-point checks."); return; }
+    if (args is [_, "--extended-native-fixture", var nativeRequest]) { NativeCoverageChecks.Run(nativeRequest, Check); Console.WriteLine($"Completed {count} extended native checks."); return; }
+    if (args is [_, "--restore-extended-memory", var memoryRequest]) { NativeCoverageChecks.RestoreMemory(memoryRequest); return; }
     if (args is [_, "--power-fixture"]) { PowerChecks.Run(root, Check); Console.WriteLine($"Completed {count} native power checks."); return; }
     if (args is [_, "--file-controls-fixture"]) { NativeFileControlChecks.Run(Check, Reject); Console.WriteLine($"Completed {count} native file-control checks."); return; }
     if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
@@ -235,6 +240,9 @@ try
     PowerCompositionChecks.Run(root, Check, Reject);
     HostsChecks.Run(root, Check, Reject);
     CatalogIntegrationChecks.Run(root, catalog, Check, Reject);
+    SavedChoiceChecks.Run(root, catalog, Check, Reject);
+    MitigationChecks.Run(Check, Reject);
+    RestorePointChecks.Layout(Check);
     Console.WriteLine($"Completed {count} tweak checks.");
 }
 finally { Directory.Delete(root, true); }

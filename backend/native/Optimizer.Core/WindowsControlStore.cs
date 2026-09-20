@@ -16,6 +16,7 @@ public sealed class WindowsControlStore : IControlStore
         return address.Kind switch
         {
             "service" => ServiceControls.Read(address),
+            "mitigations" => MitigationControl.Read(address),
             "windows-features" => WindowsFeatures.Read(address),
             "hibernation" => HibernationControl.Read(address),
             "file-acl" or "file-ownership" => FileAccessControl.Read(address),
@@ -34,6 +35,7 @@ public sealed class WindowsControlStore : IControlStore
         switch (before.Address.Kind)
         {
             case "service": ServiceControls.Write(before.Address, after); break;
+            case "mitigations": MitigationControl.Write(before, after); break;
             case "windows-features": WindowsFeatures.Write(before, after); break;
             case "hibernation": HibernationControl.Write(before, after); break;
             case "file-acl": case "file-ownership": FileAccessControl.Write(before, after); break;

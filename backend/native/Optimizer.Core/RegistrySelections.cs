@@ -35,13 +35,13 @@ public static class RegistrySelections
         foreach (var path in paths.Order(StringComparer.OrdinalIgnoreCase))
         {
             var name = path[(path.LastIndexOf('\\') + 1)..];
+            if (selector.Filter is "primary-network-devices" or "network-devices" or "device-classes" && (name.Length != 4 || !name.All(char.IsDigit))) continue;
             if (selector.Filter == "primary-interfaces" && !ids.Contains(NormalizeInterface(name))) continue;
             if (selector.Filter == "primary-network-devices")
             {
                 var device = read(assignment.Address with { KeyPath = path, ValueName = "NetCfgInstanceId" }).Value;
                 if (device?.Type != 1 || !ids.Contains(NormalizeInterface(Encoding.Unicode.GetString(device.Bytes).TrimEnd('\0')))) continue;
             }
-            if (selector.Filter is "network-devices" or "device-classes" && (name.Length != 4 || !name.All(char.IsDigit))) continue;
             if (selector.Filter == "network-devices")
             {
                 var description = read(assignment.Address with { KeyPath = path, ValueName = "DriverDesc" }).Value;

@@ -9,7 +9,7 @@ namespace RooIndustries.Optimizer;
 public sealed record WindowsRestorePoint(uint Sequence, string Description, DateTime CreatedAtUtc);
 public sealed record RestorePointPreview([property: JsonRequired] OperationOwner Owner, [property: JsonRequired] string OperationId, [property: JsonRequired] string Description,
     [property: JsonRequired] WindowsRestorePoint[] Before, [property: JsonRequired] TweakPlan? Frequency);
-public sealed record RestorePointResult(bool Created, WindowsRestorePoint? Point, bool AvailableNow, string Message);
+public sealed record RestorePointResult(bool Created, WindowsRestorePoint? Point, bool AvailableNow, string Message, bool Pending = false);
 public sealed record RestorePointJournal([property: JsonRequired] string ReviewHash, [property: JsonRequired] string Phase, [property: JsonRequired] long Sequence, [property: JsonRequired] bool EndConfirmed, RestorePointResult? Result = null, bool FrequencyRestored = false);
 
 public static class RestorePoints
@@ -31,6 +31,18 @@ public static class RestorePoints
         return ended && matches.Length == 1 ? new(true, matches[0], true, "Windows restore point created and verified.")
             : new(false, null, false, "Windows did not produce a verified new restore point. A recent point or Windows protection policy may have prevented creation.");
     }
+    public static RestorePointResult VerifyUntil(RestorePointPreview plan, long sequence, bool ended, Func<WindowsRestorePoint[]> read, Action pause, int attempts)
+    {
+        if (attempts < 1 || attempts > 60) throw new ArgumentOutOfRangeException(nameof(attempts));
+        if (sequence > uint.MaxValue) throw new InvalidDataException("Windows returned a restore-point sequence outside the supported enumeration range.");
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = Verify(plan.Before, read(), plan.Description, sequence, ended);
+            if (result.Created || !ended || sequence <= 0 || plan.Before.Any(point => point.Sequence == sequence)) return result;
+            if (attempt + 1 == attempts) return result with { Pending = true, Message = "Windows accepted the request. The new restore point is still being verified; check this request again." };
+            pause();
+        }
+    }
     public static RestorePointResult Create(string previewPath, string hash, string journalPath)
     {
         var plan = OperationFiles.Read<RestorePointPreview>(previewPath, hash); plan.Owner.Verify();
@@ -41,7 +53,7 @@ public static class RestorePoints
         using var guard = OperationFiles.Lock(journalPath);
         var journal = File.Exists(journalPath) ? OperationFiles.Read<RestorePointJournal>(journalPath) : new(hash, "prepared", 0, false);
         if (journal.ReviewHash != hash) throw new InvalidDataException("The restore-point journal belongs to another review.");
-        if (journal.Result is { } result)
+        if (journal.Result is { } result && (result.Created || !journal.EndConfirmed || journal.Sequence <= 0))
         {
             if (!journal.FrequencyRestored)
             {
@@ -73,8 +85,8 @@ public static class RestorePoints
                 var end = new RestoreInfo { EventType = 101, PointType = 12, Sequence = journal.Sequence, Description = plan.Description };
                 Set(ref end, out _); journal = journal with { EndConfirmed = true }; OperationFiles.Write(journalPath, journal);
             }
-            var verified = Verify(plan.Before, List(), plan.Description, journal.Sequence, journal.EndConfirmed);
-            journal = journal with { Phase = "finished", Result = verified }; OperationFiles.Write(journalPath, journal);
+            var verified = VerifyUntil(plan, journal.Sequence, journal.EndConfirmed, List, () => Thread.Sleep(1000), 30);
+            journal = journal with { Phase = verified.Pending ? "awaiting-verification" : "finished", Result = verified.Pending ? null : verified }; OperationFiles.Write(journalPath, journal);
             return verified;
         }
         finally
@@ -96,7 +108,7 @@ public static class RestorePoints
         var ok = SRSetRestorePoint(ref info, out status);
         if (!ok || status.Status != 0) { var error = status.Status != 0 ? (int)status.Status : Marshal.GetLastWin32Error(); throw new Win32Exception(error, "SRSetRestorePointW failed with Win32 " + error + ". Check System Protection for the Windows drive."); }
     }
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct RestoreInfo { public uint EventType, PointType; public long Sequence; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Description; }
-    [StructLayout(LayoutKind.Sequential)] private struct RestoreStatus { public uint Status; public long Sequence; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)] private struct RestoreInfo { public uint EventType, PointType; public long Sequence; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Description; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] private struct RestoreStatus { public uint Status; public long Sequence; }
     [DllImport("srclient.dll", EntryPoint = "SRSetRestorePointW", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SRSetRestorePoint(ref RestoreInfo info, out RestoreStatus status);
 }

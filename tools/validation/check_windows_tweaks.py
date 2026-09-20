@@ -18,8 +18,12 @@ def check(root):
         failures.append('Hibernation mode and Fast Startup must each have one shared setting.')
     for setting in settings:
         for option in setting['options']:
+            if option['name'] == 'Source value' or option['name'].startswith('Set ') and ' value to ' in option['name']:
+                failures.append('A choice must show its meaning or actual value: ' + setting['id'])
             for change in option['changes']:
                 address = change['address']
+                if change.get('formula', '').startswith('menu-') and 'RAM' in option['name']:
+                    failures.append('A menu command must not be labeled as a memory formula: ' + setting['id'])
                 if address['hive'] == 'LocalMachine' and address['keyPath'].casefold() == r'SYSTEM\CurrentControlSet\Control\Session Manager\Power'.casefold() and address['valueName'].casefold() == 'hiberbootenabled':
                     failures.append('Fast Startup must share native power ownership, not a separate registry writer.')
     bad_cases = []

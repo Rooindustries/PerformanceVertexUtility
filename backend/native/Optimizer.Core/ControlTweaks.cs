@@ -20,6 +20,7 @@ public sealed record TweakControlRead([property: JsonRequired] ControlAddress Ad
 {
     public JsonElement Expand(JsonElement value, bool allowPending = false)
     {
+        if (Address.Kind == "mitigations" && Value.TryGetProperty(MitigationControl.SnapshotField, out _)) return MitigationControl.Expand(value);
         if (Address.Kind == "windows-features") return WindowsFeatures.Expand(this, value, allowPending);
         if (Address.Kind is "file-acl" or "file-ownership") return FileAccessControl.Expand(this, value);
         if (Address.Kind == "hosts") return HostsBlock.Expand(this, value);
@@ -161,6 +162,8 @@ public static class ControlExecution
                         throw new InvalidDataException("An owned policy field has a newer value or identity.");
                     var restored = ControlValues.From(current.Value.EnumerateObject().ToDictionary(property => property.Name,
                         property => change.Fields.Contains(property.Name, StringComparer.Ordinal) ? change.Before.Value.GetProperty(property.Name) : property.Value));
+                    if (current.Address.Kind == "mitigations" && current.Value.TryGetProperty(MitigationControl.SnapshotField, out _))
+                        restored = MitigationControl.RestoreFields(current.Value, change.Before.Value, change.Fields);
                     store.Write(current, restored);
                     var verified = store.Read(current.Address);
                     if (verified.RestartPending) throw new InvalidDataException("Restart Windows to finish feature recovery, then check recovery again.");

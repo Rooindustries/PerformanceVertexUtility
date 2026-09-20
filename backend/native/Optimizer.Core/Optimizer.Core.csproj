@@ -8,7 +8,6 @@
   <ItemGroup>
     <EmbeddedResource Include="WindowsControls.ps1" />
     <EmbeddedResource Include="../../catalogs/adobe-hosts.txt" LogicalName="Optimizer.Core.AdobeHosts.txt" />
-    <EmbeddedResource Include="../../catalogs/windows-mitigations.json" LogicalName="Optimizer.Core.WindowsMitigations.json" />
     <Compile Include="../CpuSets/RooIndustriesCpuSets.cs" Link="Interop/CpuSets.cs" />
   </ItemGroup>
 </Project>

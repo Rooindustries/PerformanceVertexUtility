@@ -136,7 +136,9 @@ function Read-Control($address){
         }
         'memory' {
             if($address.property -ne 'compression' -or $address.target -ne 'system'){throw 'Unknown memory setting.'}
-            $value=[bool](Get-MMAgent).MemoryCompression
+            $agent=Get-MMAgent
+            if($null -eq $agent -or $agent.MemoryCompression -isnot [bool]){throw 'The memory-compression state is unavailable.'}
+            $value=[bool]$agent.MemoryCompression
         }
         'filesystem' {
             if($address.property -ne 'last-access' -or $address.target -ne 'ntfs'){throw 'Unknown file-system setting.'}
@@ -211,30 +213,7 @@ function Write-Control($address,$value){
             }
             if($result.ReturnValue -isnot [bool] -or -not $result.ReturnValue){throw 'BCD setter did not succeed.'}
         }
-        'mitigations' {
-            $before=Get-MitigationFields
-            $map=$env:ROO_INDUSTRIES_MITIGATIONS|ConvertFrom-Json
-            foreach($entry in $map){
-                $field=$entry.group+'.'+$entry.field;$override=$entry.group+'.'+$entry.override
-                if(-not $before.Contains($field) -or -not $before.Contains($override)){continue}
-                $desired=$value.$field;$force=$value.$override
-                if($null -eq $desired -or $force -isnot [bool]){throw ('Incomplete mitigation field: '+$field)}
-                $current=Get-MitigationFields
-                if($current[$field] -ceq $desired -and $current[$override] -eq $force){continue}
-                $arguments=@{System=$true;Force=[bool]$force;WarningAction='SilentlyContinue';WarningVariable='mitigationWarnings'}
-                $mitigationWarnings=@()
-                switch($desired){
-                    'ON' {$arguments.Enable=@($entry.parameter)}
-                    'OFF' {$arguments.Disable=@($entry.parameter)}
-                    'NOTSET' {$arguments.Remove=$true;$arguments.Disable=@($entry.parameter)}
-                    default {throw ('Unknown mitigation state: '+$desired)}
-                }
-                Set-ProcessMitigation @arguments
-                if($mitigationWarnings){throw ($mitigationWarnings -join '; ')}
-            }
-            $after=Get-MitigationFields
-            foreach($field in $value.PSObject.Properties){if(-not $after.Contains($field.Name) -or $after[$field.Name] -cne $field.Value){throw ('Mitigation readback differs: '+$field.Name)}}
-        }
+        'mitigations' { throw 'System mitigation writes require the native registry transaction.' }
         'defender' {
             if($value -notin @(0,1,2,3)){throw 'Invalid sample-submission choice.'}
             Set-MpPreference -SubmitSamplesConsent ([int]$value)
@@ -261,7 +240,12 @@ function Write-Control($address,$value){
             if($value -notin @('Default','Disabled','Client','EnterpriseClient','Server')){throw 'Unknown Teredo type.'}
             Set-NetTeredoConfiguration -PolicyStore PersistentStore -Type ([string]$value)
         }
-        'memory' {if($value){if((Get-Service -Name SysMain).StartType -eq 'Disabled'){throw 'Memory compression requires SysMain startup to remain enabled.'};Enable-MMAgent -MemoryCompression}else{Disable-MMAgent -MemoryCompression}}
+        'memory' {
+            $startup=(Get-Service -Name SysMain).StartType
+            if($value -and $startup -eq 'Disabled'){throw 'Memory compression requires SysMain startup to remain enabled.'}
+            try{if($value){Enable-MMAgent -MemoryCompression}else{Disable-MMAgent -MemoryCompression}}
+            finally{if((Get-Service -Name SysMain).StartType -ne $startup){Set-Service -Name SysMain -StartupType $startup}}
+        }
         'filesystem' {
             if($value -notin @(0,1,2,3)){throw 'Invalid NTFS last-access mode.'}
             $null=Invoke-SystemTool 'fsutil.exe' @('behavior','set','disablelastaccess',[string]$value)
@@ -312,7 +296,7 @@ try {
         $expected=[ordered]@{address=$request.before.address;identity=$request.before.identity;binding=$request.before.binding;value=$request.before.value}
         $observed=[ordered]@{address=$current.address;identity=$current.identity;binding=$current.binding;value=$current.value}
         if(($observed|ConvertTo-Json -Compress -Depth 30) -cne ($expected|ConvertTo-Json -Compress -Depth 30)){throw 'The Windows control changed after review.'}
-        Write-Control $request.address $request.after
+        $null=Write-Control $request.address $request.after
         $current=Read-Control $request.address
     } elseif($request.action -ne 'read'){throw 'Unknown Windows control action.'}
     [Console]::Out.Write(($current|ConvertTo-Json -Compress -Depth 30))
