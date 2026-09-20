@@ -10,6 +10,26 @@ async Task<WindowsTweaksViewModel> Load(Fixture fixture)
 {
     App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null); return model;
 }
+TweakRecovery Pending(Fixture fixture, string phase, bool committed)
+{
+    var plan = fixture.Engine.Preview("pending-profile", [new("setting", "on")]) with
+    {
+        Controls = new ControlPlan([], [], []),
+    };
+    var state = committed ? new TweakState
+    {
+        SchemaVersion = 1,
+        Context = plan.Context,
+        Revision = "pending-revision",
+        Profiles = [],
+        Held = [],
+        CreatedKeys = [],
+        History = [new TweakHistory(plan.OperationId, "pending-hash", plan.ProfileId, DateTime.UtcNow, [], [])],
+        Notices = [],
+        Controls = [],
+    } : null;
+    return new(state, new ControlJournal(plan, "pending-hash", 0, phase), "pending-hash");
+}
 try
 {
     if (args is [var catalogRepo])
@@ -88,6 +108,44 @@ try
     model.SelectedProfile = model.Profiles.Single(profile => profile.Id == "saved-off");
     Check(model.Rows.Single().Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile loaded" && fixture.Applies == 0,
         "Loading a profile replaces a prior review, approval and ready status without applying settings");
+
+    fixture = new Fixture(Path.Combine(root, "pending-recovery")) { Missing = false };
+    fixture.Choices.Save(fixture.Catalog, "my-settings", [new("setting", "on")], null);
+    fixture.Choices.Save(fixture.Catalog, "alternate", [new("setting", "off")], fixture.Choices.Read().Revision);
+    fixture.Recovery = Pending(fixture, "applying", false);
+    model = await Load(fixture);
+    Check(model.HasPendingRecovery && !model.CanEdit && model.CanRefresh && model.CanReviewRecovery && !model.CanReview
+            && model.Status == "Windows settings recovery needs review",
+        "An applying recovery is the page status and blocks new settings while refresh and recovery review stay available");
+    var selectedBefore = model.Rows.Single().Selected.Id;
+    model.ClearSelectionCommand.Execute(null);
+    model.SelectedPreset = model.Presets.Single();
+    model.SelectedProfile = model.Profiles.Single(profile => profile.Id == "alternate");
+    await model.ReviewOwnershipAsync(@"C:\Fixture");
+    Check(model.Rows.Single().Selected.Id == selectedBefore && model.ProfileId == "my-settings" && fixture.OwnershipPreviews == 0
+            && model.Status == "Windows settings recovery needs review",
+        "Clear, preset, profile, and ownership entry points cannot replace pending recovery state");
+    var reads = fixture.RecoveryReads;
+    await model.RefreshCommand.ExecuteAsync(null);
+    Check(fixture.RecoveryReads == reads + 1 && model.Status == "Windows settings recovery needs review",
+        "Refresh remains reachable and preserves the authoritative pending recovery status");
+    model.ReviewRecoveryCommand.Execute(null);
+    Check(model.HasReview && model.CanApproveReview && !model.CanEdit && model.Status == "Review recovery of the interrupted operation",
+        "Explicit recovery review remains reachable while ordinary edits stay blocked");
+    model.Approved = true;
+    Check(model.CanApply, "A reviewed pending recovery can reach its explicit confirmed apply gate");
+
+    fixture = new Fixture(Path.Combine(root, "pending-restart")) { Missing = false };
+    fixture.Recovery = Pending(fixture, "awaiting-restart", true);
+    model = await Load(fixture);
+    Check(model.HasPendingRecovery && model.CheckingRestart && !model.CanEdit && model.CanRefresh && model.CanReviewRecovery
+            && model.Status == "Restart required to finish Windows settings recovery",
+        "Awaiting-restart recovery stays visible and keeps refresh and recovery review available");
+
+    fixture = new Fixture(Path.Combine(root, "no-pending")) { Missing = false };
+    model = await Load(fixture);
+    Check(!model.HasPendingRecovery && model.CanEdit && model.CanRefresh && !model.CanReviewRecovery && model.Status == "1 settings",
+        "A healthy no-pending state restores ordinary editing without exposing recovery review");
     if (args is [var repo]) await SectionChecks.Run(root, Path.GetFullPath(repo), Check);
     Console.WriteLine($"Completed {count} Windows settings UI checks.");
 }
