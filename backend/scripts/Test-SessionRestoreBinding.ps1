@@ -10,8 +10,9 @@ function Write-Json([string]$Path, [object]$Value) {
     New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force | Out-Null
     $Value | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $Path -Encoding UTF8
 }
-function Invoke-Stop([string]$Script, [string]$SessionId, [string]$SessionPath, [string]$BackupPath, [string]$OutputPath) {
+function Invoke-Stop([string]$Script, [string]$SessionId, [string]$SessionPath, [string]$BackupPath, [string]$OutputPath, [switch]$Confirm) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-SessionId', $SessionId, '-SessionPath', $SessionPath, '-BackupPath', $BackupPath, '-OutputPath', $OutputPath)
+    if ($Confirm) { $arguments += '-ConfirmApply' }
     & powershell.exe @arguments | Out-Null
     $exitCode = $LASTEXITCODE
     $json = if (Test-Path -LiteralPath $OutputPath) { Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json } else { $null }
@@ -29,7 +30,7 @@ function New-SessionFixture([string]$Root, [string]$Kind, [string]$SessionId, [s
     Write-Json $sessionPath ([pscustomobject]@{
         schemaVersion = 1; sessionId = $SessionId; profileId = $ProfileId; dryRun = $false
         sessionStatus = 'completed'; status = 'completed'; sessionPath = $sessionPath
-        backupManifestPath = $backupPath; restorable = $true; restoredItems = @(); skippedItems = @()
+        backupManifestPath = $backupPath; restorable = $true; restoredItems = @(); skippedItems = @(); activeRestraints = @(); completedAtUtc = $null
     })
     return [pscustomobject]@{ SessionId = $SessionId; ProfileId = $ProfileId; SessionPath = $sessionPath; BackupPath = $backupPath }
 }
@@ -58,6 +59,10 @@ try {
         $idMismatchOutput = Join-Path $tempRoot "$kind-id-mismatch.json"
         $idMismatch = Invoke-Stop $script $b.SessionId $a.SessionPath $a.BackupPath $idMismatchOutput
         Add-Check ($idMismatch.ExitCode -ne 0 -and $idMismatch.Json.status -eq 'failed' -and (Get-FileHash -LiteralPath $a.SessionPath -Algorithm SHA256).Hash -eq $aSessionHash) "$kind restore rejects a SessionId that disagrees with SessionPath and backup" "$kind restore accepted a mismatched SessionId"
+        $confirmedOutput = Join-Path $tempRoot "$kind-confirmed.json"
+        $confirmed = Invoke-Stop $script $a.SessionId $a.SessionPath $a.BackupPath $confirmedOutput -Confirm
+        $saved = Get-Content -LiteralPath $a.SessionPath -Raw | ConvertFrom-Json
+        Add-Check ($confirmed.ExitCode -eq 0 -and -not $confirmed.Json.dryRun -and $confirmed.Json.result.status -eq 'rolledBack' -and $confirmed.Json.sessionPath -eq $a.SessionPath -and -not $saved.restorable -and $saved.status -eq 'completed') "$kind confirmed empty restore updates the exact session record" "$kind confirmed empty restore failed to update its session record"
     }
 } finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
