@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
@@ -51,6 +52,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private string? _lastBackupPath;
     private string? _lastBackupId;
+    private string? _lastBackupGeneration;
     private SessionRestoreEvidence? _matchTuneRestore;
     private SessionRestoreEvidence? _governorRestore;
 
@@ -119,8 +121,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         KeepCount = _all.Count(r => r.Plan == "Excluded");
         QuietCount = _all.Count(r => r.Plan == "Lower priority");
         var savedRecovery = App.Live.ProcessProfileRecovery;
-        _lastBackupPath = savedRecovery is { } saved && ValidProcessBackup(saved.Path, saved.Id) ? saved.Path : null;
-        _lastBackupId = _lastBackupPath is null ? null : savedRecovery?.Id;
+        _lastBackupPath = savedRecovery?.Path;
+        _lastBackupId = savedRecovery?.Id;
+        _lastBackupGeneration = savedRecovery?.Generation;
         RestoreAvailable = _lastBackupPath is not null;
         RestoreHint = RestoreAvailable ? "Restore is ready" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
@@ -184,22 +187,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             var changed = CountArray(result, "result", "changedItems");
             var status = ExtractString(result, "status") ?? "unknown";
-            var backup = VerifiedBackup(result);
-            if (backup is not null)
+            var recovery = ProcessProfileRecovery.FromApply(response.Value);
+            if (recovery is not null && PathsEqual(response.RecoveryPath, recovery.Path))
             {
-                _lastBackupPath = backup;
-                _lastBackupId = ExtractString(result, "backup", "backupId");
-                try { App.Live.ProcessProfileRecovery = new(backup, _lastBackupId!); }
-                catch (Exception saveError)
-                {
-                    RestoreAvailable = true;
-                    RestoreHint = "Keep this window open to restore";
-                    ActionTitle = "Recovery record needs attention";
-                    ActionDetail = "The backup exists, but its saved reference could not be written: " + saveError.Message;
-                    return;
-                }
+                _lastBackupPath = recovery.Path;
+                _lastBackupId = recovery.Id;
+                _lastBackupGeneration = response.RecoveryGeneration;
                 RestoreAvailable = true;
-                RestoreHint = "Restore is ready";
+                RestoreHint = response.Error is null ? "Restore is ready" : "Keep this window open to restore";
             }
             if (response.Error is not null || changed is null || ProcessOutcomeBlocked(result))
             {
@@ -213,7 +208,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 ActionDetail = SummarizeProcessAction(response.Value, "No process priorities needed changing.");
                 return;
             }
-            if (status == "success" && backup is not null)
+            if (status == "success" && recovery is not null)
             {
                 ActionTitle = "Process priorities applied";
                 ActionDetail = SummarizeProcessAction(response.Value, "Roo Industries applied the reviewed process controls.");
@@ -233,7 +228,10 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (ActionBusy) return;
         var backup = _lastBackupPath;
-        if (string.IsNullOrWhiteSpace(backup) || !ValidProcessBackup(backup, _lastBackupId))
+        var recovery = string.IsNullOrWhiteSpace(backup) || string.IsNullOrWhiteSpace(_lastBackupId)
+            ? null
+            : new ProcessProfileRecovery(backup, _lastBackupId, _lastBackupGeneration);
+        if (recovery is null || !recovery.Valid())
         {
             ActionTitle = "Nothing to restore";
             ActionDetail = "Apply process priorities first. Restore uses the saved original values.";
@@ -247,7 +245,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Roo Industries is putting changed process controls back to their previous state.";
         try
         {
-            var response = await App.Live.RestoreProcessProfileResultAsync(backup);
+            var response = await App.Live.RestoreProcessProfileResultAsync(recovery);
+            if (PathsEqual(response.RecoveryPath, recovery.Path) && !string.IsNullOrWhiteSpace(response.RecoveryGeneration))
+            {
+                _lastBackupGeneration = response.RecoveryGeneration;
+                recovery = recovery with { Generation = response.RecoveryGeneration };
+            }
             if (response.Value is null || response.Error is not null)
             {
                 ActionTitle = "Restore not confirmed";
@@ -262,15 +265,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             var status = ExtractString(result, "status") ?? "unknown";
             ActionDetail = SummarizeProcessAction(response.Value, "The restore result needs review.");
-            if (status == "success" && !ProcessOutcomeBlocked(result) && CountArray(result, "result", "changedItems") is not null
-                && PathsEqual(ExtractString(result, "backup", "location"), backup)
-                && ExtractString(result, "backup", "backupId") == _lastBackupId)
+            if (status == "success" && recovery.RestoreCompleted(response.Value) && response.RecoveryPath is null)
             {
                 ActionTitle = "Restore complete";
-                try { App.Live.ClearProcessProfileRecovery(backup, _lastBackupId!); }
-                catch (Exception saveError) { ActionDetail += " The saved recovery reference could not be cleared: " + saveError.Message; }
                 _lastBackupPath = null;
                 _lastBackupId = null;
+                _lastBackupGeneration = null;
                 RestoreAvailable = false;
                 RestoreHint = "No saved process settings";
             }
@@ -621,29 +621,6 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             error = exception.Message;
             return false;
         }
-    }
-
-    private static string? VerifiedBackup(JsonElement result)
-    {
-        var path = ExtractString(result, "backup", "location");
-        var id = ExtractString(result, "backup", "backupId");
-        return ExtractBool(result, "backup", "rollbackSupported") && ValidProcessBackup(path, id) ? path : null;
-    }
-
-    private static bool ValidProcessBackup(string? path, string? id)
-    {
-        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(id)) return false;
-        try
-        {
-            using var document = JsonDocument.Parse(System.IO.File.ReadAllText(path));
-            var root = document.RootElement;
-            return ExtractString(root, "actionId") == "performance.applyProfile"
-                && ExtractString(root, "backupId") == id
-                && !string.IsNullOrWhiteSpace(ExtractString(root, "profileId"))
-                && TryExtractBool(root, out var dryRun, "dryRun") && !dryRun
-                && CountArray(root, "snapshots") is > 0;
-        }
-        catch { return false; }
     }
 
     private static bool ProcessOutcomeBlocked(JsonElement root)
