@@ -61,8 +61,8 @@ static class ActionChecks
         observed.Observe(new(setting.Id, setting.Name, true, ["on"],
             [new() { Address = address, NativeKey = @"\REGISTRY\USER\fixture\Software\RooIndustriesUiModelFixture", KeyExists = true,
                 Value = new("Suggestions", 4, [1, 0, 0, 0]), MissingKeys = [] }], null, ["on", "off", "default"]));
-        check(observed.Current == "On" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
-            "An observed enabled setting never becomes a queued change");
+        check(observed.Current == "On" && observed.ToggleOn && observed.Selected.Id.Length == 0 && !observed.HasPendingChange,
+            "An observed enabled setting shows on and never becomes a queued change");
         observed.Selected = observed.Choices.Single(choice => choice.Id == "off");
         check(observed.ToggleOn && observed.Action.Id == "off" && observed.Current == "On",
             "Loading an explicit Off choice shows pending Off separately from current On");
@@ -73,8 +73,8 @@ static class ActionChecks
         check(observed.Action.Id == "default" && observed.Selected.Id == "default",
             "A transient null action binding cannot replace a loaded choice");
         observed.ToggleOn = false;
-        check(observed.Selected.Id.Length == 0 && observed.Current == "On",
-            "Clearing a queued reset leaves the observed Windows state untouched");
+        check(observed.Selected.Id == "default" && !observed.ToggleOn && observed.HasPendingChange && observed.Current == "On",
+            "Turning off an applied setting keeps its reset queued and leaves the observed Windows state untouched");
         observed.Observe(new(setting.Id, setting.Name, true, ["unknown-option"],
             [new() { Address = address, NativeKey = @"\REGISTRY\USER\fixture\Software\RooIndustriesUiModelFixture", KeyExists = true,
                 Value = new("Suggestions", 4, [9, 0, 0, 0]), MissingKeys = [] }], null));
@@ -86,6 +86,7 @@ static class ActionChecks
             && observed.SelectionAccessibleName == "Select Live service title for review" && observed.CurrentAccessibleName == "Live service title: current value Unknown value"
             && new[] { "DetailsAccessibleName", "ActionAccessibleName", "SelectionAccessibleName", "CurrentAccessibleName" }.All(notifications.Contains),
             "Live titles update distinct details, pending-value, selection, and current-state accessibility names");
+        observed.Selected = observed.Choices[0];
         observed.Observe(null);
         check(observed.Current == "Not read" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
             "A missing observation remains unknown without selecting a change");
