@@ -50,6 +50,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _governorRestoreAvailable;
 
     private string? _lastBackupPath;
+    private SessionRestoreEvidence? _matchTuneRestore;
+    private SessionRestoreEvidence? _governorRestore;
+
+    private sealed record SessionRestoreEvidence(
+        string Kind,
+        string SessionId,
+        string ProfileId,
+        string SessionPath,
+        string BackupManifestPath);
 
     private readonly List<GameAppRow> _all = new();
     public ObservableCollection<GameAppRow> Rows { get; } = new();
@@ -269,9 +278,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         MatchTuneDetail = "Roo Industries is checking the match profile without changing process priority.";
         try
         {
-            var json = await App.Live.RunGameTuneSessionTextAsync(false, 3, 1);
+            var response = await App.Live.RunGameTuneSessionResultAsync(false, 3, 1);
+            if (response.Value is null)
+            {
+                MatchTuneStatus = "Game priority check not confirmed";
+                MatchTuneDetail = response.Error ?? "The game priority check returned no result.";
+                return;
+            }
             MatchTuneStatus = "Game priorities checked";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the game priority settings. Nothing changed.");
+            MatchTuneDetail = SummarizeSessionAction(response.Value, "Roo Industries checked the game priority settings. Nothing changed.");
         }
         finally
         {
@@ -294,11 +309,18 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         MatchTuneDetail = "For a short match run, Roo Industries can raise the game and leave streaming apps unchanged.";
         try
         {
-            var json = await App.Live.RunGameTuneSessionTextAsync(true, 12, 2);
-            MatchTuneStatus = "Game priorities finished";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries ran the game priorities and wrote a restore point when anything changed.");
-            MatchTuneRestoreAvailable = SessionCanRestore(json);
-            RestoreHint = "Session restore is available if Roo Industries changed anything";
+            var response = await App.Live.RunGameTuneSessionResultAsync(true, 12, 2);
+            if (response.Value is null)
+            {
+                MatchTuneStatus = "Game priorities not confirmed";
+                MatchTuneDetail = response.Error ?? "The game priority session returned no result.";
+                SetMatchTuneRestore(_matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null);
+                return;
+            }
+            MatchTuneStatus = SessionStatusTitle(response.Value, "Game priorities finished");
+            MatchTuneDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the game priorities and wrote a restore point when anything changed.");
+            SetMatchTuneRestore(ReadSessionRestoreEvidence(response.Value, "gameTune"));
+            RestoreHint = MatchTuneRestoreAvailable ? "Session restore is available" : "No verified game-session backup";
         }
         finally
         {
@@ -317,15 +339,39 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             return;
         }
 
+        var evidence = _matchTuneRestore;
+        if (evidence is null || !ValidateSessionRestoreEvidence(evidence))
+        {
+            MatchTuneStatus = "Game restore unavailable";
+            MatchTuneDetail = "The saved game-session backup could not be verified.";
+            SetMatchTuneRestore(null);
+            return;
+        }
+
         ActionBusy = true;
         MatchTuneStatus = "Restoring game priorities";
         MatchTuneDetail = "Roo Industries is putting game-session process controls back.";
         try
         {
-            var json = await App.Live.RestoreGameTuneSessionTextAsync();
-            MatchTuneStatus = "Game priorities restore checked";
-            MatchTuneDetail = SummarizeSessionAction(json, "Roo Industries checked the game-priority restore path.");
-            MatchTuneRestoreAvailable = SessionCanRestore(json);
+            var response = await App.Live.RestoreGameTuneSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);
+            if (response.Value is null)
+            {
+                MatchTuneStatus = "Game restore not confirmed";
+                MatchTuneDetail = response.Error ?? "The game restore returned no result.";
+                SetMatchTuneRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+                return;
+            }
+            MatchTuneDetail = SummarizeSessionAction(response.Value, "The game restore result needs review.");
+            if (response.Error is null && SessionRestoreCompleted(response.Value, evidence, "performance.gameTune.stopSession"))
+            {
+                MatchTuneStatus = "Game priorities restored";
+                SetMatchTuneRestore(null);
+            }
+            else
+            {
+                MatchTuneStatus = "Game restore needs attention";
+                SetMatchTuneRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+            }
         }
         finally
         {
@@ -342,9 +388,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         GovernorDetail = "Checking background limits. No settings are being changed.";
         try
         {
-            var json = await App.Live.RunProcessGovernorSessionTextAsync(false, 3, 1, 250);
+            var response = await App.Live.RunProcessGovernorSessionResultAsync(false, 3, 1, 250);
+            if (response.Value is null)
+            {
+                GovernorStatus = "Background limit check not confirmed";
+                GovernorDetail = response.Error ?? "The background limit check returned no result.";
+                return;
+            }
             GovernorStatus = "Background limits checked";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background limit settings. Nothing changed.");
+            GovernorDetail = SummarizeSessionAction(response.Value, "Roo Industries checked the background limit settings. Nothing changed.");
         }
         finally
         {
@@ -361,10 +413,17 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         GovernorDetail = "Roo Industries is watching for short CPU spikes and can restrain noisy background apps.";
         try
         {
-            var json = await App.Live.RunProcessGovernorSessionTextAsync(true, 12, 2, 250);
-            GovernorStatus = "Background limits finished";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries ran the background limits and restored priorities after CPU use dropped.");
-            GovernorRestoreAvailable = SessionCanRestore(json);
+            var response = await App.Live.RunProcessGovernorSessionResultAsync(true, 12, 2, 250);
+            if (response.Value is null)
+            {
+                GovernorStatus = "Background limits not confirmed";
+                GovernorDetail = response.Error ?? "The background limit session returned no result.";
+                SetGovernorRestore(_governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null);
+                return;
+            }
+            GovernorStatus = SessionStatusTitle(response.Value, "Background limits finished");
+            GovernorDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the background limits and restored priorities after CPU use dropped.");
+            SetGovernorRestore(ReadSessionRestoreEvidence(response.Value, "governor"));
         }
         finally
         {
@@ -383,15 +442,39 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             return;
         }
 
+        var evidence = _governorRestore;
+        if (evidence is null || !ValidateSessionRestoreEvidence(evidence))
+        {
+            GovernorStatus = "Background restore unavailable";
+            GovernorDetail = "The saved background-session backup could not be verified.";
+            SetGovernorRestore(null);
+            return;
+        }
+
         ActionBusy = true;
         GovernorStatus = "Restoring background limits";
         GovernorDetail = "Roo Industries is putting restrained apps back to their previous controls.";
         try
         {
-            var json = await App.Live.RestoreProcessGovernorSessionTextAsync();
-            GovernorStatus = "Background limits restore checked";
-            GovernorDetail = SummarizeSessionAction(json, "Roo Industries checked the background-limits restore path.");
-            GovernorRestoreAvailable = SessionCanRestore(json);
+            var response = await App.Live.RestoreProcessGovernorSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);
+            if (response.Value is null)
+            {
+                GovernorStatus = "Background restore not confirmed";
+                GovernorDetail = response.Error ?? "The background restore returned no result.";
+                SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+                return;
+            }
+            GovernorDetail = SummarizeSessionAction(response.Value, "The background restore result needs review.");
+            if (response.Error is null && SessionRestoreCompleted(response.Value, evidence, "performance.governor.stopSession"))
+            {
+                GovernorStatus = "Background limits restored";
+                SetGovernorRestore(null);
+            }
+            else
+            {
+                GovernorStatus = "Background restore needs attention";
+                SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+            }
         }
         finally
         {
@@ -441,15 +524,19 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private async Task RefreshSessionStatusesAsync()
     {
-        var game = await App.Live.GetGameTuneSessionStatusTextAsync();
-        MatchTuneStatus = SessionStatusTitle(game, "No active game priorities");
-        MatchTuneDetail = SummarizeSessionAction(game, "No game priorities has changed this PC yet.");
-        MatchTuneRestoreAvailable = SessionCanRestore(game);
+        var game = await App.Live.GetGameTuneSessionStatusResultAsync();
+        MatchTuneStatus = game.Value is null ? "Game priorities unavailable" : SessionStatusTitle(game.Value, "No active game priorities");
+        MatchTuneDetail = game.Value is null
+            ? game.Error ?? "The game-session status returned no result."
+            : SummarizeSessionAction(game.Value, "No game priorities has changed this PC yet.");
+        SetMatchTuneRestore(ReadSessionRestoreEvidence(game.Value, "gameTune"));
 
-        var governor = await App.Live.GetProcessGovernorSessionStatusTextAsync();
-        GovernorStatus = SessionStatusTitle(governor, "No active background limits");
-        GovernorDetail = SummarizeSessionAction(governor, "No background limits session has changed this PC yet.");
-        GovernorRestoreAvailable = SessionCanRestore(governor);
+        var governor = await App.Live.GetProcessGovernorSessionStatusResultAsync();
+        GovernorStatus = governor.Value is null ? "Background limits unavailable" : SessionStatusTitle(governor.Value, "No active background limits");
+        GovernorDetail = governor.Value is null
+            ? governor.Error ?? "The background-session status returned no result."
+            : SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.");
+        SetGovernorRestore(ReadSessionRestoreEvidence(governor.Value, "governor"));
     }
 
     private static bool TryProcessAction(string json, string expectedAction, out JsonElement result, out string error)
@@ -618,21 +705,108 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         return ExtractString(first, "message") ?? ExtractString(first, "nextAction") ?? first.ToString();
     }
 
-    private static bool SessionCanRestore(string? json)
+    private void SetMatchTuneRestore(SessionRestoreEvidence? evidence)
     {
-        if (string.IsNullOrWhiteSpace(json)) return false;
+        _matchTuneRestore = evidence;
+        MatchTuneRestoreAvailable = evidence is not null;
+    }
+
+    private void SetGovernorRestore(SessionRestoreEvidence? evidence)
+    {
+        _governorRestore = evidence;
+        GovernorRestoreAvailable = evidence is not null;
+    }
+
+    private static SessionRestoreEvidence? ReadSessionRestoreEvidence(string? json, string kind)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            var status = ExtractString(root, "status") ?? ExtractString(root, "sessionStatus");
-            if (status is "restorable" or "active" or "running") return true;
-            if (ExtractInt(root, "summary", "changedItemCount") is > 0) return true;
-            if (CountArray(root, "changedItems") is > 0) return true;
-            if (CountArray(root, "result", "changedItems") is > 0) return true;
-            return !string.IsNullOrWhiteSpace(ExtractString(root, "backup", "location")) ||
-                   !string.IsNullOrWhiteSpace(ExtractString(root, "backupPath")) ||
-                   !string.IsNullOrWhiteSpace(ExtractString(root, "rollback", "rollbackManifestPath"));
+            var actionId = ExtractString(root, "actionId");
+            var startAction = kind == "gameTune" ? "performance.gameTune.startSession" : "performance.governor.startSession";
+            var statusAction = kind == "gameTune" ? "performance.gameTune.sessionStatus" : "performance.governor.sessionStatus";
+            if (actionId != startAction && actionId != statusAction) return null;
+            if (!TryExtractBool(root, out var dryRun, "dryRun") || dryRun) return null;
+            if (!TryExtractBool(root, out var restorable, "restorable") || !restorable) return null;
+            var sessionId = ExtractString(root, "sessionId");
+            var profileId = ExtractString(root, "profileId");
+            var sessionPath = ExtractString(root, "sessionPath");
+            var backupPath = ExtractString(root, "backupManifestPath") ?? ExtractString(root, "backup", "location");
+            if (string.IsNullOrWhiteSpace(sessionId)
+                || string.IsNullOrWhiteSpace(profileId)
+                || string.IsNullOrWhiteSpace(sessionPath)
+                || string.IsNullOrWhiteSpace(backupPath)) return null;
+
+            var evidence = new SessionRestoreEvidence(kind, sessionId, profileId, sessionPath, backupPath);
+            return ValidateSessionRestoreEvidence(evidence) ? evidence : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool ValidateSessionRestoreEvidence(SessionRestoreEvidence evidence)
+    {
+        if (!System.IO.File.Exists(evidence.SessionPath) || !System.IO.File.Exists(evidence.BackupManifestPath)) return false;
+        try
+        {
+            using var sessionDoc = JsonDocument.Parse(System.IO.File.ReadAllText(evidence.SessionPath));
+            var session = sessionDoc.RootElement;
+            if (ExtractString(session, "sessionId") != evidence.SessionId
+                || ExtractString(session, "profileId") != evidence.ProfileId
+                || !TryExtractBool(session, out var sessionDryRun, "dryRun") || sessionDryRun
+                || !TryExtractBool(session, out var restorable, "restorable") || !restorable
+                || !PathsEqual(ExtractString(session, "backupManifestPath"), evidence.BackupManifestPath)) return false;
+
+            using var backupDoc = JsonDocument.Parse(System.IO.File.ReadAllText(evidence.BackupManifestPath));
+            var backup = backupDoc.RootElement;
+            var expectedAction = evidence.Kind == "gameTune"
+                ? "performance.gameTune.startSession"
+                : "performance.governor.startSession";
+            return ExtractString(backup, "actionId") == expectedAction
+                && ExtractString(backup, "sessionId") == evidence.SessionId
+                && ExtractString(backup, "profileId") == evidence.ProfileId
+                && !string.IsNullOrWhiteSpace(ExtractString(backup, "backupId"))
+                && TryExtractBool(backup, out var backupDryRun, "dryRun")
+                && !backupDryRun
+                && CountArray(backup, "snapshots") is > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool SessionRestoreCompleted(string json, SessionRestoreEvidence evidence, string expectedAction)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var resultStatus = ExtractString(root, "result", "status") ?? ExtractString(root, "status");
+            return ExtractString(root, "actionId") == expectedAction
+                && ExtractString(root, "sessionId") == evidence.SessionId
+                && PathsEqual(ExtractString(root, "sessionPath"), evidence.SessionPath)
+                && PathsEqual(ExtractString(root, "backupManifestPath"), evidence.BackupManifestPath)
+                && TryExtractBool(root, out var dryRun, "dryRun")
+                && !dryRun
+                && resultStatus is "rolledBack" or "restored";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool PathsEqual(string? left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left)) return false;
+        try
+        {
+            return string.Equals(System.IO.Path.GetFullPath(left), System.IO.Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
         }
         catch
         {

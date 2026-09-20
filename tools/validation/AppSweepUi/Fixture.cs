@@ -36,6 +36,18 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? ProcessApplyText { get; set; }
         public string? ProcessRestoreText { get; set; }
         public string? LastProcessRestorePath { get; private set; }
+        public string? GameTuneText { get; set; }
+        public string? GameTuneStatusText { get; set; }
+        public string? GameTuneRestoreText { get; set; }
+        public string? GameTuneResultError { get; set; }
+        public string? GameTuneRestoreError { get; set; }
+        public string? GovernorText { get; set; }
+        public string? GovernorStatusText { get; set; }
+        public string? GovernorRestoreText { get; set; }
+        public string? GovernorResultError { get; set; }
+        public string? GovernorRestoreError { get; set; }
+        public (string SessionId, string SessionPath, string BackupPath)? LastGameRestoreRequest { get; private set; }
+        public (string SessionId, string SessionPath, string BackupPath)? LastGovernorRestoreRequest { get; private set; }
         public InstalledAppInventory? InstalledApps { get; set; }
         public DriverHardwareSummary? DriverHardware { get; set; }
         public string? NvidiaProbeText { get; set; }
@@ -71,12 +83,30 @@ namespace RooIndustries.OptimizationSuite.Services
             LastProcessRestorePath = backupPath;
             return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, OperationError ?? (ProcessRestoreText is null ? LastError : null)));
         }
-        public Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-        public Task<string?> RestoreGameTuneSessionTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-        public Task<string?> GetGameTuneSessionStatusTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-        public Task<string?> RunProcessGovernorSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-        public Task<string?> RestoreProcessGovernorSessionTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-        public Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+        public Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default) => Task.FromResult(GameTuneText);
+        public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
+            => Task.FromResult(new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)));
+        public Task<string?> RestoreGameTuneSessionTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameTuneRestoreText);
+        public Task<LiveDataResult<string>> RestoreGameTuneSessionResultAsync(string sessionId, string sessionPath, string backupManifestPath, CancellationToken cancellationToken = default)
+        {
+            LastGameRestoreRequest = (sessionId, sessionPath, backupManifestPath);
+            return Task.FromResult(new LiveDataResult<string>(GameTuneRestoreText, GameTuneRestoreError ?? (GameTuneRestoreText is null ? LastError : null)));
+        }
+        public Task<string?> GetGameTuneSessionStatusTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameTuneStatusText);
+        public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new LiveDataResult<string>(GameTuneStatusText, GameTuneStatusText is null ? LastError : null));
+        public Task<string?> RunProcessGovernorSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken cancellationToken = default) => Task.FromResult(GovernorText);
+        public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken cancellationToken = default)
+            => Task.FromResult(new LiveDataResult<string>(GovernorText, GovernorResultError ?? (GovernorText is null ? LastError : null)));
+        public Task<string?> RestoreProcessGovernorSessionTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorRestoreText);
+        public Task<LiveDataResult<string>> RestoreProcessGovernorSessionResultAsync(string sessionId, string sessionPath, string backupManifestPath, CancellationToken cancellationToken = default)
+        {
+            LastGovernorRestoreRequest = (sessionId, sessionPath, backupManifestPath);
+            return Task.FromResult(new LiveDataResult<string>(GovernorRestoreText, GovernorRestoreError ?? (GovernorRestoreText is null ? LastError : null)));
+        }
+        public Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusText);
+        public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new LiveDataResult<string>(GovernorStatusText, GovernorStatusText is null ? LastError : null));
         public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default) => Task.FromResult(DriverHardware);
         public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, OperationError ?? (NvidiaProbeText is null ? LastError : null)));
