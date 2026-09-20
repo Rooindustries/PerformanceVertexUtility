@@ -25,6 +25,13 @@
                         <TextBlock Text="Appearance" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         <views:AdaptivePanel MinColumnWidth="260" MaxColumns="2">
                             <StackPanel Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="Simple mode" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                <TextBlock Text="Show only the essentials. Turn off to see every tool and detail." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch AutomationProperties.AutomationId="SimpleModeToggle" AutomationProperties.Name="Simple mode" VerticalAlignment="Center" IsOn="{x:Bind ViewModel.SimpleMode, Mode=TwoWay}" />
+                        </views:AdaptivePanel>
+                        <views:AdaptivePanel MinColumnWidth="260" MaxColumns="2">
+                            <StackPanel Spacing="5" VerticalAlignment="Center">
                                 <TextBlock Text="Theme" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                 <TextBlock Text="Choose a blue or gold accent." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </StackPanel>

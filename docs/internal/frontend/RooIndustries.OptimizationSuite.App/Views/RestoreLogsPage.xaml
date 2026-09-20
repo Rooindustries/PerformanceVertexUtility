@@ -26,7 +26,7 @@
                         </Grid.ColumnDefinitions>
                         <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/history.svg" Style="{StaticResource PageHeaderIconStyle}" />
                         <StackPanel Grid.Column="1" Spacing="7">
-                            <TextBlock Text="Backups &amp; history" FontSize="22" FontWeight="SemiBold"
+                            <TextBlock Text="Undo changes" FontSize="22" FontWeight="SemiBold"
                                        Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>

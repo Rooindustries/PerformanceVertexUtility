@@ -42,8 +42,8 @@
                     </Grid.ColumnDefinitions>
                     <Image Source="ms-appx:///Assets/Icons/home.svg" Style="{StaticResource PageHeaderIconStyle}" />
                     <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock Text="Overview" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="Hardware and running apps." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Home" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="Pick what you want to do. Every change can be undone." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -53,6 +53,50 @@
         <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <StackPanel Spacing="20" Padding="0,0,12,12">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Start here" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <views:AdaptivePanel MinColumnWidth="240" MaxColumns="3">
+                        <Button Tag="windows" Click="OnDashboardActionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="18" MinHeight="84" AutomationProperties.Name="Speed up Windows">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="32" Height="32" Source="ms-appx:///Assets/Icons/windows.svg" AutomationProperties.AccessibilityView="Raw" />
+                                <StackPanel Grid.Column="1" Spacing="5">
+                                    <TextBlock Text="Speed up Windows" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="Flip switches to turn off things that slow your PC" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <Button Tag="profiles" Click="OnDashboardActionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="18" MinHeight="84" AutomationProperties.Name="Get ready to game">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="32" Height="32" Source="ms-appx:///Assets/Icons/game.svg" AutomationProperties.AccessibilityView="Raw" />
+                                <StackPanel Grid.Column="1" Spacing="5">
+                                    <TextBlock Text="Get ready to game" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="Give your game more of the PC while you play" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <Button Tag="uninstall" Click="OnDashboardActionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="18" MinHeight="84" AutomationProperties.Name="Remove apps">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="32" Height="32" Source="ms-appx:///Assets/Icons/apps.svg" AutomationProperties.AccessibilityView="Raw" />
+                                <StackPanel Grid.Column="1" Spacing="5">
+                                    <TextBlock Text="Remove apps" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="Uninstall what you do not use and clean what is left" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </views:AdaptivePanel>
+                </StackPanel>
                 <views:AdaptivePanel MinColumnWidth="240" MaxColumns="3">
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
@@ -113,12 +157,12 @@
                                 </Grid.ColumnDefinitions>
                                 <Image Width="24" Height="24" Source="ms-appx:///Assets/Icons/apps.svg" AutomationProperties.AccessibilityView="Raw" />
                                 <StackPanel Grid.Column="1" Spacing="5">
-                                    <TextBlock Text="Installed apps" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="Remove apps" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Text="Uninstall apps and scan leftovers" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 </StackPanel>
                             </Grid>
                         </Button>
-                        <Button Tag="monitoring" Click="OnDashboardActionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" AutomationProperties.Name="Timer &amp; cache">
+                        <Button x:Name="TimerTile" Tag="monitoring" Click="OnDashboardActionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" AutomationProperties.Name="Timer &amp; cache">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -152,7 +196,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Image Width="24" Height="24" Source="ms-appx:///Assets/Icons/history.svg" AutomationProperties.AccessibilityView="Raw" />
                                 <StackPanel Grid.Column="1" Spacing="5">
-                                    <TextBlock Text="Backups &amp; history" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="Undo changes" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Text="Review changes and saved settings" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 </StackPanel>
                             </Grid>

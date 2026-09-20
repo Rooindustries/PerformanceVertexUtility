@@ -46,52 +46,52 @@
 
             <NavigationView.MenuItems>
                 <NavigationViewItemHeader Content="YOUR PC" />
-                <NavigationViewItem Content="Overview" Tag="dashboard" IsSelected="True">
+                <NavigationViewItem Content="Home" Tag="dashboard" IsSelected="True">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/home.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Games &amp; processes" Tag="profiles">
+                <NavigationViewItem Content="Games" Tag="profiles">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/game.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Installed apps" Tag="uninstall">
+                <NavigationViewItem Content="Remove apps" Tag="uninstall">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/apps.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItemHeader Content="SYSTEM" />
-                <NavigationViewItem Content="Startup &amp; services" Tag="startup">
+                <NavigationViewItemHeader Content="SPEED UP" />
+                <NavigationViewItem x:Name="NavStartup" Content="Startup &amp; services" Tag="startup">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/startup.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Drivers &amp; GPU" Tag="drivers">
+                <NavigationViewItem Content="Graphics drivers" Tag="drivers">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/gpu.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Memory" Tag="memory">
+                <NavigationViewItem x:Name="NavMemory" Content="Memory" Tag="memory">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/memory.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Windows settings" Tag="windows">
+                <NavigationViewItem Content="Windows tweaks" Tag="windows">
                     <NavigationViewItem.Icon><ImageIcon Source="ms-appx:///Assets/Icons/windows.svg" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Timer &amp; cache" Tag="monitoring">
+                <NavigationViewItem x:Name="NavTimer" Content="Timer &amp; cache" Tag="monitoring">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/timer.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItemHeader Content="UTILITIES" />
+                <NavigationViewItemHeader Content="MORE" />
                 <NavigationViewItem Content="Tools" Tag="tools">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/tools.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Backups &amp; history" Tag="restore">
+                <NavigationViewItem Content="Undo changes" Tag="restore">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/history.svg" />
                     </NavigationViewItem.Icon>
