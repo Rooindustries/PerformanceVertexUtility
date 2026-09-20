@@ -84,6 +84,8 @@ public partial class ProcessControlsViewModel : ObservableObject
     [ObservableProperty] private bool _hasLegacyCpuRecovery;
     [ObservableProperty] private bool _matchFilename;
     [ObservableProperty] private bool _pinExecutable;
+    [ObservableProperty] private bool _cpuSetsAvailable;
+    [ObservableProperty] private bool _affinityAvailable;
     [ObservableProperty] private string _ruleName = "";
     [ObservableProperty] private string _status = "Choose an application to inspect its controls.";
     [ObservableProperty] private string _detail = "Changes use Windows process controls. Applications that deny access remain unchanged.";
@@ -103,10 +105,15 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     public ProcessControlsViewModel() => _selectedCpuMode = CpuModes[0];
     public bool CanEdit => !Busy && !RestoreAvailable;
+    public bool CanEditCpuSelection => CanEdit && CpuSetsAvailable;
+    public bool CanEditAffinity => CanEdit && AffinityAvailable;
+    public bool CanEditCpuChoices => CanEdit && (SelectedCpuMode.Kind == "logical" && CpuSetsAvailable || SetHardAffinity && AffinityAvailable);
     public bool HasProcess => _snapshot is not null;
     public bool ShowLogicalCpus => SelectedCpuMode.Kind == "logical" || SetHardAffinity;
     public bool ShowTopology => SelectedCpuMode.Kind is "core" or "cache" or "numa";
-    public bool CanPreview => CanEdit && _snapshot is not null && (Controls.Any(row => row.Available && row.Selected.Value is not null) || SelectedCpuMode.Kind != "unchanged" || SetHardAffinity);
+    public bool CanPreview => CanEdit && _snapshot is not null &&
+        (SelectedCpuMode.Kind == "unchanged" || CpuSetsAvailable) && (!SetHardAffinity || AffinityAvailable) &&
+        (Controls.Any(row => row.Available && row.Selected.Value is not null) || SelectedCpuMode.Kind != "unchanged" || SetHardAffinity);
     public bool CanApply => !Busy && _review is not null && !RestoreAvailable;
     public bool CanRestore => !Busy && RestoreAvailable;
     public bool HasReview => _review is not null;
@@ -116,6 +123,8 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     partial void OnBusyChanged(bool value) => NotifyState();
     partial void OnRestoreAvailableChanged(bool value) => NotifyState();
+    partial void OnCpuSetsAvailableChanged(bool value) => NotifyState();
+    partial void OnAffinityAvailableChanged(bool value) => NotifyState();
     partial void OnRuleNameChanged(string value) => OnPropertyChanged(nameof(CanSaveRule));
     partial void OnOneThreadPerCoreChanged(bool value) => Invalidate();
     partial void OnSetHardAffinityChanged(bool value) => Invalidate();
@@ -176,6 +185,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private async Task ReadProcessAsync(CpuProcessChoice? process, int version)
     {
         _snapshot = null; Controls.Clear(); Cpus.Clear(); _editingRuleId = null; SelectedCpuMode = CpuModes[0]; SetHardAffinity = false; OneThreadPerCore = false;
+        CpuSetsAvailable = false; AffinityAvailable = false; _affinityGroup = 0; AffinityMask = ""; AffinityLabel = "Hard-affinity CPU mask";
         if (process is null) { NotifyState(); return; }
         Busy = true;
         try
@@ -185,7 +195,9 @@ public partial class ProcessControlsViewModel : ObservableObject
             if (snapshot.Protection.Require().GetUInt32() != 0xfffffffe) throw new InvalidOperationException("Windows reports a protected application. Choose another process.");
             _snapshot = snapshot;
             var affinity = snapshot.Controls["affinity"];
-            if (affinity.Known && affinity.Error is null)
+            CpuSetsAvailable = Readable(snapshot.Controls["cpuSets"]);
+            AffinityAvailable = Readable(affinity);
+            if (AffinityAvailable)
             {
                 var value = affinity.Require().Deserialize<AffinityState>(OperationFiles.Json)!;
                 _affinityGroup = value.Group;
@@ -206,7 +218,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             }
             RuleName = Path.GetFileNameWithoutExtension(snapshot.Identity.ExecutablePath);
             Status = "Controls for " + process.Name;
-            Detail = "Current Preferred CPUs: " + Describe("cpuSets", snapshot.Controls["cpuSets"].Require()) + ". Current hard affinity: " + Describe("affinity", snapshot.Controls["affinity"].Require()) + ".";
+            Detail = "Preferred CPUs: " + DescribeRead("cpuSets", snapshot.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", affinity) + ".";
         }
         catch (Exception error) { if (version == _selectionVersion) { Status = "Process controls are unavailable."; Detail = error.Message; } }
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
@@ -223,11 +235,13 @@ public partial class ProcessControlsViewModel : ObservableObject
         var selected = Cpus.Where(cpu => cpu.Selected && cpu.Cpu.Available).Select(cpu => cpu.Cpu).ToArray();
         if (SetHardAffinity)
         {
+            if (!AffinityAvailable) throw new InvalidOperationException("The process affinity could not be read.");
             controls["affinity"] = Value(new AffinityState(_affinityGroup, AffinityMask.Trim()));
         }
         CpuSelection? selection = null;
         if (SelectedCpuMode.Kind != "unchanged")
         {
+            if (!CpuSetsAvailable) throw new InvalidOperationException("The preferred CPU state could not be read.");
             selection = new CpuSelection
             {
                 Kind = SelectedCpuMode.Kind, TopologyHash = CpuSelection.Fingerprint(snapshot.Topology),
@@ -369,6 +383,9 @@ public partial class ProcessControlsViewModel : ObservableObject
                 Status = "Controls changed after review. Preview again.";
             }
             _snapshot = fresh;
+            CpuSetsAvailable = Readable(fresh.Controls["cpuSets"]);
+            AffinityAvailable = Readable(fresh.Controls["affinity"]);
+            Detail = "Preferred CPUs: " + DescribeRead("cpuSets", fresh.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", fresh.Controls["affinity"]) + ".";
             foreach (var row in Controls) row.Update(fresh.Controls[row.Name]);
             NotifyState();
         }
@@ -460,7 +477,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()
     {
-        foreach (var property in new[] { nameof(CanEdit), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanManageWorker) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanManageWorker) }) OnPropertyChanged(property);
     }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));
@@ -479,6 +496,12 @@ public partial class ProcessControlsViewModel : ObservableObject
         "cpuPriority" => "CPU priority", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
         "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU affinity", _ => name,
     };
+    private static bool Readable(ControlRead read) => read.Known && read.Error is null && read.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
+    private static string DescribeRead(string name, ControlRead read)
+    {
+        if (Readable(read)) return Describe(name, read.Value!.Value);
+        return "unavailable" + (read.Error?.Message is { Length: > 0 } error ? " · " + error : "");
+    }
     public static string Describe(string name, JsonElement value) => name switch
     {
         "executionQoS" => value.Deserialize<PowerThrottling>(OperationFiles.Json)?.ExecutionMode switch { "systemManaged" => "Windows managed", "eco" => "Eco", "high" => "High performance", _ => "unknown" },

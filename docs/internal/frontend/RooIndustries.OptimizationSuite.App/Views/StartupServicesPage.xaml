@@ -4,6 +4,13 @@
             <ProgressRing IsActive="True" Width="40" Height="40" />
             <TextBlock Text="Reading startup and services" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
         </StackPanel>
+        <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center" Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Startup information is unavailable" Style="{StaticResource SectionHeaderTextBlockStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                <Button Content="Retry" Command="{x:Bind ViewModel.RetryCommand}" HorizontalAlignment="Left" AutomationProperties.AutomationId="StartupRetry" />
+            </StackPanel>
+        </Border>
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" MaxWidth="1600" HorizontalAlignment="Stretch" Padding="0,0,6,0">
                 <Border Style="{StaticResource CommandHeaderBorderStyle}">
