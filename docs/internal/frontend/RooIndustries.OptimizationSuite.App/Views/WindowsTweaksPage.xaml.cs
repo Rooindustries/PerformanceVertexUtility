@@ -21,6 +21,20 @@ public sealed partial class WindowsTweaksPage : Page
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.RefreshCommand.ExecuteAsync(null);
     }
+    private void SettingRowSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var row = (Grid)sender;
+        var compact = args.NewSize.Width < 720;
+        var title = row.Children.OfType<FrameworkElement>().Single(child => child.Name == "RowName");
+        var current = (StackPanel)row.Children.OfType<FrameworkElement>().Single(child => child.Name == "RowCurrent");
+        var actions = (StackPanel)row.Children.OfType<FrameworkElement>().Single(child => child.Name == "RowActions");
+        Grid.SetColumnSpan(title, compact ? 3 : 1);
+        Grid.SetRow(current, compact ? 1 : 0); Grid.SetColumn(current, compact ? 1 : 2);
+        Grid.SetRow(actions, compact ? 1 : 0); Grid.SetColumn(actions, compact ? 2 : 3); Grid.SetColumnSpan(actions, compact ? 2 : 1);
+        current.Children[0].Visibility = actions.Children[0].Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        row.RowSpacing = compact ? 8 : 0;
+        ColumnLabels.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+    }
     private void PresetTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput) ViewModel.FilterPresets(sender.Text);
