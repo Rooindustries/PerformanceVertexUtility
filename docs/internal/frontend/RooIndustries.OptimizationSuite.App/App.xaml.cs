@@ -9,6 +9,7 @@ public partial class App : Application
     public static Window? MainWindow { get; private set; }
 
     private static readonly BackendLocator Locator = new();
+    public static string? CatalogsDirectory => Locator.CatalogsDirectory;
 
     public static SampleDataService Data { get; } = new SampleDataService(Locator);
     public static LiveDataService Live { get; } = new LiveDataService(Locator);
