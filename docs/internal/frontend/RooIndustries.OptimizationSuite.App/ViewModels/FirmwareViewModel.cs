@@ -15,6 +15,7 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 
 public partial class FirmwareViewModel : ObservableObject
 {
+    public static string? WriteTestsPath { get; set; }
     public static string Root => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
     private string? _packageDirectory;
     private string? _sessionDirectory;
@@ -161,6 +162,7 @@ public partial class FirmwareViewModel : ObservableObject
             _all.Add(row);
         }
         foreach (var skipped in script.ExcludedQuestions) _all.Add(FirmwareSettingRow.ReadOnly(skipped));
+        ApplyWriteTests(_all, await Task.Run(() => ReadWriteTests(script, _sessionDirectory)));
         AllowExperimentalEdits = false;
         ChangedCount = 0; Stage = "edit"; ResultStatus = ""; Search = ""; ChangedOnly = false; Filter();
         await LoadVerificationAsync(script, _sessionDirectory);
@@ -192,6 +194,31 @@ public partial class FirmwareViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(HasExperimentalSettings));
         OnPropertyChanged(nameof(ExperimentalSummary));
+    }
+    private static FirmwareWriteTestBoard? ReadWriteTests(FirmwareScript script, string? sessionDirectory)
+    {
+        try
+        {
+            if (WriteTestsPath is null || sessionDirectory is null || !File.Exists(WriteTestsPath)) return null;
+            var session = OperationFiles.Read<FirmwareSession>(Path.Combine(sessionDirectory, "session.json"));
+            return FirmwareWriteTests.Read(WriteTestsPath).Find(session.Identity, script.Crc);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException) { return null; }
+    }
+    public static void ApplyWriteTests(IEnumerable<FirmwareSettingRow> rows, FirmwareWriteTestBoard? board)
+    {
+        if (board is null) return;
+        foreach (var row in rows)
+        {
+            if (row.IsReadOnly || !board.NotApplied.TryGetValue(row.Question.Id, out var outcome)) continue;
+            row.SetVerification(outcome == FirmwareWriteOutcomes.Unchanged ? "Did not change" : "Can't be changed here", outcome switch
+            {
+                FirmwareWriteOutcomes.Protected => "This motherboard locks this setting behind its BIOS password, so SCEWIN cannot write it.",
+                FirmwareWriteOutcomes.Rejected => "SCEWIN refused a test value for this setting on this motherboard and BIOS version.",
+                _ => "A test value was accepted but the BIOS kept the old value on this motherboard and BIOS version.",
+            }, false);
+            row.IsExperimental = true;
+        }
     }
     public static bool IsExperimentalRow(FirmwareSettingRow row) => row.IsExperimental || ShouldCollapse(row);
     public static (FirmwareSettingRow[] Normal, FirmwareSettingRow[] Experimental) Split(IEnumerable<FirmwareSettingRow> rows)

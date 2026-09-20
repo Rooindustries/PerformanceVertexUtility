@@ -97,6 +97,26 @@ public static class FirmwareEditorChecks
         check(withoutOptIn.Keys.SequenceEqual(["stored"]) && withOptIn.Keys.Order().SequenceEqual(["rejected", "stored", "unchanged"]) && !withOptIn.ContainsKey(skipped.Question.Id),
             "Experimental edits reach review only after opting in and read-only settings never do");
 
+        var writeTests = Path.Combine(Path.GetTempPath(), "roo-industries-write-tests-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(writeTests, "{\"schemaVersion\":1,\"boards\":[{\"board\":\"board\",\"bios\":\"bios\",\"crc\":\"A1B2C3D4\",\"tested\":3,\"notApplied\":{\"locked\":\"protected\",\"kept\":\"unchanged\"}}]}");
+            var catalog = FirmwareWriteTests.Read(writeTests);
+            var identity = new FirmwareIdentity("pc", "board", "bios", "boot");
+            var locked = new FirmwareSettingRow(question with { Id = "locked" }); var kept = new FirmwareSettingRow(question with { Id = "kept" }); var fine = new FirmwareSettingRow(question with { Id = "fine" });
+            FirmwareViewModel.ApplyWriteTests([locked, kept, fine], catalog.Find(identity, "a1b2c3d4"));
+            check(locked.IsExperimental && locked.VerificationReason.Contains("BIOS password", StringComparison.Ordinal) && kept.IsExperimental && kept.VerificationStatus == "Did not change" && !fine.IsExperimental,
+                "Shipped write test results move only the listed settings of the matching motherboard into Experimental");
+            var other = new FirmwareSettingRow(question with { Id = "locked" });
+            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Bios = "newer bios" }, "A1B2C3D4"));
+            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity, "FFFFFFFF"));
+            check(!other.IsExperimental, "Write test results for another BIOS version or setup layout are ignored");
+            File.WriteAllText(writeTests, "{\"schemaVersion\":1,\"boards\":[{\"board\":\"board\",\"bios\":\"bios\",\"crc\":\"A1B2C3D4\",\"tested\":1,\"notApplied\":{\"locked\":\"stored\"}}]}");
+            var invalid = false; try { FirmwareWriteTests.Read(writeTests); } catch (InvalidDataException) { invalid = true; }
+            check(invalid, "A write test catalog with an unknown outcome is rejected");
+        }
+        finally { File.Delete(writeTests); }
+
         var mixed = new FirmwareScript(Encoding.Latin1.GetBytes(Export("00", "2026-09-20T10:00:00Z")
             + "\nSetup Question = Camera name\nHelp String = Text field\nToken =11\nOffset =30\nWidth =1E\nValue =00\n"
             + "\nSetup Question = Shared values\nToken =12\nOffset =40\nWidth =01\nOptions =*[00]Auto\n         [00]Also auto\n"

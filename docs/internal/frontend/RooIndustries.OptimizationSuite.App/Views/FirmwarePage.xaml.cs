@@ -16,6 +16,7 @@ public sealed partial class FirmwarePage : Page
     public FirmwareViewModel ViewModel { get; } = new();
     public FirmwarePage()
     {
+        FirmwareViewModel.WriteTestsPath = App.CatalogsDirectory is { } catalogs ? Path.Combine(catalogs, "firmware-write-tests.json") : null;
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
