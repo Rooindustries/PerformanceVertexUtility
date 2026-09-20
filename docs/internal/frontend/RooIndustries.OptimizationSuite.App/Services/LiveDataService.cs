@@ -81,18 +81,12 @@ public sealed class LiveDataService
 
     public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
-    public async Task<string?> PreviewProcessProfileTextAsync(CancellationToken ct = default)
-        => (await PreviewProcessProfileResultAsync(ct)).Value;
 
     public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply");
-    public async Task<string?> ApplyProcessProfileTextAsync(CancellationToken ct = default)
-        => (await ApplyProcessProfileResultAsync(ct)).Value;
 
     public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(string backupPath, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Restore-ProcessProfileBackup.ps1", ct, "-BackupPath " + QuotePowerShell(backupPath) + " -ConfirmApply");
-    public async Task<string?> RestoreProcessProfileTextAsync(string backupPath, CancellationToken ct = default)
-        => (await RestoreProcessProfileResultAsync(backupPath, ct)).Value;
 
     public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
     {
@@ -105,8 +99,6 @@ public sealed class LiveDataService
 
         return RunBackendScriptResultAsync("Start-GameTuneSession.ps1", ct, args);
     }
-    public async Task<string?> RunGameTuneSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
-        => (await RunGameTuneSessionResultAsync(confirmApply, maxDurationSeconds, pollIntervalSeconds, ct)).Value;
 
     public Task<LiveDataResult<string>> RestoreGameTuneSessionResultAsync(
         string sessionId,
@@ -123,8 +115,6 @@ public sealed class LiveDataService
 
     public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct);
-    public async Task<string?> GetGameTuneSessionStatusTextAsync(CancellationToken ct = default)
-        => (await GetGameTuneSessionStatusResultAsync(ct)).Value;
 
     public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct);
@@ -141,8 +131,6 @@ public sealed class LiveDataService
 
         return RunBackendScriptResultAsync("Start-ProcessGovernorSession.ps1", ct, args);
     }
-    public async Task<string?> RunProcessGovernorSessionTextAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
-        => (await RunProcessGovernorSessionResultAsync(confirmApply, maxDurationSeconds, pollIntervalSeconds, sampleIntervalMilliseconds, ct)).Value;
 
     public Task<LiveDataResult<string>> RestoreProcessGovernorSessionResultAsync(
         string sessionId,
@@ -159,8 +147,6 @@ public sealed class LiveDataService
 
     public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Get-ProcessGovernorSessionStatus.ps1", ct);
-    public async Task<string?> GetProcessGovernorSessionStatusTextAsync(CancellationToken ct = default)
-        => (await GetProcessGovernorSessionStatusResultAsync(ct)).Value;
 
     public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<ProcessGovernorSessionStatus>("Get-ProcessGovernorSessionStatus.ps1", ct);
@@ -170,14 +156,10 @@ public sealed class LiveDataService
 
     public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
-    public async Task<string?> PreviewNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
-        => (await PreviewNvidiaProfileResultAsync(profileId, ct)).Value;
 
     public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Invoke-NvidiaNipCapabilityProbe.ps1", ct,
             "-ProfileId " + QuotePowerShell(profileId) + " -AllowReadOnlyNvpiProbe");
-    public async Task<string?> ProbeNvidiaProfileTextAsync(string profileId, CancellationToken ct = default)
-        => (await ProbeNvidiaProfileResultAsync(profileId, ct)).Value;
 
     public async Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(
         string profileId,
@@ -222,13 +204,6 @@ public sealed class LiveDataService
         if (recovery is not null) SaveNvidiaRecovery(recovery);
         return result with { RecoveryPath = recovery?.RollbackManifestPath };
     }
-    public async Task<string?> ApplyNvidiaProfileTextAsync(
-        string profileId,
-        bool exportReviewed,
-        bool userApproved,
-        bool benchmarkEvidenceAttached,
-        CancellationToken ct = default)
-        => (await ApplyNvidiaProfileResultAsync(profileId, exportReviewed, userApproved, benchmarkEvidenceAttached, ct)).Value;
 
     public Task<NvidiaProfileRecovery?> ReadNvidiaProfileRecoveryAsync(string profileId)
     {
@@ -266,8 +241,6 @@ public sealed class LiveDataService
 
     public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-StutterOptimization.ps1", ct, "-OptimizationId all");
-    public async Task<string?> PreviewStutterOptimizationTextAsync(CancellationToken ct = default)
-        => (await PreviewStutterOptimizationResultAsync(ct)).Value;
 
     public Task<LiveDataResult<string>> CheckTimerResolutionResultAsync(bool userApproved, CancellationToken ct = default)
     {
@@ -279,8 +252,6 @@ public sealed class LiveDataService
 
         return RunBackendScriptResultAsync("Invoke-StutterOptimization.ps1", ct, args);
     }
-    public async Task<string?> CheckTimerResolutionTextAsync(bool userApproved, CancellationToken ct = default)
-        => (await CheckTimerResolutionResultAsync(userApproved, ct)).Value;
 
     public Task<LiveDataResult<string>> CheckShaderCacheCleanupResultAsync(bool userApproved, CancellationToken ct = default)
     {
@@ -292,16 +263,12 @@ public sealed class LiveDataService
 
         return RunBackendScriptResultAsync("Invoke-StutterOptimization.ps1", ct, args);
     }
-    public async Task<string?> CheckShaderCacheCleanupTextAsync(bool userApproved, CancellationToken ct = default)
-        => (await CheckShaderCacheCleanupResultAsync(userApproved, ct)).Value;
 
     public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
         => RunBackendScriptResultAsync(
             "Restore-StutterOptimization.ps1",
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
-    public async Task<string?> RestoreShaderCacheCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
-        => (await RestoreShaderCacheCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
     public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false)
         => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "");
@@ -529,10 +496,7 @@ public sealed class LiveDataService
         }
     }
 
-    private string NvidiaRecoveryIndexPath => Path.Combine(
-        RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot,
-        "settings",
-        "nvidia-profile-recovery.json");
+    private string NvidiaRecoveryIndexPath => Path.Combine(_recoveryDirectory, "nvidia-profile-recovery.json");
 
     private static NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string rollbackManifestPath, string exportPath)
     {
