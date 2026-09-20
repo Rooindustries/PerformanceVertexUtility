@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\Tweaks\presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
+    <EmbeddedResource Include="Assets\Tweaks\icons.json" LogicalName="RooIndustries.TweakIcons.json" />
     <ProjectReference Include="..\..\..\..\backend\native\Optimizer.Core\Optimizer.Core.csproj" />
     <Content Include="Assets\**\*.*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets')" />
   </ItemGroup>

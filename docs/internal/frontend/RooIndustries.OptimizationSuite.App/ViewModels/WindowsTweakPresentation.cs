@@ -30,6 +30,14 @@ public static class WindowsTweakPresentation
         using var stream = typeof(WindowsTweakPresentation).Assembly.GetManifestResourceStream("RooIndustries.TweakPresentation.json") ?? throw new FileNotFoundException("The setting descriptions are missing.");
         return JsonSerializer.Deserialize<Dictionary<string, TweakPresentation>>(stream, OperationFiles.Json) ?? throw new InvalidDataException("The setting descriptions are incomplete.");
     });
+    private static readonly Lazy<Dictionary<string, string>> Icons = new(() =>
+    {
+        using var stream = typeof(WindowsTweakPresentation).Assembly.GetManifestResourceStream("RooIndustries.TweakIcons.json") ?? throw new FileNotFoundException("The setting icons are missing.");
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(stream) ?? throw new InvalidDataException("The setting icons are incomplete.");
+    });
+    public static string Icon(TweakDefinition definition) => Icons.Value.TryGetValue(definition.Id, out var asset)
+        ? "ms-appx:///Assets/Icons/Settings/" + asset
+        : "ms-appx:///Assets/Icons/tweak-" + For(definition).Section + ".svg";
     public static TweakSection[] Sections() =>
     [
         new("all", "All tweaks", "Search every setting in one place."),

@@ -27,7 +27,7 @@ public partial class WindowsTweakRow : ObservableObject
     public TweakPresentation Presentation { get; }
     public string SectionId => Presentation.Section;
     public string Topic => Presentation.Topic ?? Category;
-    public string Icon => "ms-appx:///Assets/Icons/tweak-" + SectionId + ".svg";
+    public string Icon => WindowsTweakPresentation.Icon(Definition);
     public bool IsNetwork => SectionId == "network";
     public string Scope => Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "timer-startup") ? "This user" : Definition.Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive switch
     {
