@@ -179,7 +179,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     public bool CanReviewRecovery => !Busy && HasPendingRecovery;
     public bool CanApproveReview => !Busy && (!HasPendingRecovery || _reviewingRecovery);
     public bool ShowProfileName => !ProfileId.StartsWith("file-permissions-", StringComparison.Ordinal) && !ProfileId.StartsWith("restore-point-", StringComparison.Ordinal);
-    public bool CanReview => !Busy && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && (_inspection is not null || _all.Any(row => row.Selected.Id.Length > 0)) && (_all.Any(row => row.Selected.Id.Length > 0) || _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true || _savedChoices?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true);
+    public bool CanReview => !Busy && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && _all.Any(row => row.Selected.Id.Length > 0);
     public bool CanApply => !Busy && (_review is not null || _reviewedChoices is not null || _reviewingRecovery && _recovery?.Pending is not null) && Approved && (!HasDataLoss || AcceptedDataLoss);
     public bool HasDataLoss => _review?.Plan.DataLoss.Length > 0;
     public string DataLossText => string.Join("\n", _review?.Plan.DataLoss ?? []);
@@ -337,10 +337,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
         try
         {
             var selections = restore ? Array.Empty<TweakSelection>() : _all.Where(row => row.Selected.Id.Length > 0).Select(row => new TweakSelection(row.Id, row.Selected.Id)).ToArray();
-            var ready = restore ? selections : _all.Where(row => row.CanApplySelected).Select(row => new TweakSelection(row.Id, row.Selected.Id)).ToArray();
+            if (!restore && selections.Length == 0) return;
+            var selectedReady = restore ? selections : _all.Where(row => row.CanApplySelected).Select(row => new TweakSelection(row.Id, row.Selected.Id)).ToArray();
+            var retained = restore ? Array.Empty<TweakSelection>() : (_inspection?.State?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
+                .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId)).ToArray();
+            var ready = selectedReady.Concat(retained).ToArray();
             var deferred = restore ? Array.Empty<WindowsTweakRow>() : _all.Where(row => row.Selected.Id.Length > 0 && !row.CanApplySelected).ToArray();
             _deferredDetail = string.Join("\n", deferred.Select(row => row.Name + ": " + (row.Detail.Length == 0 ? "This choice needs a matching Windows or app version." : row.Detail)));
-            _reviewedChoices = selections; _restoringChoices = restore || selections.Length == 0;
+            _reviewedChoices = selections; _restoringChoices = restore;
             if (ready.Length == 0 && _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) != true)
             {
                 Status = _restoringChoices ? "Remove this saved profile" : "Save the selected choices";

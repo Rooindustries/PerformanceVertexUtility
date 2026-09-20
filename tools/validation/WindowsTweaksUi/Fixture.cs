@@ -25,6 +25,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public int Previews { get; private set; }
         public int RecoveryReads { get; private set; }
         public int OwnershipPreviews { get; private set; }
+        public TweakSelection[]? LastPreviewSelections { get; private set; }
         public Func<Task>? BeforePreview { get; set; }
         public Action? AfterApply { get; set; }
         private readonly string _root;
@@ -61,6 +62,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string id, TweakSelection[] selections)
         {
             Previews++;
+            LastPreviewSelections = selections;
             if (BeforePreview is not null) await BeforePreview();
             var plan = Engine.Preview(id, selections); var path = Path.Combine(_root, plan.OperationId + ".json"); OperationFiles.Write(path, plan);
             return new(plan, path, OperationFiles.HashFile(path));
