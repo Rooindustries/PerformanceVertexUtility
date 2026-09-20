@@ -11,6 +11,10 @@ public sealed record WindowsRestorePointReview(RestorePointPreview Plan, string 
 
 public sealed partial class OptimizerService
 {
+    private readonly TweakChoiceStore _windowsChoices = new(Path.Combine(BrandCompatibility.LocalDataRoot, "settings", "windows-choices.json"));
+    public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.Run(_windowsChoices.Read);
+    public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string profileId, TweakSelection[] selections, string? revision)
+        => Task.Run(() => _windowsChoices.Save(catalog, profileId, selections, revision));
     public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync() => RunCoreAsync<TweakCatalogResult>("tweak-catalog", new());
     public Task<TweakRecovery> ReadWindowsRecoveryAsync() => RunCoreAsync<TweakRecovery>("tweak-recovery", new());
     public Task<System.Text.Json.JsonElement> RecoverWindowsTweaksAsync(string reviewHash) => RunCoreAsync<System.Text.Json.JsonElement>("tweak-recover", new() { ["reviewHash"] = reviewHash, ["confirm"] = true });

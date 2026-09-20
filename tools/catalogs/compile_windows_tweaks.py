@@ -33,6 +33,70 @@ def desired(change):
     return {key: change[key] for key in ('dword', 'value', 'token', 'bits', 'controlValue', 'patch', 'formula') if key in change}
 
 
+def value_label(change):
+    if change['address'].get('kind') in ('mitigations', 'windows-features'):
+        values = [value for key, value in change['value'].items() if 'Override' not in key]
+        if len(set(values)) == 1:
+            return {'ON': 'Enabled', 'OFF': 'Disabled', 'NOTSET': 'Windows default'}.get(values[0], str(values[0]))
+    if 'hive' not in change['address']:
+        value = change['value']
+        if isinstance(value, bool):
+            return 'Enabled' if value else 'Disabled'
+        return str(value) if not isinstance(value, dict) else '; '.join(key + ': ' + str(item) for key, item in value.items())
+    if change.get('dword') is not None:
+        return 'Value ' + str(change['dword'])
+    if change.get('token'):
+        token = change['token']
+        return token['name'] + ': ' + ('Remove override' if token['value'] is None else str(token['value']))
+    if change.get('bits'):
+        return 'Flags ' + hex(change['bits']['value']) + ' / ' + hex(change['bits']['mask'])
+    if change.get('formula'):
+        return {'installed-memory-kib': 'Use installed RAM size', 'menu-ownership': 'Open file ownership review', 'menu-startup': 'Open System Configuration', 'menu-power': 'Open Power Options'}[change['formula']]
+    if change.get('value'):
+        value = change['value']
+        raw = base64.b64decode(value['bytes'])
+        if value['type'] in (1, 2):
+            return raw.decode('utf-16le').rstrip('\0') or 'Empty text'
+        return 'Bytes ' + raw.hex(' ')
+    return 'Remove this override'
+
+
+def apply_availability(settings):
+    alternatives = json.loads((ROOT / 'backend/catalogs/windows-setting-alternatives.json').read_text())
+    ids = {setting['id'] for setting in settings}
+    for setting in settings:
+        original_gate = {'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': setting['editions']}
+        if setting['id'] in alternatives:
+            setting['alternatives'] = alternatives[setting['id']]
+            if not set(setting['alternatives']).issubset(ids):
+                raise ValueError('A current policy alternative is missing')
+        for option in setting['options']:
+            changes = option['changes']
+            if not changes:
+                continue
+            address = changes[0]['address']
+            path = address['keyPath'].casefold()
+            name = address.get('valueName', '').casefold()
+            if path.endswith('policies\\microsoft\\edge') and name in ('metricsreportingenabled', 'sendsiteinfotoimproveservices'):
+                for gate in option.get('availability', []):
+                    gate['requirements'] = [text.replace('edge:77:87', 'edge:77:88') for text in gate.get('requirements', [])]
+            if path.endswith('policies\\microsoft\\edge') and name == 'diagnosticdata':
+                gates = option.setdefault('availability', [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': setting['editions']}])
+                for gate in gates:
+                    gate['requirements'] = [text for text in gate.get('requirements', []) if not text.startswith('edge:')] + ['edge:122:999']
+            if path.endswith('policies\\microsoft\\dsh') and name == 'allownewsandinterests':
+                setting['minimumBuild'] = 22000
+                for gate in option.get('availability', []):
+                    gate['minimumBuild'] = 22000
+            if not option.get('controls') and all(not any(change.get(key) is not None for key in ('dword', 'value', 'token', 'bits', 'formula', 'selector')) and '{' not in change['address']['keyPath'] for change in changes):
+                for other in setting['options']:
+                    other.setdefault('availability', [copy.deepcopy(original_gate)])
+                option['availability'] = [{'minimumBuild': 10240, 'maximumBuild': 26200, 'editions': ['*']}]
+                setting['minimumBuild'] = 10240
+                setting['maximumBuild'] = 26200
+                setting['editions'] = ['*']
+
+
 def native(kind, target, property, value):
     return {'address': {'kind': kind, 'target': target, 'property': property}, 'controlValue': value}
 
@@ -352,7 +416,7 @@ def apply_labels(settings):
                 for option in setting['options']:
                     if option['changes']:
                         change = option['changes'][0]
-                        option['name'] = 'Value ' + str(change['dword']) if change.get('dword') is not None else 'Remove this override' if not any(key in change for key in ('value', 'token', 'bits')) else 'Source value'
+                        option['name'] = value_label(change)
             continue
         if row['name']:
             setting['name'] = row['name'].replace(' — ', ': ')
@@ -369,17 +433,17 @@ def apply_labels(settings):
             label = next((choice for choice in row['choices'] if
                           encoded(choice.get('matchToken')) == encoded(desired(change)) if 'matchToken' in choice), None) if option['changes'] else next((choice for choice in row['choices'] if encoded(choice.get('matchValue', choice.get('value'))) == encoded(change['value'])), None)
             if label is not None:
-                option['name'] = label['label']
+                option['name'] = value_label(change) if label['semanticStatus'] == 'unknown' else label['label']
                 unresolved |= label['semanticStatus'] != 'verified'
             else:
                 unresolved = True
-                option['name'] = 'Value ' + str(change.get('dword')) if change.get('dword') is not None else 'Source value'
+                option['name'] = value_label(change)
         setting['advanced'] = unresolved
 
 
 def compile_catalog():
     catalog = json.loads((SOURCE / 'verified-settings.json').read_text())
-    catalog['version'] = '2026-09-19.2'
+    catalog['version'] = '2026-09-20.1'
     settings = catalog['settings']
     known = {}
     settings[:] = [setting for setting in settings if setting['options']]
@@ -549,6 +613,7 @@ def compile_catalog():
                     hint = str(value['dword']) if value.get('dword') is not None else 'value ' + option['id'][-4:]
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
+    apply_availability(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 

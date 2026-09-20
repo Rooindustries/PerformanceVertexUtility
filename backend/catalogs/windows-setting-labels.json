@@ -1210,7 +1210,7 @@
           "optionId": "choice-dc6b5cc8eae3dd25",
           "type": "DWord",
           "value": 3,
-          "label": "Neither",
+          "label": "No diagnostic data",
           "semanticStatus": "verified",
           "previousLabel": "Disabled",
           "notes": [],
@@ -18160,15 +18160,15 @@
         "kind": "value",
         "valueName": "DisconnectedState"
       },
-      "name": null,
-      "semanticStatus": "unknown",
+      "name": "Connected experiences in Office",
+      "semanticStatus": "verified",
       "choices": [
         {
           "optionId": "choice-959723ea7b62f95c",
           "type": "DWord",
           "value": 2,
-          "label": "Set DWord value to 2",
-          "semanticStatus": "unknown",
+          "label": "Disabled",
+          "semanticStatus": "verified",
           "previousLabel": "Disabled",
           "notes": [],
           "matchToken": {
@@ -18191,11 +18191,15 @@
         }
       ],
       "effectNotes": [
-        "No plain feature semantics verified for this exact target."
+        "Controls this feature in supported Office products."
       ],
       "refresh": "unknown",
-      "constraints": [],
-      "sources": []
+      "constraints": [
+        "Requires a supported Office 16 product and version."
+      ],
+      "sources": [
+        "https://learn.microsoft.com/en-us/microsoft-365-apps/privacy/manage-privacy-controls#control-privacy-settings-by-editing-the-registry"
+      ]
     },
     {
       "match": {
@@ -18205,15 +18209,15 @@
         "kind": "value",
         "valueName": "UserContentDisabled"
       },
-      "name": null,
-      "semanticStatus": "unknown",
+      "name": "Office connected experiences that analyze content",
+      "semanticStatus": "verified",
       "choices": [
         {
           "optionId": "choice-959723ea7b62f95c",
           "type": "DWord",
           "value": 2,
-          "label": "Set DWord value to 2",
-          "semanticStatus": "unknown",
+          "label": "Disabled",
+          "semanticStatus": "verified",
           "previousLabel": "Disabled",
           "notes": [],
           "matchToken": {
@@ -18236,11 +18240,15 @@
         }
       ],
       "effectNotes": [
-        "No plain feature semantics verified for this exact target."
+        "Controls this feature in supported Office products."
       ],
       "refresh": "unknown",
-      "constraints": [],
-      "sources": []
+      "constraints": [
+        "Requires a supported Office 16 product and version."
+      ],
+      "sources": [
+        "https://learn.microsoft.com/en-us/microsoft-365-apps/privacy/manage-privacy-controls#control-privacy-settings-by-editing-the-registry"
+      ]
     },
     {
       "match": {
@@ -19279,15 +19287,15 @@
         "kind": "value",
         "valueName": "DownloadContentDisabled"
       },
-      "name": null,
-      "semanticStatus": "unknown",
+      "name": "Office connected experiences that download content",
+      "semanticStatus": "verified",
       "choices": [
         {
           "optionId": "choice-959723ea7b62f95c",
           "type": "DWord",
           "value": 2,
-          "label": "Set DWord value to 2",
-          "semanticStatus": "unknown",
+          "label": "Disabled",
+          "semanticStatus": "verified",
           "previousLabel": "Disabled",
           "notes": [],
           "matchToken": {
@@ -19310,11 +19318,15 @@
         }
       ],
       "effectNotes": [
-        "No plain feature semantics verified for this exact target."
+        "Controls this feature in supported Office products."
       ],
       "refresh": "unknown",
-      "constraints": [],
-      "sources": []
+      "constraints": [
+        "Requires a supported Office 16 product and version."
+      ],
+      "sources": [
+        "https://learn.microsoft.com/en-us/microsoft-365-apps/privacy/manage-privacy-controls#control-privacy-settings-by-editing-the-registry"
+      ]
     },
     {
       "match": {
@@ -19324,15 +19336,15 @@
         "kind": "value",
         "valueName": "ControllerConnectedServicesEnabled"
       },
-      "name": null,
-      "semanticStatus": "unknown",
+      "name": "Optional connected experiences in Office",
+      "semanticStatus": "verified",
       "choices": [
         {
           "optionId": "choice-959723ea7b62f95c",
           "type": "DWord",
           "value": 2,
-          "label": "Set DWord value to 2",
-          "semanticStatus": "unknown",
+          "label": "Disabled",
+          "semanticStatus": "verified",
           "previousLabel": "Disabled",
           "notes": [],
           "matchToken": {
@@ -19355,11 +19367,15 @@
         }
       ],
       "effectNotes": [
-        "No plain feature semantics verified for this exact target."
+        "Controls this feature in supported Office products."
       ],
       "refresh": "unknown",
-      "constraints": [],
-      "sources": []
+      "constraints": [
+        "Requires a supported Office 16 product and version."
+      ],
+      "sources": [
+        "https://learn.microsoft.com/en-us/microsoft-365-apps/privacy/manage-privacy-controls#control-privacy-settings-by-editing-the-registry"
+      ]
     },
     {
       "match": {

@@ -28,7 +28,8 @@ public static class ControlComposition
             if (!result.ContainsKey(field.Key)) throw new InvalidDataException("Windows does not expose policy field: " + field.Key);
             result[field.Key] = field.Value;
         }
-        return ControlValues.From(result);
+        var desired = ControlValues.From(result);
+        return desired.TryGetProperty(MitigationControl.SnapshotField, out _) ? MitigationControl.Reconcile(desired) : desired;
     }
     public static (JsonElement Desired, JsonElement? Restore) Resolve(TweakControlRead current, ControlHeld? held, ControlClaim[] before, ControlClaim[] after)
     {
@@ -39,6 +40,8 @@ public static class ControlComposition
         var baseline = held?.RestoreValue ?? held?.Original.Value ?? current.Value;
         var restored = held is null ? current.Value : ControlValues.Equal(current.Value, held.Applied) || before.Any(claim => !claim.Patch) ? baseline
             : Set(current.Value, before.SelectMany(claim => claim.Desired.EnumerateObject()).Select(property => new KeyValuePair<string, JsonElement>(property.Name, baseline.GetProperty(property.Name))));
+        if (held is not null && current.Address.Kind == "mitigations" && current.Value.TryGetProperty(MitigationControl.SnapshotField, out _) && before.All(claim => claim.Patch))
+            restored = MitigationControl.RestoreFields(current.Value, baseline, before.SelectMany(claim => claim.Desired.EnumerateObject()).Select(property => property.Name).Distinct().ToArray());
         if (after.Length == 0) return (restored, null);
         if (!after[0].Patch)
         {

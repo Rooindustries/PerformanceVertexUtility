@@ -192,11 +192,14 @@ python3 tools/validation/check_baseline.py --contracts-only
 ## Integrated actions and limits
 
 Windows settings includes search, categories, source filters, reusable profiles,
-presets, before/after review, apply, restore and interruption recovery. Advanced
-values and unavailable settings can be shown explicitly. Backups & history reads
+presets, before/after review, apply, restore and interruption recovery. Every
+setting remains visible and selectable. Toggles select a setting's choice; settings
+with several values also provide a value picker. Choices for missing components
+are saved separately from applied Windows profiles and do not create a recovery
+backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.
 
-More actions connects Widgets, Copilot, Edge and OneDrive to the existing
+Remove apps connects Widgets, Copilot, Edge and OneDrive to the existing
 installed-app removal queue. Each remover and subsequent leftover cleanup has
 its own review. The other-account option inventories exact installed AppX
 registrations by SID; removal does not claim to deprovision future accounts.
@@ -217,7 +220,9 @@ an owned clone and restores the captured original selection, preserving external
 changes and other plans.
 
 Restore-point creation verifies a new Windows sequence and description, including
-completion. A successful API return alone is insufficient. The optional creation
+completion. Enumeration can lag behind completion, so verification polls for the
+exact requested point and retains a retryable journal if it has not appeared.
+A successful API return alone is insufficient. The optional creation
 frequency override uses the same settings recovery engine. Recall snapshot
 deletion opens Windows Privacy settings and guides the Windows-owned deletion
 flow; opening the page is not reported as deletion success.
@@ -230,9 +235,26 @@ to edit the Local Group Policy database. Edge encrypted DNS is an explicit setti
 not an automatic side effect of changing another Edge policy. Windows dialogs
 handle BitLocker, Disk Cleanup and separately requested folder-view resets.
 
-DNS, mitigations and optional-feature writes have not been applied to production
-targets during this work. File-fixture coverage and read-only detection do not
-prove their visible or network effects. Native creation of a system restore point was not performed on this PC; creation
-result checks use controlled identities, and the native list reader was exercised.
+The Windows validation includes reversible tests for documentation-address DoH
+entries, disconnected Wi-Fi settings, boot overrides, NTFS, Teredo, reserved
+storage, an inactive firewall profile, SysMain and memory compression, ASLR,
+TelnetClient and hibernation. Configuration readback and exact restoration are
+checked separately. A real restore point was created, verified, replayed without
+duplication, and removed while retaining existing points. System mitigation writes
+capture raw registry values and change only selected fields; the layout is pinned
+to inspected Windows binaries and is not a public mitigation registry ABI.
 The sign-in task was created, explicitly run and removed in the approved fixture.
 No reboot or actual sign-in cycle was performed.
+
+The choice and preset matrices run every catalog entry through apply, replay,
+shared ownership and restore using isolated files. They prove transaction behavior,
+not the performance benefit or consumer effect of every Windows policy.
+
+Windows UI state checks use the real view model with an isolated file transaction:
+
+```powershell
+dotnet run --project tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj -c Release
+```
+
+The native fixture modes change system configuration and require approval of their
+exact test scopes. The catalog matrices and UI state checks do not change Windows settings.

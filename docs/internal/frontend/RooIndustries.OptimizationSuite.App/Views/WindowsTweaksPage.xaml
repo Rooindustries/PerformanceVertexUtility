@@ -4,59 +4,71 @@
     xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels"
     xmlns:views="using:RooIndustries.OptimizationSuite.Views">
     <Grid Padding="{StaticResource RooIndustriesPageMargin}" RowSpacing="12">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Image Source="ms-appx:///Assets/Icons/windows.svg" Style="{StaticResource PageHeaderIconStyle}"/>
             <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Windows settings" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="{x:Bind ViewModel.Summary, Mode=OneWay}" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/></StackPanel>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                <DropDownButton Content="More actions" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><DropDownButton.Flyout><MenuFlyout>
-                    <MenuFlyoutItem Text="Remove Windows Widgets…" Tag="widgets" Click="OpenAppGroup"/>
-                    <MenuFlyoutItem Text="Remove Copilot apps…" Tag="copilot" Click="OpenAppGroup"/>
-                    <MenuFlyoutItem Text="Remove Microsoft Edge…" Tag="edge" Click="OpenAppGroup"/>
-                    <MenuFlyoutItem Text="Remove OneDrive…" Tag="onedrive" Click="OpenAppGroup"/>
-                    <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="Import WPD custom switches…" Click="ImportSettings"/>
-                    <MenuFlyoutItem Text="Review file ownership…" Click="ReviewFileOwnership"/>
-                    <MenuFlyoutItem Text="Create a Windows restore point…" Click="CreateRestorePoint"/>
-                    <MenuFlyoutItem Text="Delete Recall snapshots…" Tag="recall" Click="OpenWindowsTool"/>
-                    <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="System Protection and restore points…" Tag="protection" Click="OpenWindowsTool"/>
-                    <MenuFlyoutItem Text="Manage BitLocker…" Tag="bitlocker" Click="OpenWindowsTool"/>
-                    <MenuFlyoutItem Text="Disk Cleanup…" Tag="cleanup" Click="OpenWindowsTool"/>
-                    <MenuFlyoutItem Text="File Explorer folder options…" Tag="folders" Click="OpenWindowsTool"/>
-                    <MenuFlyoutItem Text="O&amp;O ShutUp10…" Tag="oosu" Click="OpenWindowsTool"/>
-                </MenuFlyout></DropDownButton.Flyout></DropDownButton>
-                <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" VerticalAlignment="Top" AutomationProperties.AutomationId="WindowsTweaksRefresh"/>
-            </StackPanel>
+            <Button Grid.Column="2" Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" VerticalAlignment="Top" AutomationProperties.AutomationId="WindowsTweaksRefresh"/>
         </Grid>
-        <views:AdaptivePanel Grid.Row="1" MinColumnWidth="250" MaxColumns="3" IsHitTestVisible="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
+        <views:AdaptivePanel Grid.Row="1" MinColumnWidth="185" MaxColumns="5" Compact="True" IsHitTestVisible="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
+            <DropDownButton AutomationProperties.AutomationId="WindowsAppsActions" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><DropDownButton.Content><StackPanel Orientation="Horizontal" Spacing="8"><Image Source="ms-appx:///Assets/Icons/apps.svg" Width="16" Height="16"/><TextBlock Text="Remove apps"/></StackPanel></DropDownButton.Content><DropDownButton.Flyout><MenuFlyout>
+                <MenuFlyoutItem Text="Windows Widgets…" Tag="widgets" Click="OpenAppGroup"/>
+                <MenuFlyoutItem Text="Copilot apps…" Tag="copilot" Click="OpenAppGroup"/>
+                <MenuFlyoutItem Text="Microsoft Edge…" Tag="edge" Click="OpenAppGroup"/>
+                <MenuFlyoutItem Text="OneDrive…" Tag="onedrive" Click="OpenAppGroup"/>
+            </MenuFlyout></DropDownButton.Flyout></DropDownButton>
+            <Button Click="ImportSettings" AutomationProperties.AutomationId="WindowsImportChoices" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><StackPanel Orientation="Horizontal" Spacing="8"><Image Source="ms-appx:///Assets/Icons/settings.svg" Width="16" Height="16"/><TextBlock Text="Import WPD"/></StackPanel></Button>
+            <Button Click="ReviewFileOwnership" AutomationProperties.AutomationId="WindowsFileOwnership" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><StackPanel Orientation="Horizontal" Spacing="8"><Image Source="ms-appx:///Assets/Icons/tools.svg" Width="16" Height="16"/><TextBlock Text="File ownership"/></StackPanel></Button>
+            <DropDownButton AutomationProperties.AutomationId="WindowsRestorePoints" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><DropDownButton.Content><StackPanel Orientation="Horizontal" Spacing="8"><Image Source="ms-appx:///Assets/Icons/history.svg" Width="16" Height="16"/><TextBlock Text="Restore points"/></StackPanel></DropDownButton.Content><DropDownButton.Flyout><MenuFlyout>
+                <MenuFlyoutItem Text="Create restore point…" Click="CreateRestorePoint"/>
+                <MenuFlyoutItem Text="System Protection…" Tag="protection" Click="OpenWindowsTool"/>
+            </MenuFlyout></DropDownButton.Flyout></DropDownButton>
+            <DropDownButton AutomationProperties.AutomationId="WindowsToolsActions" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"><DropDownButton.Content><StackPanel Orientation="Horizontal" Spacing="8"><Image Source="ms-appx:///Assets/Icons/windows.svg" Width="16" Height="16"/><TextBlock Text="Windows tools"/></StackPanel></DropDownButton.Content><DropDownButton.Flyout><MenuFlyout>
+                <MenuFlyoutItem Text="Delete Recall snapshots…" Tag="recall" Click="OpenWindowsTool"/>
+                <MenuFlyoutItem Text="Manage BitLocker…" Tag="bitlocker" Click="OpenWindowsTool"/>
+                <MenuFlyoutItem Text="Disk Cleanup…" Tag="cleanup" Click="OpenWindowsTool"/>
+                <MenuFlyoutItem Text="File Explorer folder options…" Tag="folders" Click="OpenWindowsTool"/>
+                <MenuFlyoutItem Text="O&amp;O ShutUp10…" Tag="oosu" Click="OpenWindowsTool"/>
+            </MenuFlyout></DropDownButton.Flyout></DropDownButton>
+        </views:AdaptivePanel>
+        <views:AdaptivePanel Grid.Row="2" MinColumnWidth="250" MaxColumns="3" IsHitTestVisible="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
             <ComboBox Header="Saved profiles" ItemsSource="{x:Bind ViewModel.Profiles}" SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}" PlaceholderText="Choose a profile" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksProfiles"/>
             <TextBox Header="Profile name" Text="{x:Bind ViewModel.ProfileId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" Visibility="{x:Bind ViewModel.ShowProfileName, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="WindowsTweaksProfileName"/>
             <AutoSuggestBox Header="Add a preset" ItemsSource="{x:Bind ViewModel.Presets}" DisplayMemberPath="Name" TextMemberPath="Name" PlaceholderText="Search preset names" TextChanged="PresetTextChanged" SuggestionChosen="PresetChosen" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksPreset"/>
         </views:AdaptivePanel>
-        <Grid Grid.Row="2" ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/><ColumnDefinition Width="200"/></Grid.ColumnDefinitions>
+        <Grid Grid.Row="3" ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/><ColumnDefinition Width="200"/></Grid.ColumnDefinitions>
             <TextBox PlaceholderText="Search settings" Text="{x:Bind ViewModel.Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="WindowsTweaksSearch" AutomationProperties.Name="Search Windows settings"/>
             <ComboBox Grid.Column="1" ItemsSource="{x:Bind ViewModel.Categories}" SelectedItem="{x:Bind ViewModel.Category, Mode=TwoWay}" HorizontalAlignment="Stretch" PlaceholderText="All categories" AutomationProperties.AutomationId="WindowsTweaksCategory" AutomationProperties.Name="Setting category"/>
             <ComboBox Grid.Column="2" ItemsSource="{x:Bind ViewModel.Sources}" SelectedItem="{x:Bind ViewModel.Source, Mode=TwoWay}" HorizontalAlignment="Stretch" PlaceholderText="All sources" AutomationProperties.AutomationId="WindowsTweaksSource" AutomationProperties.Name="Source tool"/>
         </Grid>
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="4">
             <ListView IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" ItemsSource="{x:Bind ViewModel.Rows}" SelectionMode="None" HorizontalAlignment="Stretch" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" AutomationProperties.AutomationId="WindowsTweaksList">
                 <ListView.ItemTemplate><DataTemplate x:DataType="vm:WindowsTweakRow">
                     <Grid Padding="12,8" ColumnSpacing="14" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="135"/><ColumnDefinition Width="205"/></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="135"/><ColumnDefinition Width="240"/></Grid.ColumnDefinitions>
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                             <TextBlock Text="{x:Bind Context}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                             <TextBlock Text="{x:Bind Detail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
                             <TextBlock Text="{x:Bind Refresh}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Refresh, Converter={StaticResource StringToVisibility}}"/>
+                            <ItemsControl ItemsSource="{x:Bind Alternatives}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:TweakAlternative">
+                                <HyperlinkButton Command="{x:Bind OpenCommand}" Padding="0"><TextBlock Text="{x:Bind Name}" FontSize="12" TextWrapping="Wrap"/></HyperlinkButton>
+                            </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center"><TextBlock Text="Configured" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/><TextBlock Text="{x:Bind Current, Mode=OneWay}" TextWrapping="Wrap"/></StackPanel>
                         <StackPanel Grid.Column="2" Spacing="6" VerticalAlignment="Center">
-                            <ComboBox ItemsSource="{x:Bind Choices}" SelectedItem="{x:Bind Selected, Mode=TwoWay}" IsEnabled="{x:Bind Available, Mode=OneWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}">
+                            <ToggleSwitch IsOn="{x:Bind ToggleOn, Mode=TwoWay}" AutomationProperties.Name="{x:Bind Name}" Visibility="{x:Bind HasToggle, Converter={StaticResource BoolToVisibility}}">
+                                <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Description}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
+                                <ToggleSwitch.OnContent><TextBlock Text="{x:Bind ToggleOnLabel}" TextWrapping="Wrap" MaxWidth="160"/></ToggleSwitch.OnContent>
+                                <ToggleSwitch.OffContent><TextBlock Text="{x:Bind ToggleOffLabel}" TextWrapping="Wrap" MaxWidth="160"/></ToggleSwitch.OffContent>
+                            </ToggleSwitch>
+                            <ComboBox Visibility="{x:Bind HasValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind Choices}" SelectedItem="{x:Bind Selected, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}">
                                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" MaxWidth="170"/></DataTemplate></ComboBox.ItemTemplate>
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Description}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
+                            <TextBlock Text="{x:Bind ChoiceStatus, Mode=OneWay}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ChoiceStatus, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
+                            <HyperlinkButton Content="Keep current" Command="{x:Bind KeepCurrentCommand}" FontSize="11" Padding="0" Visibility="{x:Bind ShowKeepCurrent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </Grid>
                 </DataTemplate></ListView.ItemTemplate>
@@ -64,7 +76,7 @@
             <TextBlock Text="No settings match these filters." HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.ShowEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
             <ProgressRing IsActive="{x:Bind ViewModel.Busy, Mode=OneWay}" Visibility="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" Width="32" Height="32"/>
         </Grid>
-        <Border Grid.Row="4" Style="{StaticResource PanelBorderStyle}">
+        <Border Grid.Row="5" Style="{StaticResource PanelBorderStyle}">
             <StackPanel Spacing="10">
                 <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="WindowsTweaksStatus"/>
                 <TextBlock Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="WindowsTweaksDetail"/>
@@ -85,7 +97,7 @@
                     <Button Content="Review recovery" Command="{x:Bind ViewModel.ReviewRecoveryCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasPendingRecovery, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                     <Button Content="Clear selection" Command="{x:Bind ViewModel.ClearSelectionCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"/>
                 </views:AdaptivePanel>
-                <StackPanel Orientation="Horizontal" Spacing="16"><TextBlock Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/><CheckBox Content="Advanced values" IsChecked="{x:Bind ViewModel.ShowAdvanced, Mode=TwoWay}"/><CheckBox Content="Unavailable settings" IsChecked="{x:Bind ViewModel.ShowUnavailable, Mode=TwoWay}"/></StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="16"><TextBlock Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/><CheckBox Content="Technical values" IsChecked="{x:Bind ViewModel.ShowAdvanced, Mode=TwoWay}"/></StackPanel>
             </StackPanel>
         </Border>
     </Grid>

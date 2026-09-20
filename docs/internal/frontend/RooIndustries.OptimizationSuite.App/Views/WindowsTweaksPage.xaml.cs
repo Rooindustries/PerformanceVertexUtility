@@ -6,12 +6,14 @@ using System.IO;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using RooIndustries.OptimizationSuite.ViewModels;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
 public sealed partial class WindowsTweaksPage : Page
 {
     public WindowsTweaksViewModel ViewModel { get; } = new();
+    private WindowsRestorePointReview? _pendingRestorePoint;
     public WindowsTweaksPage()
     {
         InitializeComponent();
@@ -83,17 +85,19 @@ public sealed partial class WindowsTweaksPage : Page
     }
     private async void CreateRestorePoint(object sender, RoutedEventArgs args)
     {
-        var fresh = new CheckBox { Content = "Allow a new point even if Windows created one recently" };
-        var text = new TextBlock { Text = "Creates a Windows system restore point. If selected, the app temporarily changes the creation-frequency setting and restores it afterward.", TextWrapping = TextWrapping.Wrap, MaxWidth = 500 };
+        var pending = _pendingRestorePoint is not null;
+        var fresh = new CheckBox { Content = "Allow a new point even if Windows created one recently", Visibility = pending ? Visibility.Collapsed : Visibility.Visible };
+        var text = new TextBlock { Text = pending ? "Checks the previously requested restore point without starting another backup." : "Creates a Windows system restore point. If selected, the app temporarily changes the creation-frequency setting and restores it afterward.", TextWrapping = TextWrapping.Wrap, MaxWidth = 500 };
         var content = new StackPanel { Spacing = 12 }; content.Children.Add(text); content.Children.Add(fresh);
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Create a Windows restore point", Content = content, PrimaryButtonText = "Create restore point", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = pending ? "Check the requested restore point" : "Create a Windows restore point", Content = content, PrimaryButtonText = pending ? "Check restore point" : "Create restore point", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         ViewModel.Busy = true; ViewModel.Status = "Creating Windows restore point…";
         try
         {
-            var review = await App.Operations.PreviewRestorePointAsync(fresh.IsChecked == true);
-            var result = await App.Operations.CreateRestorePointAsync(review);
-            ViewModel.Status = result.Created && result.AvailableNow ? "Windows restore point verified" : "No new restore point was confirmed";
+            _pendingRestorePoint ??= await App.Operations.PreviewRestorePointAsync(fresh.IsChecked == true);
+            var result = await App.Operations.CreateRestorePointAsync(_pendingRestorePoint);
+            if (!result.Pending) _pendingRestorePoint = null;
+            ViewModel.Status = result.Created && result.AvailableNow ? "Windows restore point verified" : result.Pending ? "Windows is still preparing the restore point" : "No new restore point was confirmed";
             ViewModel.Detail = result.Message;
         }
         catch (Exception error) { ViewModel.Status = "Couldn't confirm the restore point."; ViewModel.Detail = error.Message + " Check System Protection and saved Windows settings for recovery."; }

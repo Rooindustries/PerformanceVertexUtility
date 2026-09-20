@@ -6,3 +6,4 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';
 if($LASTEXITCODE -ne 0){throw 'Tweak engine checks failed'}
 & (Join-Path $PSScriptRoot 'Test-TweakRoutes.ps1') -DotNetPath $DotNetPath
 & (Join-Path $PSScriptRoot 'Test-AppxScopes.ps1')
+& (Join-Path $PSScriptRoot 'Test-WindowsControlOutput.ps1')

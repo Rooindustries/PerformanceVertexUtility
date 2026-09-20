@@ -1,0 +1,62 @@
+using System.Text.Json;
+using RooIndustries.Optimizer;
+
+namespace RooIndustries.OptimizationSuite
+{
+    public static class App
+    {
+        public static Services.Fixture Operations { get; set; } = null!;
+    }
+}
+namespace RooIndustries.OptimizationSuite.Services
+{
+    public sealed record WindowsTweakReview(TweakPlan Plan, string Path, string Hash);
+    public sealed class Fixture
+    {
+        public TweakCatalog Catalog { get; }
+        public TweakChoiceStore Choices { get; }
+        public FileTweakStore Windows { get; }
+        public TweakEngine Engine { get; }
+        public bool Missing { get; set; } = true;
+        public bool FailRead { get; set; }
+        public bool FailApply { get; set; }
+        public int Applies { get; private set; }
+        public int Previews { get; private set; }
+        public Func<Task>? BeforePreview { get; set; }
+        public Action? AfterApply { get; set; }
+        private readonly string _root;
+        public Fixture(string root)
+        {
+            _root = root; Directory.CreateDirectory(root);
+            var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Enabled");
+            var setting = new TweakDefinition("setting", "Office setting", "Apps", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Fixture", "fixture", "isolated UI validation")]);
+            Catalog = new(1, "fixture", [setting], []);
+            Choices = new(Path.Combine(root, "choices.json")); Windows = FileTweakStore.Create(Path.Combine(root, "windows.json")); Engine = new(Catalog, Windows);
+        }
+        public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync() => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
+        public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromResult(Choices.Read());
+        public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string id, TweakSelection[] selections, string? revision) => Task.FromResult(Choices.Save(catalog, id, selections, revision));
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync() => FailRead ? Task.FromException<TweakRecovery>(new IOException("Controlled recovery read failure")) : Task.FromResult(new TweakRecovery(Windows.ReadState(), null, null));
+        public Task<TweakInspection> ReadWindowsTweaksAsync()
+        {
+            var inspection = Engine.Detect();
+            return Task.FromResult(Missing ? inspection with { Settings = [new("setting", "Office setting", false, [], [], "A supported Microsoft Office installation could not be identified.", [])] } : inspection);
+        }
+        public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string id, TweakSelection[] selections)
+        {
+            Previews++;
+            if (BeforePreview is not null) await BeforePreview();
+            var plan = Engine.Preview(id, selections); var path = Path.Combine(_root, plan.OperationId + ".json"); OperationFiles.Write(path, plan);
+            return new(plan, path, OperationFiles.HashFile(path));
+        }
+        public Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool accepted)
+        {
+            Applies++;
+            if (FailApply) throw new IOException("Controlled native apply failure");
+            var result = Engine.Apply(review.Path, review.Hash, accepted); AfterApply?.Invoke(); return Task.FromResult(result);
+        }
+        public Task<JsonElement> RecoverWindowsTweaksAsync(string hash) => throw new InvalidOperationException("Unexpected recovery call");
+        public Task<WindowsTweakReview> PreviewOwnershipAsync(string path) => throw new InvalidOperationException("Unexpected ownership call");
+    }
+}

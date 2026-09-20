@@ -14,7 +14,7 @@ public sealed record TweakOption([property: JsonRequired] string Id, [property: 
 public sealed record TweakSelection([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId);
 public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false);
 public sealed record TweakDefinition([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] string Category, [property: JsonRequired] string Description, [property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild,
-    [property: JsonRequired] string[] Editions, [property: JsonRequired] string Refresh, [property: JsonRequired] TweakOption[] Options, [property: JsonRequired] TweakSource[] Sources, string[]? Requirements = null, bool Advanced = false);
+    [property: JsonRequired] string[] Editions, [property: JsonRequired] string Refresh, [property: JsonRequired] TweakOption[] Options, [property: JsonRequired] TweakSource[] Sources, string[]? Requirements = null, bool Advanced = false, string[]? Alternatives = null);
 public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [property: JsonRequired] string Version, [property: JsonRequired] TweakDefinition[] Settings, [property: JsonRequired] TweakPreset[] Presets)
 {
     [JsonIgnore] public string Digest => OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(this, OperationFiles.Json));
