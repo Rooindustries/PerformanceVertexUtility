@@ -62,6 +62,49 @@ public static class FirmwareEditorChecks
         check(inconclusivePresentation.Status == "Not tested", "Inconclusive behavior stays untested");
         check(numericPresentation.Reason.Contains("9", StringComparison.Ordinal), "Numeric test values are displayed");
         check(!stalePresentation.CanCollapse, "Stale trials stay in the normal list");
+
+        FirmwareSettingRow Described(string id, FirmwareVerificationTrial? trial, string matchStatus = FirmwareVerificationMatchStatuses.Matched)
+        {
+            var target = new FirmwareSettingRow(question with { Id = id });
+            if (trial is null) return target;
+            var description = FirmwareViewModel.DescribeVerification(new FirmwareVerificationMatch(trial, matchStatus), question);
+            target.SetVerification(description.Status, description.Reason, description.CanCollapse);
+            target.IsExperimental = description.Experimental;
+            return target;
+        }
+        var rejected = Described("rejected", incomplete with { Status = FirmwareTrialStatuses.WriteRejected, RestorationComplete = true });
+        var rejectedUnrestored = Described("rejected-unrestored", incomplete with { Status = FirmwareTrialStatuses.WriteRejected });
+        var unchangedNow = Described("unchanged", incomplete with { RestorationComplete = true });
+        var confirmedUnchanged = Described("confirmed", completed);
+        var stored = Described("stored", completed with { Status = FirmwareTrialStatuses.ValueStored });
+        var untested = Described("untested", null);
+        var otherBoard = Described("other-board", incomplete with { Status = FirmwareTrialStatuses.WriteRejected, RestorationComplete = true }, FirmwareVerificationMatchStatuses.DifferentBoard);
+        var skipped = FirmwareSettingRow.ReadOnly(new FirmwareExcludedQuestion("Custom HID", "Device text", "This is text or a data block, not a single value SCEWIN can write."));
+        check(rejected.IsExperimental && rejected.VerificationStatus == "Can't be changed here" && unchangedNow.IsExperimental && unchangedNow.VerificationStatus == "Did not change",
+            "Rejected writes and values that did not change are marked experimental in plain words");
+        check(!rejectedUnrestored.IsExperimental && !otherBoard.IsExperimental && !stored.IsExperimental && !untested.IsExperimental,
+            "Unfinished tests, another motherboard's tests, stored values and untested settings stay out of Experimental");
+        rejected.SelectedOption = rejected.Options[1];
+        unchangedNow.SelectedOption = unchangedNow.Options[1];
+        var rows = new[] { rejected, rejectedUnrestored, unchangedNow, confirmedUnchanged, stored, untested, otherBoard, skipped };
+        var (normal, experimental) = FirmwareViewModel.Split(rows);
+        check(rejected.Changed && rejected.IsExperimental && experimental.Contains(rejected) && experimental.Contains(unchangedNow) && experimental.Contains(confirmedUnchanged) && experimental.Contains(skipped)
+            && !normal.Any(row => row.IsExperimental || row.IsReadOnly || FirmwareViewModel.ShouldCollapse(row)) && normal.Length == 4,
+            "Settings SCEWIN cannot apply never appear in the normal list, even after they are edited");
+        stored.SelectedOption = stored.Options[1];
+        var withoutOptIn = FirmwareViewModel.ReviewSelections(rows, row => row.Changed, false);
+        var withOptIn = FirmwareViewModel.ReviewSelections(rows, row => row.Changed, true);
+        check(withoutOptIn.Keys.SequenceEqual(["stored"]) && withOptIn.Keys.Order().SequenceEqual(["rejected", "stored", "unchanged"]) && !withOptIn.ContainsKey(skipped.Question.Id),
+            "Experimental edits reach review only after opting in and read-only settings never do");
+
+        var mixed = new FirmwareScript(Encoding.Latin1.GetBytes(Export("00", "2026-09-20T10:00:00Z")
+            + "\nSetup Question = Camera name\nHelp String = Text field\nToken =11\nOffset =30\nWidth =1E\nValue =00\n"
+            + "\nSetup Question = Shared values\nToken =12\nOffset =40\nWidth =01\nOptions =*[00]Auto\n         [00]Also auto\n"
+            + "\nSetup Question = Nothing selected\nToken =13\nOffset =41\nWidth =01\nOptions =[00]Off\n         [01]On\n"
+            + "\nSetup Question = Empty value\nToken =14\nOffset =42\nWidth =01\nValue =\n"));
+        check(mixed.Questions.Count == 1 && mixed.ExcludedQuestions.Select(item => item.Name).SequenceEqual(["Camera name", "Shared values", "Nothing selected", "Empty value"])
+            && mixed.ExcludedQuestions.All(item => item.Reason.Length > 0),
+            "Settings the export cannot express as one writable value are reported separately with a reason");
     }
 
     private static string Export(string selected, string stamp)
