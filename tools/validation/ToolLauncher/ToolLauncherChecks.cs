@@ -8,7 +8,7 @@ static class ToolLauncherChecks
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-tool-launcher-" + Guid.NewGuid().ToString("N"));
         var id = "fixture-" + Guid.NewGuid().ToString("N");
-        var cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite", "tools");
+        var cacheRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tools");
         var cache = Path.Combine(cacheRoot, id);
         var oldRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT");
         var relative = "Utilities/Other/Fixture/SCEWIN64.exe";

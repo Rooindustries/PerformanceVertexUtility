@@ -2,9 +2,11 @@
 
 Tools → BIOS settings keeps package setup, export, editing, review, import and recovery in the app. It edits AMISCE setup scripts; it does not flash a BIOS image or write arbitrary UEFI offsets.
 
-On first use, select the Windows x64 SCEWIN folder supplied for the motherboard. The app shows the version, publisher, signature and files before copying the package. An unsigned executable requires an explicit source-trust decision. External drivers must have valid signatures. No driver is installed through an independent installer: SCEWIN uses its own matching package when the user selects Load settings. A successful export establishes script availability, not universal motherboard support.
+On first use, **Set up and load settings** downloads a pinned official MSI Center archive and the upstream innoextract utility, extracts SCEWIN and its matching drivers, verifies the package, and continues into the original BIOS export and editor. MSI Center and its installers are not run. Setup downloads about 560 MB once; later visits reuse the verified package. Download progress and cancellation are available before firmware access starts. Partial downloads and extracted installers are removed after cancellation, failure or completion. Vendor sample BIOS exports and scripts are never installed or used as this PC's settings.
 
-The supplied `DL_SCEWIN.exe` is a downloader, not a firmware helper. It retrieves MSI Center and extracts SCEWIN. The app does not run that downloader or assume an MSI package supports a different motherboard. The first-use folder selection remains necessary until a compatible redistributable package is available.
+Acquisition uses a fixed archive size and SHA-256, a pinned extraction utility, HTTPS, signature verification, and the existing package fingerprint. Concurrent setup is serialized. A changed upstream archive requires a reviewed application update; it is not silently trusted. Source details and versions are recorded in [SCEWIN acquisition](scewin-acquisition.md). The app downloads vendor binaries on demand instead of shipping them in its repository or release package.
+
+An optional **Use an existing SCEWIN package** section retains manual package selection. That path shows the version, publisher, signature and files before copying them; an unsigned executable requires an explicit source-trust decision. External drivers must have valid signatures. SCEWIN uses its matching driver package when settings are loaded. A successful export establishes script availability for the current firmware, not universal motherboard support or permission to import changes automatically.
 
 ## Import contract
 
@@ -20,6 +22,8 @@ The supplied `DL_SCEWIN.exe` is a downloader, not a firmware helper. It retrieve
 ## Verification
 
 Run `backend/scripts/Test-OptimizerCore.ps1 -Area firmware` for the parser and workflow checks. Run `backend/scripts/Test-FirmwareWorkflow.ps1` on Windows to add package inspection and actual process invocation through `ScewinProvider`, using a compiled file-only helper. The fixture never calls firmware APIs, loads a driver, or restarts Windows. It checks exported and imported bytes, switches, errors, interrupted/repeated/concurrent operations, undo and cleanup.
+
+The same command checks automatic acquisition against disposable nested archives through the production download/extraction path: exact hashes, changed sizes, interrupted downloads, insecure sources/redirects, missing or duplicate archive members, concurrent setup, extraction failure, clean retry and preservation of an existing package. Its extractor substitutes archive fixtures and never executes a vendor installer. To check the real vendor download and signature inspection without launching SCEWIN, run `dotnet run --project tools/validation/OptimizerCore/OptimizerCore.csproj -c Release -- --firmware-download <disposable-package-directory>` on Windows.
 
 `tools/scripts/Test-ToolLauncher.ps1` separately verifies catalog resolution, portable dependency extraction, archive path containment, atomic cache publication and launching a disposable executable.
 

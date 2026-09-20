@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.Optimizer;
@@ -18,10 +19,11 @@ public partial class FirmwareViewModel : ObservableObject
     private string? _packageDirectory;
     private string? _sessionDirectory;
     private string? _reviewHash;
+    private CancellationTokenSource? _setupCancellation;
     private readonly List<FirmwareSettingRow> _all = new();
     [ObservableProperty] private string _board = "Reading motherboard details…";
     [ObservableProperty] private string _bios = "";
-    [ObservableProperty] private string _packageText = "No compatible package added. Add its folder to enable Load settings.";
+    [ObservableProperty] private string _packageText = "First use downloads about 560 MB. Later visits use the saved SCEWIN package.";
     [ObservableProperty] private string _message = "";
     [ObservableProperty] private string _search = "";
     [ObservableProperty] private bool _busy;
@@ -36,7 +38,9 @@ public partial class FirmwareViewModel : ObservableObject
     public bool IsEditing => Stage == "edit";
     public bool IsReview => Stage == "review";
     public bool IsResult => Stage == "result";
-    public bool CanLoad => !Busy && _packageDirectory is not null;
+    public bool CanLoad => !Busy;
+    public bool CanCancelSetup => _setupCancellation is not null;
+    public string LoadLabel => _packageDirectory is null ? "Set up and load settings" : "Load settings";
     public bool CanReview => !Busy && IsEditing && ChangedCount > 0;
     public bool CanApply => !Busy && IsReview && _reviewHash is not null;
     public bool CanRestart => !Busy && ResultStatus == "restartRequired";
@@ -67,9 +71,9 @@ public partial class FirmwareViewModel : ObservableObject
     partial void OnChangedOnlyChanged(bool value) => Filter();
     private void RefreshActions()
     {
-        foreach (var name in new[] { nameof(CanLoad), nameof(CanReview), nameof(CanApply), nameof(CanRestart), nameof(CanVerify), nameof(CanOpenFiles), nameof(ApplyLabel) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(CanLoad), nameof(CanCancelSetup), nameof(LoadLabel), nameof(CanReview), nameof(CanApply), nameof(CanRestart), nameof(CanVerify), nameof(CanOpenFiles), nameof(ApplyLabel) }) OnPropertyChanged(name);
     }
-    private FirmwareWorkflow Workflow() => new(new ScewinProvider(_packageDirectory ?? throw new InvalidOperationException("Choose a SCEWIN package first.")), Path.Combine(Root, "sessions"));
+    private FirmwareWorkflow Workflow() => new(new ScewinProvider(_packageDirectory ?? throw new InvalidOperationException("Load settings to set up SCEWIN first.")), Path.Combine(Root, "sessions"));
 
     public async Task InitializeAsync() => await RunAsync(async () =>
     {
@@ -85,7 +89,7 @@ public partial class FirmwareViewModel : ObservableObject
             _ = new ScewinProvider(saved.PackageDirectory).PackageFingerprint;
             var package = OperationFiles.Read<FirmwarePackage>(Path.Combine(saved.PackageDirectory, "package.json"));
             _packageDirectory = saved.PackageDirectory;
-            PackageText = "SCEWIN " + package.Version + " · Ready to load settings";
+            PackageText = PackageStatus(package);
             RefreshActions();
         }
         LoadHistory();
@@ -95,7 +99,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         _packageDirectory = await Task.Run(() => ScewinProvider.SetUp(directory, reviewed, Path.Combine(Root, "packages")));
         OperationFiles.Write(Path.Combine(Root, "workspace.json"), new FirmwareWorkspace(_packageDirectory));
-        PackageText = "SCEWIN " + reviewed.Version + " · Ready to load settings";
+        PackageText = PackageStatus(reviewed);
         Stage = "setup"; _sessionDirectory = null; _reviewHash = null;
         Message = "Package saved. Load settings to check compatibility and save the original export.";
         RefreshActions();
@@ -103,6 +107,28 @@ public partial class FirmwareViewModel : ObservableObject
 
     public async Task LoadAsync() => await RunAsync(async () =>
     {
+        if (_packageDirectory is null)
+        {
+            _setupCancellation = new CancellationTokenSource();
+            RefreshActions();
+            try
+            {
+                var setupCancellation = _setupCancellation;
+                var progress = new Progress<string>(status => { if (_setupCancellation == setupCancellation) Message = status; });
+                var directory = await new ScewinSetup().InstallAsync(Path.Combine(Root, "packages"), progress, _setupCancellation.Token);
+                OperationFiles.Write(Path.Combine(Root, "workspace.json"), new FirmwareWorkspace(directory));
+                _packageDirectory = directory;
+                var package = OperationFiles.Read<FirmwarePackage>(Path.Combine(directory, "package.json"));
+                PackageText = PackageStatus(package);
+                _setupCancellation.Token.ThrowIfCancellationRequested();
+            }
+            finally
+            {
+                _setupCancellation.Dispose();
+                _setupCancellation = null;
+                RefreshActions();
+            }
+        }
         Message = "Reading BIOS settings and saving the original export…";
         var workflow = Workflow();
         _sessionDirectory = await Task.Run(workflow.Load);
@@ -110,6 +136,8 @@ public partial class FirmwareViewModel : ObservableObject
         Message = "Choose only the settings you want to change. The original export is saved.";
         LoadHistory();
     });
+    public void CancelSetup() => _setupCancellation?.Cancel();
+    private static string PackageStatus(FirmwarePackage package) => (package.Version == "Not specified" ? "SCEWIN" : "SCEWIN " + package.Version) + " · Ready to load settings";
     private void LoadEditor(FirmwareScript script)
     {
         _reviewHash = null;
@@ -219,6 +247,7 @@ public partial class FirmwareViewModel : ObservableObject
         if (Busy) return;
         Busy = true;
         try { await operation(); }
+        catch (OperationCanceledException) { Message = "Setup cancelled. Load settings when you are ready to try again."; }
         catch (Exception ex) { Message = ex.Message; }
         finally { Busy = false; }
     }

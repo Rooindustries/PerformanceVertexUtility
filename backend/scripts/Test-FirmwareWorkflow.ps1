@@ -14,4 +14,6 @@ try {
     if($LASTEXITCODE -ne 0){throw 'Firmware state checks failed'}
     & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-provider $fixture
     if($LASTEXITCODE -ne 0){throw 'Firmware CLI adapter checks failed'}
+    & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-setup $fixture
+    if($LASTEXITCODE -ne 0){throw 'Firmware automatic setup checks failed'}
 } finally {Remove-Item -LiteralPath $fixture -Recurse -Force}

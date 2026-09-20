@@ -3,6 +3,10 @@ using RooIndustries.Optimizer;
 
 try
 {
+    var firmware = new FirmwareViewModel();
+    if (!firmware.CanLoad || firmware.LoadLabel != "Set up and load settings" || firmware.CanCancelSetup)
+        throw new InvalidOperationException("First-use BIOS setup must be available without a package folder.");
+    Console.WriteLine("PASS First-use BIOS setup is available without a package folder");
     var numeric = new FirmwareSettingRow(new FirmwareQuestion("numeric", "Delay", "", "5", "decimal", 1, [], "", ""));
     numeric.SelectedOption = null;
     if (numeric.Selection != "5" || numeric.Changed) throw new InvalidOperationException("An unused choice editor changed a numeric setting before user input.");
