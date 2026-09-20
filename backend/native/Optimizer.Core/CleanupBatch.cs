@@ -220,6 +220,11 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
         if (journal.Status is not ("prepared" or "running" or "applied" or "stopped" or "needsReconciliation" or "restoring" or "restored" or "partiallyRestored") ||
             journal.Entries.Any(entry => entry.Status is not ("pending" or "applying" or "applied" or "needsReconciliation" or "restoring" or "restored")))
             throw new InvalidDataException("Unknown batch recovery state.");
+        if (!journal.RestoreStarted && journal.Status is ("restoring" or "restored" or "partiallyRestored")
+            || journal.RestoreStarted && journal.Status is ("prepared" or "running" or "applied" or "stopped"))
+            throw new InvalidDataException("Batch recovery phase contradicts its restore state.");
+        if (journal.Status == "restored" && !journal.Entries.Any(entry => entry.Status == "restored"))
+            throw new InvalidDataException("Restored batch state is missing an actual restored entry.");
         if (journal.Status == "partiallyRestored" && (!journal.RestoreStarted || !journal.Entries.Any(entry => entry.Status == "restored")))
             throw new InvalidDataException("Partial recovery state is missing its restoration evidence.");
         return journal;
