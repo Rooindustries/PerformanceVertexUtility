@@ -24,17 +24,32 @@ public partial class WindowsTweakRow : ObservableObject
     public string Id => Definition.Id;
     [ObservableProperty] private string _name;
     public string Category => Definition.Category;
+    public TweakPresentation Presentation { get; }
+    public string SectionId => Presentation.Section;
+    public string Topic => Presentation.Topic ?? Category;
+    public string Icon => "ms-appx:///Assets/Icons/tweak-" + SectionId + ".svg";
+    public bool IsNetwork => SectionId == "network";
     public string Scope => Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "timer-startup") ? "This user" : Definition.Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive switch
     {
         "CurrentUser" => "This user", "Users" => "Sign-in screen", "LocalMachine" => "Entire PC", _ => "This PC",
     };
-    public string Context => Category + " · " + Scope;
-    public string Description => Definition.Description;
+    public string Context => Topic + " · " + Scope;
+    public string Description => Presentation.Description ?? "";
+    public string Help => Presentation.Description ?? Definition.Description;
     public string Sources => string.Join(" · ", Definition.Sources.Select(source => source.Product).Distinct());
     public string Refresh => Definition.Refresh.StartsWith("Policy supports live refresh", StringComparison.OrdinalIgnoreCase) || Definition.Refresh is "reopen affected apps" ? "" : Definition.Refresh switch { "none" => "", "restart" => "Restart Windows after applying", "sign-out" => "Sign out after applying", "explorer-refresh" => "Reopen Explorer after applying", "new-windows-or-sign-out" => "Reopen affected apps or sign out", _ => Definition.Refresh };
     public TweakChoice[] Choices { get; private set; }
     public TweakAlternative[] Alternatives { get; }
-    [ObservableProperty] private TweakChoice _selected;
+    private TweakChoice _selected;
+    public TweakChoice Selected
+    {
+        get => _selected;
+        set
+        {
+            if (value is null || !SetProperty(ref _selected, value)) return;
+            SyncToggle(); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus)); OnPropertyChanged(nameof(HasValuePicker)); OnPropertyChanged(nameof(ShowKeepCurrent));
+        }
+    }
     [ObservableProperty] private string _current = "Not checked";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private bool _available;
@@ -50,12 +65,7 @@ public partial class WindowsTweakRow : ObservableObject
     public string ToggleOnLabel => _selectionToggle && Choices.Length > 2 ? "Use selected value" : _onChoice?.Name ?? "On";
     public string ToggleOffLabel => _offChoice?.Name ?? "Off";
     public bool CanApplySelected => Selected.Id.Length > 0 && Available && _observed?.AvailableChoices?.Contains(Selected.Id) != false;
-    public string ChoiceStatus => Selected.Id.Length == 0 ? "" : CanApplySelected ? "Selected for review" : "Choice selected · requirement pending";
-    partial void OnSelectedChanged(TweakChoice value)
-    {
-        if (value is null) { Selected = Choices[0]; return; }
-        SyncToggle(); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus)); OnPropertyChanged(nameof(HasValuePicker)); OnPropertyChanged(nameof(ShowKeepCurrent));
-    }
+    public string ChoiceStatus => Selected.Id.Length == 0 ? "" : CanApplySelected ? "Selected for review" : "Selected · save for later";
     partial void OnToggleOnChanged(bool value)
     {
         if (!_syncingToggle && HasToggle) Selected = value ? _selectionToggle && Selected.Id.Length > 0 ? Selected : _onChoice! : _offChoice!;
@@ -69,11 +79,11 @@ public partial class WindowsTweakRow : ObservableObject
     [RelayCommand] private void KeepCurrent() => Selected = Choices[0];
     public WindowsTweakRow(TweakDefinition definition, IReadOnlyDictionary<string, TweakDefinition> definitions, Action<string> showSetting)
     {
-        Definition = definition; _name = definition.Name;
+        Definition = definition; Presentation = WindowsTweakPresentation.For(definition); _name = Presentation.Name ?? definition.Name;
         Alternatives = (definition.Alternatives ?? []).Where(definitions.ContainsKey).Select(id => new TweakAlternative(
-            definitions[id].Name + (definitions[id].Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive == "LocalMachine" ? " · Entire PC" : " · This user"),
+            (WindowsTweakPresentation.For(definitions[id]).Name ?? definitions[id].Name) + (definitions[id].Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive == "LocalMachine" ? " · Entire PC" : " · This user"),
             new RelayCommand(() => showSetting(id)))).ToArray();
-        Choices = [new("", "Keep current"), .. definition.Options.Select(option => new TweakChoice(option.Id, option.Name))];
+        Choices = [new("", "Keep current"), .. definition.Options.Select(option => new TweakChoice(option.Id, WindowsTweakPresentation.Choice(definition, option)))];
         _onChoice = Choices.Skip(1).FirstOrDefault(choice => new[] { "On", "Enabled", "Allow", "Allowed", "Show", "Start request", "Use Ultimate Performance", "Block listed hosts", "Add restriction" }.Contains(choice.Name, StringComparer.OrdinalIgnoreCase));
         _offChoice = Choices.Skip(1).FirstOrDefault(choice => new[] { "Off", "Disabled", "Block", "Blocked", "Hide", "Stop request", "Return to previous plan", "Remove this block list", "Remove this restriction" }.Contains(choice.Name, StringComparer.OrdinalIgnoreCase));
         if (Choices.Length > 3 || _onChoice is null || _offChoice is null) { _selectionToggle = true; _onChoice = Choices[1]; _offChoice = Choices[0]; }
@@ -82,18 +92,20 @@ public partial class WindowsTweakRow : ObservableObject
     public void Observe(TweakSettingStatus? status)
     {
         _observed = status;
-        Name = status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } ? serviceName : Definition.Name;
+        Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } ? serviceName : Definition.Name);
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
         Detail = status is null ? "Refresh to read this setting." : status.Controls?.Any(control => control.RestartPending) == true ? "Restart Windows to finish this feature change." : status.Error ?? (status.Supported == false ? "Not available on this Windows build or edition." : "");
         if (Detail.Length == 0) Detail = string.Join("\n", (status?.Controls ?? []).Where(control => control.Address.Kind is "timer" or "download-blocker" or "firewall-profile").Select(control => control.DisplayName).Where(text => !string.IsNullOrWhiteSpace(text)));
         Current = status is null || status.Error is not null ? "Not read"
             : status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null) ? "Not configured"
-            : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Definition.Options.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
+            : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
         else if (Detail.Contains("0x80070002", StringComparison.Ordinal) && Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "scheduled-task")) Detail = "This Windows task is not installed.";
+        else if (IsNetwork && status?.Error is { } error) Detail = error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase)
+            ? "The current adapter does not expose this option. You can save a choice for a compatible adapter." : "Windows could not read this preference. Refresh to try again.";
         SyncToggle(); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus));
     }
 }
@@ -120,14 +132,16 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private string _deferredDetail = "";
     private string? _focusedSetting;
     public ObservableCollection<WindowsTweakRow> Rows { get; } = new();
+    public TweakSection[] Sections { get; } = WindowsTweakPresentation.Sections();
     public ObservableCollection<string> Categories { get; } = new();
     public ObservableCollection<string> Sources { get; } = new();
     public ObservableCollection<WindowsProfileChoice> Profiles { get; } = new();
     public ObservableCollection<TweakChoice> Presets { get; } = new();
     public ObservableCollection<WindowsChangeRow> Changes { get; } = new();
     [ObservableProperty] private bool _showAdvanced = true;
+    [ObservableProperty] private TweakSection? _selectedSection;
     [ObservableProperty] private string _search = "";
-    [ObservableProperty] private string _category = "All categories";
+    [ObservableProperty] private string _category = "All groups";
     [ObservableProperty] private string _source = "All sources";
     [ObservableProperty] private string _profileId = "my-settings";
     [ObservableProperty] private WindowsProfileChoice? _selectedProfile;
@@ -138,6 +152,17 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [ObservableProperty] private string _status = "Loading Windows settings…";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private string _summary = "";
+    public WindowsTweaksViewModel() { _selectedSection = Sections[0]; }
+    public string SectionTitle => SelectedSection?.Name ?? "All tweaks";
+    public string SectionDescription => SelectedSection?.Description ?? "";
+    public string SectionIcon => SelectedSection?.Icon ?? Sections[0].Icon;
+    public bool IsDebloat => SelectedSection?.Id == "debloat";
+    public string VisibleCount => Rows.Count + " settings";
+    partial void OnSelectedSectionChanged(TweakSection? value)
+    {
+        _focusedSetting = null; Search = ""; Category = "All groups"; UpdateTopics(); Filter(); FilterPresets("");
+        foreach (var name in new[] { nameof(SectionTitle), nameof(SectionDescription), nameof(SectionIcon), nameof(IsDebloat) }) OnPropertyChanged(name);
+    }
     public bool CanEdit => !Busy;
     public bool ShowProfileName => !ProfileId.StartsWith("file-permissions-", StringComparison.Ordinal) && !ProfileId.StartsWith("restore-point-", StringComparison.Ordinal);
     public bool CanReview => !Busy && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && (_inspection is not null || _all.Any(row => row.Selected.Id.Length > 0)) && (_all.Any(row => row.Selected.Id.Length > 0) || _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true || _savedChoices?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) == true);
@@ -200,12 +225,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
             {
                 var row = new WindowsTweakRow(definition, definitions, id =>
                 {
-                    Category = "All categories"; Source = "All sources"; ShowAdvanced = true; Search = definitions[id].Name;
+                    SelectedSection = Sections.Single(section => section.Id == WindowsTweakPresentation.For(definitions[id]).Section);
+                    Category = "All groups"; Source = "All sources"; ShowAdvanced = true; Search = WindowsTweakPresentation.For(definitions[id]).Name ?? definitions[id].Name;
                     _focusedSetting = id; Filter();
                 });
                 row.PropertyChanged += RowChanged; _all.Add(row);
             }
             Filter();
+            UpdateSections();
             _savedChoices = await App.Operations.ReadWindowsChoicesAsync();
             _recovery = await App.Operations.ReadWindowsRecoveryAsync();
             OnPropertyChanged(nameof(HasPendingRecovery));
@@ -213,9 +240,9 @@ public partial class WindowsTweaksViewModel : ObservableObject
             _loading = true;
             _inspection = inspection;
             foreach (var row in _all) row.Observe(inspection.Settings.SingleOrDefault(item => item.Id == row.Id));
-            Fill(Categories, "All categories", _all.Select(row => row.Category));
+            UpdateTopics();
             Fill(Sources, "All sources", _all.SelectMany(row => row.Definition.Sources.Select(source => source.Product)));
-            if (!Categories.Contains(Category)) Category = "All categories";
+            if (!Categories.Contains(Category)) Category = "All groups";
             if (!Sources.Contains(Source)) Source = "All sources";
             OnPropertyChanged(nameof(Category)); OnPropertyChanged(nameof(Source));
             Profiles.Clear(); foreach (var profile in inspection.State?.Profiles ?? [])
@@ -249,6 +276,21 @@ public partial class WindowsTweaksViewModel : ObservableObject
         _loading = false; Invalidate(); Notify();
     }
     private void RowChanged(object? sender, PropertyChangedEventArgs args) { if (!_loading && args.PropertyName == nameof(WindowsTweakRow.Selected)) { Invalidate(); Notify(); } }
+    private void UpdateSections()
+    {
+        foreach (var section in Sections)
+        {
+            section.Count = _all.Count(row => section.Id == "all" || row.SectionId == section.Id);
+            section.SelectedCount = _all.Count(row => (section.Id == "all" || row.SectionId == section.Id) && row.Selected.Id.Length > 0);
+        }
+    }
+    private void UpdateTopics()
+    {
+        var selected = Category;
+        Fill(Categories, "All groups", _all.Where(row => SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id).Select(row => row.Topic));
+        Category = Categories.Contains(selected) ? selected : "All groups";
+        OnPropertyChanged(nameof(Category));
+    }
     [RelayCommand]
     private void ClearSelection()
     {
@@ -293,7 +335,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
                 var ids = (_inspection?.State?.Profiles ?? []).Concat(_review.Plan.Profiles).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == change.Before.Id).Select(claim => claim.SettingId).ToArray();
                 var row = _all.FirstOrDefault(item => ids.Contains(item.Id));
                 Changes.Add(new(row?.Name ?? change.Before.Address.ValueName ?? "Setting", DescribeSetting(row?.Definition, change.Before.Value), DescribeSetting(row?.Definition, change.After),
-                    change.Before.Address.Hive + "\\" + change.Before.Address.KeyPath + " · " + change.Before.Address.ValueName));
+                    row?.Scope ?? (change.Before.Address.Hive == "CurrentUser" ? "This user" : "Entire PC")));
             }
             foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change);
             Status = Changes.Count == 0 ? "Selected values already match" : Changes.Count == 1 ? "1 change ready to review" : Changes.Count + " changes ready to review";
@@ -356,6 +398,18 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     private void AddNativeChange(ControlMutation change)
     {
+        var row = _all.FirstOrDefault(item => item.Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address == change.Before.Address));
+        if (row?.IsNetwork == true)
+        {
+            string Label(System.Text.Json.JsonElement value)
+            {
+                if (value.ValueKind == System.Text.Json.JsonValueKind.Null) return "Not configured";
+                var choice = row.Definition.Options.FirstOrDefault(option => (option.Controls ?? []).Any(control => control.Address == change.Before.Address && ControlValues.Equal(change.Before.Expand(control.Value, true), value)));
+                return choice is null ? "Custom preference" : WindowsTweakPresentation.Choice(row.Definition, choice);
+            }
+            Changes.Add(new(row.Name, Label(change.Before.Value), Label(change.After), row.Scope));
+            return;
+        }
         var name = _catalog?.Settings.FirstOrDefault(row => row.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address == change.Before.Address))?.Name ?? change.Before.Address.Target;
         if (change.Before.Address.Kind is "windows-features" or "mitigations")
         {
@@ -401,8 +455,9 @@ public partial class WindowsTweaksViewModel : ObservableObject
             {
                 if (option.Changes is not [var change]) continue;
                 var desired = change.Dword is { } number ? new RegistryValueData(change.Address.ValueName!, 4, BitConverter.GetBytes(number)) : change.Value;
-                if (change.Token is { } token ? TweakTokens.Get(value, token.Name) == token.Value : change.Bits is null && TweakRead.SameValue(value, desired)) return option.Name;
+                if (change.Token is { } token ? TweakTokens.Get(value, token.Name) == token.Value : change.Bits is null && TweakRead.SameValue(value, desired)) return WindowsTweakPresentation.Choice(definition, option);
             }
+            if (WindowsTweakPresentation.For(definition).Section == "network") return "Custom preference";
         }
         return Describe(value);
     }
@@ -410,14 +465,17 @@ public partial class WindowsTweaksViewModel : ObservableObject
         : value.Type is 1 or 2 ? System.Text.Encoding.Unicode.GetString(value.Bytes).TrimEnd('\0') : "Type " + value.Type + " · " + value.Bytes.Length + " bytes";
     public void FilterPresets(string text)
     {
-        Presets.Clear(); foreach (var preset in _presets.Where(preset => preset.Name.Contains(text ?? "", StringComparison.OrdinalIgnoreCase)).Take(50)) Presets.Add(preset);
+        Presets.Clear(); foreach (var preset in _presets.Where(preset => preset.Name.Contains(text ?? "", StringComparison.OrdinalIgnoreCase) &&
+            (SelectedSection?.Id is null or "all" || _catalog!.Presets.Single(item => item.Id == preset.Id).Selections.All(selection => _all.Any(row => row.Id == selection.SettingId && row.SectionId == SelectedSection.Id)))).Take(50)) Presets.Add(preset);
     }
+    public void FindSetting(string query) { SelectedSection = Sections[0]; Search = query; }
     private void Filter()
     {
         Rows.Clear();
-        foreach (var row in _all.Where(row => (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced) && (Category == "All categories" || row.Category == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
-            (string.IsNullOrEmpty(Search) || (row.Name + " " + row.Description + " " + row.Sources).Contains(Search, StringComparison.OrdinalIgnoreCase)))) Rows.Add(row);
-        OnPropertyChanged(nameof(HasRows)); OnPropertyChanged(nameof(ShowEmpty));
+        foreach (var row in _all.Where(row => (SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced) && (Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
+            (string.IsNullOrEmpty(Search) || (row.Name + " " + row.Description + " " + row.Sources).Contains(Search, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(row => row.IsNetwork ? row.Topic switch { "Connection" => 0, "Adapter" => 1, "Local network" => 2, "Wireless" => 3, "Firewall" => 4, "DNS" => 5, _ => 6 } : 0).ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)) Rows.Add(row);
+        OnPropertyChanged(nameof(HasRows)); OnPropertyChanged(nameof(ShowEmpty)); OnPropertyChanged(nameof(VisibleCount));
     }
     public async Task ReviewOwnershipAsync(string path)
     {
@@ -437,6 +495,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void Invalidate() { _revision++; _reviewingRecovery = false; _review = null; _reviewedChoices = null; _restoringChoices = false; _deferredDetail = ""; Approved = false; AcceptedDataLoss = false; Changes.Clear(); Notify(); }
     private void Notify()
     {
+        UpdateSections();
         foreach (var name in new[] { nameof(HasValueChanges), nameof(ShowEmpty), nameof(CanEdit), nameof(ShowProfileName), nameof(CanReview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(HasDataLoss), nameof(DataLossText), nameof(ApplyLabel), nameof(SelectionText) }) OnPropertyChanged(name);
     }
 }

@@ -199,6 +199,20 @@ are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.
 
+The section list separates Gaming, Network, Debloat, Apps, Privacy, Windows,
+Updates, Devices, Security, and Services. All tweaks provides a combined search.
+Selections and reviewed changes survive switching sections. Network opens first
+and describes each preference's purpose, scope and material effects. Registry
+paths and native command details stay in the internal review and recovery data.
+Debloat links to the existing reviewed app-removal flow.
+
+Section membership and network copy are generated without changing executor
+identities or values:
+
+```sh
+python3 tools/catalogs/compile_tweak_presentation.py --check
+```
+
 Remove apps connects Widgets, Copilot, Edge and OneDrive to the existing
 installed-app removal queue. Each remover and subsequent leftover cleanup has
 its own review. The other-account option inventories exact installed AppX
@@ -253,7 +267,7 @@ not the performance benefit or consumer effect of every Windows policy.
 Windows UI state checks use the real view model with an isolated file transaction:
 
 ```powershell
-dotnet run --project tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj -c Release
+dotnet run --project tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj -c Release -- .
 ```
 
 The native fixture modes change system configuration and require approval of their

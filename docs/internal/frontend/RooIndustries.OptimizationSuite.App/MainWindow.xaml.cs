@@ -129,7 +129,7 @@ public sealed partial class MainWindow : Window
     public void FindWindowsSetting(string query)
     {
         SelectNav("windows");
-        if (ContentFrame.Content is WindowsTweaksPage page) page.ViewModel.Search = query;
+        if (ContentFrame.Content is WindowsTweaksPage page) page.ViewModel.FindSetting(query);
     }
     public void ShowProcesses()
     {
