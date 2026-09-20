@@ -571,7 +571,10 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.OperationError = null;
 
     var shaderRollback = Path.Combine(Path.GetTempPath(), "shader-rollback-" + Guid.NewGuid().ToString("N") + ".json");
-    File.WriteAllText(shaderRollback, "{}");
+    var shaderBackup = shaderRollback + ".cache";
+    File.WriteAllText(shaderBackup, "fixture cache bytes");
+    var validShaderBackup = JsonSerializer.Serialize(new { manifestId = "shader-fixture", actionId = "performance.stutterOptimization.restoreShaderCacheFixture", optimizationId = "shader-cache-cleanup", restoreSupported = true, fileBackups = new[] { new { source = shaderRollback + ".original", backupPath = shaderBackup } } });
+    File.WriteAllText(shaderRollback, validShaderBackup);
     try
     {
         App.Live.LastError = null;
@@ -582,6 +585,10 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             status = "success",
             rollback = new { rollbackManifestPath = shaderRollback },
         });
+        File.WriteAllText(shaderRollback, "{}");
+        await monitoring.PrepareShaderCacheCommand.ExecuteAsync(null);
+        Check(!monitoring.ShaderRestoreAvailable, "An empty shader rollback file cannot enable restore");
+        File.WriteAllText(shaderRollback, validShaderBackup);
         await monitoring.PrepareShaderCacheCommand.ExecuteAsync(null);
         Check(monitoring.ShaderRestoreAvailable, "An explicit current shader rollback enables restore");
         App.Live.ShaderRestoreText = null;
@@ -590,7 +597,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         Check(monitoring.ShaderRestoreAvailable && monitoring.StutterActionTitle == "Cache restore not confirmed",
             "A missing shader restore response preserves the current rollback without claiming completion");
     }
-    finally { File.Delete(shaderRollback); }
+    finally { File.Delete(shaderRollback); File.Delete(shaderBackup); }
     }
 
     var appA = AppItem("app-a", "App A");
