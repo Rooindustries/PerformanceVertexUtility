@@ -12,6 +12,10 @@ try {
     [IO.File]::WriteAllText((Join-Path $fixture 'fixture-authority.txt'),'roo-industries-firmware-cli-fixture/v1')
     & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware
     if($LASTEXITCODE -ne 0){throw 'Firmware state checks failed'}
+    & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-verification
+    if($LASTEXITCODE -ne 0){throw 'Firmware verification evidence checks failed'}
+    & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-authority
+    if($LASTEXITCODE -ne 0){throw 'Firmware command authority checks failed'}
     & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-provider $fixture
     if($LASTEXITCODE -ne 0){throw 'Firmware CLI adapter checks failed'}
     & $DotNetPath run --project (Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj') --configuration Release -- --firmware-setup $fixture

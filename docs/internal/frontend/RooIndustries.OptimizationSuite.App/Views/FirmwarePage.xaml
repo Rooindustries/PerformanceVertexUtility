@@ -1,4 +1,24 @@
 <Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:views="using:RooIndustries.OptimizationSuite.Views" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="RooIndustries.OptimizationSuite.Views.FirmwarePage" xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels" xmlns:core="using:RooIndustries.Optimizer">
+    <Page.Resources>
+        <DataTemplate x:Key="FirmwareSettingTemplate" x:DataType="vm:FirmwareSettingRow">
+            <Grid Padding="14,10" ColumnSpacing="14" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="190" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind Help}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" FontSize="12" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" ToolTipService.ToolTip="{x:Bind Help}" />
+                    <TextBlock Text="{x:Bind VerificationStatus, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesAccentBrush}" />
+                    <TextBlock Text="{x:Bind VerificationReason, Mode=OneWay}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" FontSize="12" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{x:Bind Current}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <ComboBox Grid.Column="2" ItemsSource="{x:Bind Options}" DisplayMemberPath="Label" SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" Visibility="{x:Bind IsChoice, Converter={StaticResource BoolToVisibility}}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}" />
+                <TextBox Grid.Column="2" Text="{x:Bind Selection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Header="{x:Bind NumberHint}" Visibility="{x:Bind IsNumeric, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="{x:Bind Name}" />
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
     <Grid Padding="{StaticResource RooIndustriesPageMargin}" RowSpacing="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -63,6 +83,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
@@ -82,27 +103,11 @@
                     <TextBlock Grid.Column="1" Text="Current" Style="{StaticResource PanelLabelTextBlockStyle}" />
                     <TextBlock Grid.Column="2" Text="New value" Style="{StaticResource PanelLabelTextBlockStyle}" />
                 </Grid>
-                <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Settings}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:FirmwareSettingRow">
-                            <Grid Padding="14,10" ColumnSpacing="14" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="190" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind Help}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" FontSize="12" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" ToolTipService.ToolTip="{x:Bind Help}" />
-                                </StackPanel>
-                                <TextBlock Grid.Column="1" Text="{x:Bind Current}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                <ComboBox Grid.Column="2" ItemsSource="{x:Bind Options}" DisplayMemberPath="Label" SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" Visibility="{x:Bind IsChoice, Converter={StaticResource BoolToVisibility}}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}" />
-                                <TextBox Grid.Column="2" Text="{x:Bind Selection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Header="{x:Bind NumberHint}" Visibility="{x:Bind IsNumeric, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="{x:Bind Name}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-                <Grid Grid.Row="3">
+                <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Settings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
+                <Expander Grid.Row="3" Header="{x:Bind ViewModel.TestedUnchangedSummary, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasTestedUnchangedSettings, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <ListView ItemsSource="{x:Bind ViewModel.TestedUnchangedSettings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" MaxHeight="300" />
+                </Expander>
+                <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -148,6 +153,7 @@
                     <Button Content="Verify current settings" Click="Verify" IsEnabled="{x:Bind ViewModel.CanVerify, Mode=OneWay}" AutomationProperties.AutomationId="VerifyFirmware" />
                     <Button Content="Restart now" Click="Restart" IsEnabled="{x:Bind ViewModel.CanRestart, Mode=OneWay}" Visibility="{x:Bind ViewModel.CanRestart, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="RestartAfterFirmware" />
                     <Button Content="Review undo" Click="Undo" IsEnabled="{x:Bind ViewModel.CanVerify, Mode=OneWay}" />
+                    <Button Content="View settings" Click="OpenSettings" IsEnabled="{x:Bind ViewModel.CanVerify, Mode=OneWay}" />
                 </views:AdaptivePanel>
                 <TextBlock Text="After restarting, reopen BIOS settings and select this saved session to verify the result." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
             </StackPanel>
