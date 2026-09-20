@@ -30,6 +30,24 @@ TweakRecovery Pending(Fixture fixture, string phase, bool committed)
     } : null;
     return new(state, new ControlJournal(plan, "pending-hash", 0, phase), "pending-hash");
 }
+TweakCatalog TwoSettingCatalog()
+{
+    TweakDefinition Setting(string id, string name, string valueName) => new(
+        id,
+        name,
+        "Apps",
+        "Fixture",
+        10240,
+        26200,
+        ["*"],
+        "none",
+        [
+            new("on", "On", [new(new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", valueName), 1)]),
+            new("off", "Off", [new(new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", valueName), 0)]),
+        ],
+        [new("Fixture", "fixture", "isolated UI validation")]);
+    return new(1, "two-setting-fixture", [Setting("first", "First setting", "First"), Setting("second", "Second setting", "Second")], []);
+}
 try
 {
     if (args is [var catalogRepo])
@@ -45,6 +63,10 @@ try
     Check(fixture.Choices.Read().Profiles.Single().Selections.Single() == new TweakSelection("setting", "on") && fixture.Windows.ReadState() is null && fixture.Applies == 0,
         "Saving unavailable choices persists intent without creating a Windows backup or running an apply");
     Check(model.Rows[0].Selected.Id == "on" && model.Rows[0].ToggleOn, "Reloading the page retains the saved toggle choice");
+    var savedOnlyPreviews = fixture.Previews;
+    model.ClearSelectionCommand.Execute(null); await model.ReviewCommand.ExecuteAsync(null);
+    Check(!model.CanReview && !model.HasReview && fixture.Previews == savedOnlyPreviews && fixture.Choices.Read().Profiles.Length == 1,
+        "Clearing a saved-only profile cannot route ordinary review into preference removal");
     await model.ReviewRestoreCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
     Check(fixture.Choices.Read().Profiles.Length == 0 && fixture.Applies == 0 && model.Status == "Saved choices removed", "Saved-only restore removes preferences without a Windows restore call");
 
@@ -54,6 +76,10 @@ try
         "A failed Windows apply retains the requested choices and never reports them applied");
     fixture.FailApply = false; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
     Check(fixture.Windows.ReadState()?.Profiles.Length == 1, "The reviewed ready choice reaches the real file-backed transaction");
+    var appliedPreviews = fixture.Previews;
+    model.ClearSelectionCommand.Execute(null); await model.ReviewCommand.ExecuteAsync(null);
+    Check(!model.CanReview && !model.HasReview && fixture.Previews == appliedPreviews && fixture.Windows.ReadState()?.Profiles.Length == 1 && model.CanRestore,
+        "Clearing an applied profile cannot route ordinary review into Windows restore");
     var saved = fixture.Choices.Read(); fixture.FailApply = true;
     await model.ReviewRestoreCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
     Check(fixture.Choices.Read().Revision == saved.Revision && fixture.Windows.ReadState()?.Profiles.Length == 1,
@@ -79,6 +105,9 @@ try
     Check(!model.HasReview && !model.CanApply && fixture.Applies == 0, "Changing selection while a review is loading invalidates the old response");
 
     fixture = new Fixture(Path.Combine(root, "action-review")) { Missing = false }; model = await Load(fixture);
+    var defaultPreviews = fixture.Previews; await model.ReviewCommand.ExecuteAsync(null);
+    Check(!model.CanReview && !model.HasReview && fixture.Previews == defaultPreviews,
+        "An empty default profile has no ordinary review or implicit restore path");
     var actionRow = model.Rows.Single();
     actionRow.ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true;
     Check(model.HasReview && model.CanApply, "A selected action reaches a confirmed review before the stale-action check");
@@ -108,6 +137,31 @@ try
     model.SelectedProfile = model.Profiles.Single(profile => profile.Id == "saved-off");
     Check(model.Rows.Single().Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile loaded" && fixture.Applies == 0,
         "Loading a profile replaces a prior review, approval and ready status without applying settings");
+
+    fixture = new Fixture(Path.Combine(root, "partial-profile"), TwoSettingCatalog()) { Missing = false };
+    model = await Load(fixture);
+    foreach (var row in model.Rows) row.Selected = row.Choices.Single(choice => choice.Id == "on");
+    await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(fixture.Windows.ReadState()?.Profiles.Single().Selections.Length == 2,
+        "The two-setting fixture begins with both applied claims");
+    var first = model.Rows.Single(row => row.Id == "first");
+    var second = model.Rows.Single(row => row.Id == "second");
+    first.Selected = first.Choices.Single(choice => choice.Id == "off");
+    second.ToggleOn = false;
+    await model.ReviewCommand.ExecuteAsync(null);
+    Check(fixture.LastPreviewSelections?.OrderBy(selection => selection.SettingId).SequenceEqual(new[]
+        {
+            new TweakSelection("first", "off"),
+            new TweakSelection("second", "on"),
+        }) == true,
+        "Partial profile review keeps an existing applied claim behind Keep current");
+    model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(fixture.Windows.ReadState()?.Profiles.Single().Selections.OrderBy(selection => selection.SettingId).SequenceEqual(new[]
+        {
+            new TweakSelection("first", "off"),
+            new TweakSelection("second", "on"),
+        }) == true && fixture.Choices.Read().Profiles.Single().Selections.SequenceEqual(new[] { new TweakSelection("first", "off") }),
+        "Applying a partial edit preserves the Windows claim while saved choices keep only explicit intent");
 
     fixture = new Fixture(Path.Combine(root, "pending-recovery")) { Missing = false };
     fixture.Choices.Save(fixture.Catalog, "my-settings", [new("setting", "on")], null);
