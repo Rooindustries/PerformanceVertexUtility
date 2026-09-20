@@ -659,6 +659,16 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 return;
             }
 
+            if ((status == "preview" && (mode != "preview" || !GatesPermit(root, true)))
+                || (status == "success" && (mode != "real" || !GatesPermit(root, false))))
+            {
+                CleanupExecutionState = applied ? "Cleanup result was not confirmed." : "Final check was not confirmed.";
+                CleanupExecutionDetail = "The response contains missing or conflicting completion checks.";
+                FinalCheckPassed = false;
+                SetSelectedRecovery(expectedAppId);
+                return;
+            }
+
             if (status == "cleanup-review-required")
             {
                 CleanupExecutionState = "App removal completed. Leftover cleanup needs a new review.";
@@ -863,12 +873,41 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 && string.Equals(ExtractString(root, "status"), "success", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(ExtractString(root, "rollbackManifestPath"), rollbackPath, StringComparison.Ordinal)
                 && TryExtractBool(root, out var dryRun, "dryRun")
-                && !dryRun;
+                && !dryRun
+                && GatesPermit(root, false)
+                && ExtractString(root, "executionMode") is ("real-system-restore" or "disposable-fixture-restore")
+                && root.TryGetProperty("restoredItems", out var restored) && restored.ValueKind == JsonValueKind.Array
+                && restored.GetArrayLength() == ExtractInt(root, "summary", "restoredCount")
+                && restored.EnumerateArray().All(item => ExtractBool(item, "restored"));
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool GatesPermit(JsonElement root, bool preview)
+    {
+        if (!root.TryGetProperty("gates", out var gates) || gates.ValueKind != JsonValueKind.Array || gates.GetArrayLength() == 0
+            || !root.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array
+            || errors.EnumerateArray().Any(issue => !TryExtractBool(issue, out var blocking, "blocking") || blocking)
+            || !root.TryGetProperty("summary", out var summary) || !summary.TryGetProperty("blockingGateCount", out var count)
+            || !count.TryGetInt32(out var reported)) return false;
+        var actual = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var gate in gates.EnumerateArray())
+        {
+            var id = ExtractString(gate, "gateId");
+            if (string.IsNullOrWhiteSpace(id) || !ids.Add(id)
+                || !TryExtractBool(gate, out var required, "required")
+                || !TryExtractBool(gate, out var satisfied, "satisfied")
+                || !TryExtractBool(gate, out var blocking, "blocking")
+                || blocking != (required && !satisfied)) return false;
+            if (!blocking) continue;
+            actual++;
+            if (!preview || id is not ("confirm-apply" or "real-mode-selected" or "explicit-user-approval" or "real-system-flag")) return false;
+        }
+        return actual == reported;
     }
 
     private static bool HasVendorRemover(InstalledApp app)

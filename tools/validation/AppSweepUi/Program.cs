@@ -682,11 +682,22 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         dryRun = true,
         status = "preview",
         executionMode = "preview",
-        summary = new { approvalReady = true, cleanupItemCount = 0 },
+        gates = new[] { new { gateId = "confirm-apply", required = true, satisfied = false, blocking = true }, new { gateId = "review-inputs", required = true, satisfied = true, blocking = false } },
+        errors = Array.Empty<object>(),
+        summary = new { approvalReady = true, cleanupItemCount = 0, blockingGateCount = 1 },
     }));
     App.Live.LastError = null;
     await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
     Check(cleanup.FinalCheckPassed, "An identity-bound dry-run final check can approve the reviewed cleanup");
+    var validFinalResponse = App.Live.CleanupApply;
+    App.Live.CleanupApply = async (id, a, b, c) => (await validFinalResponse(id, a, b, c))!.Replace("confirm-apply", "backup-path", StringComparison.Ordinal);
+    await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
+    Check(!cleanup.FinalCheckPassed, "Favorable approval summary cannot override a blocking backup gate");
+    App.Live.CleanupApply = async (id, a, b, c) => (await validFinalResponse(id, a, b, c))!.Replace("\"blockingGateCount\":1", "\"blockingGateCount\":0", StringComparison.Ordinal);
+    await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
+    Check(!cleanup.FinalCheckPassed, "Conflicting gate totals cannot approve cleanup");
+    App.Live.CleanupApply = validFinalResponse;
+
     }
 
     var routeA = new TaskCompletionSource<OfficialUninstallPreview?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -787,7 +798,11 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             dryRun = false,
             status = "success",
             rollbackManifestPath = rollback,
-            summary = new { restoredCount = 1 },
+            executionMode = "real-system-restore",
+            gates = new[] { new { gateId = "backup-files-present", required = true, satisfied = true, blocking = false } },
+            errors = Array.Empty<object>(),
+            restoredItems = new[] { new { itemId = "current-a", restored = true } },
+            summary = new { restoredCount = 1, blockingGateCount = 0 },
         }));
         await oldRestore;
         Check(cleanup.SelectedApp == appB && !cleanup.CleanupExecutionState.StartsWith("Restore complete", StringComparison.Ordinal),
