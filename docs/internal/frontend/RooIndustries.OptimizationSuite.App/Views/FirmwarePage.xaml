@@ -110,7 +110,7 @@
                 <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Settings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
                 <Expander Grid.Row="3" Header="{x:Bind ViewModel.ExperimentalSummary, Mode=OneWay}" IsExpanded="False" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasExperimentalSettings, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="FirmwareExperimental">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="These settings did not change when they were tested, or SCEWIN cannot write them on this motherboard. They are kept out of the main list." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="These settings were refused, did not change, change other settings as a side effect, or were too risky to test. They are kept out of the main list." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         <CheckBox Content="Let me try these anyway" IsChecked="{x:Bind ViewModel.AllowExperimentalEdits, Mode=TwoWay}" AutomationProperties.AutomationId="FirmwareExperimentalOptIn" />
                         <ListView MaxHeight="320" ItemsSource="{x:Bind ViewModel.ExperimentalSettings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" />
                     </StackPanel>
