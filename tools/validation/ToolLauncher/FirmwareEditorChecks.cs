@@ -100,20 +100,34 @@ public static class FirmwareEditorChecks
         var writeTests = Path.Combine(Path.GetTempPath(), "roo-industries-write-tests-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
-            File.WriteAllText(writeTests, "{\"schemaVersion\":1,\"boards\":[{\"board\":\"board\",\"bios\":\"bios\",\"crc\":\"A1B2C3D4\",\"tested\":3,\"notApplied\":{\"locked\":\"protected\",\"kept\":\"unchanged\"}}]}");
+            File.WriteAllText(writeTests, """
+                {"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":5,"experimental":{
+                  "locked":{"name":"Locked mode","outcome":"protected"},
+                  "kept":{"name":"Kept mode","outcome":"unchanged"},
+                  "linked":{"name":"Linked mode","outcome":"side-effects","affects":["Gear Mode","Memory Ref Clock"],"affectedCount":22},
+                  "fuse":{"name":"Fuse mode","outcome":"risky"},
+                  "refused":{"name":"Refused mode","outcome":"rejected"}}}]}
+                """);
             var catalog = FirmwareWriteTests.Read(writeTests);
             var identity = new FirmwareIdentity("pc", "board", "bios", "boot");
-            var locked = new FirmwareSettingRow(question with { Id = "locked" }); var kept = new FirmwareSettingRow(question with { Id = "kept" }); var fine = new FirmwareSettingRow(question with { Id = "fine" });
-            FirmwareViewModel.ApplyWriteTests([locked, kept, fine], catalog.Find(identity));
+            FirmwareSettingRow Named(string id, string name) => new(question with { Id = id, Name = name });
+            var locked = Named("locked", "Locked mode"); var kept = Named("kept", "Kept mode"); var linked = Named("linked", "Linked mode"); var fuse = Named("fuse", "Fuse mode"); var fine = Named("fine", "Fine mode");
+            FirmwareViewModel.ApplyWriteTests([locked, kept, linked, fuse, fine], catalog.For(identity));
             check(locked.IsExperimental && locked.VerificationReason.Contains("BIOS password", StringComparison.Ordinal) && kept.IsExperimental && kept.VerificationStatus == "Did not change" && !fine.IsExperimental,
                 "Shipped write test results move only the listed settings of the matching motherboard into Experimental");
-            var other = new FirmwareSettingRow(question with { Id = "locked" });
-            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Bios = "newer bios" }));
-            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Board = "other board" }));
-            var moved = new FirmwareSettingRow(question with { Id = "locked-after-layout-change" });
-            FirmwareViewModel.ApplyWriteTests([moved], catalog.Find(identity));
-            check(!other.IsExperimental && !moved.IsExperimental, "Write test results for another motherboard, BIOS version or setting identity are ignored");
-            File.WriteAllText(writeTests, "{\"schemaVersion\":1,\"boards\":[{\"board\":\"board\",\"bios\":\"bios\",\"crc\":\"A1B2C3D4\",\"tested\":1,\"notApplied\":{\"locked\":\"stored\"}}]}");
+            check(linked.IsExperimental && linked.VerificationStatus == "Changes other settings" && linked.VerificationReason.Contains("22 other settings", StringComparison.Ordinal) && linked.VerificationReason.Contains("Gear Mode", StringComparison.Ordinal)
+                && fuse.IsExperimental && fuse.VerificationStatus == "Too risky to test",
+                "Settings that change other settings say so and name them, and settings too risky to test are experimental");
+            var sameBoardOtherId = Named("other-id", "Locked mode");
+            FirmwareViewModel.ApplyWriteTests([sameBoardOtherId], catalog.For(identity));
+            check(!sameBoardOtherId.IsExperimental, "On a tested motherboard only exact setting identities count, not names");
+            var untestedBoard = identity with { Board = "other board", Bios = "other bios" };
+            var byNameLinked = Named("x1", "linked MODE"); var byNameRefused = Named("x2", "Refused mode"); var byNameFuse = Named("x3", "Fuse mode"); var byNameKept = Named("x4", "Kept mode"); var byNameLocked = Named("x5", "Locked mode"); var byNameFine = Named("x6", "Fine mode");
+            FirmwareViewModel.ApplyWriteTests([byNameLinked, byNameRefused, byNameFuse, byNameKept, byNameLocked, byNameFine], catalog.For(untestedBoard));
+            check(byNameLinked.IsExperimental && byNameRefused.IsExperimental && byNameFuse.IsExperimental && byNameKept.IsExperimental && byNameRefused.VerificationReason.Contains("has not been tested", StringComparison.Ordinal),
+                "An untested motherboard falls back to the tested boards' results by setting name and says so");
+            check(!byNameLocked.IsExperimental && !byNameFine.IsExperimental, "A tested board's password lock and its working settings do not carry over to another motherboard");
+            File.WriteAllText(writeTests, """{"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":1,"experimental":{"locked":{"name":"Locked mode","outcome":"stored"}}}]}""");
             var invalid = false; try { FirmwareWriteTests.Read(writeTests); } catch (InvalidDataException) { invalid = true; }
             check(invalid, "A write test catalog with an unknown outcome is rejected");
         }
