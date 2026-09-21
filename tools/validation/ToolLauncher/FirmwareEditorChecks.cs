@@ -104,13 +104,15 @@ public static class FirmwareEditorChecks
             var catalog = FirmwareWriteTests.Read(writeTests);
             var identity = new FirmwareIdentity("pc", "board", "bios", "boot");
             var locked = new FirmwareSettingRow(question with { Id = "locked" }); var kept = new FirmwareSettingRow(question with { Id = "kept" }); var fine = new FirmwareSettingRow(question with { Id = "fine" });
-            FirmwareViewModel.ApplyWriteTests([locked, kept, fine], catalog.Find(identity, "a1b2c3d4"));
+            FirmwareViewModel.ApplyWriteTests([locked, kept, fine], catalog.Find(identity));
             check(locked.IsExperimental && locked.VerificationReason.Contains("BIOS password", StringComparison.Ordinal) && kept.IsExperimental && kept.VerificationStatus == "Did not change" && !fine.IsExperimental,
                 "Shipped write test results move only the listed settings of the matching motherboard into Experimental");
             var other = new FirmwareSettingRow(question with { Id = "locked" });
-            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Bios = "newer bios" }, "A1B2C3D4"));
-            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity, "FFFFFFFF"));
-            check(!other.IsExperimental, "Write test results for another BIOS version or setup layout are ignored");
+            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Bios = "newer bios" }));
+            FirmwareViewModel.ApplyWriteTests([other], catalog.Find(identity with { Board = "other board" }));
+            var moved = new FirmwareSettingRow(question with { Id = "locked-after-layout-change" });
+            FirmwareViewModel.ApplyWriteTests([moved], catalog.Find(identity));
+            check(!other.IsExperimental && !moved.IsExperimental, "Write test results for another motherboard, BIOS version or setting identity are ignored");
             File.WriteAllText(writeTests, "{\"schemaVersion\":1,\"boards\":[{\"board\":\"board\",\"bios\":\"bios\",\"crc\":\"A1B2C3D4\",\"tested\":1,\"notApplied\":{\"locked\":\"stored\"}}]}");
             var invalid = false; try { FirmwareWriteTests.Read(writeTests); } catch (InvalidDataException) { invalid = true; }
             check(invalid, "A write test catalog with an unknown outcome is rejected");

@@ -24,6 +24,5 @@ public sealed record FirmwareWriteTests([property: JsonRequired] int SchemaVersi
                 throw new InvalidDataException("The BIOS write test results are invalid.");
         return tests;
     }
-    public FirmwareWriteTestBoard? Find(FirmwareIdentity identity, string crc) => Boards.FirstOrDefault(board =>
-        board.Board == identity.Board && board.Bios == identity.Bios && string.Equals(board.Crc, crc, StringComparison.OrdinalIgnoreCase));
+    public FirmwareWriteTestBoard? Find(FirmwareIdentity identity) => Boards.FirstOrDefault(board => board.Board == identity.Board && board.Bios == identity.Bios);
 }
