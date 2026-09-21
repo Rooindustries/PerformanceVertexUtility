@@ -201,7 +201,7 @@ public partial class FirmwareViewModel : ObservableObject
         {
             if (WriteTestsPath is null || sessionDirectory is null || !File.Exists(WriteTestsPath)) return null;
             var session = OperationFiles.Read<FirmwareSession>(Path.Combine(sessionDirectory, "session.json"));
-            return FirmwareWriteTests.Read(WriteTestsPath).Find(session.Identity, script.Crc);
+            return FirmwareWriteTests.Read(WriteTestsPath).Find(session.Identity);
         }
         catch (Exception error) when (error is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException) { return null; }
     }
