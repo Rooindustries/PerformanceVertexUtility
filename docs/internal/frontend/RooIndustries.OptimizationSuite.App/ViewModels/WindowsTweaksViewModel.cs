@@ -245,6 +245,16 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private string _summary = "";
     public WindowsTweaksViewModel() { _selectedSection = Sections[0]; }
+    public const string FpsPresetId = "fps-boost";
+    public bool HasFpsPreset => !Busy && !HasPendingRecovery && _catalog?.Presets.Any(preset => preset.Id == FpsPresetId) == true;
+    [RelayCommand]
+    private void SelectFpsPreset()
+    {
+        if (!HasFpsPreset) return;
+        SelectedSection = Sections[0];
+        SelectedPreset = null;
+        SelectedPreset = new(FpsPresetId, _catalog!.Presets.Single(preset => preset.Id == FpsPresetId).Name);
+    }
     public string SectionTitle => SelectedSection?.Name ?? "All tweaks";
     public string SectionDescription => SelectedSection?.Description ?? "";
     public string SectionIcon => SelectedSection?.Icon ?? Sections[0].Icon;
@@ -609,7 +619,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void Notify()
     {
         UpdateSections();
-        foreach (var name in new[] { nameof(HasValueChanges), nameof(ShowEmpty), nameof(CanRefresh), nameof(CanEdit), nameof(CanReviewRecovery), nameof(CanApproveReview), nameof(ShowProfileName), nameof(CanReview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(HasDataLoss), nameof(DataLossText), nameof(ApplyLabel), nameof(SelectionText) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasValueChanges), nameof(HasFpsPreset), nameof(ShowEmpty), nameof(CanRefresh), nameof(CanEdit), nameof(CanReviewRecovery), nameof(CanApproveReview), nameof(ShowProfileName), nameof(CanReview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(HasDataLoss), nameof(DataLossText), nameof(ApplyLabel), nameof(SelectionText) }) OnPropertyChanged(name);
     }
 
     private void SetLoadedStatus(TweakInspection inspection)

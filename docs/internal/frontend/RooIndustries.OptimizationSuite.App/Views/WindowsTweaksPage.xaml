@@ -162,8 +162,9 @@
             <StackPanel Spacing="8">
                 <views:AdaptivePanel MinColumnWidth="380" MaxColumns="2">
                     <StackPanel Spacing="3"><TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="WindowsTweaksStatus"/><TextBlock Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="WindowsTweaksDetail"/></StackPanel>
-                    <views:AdaptivePanel MinColumnWidth="130" MaxColumns="4" VerticalAlignment="Center">
+                    <views:AdaptivePanel MinColumnWidth="130" MaxColumns="5" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesAccentBrush}"/>
+                        <Button Content="Game FPS preset" Command="{x:Bind ViewModel.SelectFpsPresetCommand}" Visibility="{x:Bind ViewModel.HasFpsPreset, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ToolTipService.ToolTip="Pick every tweak that raised FPS in our Counter-Strike 2 tests. Nothing changes until you check and apply." AutomationProperties.AutomationId="WindowsTweaksFpsPreset"/>
                         <Button Content="Undo picks" Command="{x:Bind ViewModel.ClearSelectionCommand}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"/>
                         <Button Command="{x:Bind ViewModel.ReviewCommand}" IsEnabled="{x:Bind ViewModel.CanReview, Mode=OneWay}" AutomationProperties.AutomationId="WindowsTweaksPreview"><TextBlock Text="1. Check"/></Button>
                         <Button Command="{x:Bind ViewModel.ApplyCommand}" IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" Style="{StaticResource NavCtaButtonStyle}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" AutomationProperties.AutomationId="WindowsTweaksApply"><TextBlock Text="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}" TextWrapping="Wrap"/></Button>
