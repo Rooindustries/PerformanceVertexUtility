@@ -148,6 +148,18 @@ try
     Check(model.Rows.Single().Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile loaded" && fixture.Applies == 0,
         "Loading a profile replaces a prior review, approval and ready status without applying settings");
 
+    fixture = new Fixture(Path.Combine(root, "no-fps-preset")) { Missing = false }; model = await Load(fixture);
+    model.SelectFpsPresetCommand.Execute(null);
+    Check(!model.HasFpsPreset && model.Rows.All(row => row.Selected.Id.Length == 0), "Without an FPS preset in the catalog the preset button is hidden and does nothing");
+    var fpsCatalog = TwoSettingCatalog() with { Presets = [new(WindowsTweaksViewModel.FpsPresetId, "Game FPS preset", [new("first", "on"), new("second", "off")])] };
+    fixture = new Fixture(Path.Combine(root, "fps-preset"), fpsCatalog) { Missing = false }; model = await Load(fixture);
+    Check(model.HasFpsPreset && model.Rows.All(row => row.Selected.Id.Length == 0) && fixture.Applies == 0, "A catalog with an FPS preset offers the preset button without selecting anything");
+    model.SelectFpsPresetCommand.Execute(null);
+    Check(model.Rows.Single(row => row.Id == "first").Selected.Id == "on" && model.Rows.Single(row => row.Id == "second").Selected.Id == "off" && !model.HasReview && !model.CanApply && fixture.Applies == 0 && fixture.Previews == 0,
+        "The FPS preset queues its tweaks for review and applies nothing on its own");
+    await model.ReviewCommand.ExecuteAsync(null);
+    Check(model.HasReview && !model.CanApply && fixture.Applies == 0, "The preset still needs the normal check and confirmation before anything is applied");
+
     fixture = new Fixture(Path.Combine(root, "partial-profile"), TwoSettingCatalog()) { Missing = false };
     model = await Load(fixture);
     foreach (var row in model.Rows) row.Selected = row.Choices.Single(choice => choice.Id == "on");
