@@ -50,6 +50,18 @@ def check(root):
         failures.append('Linked effects and additional source features must remain in the coverage inventory.')
     settings_by_id = {item['id']: item for item in settings}
     preset_ids = {item['id'] for item in catalog['presets']}
+    fps_source = root / 'backend/catalogs/fps-preset.json'
+    fps = next((item for item in catalog['presets'] if item['id'] == 'fps-boost'), None)
+    if fps_source.exists() != (fps is not None):
+        failures.append('The fps-boost preset must exist exactly when backend/catalogs/fps-preset.json does.')
+    if fps is not None:
+        measured = json.loads(fps_source.read_text())['selections']
+        if [(item['settingId'], item['optionId']) for item in measured] != [(item['settingId'], item['optionId']) for item in fps['selections']]:
+            failures.append('The fps-boost preset must list exactly the measured winners.')
+        for item in measured:
+            option_ids = {option['id'] for option in settings_by_id.get(item['settingId'], {}).get('options', [])}
+            if item['optionId'] not in option_ids or not item.get('evidence'):
+                failures.append('An FPS preset choice needs a real catalog option and benchmark evidence: ' + item['settingId'])
     for feature in coverage['features']:
         if feature['status'] == 'shared-settings' and (not feature.get('settings') or any(identifier not in settings_by_id for identifier in feature['settings'])):
             failures.append('A shared source feature must reference real setting resources: ' + feature['id'])

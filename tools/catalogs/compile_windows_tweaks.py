@@ -615,6 +615,17 @@ def compile_catalog():
     apply_labels(settings)
     apply_availability(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
+    fps = ROOT / 'backend/catalogs/fps-preset.json'
+    if fps.exists():
+        source = json.loads(fps.read_text())
+        choices = {setting['id']: {option['id'] for option in setting['options']} for setting in settings}
+        selections = [{'settingId': item['settingId'], 'optionId': item['optionId']} for item in source['selections']]
+        if len({item['settingId'] for item in selections}) != len(selections):
+            raise ValueError('The FPS preset selects one setting more than once')
+        for item in selections:
+            if item['optionId'] not in choices.get(item['settingId'], ()):
+                raise ValueError('The FPS preset names a setting or choice that is not in the catalog: ' + item['settingId'])
+        catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections})
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 
 

@@ -64,6 +64,16 @@ try
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
         ActionChecks.Run(catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
+        if (catalog.Presets.SingleOrDefault(preset => preset.Id == WindowsTweaksViewModel.FpsPresetId) is { } fpsPreset)
+        {
+            var shipped = new Fixture(Path.Combine(root, "shipped-fps-preset"), catalog) { Missing = false };
+            var shippedModel = await Load(shipped);
+            Check(shippedModel.HasFpsPreset, "The shipped catalog's FPS preset shows the preset button");
+            shippedModel.SelectFpsPresetCommand.Execute(null);
+            var queued = shippedModel.Rows.Where(row => row.Selected.Id.Length > 0).Select(row => (row.Id, row.Selected.Id)).OrderBy(item => item.Item1).ToArray();
+            var expected = fpsPreset.Selections.Select(item => (item.SettingId, item.OptionId)).OrderBy(item => item.Item1).ToArray();
+            Check(queued.SequenceEqual(expected) && shipped.Applies == 0, "The shipped FPS preset queues exactly its measured tweaks and applies nothing");
+        }
     }
     var fixture = new Fixture(Path.Combine(root, "missing")); var model = await Load(fixture);
     Check(model.Rows.Count == 1 && model.Rows[0].HasToggle && model.Rows[0].Choices.Length == 3, "Missing products retain every choice and an interactive toggle");
