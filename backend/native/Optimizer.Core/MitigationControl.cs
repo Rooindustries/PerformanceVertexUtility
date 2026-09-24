@@ -22,6 +22,13 @@ public static class MitigationControl
         new("FontDisable.Audit", 48, "FontDisable.OverrideFontDisable", true, HasOption: true),
         new("ImageLoad.BlockRemoteImageLoads", 52, "ImageLoad.OverrideBlockRemoteImageLoads"), new("ImageLoad.AuditRemoteImageLoads", 52, "ImageLoad.OverrideBlockRemoteImageLoads", true),
     ];
+    public static string[] Linked(IEnumerable<string> names)
+    {
+        var units = names.SelectMany(Units).ToHashSet(StringComparer.Ordinal);
+        return Fields.SelectMany(field => new[] { field.Name, field.Override }).Distinct().Where(name => Units(name).Any(units.Contains)).ToArray();
+    }
+    public static string[] Units(string name) => Fields.Where(field => field.Name == name).Select(field => ValueName(field) + ":" + field.Bit)
+        .Concat(Fields.Where(field => field.Override == name).Select(field => "override:" + field.Bit)).DefaultIfEmpty(name).Distinct().ToArray();
     private static RegistryAddress Address(string name) => new("LocalMachine", "Registry64", Kernel, "value", name);
     private static string ValueName(Field field) => field.Audit ? Names[1] : Names[0];
     private static int Slot(RegistryValueData? value, int bit) => value is null || value.Bytes.Length <= bit / 8 ? 0 : value.Bytes[bit / 8] >> (bit % 8) & 15;

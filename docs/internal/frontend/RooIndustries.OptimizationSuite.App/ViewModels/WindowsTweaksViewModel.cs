@@ -466,6 +466,11 @@ public partial class WindowsTweaksViewModel : ObservableObject
             Status = Changes.Count == 0 ? "Selected values already match" : Changes.Count == 1 ? "1 change ready to review" : Changes.Count + " changes ready to review";
             Detail = restore ? "Shared settings stay active while another profile needs them." : Changes.Count == 0 ? "Save this profile to keep track of these choices." : "Review these values and confirm before applying.";
             if (deferred.Length > 0) Detail += "\n" + deferred.Length + " choices will be saved with requirements pending:\n" + _deferredDetail;
+            if (_review.Plan.LeftAsChanged.Length > 0)
+            {
+                if (Changes.Count == 0) Status = "Windows already changed these settings";
+                Detail += "\nWindows or another app changed or removed these, or they could not be read, so they stay as they are now:\n" + string.Join("\n", _review.Plan.LeftAsChanged.Select(id => _all.FirstOrDefault(row => row.Id == id)?.Name ?? id).Distinct());
+            }
         }
         catch (Exception error) { Invalidate(); Status = "Couldn't prepare these changes."; Detail = error.Message; }
         finally { Busy = false; }

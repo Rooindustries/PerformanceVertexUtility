@@ -125,8 +125,59 @@ try
     Check(Dword(store, extension) == 7 && store.ReadState() is null, "Review rejection preserves the intervening external value");
     Apply(engine, "one", Show());
     Put("drift", extension, new("HideFileExt", 4, BitConverter.GetBytes(9u)));
-    Reject(() => engine.Preview("one", []), "Restore detects external drift instead of overwriting it");
-    Check(Dword(store, extension) == 9 && store.ReadState()!.Profiles.Length == 1, "Drift retains recovery ownership for later reconciliation");
+    var released = Preview(engine, "one", []);
+    Check(released.Plan.Changes.Length == 0 && released.Plan.LeftAsChanged.SequenceEqual(new[] { "explorer.file-extensions" }), "Restore reports a setting changed outside Roo Industries instead of overwriting it");
+    engine.Apply(released.Path, released.Hash);
+    Check(Dword(store, extension) == 9 && store.ReadState()!.Profiles.Length == 0 && store.ReadState()!.Held.Length == 0, "Restore leaves the outside value and releases the profile instead of blocking it forever");
+
+    void Drop(string name, RegistryAddress address)
+    {
+        var fixture = Fixture(name);
+        fixture.Keys.Remove(("\\REGISTRY\\USER\\" + fixture.Context.Owner.UserSid + "\\" + address.KeyPath).ToUpperInvariant());
+        OperationFiles.Write(Path.Combine(root, name + ".json"), fixture);
+    }
+    store = Fresh("windows-removed"); engine = new(catalog, store);
+    Apply(engine, "one", Show()); Apply(engine, "other", [new("explorer.hidden-files", "show")]);
+    Drop("windows-removed", extension);
+    writes = Fixture("windows-removed").Writes;
+    var removed = Preview(engine, "one", []);
+    Check(removed.Plan.Changes.Length == 0 && removed.Plan.LeftAsChanged.Length == 0, "Restore treats a key Windows deleted back to its original absence as already restored");
+    engine.Apply(removed.Path, removed.Hash);
+    Check(!store.Read(extension).KeyExists && store.ReadState()!.Profiles.Single().Id == "other" && Fixture("windows-removed").Writes == writes, "Restoring after Windows removed the key writes nothing and releases only that profile");
+
+    store = Fresh("windows-reset"); engine = new(catalog, store);
+    Put("windows-reset", extension, new("HideFileExt", 4, BitConverter.GetBytes(1u)));
+    Apply(engine, "one", Show()); Apply(engine, "same", Show());
+    Put("windows-reset", extension, new("HideFileExt", 4, BitConverter.GetBytes(1u)));
+    writes = Fixture("windows-reset").Writes;
+    Apply(engine, "one", []);
+    Check(Dword(store, extension) == 1 && store.ReadState()!.Profiles.Single().Id == "same" && Fixture("windows-reset").Writes == writes, "Restoring one owner of a setting Windows reset writes nothing and keeps the other owner");
+    var sameRestore = Preview(engine, "same", []);
+    Check(sameRestore.Plan.Changes.Length == 0 && sameRestore.Plan.LeftAsChanged.Length == 0, "A setting Windows put back to its original is not reported as changed");
+    engine.Apply(sameRestore.Path, sameRestore.Hash);
+    Check(Dword(store, extension) == 1 && store.ReadState()!.Profiles.Length == 0 && Fixture("windows-reset").Writes == writes, "The last owner of a setting Windows reset releases it without writing");
+
+    store = Fresh("shared-drift"); engine = new(catalog, store);
+    Apply(engine, "one", Show()); Apply(engine, "two", Show());
+    Put("shared-drift", extension, new("HideFileExt", 4, BitConverter.GetBytes(9u)));
+    var firstShared = Preview(engine, "one", []);
+    Check(firstShared.Plan.Changes.Length == 0 && firstShared.Plan.LeftAsChanged.SequenceEqual(new[] { "explorer.file-extensions" }), "Two owners of a drifted setting do not block each other's restore");
+    engine.Apply(firstShared.Path, firstShared.Hash);
+    Apply(engine, "two", []);
+    Check(Dword(store, extension) == 9 && store.ReadState()!.Profiles.Length == 0 && store.ReadState()!.Held.Length == 0, "Both owners of a drifted setting can be restored and the outside value stays");
+
+    store = Fresh("reapply"); engine = new(catalog, store);
+    Apply(engine, "one", Show());
+    Put("reapply", extension, new("HideFileExt", 4, BitConverter.GetBytes(9u)));
+    var again = Preview(engine, "one", Show());
+    Check(again.Plan.Changes.Length == 1 && again.Plan.LeftAsChanged.Length == 0, "Re-applying a setting Windows changed shows the write in the review");
+    engine.Apply(again.Path, again.Hash);
+    Check(Dword(store, extension) == 0, "Re-applying a setting Windows changed writes the chosen value again");
+    Put("reapply", extension, new("HideFileExt", 4, BitConverter.GetBytes(9u)));
+    Apply(engine, "one", [new("explorer.file-extensions", "hide")]);
+    Check(Dword(store, extension) == 1, "Switching a setting Windows changed to another choice writes that choice");
+    Apply(engine, "one", []);
+    Check(!store.Read(extension).KeyExists && store.ReadState()!.Profiles.Length == 0, "Restore after re-applying returns the true original");
 
     store = Fresh("independent"); engine = new(catalog, store);
     Apply(engine, "a", Show()); Apply(engine, "b", [new("explorer.hidden-files", "show")]);

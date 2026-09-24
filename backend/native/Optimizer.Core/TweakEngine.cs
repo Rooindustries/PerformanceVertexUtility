@@ -122,24 +122,39 @@ public sealed class TweakEngine
         var held = (state?.Held ?? []).ToDictionary(item => item.Original.Id, StringComparer.Ordinal);
         var next = new List<TweakHeldValue>();
         var changes = new List<TweakMutation>();
+        var left = new List<string>();
         foreach (var id in held.Keys.Concat(wanted.Keys).Distinct().Order(StringComparer.Ordinal))
         {
             held.TryGetValue(id, out var original);
             wanted.TryGetValue(id, out var desired);
             if (!affected.Contains(id)) { next.Add(original!); continue; }
-            var observed = Capture((desired?.First().Target ?? original!.Original).Address);
-            if (observed.Id != id) throw new InvalidDataException("A registry target now resolves to a different resource.");
             var oldClaims = (state?.Profiles ?? []).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == id).ToArray();
-            var after = TweakComposition.Resolve(observed, original, oldClaims, desired ?? []);
+            var asks = (desired ?? []).Any(claim => !oldClaims.Any(old => ReferenceEquals(old, claim)));
+            TweakRead observed; TweakResolution after;
+            try
+            {
+                observed = Capture((desired?.First().Target ?? original!.Original).Address);
+                if (observed.Id != id) throw new InvalidDataException("A registry target now resolves to a different resource.");
+                after = TweakComposition.Resolve(observed, original, oldClaims, desired ?? []);
+            }
+            catch (Exception error) when (!asks && original is not null && error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException))
+            {
+                left.AddRange(oldClaims.Where(claim => desired?.Any(kept => ReferenceEquals(kept, claim)) != true).Select(claim => claim.SettingId));
+                if (desired is not null) next.Add(original);
+                continue;
+            }
+            left.AddRange(after.LeftAsChanged ?? []);
             if (!TweakRead.SameValue(observed.Value, after.Value)) changes.Add(new(observed, after.Value));
-            if (desired is not null) next.Add(new(original?.Original ?? observed, after.Value, after.RestoreValue, after.Composed));
+            if (desired is not null) next.Add(new(original?.Original ?? observed, after.Applied ?? after.Value, after.RestoreValue, after.Composed));
         }
+        var controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, _store.ReadControl);
         return new()
         {
             SchemaVersion = 1, OperationId = operationId, CreatedAtUtc = created, Context = _store.Context, CatalogHash = _catalog.Digest,
             BeforeRevision = state?.Revision, AfterRevision = revision, ProfileId = profileId, Selections = selections,
             Expected = reads.Values.OrderBy(read => read.Id, StringComparer.Ordinal).ToArray(), Changes = changes.ToArray(),
-            Profiles = profiles.OrderBy(profile => profile.Id, StringComparer.Ordinal).ToArray(), Held = next.ToArray(), Controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, _store.ReadControl),
+            Profiles = profiles.OrderBy(profile => profile.Id, StringComparer.Ordinal).ToArray(), Held = next.ToArray(), Controls = controls,
+            LeftAsChanged = left.Concat(controls.LeftAsChanged ?? []).Distinct().Order(StringComparer.Ordinal).ToArray(),
             DataLoss = selections.Length > 0 ? profiles.Single(profile => profile.Id == profileId).DataLoss ?? []
                 : state?.Profiles.SingleOrDefault(profile => profile.Id == profileId)?.DataLoss is { Length: > 0 } ? ["Restore returns the saved settings. Data deleted by the earlier changes cannot be restored."] : [],
         };

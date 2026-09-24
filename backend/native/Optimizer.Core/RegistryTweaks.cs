@@ -185,7 +185,10 @@ public sealed class RegistryTweakStore : ITweakStore
         foreach (var key in created.OrderByDescending(item => item.NativeKey.Length).ToArray())
         {
             if (next.Held.Any(item => TweakRead.IsInside(item.Original.NativeKey, key.NativeKey))) continue;
-            if (!RegistryNative.RemoveTweakKey(key, transaction)) notices.Add("Kept registry key with other data or changed permissions: " + key.Address.KeyPath);
+            bool removed;
+            try { removed = RegistryNative.RemoveTweakKey(key, transaction); }
+            catch (Exception error) when (error is InvalidDataException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { removed = false; }
+            if (!removed) notices.Add("Kept registry key with other data or changed permissions: " + key.Address.KeyPath);
             created.Remove(key);
         }
         if (restartPending) notices.Add("Restart Windows to finish the feature changes, then check restart completion in Windows settings.");
