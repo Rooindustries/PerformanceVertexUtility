@@ -98,6 +98,7 @@ static class ServiceControls
                     Check(QueryServiceConfig2(service, 3, memory, needed, out _), "QueryServiceConfig2(delayed start)");
                     value = ControlValues.From(Marshal.ReadInt32(memory) != 0); break;
                 case "running":
+                    if ((config.Type & 3) != 0) throw new InvalidDataException("This is a Windows driver. It cannot be started or stopped while Windows is running: " + address.Target);
                     Check(QueryServiceStatus(service, out var status), "QueryServiceStatus");
                     if (status.State is not (1 or 4)) throw new InvalidDataException("The service is transitioning. Try again after it settles: " + address.Target);
                     value = ControlValues.From(status.State == 4); break;
