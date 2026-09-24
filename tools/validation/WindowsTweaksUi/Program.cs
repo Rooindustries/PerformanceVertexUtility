@@ -77,6 +77,10 @@ try
     }
     var fixture = new Fixture(Path.Combine(root, "missing")); var model = await Load(fixture);
     Check(model.Rows.Count == 1 && model.Rows[0].HasToggle && model.Rows[0].Choices.Length == 3, "Missing products retain every choice and an interactive toggle");
+    model.ShowAdvanced = false;
+    Check(model.Rows.Count == 0, "Simple mode hides a setting that cannot apply on this PC");
+    model.ShowAdvanced = true;
+    Check(model.Rows.Count == 1, "Advanced options show settings that cannot apply on this PC");
     model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null);
     Check(model.ApplyLabel == "Save choices" && !model.CanApply && fixture.Previews == 0, "A missing-product review offers saved choices with explicit confirmation and no Windows preview");
     model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);

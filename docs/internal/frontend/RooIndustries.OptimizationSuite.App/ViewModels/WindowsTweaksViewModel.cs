@@ -115,6 +115,8 @@ public partial class WindowsTweakRow : ObservableObject
     private TweakSettingStatus? _observed;
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
+    public bool UnavailableHere => _observed is { } status && (status.Supported == false
+        || status.Error is { } error && (error.Contains("Win32 1060", StringComparison.Ordinal) || error.Contains("0x80070002", StringComparison.Ordinal) || error.Contains("Windows driver", StringComparison.Ordinal)));
     public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice;
     public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id))
         ?? (ActionChoices.Length == 2 && AppliedChoice is not null ? ActionChoices.First(choice => choice != AppliedChoice) : null);
@@ -595,7 +597,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void Filter()
     {
         Rows.Clear();
-        foreach (var row in _all.Where(row => (SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced) && (Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
+        foreach (var row in _all.Where(row => (SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced && !row.UnavailableHere) && (Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
             (string.IsNullOrEmpty(Search) || (row.Name + " " + row.Description + " " + row.Sources).Contains(Search, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(row => row.IsNetwork ? row.Topic switch { "Connection" => 0, "Adapter" => 1, "Local network" => 2, "Wireless" => 3, "Firewall" => 4, "DNS" => 5, _ => 6 } : 0).ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)) Rows.Add(row);
         OnPropertyChanged(nameof(HasRows)); OnPropertyChanged(nameof(ShowEmpty)); OnPropertyChanged(nameof(VisibleCount));
