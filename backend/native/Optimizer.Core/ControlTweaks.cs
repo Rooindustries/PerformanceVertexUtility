@@ -43,7 +43,7 @@ public sealed record TweakControlRead([property: JsonRequired] ControlAddress Ad
 public sealed record ControlClaim([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId, [property: JsonRequired] TweakControlRead Target, [property: JsonRequired] JsonElement Desired, bool Patch = false);
 public sealed record ControlHeld([property: JsonRequired] TweakControlRead Original, [property: JsonRequired] JsonElement Applied, JsonElement? RestoreValue = null);
 public sealed record ControlMutation([property: JsonRequired] TweakControlRead Before, [property: JsonRequired] JsonElement After, string[]? Fields = null);
-public sealed record ControlPlan([property: JsonRequired] TweakControlRead[] Expected, [property: JsonRequired] ControlMutation[] Changes, [property: JsonRequired] ControlHeld[] Held);
+public sealed record ControlPlan([property: JsonRequired] TweakControlRead[] Expected, [property: JsonRequired] ControlMutation[] Changes, [property: JsonRequired] ControlHeld[] Held, string[]? LeftAsChanged = null);
 public sealed record ControlJournal([property: JsonRequired] TweakPlan Plan, [property: JsonRequired] string ReviewHash, [property: JsonRequired] int Attempted, string Phase = "applying");
 
 public static class ControlValues
@@ -68,23 +68,37 @@ public static class ControlPlanning
         var wanted = profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id).ToDictionary(group => group.Key, group => group.ToArray());
         foreach (var claims in wanted.Values) ControlComposition.Check(claims);
         var held = (state?.Controls ?? []).ToDictionary(item => item.Original.Id);
-        var expected = new List<TweakControlRead>(); var changes = new List<ControlMutation>(); var next = new List<ControlHeld>();
+        var expected = new List<TweakControlRead>(); var changes = new List<ControlMutation>(); var next = new List<ControlHeld>(); var left = new List<string>();
         foreach (var id in held.Keys.Concat(wanted.Keys).Distinct().Order(StringComparer.Ordinal))
         {
             held.TryGetValue(id, out var original); wanted.TryGetValue(id, out var claims);
             if (!affected.Contains(id)) { next.Add(original!); continue; }
-            var observed = read((claims?.First().Target ?? original!.Original).Address); observed.Validate();
-            if (observed.RestartPending) throw new InvalidDataException("Restart Windows before changing or restoring pending Windows features.");
-            if (observed.Id != id)
-                throw new InvalidDataException("A Windows control changed outside this profile: " + observed.Address.Target);
-            if (claims is not null && claims.Any(claim => !claim.Target.Same(observed) && !held.ContainsKey(id)))
-                throw new InvalidDataException("A Windows control changed during review: " + observed.Address.Target);
-            expected.Add(observed);
             var before = (state?.Profiles ?? []).SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == id).ToArray();
-            var composed = ControlComposition.Resolve(observed, original, before, claims ?? []);
-            if (observed.Address.Kind == "hibernation") { HibernationControl.Validate(observed.Value); HibernationControl.Validate(composed.Desired); }
+            var asks = (claims ?? []).Any(claim => !before.Any(old => ReferenceEquals(old, claim)));
+            TweakControlRead observed; (JsonElement Desired, JsonElement? Restore, string[]? LeftAsChanged, JsonElement? Applied) composed = default;
+            try
+            {
+                observed = read((claims?.First().Target ?? original!.Original).Address); observed.Validate();
+                if (!observed.RestartPending)
+                {
+                    if (observed.Id != id) throw new InvalidDataException("A Windows control changed outside this profile: " + observed.Address.Target);
+                    if (claims is not null && claims.Any(claim => !claim.Target.Same(observed) && !held.ContainsKey(id)))
+                        throw new InvalidDataException("A Windows control changed during review: " + observed.Address.Target);
+                    composed = ControlComposition.Resolve(observed, original, before, claims ?? []);
+                    if (observed.Address.Kind == "hibernation") { HibernationControl.Validate(observed.Value); HibernationControl.Validate(composed.Desired); }
+                }
+            }
+            catch (Exception error) when (!asks && original is not null && error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException))
+            {
+                left.AddRange(before.Where(claim => claims?.Any(kept => ReferenceEquals(kept, claim)) != true).Select(claim => claim.SettingId));
+                if (claims is not null) next.Add(original);
+                continue;
+            }
+            if (observed.RestartPending) throw new InvalidDataException("Restart Windows before changing or restoring pending Windows features.");
+            expected.Add(observed);
+            left.AddRange(composed.LeftAsChanged ?? []);
             if (!ControlValues.Equal(observed.Value, composed.Desired) || observed.Address.Kind is "timer" or "timer-startup" or "download-blocker" && observed.LostLease && claims is null) changes.Add(new(observed, composed.Desired, before.Concat(claims ?? []).All(claim => claim.Patch) ? before.Concat(claims ?? []).SelectMany(claim => claim.Desired.EnumerateObject().Select(property => property.Name)).Distinct(StringComparer.Ordinal).ToArray() : null));
-            if (claims is not null) next.Add(new(original is null ? observed : original.Original with { Address = observed.Address }, composed.Desired, composed.Restore));
+            if (claims is not null) next.Add(new(original is null ? observed : original.Original with { Address = observed.Address }, composed.Applied ?? composed.Desired, composed.Restore));
         }
         var relevant = affected.Any(id => wanted.GetValueOrDefault(id)?.Any(claim => claim.Target.Address.Kind == "memory" || claim.Target.Address.Kind == "service" && claim.Target.Address.Target.Equals("SysMain", StringComparison.OrdinalIgnoreCase)) == true);
         if (relevant && wanted.Values.Any(claims => claims[0].Target.Address.Kind == "memory" && claims[0].Desired.ValueKind == JsonValueKind.True))
@@ -94,7 +108,7 @@ public static class ControlPlanning
             if (value.GetUInt32() == 4) throw new InvalidDataException("Memory compression requires SysMain startup to remain enabled.");
             if (expected.All(item => item.Id != dependency.Id)) expected.Add(dependency);
         }
-        return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray());
+        return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray(), left.Count > 0 ? left.Distinct().Order(StringComparer.Ordinal).ToArray() : null);
     }
     private static int ChangeOrder(ControlMutation change) => change.Before.Address.Kind == "timer" && change.After.ValueKind == JsonValueKind.False ? 0 : change.Before.Address.Kind == "memory" ? 25 : change.Before.Address.Property switch
     {

@@ -136,6 +136,7 @@ public sealed record TweakPlan
     public string[] DataLoss { get; init; } = [];
     public string? PresetId { get; init; }
     public string[] Skipped { get; init; } = [];
+    public string[] LeftAsChanged { get; init; } = [];
 }
 
 public sealed record TweakRecovery(TweakState? State, ControlJournal? Pending, string? PendingHash);

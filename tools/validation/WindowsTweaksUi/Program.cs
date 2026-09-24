@@ -114,6 +114,18 @@ try
     Check(fixture.Windows.ReadState()?.Profiles.Length == 0 && fixture.Choices.Read().Profiles.Length == 2 && model.Status == "Windows settings restored; saved choices need attention",
         "A concurrent preference change remains intact after a completed Windows restore and is reported separately");
 
+    fixture = new Fixture(Path.Combine(root, "changed-by-windows")) { Missing = false }; model = await Load(fixture);
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    var enabled = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Enabled");
+    var windowsFile = Path.Combine(root, "changed-by-windows", "windows.json"); var changed = OperationFiles.Read<TweakFixture>(windowsFile);
+    changed.Keys[fixture.Windows.Read(enabled).NativeKey.ToUpperInvariant()].Values["ENABLED"] = new("Enabled", 4, BitConverter.GetBytes(5u));
+    OperationFiles.Write(windowsFile, changed); model = await Load(fixture);
+    await model.ReviewRestoreCommand.ExecuteAsync(null);
+    Check(model.Status == "Windows already changed these settings" && model.Detail.Contains("\n" + model.Rows.Single(row => row.Id == "setting").Name, StringComparison.Ordinal) && !model.Detail.Contains("\nsetting", StringComparison.Ordinal),
+        "Undo names a setting Windows changed afterwards by its shown name and says it stays as it is");
+    model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(fixture.Windows.ReadState()?.Profiles.Length == 0 && BitConverter.ToUInt32(fixture.Windows.Read(enabled).Value!.Bytes) == 5, "Undo finishes and keeps the value Windows set");
+
     fixture = new Fixture(Path.Combine(root, "unknown")) { FailRead = true };
     fixture.Choices.Save(fixture.Catalog, "my-settings", [new("setting", "on")], null); model = await Load(fixture);
     Check(model.Rows.Count == 1 && !model.CanRestore && model.Rows[0].Selected.Id == "on", "An unreadable Windows state preserves saved choices without claiming an empty restore state");
