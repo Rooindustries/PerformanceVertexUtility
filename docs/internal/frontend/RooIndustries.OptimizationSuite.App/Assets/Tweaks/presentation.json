@@ -552,6 +552,9 @@
   "windows.96b51b359cfc2ab5": {
     "section": "windows"
   },
+  "explorer.app-theme": {
+    "section": "windows"
+  },
   "windows.e8d47a9189180b1e": {
     "section": "windows"
   },
@@ -573,6 +576,9 @@
   "windows.d252a66306d764b3": {
     "section": "debloat"
   },
+  "explorer.file-extensions": {
+    "section": "windows"
+  },
   "windows.0b49273b328b977a": {
     "section": "windows"
   },
@@ -580,6 +586,9 @@
     "section": "windows"
   },
   "windows.4bb03ab1a2d9e3f2": {
+    "section": "windows"
+  },
+  "explorer.hidden-files": {
     "section": "windows"
   },
   "windows.07df3877f89b977d": {
@@ -624,6 +633,12 @@
   "windows.13520c8b6440551c": {
     "section": "windows"
   },
+  "explorer.task-view": {
+    "section": "windows"
+  },
+  "explorer.taskbar-alignment": {
+    "section": "windows"
+  },
   "windows.a64761d842b05a5c": {
     "section": "debloat"
   },
@@ -643,6 +658,9 @@
     "section": "windows"
   },
   "windows.665b3c1700d0d9f2": {
+    "section": "windows"
+  },
+  "explorer.system-theme": {
     "section": "windows"
   },
   "windows.82de3311ecbb8bfd": {
@@ -2029,9 +2047,6 @@
   "windows.48528fe51a747f21": {
     "section": "services"
   },
-  "windows.aeaece32413afc65": {
-    "section": "services"
-  },
   "windows.c1ba6f2692812943": {
     "section": "services"
   },
@@ -2044,25 +2059,10 @@
   "windows.60ff8c3066d98975": {
     "section": "services"
   },
-  "windows.8d670bbb91fedfb8": {
-    "section": "services"
-  },
   "windows.8b30f1b439a11081": {
     "section": "services"
   },
   "windows.f764194de531cdaf": {
-    "section": "services"
-  },
-  "windows.b3af6ecb456108cb": {
-    "section": "services"
-  },
-  "windows.4a802560253ab454": {
-    "section": "services"
-  },
-  "windows.9214cfadb5f28219": {
-    "section": "services"
-  },
-  "windows.1fada349dd1f718f": {
     "section": "services"
   },
   "windows.f1edfabad5ece1fa": {
@@ -2384,12 +2384,6 @@
   "windows.6a3f0125dea8d116": {
     "section": "services"
   },
-  "windows.f6e7858581751ba2": {
-    "section": "services"
-  },
-  "windows.505478578c02a1c3": {
-    "section": "services"
-  },
   "windows.428835245afe32a9": {
     "section": "services"
   },
@@ -2541,9 +2535,6 @@
     "section": "services"
   },
   "windows.f268a50eba858d47": {
-    "section": "services"
-  },
-  "windows.0e25c1c25c792d50": {
     "section": "services"
   },
   "windows.4d0285ad7fcb2077": {
@@ -3829,24 +3820,6 @@
   },
   "windows.f70cb08b28f96d33": {
     "section": "gaming"
-  },
-  "explorer.app-theme": {
-    "section": "windows"
-  },
-  "explorer.file-extensions": {
-    "section": "windows"
-  },
-  "explorer.hidden-files": {
-    "section": "windows"
-  },
-  "explorer.task-view": {
-    "section": "windows"
-  },
-  "explorer.taskbar-alignment": {
-    "section": "windows"
-  },
-  "explorer.system-theme": {
-    "section": "windows"
   },
   "windows.72fcf05d8d3eb1d2": {
     "section": "updates"

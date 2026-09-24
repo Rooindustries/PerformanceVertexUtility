@@ -13820,6 +13820,91 @@
       "advanced": false
     },
     {
+      "id": "explorer.app-theme",
+      "name": "App theme",
+      "category": "Desktop and File Explorer",
+      "description": "Color preference for applications and Windows surfaces that support it.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "Notify shell and affected apps; recheck visible result.",
+      "options": [
+        {
+          "id": "dark",
+          "name": "Dark",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "AppsUseLightTheme"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "light",
+          "name": "Light",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "AppsUseLightTheme"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
+          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
+        },
+        {
+          "product": "Gaming toggles",
+          "reference": "gaming-toggles-r11h2",
+          "evidence": "2.4.9 · dark-theme · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleDarkMode · static source mapping"
+        }
+      ],
+      "advanced": false
+    },
+    {
       "id": "windows.e8d47a9189180b1e",
       "name": "Combine Taskbar Buttons: MMTaskbar Glom Level",
       "category": "Desktop and File Explorer",
@@ -14378,6 +14463,86 @@
       "advanced": false
     },
     {
+      "id": "explorer.file-extensions",
+      "name": "File extensions",
+      "category": "Desktop and File Explorer",
+      "description": "Show or hide extensions for known file types. Existing Explorer windows may need to be reopened.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "Refresh File Explorer.",
+      "options": [
+        {
+          "id": "show",
+          "name": "Show",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "HideFileExt"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Hide",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "HideFileExt"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleShowExt",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Gaming toggles",
+          "reference": "gaming-toggles-r11h2",
+          "evidence": "2.4.9 · show-file-extensions · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleShowExt · static source mapping"
+        }
+      ],
+      "advanced": false
+    },
+    {
       "id": "windows.0b49273b328b977a",
       "name": "Hibernation & Sleep: Show Sleep Option",
       "category": "Desktop and File Explorer",
@@ -14564,6 +14729,111 @@
           "product": "Chris Titus Tech WinUtil",
           "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
           "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFTweaksHiber · static source mapping"
+        }
+      ],
+      "advanced": true
+    },
+    {
+      "id": "explorer.hidden-files",
+      "name": "Hidden files",
+      "category": "Desktop and File Explorer",
+      "description": "WinUtil supplies a source undo of 0. Its Explorer meaning is not verified; never label 0 Enabled.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "Refresh File Explorer.",
+      "options": [
+        {
+          "id": "show",
+          "name": "Show",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "Hidden"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Hide",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "Hidden"
+              },
+              "dword": 2
+            }
+          ]
+        },
+        {
+          "id": "choice-95a6ed84299d0109",
+          "name": "Value 0",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "Hidden"
+              },
+              "dword": 0
+            }
+          ],
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "*"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleHiddenFiles",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Gaming toggles",
+          "reference": "gaming-toggles-r11h2",
+          "evidence": "2.4.9 · show-hidden-files · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleHiddenFiles · static source mapping"
         }
       ],
       "advanced": true
@@ -15657,6 +15927,171 @@
       "advanced": true
     },
     {
+      "id": "explorer.task-view",
+      "name": "Task View button",
+      "category": "Desktop and File Explorer",
+      "description": "Value meanings have not been verified. Review the exact target and value before applying.",
+      "minimumBuild": 10240,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "explorer-refresh",
+      "options": [
+        {
+          "id": "show",
+          "name": "Value 1",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "ShowTaskViewButton"
+              },
+              "dword": 1
+            }
+          ]
+        },
+        {
+          "id": "hide",
+          "name": "Value 0",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "ShowTaskViewButton"
+              },
+              "dword": 0
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskView",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFTweaksDisplay · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleTaskView · static source mapping"
+        }
+      ],
+      "advanced": true
+    },
+    {
+      "id": "explorer.taskbar-alignment",
+      "name": "Taskbar alignment",
+      "category": "Desktop and File Explorer",
+      "description": "Windows 11.",
+      "minimumBuild": 22000,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "Refresh taskbar.",
+      "options": [
+        {
+          "id": "left",
+          "name": "Left",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "TaskbarAl"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "center",
+          "name": "Center",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "kind": "value",
+                "valueName": "TaskbarAl"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskbarAlignment",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Gaming playbook R11H2",
+          "reference": "gaming-playbook-r11h2.action.phase5-apply-0060",
+          "evidence": "target-reference; desired values verified against the Windows contract"
+        },
+        {
+          "product": "Gaming toggles",
+          "reference": "gaming-toggles-r11h2",
+          "evidence": "2.4.9 · center-taskbar · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleTaskbarAlignment · static source mapping"
+        }
+      ],
+      "advanced": false
+    },
+    {
       "id": "windows.a64761d842b05a5c",
       "name": "The Copilot button from the taskbar",
       "category": "Desktop and File Explorer",
@@ -16177,6 +16612,91 @@
         }
       ],
       "advanced": true
+    },
+    {
+      "id": "explorer.system-theme",
+      "name": "Windows theme",
+      "category": "Desktop and File Explorer",
+      "description": "Color preference for applications and Windows surfaces that support it.",
+      "minimumBuild": 14393,
+      "maximumBuild": 26200,
+      "editions": [
+        "Core",
+        "CoreN",
+        "CoreSingleLanguage",
+        "CoreCountrySpecific",
+        "Professional",
+        "ProfessionalN",
+        "ProfessionalEducation",
+        "ProfessionalEducationN",
+        "ProfessionalWorkstation",
+        "ProfessionalWorkstationN",
+        "Enterprise",
+        "EnterpriseN",
+        "EnterpriseS",
+        "Education",
+        "EducationN",
+        "IoTEnterprise",
+        "IoTEnterpriseS"
+      ],
+      "refresh": "Notify shell and affected apps; recheck visible result.",
+      "options": [
+        {
+          "id": "dark",
+          "name": "Dark",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "SystemUsesLightTheme"
+              },
+              "dword": 0
+            }
+          ]
+        },
+        {
+          "id": "light",
+          "name": "Light",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "kind": "value",
+                "valueName": "SystemUsesLightTheme"
+              },
+              "dword": 1
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
+          "evidence": "source-confirmed registry preference"
+        },
+        {
+          "product": "Microsoft",
+          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
+          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
+        },
+        {
+          "product": "Gaming toggles",
+          "reference": "gaming-toggles-r11h2",
+          "evidence": "2.4.9 · dark-theme · static source mapping"
+        },
+        {
+          "product": "Chris Titus Tech WinUtil",
+          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
+          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleDarkMode · static source mapping"
+        }
+      ],
+      "advanced": false
     },
     {
       "id": "windows.82de3311ecbb8bfd",
@@ -41827,78 +42347,6 @@
       "advanced": false
     },
     {
-      "id": "windows.aeaece32413afc65",
-      "name": "Driver Install task",
-      "category": "Scheduled tasks",
-      "description": "Enabled permits future triggers; it does not mean currently running. Disabling does not necessarily stop an existing instance.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "reopen affected apps",
-      "options": [
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Driver Install",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Driver Install",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · auto-driver-updates · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
       "id": "windows.c1ba6f2692812943",
       "name": "GatherNetworkInfo task",
       "category": "Scheduled tasks",
@@ -42192,78 +42640,6 @@
       "advanced": false
     },
     {
-      "id": "windows.8d670bbb91fedfb8",
-      "name": "PerformRemediation",
-      "category": "Scheduled tasks",
-      "description": "Changes performRemediation. Applies to this PC.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\WaaSMedic\\PerformRemediation",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\WaaSMedic\\PerformRemediation",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · WaaSMedicTask · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
       "id": "windows.8b30f1b439a11081",
       "name": "ProgramDataUpdater task",
       "category": "Scheduled tasks",
@@ -42411,294 +42787,6 @@
         }
       ],
       "advanced": false
-    },
-    {
-      "id": "windows.b3af6ecb456108cb",
-      "name": "Schedule Scan",
-      "category": "Scheduled tasks",
-      "description": "Changes schedule Scan. Applies to this PC.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · ScheduleScan · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
-      "id": "windows.4a802560253ab454",
-      "name": "Schedule Scan Static Task",
-      "category": "Scheduled tasks",
-      "description": "Changes schedule Scan Static Task. Applies to this PC.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan Static Task",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan Static Task",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · ScheduleScanStaticTask · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
-      "id": "windows.9214cfadb5f28219",
-      "name": "Schedule Wake To Work",
-      "category": "Scheduled tasks",
-      "description": "Changes schedule Wake To Work. Applies to this PC.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Wake To Work",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Wake To Work",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · ScheduleWakeToWork · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
-      "id": "windows.1fada349dd1f718f",
-      "name": "Schedule Work",
-      "category": "Scheduled tasks",
-      "description": "Changes schedule Work. Applies to this PC.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Work",
-                "property": "enabled"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-88665aca77848447",
-          "name": "Enabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "scheduled-task",
-                "target": "\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Work",
-                "property": "enabled"
-              },
-              "value": true,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · ScheduleWork · static source mapping"
-        }
-      ],
-      "advanced": true
     },
     {
       "id": "windows.f1edfabad5ece1fa",
@@ -44293,7 +44381,7 @@
       "id": "windows.8522dcf3c460532d",
       "name": "BITS: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44334,13 +44422,13 @@
           "evidence": "2.4.9 · windows-update · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.bdee78b3d81a9425",
       "name": "BITS: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44406,13 +44494,13 @@
           "evidence": "2.4.9 · windows-update · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.63bc2ce4fde98aee",
       "name": "BTAGService: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44453,13 +44541,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.ec62abcbf618aa2a",
       "name": "BTAGService: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44525,7 +44613,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.f31a85ef7fe97d67",
@@ -44650,7 +44738,7 @@
       "id": "windows.776d14c10022638c",
       "name": "BTHPORT: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44691,13 +44779,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.82daf77812001f77",
       "name": "BTHPORT: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44763,13 +44851,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.bcdd0d66cb322fbd",
       "name": "BTHUSB: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44810,13 +44898,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.2722f6f421e43fd9",
       "name": "BTHUSB: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -44882,7 +44970,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.8b6e05a6ab5429fe",
@@ -45126,7 +45214,7 @@
       "id": "windows.ee005e4fd053d5d0",
       "name": "BthAvctpSvc: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -45167,13 +45255,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.d10ee968a64cb407",
       "name": "BthAvctpSvc: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -45239,13 +45327,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.14abe60db93e548c",
       "name": "BthEnum: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -45286,13 +45374,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.fc0d1582b10c1275",
       "name": "BthEnum: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -45358,7 +45446,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.e4a7740e3c9c6498",
@@ -45721,7 +45809,7 @@
       "id": "windows.f9de8999172338d0",
       "name": "CDPUserSvc: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -45787,7 +45875,7 @@
           "evidence": "1.5.2042 RC 1 · CDPUserSvc · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.1139b9fdbc57b3c0",
@@ -45984,7 +46072,7 @@
       "id": "windows.3be3dac3375bc5ab",
       "name": "DevicesFlowUserSvc: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -46025,13 +46113,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.4e68d327eac6b266",
       "name": "DevicesFlowUserSvc: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -46097,7 +46185,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.e9431a4d528324f7",
@@ -47852,7 +47940,7 @@
       "id": "windows.31d55b05261eb383",
       "name": "RFCOMM: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -47893,13 +47981,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.5075a69c4ee25140",
       "name": "RFCOMM: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -47965,7 +48053,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.5ddb5c8548643fe2",
@@ -48696,7 +48784,7 @@
       "id": "windows.c2df703d691ec68f",
       "name": "UsoSvc: delayed start",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -48737,13 +48825,13 @@
           "evidence": "1.5.2042 RC 1 · UsoSvc · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.7d8fcb29bd58e61a",
       "name": "UsoSvc: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -48814,13 +48902,13 @@
           "evidence": "1.5.2042 RC 1 · UsoSvc · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.aebfce7259b9cf2b",
       "name": "UsoSvc: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -48891,7 +48979,7 @@
           "evidence": "1.5.2042 RC 1 · UsoSvc · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.0bd96dda6acb2575",
@@ -49395,129 +49483,10 @@
       "advanced": false
     },
     {
-      "id": "windows.f6e7858581751ba2",
-      "name": "WaaSMedicSvc: running state",
-      "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-01c43a1bb3484ba2",
-          "name": "Stopped",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "service",
-                "target": "WaaSMedicSvc",
-                "property": "running"
-              },
-              "value": false,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · WaaSMedicSvc · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
-      "id": "windows.505478578c02a1c3",
-      "name": "WaaSMedicSvc: startup",
-      "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "restart",
-      "options": [
-        {
-          "id": "choice-ee9a883679cdfeb1",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "service",
-                "target": "WaaSMedicSvc",
-                "property": "startup"
-              },
-              "value": 4,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-a07ff647a2e4c1e3",
-          "name": "Manual",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "service",
-                "target": "WaaSMedicSvc",
-                "property": "startup"
-              },
-              "value": 3,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "WPD",
-          "reference": "https://wpd.app/get/latest.zip",
-          "evidence": "1.5.2042 RC 1 · WaaSMedicSvc · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
       "id": "windows.428835245afe32a9",
       "name": "Windows Firewall service",
       "category": "Services",
-      "description": "Changes windows Firewall service. Applies to this PC.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Changes windows Firewall service. Applies to this PC.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49564,7 +49533,7 @@
       "id": "windows.f373a904cea14365",
       "name": "Windows Firewall service",
       "category": "Services",
-      "description": "Changes windows Firewall service. Applies to this PC.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Changes windows Firewall service. Applies to this PC.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49611,7 +49580,7 @@
       "id": "windows.2119d80378e882fd",
       "name": "WlanSvc: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49652,13 +49621,13 @@
           "evidence": "2.4.9 · wifi · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.378b3ed763fb8070",
       "name": "WlanSvc: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49724,13 +49693,13 @@
           "evidence": "2.4.9 · wifi · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.8e36f8919bda1782",
       "name": "WpnService: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49771,13 +49740,13 @@
           "evidence": "2.4.9 · telemetry · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.a471d3972114c0b7",
       "name": "WpnService: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49843,13 +49812,13 @@
           "evidence": "2.4.9 · telemetry · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.6c0988ed580b0790",
       "name": "WpnUserService: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49915,13 +49884,13 @@
           "evidence": "1.5.2042 RC 1 · WpnUserService · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.76d2756e9145f855",
       "name": "bthserv: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -49962,13 +49931,13 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.5d68094bfaf45933",
       "name": "bthserv: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -50034,7 +50003,7 @@
           "evidence": "2.4.9 · bluetooth · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.15b8022aa5731ae0",
@@ -52634,78 +52603,6 @@
       "advanced": false
     },
     {
-      "id": "windows.0e25c1c25c792d50",
-      "name": "wermgr: startup",
-      "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "*"
-      ],
-      "refresh": "reopen affected apps",
-      "options": [
-        {
-          "id": "choice-ee9a883679cdfeb1",
-          "name": "Disabled",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "service",
-                "target": "wermgr",
-                "property": "startup"
-              },
-              "value": 4,
-              "patch": false
-            }
-          ]
-        },
-        {
-          "id": "choice-abe3c9cd2753a893",
-          "name": "Automatic",
-          "changes": [],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ],
-          "controls": [
-            {
-              "address": {
-                "kind": "service",
-                "target": "wermgr",
-                "property": "startup"
-              },
-              "value": 2,
-              "patch": false
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFTweaksTelemetry · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
       "id": "windows.4d0285ad7fcb2077",
       "name": "wisvc: running state",
       "category": "Services",
@@ -52828,7 +52725,7 @@
       "id": "windows.65a494abd30751df",
       "name": "wuauserv: running state",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -52874,13 +52771,13 @@
           "evidence": "1.5.2042 RC 1 · wuauserv · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.2a9bde13ddb649f3",
       "name": "wuauserv: startup",
       "category": "Services",
-      "description": "Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
+      "description": "Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on. Startup and running state are separate. Disabled startup does not itself stop a running service. Exact service identity and dependencies must be detected.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -52956,7 +52853,7 @@
           "evidence": "1.5.2042 RC 1 · wuauserv · static source mapping"
         }
       ],
-      "advanced": false
+      "advanced": true
     },
     {
       "id": "windows.14ff050f1e4e53b5",
@@ -74624,526 +74521,6 @@
       "advanced": true
     },
     {
-      "id": "explorer.app-theme",
-      "name": "App theme",
-      "category": "Windows & Explorer",
-      "description": "Color preference for applications and Windows surfaces that support it.",
-      "minimumBuild": 14393,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "Notify shell and affected apps; recheck visible result.",
-      "options": [
-        {
-          "id": "dark",
-          "name": "Dark",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                "kind": "value",
-                "valueName": "AppsUseLightTheme"
-              },
-              "dword": 0
-            }
-          ]
-        },
-        {
-          "id": "light",
-          "name": "Light",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                "kind": "value",
-                "valueName": "AppsUseLightTheme"
-              },
-              "dword": 1
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Microsoft",
-          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
-          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
-        },
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · dark-theme · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleDarkMode · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
-      "id": "explorer.file-extensions",
-      "name": "File extensions",
-      "category": "Windows & Explorer",
-      "description": "Show or hide extensions for known file types. Existing Explorer windows may need to be reopened.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "Refresh File Explorer.",
-      "options": [
-        {
-          "id": "show",
-          "name": "Show",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "HideFileExt"
-              },
-              "dword": 0
-            }
-          ]
-        },
-        {
-          "id": "hide",
-          "name": "Hide",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "HideFileExt"
-              },
-              "dword": 1
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleShowExt",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · show-file-extensions · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleShowExt · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
-      "id": "explorer.hidden-files",
-      "name": "Hidden files",
-      "category": "Windows & Explorer",
-      "description": "WinUtil supplies a source undo of 0. Its Explorer meaning is not verified; never label 0 Enabled.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "Refresh File Explorer.",
-      "options": [
-        {
-          "id": "show",
-          "name": "Show",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "Hidden"
-              },
-              "dword": 1
-            }
-          ]
-        },
-        {
-          "id": "hide",
-          "name": "Hide",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "Hidden"
-              },
-              "dword": 2
-            }
-          ]
-        },
-        {
-          "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "Hidden"
-              },
-              "dword": 0
-            }
-          ],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleHiddenFiles",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · show-hidden-files · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleHiddenFiles · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
-      "id": "explorer.task-view",
-      "name": "Task View button",
-      "category": "Windows & Explorer",
-      "description": "Value meanings have not been verified. Review the exact target and value before applying.",
-      "minimumBuild": 10240,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "explorer-refresh",
-      "options": [
-        {
-          "id": "show",
-          "name": "Value 1",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "ShowTaskViewButton"
-              },
-              "dword": 1
-            }
-          ]
-        },
-        {
-          "id": "hide",
-          "name": "Value 0",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "ShowTaskViewButton"
-              },
-              "dword": 0
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskView",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFTweaksDisplay · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleTaskView · static source mapping"
-        }
-      ],
-      "advanced": true
-    },
-    {
-      "id": "explorer.taskbar-alignment",
-      "name": "Taskbar alignment",
-      "category": "Windows & Explorer",
-      "description": "Windows 11.",
-      "minimumBuild": 22000,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "Refresh taskbar.",
-      "options": [
-        {
-          "id": "left",
-          "name": "Left",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "TaskbarAl"
-              },
-              "dword": 0
-            }
-          ]
-        },
-        {
-          "id": "center",
-          "name": "Center",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                "kind": "value",
-                "valueName": "TaskbarAl"
-              },
-              "dword": 1
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleTaskbarAlignment",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Gaming playbook R11H2",
-          "reference": "gaming-playbook-r11h2.action.phase5-apply-0060",
-          "evidence": "target-reference; desired values verified against the Windows contract"
-        },
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · center-taskbar · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleTaskbarAlignment · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
-      "id": "explorer.system-theme",
-      "name": "Windows theme",
-      "category": "Windows & Explorer",
-      "description": "Color preference for applications and Windows surfaces that support it.",
-      "minimumBuild": 14393,
-      "maximumBuild": 26200,
-      "editions": [
-        "Core",
-        "CoreN",
-        "CoreSingleLanguage",
-        "CoreCountrySpecific",
-        "Professional",
-        "ProfessionalN",
-        "ProfessionalEducation",
-        "ProfessionalEducationN",
-        "ProfessionalWorkstation",
-        "ProfessionalWorkstationN",
-        "Enterprise",
-        "EnterpriseN",
-        "EnterpriseS",
-        "Education",
-        "EducationN",
-        "IoTEnterprise",
-        "IoTEnterpriseS"
-      ],
-      "refresh": "Notify shell and affected apps; recheck visible result.",
-      "options": [
-        {
-          "id": "dark",
-          "name": "Dark",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                "kind": "value",
-                "valueName": "SystemUsesLightTheme"
-              },
-              "dword": 0
-            }
-          ]
-        },
-        {
-          "id": "light",
-          "name": "Light",
-          "changes": [
-            {
-              "address": {
-                "hive": "CurrentUser",
-                "view": "Registry64",
-                "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                "kind": "value",
-                "valueName": "SystemUsesLightTheme"
-              },
-              "dword": 1
-            }
-          ]
-        }
-      ],
-      "sources": [
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://raw.githubusercontent.com/ChrisTitusTech/winutil/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#WPFToggleDarkMode",
-          "evidence": "source-confirmed registry preference"
-        },
-        {
-          "product": "Microsoft",
-          "reference": "https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/set-dark-mode",
-          "evidence": "documented color-mode feature; registry binding is source-confirmed in WinUtil"
-        },
-        {
-          "product": "Gaming toggles",
-          "reference": "gaming-toggles-r11h2",
-          "evidence": "2.4.9 · dark-theme · static source mapping"
-        },
-        {
-          "product": "Chris Titus Tech WinUtil",
-          "reference": "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json",
-          "evidence": "fc60cbde09d669178bda1665be9cb1a703516fca · WPFToggleDarkMode · static source mapping"
-        }
-      ],
-      "advanced": false
-    },
-    {
       "id": "windows.72fcf05d8d3eb1d2",
       "name": "Access to all Windows Update features",
       "category": "Windows Update",
@@ -80236,90 +79613,6 @@
         {
           "settingId": "windows.5e360dcb6120e4a7",
           "optionId": "choice-c4697634bc8964cb"
-        }
-      ]
-    },
-    {
-      "id": "gaming.auto-driver-updates.48.enabled",
-      "name": "Gaming toggles · Automatic Driver Updates · enabled",
-      "selections": [
-        {
-          "settingId": "windows.a42338997dc856a9",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.481ea88a0a9d986a",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.953a30d8b6c2c8a5",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.4a788482e013cb6a",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.7ef93bb6784cada0",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.de49cf9b77004f03",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.190ec8140565cdbe",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.b6502620eeb0dc2f",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.aeaece32413afc65",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
-      "id": "gaming.auto-driver-updates.48.disabled",
-      "name": "Gaming toggles · Automatic Driver Updates · disabled",
-      "selections": [
-        {
-          "settingId": "windows.a42338997dc856a9",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.481ea88a0a9d986a",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.953a30d8b6c2c8a5",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.4a788482e013cb6a",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.7ef93bb6784cada0",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.de49cf9b77004f03",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.190ec8140565cdbe",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.b6502620eeb0dc2f",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.aeaece32413afc65",
-          "optionId": "choice-01c43a1bb3484ba2"
         }
       ]
     },
@@ -90640,150 +89933,6 @@
       ]
     },
     {
-      "id": "winutil.wpftweakstelemetry.11.apply",
-      "name": "Chris Titus Tech WinUtil · Telemetry - Disable · apply",
-      "selections": [
-        {
-          "settingId": "windows.f21513f9c6b27e2c",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.4f9aba2eae2173b8",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.ad6fb424404e94c0",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.3f759aee0234f2d2",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.9a3ceb91b2ff8afc",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.eb94d28ca695e7f3",
-          "optionId": "choice-6b253977ea5987f3"
-        },
-        {
-          "settingId": "windows.90d6e61ebdfaf38b",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.c5a3463ac3fe7bce",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.94caf9dc9f3af63e",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.96b51b359cfc2ab5",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "privacy.activity-publishing",
-          "optionId": "disabled"
-        },
-        {
-          "settingId": "windows.9f626a72aa00c77a",
-          "optionId": "choice-95a6ed84299d0109"
-        },
-        {
-          "settingId": "windows.171a004ed11767da",
-          "optionId": "choice-abe3c9cd2753a893"
-        },
-        {
-          "settingId": "windows.4bcc423bac2474c3",
-          "optionId": "choice-ee9a883679cdfeb1"
-        },
-        {
-          "settingId": "windows.0e25c1c25c792d50",
-          "optionId": "choice-ee9a883679cdfeb1"
-        },
-        {
-          "settingId": "windows.c3ff4641d275bd79",
-          "optionId": "choice-ddc5d54ef96d6b7b"
-        },
-        {
-          "settingId": "windows.ace5da5cbef46267",
-          "optionId": "choice-c4697634bc8964cb"
-        }
-      ]
-    },
-    {
-      "id": "winutil.wpftweakstelemetry.11.source-default",
-      "name": "Chris Titus Tech WinUtil · Telemetry - Disable · source-default",
-      "selections": [
-        {
-          "settingId": "windows.f21513f9c6b27e2c",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.4f9aba2eae2173b8",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.ad6fb424404e94c0",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.3f759aee0234f2d2",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.9a3ceb91b2ff8afc",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.eb94d28ca695e7f3",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.90d6e61ebdfaf38b",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.c5a3463ac3fe7bce",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.94caf9dc9f3af63e",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.96b51b359cfc2ab5",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "privacy.activity-publishing",
-          "optionId": "default"
-        },
-        {
-          "settingId": "windows.9f626a72aa00c77a",
-          "optionId": "choice-c4697634bc8964cb"
-        },
-        {
-          "settingId": "windows.171a004ed11767da",
-          "optionId": "choice-5bcd1ae8bde75d17"
-        },
-        {
-          "settingId": "windows.4bcc423bac2474c3",
-          "optionId": "choice-abe3c9cd2753a893"
-        },
-        {
-          "settingId": "windows.0e25c1c25c792d50",
-          "optionId": "choice-abe3c9cd2753a893"
-        },
-        {
-          "settingId": "windows.c3ff4641d275bd79",
-          "optionId": "choice-c4697634bc8964cb"
-        }
-      ]
-    },
-    {
       "id": "winutil.wpftweaksdeliveryoptimization.12.apply",
       "name": "Chris Titus Tech WinUtil · Delivery Optimization - Disable · apply",
       "selections": [
@@ -94514,30 +93663,6 @@
       ]
     },
     {
-      "id": "wpd.waasmedicsvc.91.apply",
-      "name": "WPD · Windows Update Medic Service · apply",
-      "selections": [
-        {
-          "settingId": "windows.505478578c02a1c3",
-          "optionId": "choice-ee9a883679cdfeb1"
-        },
-        {
-          "settingId": "windows.f6e7858581751ba2",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.waasmedicsvc.91.source-default",
-      "name": "WPD · Windows Update Medic Service · source-default",
-      "selections": [
-        {
-          "settingId": "windows.505478578c02a1c3",
-          "optionId": "choice-a07ff647a2e4c1e3"
-        }
-      ]
-    },
-    {
       "id": "wpd.usosvc.92.apply",
       "name": "WPD · Update Orchestrator Service · apply",
       "selections": [
@@ -94570,26 +93695,6 @@
       ]
     },
     {
-      "id": "wpd.waasmedictask.93.apply",
-      "name": "WPD · PerformRemediation · apply",
-      "selections": [
-        {
-          "settingId": "windows.8d670bbb91fedfb8",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.waasmedictask.93.source-default",
-      "name": "WPD · PerformRemediation · source-default",
-      "selections": [
-        {
-          "settingId": "windows.8d670bbb91fedfb8",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
       "id": "wpd.scheduledstart.94.apply",
       "name": "WPD · Scheduled Start · apply",
       "selections": [
@@ -94605,86 +93710,6 @@
       "selections": [
         {
           "settingId": "windows.f1edfabad5ece1fa",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulescan.95.apply",
-      "name": "WPD · Schedule Scan · apply",
-      "selections": [
-        {
-          "settingId": "windows.b3af6ecb456108cb",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulescan.95.source-default",
-      "name": "WPD · Schedule Scan · source-default",
-      "selections": [
-        {
-          "settingId": "windows.b3af6ecb456108cb",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulescanstatictask.96.apply",
-      "name": "WPD · Schedule Scan Static Task · apply",
-      "selections": [
-        {
-          "settingId": "windows.4a802560253ab454",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulescanstatictask.96.source-default",
-      "name": "WPD · Schedule Scan Static Task · source-default",
-      "selections": [
-        {
-          "settingId": "windows.4a802560253ab454",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulewaketowork.97.apply",
-      "name": "WPD · Schedule Wake To Work · apply",
-      "selections": [
-        {
-          "settingId": "windows.9214cfadb5f28219",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulewaketowork.97.source-default",
-      "name": "WPD · Schedule Wake To Work · source-default",
-      "selections": [
-        {
-          "settingId": "windows.9214cfadb5f28219",
-          "optionId": "choice-88665aca77848447"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulework.98.apply",
-      "name": "WPD · Schedule Work · apply",
-      "selections": [
-        {
-          "settingId": "windows.1fada349dd1f718f",
-          "optionId": "choice-01c43a1bb3484ba2"
-        }
-      ]
-    },
-    {
-      "id": "wpd.schedulework.98.source-default",
-      "name": "WPD · Schedule Work · source-default",
-      "selections": [
-        {
-          "settingId": "windows.1fada349dd1f718f",
           "optionId": "choice-88665aca77848447"
         }
       ]
@@ -95844,14 +94869,6 @@
           "optionId": "choice-01c43a1bb3484ba2"
         },
         {
-          "settingId": "windows.505478578c02a1c3",
-          "optionId": "choice-ee9a883679cdfeb1"
-        },
-        {
-          "settingId": "windows.f6e7858581751ba2",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
           "settingId": "windows.aebfce7259b9cf2b",
           "optionId": "choice-ee9a883679cdfeb1"
         },
@@ -95860,27 +94877,7 @@
           "optionId": "choice-01c43a1bb3484ba2"
         },
         {
-          "settingId": "windows.8d670bbb91fedfb8",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
           "settingId": "windows.f1edfabad5ece1fa",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
-          "settingId": "windows.b3af6ecb456108cb",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
-          "settingId": "windows.4a802560253ab454",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
-          "settingId": "windows.9214cfadb5f28219",
-          "optionId": "choice-01c43a1bb3484ba2"
-        },
-        {
-          "settingId": "windows.1fada349dd1f718f",
           "optionId": "choice-01c43a1bb3484ba2"
         },
         {

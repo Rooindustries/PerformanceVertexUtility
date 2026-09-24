@@ -2588,7 +2588,7 @@
       "options": [
         {
           "id": "enabled",
-          "status": "implemented",
+          "status": "partial",
           "selections": [
             {
               "settingId": "windows.a42338997dc856a9",
@@ -2621,18 +2621,21 @@
             {
               "settingId": "windows.b6502620eeb0dc2f",
               "optionId": "choice-c4697634bc8964cb"
-            },
-            {
-              "settingId": "windows.aeaece32413afc65",
-              "optionId": "choice-88665aca77848447"
             }
           ],
-          "remainingEffects": [],
+          "remainingEffects": [
+            {
+              "method": "scheduled-task",
+              "path": "\\Microsoft\\Windows\\UpdateOrchestrator\\Driver Install",
+              "operation": "enable",
+              "sourceLine": 61
+            }
+          ],
           "refreshInstructions": null
         },
         {
           "id": "disabled",
-          "status": "implemented",
+          "status": "partial",
           "selections": [
             {
               "settingId": "windows.a42338997dc856a9",
@@ -2665,13 +2668,16 @@
             {
               "settingId": "windows.b6502620eeb0dc2f",
               "optionId": "choice-6b253977ea5987f3"
-            },
-            {
-              "settingId": "windows.aeaece32413afc65",
-              "optionId": "choice-01c43a1bb3484ba2"
             }
           ],
-          "remainingEffects": [],
+          "remainingEffects": [
+            {
+              "method": "scheduled-task",
+              "path": "\\Microsoft\\Windows\\UpdateOrchestrator\\Driver Install",
+              "operation": "disable",
+              "sourceLine": 78
+            }
+          ],
           "refreshInstructions": null
         }
       ]
@@ -18537,7 +18543,7 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
+          "status": "partial",
           "selections": [
             {
               "settingId": "windows.f21513f9c6b27e2c",
@@ -18596,10 +18602,6 @@
               "optionId": "choice-ee9a883679cdfeb1"
             },
             {
-              "settingId": "windows.0e25c1c25c792d50",
-              "optionId": "choice-ee9a883679cdfeb1"
-            },
-            {
               "settingId": "windows.c3ff4641d275bd79",
               "optionId": "choice-ddc5d54ef96d6b7b"
             },
@@ -18608,12 +18610,20 @@
               "optionId": "choice-c4697634bc8964cb"
             }
           ],
-          "remainingEffects": [],
+          "remainingEffects": [
+            {
+              "kind": "service-startup",
+              "target": "wermgr",
+              "startupType": "Disabled",
+              "alsoStopRunningService": false,
+              "method": "service-startup"
+            }
+          ],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
+          "status": "partial",
           "selections": [
             {
               "settingId": "windows.f21513f9c6b27e2c",
@@ -18672,15 +18682,19 @@
               "optionId": "choice-abe3c9cd2753a893"
             },
             {
-              "settingId": "windows.0e25c1c25c792d50",
-              "optionId": "choice-abe3c9cd2753a893"
-            },
-            {
               "settingId": "windows.c3ff4641d275bd79",
               "optionId": "choice-c4697634bc8964cb"
             }
           ],
-          "remainingEffects": [],
+          "remainingEffects": [
+            {
+              "kind": "service-startup",
+              "target": "wermgr",
+              "startupType": "Automatic",
+              "alsoStopRunningService": false,
+              "method": "service-startup"
+            }
+          ],
           "refreshInstructions": null
         }
       ]
@@ -24992,30 +25006,39 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.505478578c02a1c3",
-              "optionId": "choice-ee9a883679cdfeb1"
+              "method": "native",
+              "kind": "service",
+              "target": "WaaSMedicSvc",
+              "property": "startup",
+              "value": 4
             },
             {
-              "settingId": "windows.f6e7858581751ba2",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "method": "native",
+              "kind": "service",
+              "target": "WaaSMedicSvc",
+              "property": "running",
+              "value": false
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.505478578c02a1c3",
-              "optionId": "choice-a07ff647a2e4c1e3"
+              "method": "native",
+              "kind": "service",
+              "target": "WaaSMedicSvc",
+              "property": "startup",
+              "value": 3
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]
@@ -25074,26 +25097,46 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.8d670bbb91fedfb8",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\WaaSMedic\\PerformRemediation",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 2,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.8d670bbb91fedfb8",
-              "optionId": "choice-88665aca77848447"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\WaaSMedic\\PerformRemediation",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 66,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]
@@ -25140,26 +25183,46 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.b3af6ecb456108cb",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 2,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.b3af6ecb456108cb",
-              "optionId": "choice-88665aca77848447"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 66,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]
@@ -25173,26 +25236,46 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.4a802560253ab454",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan Static Task",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 2,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.4a802560253ab454",
-              "optionId": "choice-88665aca77848447"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Scan Static Task",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 66,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]
@@ -25206,26 +25289,46 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.9214cfadb5f28219",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Wake To Work",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 2,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.9214cfadb5f28219",
-              "optionId": "choice-88665aca77848447"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Wake To Work",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 66,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]
@@ -25239,26 +25342,46 @@
       "options": [
         {
           "id": "apply",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.1fada349dd1f718f",
-              "optionId": "choice-01c43a1bb3484ba2"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Work",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 2,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         },
         {
           "id": "source-default",
-          "status": "implemented",
-          "selections": [
+          "status": "pending-executor",
+          "selections": [],
+          "remainingEffects": [
             {
-              "settingId": "windows.1fada349dd1f718f",
-              "optionId": "choice-88665aca77848447"
+              "kind": "task-cache-trigger-patch",
+              "hive": "HKLM",
+              "resolveGuidFrom": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\UpdateOrchestrator\\Schedule Work",
+              "resolveGuidValue": "Id",
+              "path": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\\{resolved-guid}",
+              "name": "Triggers",
+              "valueKind": "Binary",
+              "byteOffset": 42,
+              "aclOperation": "Temporary current-user ownership and FullControl, then restore owner/access",
+              "operation": "patch-byte",
+              "value": 66,
+              "method": "task-cache-trigger-patch"
             }
           ],
-          "remainingEffects": [],
           "refreshInstructions": null
         }
       ]

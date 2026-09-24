@@ -97,6 +97,30 @@ def apply_availability(settings):
                 setting['editions'] = ['*']
 
 
+WINDOWS_REFUSED_SERVICES = {'wermgr', 'waasmedicsvc'}
+WINDOWS_REFUSED_TASK_FOLDERS = ('\\microsoft\\windows\\waasmedic\\', '\\microsoft\\windows\\updateorchestrator\\')
+
+
+def windows_refuses(change):
+    address = change['address']
+    if address.get('kind') == 'service':
+        return address['target'].casefold() in WINDOWS_REFUSED_SERVICES
+    if address.get('kind') == 'scheduled-task':
+        return address['target'].casefold().startswith(WINDOWS_REFUSED_TASK_FOLDERS)
+    return False
+
+
+def mark_protected_services(settings):
+    protected = {name.casefold() for name in json.loads((ROOT / 'modules/tweak_manifest.json').read_text())['protected']['services']}
+    note = 'Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on.'
+    for setting in settings:
+        targets = {control['address']['target'].casefold() for option in setting['options'] for control in option.get('controls', []) if control['address']['kind'] == 'service'}
+        if targets & protected:
+            setting['advanced'] = True
+            if note not in setting['description']:
+                setting['description'] = note + ' ' + setting['description']
+
+
 def native(kind, target, property, value):
     return {'address': {'kind': kind, 'target': target, 'property': property}, 'controlValue': value}
 
@@ -486,6 +510,8 @@ def compile_catalog():
                         covered['processRefresh'] = 'Restart Windows to close existing processes. Apply changes new-launch permissions; it does not force-stop processes.'
                 for effect in [item for effect in effects for item in expand(effect)]:
                     change = assignment(effect)
+                    if change is not None and windows_refuses(change):
+                        change = None
                     if change is None:
                         pending.append(effect)
                         continue
@@ -614,6 +640,7 @@ def compile_catalog():
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
     apply_availability(settings)
+    mark_protected_services(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
     fps = ROOT / 'backend/catalogs/fps-preset.json'
     if fps.exists():
