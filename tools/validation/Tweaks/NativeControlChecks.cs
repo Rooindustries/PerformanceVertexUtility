@@ -76,6 +76,11 @@ static class NativeControlChecks
                 var plan = engine.Preview(profile, choices); var review = Path.Combine(files, plan.OperationId + ".json"); OperationFiles.Write(review, plan);
                 return engine.Apply(review, OperationFiles.HashFile(review)).State;
             }
+            var driverRefused = false;
+            try { native.Read(new ControlAddress("service", "NetBT", "running")); }
+            catch (InvalidDataException error) when (error.Message.Contains("Windows driver", StringComparison.Ordinal)) { driverRefused = true; }
+            check(driverRefused && native.Read(new ControlAddress("service", "NetBT", "startup")).Value.ValueKind == System.Text.Json.JsonValueKind.Number,
+                "A Windows driver's running state is refused before any change while its startup type stays readable");
             var originalStartup = native.Read(startup); var originalRunning = native.Read(running); var originalTask = native.Read(task); var originalFirewall = native.Read(firewall);
             check(originalStartup.Value.GetInt32() == 3 && !originalRunning.Value.GetBoolean() && !originalTask.Value.GetBoolean(), "Disposable service and task have independently observed initial states");
             Apply("service", new TweakSelection("automatic", "set"), new TweakSelection("run", "set"));
