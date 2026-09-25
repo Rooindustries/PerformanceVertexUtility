@@ -18,7 +18,7 @@ static class CatalogMatrixChecks
             var directory = Path.Combine(root, "matrix-" + total); Directory.CreateDirectory(directory);
             try
             {
-                var subset = catalog with { Settings = [definition], Presets = [] };
+                var subset = catalog with { Settings = [definition], Presets = [], Incompatible = null };
                 Exercise(directory, subset, [new(definition.Id, option.Id)]);
                 results.Add(new { setting = definition.Id, option = option.Id, result = "passed" });
             }
@@ -40,7 +40,7 @@ static class CatalogMatrixChecks
             try
             {
                 var definitions = preset.Selections.Select(selection => catalog.Resolve(selection).Definition).DistinctBy(item => item.Id).ToArray();
-                var subset = catalog with { Settings = definitions, Presets = [preset] };
+                var subset = catalog with { Settings = definitions, Presets = [preset], Incompatible = null };
                 Exercise(directory, subset, preset.Selections, preset);
                 results.Add(new { preset = preset.Id, choices = preset.Selections.Length, result = "passed" });
             }

@@ -20512,7 +20512,7 @@
         },
         {
           "id": "Fully Disabled",
-          "status": "implemented",
+          "status": "excluded-incompatible",
           "selections": [
             {
               "settingId": "windows.b3ed2a21f895b89b",

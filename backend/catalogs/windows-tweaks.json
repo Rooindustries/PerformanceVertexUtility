@@ -15033,7 +15033,7 @@
       "id": "windows.b3ed2a21f895b89b",
       "name": "Multi-Plane Overlay (MPO): Overlay Test Mode",
       "category": "Desktop and File Explorer",
-      "description": "Value meanings have not been verified. Review the exact target and value before applying.",
+      "description": "Roo Industries will not apply this together with Multi-Plane Overlay (MPO): Disable Overlays. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -21998,7 +21998,7 @@
       "id": "windows.afc9a1a923dc6c65",
       "name": "Multi-Plane Overlay (MPO): Disable Overlays",
       "category": "Gaming and display",
-      "description": "Value meanings have not been verified. Review the exact target and value before applying.",
+      "description": "Roo Industries will not apply this together with Multi-Plane Overlay (MPO): Overlay Test Mode. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -90707,20 +90707,6 @@
       ]
     },
     {
-      "id": "winutil.wpfmultiplaneoverlay.46.Fully Disabled",
-      "name": "Chris Titus Tech WinUtil · Multiplane Overlay · Fully Disabled",
-      "selections": [
-        {
-          "settingId": "windows.b3ed2a21f895b89b",
-          "optionId": "choice-950ca1b1a0b488e2"
-        },
-        {
-          "settingId": "windows.afc9a1a923dc6c65",
-          "optionId": "choice-6b253977ea5987f3"
-        }
-      ]
-    },
-    {
       "id": "winutil.wpftogglemouseacceleration.47.apply",
       "name": "Chris Titus Tech WinUtil · Mouse Acceleration · apply",
       "selections": [
@@ -94958,6 +94944,21 @@
         }
       ],
       "availableOnly": true
+    }
+  ],
+  "incompatible": [
+    {
+      "selections": [
+        {
+          "settingId": "windows.afc9a1a923dc6c65",
+          "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.b3ed2a21f895b89b",
+          "optionId": "choice-950ca1b1a0b488e2"
+        }
+      ],
+      "reason": "Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing."
     }
   ]
 }

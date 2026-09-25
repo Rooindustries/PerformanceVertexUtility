@@ -179,6 +179,72 @@ try
     Apply(engine, "one", []);
     Check(!store.Read(extension).KeyExists && store.ReadState()!.Profiles.Length == 0, "Restore after re-applying returns the true original");
 
+    void RejectPair(Action operation, string name)
+    {
+        var refused = false;
+        try { operation(); } catch (InvalidDataException error) when (error.Message.Contains("cannot be used together", StringComparison.Ordinal)) { refused = true; }
+        Check(refused, name);
+    }
+    var overlays = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesIncompatibleFixture", "value", "DisableOverlays");
+    var testMode = overlays with { ValueName = "OverlayTestMode" };
+    TweakDefinition Pairing(string id, RegistryAddress address, uint value) => new(id, id, "Fixture", "Fixture", 10240, 26200, ["*"], "none",
+        [new("set", "Set", [new(address, value)]), new("reset", "Remove", [new(address, null, (RegistryValueData?)null)])], [new("Fixture", "fixture", "incompatible pair")]);
+    var pairSettings = new[] { Pairing("overlays", overlays, 1), Pairing("test-mode", testMode, 5), Pairing("other", overlays with { ValueName = "Other" }, 1) };
+    var rule = new TweakIncompatibility([new("overlays", "set"), new("test-mode", "set")], "Together they crash games.");
+    var paired = new TweakCatalog(1, "pairs", pairSettings, [], [rule]);
+    store = Fresh("pairs"); engine = new(paired, store);
+    RejectPair(() => engine.Preview("both", [new("overlays", "set"), new("test-mode", "set")]), "One request cannot apply two settings that are not allowed together");
+    Apply(engine, "first", [new("overlays", "set")]);
+    RejectPair(() => engine.Preview("second", [new("test-mode", "set")]), "A second profile cannot complete a combination that is not allowed");
+    Check(store.ReadState()!.Profiles.Single().Id == "first" && Dword(store, testMode) is null, "A refused combination changes nothing");
+    Apply(engine, "first", []);
+    Put("pairs", testMode, new("OverlayTestMode", 4, BitConverter.GetBytes(5u)));
+    RejectPair(() => engine.Preview("first", [new("overlays", "set")]), "A setting is refused when Windows already has the other half of a combination that is not allowed");
+    Put("pairs", testMode, new("OverlayTestMode", 4, BitConverter.GetBytes(0u)));
+    Apply(engine, "first", [new("overlays", "set")]);
+    Check(Dword(store, overlays) == 1, "Either half alone still applies");
+    Apply(engine, "first", []);
+    store = Fresh("pairs-legacy"); engine = new(new TweakCatalog(1, "pairs", pairSettings, []), store);
+    Apply(engine, "old-a", [new("overlays", "set")]); Apply(engine, "old-b", [new("test-mode", "set")]);
+    engine = new(new TweakCatalog(1, "pairs", pairSettings, [], [rule]), store);
+    Apply(engine, "unrelated", [new("other", "set")]);
+    Apply(engine, "old-a", []);
+    Check(Dword(store, overlays) is null && Dword(store, testMode) == 5 && store.ReadState()!.Profiles.Select(profile => profile.Id).Order().SequenceEqual(new[] { "old-b", "unrelated" }),
+        "A combination applied by an older version never blocks undo or unrelated changes");
+    Reject(() => new TweakCatalog(1, "pairs", pairSettings, [new("bad", "Bad", [new("overlays", "set"), new("test-mode", "set")])], [rule]).Validate(), "A preset cannot combine settings that are not allowed together");
+    store = Fresh("pairs-held"); engine = new(paired, store);
+    Put("pairs-held", testMode, new("OverlayTestMode", 4, BitConverter.GetBytes(5u)));
+    Apply(engine, "a", [new("test-mode", "reset")]);
+    RejectPair(() => engine.Preview("a", [new("overlays", "set")]), "Swapping a profile's choice is refused when the swap would put back the other half of a combination that is not allowed");
+    RejectPair(() => engine.Preview("b", [new("overlays", "set")]), "A second profile is refused when undoing the first would bring back the other half of the combination");
+    Check(Dword(store, testMode) is null && Dword(store, overlays) is null, "Refused combinations leave both values untouched");
+    store = Fresh("pairs-compat"); engine = new(paired, store);
+    Put("pairs-compat", overlays, new("DisableOverlays", 4, BitConverter.GetBytes(1u)));
+    Apply(engine, "compat", [new("test-mode", "set"), new("overlays", "reset")]);
+    Check(Dword(store, testMode) == 5 && Dword(store, overlays) is null, "A choice set that removes one half of a combination is allowed even when that half is already set");
+    store = Fresh("pairs-resend"); engine = new(paired, store);
+    Apply(engine, "mine", [new("overlays", "set")]);
+    Put("pairs-resend", testMode, new("OverlayTestMode", 4, BitConverter.GetBytes(5u)));
+    Apply(engine, "mine", [new("overlays", "set"), new("other", "set")]);
+    Check(Dword(store, overlays with { ValueName = "Other" }) == 1 && store.ReadState()!.Profiles.Single().Selections.Length == 2, "Re-sending a held choice does not block unrelated changes after another tool set the other half");
+    store = Fresh("pairs-shared"); engine = new(paired, store);
+    Put("pairs-shared", overlays, new("DisableOverlays", 4, BitConverter.GetBytes(1u)));
+    Apply(engine, "a", [new("test-mode", "set"), new("overlays", "reset")]);
+    RejectPair(() => engine.Preview("b", [new("test-mode", "set")]), "A second profile cannot share one half when undoing the first would bring back the other half");
+    Apply(engine, "a", []);
+    Check(Dword(store, overlays) == 1 && Dword(store, testMode) is null && store.ReadState() is { Profiles.Length: 0 }, "Undoing the compatibility choice returns the PC to its original values");
+    store = Fresh("pairs-preexisting"); engine = new(paired, store);
+    Put("pairs-preexisting", overlays, new("DisableOverlays", 4, BitConverter.GetBytes(1u)));
+    Put("pairs-preexisting", testMode, new("OverlayTestMode", 4, BitConverter.GetBytes(5u)));
+    Apply(engine, "fix", [new("overlays", "reset")]);
+    Check(Dword(store, overlays) is null && Dword(store, testMode) == 5, "A PC that already had both halves can remove one of them");
+    Apply(engine, "fix", []);
+    Check(Dword(store, overlays) == 1 && Dword(store, testMode) == 5, "Undo returns a PC that already had both halves to exactly what it had");
+    var choices = new TweakChoiceStore(Path.Combine(root, "pair-choices.json"));
+    RejectPair(() => choices.Save(paired, "saved", [new("overlays", "set"), new("test-mode", "set")], null), "Saved choices cannot hold a combination that is not allowed");
+    var mpo = catalog.Incompatible?.SingleOrDefault(item => item.Selections.Select(selection => selection.SettingId).Order().SequenceEqual(new[] { "windows.afc9a1a923dc6c65", "windows.b3ed2a21f895b89b" }));
+    Check(mpo is not null && catalog.Presets.All(preset => !mpo.Selections.All(preset.Selections.Contains)), "The shipped catalog refuses the MPO combination that crashed CS2 and no preset applies it");
+
     store = Fresh("independent"); engine = new(catalog, store);
     Apply(engine, "a", Show()); Apply(engine, "b", [new("explorer.hidden-files", "show")]);
     Put("independent", extension, new("HideFileExt", 4, BitConverter.GetBytes(9u)));

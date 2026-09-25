@@ -148,6 +148,7 @@ public sealed class TweakEngine
             if (desired is not null) next.Add(new(original?.Original ?? observed, after.Applied ?? after.Value, after.RestoreValue, after.Composed));
         }
         var controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, _store.ReadControl);
+        if (selections.Length > 0) CheckIncompatible(state, changes, next, profiles, controls, Capture);
         return new()
         {
             SchemaVersion = 1, OperationId = operationId, CreatedAtUtc = created, Context = _store.Context, CatalogHash = _catalog.Digest,
@@ -160,6 +161,40 @@ public sealed class TweakEngine
         };
     }
 
+    private void CheckIncompatible(TweakState? state, List<TweakMutation> changes, List<TweakHeldValue> held, List<TweakProfile> profiles, ControlPlan controls, Func<RegistryAddress, TweakRead> capture)
+    {
+        foreach (var rule in _catalog.Incompatible ?? [])
+        {
+            var options = rule.Selections.Select(_catalog.Resolve).ToArray();
+            var halves = options.Select(item => (item.Definition, item.Option, Changes: item.Option.Changes.SelectMany(_store.Resolve).ToArray())).ToArray();
+            var addresses = halves.SelectMany(half => half.Changes).Select(change => Local(change.Address)).ToHashSet();
+            var controlAddresses = options.SelectMany(item => item.Option.Controls ?? []).Select(control => control.Address).ToHashSet();
+            string[] Owned(IEnumerable<TweakProfile> list) => list.SelectMany(profile => profile.Claims).Where(claim => addresses.Contains(claim.Target.Address))
+                .Select(claim => claim.SettingId + "/" + claim.OptionId + "/" + claim.Target.Id).Order(StringComparer.Ordinal).ToArray();
+            var touched = changes.Any(change => addresses.Contains(change.Before.Address)) || controls.Changes.Any(change => controlAddresses.Contains(change.Before.Address)) ||
+                !Owned(state?.Profiles ?? []).SequenceEqual(Owned(profiles));
+            if (!touched) continue;
+            var reads = halves.SelectMany(half => half.Changes).Select(change => capture(change.Address)).DistinctBy(read => read.Id).ToDictionary(read => read.Id, StringComparer.Ordinal);
+            RegistryValueData? Baseline(string id) => (state?.Held ?? []).Concat(held).FirstOrDefault(item => item.Original.Id == id) is { } owned ? owned.Composed ? owned.RestoreValue : owned.Original.Value : reads[id].Value;
+            var planned = reads.Keys.ToDictionary(id => id, id => changes.FirstOrDefault(change => change.Before.Id == id) is { } mutation ? mutation.After : reads[id].Value, StringComparer.Ordinal);
+            var original = reads.Keys.ToDictionary(id => id, Baseline, StringComparer.Ordinal);
+            var states = new List<Dictionary<string, RegistryValueData?>> { planned };
+            foreach (var profile in profiles.Where(profile => profile.Claims.Any(claim => reads.ContainsKey(claim.Target.Id))))
+                states.Add(reads.Keys.ToDictionary(id => id, id => profile.Claims.Any(claim => claim.Target.Id == id) && !profiles.Any(other => other != profile && other.Claims.Any(claim => claim.Target.Id == id)) ? original[id] : planned[id], StringComparer.Ordinal));
+            bool ControlsEffective((TweakDefinition Definition, TweakOption Option, TweakAssignment[] Changes) half) => (half.Option.Controls ?? []).All(control =>
+            {
+                var read = _store.ReadControl(control.Address); read.Validate();
+                var value = controls.Changes.FirstOrDefault(item => item.Before.Id == read.Id) is { } mutation ? mutation.After : read.Value;
+                return ControlComposition.Matches(new(half.Definition.Id, half.Option.Id, read, read.Expand(control.Value, allowPending: true), control.Patch), value);
+            });
+            bool Effective((TweakDefinition Definition, TweakOption Option, TweakAssignment[] Changes) half, Dictionary<string, RegistryValueData?> values) =>
+                (half.Changes.Length > 0 || half.Option.Controls is { Length: > 0 }) && ControlsEffective(half) &&
+                half.Changes.All(change => { var read = capture(change.Address); return TweakComposition.Matches(new(half.Definition.Id, half.Option.Id, read, Desired(change), change.Token, change.Bits), values[read.Id]); });
+            bool Original(Dictionary<string, RegistryValueData?> values) => values.All(item => TweakRead.SameValue(item.Value, original[item.Key]));
+            if (states.Any(values => halves.All(half => Effective(half, values)) && !Original(values)))
+                throw new InvalidDataException(string.Join(" and ", options.Select(item => item.Definition.Name)) + " cannot be used together. " + rule.Reason);
+        }
+    }
     private bool Supported(TweakDefinition definition) => _store.Context.WindowsBuild >= definition.MinimumBuild && _store.Context.WindowsBuild <= definition.MaximumBuild &&
         (definition.Editions.Contains("*") || definition.Editions.Contains(_store.Context.Edition, StringComparer.OrdinalIgnoreCase));
     private bool Supported(TweakOption option) => (option.ValidUntilUtc is null || DateTime.UtcNow < option.ValidUntilUtc.Value) && (option.Availability is null || option.Availability.Any(gate =>
@@ -170,7 +205,8 @@ public sealed class TweakEngine
         try { _store.CheckRequirement(requirement); return true; }
         catch (Exception error) when (error is InvalidDataException or IOException or System.ComponentModel.Win32Exception) { return false; }
     }
-    private TweakRead Read(RegistryAddress address) { address = address with { KeyPath = address.KeyPath.Replace("{user-sid}", _store.Context.Owner.UserSid, StringComparison.OrdinalIgnoreCase) }; var result = _store.Read(address); result.Validate(); return result; }
+    private RegistryAddress Local(RegistryAddress address) => address with { KeyPath = address.KeyPath.Replace("{user-sid}", _store.Context.Owner.UserSid, StringComparison.OrdinalIgnoreCase) };
+    private TweakRead Read(RegistryAddress address) { var result = _store.Read(Local(address)); result.Validate(); return result; }
     private static RegistryValueData? Desired(TweakAssignment change) => change.Dword is { } value ? new(change.Address.ValueName!, 4, BitConverter.GetBytes(value)) : change.Value;
     private TweakState? State()
     {

@@ -24,6 +24,8 @@ public sealed class TweakChoiceStore(string path)
     {
         Validate(profileId, selections);
         foreach (var selection in selections) _ = catalog.Resolve(selection);
+        if ((catalog.Incompatible ?? []).FirstOrDefault(rule => rule.Selections.All(selections.Contains)) is { } rule)
+            throw new InvalidDataException(string.Join(" and ", rule.Selections.Select(item => catalog.Resolve(item).Definition.Name)) + " cannot be used together. " + rule.Reason);
         using var guard = OperationFiles.Lock(path);
         var file = Read();
         if (file.Revision != expectedRevision) throw new InvalidDataException("Saved choices changed in another window. Refresh before saving.");

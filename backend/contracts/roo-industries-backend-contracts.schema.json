@@ -6815,6 +6815,45 @@
             "$ref": "#/$defs/windowsTweakDefinition"
           }
         },
+        "incompatible": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "selections",
+              "reason"
+            ],
+            "properties": {
+              "selections": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "settingId",
+                    "optionId"
+                  ],
+                  "properties": {
+                    "settingId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "optionId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
         "presets": {
           "type": "array",
           "items": {
