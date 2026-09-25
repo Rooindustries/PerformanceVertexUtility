@@ -110,6 +110,15 @@ def windows_refuses(change):
     return False
 
 
+def incompatible_rules():
+    return [{(item['settingId'], item['optionId']) for item in rule['selections']} for rule in json.loads((ROOT / 'backend/catalogs/incompatible-settings.json').read_text())['rules']]
+
+
+def combines_incompatible(selections):
+    chosen = {(item['settingId'], item['optionId']) for item in selections}
+    return any(rule <= chosen for rule in incompatible_rules())
+
+
 def mark_protected_services(settings):
     protected = {name.casefold() for name in json.loads((ROOT / 'modules/tweak_manifest.json').read_text())['protected']['services']}
     note = 'Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on.'
@@ -609,6 +618,8 @@ def compile_catalog():
                 if record['id'] == 'user-account-control':
                     covered['enableChoice'] = 'Enable standard Windows UAC values; use Restore for the captured original values.'
                 status = 'outside-supported-windows-range' if not gates else 'partial' if pending and choices else 'pending-executor' if pending else 'implemented' if choices else 'no-independent-change'
+                if status == 'implemented' and combines_incompatible(choices.values()):
+                    status = 'excluded-incompatible'
                 row = {'id': direction, 'status': status, 'selections': list(choices.values()), 'remainingEffects': pending, 'refreshInstructions': 'Sign out or restart Windows after applying.' if refresh_effects else None}
                 covered['options'].append(row)
                 if choices and status == 'implemented':
@@ -642,6 +653,26 @@ def compile_catalog():
     apply_availability(settings)
     mark_protected_services(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
+    rules = json.loads((ROOT / 'backend/catalogs/incompatible-settings.json').read_text())['rules']
+    by_id = {setting['id']: setting for setting in settings}
+    incompatible = []
+    for rule in rules:
+        selections = [{'settingId': item['settingId'], 'optionId': item['optionId']} for item in rule['selections']]
+        if len(selections) < 2 or len({item['settingId'] for item in selections}) != len(selections):
+            raise ValueError('An incompatible-settings rule needs two or more different settings')
+        for item in selections:
+            if item['optionId'] not in {option['id'] for option in by_id.get(item['settingId'], {}).get('options', [])}:
+                raise ValueError('An incompatible-settings rule names a setting or choice that is not in the catalog: ' + item['settingId'])
+        for item in selections:
+            others = ', '.join(by_id[other['settingId']]['name'] for other in selections if other is not item)
+            note = 'Roo Industries will not apply this together with ' + others + '. ' + rule['reason']
+            if note not in by_id[item['settingId']]['description']:
+                by_id[item['settingId']]['description'] = note + ' ' + by_id[item['settingId']]['description']
+        pairs = {(item['settingId'], item['optionId']) for item in selections}
+        catalog['presets'] = [preset for preset in catalog['presets'] if not pairs <= {(item['settingId'], item['optionId']) for item in preset['selections']}]
+        incompatible.append({'selections': selections, 'reason': rule['reason']})
+    if incompatible:
+        catalog['incompatible'] = incompatible
     fps = ROOT / 'backend/catalogs/fps-preset.json'
     if fps.exists():
         source = json.loads(fps.read_text())
@@ -652,6 +683,8 @@ def compile_catalog():
         for item in selections:
             if item['optionId'] not in choices.get(item['settingId'], ()):
                 raise ValueError('The FPS preset names a setting or choice that is not in the catalog: ' + item['settingId'])
+        if combines_incompatible(selections):
+            raise ValueError('The FPS preset combines settings that cannot be used together')
         catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections})
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 

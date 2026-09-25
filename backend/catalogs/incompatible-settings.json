@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "selections": [
+        { "settingId": "windows.afc9a1a923dc6c65", "optionId": "choice-6b253977ea5987f3" },
+        { "settingId": "windows.b3ed2a21f895b89b", "optionId": "choice-950ca1b1a0b488e2" }
+      ],
+      "reason": "Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing.",
+      "evidence": "scratch CS2 crash search 2026-09-25: DisableOverlays=1 alone 0/5 crashes, OverlayTestMode=5 alone 0/5, both together crashed on launch 1 with DXGI 887a0005 device removed"
+    }
+  ]
+}

@@ -15,7 +15,8 @@ public sealed record TweakSelection([property: JsonRequired] string SettingId, [
 public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false);
 public sealed record TweakDefinition([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] string Category, [property: JsonRequired] string Description, [property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild,
     [property: JsonRequired] string[] Editions, [property: JsonRequired] string Refresh, [property: JsonRequired] TweakOption[] Options, [property: JsonRequired] TweakSource[] Sources, string[]? Requirements = null, bool Advanced = false, string[]? Alternatives = null);
-public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [property: JsonRequired] string Version, [property: JsonRequired] TweakDefinition[] Settings, [property: JsonRequired] TweakPreset[] Presets)
+public sealed record TweakIncompatibility([property: JsonRequired] TweakSelection[] Selections, [property: JsonRequired] string Reason);
+public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [property: JsonRequired] string Version, [property: JsonRequired] TweakDefinition[] Settings, [property: JsonRequired] TweakPreset[] Presets, TweakIncompatibility[]? Incompatible = null)
 {
     [JsonIgnore] public string Digest => OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(this, OperationFiles.Json));
     public void Validate()
@@ -52,6 +53,13 @@ public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [p
         {
             if (string.IsNullOrWhiteSpace(preset.Id) || !presets.Add(preset.Id) || preset.Selections is not { Length: > 0 }) throw new InvalidDataException("Invalid or duplicate preset.");
             foreach (var selection in preset.Selections) Resolve(selection);
+        }
+        foreach (var rule in Incompatible ?? [])
+        {
+            if (rule?.Selections is not { Length: > 1 } || rule.Selections.Any(item => item is null) || string.IsNullOrWhiteSpace(rule.Reason) || rule.Selections.Select(item => item.SettingId).Distinct().Count() != rule.Selections.Length)
+                throw new InvalidDataException("Invalid incompatible-settings rule.");
+            if (rule.Selections.Any(selection => Resolve(selection).Option.Controls is { Length: > 0 })) throw new InvalidDataException("Incompatible-settings rules support registry settings only.");
+            if (Presets.FirstOrDefault(preset => rule.Selections.All(preset.Selections.Contains)) is { } preset) throw new InvalidDataException("A preset combines settings that cannot be used together: " + preset.Id);
         }
     }
     public (TweakDefinition Definition, TweakOption Option) Resolve(TweakSelection selection)
