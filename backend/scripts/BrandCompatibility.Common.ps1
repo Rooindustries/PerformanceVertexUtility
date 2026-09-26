@@ -15,3 +15,10 @@ function Find-RooIndustriesCompatibleTask {
     if($task.Description -cne $expected){throw 'The worker task belongs to another user or state folder.'}
     return $task
 }
+
+function Get-RooIndustriesLocalDataRoot {
+    $localData=[Environment]::GetFolderPath('LocalApplicationData')
+    $legacy=Join-Path $localData 'RooOptimizationSuite'
+    if(Test-Path -LiteralPath $legacy -PathType Container){return $legacy}
+    return Join-Path $localData 'RooIndustriesOptimizationSuite'
+}
