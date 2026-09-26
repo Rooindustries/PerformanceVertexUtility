@@ -80,7 +80,7 @@ public static class OperationFiles
         for (var attempt = 0; ; attempt++)
         {
             try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
-            catch (FileNotFoundException) when (attempt < 40 && WriteInProgress(path)) { Thread.Sleep(25); }
+            catch (FileNotFoundException) when (attempt < 40 && (attempt < 4 || WriteInProgress(path))) { Thread.Sleep(5); }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
         }
     }
