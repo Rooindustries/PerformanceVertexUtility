@@ -9,6 +9,7 @@ var repo = Path.GetFullPath(args[0]);
 var fixture = Path.Combine(Path.GetTempPath(), "roo-industries-client-boundary-" + Guid.NewGuid().ToString("N"));
 var previousRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT");
 string? recoveryRoot = null;
+string? savedRollback = null;
 LiveDataService? service = null;
 void Check(bool condition, string message)
 {
@@ -39,7 +40,9 @@ try
     Check(await service.GetCleanupManifestAsync(appId) is not null, "Client reads the reviewed cleanup list");
     // Change the discovery response after review; execution must still use the approved snapshot.
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(later)));
-    var json = await service.RequestUninstallCleanupApplyTextAsync(appId, true, true, true);
+    var applyResult = await service.RequestUninstallCleanupApplyResultAsync(appId, true, true, true);
+    savedRollback = applyResult.RecoveryPath;
+    var json = applyResult.Value;
     Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result");
     using var applied = JsonDocument.Parse(json!);
     var status = applied.RootElement.GetProperty("status").GetString();
@@ -48,7 +51,7 @@ try
     Check(!File.Exists(original) && File.Exists(later), "Apply removes only the reviewed target after discovery changes");
     var rollback = applied.RootElement.GetProperty("rollback").GetProperty("rollbackManifestPath").GetString()!;
     recoveryRoot = Path.GetDirectoryName(rollback);
-    Check(service.LastCleanupRollbackPath == rollback && File.Exists(rollback), "Client retains the durable recovery location");
+    Check(applyResult.RecoveryPath == rollback && File.Exists(rollback), "Client retains the durable recovery location");
     var restored = await service.RestoreUninstallCleanupTextAsync(rollback);
     using var restore = JsonDocument.Parse(restored!);
     Check(restore.RootElement.GetProperty("status").GetString() == "success" && File.ReadAllText(original) == "reviewed original", "Client restores the original bytes through the real restore command");
@@ -99,7 +102,7 @@ try
 finally
 {
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previousRoot);
-    recoveryRoot ??= service?.LastCleanupRollbackPath is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
+    recoveryRoot ??= savedRollback is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
 }
