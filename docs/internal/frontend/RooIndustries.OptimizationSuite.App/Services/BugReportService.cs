@@ -52,6 +52,7 @@ public sealed class BugRedactor
             if (escaped != value) rules.Add((Word(escaped), replacement));
         }
         rules.Add((OtherProfiles, "<user>"));
+        rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), "<sid>"));
         _rules = rules.ToArray();
     }
 
