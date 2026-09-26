@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $script:RooIndustriesUninstallProductName = 'Roo Industries Optimization Suite'
 
 function Get-RooIndustriesUninstallUtcStamp {
@@ -555,7 +556,7 @@ function New-RooIndustriesLeftoverItem {
 }
 function Assert-RooIndustriesCleanupExclusions {
     param([string[]]$Targets)
-    $policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
+    $policy=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
     if(@($Targets).Count -eq 0){return}
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}
