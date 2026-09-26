@@ -12,8 +12,9 @@ try {
     $localData=Join-Path $root 'local'
     [IO.Directory]::CreateDirectory($localData)|Out-Null
     Assert ((Get-RooIndustriesLocalDataRoot -LocalData $localData) -eq (Join-Path $localData 'RooIndustriesOptimizationSuite')) 'Without a legacy folder the current data folder holds cleanup exclusions'
-    [IO.Directory]::CreateDirectory((Join-Path $localData 'RooOptimizationSuite'))|Out-Null
-    Assert ((Get-RooIndustriesLocalDataRoot -LocalData $localData) -eq (Join-Path $localData 'RooOptimizationSuite')) 'An existing legacy folder holds cleanup exclusions like the native host'
+    $legacyData=Join-Path $localData $script:RooIndustriesLegacyIdentity.dataFolder
+    [IO.Directory]::CreateDirectory($legacyData)|Out-Null
+    Assert ((Get-RooIndustriesLocalDataRoot -LocalData $localData) -eq $legacyData) 'An existing legacy folder holds cleanup exclusions like the native host'
 
     $dataRoot=Get-RooIndustriesLocalDataRoot -LocalData $localData
     $policy=Join-Path $dataRoot 'cleanup-exclusions.json'

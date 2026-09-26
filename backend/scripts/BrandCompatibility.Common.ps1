@@ -3,6 +3,7 @@ $script:RooIndustriesLegacyIdentity = @{
     policyDescription = 'Roo process rules | '
     gameTask = 'Roo Protected Session '
     gameDescription = 'Roo protected game session | '
+    dataFolder = 'RooOptimizationSuite'
 }
 
 function Find-RooIndustriesCompatibleTask {
@@ -18,7 +19,7 @@ function Find-RooIndustriesCompatibleTask {
 
 function Get-RooIndustriesLocalDataRoot {
     param([string]$LocalData=[Environment]::GetFolderPath('LocalApplicationData'))
-    $legacy=Join-Path $localData 'RooOptimizationSuite'
+    $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder
     if(Test-Path -LiteralPath $legacy -PathType Container){return $legacy}
     return Join-Path $localData 'RooIndustriesOptimizationSuite'
 }
