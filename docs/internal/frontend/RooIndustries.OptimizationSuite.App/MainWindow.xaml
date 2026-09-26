@@ -38,7 +38,7 @@
                         <TextBlock Text="ROO INDUSTRIES" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="13" FontWeight="SemiBold" CharacterSpacing="80"
                                    Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                        <TextBlock Text="Optimization Suite" FontFamily="{StaticResource RooIndustriesFontFamily}"
+                        <TextBlock Text="Optimization Suite Beta" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>
@@ -97,6 +97,14 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Content="Report a bug" Tag="bug" AutomationProperties.AutomationId="NavReportBug">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEBE8;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
 
             <Grid>
                 <Grid.RowDefinitions>

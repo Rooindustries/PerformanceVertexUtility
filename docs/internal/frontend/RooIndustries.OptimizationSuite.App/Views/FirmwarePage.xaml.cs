@@ -43,7 +43,17 @@ public sealed partial class FirmwarePage : Page
     private void CancelSetup(object sender, RoutedEventArgs e) => ViewModel.CancelSetup();
     private async void Review(object sender, RoutedEventArgs e) => await ViewModel.ReviewAsync();
     private void Edit(object sender, RoutedEventArgs e) => ViewModel.EditAgain();
-    private async void Apply(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();
+    private async void Apply(object sender, RoutedEventArgs e)
+    {
+        if (!ViewModel.CanApply) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "Write these BIOS settings?",
+            Content = new TextBlock { Text = "A wrong BIOS setting can stop this PC from starting. If that happens, reset the BIOS to its defaults.\n\nIf this PC uses BitLocker or Device Encryption, find your recovery key before you restart. Windows can ask for it after a BIOS change.", TextWrapping = TextWrapping.Wrap, MaxWidth = 550 },
+            PrimaryButtonText = ViewModel.ApplyLabel, CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && ViewModel.CanApply) await ViewModel.ApplyAsync();
+    }
     private async void Verify(object sender, RoutedEventArgs e) => await ViewModel.VerifyAsync();
     private async void Undo(object sender, RoutedEventArgs e) => await ViewModel.UndoAsync();
     private async void OpenSettings(object sender, RoutedEventArgs e) => await ViewModel.OpenSettingsAsync();

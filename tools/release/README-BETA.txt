@@ -92,20 +92,24 @@ the FPS preset on a PC you use for banking, work or school.
   HKEY_LOCAL_MACHINE\SOFTWARE\RooIndustriesOptimizationSuite
 - Backups for process and game session changes are kept in
   C:\Program Files\Roo Industries\Optimization Suite\backend\state
-- If the app crashes, it writes last-crash.log into the data folder above.
+- The app's log is in the logs folder inside the data folder above
+  (Settings > Open logs folder).
 Please don't delete these while you're testing, or undo can't work.
 
 
 8. Reporting problems
 ---------------------
-Send your report to the Roo Industries contact who gave you the beta. Include:
-- what you clicked and what you expected to happen
-- a screenshot of the message the app showed
-- your Windows version (Settings > System > About)
-- the version number from the app's Settings page
-- last-crash.log from the data folder, if it exists
-Don't send your whole data folder. It can contain file paths and app names
-from your PC.
+Use "Report a bug" in the app menu (next to Settings). It fills in your PC
+specs for you. Add your Discord or email if you want a reply, describe what
+happened, then press "Attach logs" and send.
+
+What gets sent to Roo Industries: the specs shown in the form, your
+description, your contact if you gave one, the app's logs and a short list of
+which tweaks are applied. Your Windows username, PC name and user folder paths
+are removed first, and no serial numbers are collected.
+
+If sending fails, the form lets you save the report to a file so you can send
+it by hand.
 
 
 9. Updating and uninstalling

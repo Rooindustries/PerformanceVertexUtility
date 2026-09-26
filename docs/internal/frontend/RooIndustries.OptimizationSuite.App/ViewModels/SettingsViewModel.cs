@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.OptimizationSuite.Services;
@@ -11,10 +10,11 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string _selectedThemeId;
     [ObservableProperty] private bool _reducedEffects;
     [ObservableProperty] private bool _simpleMode;
-    [ObservableProperty] private string? _productName;
-    [ObservableProperty] private string? _versionText;
+    [ObservableProperty] private string? _productName = "Roo Industries Optimization Suite";
+    [ObservableProperty] private string? _versionText = "Version " + App.VersionText;
 
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
+    public string LogFolder => AppLog.Folder;
 
     public SettingsViewModel()
     {
@@ -23,12 +23,7 @@ public partial class SettingsViewModel : PageViewModelBase
         _simpleMode = App.Theme.SimpleMode;
     }
 
-    protected override async Task LoadCoreAsync()
-    {
-        var product = await Data.GetProductStatusAsync();
-        ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
-        VersionText = "Version " + typeof(SettingsViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-    }
+    protected override Task LoadCoreAsync() => Task.CompletedTask;
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);
 

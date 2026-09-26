@@ -37,7 +37,7 @@ public sealed partial class OptimizerService
         if (!string.Equals(Hash(review.PreviewPath), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed game settings changed. Preview them again.");
         var status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash));
         if (status.State?.Preview.OperationId != review.Plan.OperationId || status.HostRunning != true)
-            throw new InvalidDataException("The backend did not start the reviewed game session. Inspect its recovery state before retrying.");
+            throw new InvalidDataException("The game session did not start. Check Undo changes before trying again.");
         return status;
     }
 
@@ -78,7 +78,7 @@ public sealed partial class OptimizerService
         var operation = RequireData(result);
         if (result.Status != "completed" || operation.Worker is null || string.IsNullOrWhiteSpace(operation.SessionRoot) ||
             !string.Equals(Path.GetFullPath(operation.SessionRoot), Path.GetFullPath(sessionRoot), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The backend returned a different or incomplete game session.");
+            throw new InvalidDataException("The game session could not be confirmed. Check Undo changes before trying again.");
         return operation.Worker;
     }
 

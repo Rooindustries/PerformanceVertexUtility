@@ -483,9 +483,9 @@ public partial class ProcessControlsViewModel : ObservableObject
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));
     internal static ControlOption[] Options(string name) => name switch
     {
-        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", _ => value }, value)).ToArray(),
+        "cpuPriority" => new[] { "Idle", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime" }.Select(value => Option(value switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", "Realtime" => "Realtime · can freeze your PC", _ => value }, value)).ToArray(),
         "ioPriority" => [Option("Very low", 0), Option("Low", 1), Option("Normal", 2), Option("High · Windows support varies", 3)],
-        "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime", 5)],
+        "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime · can freeze your PC", 5)],
         "memoryPriority" => [Option("Very low", 1), Option("Low", 2), Option("Medium", 3), Option("Below normal", 4), Option("Normal", 5)],
         "executionQoS" => [Option("Windows managed", "systemManaged"), Option("Eco", "eco"), Option("High performance", "high")],
         "priorityBoost" => [Option("Allow dynamic boosts", true), Option("Disable dynamic boosts", false)],
@@ -509,7 +509,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         "cpuSets" => value.GetArrayLength() == 0 ? "Windows default" : value.GetArrayLength() + " selected",
         "priorityBoost" => value.GetBoolean() ? "allowed" : "disabled",
         "cpuPriority" => value.GetString() switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", "RealTime" => "Realtime", var text => text ?? "unknown" },
-        "ioPriority" or "gpuPriority" or "memoryPriority" => Options(name).SingleOrDefault(option => option.Value?.GetInt32() == value.GetInt32())?.Label ?? value.ToString(),
+        "ioPriority" or "gpuPriority" or "memoryPriority" => Options(name).SingleOrDefault(option => option.Value?.GetInt32() == value.GetInt32())?.Label.Split(" · ")[0] ?? value.ToString(),
         _ => value.ToString(),
     };
 }

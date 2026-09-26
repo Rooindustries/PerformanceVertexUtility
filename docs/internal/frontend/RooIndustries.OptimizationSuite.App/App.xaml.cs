@@ -16,6 +16,8 @@ public partial class App : Application
     public static CapabilityService Capabilities { get; } = new CapabilityService(Locator);
     public static OptimizerService Operations { get; } = new(Locator);
     public static ThemeService Theme { get; } = new ThemeService(new SettingsStore());
+    public static BugReportService BugReports { get; } = new(BugReportService.ReadWebhook(typeof(App).Assembly), new DiscordWebhookSender(),
+        System.IO.Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "bug-reports"), AppLog.Folder, BugRedactor.Current());
 
     private static readonly string[] AccentKeys =
     {
@@ -69,21 +71,29 @@ public partial class App : Application
             _ = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue(name);
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+        System.AppDomain.CurrentDomain.UnhandledException += (_, e) => AppLog.Write("crash", e.ExceptionObject?.ToString());
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) => AppLog.Write("background", e.Exception.ToString());
+        AppLog.Write("start", "Version " + VersionText + " on " + System.Environment.OSVersion.VersionString
+            + (IsAdministrator() ? " as administrator" : " without administrator rights"));
     }
 
-    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    public static string VersionText => (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.1.0") + " beta";
+
+    public static bool IsAdministrator()
     {
         try
         {
-            var dir = RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot;
-            System.IO.Directory.CreateDirectory(dir);
-            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "last-crash.log"),
-                e.Message + System.Environment.NewLine + e.Exception);
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
         }
         catch
         {
+            return false;
         }
     }
+
+    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        => AppLog.Write("crash", e.Message + System.Environment.NewLine + e.Exception);
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {

@@ -35,4 +35,15 @@
     <Content Include="Assets\**\*.*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets')" />
   </ItemGroup>
 
+  <Target Name="EmbedBugReportWebhook" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <BugReportWebhookFile>$(IntermediateOutputPath)bug-report-webhook.txt</BugReportWebhookFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(BugReportWebhookFile)" Lines="$([MSBuild]::Escape('url=$(ROO_INDUSTRIES_BUG_WEBHOOK)'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(BugReportWebhookFile)" LogicalName="RooIndustries.BugReportWebhook" />
+    </ItemGroup>
+  </Target>
+
 </Project>

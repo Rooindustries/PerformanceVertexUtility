@@ -906,4 +906,6 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     finally { File.Delete(rollback); }
 }
 
+await BugReportChecks.RunAsync(Check);
+
 Console.WriteLine($"Completed {count} app sweep UI checks.");

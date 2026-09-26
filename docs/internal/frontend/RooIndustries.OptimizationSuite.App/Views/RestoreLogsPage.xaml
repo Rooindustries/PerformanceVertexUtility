@@ -46,7 +46,7 @@
 
                 <Border Style="{StaticResource FocalPanelBorderStyle}">
                     <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows settings" Click="OpenWindowsSettings"/><Button Content="BIOS backups" Click="OpenBiosBackups" AutomationProperties.AutomationId="OpenBiosBackups"/></StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows tweaks" Click="OpenWindowsSettings"/><Button Content="BIOS backups" Click="OpenBiosBackups" AutomationProperties.AutomationId="OpenBiosBackups"/></StackPanel>
                         <TextBlock Text="Saved settings" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
@@ -66,7 +66,7 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <TextBlock Text="Use Windows settings to restore a saved profile. Use Games &amp; processes to stop a session or restore process settings."
+                        <TextBlock Text="Use Windows tweaks to restore a saved profile. Use Games to stop a session or restore process settings."
                                    FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Border>
