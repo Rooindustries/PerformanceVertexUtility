@@ -18,6 +18,7 @@ function Get-ValidationTempPaths {
 }
 $baselineProcess = [Diagnostics.Process]::GetCurrentProcess()
 $baselineProcess.PriorityClass = [Diagnostics.ProcessPriorityClass]::Normal
+Set-RooIndustriesProcessIoPriority $baselineProcess 'Normal'
 $baselineProcess.Dispose()
 $tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
