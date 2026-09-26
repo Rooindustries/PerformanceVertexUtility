@@ -17,7 +17,7 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false, bool attributes = false)
+    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false, bool finalize = false)
     {
         Path = NormalizePath(path);
         _writable = writable;
@@ -38,9 +38,9 @@ public sealed class FileLease : IDisposable
                 if (final && policy) access = ReadAttributes | ReadControl | Synchronize | (writable ? WriteDacl : 0);
                 if (final && owner) access |= WriteOwner;
                 if (final && content) access = ReadData | ReadAttributes | ReadControl | Synchronize | (writable ? 2u | WriteAttributes : 0u);
-                if (final && attributes) access = ReadAttributes | WriteAttributes | Synchronize;
+                if (final && finalize) access = ReadData | ReadAttributes | WriteAttributes | ReadControl | Synchronize;
                 var handle = OpenRelative(parent, parts[index], access, shareDelete ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
-                    0x00200020 | (policy || final && (restore || attributes) ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u));
+                    0x00200020 | (policy || final && (restore || finalize) ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
                 if ((Basic(handle).FileAttributes & 0x10) == 0) { handle.Dispose(); throw new InvalidDataException("A file replaced a path ancestor."); }
@@ -55,7 +55,13 @@ public sealed class FileLease : IDisposable
     public static FileLease Open(string path, bool writable = false) => new(path, writable, false, false, false);
     public static FileLease Create(string path, bool directory) => new(path, true, true, directory, true);
     public static FileLease OpenForRestore(string path) => new(path, true, false, false, true);
-    public static FileLease OpenAttributes(string path) => new(path, true, false, false, false, attributes: true);
+    internal static Action<string>? SimulateBeforeFinalize;
+    internal static Func<string, bool>? SimulateDeleteFailure;
+    public static FileLease OpenFinalize(string path)
+    {
+        SimulateBeforeFinalize?.Invoke(NormalizePath(path));
+        return new(path, true, false, false, false, finalize: true);
+    }
     public FileIdentity CurrentIdentity() => Identity(_handle);
     public static FileLease OpenPolicy(string path, bool writable = false, bool owner = false) => new(path, writable, false, false, false, policy: true, owner: owner);
     public void SetOwner(byte[] sid)
@@ -256,6 +262,7 @@ public sealed class FileLease : IDisposable
     public void MarkDelete()
     {
         if (!_writable) throw new InvalidOperationException("A detection handle cannot delete a file.");
+        if (SimulateDeleteFailure?.Invoke(Path) == true) throw new IOException("Simulated deletion failure.");
         uint flags = 1 | 0x10;
         if (!SetDispositionInformation(_handle, 21, ref flags, 4)) Fail("SetFileInformationByHandle(FileDispositionInfoEx)");
         if (!Standard(_handle).DeletePending) throw new IOException("Windows did not report the reviewed object as pending deletion.");
