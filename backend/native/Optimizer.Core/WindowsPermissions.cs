@@ -27,13 +27,13 @@ internal static class WindowsPermissions
                 }
                 else
                 {
-                    var submitted = security;
+                    if (!SetKernelObjectSecurity(handle, information, security)) throw Error("SetKernelObjectSecurity");
                     if ((control & 0x400) != 0)
                     {
-                        submitted = (byte[])security.Clone();
-                        BitConverter.GetBytes((ushort)(control | 0x100)).CopyTo(submitted, 2);
+                        var autoInherited = (byte[])security.Clone();
+                        BitConverter.GetBytes((ushort)(control | 0x100)).CopyTo(autoInherited, 2);
+                        if (!SetKernelObjectSecurity(handle, 4u | ((control & 0x1000) != 0 ? 0x80000000u : 0u), autoInherited)) throw Error("SetKernelObjectSecurity(auto-inherited)");
                     }
-                    if (!SetKernelObjectSecurity(handle, information, submitted)) throw Error("SetKernelObjectSecurity");
                 }
                 return;
             }
