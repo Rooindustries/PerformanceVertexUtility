@@ -28,7 +28,12 @@ sealed class PrivilegeScope : IDisposable
                 _previous.Add(previous);
             }
         }
-        catch { Dispose(); throw; }
+        catch (Exception error)
+        {
+            try { Dispose(); }
+            catch (Exception cleanup) { error.Data["PrivilegeRestoreFailure"] = cleanup.Message; }
+            throw;
+        }
     }
     public void Dispose()
     {
