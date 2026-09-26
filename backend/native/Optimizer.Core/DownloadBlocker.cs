@@ -90,7 +90,7 @@ public static class DownloadBlocker
             OperationFiles.Write(target.Receipt, receipt with { Phase = "active" }); return;
         }
         if (receipt is null || receipt.Phase == "retained") return;
-        if (receipt.Phase == "creating" && current.Policy is null) { File.Delete(target.Receipt); return; }
+        if (receipt.Phase == "creating" && current.Policy is null) { OperationFiles.Delete(target.Receipt); return; }
         if (receipt.Original is null || current.Policy?.Id != receipt.Original.Id) throw new InvalidDataException("The original folder identity is unavailable for restoration.");
         OperationFiles.Write(target.Receipt, receipt with { Phase = "restoring" });
         if (!ControlValues.Equal(current.Policy.Value, receipt.Original.Value)) FileAccessControl.Write(current.Policy, receipt.Original.Value);
@@ -105,6 +105,6 @@ public static class DownloadBlocker
             try { folder.MarkDelete(); }
             catch (Win32Exception error) when (error.NativeErrorCode == 145) { OperationFiles.Write(target.Receipt, receipt with { Phase = "retained" }); return; }
         }
-        File.Delete(target.Receipt);
+        OperationFiles.Delete(target.Receipt);
     }
 }

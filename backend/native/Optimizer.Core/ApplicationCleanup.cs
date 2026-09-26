@@ -111,7 +111,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         var preview = OperationFiles.Read<ApplicationCleanupPreview>(previewPath, reviewHash);
         Validate(preview);
         if (string.Equals(Path.GetFullPath(previewPath), Path.GetFullPath(journalPath), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Cleanup preview and recovery journal must be separate.");
-        var journal = File.Exists(journalPath) ? ReadJournal(journalPath) : new ApplicationCleanupJournal
+        var journal = OperationFiles.Exists(journalPath) ? ReadJournal(journalPath) : new ApplicationCleanupJournal
         {
             SchemaVersion = 1, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash, Preview = preview,
             Status = "prepared", RestoreStarted = false, Errors = [], UpdatedAtUtc = DateTime.UtcNow,
