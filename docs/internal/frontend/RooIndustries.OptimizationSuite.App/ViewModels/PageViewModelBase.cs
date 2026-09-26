@@ -47,6 +47,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLog.Write(GetType().Name, ex.ToString());
             ErrorMessage = ex.Message;
         }
         finally

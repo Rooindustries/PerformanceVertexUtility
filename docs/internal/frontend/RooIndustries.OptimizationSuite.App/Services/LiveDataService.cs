@@ -74,7 +74,16 @@ public sealed class LiveDataService
 
     public bool ScriptsAvailable => ScriptsDirectory is not null && Directory.Exists(ScriptsDirectory);
 
-    public string? LastError { get; private set; }
+    private string? _lastError;
+    public string? LastError
+    {
+        get => _lastError;
+        private set
+        {
+            _lastError = value;
+            if (value is not (AppLog.Failed or AppLog.MissingFiles or AppLog.TimedOut)) AppLog.Write("backend", value);
+        }
+    }
     public string? RepoRoot => _locator.RepoRoot;
 
     public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
@@ -550,7 +559,8 @@ public sealed class LiveDataService
         var dir = ScriptsDirectory;
         if (dir is null)
         {
-            var error = "Repo root not resolved (RepoRoot=" + (RepoRoot ?? "null") + ")";
+            AppLog.Write("backend", "Repo root not resolved.");
+            var error = AppLog.MissingFiles;
             LastError = error;
             return new(null, error);
         }
@@ -558,7 +568,8 @@ public sealed class LiveDataService
         var scriptPath = Path.Combine(dir, scriptFile);
         if (!File.Exists(scriptPath))
         {
-            var error = "Script not found: " + scriptPath;
+            AppLog.Write("backend", "Script not found: " + scriptPath);
+            var error = AppLog.MissingFiles;
             LastError = error;
             return new(null, error);
         }
@@ -568,7 +579,8 @@ public sealed class LiveDataService
             var result = await RunScriptResultAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(result.Value))
             {
-                var error = result.Error ?? "Empty output from " + scriptFile;
+                if (result.Error is null) AppLog.Write("backend", "Empty output from " + scriptFile);
+                var error = result.Error ?? AppLog.Failed;
                 LastError = error;
                 return new(null, error);
             }
@@ -577,7 +589,8 @@ public sealed class LiveDataService
         }
         catch (Exception ex)
         {
-            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            AppLog.Write("backend", scriptFile + ": " + ex);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
@@ -608,13 +621,15 @@ public sealed class LiveDataService
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
             if (value is not null) return new(value, null);
-            var error = "No data returned from " + scriptFile;
+            AppLog.Write("backend", "No data returned from " + scriptFile);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
         catch (Exception ex)
         {
-            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            AppLog.Write("backend", scriptFile + ": " + ex);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
@@ -629,13 +644,15 @@ public sealed class LiveDataService
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
             if (value is not null) return new(value, null);
-            const string error = "The backend returned no operation data.";
+            AppLog.Write("backend", "The backend returned no operation data.");
+            const string error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
         catch (Exception error)
         {
-            var message = error.GetType().Name + ": " + error.Message;
+            AppLog.Write("backend", error.ToString());
+            const string message = AppLog.Failed;
             LastError = message;
             return new(null, message);
         }
@@ -1032,7 +1049,8 @@ public sealed class LiveDataService
         using var process = new Process { StartInfo = psi };
         if (!process.Start())
         {
-            return new(null, "Could not start " + Path.GetFileName(scriptPath));
+            AppLog.Write("backend", "Could not start " + Path.GetFileName(scriptPath));
+            return new(null, AppLog.Failed);
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -1047,19 +1065,23 @@ public sealed class LiveDataService
         catch (OperationCanceledException)
         {
             TryKill(process);
-            return new(null, "Timed out running " + Path.GetFileName(scriptPath));
+            AppLog.Write("backend", "Timed out running " + Path.GetFileName(scriptPath));
+            return new(null, AppLog.TimedOut);
         }
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
-            var detail = string.IsNullOrWhiteSpace(stderr) ? "" : ": " + stderr.Trim();
-            return new(stdout, Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode + detail);
+            AppLog.Write("backend", Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode);
+            var plain = AppLog.Explain("backend", stderr, "");
+            var code = " (code " + process.ExitCode + ")";
+            return new(stdout, plain.Length == 0 ? "Something went wrong" + code + ". Details were saved to the app log (Settings, Open logs folder)." : plain + code);
         }
         if (string.IsNullOrWhiteSpace(stdout) && !string.IsNullOrWhiteSpace(stderr))
         {
-            return new(null, stderr.Trim());
+            AppLog.Write("backend", Path.GetFileName(scriptPath) + " wrote only errors.");
+            return new(null, AppLog.Explain("backend", stderr, AppLog.Failed));
         }
 
         return new(stdout, null);

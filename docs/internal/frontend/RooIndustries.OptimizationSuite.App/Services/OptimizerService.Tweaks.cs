@@ -24,7 +24,7 @@ public sealed partial class OptimizerService
         var directory = NewOperationDirectory("windows-settings");
         var path = System.IO.Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<TweakPlan>("tweak-preview", new() { ["profileId"] = profileId, ["selections"] = selections, ["outputPath"] = path });
-        if (plan.ProfileId != profileId) throw new InvalidDataException("The backend returned a review for a different profile.");
+        if (plan.ProfileId != profileId) throw new InvalidDataException("The review did not match your choices. Review them again.");
         return new(plan, path, Hash(path));
     }
     public Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool acceptDataLoss = false)
