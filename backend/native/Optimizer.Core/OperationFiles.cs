@@ -58,6 +58,7 @@ public static class OperationFiles
         var operation = path + "." + Guid.NewGuid().ToString("N");
         var temporary = operation + ".tmp";
         var marker = operation + ".writing";
+        var backup = operation + ".bak";
         try
         {
             using (new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
@@ -66,7 +67,20 @@ public static class OperationFiles
                 JsonSerializer.Serialize(output, value, Json);
                 output.Flush(flushToDisk: true);
             }
-            if (File.Exists(path)) File.Replace(temporary, path, null, ignoreMetadataErrors: true);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    SimulateReplaceFailure?.Invoke(path, backup);
+                    File.Replace(temporary, path, backup, ignoreMetadataErrors: true);
+                }
+                catch when (!File.Exists(path) && File.Exists(backup))
+                {
+                    File.Move(backup, path);
+                    throw;
+                }
+                File.Delete(backup);
+            }
             else File.Move(temporary, path);
         }
         finally { File.Delete(temporary); File.Delete(marker); }
@@ -85,11 +99,21 @@ public static class OperationFiles
         {
             try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
             catch (FileNotFoundException) when (attempt < 40 && (attempt < 10 || File.Exists(path) || WriteInProgress(path))) { Thread.Sleep(5); }
+            catch (FileNotFoundException) when (InterruptedReplace(path)) { throw new InvalidDataException("An interrupted save left only a backup of " + Path.GetFileName(path) + ". Review and recover it before continuing."); }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
         }
     }
 
-    public static bool Absent(string path) => !File.Exists(path) && !Directory.Exists(path) && !WriteInProgress(path) && !File.Exists(path);
+    internal static Action<string, string>? SimulateReplaceFailure;
+
+    public static bool Absent(string path) => !File.Exists(path) && !Directory.Exists(path) && !WriteInProgress(path) && !InterruptedReplace(path) && !File.Exists(path);
+
+    private static bool InterruptedReplace(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(full);
+        return directory is not null && Directory.Exists(directory) && !File.Exists(full) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.bak").Any();
+    }
 
     private static void RemoveStaleMarkers(string path)
     {
@@ -98,7 +122,7 @@ public static class OperationFiles
             var name = Path.GetFileName(file);
             if (name.Length <= Path.GetFileName(path).Length + 1) continue;
             var suffix = name[(Path.GetFileName(path).Length + 1)..];
-            if (suffix.Length != 32 + 4 && suffix.Length != 32 + 8 || !Guid.TryParseExact(suffix[..32], "N", out _) || suffix[32..] is not (".tmp" or ".writing")) continue;
+            if (suffix.Length < 36 || !Guid.TryParseExact(suffix[..32], "N", out _) || suffix[32..] is not (".tmp" or ".writing")) continue;
             if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromMinutes(1)) continue;
             try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
@@ -109,7 +133,7 @@ public static class OperationFiles
         var full = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(full);
         return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*")
-            .Any(file => (file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".writing", StringComparison.OrdinalIgnoreCase)) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
+            .Any(file => (file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".writing", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
     }
 
     private static void CheckProperties(JsonElement element)

@@ -24,12 +24,22 @@ function Write-RooIndustriesOperationJson {
     $operation = $full + '.' + [guid]::NewGuid().ToString('N')
     $temporary = $operation + '.tmp'
     $marker = $operation + '.writing'
+    $backup = $operation + '.bak'
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 32))
     try {
         [IO.FileStream]::new($marker, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None).Dispose()
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if ([IO.File]::Exists($full)) { [IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value) }
+        if ([IO.File]::Exists($full)) {
+            try {
+                if ($script:RooIndustriesSimulateReplaceFailure) { & $script:RooIndustriesSimulateReplaceFailure $full $backup }
+                [IO.File]::Replace($temporary,$full,$backup)
+            } catch {
+                if (-not [IO.File]::Exists($full) -and [IO.File]::Exists($backup)) { [IO.File]::Move($backup,$full) }
+                throw
+            }
+            [IO.File]::Delete($backup)
+        }
         else { [IO.File]::Move($temporary,$full) }
     } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }; if ([IO.File]::Exists($marker)) { [IO.File]::Delete($marker) } }
 }
@@ -48,7 +58,7 @@ function Read-RooIndustriesOperationJson {
             if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
             if ($attempt -ge 40) { throw }
             if ($failure -is [IO.FileNotFoundException]) {
-                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue | Where-Object { ($_.Name.EndsWith('.tmp') -or $_.Name.EndsWith('.writing')) -and ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
+                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue | Where-Object { ($_.Name.EndsWith('.tmp') -or $_.Name.EndsWith('.writing') -or $_.Name.EndsWith('.bak')) -and ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
                 if ($attempt -ge 10 -and $pending.Count -eq 0 -and -not [IO.File]::Exists($full)) { throw }
                 Start-Sleep -Milliseconds 5
             } elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
