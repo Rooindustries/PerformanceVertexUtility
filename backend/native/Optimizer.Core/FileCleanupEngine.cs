@@ -104,8 +104,8 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         using var lease = OperationFiles.Lock(journalPath);
         var journal = ReadJournal(journalPath);
         currentAuthority().Verify(journal.Preview.AppId, journal.Preview.ProviderIdentityHash);
-        var alreadyRestored = journal.Status == "restored";
         var conflicts = false;
+        var touched = new List<string>();
         var createdDirectories = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
         var unsafeDirectories = new List<string>();
         foreach (var entry in journal.Entries.Where(entry => entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
@@ -154,6 +154,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     Save(journalPath, journal);
                 }
                 else RestoreFile(entry, journalPath, journal);
+                touched.Add(entry.Original.Path);
                 entry.Status = "restored";
                 entry.Error = null;
                 Save(journalPath, journal);
@@ -183,7 +184,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             }
             catch (Exception error) { entry.Error = error.Message; conflicts = true; }
         }
-        foreach (var entry in journal.Entries.Where(entry => !alreadyRestored && entry.Status == "restored" && entry.Error is null && entry.RestoredIdentity is not null && (!entry.Original.Directory || entry.DirectoryMetadataRestored)).OrderByDescending(entry => Depth(entry.Original.Path)))
+        foreach (var entry in journal.Entries.Where(entry => touched.Any(path => Within(path, entry.Original.Path)) && entry.Status == "restored" && entry.Error is null && entry.RestoredIdentity is not null && (!entry.Original.Directory || entry.DirectoryMetadataRestored)).OrderByDescending(entry => Depth(entry.Original.Path)))
         {
             try
             {
