@@ -10,6 +10,8 @@ sealed class PrivilegeScope : IDisposable
     private static readonly object Gate = new();
     private readonly SafeFileHandle _token;
     private readonly List<TokenPrivileges> _previous = [];
+    private bool _disposed;
+    internal static Func<bool>? SimulateRestoreFailure;
     public static PrivilegeScope FilePolicy() => new("File permission recovery", "SeBackupPrivilege", "SeRestorePrivilege");
     public PrivilegeScope(string operation, params string[] names)
     {
@@ -30,6 +32,9 @@ sealed class PrivilegeScope : IDisposable
     }
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        Win32Exception? stuck = null;
         try
         {
             if (_token is not null && !_token.IsClosed)
@@ -37,11 +42,15 @@ sealed class PrivilegeScope : IDisposable
                 foreach (var saved in _previous.AsEnumerable().Reverse())
                 {
                     var value = saved;
-                    if (value.Count != 0 && !RestoreTokenPrivileges(_token, false, ref value, 0, IntPtr.Zero, IntPtr.Zero)) throw Error("AdjustTokenPrivileges(restore)");
+                    if (value.Count == 0) continue;
+                    if (SimulateRestoreFailure?.Invoke() != true && RestoreTokenPrivileges(_token, false, ref value, 0, IntPtr.Zero, IntPtr.Zero)) continue;
+                    var disable = new TokenPrivileges { Count = 1, Luid = value.Luid, Attributes = 0 };
+                    if (!RestoreTokenPrivileges(_token, false, ref disable, 0, IntPtr.Zero, IntPtr.Zero)) stuck ??= Error("AdjustTokenPrivileges(disable)");
                 }
             }
         }
         finally { _token?.Dispose(); Monitor.Exit(Gate); }
+        if (stuck is not null) throw stuck;
     }
     private static Win32Exception Error(string api) => new(Marshal.GetLastWin32Error(), api + " failed.");
     [StructLayout(LayoutKind.Sequential)] private struct Luid { public uint Low; public int High; }
