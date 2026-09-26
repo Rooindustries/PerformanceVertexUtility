@@ -128,8 +128,8 @@ static class RecoveryChecks
                 app.SetAccessControl(security);
                 app.SetValue("Kind", "app");
                 using (var ordinary = app.CreateSubKey("Ordinary")) ordinary.SetValue("Kind", "ordinary");
-                using var pinned = app.CreateSubKey("Explicit");
-                pinned.SetValue("Kind", "explicit");
+                using (var created = app.CreateSubKey("Explicit")) created.SetValue("Kind", "explicit");
+                using var pinned = app.OpenSubKey("Explicit", Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ReadKey | RegistryRights.ChangePermissions) ?? throw new InvalidDataException("Missing registry fixture key.");
                 if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KA;;;" + WindowsIdentity.GetCurrent().User!.Value + ")", 1, out var descriptor, out var size)) throw new Win32Exception(Marshal.GetLastWin32Error());
                 try
                 {
