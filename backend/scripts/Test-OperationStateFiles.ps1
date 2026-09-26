@@ -26,6 +26,11 @@ try {
     $writes=[int](Receive-Job -Job $writer -Wait)
     Write-Output ('Operation-state race: writes='+$writes+' reads='+$reads+' failures='+$failures+' '+$failure)
     Assert ($writes -gt 50 -and $reads -gt 50 -and $failures -eq 0) 'PowerShell readers never fail while a writer atomically replaces the same file'
+    $script:RooIndustriesSimulateReplaceFailure={param($Target,$Backup) [IO.File]::Move($Target,$Backup); throw 'Simulated replace failure'}
+    $replaceFailed=$false
+    try{Write-RooIndustriesOperationJson @{value='replacement'} $path}catch{$replaceFailed=$true}finally{$script:RooIndustriesSimulateReplaceFailure=$null}
+    $kept=(Read-RooIndustriesOperationJson $path).data
+    Assert ($replaceFailed -and $kept.value -ne 'replacement' -and @(Get-ChildItem -LiteralPath $root -Filter 'state.json.*' -Force).Count -eq 0) 'A failed PowerShell replace keeps the previous file and leaves no backup behind'
     $missing=$false
     try{Read-RooIndustriesOperationJson (Join-Path $root 'absent.json')|Out-Null}catch{$missing=$true}
     Assert $missing 'A missing operation file still fails after its bounded wait'
