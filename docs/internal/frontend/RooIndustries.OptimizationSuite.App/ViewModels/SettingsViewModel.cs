@@ -13,11 +13,8 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string? _productName = "Roo Industries Optimization Suite";
     [ObservableProperty] private string? _versionText = "Version " + App.VersionText;
 
-    public const string FeedbackUrl = "";
-
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
     public string LogFolder => AppLog.Folder;
-    public bool HasFeedbackUrl => FeedbackUrl.Length > 0;
 
     public SettingsViewModel()
     {
