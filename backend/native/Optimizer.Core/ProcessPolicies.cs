@@ -1,5 +1,6 @@
 #nullable enable
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace RooIndustries.Optimizer;
@@ -193,6 +194,12 @@ public sealed class ProcessPolicyHost
         return request.Host == _state.Host;
     }
 
+    private static string ExecutableHash(string path)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        return Convert.ToHexString(SHA256.HashData(file));
+    }
+
     public PolicyHostState Tick()
     {
         _state.Errors = [];
@@ -246,7 +253,7 @@ public sealed class ProcessPolicyHost
                     }
                     if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, identity.ExecutablePath, StringComparison.OrdinalIgnoreCase)) continue;
                     if (_state.Instances.Any(instance => instance.RuleId == rule.RuleId && instance.RuleHash == hash && instance.Process == identity && instance.Status is not ("restored" or "expired"))) continue;
-                    if (rule.ExecutableHash is not null && !string.Equals(OperationFiles.HashFile(identity.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
+                    if (rule.ExecutableHash is not null && !string.Equals(ExecutableHash(identity.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
                     {
                         _state.Errors.Add(rule.Name + ": the executable changed and needs review.");
                         continue;

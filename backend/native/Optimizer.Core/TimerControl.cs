@@ -28,14 +28,7 @@ public static class TimerControl
         if (state.Launch.Root != root) throw new InvalidDataException("Timer state belongs to a different directory.");
         return state;
     }
-    private static T ReadJson<T>(string path)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            try { return OperationFiles.Read<T>(path); }
-            catch (IOException error) when (attempt < 10 && (error.HResult & 0xffff) is 32 or 33) { Thread.Sleep(20); }
-        }
-    }
+    private static T ReadJson<T>(string path) => OperationFiles.Read<T>(path);
     private static Process? Running(TimerWorkerState state)
     {
         try
