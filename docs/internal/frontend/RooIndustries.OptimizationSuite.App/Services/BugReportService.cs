@@ -245,10 +245,19 @@ public sealed class BugReportService
         var wait = WaitBeforeSend;
         if (wait > TimeSpan.Zero) return new(BugSendStatus.Throttled, wait);
 
-        BugAttachment ready = attachment;
-        var current = await Task.Run(() => RefreshSpecs(ready, report.Specs), cancellationToken);
-        var payload = BuildPayload(report, current.FileName);
         _nextSendUtc = _now() + SendInterval;
+        BugAttachment ready = attachment;
+        BugAttachment current;
+        try
+        {
+            current = await Task.Run(() => RefreshSpecs(ready, report.Specs), cancellationToken);
+        }
+        catch
+        {
+            _nextSendUtc = DateTime.MinValue;
+            throw;
+        }
+        var payload = BuildPayload(report, current.FileName);
         BugSendResult result;
         try
         {
