@@ -17,5 +17,6 @@ function Stop-RooIndustriesValidationProcess {
 function Set-RooIndustriesValidationNormalPriority {
     $current = [System.Diagnostics.Process]::GetCurrentProcess()
     $current.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::Normal
+    Set-RooIndustriesProcessIoPriority $current 'Normal'
     $current.Dispose()
 }
