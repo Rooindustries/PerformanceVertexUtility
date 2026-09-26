@@ -107,6 +107,7 @@ public sealed class CleanupExclusionStore(string path)
     {
         string revision;
         CleanupExclusionDocument document;
+        if (OperationFiles.Absent(path)) return new(CleanupExclusions.Empty, null);
         try
         {
             revision = OperationFiles.HashFile(path);

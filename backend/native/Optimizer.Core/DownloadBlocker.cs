@@ -20,6 +20,7 @@ public static class DownloadBlocker
     }
     private static DownloadBlockerReceipt? Receipt(string file, string path)
     {
+        if (OperationFiles.Absent(file)) return null;
         try
         {
             var receipt = OperationFiles.Read<DownloadBlockerReceipt>(file); receipt.Owner.Verify();
