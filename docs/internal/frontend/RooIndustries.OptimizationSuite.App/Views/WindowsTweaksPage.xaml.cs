@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.OptimizationSuite.Services;
 
@@ -56,7 +56,7 @@ public sealed partial class WindowsTweaksPage : Page
     {
         if (sender is FrameworkElement { Tag: string group } && App.MainWindow is MainWindow window) window.OpenAppGroup(group);
     }
-    private async void OpenWindowsTool(object sender, RoutedEventArgs args)
+    private void OpenWindowsTool(object sender, RoutedEventArgs args)
     {
         try
         {
@@ -64,7 +64,7 @@ public sealed partial class WindowsTweaksPage : Page
             if (action == "oosu") { if (App.MainWindow is MainWindow window) window.FindTool("ShutUp"); return; }
             if (action == "recall")
             {
-                if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy"))) throw new InvalidOperationException("Windows Privacy settings could not be opened.");
+                using var settings = Process.Start(new ProcessStartInfo("ms-settings:privacy") { UseShellExecute = true });
                 ViewModel.Status = "Use Recall & snapshots in Windows settings";
                 ViewModel.Detail = "Open Recall & snapshots, expand Delete snapshots, then choose Delete all. Windows asks for Windows Hello where required. Deleted snapshots cannot be restored.";
                 return;
@@ -88,8 +88,7 @@ public sealed partial class WindowsTweaksPage : Page
         if (!ViewModel.CanEdit) return;
         try
         {
-            var picker = new FileOpenPicker(); picker.FileTypeFilter.Add(".json");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+            var picker = new FileOpenPicker(App.MainWindow!.AppWindow.Id); picker.FileTypeFilter.Add(".json");
             var file = await picker.PickSingleFileAsync(); if (file is null) return;
             ViewModel.Busy = true; await App.Operations.ImportWindowsSettingsAsync(file.Path); ViewModel.Busy = false;
             await ViewModel.RefreshCommand.ExecuteAsync(null); ViewModel.SelectedSection = ViewModel.Sections[0]; ViewModel.ShowAdvanced = true; ViewModel.Source = "Custom settings";

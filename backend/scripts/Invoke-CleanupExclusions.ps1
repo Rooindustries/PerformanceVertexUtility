@@ -11,6 +11,9 @@ $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if($Action -eq 'Save' -and -not $ConfirmApply){throw 'Confirm the new cleanup exclusion list before saving it.'}
+$hostDirectory=Join-Path $root 'backend\bin\optimizer'
+$hostArgs=@(Join-Path $hostDirectory 'Optimizer.Host.dll')
+if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $hostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $hostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){
     $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     $DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -31,7 +34,7 @@ try {
     if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
     $path=Join-Path $scratch 'request.json'
     Write-RooIndustriesOperationJson $request $path
-    $output=@(& $DotNetPath $hostDll $coreAction $path) -join "`n"
+    $output=@(& $DotNetPath @hostArgs $coreAction $path) -join "`n"
     $code=$LASTEXITCODE
     $result=$output|ConvertFrom-Json
     if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}

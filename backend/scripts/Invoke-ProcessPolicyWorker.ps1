@@ -22,6 +22,8 @@ $description='Roo Industries process rules | '+$owner.userSid+' | '+$PolicyRoot
 if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimizer'}
 $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build the policy worker with Build-OptimizerHost.ps1 before starting saved rules.'}
+$hostArgs=@($hostDll)
+if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){
     $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     if(Test-Path -LiteralPath $candidate){$DotNetPath=$candidate}else{$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -40,7 +42,7 @@ function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
         $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true}
         foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
         Write-RooIndustriesOperationJson $request $path
-        $text=@(& $DotNetPath $hostDll $CoreAction $path) -join "`n"
+        $text=@(& $DotNetPath @hostArgs $CoreAction $path) -join "`n"
         $exitCode=$LASTEXITCODE
         $result=$text|ConvertFrom-Json
         if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}
@@ -69,7 +71,7 @@ if($Action -in @('Start','EnableLogon','DisableLogon')) {
     [IO.Directory]::CreateDirectory($PolicyRoot)|Out-Null
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
     $atLogon=($Action -eq 'EnableLogon' -or ($Action -eq 'Start' -and $task -and @($task.Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0))
-    $arguments='"'+$hostDll+'" policy-run "'+$requestPath+'"'
+    $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run','"'+$requestPath+'"')) -join ' '
     $execute=New-ScheduledTaskAction -Execute $DotNetPath -Argument $arguments -WorkingDirectory $HostDirectory
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel $(if($admin){'Highest'}else{'Limited'})
