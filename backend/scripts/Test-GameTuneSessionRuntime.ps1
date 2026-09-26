@@ -111,9 +111,19 @@ try {
     Add-Failure "Dry-run Game Tune session execution failed: $($_.Exception.Message)"
 }
 
+$previewRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-game-tune-preview-$([guid]::NewGuid().ToString('N'))"
 try {
+    New-Item -ItemType Directory -Path $previewRoot -Force | Out-Null
+    $profileBackupPath = Join-Path $repoRoot 'backend\samples\process-profile-backup.sample.json'
+    $gameTuneBackup = Get-Content -LiteralPath $profileBackupPath -Raw | ConvertFrom-Json
+    $gameTuneBackup.actionId = 'performance.gameTune.startSession'
+    $gameTuneBackup | Add-Member -NotePropertyName 'sessionId' -NotePropertyValue 'game-tune-restore-preview-validation' -Force
+    $gameTuneBackupPath = Join-Path $previewRoot 'backup.json'
+    ($gameTuneBackup | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $gameTuneBackupPath -Encoding UTF8
+
     $restorePreview = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') `
-        -BackupPath (Join-Path $repoRoot 'backend\samples\process-profile-backup.sample.json') | ConvertFrom-Json
+        -BackupPath $gameTuneBackupPath `
+        -StateRoot (Join-Path $previewRoot 'state') | ConvertFrom-Json
     if ($restorePreview.actionId -eq 'performance.gameTune.stopSession' -and $restorePreview.dryRun -eq $true -and $restorePreview.status -eq 'preview') {
         Add-Pass 'Game Tune restore preview returned a structured preview envelope'
     } else {
@@ -124,8 +134,20 @@ try {
     } else {
         Add-Failure 'Game Tune restore preview reported applied changes'
     }
+
+    $foreignOutputPath = Join-Path $previewRoot 'foreign-backup.json'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -BackupPath $profileBackupPath -OutputPath $foreignOutputPath | Out-Null
+    $foreignExitCode = $LASTEXITCODE
+    $foreignPreview = Get-Content -LiteralPath $foreignOutputPath -Raw | ConvertFrom-Json
+    if ($foreignExitCode -ne 0 -and $foreignPreview.status -eq 'failed' -and @($foreignPreview.preview).Count -eq 0 -and @($foreignPreview.restoredItems).Count -eq 0) {
+        Add-Pass 'Game Tune restore preview refuses a process profile backup'
+    } else {
+        Add-Failure "Game Tune restore preview accepted a process profile backup: exit=$foreignExitCode status=$($foreignPreview.status)"
+    }
 } catch {
     Add-Failure "Game Tune restore preview failed: $($_.Exception.Message)"
+} finally {
+    if (Test-Path -LiteralPath $previewRoot) { Remove-Item -LiteralPath $previewRoot -Recurse -Force }
 }
 
 try {
