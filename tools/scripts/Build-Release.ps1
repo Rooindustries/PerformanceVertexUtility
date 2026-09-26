@@ -77,6 +77,7 @@ $numericVersion = '{0}.{1}.{2}.0' -f $Matches[1], $Matches[2], $Matches[3]
 $dotnet = Resolve-DotNetSdk $DotNetPath
 $iscc = Resolve-Iscc $IsccPath
 Write-Host "Version $version using $dotnet and $iscc"
+Write-Host ('Bug report webhook: ' + $(if ([string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_BUG_WEBHOOK)) { 'not set, testers save reports to a file' } else { 'embedded from ROO_INDUSTRIES_BUG_WEBHOOK' }))
 
 $work = Join-Path $OutputRoot ('work-' + $version)
 $stage = Join-Path $work 'stage'
