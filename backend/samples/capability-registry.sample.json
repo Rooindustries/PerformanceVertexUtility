@@ -4622,13 +4622,13 @@
                          {
                              "capabilityId": "system-optimizations.windows-settings",
                              "family": "system-optimizations",
-                             "displayName": "Privacy and Explorer settings",
-                             "technicalName": "Typed Windows registry preferences with deduplicated profiles and transactional recovery",
+                             "displayName": "Windows settings",
+                             "technicalName": "Shared Windows settings with reviewed profiles and exact-state recovery",
                              "source": "roo-industries-native",
                              "implementedBy": "roo-industries-native",
                              "frontendLabel": "Windows settings",
                              "frontendTab": "Windows settings",
-                             "riskLevel": "medium",
+                             "riskLevel": "high",
                              "approvalRequired": true,
                              "availability": {
                                  "detection": [
@@ -4637,7 +4637,7 @@
                                          "target": "backend/bin/optimizer/Optimizer.Host.dll"
                                      }
                                  ],
-                                 "notes": "Twelve individually defined preferences and policies. Applicability is checked per setting and Windows build/edition. Restoring a profile releases its claims without overriding other active profiles."
+                                 "notes": "Version-pinned settings from O&O ShutUp10, Chris Titus Tech WinUtil, Gaming toggles and WPD share underlying resources. Windows build, edition, installed products and native target availability are checked per choice."
                              },
                              "preview": {
                                  "status": "implemented",
@@ -4646,7 +4646,7 @@
                              },
                              "apply": {
                                  "status": "fixture-proven",
-                                 "mode": "reviewed-native-registry-transaction",
+                                 "mode": "reviewed-native-settings",
                                  "script": "backend/scripts/Invoke-WindowsTweakRequest.ps1",
                                  "actionId": "settings.apply",
                                  "gates": [
@@ -4654,7 +4654,7 @@
                                      "exact-target-allowlist",
                                      "backup-completed"
                                  ],
-                                 "notes": "The native registry adapter is executable. File fixtures verify planning and recovery; real-target visible Windows effects are separate from registry readback."
+                                 "notes": "Registry transactions and journaled native controls verify configuration readback. Recall data effects require separate acknowledgement. Guided Windows actions and app removers have separate review flows; configuration readback is not proof of performance improvement."
                              },
                              "restore": {
                                  "status": "fixture-proven",
@@ -4666,7 +4666,11 @@
                              "testEvidence": [
                                  {
                                      "test": "backend/scripts/Test-Tweaks.ps1",
-                                     "proves": "Canonical target deduplication, profile conflicts, shared ownership, exact-value recovery, concurrency and interruption in an atomic file fixture; native registry fixture requires explicit approval."
+                                     "proves": "File fixtures cover canonical target ownership, conflicts, applicability, recovery and data-loss gates. Native registry, service, task, firewall, hibernation, file, hosts, timer and power-plan fixtures are separate approved or disposable checks."
+                                 },
+                                 {
+                                     "test": "backend/scripts/Test-AppxScopes.ps1",
+                                     "proves": "Exact account and package identity for installed AppX registrations; no live package removal."
                                  }
                              ],
                              "resolvedAvailability": {
