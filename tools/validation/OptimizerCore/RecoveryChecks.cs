@@ -219,7 +219,7 @@ static class RecoveryChecks
             Console.WriteLine("Registry refusal: " + (reason.Length > 300 ? reason[..300] : reason));
             string? Kind(string path) { using var key = hive.OpenSubKey(path); return key?.GetValue("Kind") as string; }
             check(refused && keys.All(path => KeySddl(path) == before[path]) && Kind(keys[0]) == "app" && Kind(keys[1]) == "ordinary" && Kind(keys[2]) == "explicit", "Registry cleanup refuses a mixed-inheritance tree it cannot restore exactly and leaves its keys, values and permissions untouched");
-            check(reason.Contains("could not reproduce", StringComparison.Ordinal), "Registry cleanup explains that recovery could not be reproduced");
+            check(reason.Contains("did not reproduce the captured data and permissions", StringComparison.Ordinal), "Registry cleanup explains that recovery could not reproduce the permissions");
         }
         finally
         {
