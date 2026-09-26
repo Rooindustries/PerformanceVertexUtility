@@ -146,12 +146,15 @@ public sealed partial class OptimizerService
         var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         if (!File.Exists(host)) throw new FileNotFoundException("Build the optimizer helper with backend/scripts/Build-OptimizerHost.ps1 before using process rules and deep cleanup.", host);
         var dotnet = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_DOTNET_EXE");
-        if (string.IsNullOrWhiteSpace(dotnet))
+        var hostDirectory = Path.GetDirectoryName(host)!;
+        var bundled = string.IsNullOrWhiteSpace(dotnet) && File.Exists(Path.Combine(hostDirectory, "hostpolicy.dll"));
+        if (bundled) dotnet = Path.Combine(hostDirectory, "Optimizer.Host.exe");
+        else if (string.IsNullOrWhiteSpace(dotnet))
         {
             var userRuntime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet.exe");
             dotnet = File.Exists(userRuntime) ? userRuntime : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
         }
-        if (!File.Exists(dotnet)) throw new FileNotFoundException("The optimizer helper requires the .NET 8 Windows x64 runtime.", dotnet);
+        if (!File.Exists(dotnet)) throw new FileNotFoundException(bundled ? "The bundled optimizer helper is missing. Reinstall the app." : "The optimizer helper requires the .NET 8 Windows x64 runtime.", dotnet);
         Directory.CreateDirectory(_storage);
         var path = Path.Combine(_storage, "request-" + Guid.NewGuid().ToString("N") + ".json");
         request["schemaVersion"] = 1;
@@ -165,7 +168,7 @@ public sealed partial class OptimizerService
                 StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
             };
             start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
-            foreach (var argument in new[] { host, action, path }) start.ArgumentList.Add(argument);
+            foreach (var argument in bundled ? new[] { action, path } : new[] { host, action, path }) start.ArgumentList.Add(argument);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
             var output = process.StandardOutput.ReadToEndAsync();
             var errors = process.StandardError.ReadToEndAsync();

@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.Optimizer;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
@@ -26,9 +26,7 @@ public sealed partial class FirmwarePage : Page
         if (ViewModel.Busy || App.MainWindow is null) return;
         try
         {
-            var picker = new FolderPicker();
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+            var picker = new FolderPicker(App.MainWindow.AppWindow.Id);
             var folder = await picker.PickSingleFolderAsync();
             if (folder is null) return;
             var package = await Task.Run(() => ScewinProvider.Inspect(folder.Path));

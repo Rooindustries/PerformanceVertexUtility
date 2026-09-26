@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.OptimizationSuite.Services;
@@ -26,7 +27,7 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         var product = await Data.GetProductStatusAsync();
         ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
-        VersionText = "Version " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
+        VersionText = "Version " + typeof(SettingsViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
     }
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);

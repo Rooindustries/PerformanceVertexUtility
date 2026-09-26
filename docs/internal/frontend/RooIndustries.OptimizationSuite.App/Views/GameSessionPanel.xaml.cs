@@ -2,7 +2,7 @@ using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.ViewModels;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
@@ -28,8 +28,7 @@ public sealed partial class GameSessionPanel : UserControl
         if (!ViewModel.CanEdit || App.MainWindow is null) return;
         try
         {
-            var picker = new FileOpenPicker(); picker.FileTypeFilter.Add(".exe");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+            var picker = new FileOpenPicker(App.MainWindow.AppWindow.Id); picker.FileTypeFilter.Add(".exe");
             var file = await picker.PickSingleFileAsync();
             if (file is not null && ViewModel.CanEdit) ViewModel.GamePath = file.Path;
         }
