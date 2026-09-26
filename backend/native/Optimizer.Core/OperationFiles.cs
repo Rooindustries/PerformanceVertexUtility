@@ -35,7 +35,7 @@ public static class OperationFiles
 
     public static T Read<T>(string path, string? expectedHash = null)
     {
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var file = OpenShared(path);
         var bytes = new byte[checked((int)file.Length)];
         file.ReadExactly(bytes);
         if (expectedHash is not null && !string.Equals(Hash(bytes), expectedHash, StringComparison.OrdinalIgnoreCase))
@@ -71,8 +71,17 @@ public static class OperationFiles
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
     public static string HashFile(string path)
     {
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var file = OpenShared(path);
         return Convert.ToHexString(SHA256.HashData(file));
+    }
+
+    private static FileStream OpenShared(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
+            catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
+        }
     }
 
     private static void CheckProperties(JsonElement element)
