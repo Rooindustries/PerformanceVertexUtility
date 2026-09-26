@@ -14,7 +14,7 @@ $attemptsBefore=$null
 $outputSafe=$false
 try {
     Assert-RooIndustriesDistinctOperationPaths @($InputPath,$JournalPath,$OutputPath)
-    if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -in @([IO.Path]::GetFullPath($JournalPath)+'.cancel',[IO.Path]::GetFullPath($JournalPath)+'.lock')){throw 'OutputPath cannot replace queue control files.'}
+    if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -in @(([IO.Path]::GetFullPath($JournalPath)+'.cancel'),([IO.Path]::GetFullPath($JournalPath)+'.lock'))){throw 'OutputPath cannot replace queue control files.'}
     $outputSafe=$true
     $JournalPath=[IO.Path]::GetFullPath($JournalPath)
     $cancelPath=$JournalPath+'.cancel'
