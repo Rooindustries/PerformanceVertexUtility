@@ -17,7 +17,7 @@ function Find-RooIndustriesCompatibleTask {
 }
 
 function Get-RooIndustriesLocalDataRoot {
-    $localData=[Environment]::GetFolderPath('LocalApplicationData')
+    param([string]$LocalData=[Environment]::GetFolderPath('LocalApplicationData'))
     $legacy=Join-Path $localData 'RooOptimizationSuite'
     if(Test-Path -LiteralPath $legacy -PathType Container){return $legacy}
     return Join-Path $localData 'RooIndustriesOptimizationSuite'
