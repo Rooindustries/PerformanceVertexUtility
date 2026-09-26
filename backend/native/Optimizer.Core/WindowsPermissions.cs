@@ -25,7 +25,16 @@ internal static class WindowsPermissions
                     var result = RegSetKeySecurity(handle, information, security);
                     if (result != 0) throw new Win32Exception(result, "RegSetKeySecurity failed: " + result);
                 }
-                else if (!SetKernelObjectSecurity(handle, information, security)) throw Error("SetKernelObjectSecurity");
+                else
+                {
+                    var submitted = security;
+                    if ((control & 0x400) != 0)
+                    {
+                        submitted = (byte[])security.Clone();
+                        BitConverter.GetBytes((ushort)(control | 0x100)).CopyTo(submitted, 2);
+                    }
+                    if (!SetKernelObjectSecurity(handle, information, submitted)) throw Error("SetKernelObjectSecurity");
+                }
                 return;
             }
             var protection = (control & 0x1000) != 0 ? 0x80000000u : 0x20000000u;
