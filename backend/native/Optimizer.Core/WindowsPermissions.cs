@@ -17,7 +17,7 @@ internal static class WindowsPermissions
             if (!GetSecurityDescriptorDacl(descriptor, out var present, out var dacl, out _)) throw Error("GetSecurityDescriptorDacl");
             if (!present) throw new InvalidDataException("An absent DACL requires a separate recovery contract.");
             var control = unchecked((ushort)Marshal.ReadInt16(descriptor, 2));
-            if ((control & 0x400) == 0)
+            if (objectType == 1 || (control & 0x400) == 0)
             {
                 var information = 7u | ((control & 0x1000) != 0 ? 0x80000000u : 0u);
                 if (objectType == 4)
