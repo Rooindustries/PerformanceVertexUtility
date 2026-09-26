@@ -49,7 +49,7 @@ function Read-RooIndustriesOperationJson {
             if ($attempt -ge 40) { throw }
             if ($failure -is [IO.FileNotFoundException]) {
                 $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue | Where-Object { ($_.Name.EndsWith('.tmp') -or $_.Name.EndsWith('.writing')) -and ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
-                if ($attempt -ge 2 -and $pending.Count -eq 0 -and -not [IO.File]::Exists($full)) { throw }
+                if ($attempt -ge 10 -and $pending.Count -eq 0 -and -not [IO.File]::Exists($full)) { throw }
                 Start-Sleep -Milliseconds 5
             } elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
             else { throw }
