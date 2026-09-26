@@ -39,7 +39,7 @@ public sealed class FileLease : IDisposable
                 if (final && owner) access |= WriteOwner;
                 if (final && content) access = ReadData | ReadAttributes | ReadControl | Synchronize | (writable ? 2u | WriteAttributes : 0u);
                 var handle = OpenRelative(parent, parts[index], access, shareDelete ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
-                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u));
+                    0x00200020 | (policy || final && restore ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
                 if ((Basic(handle).FileAttributes & 0x10) == 0) { handle.Dispose(); throw new InvalidDataException("A file replaced a path ancestor."); }
@@ -228,7 +228,11 @@ public sealed class FileLease : IDisposable
     {
         if (!_writable || original.SecurityCoverage != 7 || original.Security is not { Length: > 0 })
             throw new InvalidDataException("File permissions were not captured for restoration.");
-        using (new PrivilegeScope("File ownership recovery", "SeRestorePrivilege")) WindowsPermissions.Restore(_handle, 1, original.Security);
+        try { WindowsPermissions.Restore(_handle, 1, original.Security); }
+        catch (Win32Exception error) when (error.NativeErrorCode is 5 or 1307)
+        {
+            using (new PrivilegeScope("File ownership recovery", "SeRestorePrivilege")) WindowsPermissions.Restore(_handle, 1, original.Security);
+        }
         var basic = new FileBasicInfo
         {
             CreationTime = original.CreationTime, LastAccessTime = original.LastAccessTime, LastWriteTime = original.LastWriteTime,
