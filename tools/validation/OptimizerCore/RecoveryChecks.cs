@@ -12,6 +12,7 @@ static class RecoveryChecks
     {
         Permissions(check);
         InterruptedCleanup(check);
+        RepeatedRestore(check);
         RegistryPermissions(check);
         ReplaceRace(check);
         PrivilegeRestoreFailure(check);
@@ -161,6 +162,42 @@ static class RecoveryChecks
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Interrupted-cleanup validation removes its fixture");
+    }
+
+    static void RepeatedRestore(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-repeated-restore-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "App");
+        var folder = Path.Combine(source, "Data");
+        var child = Path.Combine(folder, "child.txt");
+        var operations = Path.Combine(root, "Operations");
+        var folderWritten = new DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Directory.CreateDirectory(operations);
+            File.WriteAllText(child, "child");
+            Directory.SetLastWriteTimeUtc(folder, folderWritten);
+            var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("repeated fixture"));
+            var authority = new CleanupAuthority
+            {
+                AppId = "fixture:repeated", ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+                RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var engine = new FileCleanupEngine(() => authority);
+            var reviewPath = Path.Combine(operations, "review.json");
+            var journalPath = Path.Combine(operations, "journal.json");
+            OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+            engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
+            var first = engine.Restore(journalPath);
+            check(first.Status == "restored" && Directory.GetLastWriteTimeUtc(folder) == folderWritten, "A completed recovery restores the folder's original write time");
+            File.Delete(child);
+            var second = engine.Restore(journalPath);
+            if (second.Status != "restored") Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(second, OperationFiles.Json));
+            check(second.Status == "restored" && File.ReadAllText(child) == "child" && Directory.GetLastWriteTimeUtc(folder) == folderWritten, "A later recovery that restores a child into an already-restored folder puts the folder's write time back");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        check(!Directory.Exists(root), "Repeated-recovery validation removes its fixture");
     }
 
     static void RegistryPermissions(Action<bool, string> check)
