@@ -94944,6 +94944,73 @@
         }
       ],
       "availableOnly": true
+    },
+    {
+      "id": "fps-boost",
+      "name": "FPS preset (turns off Memory Integrity, VBS, Credential Guard, Secure Launch, the Windows hypervisor, Spectre and Meltdown protections and Control Flow Guard)",
+      "selections": [
+        {
+          "settingId": "windows.a37f2d7904b12d56",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.4507a73b6ce058e6",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.ebcb7d7c938e041a",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.1a312f189b5815d5",
+          "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.22bf56124768d4a0",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.ebdd8782dfaaa8f9",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.d47c42ef436fb54a",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.828d4b1f887bfaad",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.bd24cb899aeebe80",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.f6deda9293f22576",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.dadbb9f2b31a9392",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.f621c6877f2af1d1",
+          "optionId": "choice-8a82bd73e2e93338"
+        },
+        {
+          "settingId": "windows.0c2df5b4c9887da8",
+          "optionId": "choice-dc6b5cc8eae3dd25"
+        },
+        {
+          "settingId": "windows.f5bf7a12d3552d6f",
+          "optionId": "choice-dc6b5cc8eae3dd25"
+        },
+        {
+          "settingId": "windows.6eec44b714e4d017",
+          "optionId": "choice-8dec51f655aab290"
+        }
+      ],
+      "availableOnly": true
     }
   ],
   "incompatible": [
