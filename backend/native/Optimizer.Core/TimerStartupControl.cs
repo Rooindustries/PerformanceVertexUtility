@@ -34,6 +34,12 @@ public static class TimerStartupControl
         try { scheduler.Connect(); return scheduler; }
         catch { Marshal.FinalReleaseComObject(scheduler); throw; }
     }
+    internal static string StartupScript(string assembly, string launcher, bool bundled, string root)
+    {
+        static string Literal(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        static string Verify(string file) => "if((Get-FileHash -LiteralPath " + Literal(file) + " -Algorithm SHA256).Hash -cne " + Literal(OperationFiles.HashFile(file)) + "){throw 'The timer helper changed; review its startup registration again.'}\n";
+        return "$ErrorActionPreference='Stop'\n" + Verify(assembly) + (bundled ? Verify(launcher) : "") + "& " + Literal(launcher) + (bundled ? "" : " " + Literal(assembly)) + " '--timer-autostart' " + Literal(root) + "\nexit $LASTEXITCODE\n";
+    }
     private static object? Find(dynamic scheduler, string name)
     {
         try { return scheduler.GetFolder(@"\").GetTask(name); }
@@ -88,8 +94,7 @@ public static class TimerStartupControl
             var bundled = Path.GetFileNameWithoutExtension(dotnet).Equals(Path.GetFileNameWithoutExtension(assembly), StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(Path.GetDirectoryName(assembly)!, "hostpolicy.dll"));
             if (!bundled && !Path.GetFileNameWithoutExtension(dotnet).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"), "dotnet.exe");
             if (!File.Exists(dotnet)) throw new FileNotFoundException("Install the .NET runtime or provide DOTNET_ROOT before configuring timer startup.", dotnet);
-            string Literal(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-            var script = "$ErrorActionPreference='Stop'\nif((Get-FileHash -LiteralPath " + Literal(assembly) + " -Algorithm SHA256).Hash -cne " + Literal(OperationFiles.HashFile(assembly)) + "){throw 'The timer helper changed; review its startup registration again.'}\n& " + Literal(dotnet) + (bundled ? "" : " " + Literal(assembly)) + " '--timer-autostart' " + Literal(target.Root) + "\nexit $LASTEXITCODE\n";
+            var script = StartupScript(assembly, dotnet, bundled, target.Root);
             var scriptPath = Path.Combine(target.Root, "startup.ps1");
             if (File.Exists(scriptPath)) throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
