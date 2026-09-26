@@ -80,7 +80,7 @@ public static class OperationFiles
         for (var attempt = 0; ; attempt++)
         {
             try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
-            catch (FileNotFoundException) when (attempt < 40 && (attempt < 4 || WriteInProgress(path))) { Thread.Sleep(5); }
+            catch (FileNotFoundException) when (attempt < 40 && (attempt < 2 || WriteInProgress(path))) { Thread.Sleep(5); }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
         }
     }
@@ -89,7 +89,7 @@ public static class OperationFiles
     {
         var full = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(full);
-        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.tmp").Any();
+        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.tmp").Any(file => DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
     }
 
     private static void CheckProperties(JsonElement element)
