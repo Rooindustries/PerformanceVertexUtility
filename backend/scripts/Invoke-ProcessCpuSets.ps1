@@ -53,7 +53,7 @@ try {
             $result.status='preview'; $result.data=$preview
         } else {
             $lease=Lock-RooIndustriesOperation $JournalPath
-            if (Test-Path -LiteralPath $JournalPath) {
+            if (Test-RooIndustriesOperationFile $JournalPath) {
                 $journal=(Read-RooIndustriesOperationJson $JournalPath).data
                 if ($journal.kind -ne 'cpu-set-journal' -or $journal.preview.operationId -cne $preview.operationId -or
                     ($Action -eq 'Apply' -and $journal.reviewSha256 -ine $ReviewSha256)) { throw 'Journal belongs to a different reviewed operation.' }

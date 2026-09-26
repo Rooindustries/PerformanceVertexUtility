@@ -38,7 +38,7 @@ try {
     } elseif(-not $ConfirmApply) {$result.status='preview';$result.data=$plan}
     else {
         $lease=Lock-RooIndustriesOperation $JournalPath
-        if(Test-Path -LiteralPath $JournalPath) {
+        if(Test-RooIndustriesOperationFile $JournalPath) {
             $journal=(Read-RooIndustriesOperationJson $JournalPath).data
             if($journal.kind -ne 'bulk-uninstall-journal' -or $journal.plan.queueId -cne $plan.queueId -or
                 ($Action -eq 'Apply' -and $journal.reviewSha256 -ine $ReviewSha256)){throw 'Journal belongs to a different reviewed queue.'}
