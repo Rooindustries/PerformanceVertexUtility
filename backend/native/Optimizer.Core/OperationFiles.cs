@@ -54,9 +54,12 @@ public static class OperationFiles
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var operation = path + "." + Guid.NewGuid().ToString("N");
+        var temporary = operation + ".tmp";
+        var marker = operation + ".writing";
         try
         {
+            using (new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
             using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 JsonSerializer.Serialize(output, value, Json);
@@ -65,7 +68,7 @@ public static class OperationFiles
             if (File.Exists(path)) File.Replace(temporary, path, null, ignoreMetadataErrors: true);
             else File.Move(temporary, path);
         }
-        finally { File.Delete(temporary); }
+        finally { File.Delete(temporary); File.Delete(marker); }
     }
 
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
@@ -91,7 +94,8 @@ public static class OperationFiles
     {
         var full = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(full);
-        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.tmp").Any(file => DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
+        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*")
+            .Any(file => (file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".writing", StringComparison.OrdinalIgnoreCase)) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
     }
 
     private static void CheckProperties(JsonElement element)

@@ -14,14 +14,17 @@ function Write-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)]$Value, [Parameter(Mandatory=$true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
-    $temporary = $full + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    $operation = $full + '.' + [guid]::NewGuid().ToString('N')
+    $temporary = $operation + '.tmp'
+    $marker = $operation + '.writing'
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 32))
     try {
+        [IO.FileStream]::new($marker, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None).Dispose()
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
         if ([IO.File]::Exists($full)) { [IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value) }
         else { [IO.File]::Move($temporary,$full) }
-    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }; if ([IO.File]::Exists($marker)) { [IO.File]::Delete($marker) } }
 }
 
 function Read-RooIndustriesOperationJson {
@@ -38,7 +41,7 @@ function Read-RooIndustriesOperationJson {
             if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
             if ($attempt -ge 40) { throw }
             if ($failure -is [IO.FileNotFoundException]) {
-                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*.tmp') -File -ErrorAction SilentlyContinue | Where-Object { ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
+                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue | Where-Object { ($_.Name.EndsWith('.tmp') -or $_.Name.EndsWith('.writing')) -and ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
                 if ($attempt -ge 2 -and $pending.Count -eq 0) { throw }
                 Start-Sleep -Milliseconds 5
             } elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
