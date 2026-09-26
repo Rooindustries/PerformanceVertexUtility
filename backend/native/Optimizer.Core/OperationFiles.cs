@@ -80,8 +80,16 @@ public static class OperationFiles
         for (var attempt = 0; ; attempt++)
         {
             try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
+            catch (FileNotFoundException) when (attempt < 40 && WriteInProgress(path)) { Thread.Sleep(25); }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
         }
+    }
+
+    private static bool WriteInProgress(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(full);
+        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.tmp").Any();
     }
 
     private static void CheckProperties(JsonElement element)
