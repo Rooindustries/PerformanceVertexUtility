@@ -57,7 +57,7 @@ if($Action -eq 'Start'){
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'Build-OptimizerHost.ps1 must package the background session executable.'}
     $execute=New-ScheduledTaskAction -Execute $workerExe -Argument ('run "'+$requestPath+'"') -WorkingDirectory (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
-    $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Force|Out-Null
     Start-ScheduledTask -TaskName $taskName
     $clock=[Diagnostics.Stopwatch]::StartNew()
