@@ -560,5 +560,8 @@ function Assert-RooIndustriesCleanupExclusions {
     if(@($Targets).Count -eq 0){return}
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}
+    $saved=$null
+    try {$saved=[IO.File]::ReadAllText($policy)|ConvertFrom-Json} catch {$saved=$null}
+    if($null -ne $saved -and $saved.schemaVersion -eq 1 -and $null -ne $saved.exclusions -and $null -ne $saved.exclusions.paths -and $null -ne $saved.exclusions.registry -and @($saved.exclusions.paths).Count -eq 0 -and @($saved.exclusions.registry).Count -eq 0){return}
     & (Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1') -Action Check -FileTarget $Targets|Out-Null
 }
