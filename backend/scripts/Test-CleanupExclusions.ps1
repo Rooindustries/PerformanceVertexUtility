@@ -4,9 +4,8 @@ $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:ROO_INDUSTRIES_DOTNET_EXE=$DotNetPath
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-exclusion-host-'+[Guid]::NewGuid().ToString('N'))
-$localData=[Environment]::GetFolderPath('LocalApplicationData')
-$dataRoot=if(Test-Path -LiteralPath (Join-Path $localData 'RooOptimizationSuite') -PathType Container){Join-Path $localData 'RooOptimizationSuite'}else{Join-Path $localData 'RooIndustriesOptimizationSuite'}
-$policy=Join-Path $dataRoot 'cleanup-exclusions.json'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+$policy=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
 $before=if(Test-Path $policy){[IO.File]::ReadAllBytes($policy)}else{$null}
 $ownedRevision=$null
 $command=Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1'
