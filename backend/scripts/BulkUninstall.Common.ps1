@@ -127,7 +127,7 @@ function Remove-RooIndustriesBulkOwnedClaim {
     $path=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
     $lease=Lock-RooIndustriesOperation $path
     try {
-        if(Test-Path -LiteralPath $path){$claim=(Read-RooIndustriesOperationJson $path).data;if($claim.queueId -ceq $Plan.queueId){Remove-Item -LiteralPath $path -Force}}
+        if(Test-RooIndustriesOperationFile $path){$claim=(Read-RooIndustriesOperationJson $path).data;if($claim.queueId -ceq $Plan.queueId){Remove-Item -LiteralPath $path -Force}}
     } finally {$lease.Dispose()}
 }
 
@@ -166,7 +166,7 @@ function Invoke-RooIndustriesBulkEntry {
         if($null -eq ('RooIndustries.Optimization.ProcessOutput.Capture' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessOutput.cs')}
         $claimPath=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
         $claimLease=Lock-RooIndustriesOperation $claimPath
-        if(Test-Path -LiteralPath $claimPath) {
+        if(Test-RooIndustriesOperationFile $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }

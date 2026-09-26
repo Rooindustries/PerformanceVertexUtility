@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+. (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 $script:RooIndustriesUninstallProductName = 'Roo Industries Optimization Suite'
 
 function Get-RooIndustriesUninstallUtcStamp {
@@ -558,11 +559,7 @@ function Assert-RooIndustriesCleanupExclusions {
     param([string[]]$Targets,[string]$DataRoot=(Get-RooIndustriesLocalDataRoot))
     $policy=Join-Path $DataRoot 'cleanup-exclusions.json'
     if(@($Targets).Count -eq 0){return}
-    try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
-    catch [System.Management.Automation.ItemNotFoundException] {
-        if(@(Get-ChildItem -LiteralPath $DataRoot -Filter 'cleanup-exclusions.json.*.bak' -File -ErrorAction SilentlyContinue).Count -gt 0){throw 'An interrupted save left only a backup of the cleanup exclusion list. Review and recover it before cleaning up.'}
-        return
-    }
+    if(-not (Test-RooIndustriesOperationFile $policy)){return}
     $saved=$null
     try {$saved=[IO.File]::ReadAllText($policy)|ConvertFrom-Json} catch {$saved=$null}
     if($null -ne $saved -and $saved.schemaVersion -eq 1 -and $null -ne $saved.owner -and [string]$saved.owner.userSid -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -and [string]$saved.owner.machine -ieq $env:COMPUTERNAME -and $null -ne $saved.exclusions -and $null -ne $saved.exclusions.paths -and $null -ne $saved.exclusions.registry -and @($saved.exclusions.paths).Count -eq 0 -and @($saved.exclusions.registry).Count -eq 0){return}

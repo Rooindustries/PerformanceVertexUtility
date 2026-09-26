@@ -10,38 +10,75 @@ function Assert-RooIndustriesDistinctOperationPaths {
     }
 }
 
+function Open-RooIndustriesReplaceLock {
+    param([Parameter(Mandatory=$true)][string]$Full)
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while ($true) {
+        try { return [IO.FileStream]::new($Full + '.replace.lock', [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None, 1, [IO.FileOptions]::DeleteOnClose) }
+        catch {
+            $failure = $_.Exception
+            if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+            if ($failure -is [UnauthorizedAccessException]) { return $null }
+            if (-not ($failure -is [IO.IOException] -and (($failure.HResult -band 0xffff) -eq 32 -or ($failure.HResult -band 0xffff) -eq 33)) -or $clock.Elapsed.TotalSeconds -ge 30) { throw }
+            Start-Sleep -Milliseconds 2
+        }
+    }
+}
+
+function Get-RooIndustriesOperationLeftovers {
+    param([Parameter(Mandatory=$true)][string]$Full)
+    $name = [IO.Path]::GetFileName($Full)
+    @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($Full)) -File -Force -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name.Length -ge $name.Length + 37 -and $_.Name.StartsWith($name + '.', [StringComparison]::OrdinalIgnoreCase) -and $_.Name.Substring($name.Length + 1) -match '^[0-9a-f]{32}\.(tmp|bak|writing)$'
+    } | ForEach-Object { $_.FullName })
+}
+
+function Restore-RooIndustriesOrphanedOperation {
+    param([Parameter(Mandatory=$true)][string]$Full)
+    if ([IO.File]::Exists($Full)) { return }
+    $backups = @(Get-RooIndustriesOperationLeftovers $Full | Where-Object { $_.EndsWith('.bak', [StringComparison]::OrdinalIgnoreCase) })
+    if ($backups.Count -eq 1) { [IO.File]::Move($backups[0], $Full) }
+    elseif ($backups.Count -gt 1) { throw ('Several interrupted saves left backups of ' + [IO.Path]::GetFileName($Full) + '. Review them before continuing.') }
+}
+
+function Test-RooIndustriesOperationFile {
+    param([Parameter(Mandatory=$true)][string]$Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    if ([IO.File]::Exists($full)) { return $true }
+    if (-not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($full))) { return $false }
+    $guard = Open-RooIndustriesReplaceLock $full
+    try { Restore-RooIndustriesOrphanedOperation $full; return [IO.File]::Exists($full) } finally { if ($guard) { $guard.Dispose() } }
+}
+
 function Write-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)]$Value, [Parameter(Mandatory=$true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
-    foreach ($stale in @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue)) {
-        if ($stale.Name.Length -le [IO.Path]::GetFileName($full).Length + 1) { continue }
-        $suffix = $stale.Name.Substring([IO.Path]::GetFileName($full).Length + 1)
-        if ($suffix -match '^[0-9a-f]{32}\.(tmp|writing)$' -and ([DateTime]::UtcNow - $stale.LastWriteTimeUtc).TotalMinutes -ge 1) {
-            try { [IO.File]::Delete($stale.FullName) } catch { }
-        }
-    }
-    $operation = $full + '.' + [guid]::NewGuid().ToString('N')
-    $temporary = $operation + '.tmp'
-    $marker = $operation + '.writing'
-    $backup = $operation + '.bak'
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 32))
+    $guard = Open-RooIndustriesReplaceLock $full
     try {
-        [IO.FileStream]::new($marker, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None).Dispose()
-        $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if ([IO.File]::Exists($full)) {
-            try {
-                if ($script:RooIndustriesSimulateReplaceFailure) { & $script:RooIndustriesSimulateReplaceFailure $full $backup }
-                [IO.File]::Replace($temporary,$full,$backup)
-            } catch {
-                if (-not [IO.File]::Exists($full) -and [IO.File]::Exists($backup)) { [IO.File]::Move($backup,$full) }
-                throw
+        Restore-RooIndustriesOrphanedOperation $full
+        if ([IO.File]::Exists($full)) { foreach ($leftover in Get-RooIndustriesOperationLeftovers $full) { try { [IO.File]::Delete($leftover) } catch { } } }
+        $operation = $full + '.' + [guid]::NewGuid().ToString('N')
+        $temporary = $operation + '.tmp'
+        $backup = $operation + '.bak'
+        $hook = Get-Variable -Name RooIndustriesSimulateReplaceFailure -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+        try {
+            $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
+            if ([IO.File]::Exists($full)) {
+                try {
+                    if ($hook) { & $hook $full $backup }
+                    [IO.File]::Replace($temporary,$full,$backup)
+                } catch {
+                    if (-not [IO.File]::Exists($full) -and [IO.File]::Exists($backup)) { [IO.File]::Move($backup,$full) }
+                    throw
+                }
+                try { [IO.File]::Delete($backup) } catch { }
             }
-            [IO.File]::Delete($backup)
-        }
-        else { [IO.File]::Move($temporary,$full) }
-    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }; if ([IO.File]::Exists($marker)) { [IO.File]::Delete($marker) } }
+            else { [IO.File]::Move($temporary,$full) }
+        } finally { if ([IO.File]::Exists($temporary)) { try { [IO.File]::Delete($temporary) } catch { } } }
+    } finally { if ($guard) { $guard.Dispose() } }
 }
 
 function Read-RooIndustriesOperationJson {
@@ -57,11 +94,8 @@ function Read-RooIndustriesOperationJson {
             $failure = $_.Exception
             if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
             if ($attempt -ge 40) { throw }
-            if ($failure -is [IO.FileNotFoundException]) {
-                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue | Where-Object { ($_.Name.EndsWith('.tmp') -or $_.Name.EndsWith('.writing') -or $_.Name.EndsWith('.bak')) -and ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
-                if ($attempt -ge 10 -and $pending.Count -eq 0 -and -not [IO.File]::Exists($full)) { throw }
-                Start-Sleep -Milliseconds 5
-            } elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
+            if ($failure -is [IO.FileNotFoundException]) { if (-not (Test-RooIndustriesOperationFile $full)) { throw } }
+            elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
             else { throw }
         }
     }
