@@ -54,6 +54,10 @@ public class RooIndustriesBulkFixture {
     Assert ($preview.status -eq 'preview' -and -not(Test-Path $a.JournalPath)) 'Apply without confirmation remains a preview'
     $overwrite=Read-Result (& $runScript @a -OutputPath $case.planPath)
     Assert ($overwrite.status -eq 'failed' -and (Get-FileHash $case.planPath).Hash -eq $a.ReviewSha256 -and -not(Test-Path $case.counter)) 'An output collision cannot destroy the reviewed bulk plan or launch a command'
+    foreach($control in '.cancel','.lock'){
+        $controlOutput=Read-Result (& $runScript @a -OutputPath ($a.JournalPath+$control))
+        Assert ($controlOutput.status -eq 'failed' -and $controlOutput.errors[0].message -eq 'OutputPath cannot replace queue control files.' -and -not(Test-Path ($a.JournalPath+$control)) -and -not(Test-Path $case.counter)) "An output path cannot replace the queue $control file"
+    }
     $lease=Lock-RooIndustriesOperation $a.JournalPath
     try{$busy=Read-Result (& $runScript @a)}finally{$lease.Dispose()}
     Assert ($busy.status -eq 'failed' -and -not(Test-Path $case.counter)) 'Concurrent queue invocation cannot dispatch through an occupied journal lease'
