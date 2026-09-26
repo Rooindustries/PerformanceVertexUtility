@@ -17,11 +17,15 @@ internal static class WindowsPermissions
             if (!GetSecurityDescriptorDacl(descriptor, out var present, out var dacl, out _)) throw Error("GetSecurityDescriptorDacl");
             if (!present) throw new InvalidDataException("An absent DACL requires a separate recovery contract.");
             var control = unchecked((ushort)Marshal.ReadInt16(descriptor, 2));
-            if (objectType == 4 && (control & 0x400) == 0)
+            if ((control & 0x400) == 0)
             {
                 var information = 7u | ((control & 0x1000) != 0 ? 0x80000000u : 0u);
-                var result = RegSetKeySecurity(handle, information, security);
-                if (result != 0) throw new Win32Exception(result, "RegSetKeySecurity failed: " + result);
+                if (objectType == 4)
+                {
+                    var result = RegSetKeySecurity(handle, information, security);
+                    if (result != 0) throw new Win32Exception(result, "RegSetKeySecurity failed: " + result);
+                }
+                else if (!SetKernelObjectSecurity(handle, information, security)) throw Error("SetKernelObjectSecurity");
                 return;
             }
             var protection = (control & 0x1000) != 0 ? 0x80000000u : 0x20000000u;
@@ -37,4 +41,5 @@ internal static class WindowsPermissions
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetSecurityDescriptorDacl(IntPtr security, out bool present, out IntPtr dacl, out bool defaulted);
     [DllImport("advapi32.dll")] static extern uint SetSecurityInfo(SafeHandle handle, uint objectType, uint information, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
     [DllImport("advapi32.dll")] static extern int RegSetKeySecurity(SafeHandle handle, uint information, byte[] descriptor);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetKernelObjectSecurity(SafeHandle handle, uint information, byte[] descriptor);
 }
