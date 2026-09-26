@@ -87,6 +87,8 @@ static class BugReportChecks
                     && state.RootElement.GetProperty("lastErrors").GetArrayLength() == 1,
                     "The tweak summary lists applied profiles, pending recovery and non-empty errors");
             }
+            var sid = new BugRedactor(null, null, null).Redact(@"HKEY_USERS\S-1-5-21-2864832615-2000329836-3074386272-1001\Software and S-1-5-18");
+            check(!sid.Contains("2864832615") && sid.Contains(@"HKEY_USERS\<sid>\Software") && sid.Contains("S-1-5-18"), "A user account SID is removed while well-known system SIDs stay readable");
             var admin = new BugRedactor(null, "Admin", null).Redact("Run as administrator. admin signed in.");
             check(admin == "Run as administrator. <user> signed in.", "A short user name is only redacted as a whole word");
             var accented = new BugRedactor(@"C:\Users\José", "José", "PC-JOSÉ").Redact("{\"p\":\"C:\\\\Users\\\\Jos\\u00e9\"} José on PC-JOSÉ");
