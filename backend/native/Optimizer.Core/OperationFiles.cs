@@ -85,6 +85,8 @@ public static class OperationFiles
         }
     }
 
+    public static bool Absent(string path) => !File.Exists(path) && !WriteInProgress(path) && !File.Exists(path);
+
     private static bool WriteInProgress(string path)
     {
         var full = Path.GetFullPath(path);
