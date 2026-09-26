@@ -29,7 +29,10 @@ function Read-RooIndustriesOperationJson {
     $full = [IO.Path]::GetFullPath($Path)
     $bytes = $null
     for ($attempt = 0; $null -eq $bytes; $attempt++) {
-        try { $bytes = [IO.File]::ReadAllBytes($full) }
+        try {
+            $stream = [IO.FileStream]::new($full, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try { $buffer = [IO.MemoryStream]::new(); $stream.CopyTo($buffer); $bytes = $buffer.ToArray() } finally { $stream.Dispose() }
+        }
         catch {
             $failure = $_.Exception
             if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
