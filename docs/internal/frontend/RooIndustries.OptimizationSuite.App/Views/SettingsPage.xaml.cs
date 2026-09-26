@@ -28,8 +28,6 @@ public sealed partial class SettingsPage : Page
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e) => Open(ViewModel.LogFolder, folder: true);
 
-    private void Feedback_Click(object sender, RoutedEventArgs e) => Open(SettingsViewModel.FeedbackUrl);
-
     private static void Open(string target, bool folder = false)
     {
         try

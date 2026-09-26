@@ -16,6 +16,8 @@ public partial class App : Application
     public static CapabilityService Capabilities { get; } = new CapabilityService(Locator);
     public static OptimizerService Operations { get; } = new(Locator);
     public static ThemeService Theme { get; } = new ThemeService(new SettingsStore());
+    public static BugReportService BugReports { get; } = new(BugReportService.ReadWebhook(typeof(App).Assembly), new DiscordWebhookSender(),
+        System.IO.Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "bug-reports"), AppLog.Folder, BugRedactor.Current());
 
     private static readonly string[] AccentKeys =
     {

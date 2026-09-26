@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -23,6 +24,7 @@ public sealed partial class MainWindow : Window
         ["monitoring"] = typeof(MonitoringPage),
         ["tools"] = typeof(ToolsDiagnosticsPage),
         ["restore"] = typeof(RestoreLogsPage),
+        ["bug"] = typeof(BugReportPage),
     };
 
     private string _currentTag;
@@ -115,7 +117,7 @@ public sealed partial class MainWindow : Window
 
     public void SelectNav(string tag)
     {
-        foreach (var item in Nav.MenuItems)
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems))
         {
             if (item is NavigationViewItem { Tag: string itemTag } navItem && itemTag == tag)
             {
@@ -154,7 +156,7 @@ public sealed partial class MainWindow : Window
 
         var secondary = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
-        foreach (var item in Nav.MenuItems)
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems))
         {
             if (item is NavigationViewItem navItem)
             {
