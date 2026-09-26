@@ -125,12 +125,13 @@ static class RecoveryChecks
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-interrupted-" + Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "App");
-        var removed = Path.Combine(source, "removed.txt");
+        var folder = Path.Combine(source, "Sub");
+        var removed = Path.Combine(folder, "removed.txt");
         var kept = Path.Combine(source, "kept.txt");
         var operations = Path.Combine(root, "Operations");
         try
         {
-            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(folder);
             Directory.CreateDirectory(operations);
             File.WriteAllText(removed, "removed original");
             File.WriteAllText(kept, "kept original");
@@ -156,7 +157,7 @@ static class RecoveryChecks
             OperationFiles.Write(journalPath, journal);
             engine.Restore(journalPath);
             check(File.ReadAllText(kept) == "edited by the user" && File.GetLastWriteTimeUtc(kept) == editedAt, "Recovery leaves a never-deleted, later-edited sibling's content and write time untouched");
-            check(File.ReadAllText(removed) == "removed original", "Recovery still restores the deleted sibling inside the never-deleted folder");
+            check(File.ReadAllText(removed) == "removed original" && Directory.Exists(folder), "Recovery still recreates the deleted folder beside the never-deleted sibling");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Interrupted-cleanup validation removes its fixture");
@@ -212,7 +213,7 @@ static class RecoveryChecks
             {
                 var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
                 refused = result.Status != "applied";
-                reason = System.Text.Json.JsonSerializer.Serialize(result, OperationFiles.Json);
+                reason = result.Error ?? result.Status;
             }
             catch (Exception error) when (error is InvalidDataException or InvalidOperationException) { refused = true; reason = error.Message; }
             Console.WriteLine("Registry refusal: " + (reason.Length > 300 ? reason[..300] : reason));
