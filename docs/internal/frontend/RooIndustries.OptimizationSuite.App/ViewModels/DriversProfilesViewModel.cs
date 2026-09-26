@@ -119,17 +119,9 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
         }
 
-        var catalog = await Data.GetDriverRecommendationsAsync();
-        var pnps = Gpus.Select(g => g.PnpDeviceId).Where(p => !string.IsNullOrWhiteSpace(p)).Cast<string>().ToList();
-        var matched = (catalog.Recommendations ?? Enumerable.Empty<DriverRecommendation>())
-            .Where(r => r.HardwareMatches?.Any(m => pnps.Any(p => p.StartsWith(m, StringComparison.OrdinalIgnoreCase))) ?? false)
-            .ToList();
         Recommendations.Clear();
-        foreach (var r in matched) Recommendations.Add(r);
-        HasRecommendations = Recommendations.Count > 0;
-
+        HasRecommendations = false;
         ManualGateWarnings.Clear();
-        foreach (var w in catalog.ManualInstallGate?.Warnings ?? Enumerable.Empty<string>()) ManualGateWarnings.Add(w);
 
         if (!HasNvidia)
         {

@@ -43,7 +43,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
-        RestoreHeadline = restart ? "Windows feature changes are waiting for restart verification." : windows?.Pending is not null ? "A Windows settings change needs recovery. Open Windows settings to review it." : restorable
+        RestoreHeadline = restart ? "Windows feature changes are waiting for restart verification." : windows?.Pending is not null ? "A Windows settings change needs recovery. Open Windows tweaks to review it." : restorable
             ? "Saved settings are available. Open the matching section to restore them."
             : unavailable ? "Some recovery state could not be read. Reopen this page to retry."
                 : "No Windows or process settings to restore.";

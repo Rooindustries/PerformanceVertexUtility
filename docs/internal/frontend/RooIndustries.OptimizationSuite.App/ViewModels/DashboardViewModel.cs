@@ -19,6 +19,7 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty] private string _backgroundSummary = "";
     [ObservableProperty] private string _gameName = "None detected";
 
+    public bool NotAdministrator { get; } = !App.IsAdministrator();
     public ObservableCollection<UsageLine> TopMemoryUsers { get; } = new();
     public ObservableCollection<StatusLine> DriverLines { get; } = new();
 

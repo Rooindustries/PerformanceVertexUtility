@@ -38,7 +38,7 @@
                         <TextBlock Text="ROO INDUSTRIES" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="13" FontWeight="SemiBold" CharacterSpacing="80"
                                    Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                        <TextBlock Text="Optimization Suite" FontFamily="{StaticResource RooIndustriesFontFamily}"
+                        <TextBlock Text="Optimization Suite Beta" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>

@@ -142,16 +142,24 @@ public sealed partial class OptimizerService
 
     private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default)
     {
-        var root = _locator.RepoRoot ?? throw new InvalidOperationException("The backend folder is unavailable.");
+        var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
         var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
-        if (!File.Exists(host)) throw new FileNotFoundException("Build the optimizer helper with backend/scripts/Build-OptimizerHost.ps1 before using process rules and deep cleanup.", host);
+        if (!File.Exists(host))
+        {
+            AppLog.Write("helper", "Missing " + host);
+            throw new FileNotFoundException(AppLog.MissingFiles, host);
+        }
         var dotnet = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_DOTNET_EXE");
         if (string.IsNullOrWhiteSpace(dotnet))
         {
             var userRuntime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet.exe");
             dotnet = File.Exists(userRuntime) ? userRuntime : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
         }
-        if (!File.Exists(dotnet)) throw new FileNotFoundException("The optimizer helper requires the .NET 8 Windows x64 runtime.", dotnet);
+        if (!File.Exists(dotnet))
+        {
+            AppLog.Write("helper", "Missing " + dotnet);
+            throw new FileNotFoundException("This app needs the Microsoft .NET 8 Desktop Runtime. Install it from Microsoft, then reopen the app.", dotnet);
+        }
         Directory.CreateDirectory(_storage);
         var path = Path.Combine(_storage, "request-" + Guid.NewGuid().ToString("N") + ".json");
         request["schemaVersion"] = 1;
@@ -178,11 +186,19 @@ public sealed partial class OptimizerService
             }
             var text = await output;
             var stderr = await errors;
-            if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("Optimizer helper exit " + process.ExitCode + ": " + stderr);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                AppLog.Write("helper", action + " exited with code " + process.ExitCode);
+                throw new InvalidOperationException(AppLog.Explain("helper", stderr, AppLog.Failed));
+            }
             using var document = JsonDocument.Parse(text);
             var result = document.RootElement;
             if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
-                throw new InvalidOperationException(result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : "The optimizer helper failed.");
+            {
+                var message = result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : null;
+                AppLog.Write("helper", action + " failed: " + (message ?? text));
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? AppLog.Failed : message);
+            }
             return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
         }
         finally { File.Delete(path); }

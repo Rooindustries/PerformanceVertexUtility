@@ -10,10 +10,14 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string _selectedThemeId;
     [ObservableProperty] private bool _reducedEffects;
     [ObservableProperty] private bool _simpleMode;
-    [ObservableProperty] private string? _productName;
-    [ObservableProperty] private string? _versionText;
+    [ObservableProperty] private string? _productName = "Roo Industries Optimization Suite";
+    [ObservableProperty] private string? _versionText = "Version " + App.VersionText;
+
+    public const string FeedbackUrl = "";
 
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;
+    public string LogFolder => AppLog.Folder;
+    public bool HasFeedbackUrl => FeedbackUrl.Length > 0;
 
     public SettingsViewModel()
     {
@@ -22,12 +26,7 @@ public partial class SettingsViewModel : PageViewModelBase
         _simpleMode = App.Theme.SimpleMode;
     }
 
-    protected override async Task LoadCoreAsync()
-    {
-        var product = await Data.GetProductStatusAsync();
-        ProductName = string.IsNullOrWhiteSpace(product.ProductName) ? "Roo Industries Optimization Suite" : product.ProductName;
-        VersionText = "Version " + (product.BackendPackageVersion?.Replace("-contracts", string.Empty) ?? "0.1.0");
-    }
+    protected override Task LoadCoreAsync() => Task.CompletedTask;
 
     partial void OnSelectedThemeIdChanged(string value) => App.Theme.SetTheme(value);
 
