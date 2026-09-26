@@ -555,13 +555,13 @@ function New-RooIndustriesLeftoverItem {
     }
 }
 function Assert-RooIndustriesCleanupExclusions {
-    param([string[]]$Targets)
-    $policy=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
+    param([string[]]$Targets,[string]$DataRoot=(Get-RooIndustriesLocalDataRoot))
+    $policy=Join-Path $DataRoot 'cleanup-exclusions.json'
     if(@($Targets).Count -eq 0){return}
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}
     $saved=$null
     try {$saved=[IO.File]::ReadAllText($policy)|ConvertFrom-Json} catch {$saved=$null}
-    if($null -ne $saved -and $saved.schemaVersion -eq 1 -and $null -ne $saved.exclusions -and $null -ne $saved.exclusions.paths -and $null -ne $saved.exclusions.registry -and @($saved.exclusions.paths).Count -eq 0 -and @($saved.exclusions.registry).Count -eq 0){return}
+    if($null -ne $saved -and $saved.schemaVersion -eq 1 -and $null -ne $saved.owner -and [string]$saved.owner.userSid -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -and [string]$saved.owner.machine -ieq $env:COMPUTERNAME -and $null -ne $saved.exclusions -and $null -ne $saved.exclusions.paths -and $null -ne $saved.exclusions.registry -and @($saved.exclusions.paths).Count -eq 0 -and @($saved.exclusions.registry).Count -eq 0){return}
     & (Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1') -Action Check -FileTarget $Targets|Out-Null
 }
