@@ -26,6 +26,7 @@ if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Chec
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
+if (args is ["--recovery"]) { RecoveryChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
@@ -163,6 +164,33 @@ try
     OperationFiles.Write(highPath, highPreview);
     Check(engine.Apply(highPath, OperationFiles.HashFile(highPath), highJournal).Status == "applied" && Oracle.Io(probe.Handle) == 3, "The current Windows token can apply and independently read High I/O priority");
     Check(engine.Restore(highJournal).Status == "restored" && Oracle.Io(probe.Handle) == ioBefore, "High I/O priority restores through the same native control path");
+    foreach (var (name, value, label) in new[] { ("cpuPriority", Value("Realtime"), "Realtime CPU priority"), ("gpuPriority", Value(5), "Realtime GPU priority") })
+    {
+        var realtimePath = Path.Combine(root, name + "-realtime-review.json");
+        var realtimeJournal = Path.Combine(root, name + "-realtime-journal.json");
+        OperationFiles.Write(realtimePath, engine.Preview(probe.Id, new() { [name] = value }));
+        var realtime = engine.Apply(realtimePath, OperationFiles.HashFile(realtimePath), realtimeJournal);
+        probe.Refresh();
+        var observed = name == "cpuPriority" ? probe.PriorityClass == ProcessPriorityClass.RealTime : Oracle.Gpu(probe.Handle) == 5;
+        if (realtime.Status != "applied") Console.WriteLine(JsonSerializer.Serialize(realtime, OperationFiles.Json));
+        Check(realtime.Status == "applied" && observed, "The current Windows token can apply and independently read " + label);
+        var realtimeRestore = engine.Restore(realtimeJournal);
+        probe.Refresh();
+        Check(realtimeRestore.Status == "restored" && probe.PriorityClass == priorityBefore && Oracle.Gpu(probe.Handle) == gpuBefore, label + " restores through the same native control path");
+        probe.Refresh();
+    }
+    var sameBefore = probe.PriorityClass;
+    var samePath = Path.Combine(root, "same-review.json");
+    var sameJournal = Path.Combine(root, "same-journal.json");
+    OperationFiles.Write(samePath, engine.Preview(probe.Id, new() { ["cpuPriority"] = Value(sameBefore.ToString()) }));
+    var same = engine.Apply(samePath, OperationFiles.HashFile(samePath), sameJournal);
+    Check(same.Status == "applied" && same.Changes.Single().Status == "unchanged", "A process already at its target value is recorded as unchanged");
+    probe.PriorityClass = sameBefore == ProcessPriorityClass.High ? ProcessPriorityClass.AboveNormal : ProcessPriorityClass.High;
+    var foreign = probe.PriorityClass;
+    engine.Restore(sameJournal);
+    probe.Refresh();
+    Check(probe.PriorityClass == foreign, "Restoring an unchanged field leaves a later outside value alone");
+    probe.PriorityClass = sameBefore;
     var malformed = Path.Combine(root, "duplicate.json");
     File.WriteAllText(malformed, "{\"kind\":\"windowsDefault\",\"kind\":\"logical\"}");
     Reject(() => OperationFiles.Read<CpuSelection>(malformed), "Duplicate JSON fields are rejected at the saved-operation boundary");
@@ -185,6 +213,7 @@ ApplicationCleanupChecks.Run(Check);
 ExclusionChecks.Run(Check);
 CleanupBatchChecks.Run(Check);
 FirmwareChecks.Run(Check);
+RecoveryChecks.Run(Check);
 
 }
 catch (Exception error)
