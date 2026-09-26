@@ -214,7 +214,8 @@ public sealed class ProcessTarget : IDisposable
             case "ioPriority":
                 var io = value.GetInt32();
                 if (io is < 0 or > 3) throw new InvalidDataException("I/O priority is outside the supported range.");
-                CheckStatus(NtSetInformationProcess(_handle, 33, ref io, 4), "NtSetInformationProcess(ProcessIoPriority)");
+                using (io == 3 ? new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege") : null)
+                    CheckStatus(NtSetInformationProcess(_handle, 33, ref io, 4), "NtSetInformationProcess(ProcessIoPriority)");
                 break;
             case "gpuPriority":
                 var gpu = value.GetInt32();
