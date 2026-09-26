@@ -23,7 +23,7 @@ public sealed class BackendLocator
     private static void ClearInstalledOverrides()
     {
         if (!Installed) return;
-        foreach (var name in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => name.StartsWith("ROO_", StringComparison.OrdinalIgnoreCase)).ToArray())
+        foreach (var name in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => name.StartsWith(RooIndustries.Optimizer.BrandCompatibility.LegacyEnvironmentPrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
             Environment.SetEnvironmentVariable(name, null);
     }
 
