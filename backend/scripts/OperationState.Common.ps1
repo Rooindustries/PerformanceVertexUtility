@@ -15,6 +15,7 @@ function Write-RooIndustriesOperationJson {
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
     foreach ($stale in @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue)) {
+        if ($stale.Name.Length -le [IO.Path]::GetFileName($full).Length + 1) { continue }
         $suffix = $stale.Name.Substring([IO.Path]::GetFileName($full).Length + 1)
         if ($suffix -match '^[0-9a-f]{32}\.(tmp|writing)$' -and ([DateTime]::UtcNow - $stale.LastWriteTimeUtc).TotalMinutes -ge 1) {
             try { [IO.File]::Delete($stale.FullName) } catch { }
