@@ -62,7 +62,7 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
         Validate(preview);
         ValidateStorage(preview, previewPath, journalPath);
         if (string.Equals(Path.GetFullPath(previewPath), Path.GetFullPath(journalPath), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Batch review and journal paths must be separate.");
-        var journal = File.Exists(journalPath) ? ReadJournal(journalPath) : new CleanupBatchJournal
+        var journal = OperationFiles.Exists(journalPath) ? ReadJournal(journalPath) : new CleanupBatchJournal
         {
             SchemaVersion = 1, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash, Preview = preview,
             RestoreStarted = false, Status = "prepared", UpdatedAtUtc = DateTime.UtcNow,

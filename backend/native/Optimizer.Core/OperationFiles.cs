@@ -54,14 +54,14 @@ public static class OperationFiles
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        RemoveStaleMarkers(path);
+        using var guard = ReplaceLock(path);
+        RecoverOrphan(path);
+        RemoveLeftovers(path);
         var operation = path + "." + Guid.NewGuid().ToString("N");
         var temporary = operation + ".tmp";
-        var marker = operation + ".writing";
         var backup = operation + ".bak";
         try
         {
-            using (new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
             using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 JsonSerializer.Serialize(output, value, Json);
@@ -79,11 +79,11 @@ public static class OperationFiles
                     File.Move(backup, path);
                     throw;
                 }
-                File.Delete(backup);
+                TryDelete(backup);
             }
             else File.Move(temporary, path);
         }
-        finally { File.Delete(temporary); File.Delete(marker); }
+        finally { TryDelete(temporary); }
     }
 
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
@@ -93,47 +93,81 @@ public static class OperationFiles
         return Convert.ToHexString(SHA256.HashData(file));
     }
 
+    internal static Action<string, string>? SimulateReplaceFailure;
+
+    public static bool Exists(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (File.Exists(full)) return true;
+        if (!Directory.Exists(Path.GetDirectoryName(full))) return false;
+        using var guard = ReplaceLock(full);
+        RecoverOrphan(full);
+        return File.Exists(full);
+    }
+
+    public static bool Absent(string path) => !Directory.Exists(path) && !Exists(path);
+
+    public static void Delete(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!Directory.Exists(Path.GetDirectoryName(full))) return;
+        using var guard = ReplaceLock(full);
+        File.Delete(full);
+        foreach (var leftover in Leftovers(full)) File.Delete(leftover);
+    }
+
     private static FileStream OpenShared(string path)
     {
         for (var attempt = 0; ; attempt++)
         {
             try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
-            catch (FileNotFoundException) when (attempt < 40 && (attempt < 10 || File.Exists(path) || WriteInProgress(path))) { Thread.Sleep(5); }
-            catch (FileNotFoundException) when (InterruptedReplace(path)) { throw new InvalidDataException("An interrupted save left only a backup of " + Path.GetFileName(path) + ". Review and recover it before continuing."); }
+            catch (FileNotFoundException) when (attempt < 40 && Exists(path)) { }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020) && attempt < 40) { Thread.Sleep(25); }
         }
     }
 
-    internal static Action<string, string>? SimulateReplaceFailure;
-
-    public static bool Absent(string path) => !File.Exists(path) && !Directory.Exists(path) && !WriteInProgress(path) && !InterruptedReplace(path) && !File.Exists(path);
-
-    private static bool InterruptedReplace(string path)
+    private static FileStream? ReplaceLock(string path)
     {
-        var full = Path.GetFullPath(path);
-        var directory = Path.GetDirectoryName(full);
-        return directory is not null && Directory.Exists(directory) && !File.Exists(full) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*.bak").Any();
-    }
-
-    private static void RemoveStaleMarkers(string path)
-    {
-        foreach (var file in Directory.EnumerateFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".*"))
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
         {
-            var name = Path.GetFileName(file);
-            if (name.Length <= Path.GetFileName(path).Length + 1) continue;
-            var suffix = name[(Path.GetFileName(path).Length + 1)..];
-            if (suffix.Length < 36 || !Guid.TryParseExact(suffix[..32], "N", out _) || suffix[32..] is not (".tmp" or ".writing")) continue;
-            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromMinutes(1)) continue;
-            try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            try { return new FileStream(path + ".replace.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+            catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33 && clock.Elapsed < TimeSpan.FromSeconds(30)) { Thread.Sleep(2); }
+            catch (UnauthorizedAccessException) { return null; }
         }
     }
 
-    private static bool WriteInProgress(string path)
+    private static void RecoverOrphan(string path)
     {
-        var full = Path.GetFullPath(path);
-        var directory = Path.GetDirectoryName(full);
-        return directory is not null && Directory.Exists(directory) && Directory.EnumerateFiles(directory, Path.GetFileName(full) + ".*")
-            .Any(file => (file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".writing", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromSeconds(5));
+        if (File.Exists(path)) return;
+        var backups = Leftovers(path).Where(file => file.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (backups.Length == 1) File.Move(backups[0], path);
+        else if (backups.Length > 1) throw new InvalidDataException("Several interrupted saves left backups of " + Path.GetFileName(path) + ". Review them before continuing.");
+    }
+
+    private static void RemoveLeftovers(string path)
+    {
+        if (!File.Exists(path)) return;
+        foreach (var leftover in Leftovers(path)) TryDelete(leftover);
+    }
+
+    private static IEnumerable<string> Leftovers(string path)
+    {
+        var name = Path.GetFileName(path);
+        return Directory.EnumerateFiles(Path.GetDirectoryName(path)!, name + ".*").Where(file =>
+        {
+            var candidate = Path.GetFileName(file);
+            if (candidate.Length < name.Length + 36) return false;
+            var suffix = candidate[(name.Length + 1)..];
+            return Guid.TryParseExact(suffix[..32], "N", out _) && suffix[32..] is ".tmp" or ".bak" or ".writing";
+        });
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static void CheckProperties(JsonElement element)

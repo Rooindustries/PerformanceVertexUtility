@@ -12,7 +12,7 @@ public static class CustomTweaks
     private static string Store => Path.Combine(BrandCompatibility.LocalDataRoot, "settings", "custom-windows-settings.json");
     private static CustomTweakFile Read()
     {
-        if (!File.Exists(Store)) return new(1, OperationOwner.Current(), []);
+        if (!OperationFiles.Exists(Store)) return new(1, OperationOwner.Current(), []);
         if (new FileInfo(Store).Length > 2097152) throw new InvalidDataException("Custom settings exceed 2 MiB.");
         var file = OperationFiles.Read<CustomTweakFile>(Store); file.Owner.Verify();
         if (file.SchemaVersion != 1 || file.Entries.Length > 200) throw new InvalidDataException("Custom settings format or count is invalid.");
@@ -79,7 +79,7 @@ public static class CustomTweaks
         var current = Read(); var updated = current with { Entries = current.Entries.Where(entry => !entries.Any(incoming => incoming.Id == entry.Id)).Concat(entries).ToArray() };
         if (updated.Entries.Length > 200) throw new InvalidDataException("At most 200 custom switches can be imported.");
         var merged = Merge(catalog, updated.Entries);
-        if (File.Exists(Store)) OperationFiles.Write(Store + ".previous.json", current);
+        if (OperationFiles.Exists(Store)) OperationFiles.Write(Store + ".previous.json", current);
         OperationFiles.Write(Store, updated); return merged;
     }
     public static TweakCatalog AddOwnership(TweakCatalog catalog, string path)
@@ -96,7 +96,7 @@ public static class CustomTweaks
     }
     public static void PruneOwnership(TweakState state)
     {
-        if (!File.Exists(Store)) return;
+        if (!OperationFiles.Exists(Store)) return;
         using var guard = OperationFiles.Lock(Store); var current = Read();
         var held = state.Profiles.SelectMany(profile => profile.Controls ?? []).Select(claim => "ownership." + claim.Target.Id[..16].ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
         var entries = current.Entries.Where(entry => !entry.Id.StartsWith("ownership.", StringComparison.Ordinal) || held.Contains(entry.Id)).ToArray();
