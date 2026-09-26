@@ -96,7 +96,7 @@
                 <TabViewItem Header="Remove apps" IsClosable="False" AutomationProperties.AutomationId="RemovalTab">
                     <views:BulkRemovalPanel x:Name="BulkRemoval" />
                 </TabViewItem>
-                <TabViewItem Header="Leftover cleanup" IsClosable="False" AutomationProperties.AutomationId="LeftoversTab">
+                <TabViewItem x:Name="LeftoversTab" Header="Leftover cleanup" IsClosable="False" AutomationProperties.AutomationId="LeftoversTab">
             <Grid x:Name="MasterDetail" ColumnSpacing="18" RowSpacing="16" SizeChanged="MasterDetail_SizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="ListColumn" Width="1*" />
@@ -141,13 +141,13 @@
                         </StackPanel>
                         <StackPanel Spacing="9">
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Path" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Check the app's uninstaller." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Path" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Check the app's uninstaller." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Scan" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Find leftover files." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Scan" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Find leftover files." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Apply" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=" — Review selected files before removing them." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Apply" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Review selected files before removing them." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                         </StackPanel>
                     </StackPanel>

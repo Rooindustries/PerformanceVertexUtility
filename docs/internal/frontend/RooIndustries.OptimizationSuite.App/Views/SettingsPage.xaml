@@ -52,6 +52,11 @@
                         <TextBlock Text="{x:Bind ViewModel.ProductName, Mode=OneWay}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextDisplayBrush}" />
                         <TextBlock Text="{x:Bind ViewModel.VersionText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         <TextBlock Text="Roo Industries / rooindustries.com" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="This is a beta. If something goes wrong, use Report a bug in the menu." Margin="0,8,0,0" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.LogFolder}" IsTextSelectionEnabled="True" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="LogFolderPath" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                            <Button Content="Open logs folder" Click="OpenLogs_Click" AutomationProperties.AutomationId="OpenLogsFolder" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

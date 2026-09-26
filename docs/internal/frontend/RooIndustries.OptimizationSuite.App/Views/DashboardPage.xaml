@@ -43,7 +43,8 @@
                     <Image Source="ms-appx:///Assets/Icons/home.svg" Style="{StaticResource PageHeaderIconStyle}" />
                     <StackPanel Grid.Column="1" Spacing="4">
                         <TextBlock Text="Home" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="Pick what you want to do. Every change can be undone." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Pick what you want to do. Most changes can be undone. Removed apps must be installed again." Style="{StaticResource PageSubtitleTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Most changes need administrator rights. Close the app, right-click it, and choose Run as administrator." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextAccentBrush}" Visibility="{x:Bind ViewModel.NotAdministrator, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="DashboardAdminNotice" />
                     </StackPanel>
                 </Grid>
             </Border>

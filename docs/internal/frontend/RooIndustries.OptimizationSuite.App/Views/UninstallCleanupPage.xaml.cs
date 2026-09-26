@@ -16,6 +16,7 @@ public sealed partial class UninstallCleanupPage : Page
     public UninstallCleanupPage()
     {
         InitializeComponent();
+        LeftoversTab.Visibility = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
         Loaded += async (_, _) =>
         {
             ResizeContent();

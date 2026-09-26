@@ -201,7 +201,7 @@ public sealed partial class OptimizerService
 
     private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false)
     {
-        var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException("The backend folder is unavailable."), script);
+        var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException(AppLog.MissingFiles), script);
         var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
         {
@@ -211,7 +211,11 @@ public sealed partial class OptimizerService
         };
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(argument);
         using var process = new Process { StartInfo = start };
-        if (!process.Start()) throw new InvalidOperationException("The backend process did not start.");
+        if (!process.Start())
+        {
+            AppLog.Write("backend", script + " did not start.");
+            throw new InvalidOperationException(AppLog.Failed);
+        }
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -221,13 +225,23 @@ public sealed partial class OptimizerService
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync();
-            throw new TimeoutException("The backend did not respond. Check the saved operation before retrying.");
+            AppLog.Write("backend", script + " timed out.");
+            throw new TimeoutException(AppLog.TimedOut);
         }
         var text = await output;
         var stderr = await error;
-        if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr) ? "The backend returned no response." : stderr.Trim());
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            AppLog.Write("backend", script + " returned no response.");
+            throw new InvalidOperationException(AppLog.Explain("backend", stderr, AppLog.Failed));
+        }
         var result = JsonSerializer.Deserialize<OptimizerResult<T>>(text, Json) ?? throw new InvalidDataException("The backend response could not be read.");
-        if (result.Status == "failed") throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Select(issue => issue.Message)));
+        if (result.Status == "failed")
+        {
+            var message = string.Join(Environment.NewLine, result.Errors.Select(issue => issue.Message).Where(value => !string.IsNullOrWhiteSpace(value)));
+            AppLog.Write("backend", script + " failed: " + message);
+            throw new InvalidOperationException(message.Length == 0 ? AppLog.Failed : message);
+        }
         return result;
     }
 }
