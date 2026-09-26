@@ -5,23 +5,24 @@ using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.Optimizer;
 
-sealed class FilePolicyPrivileges : IDisposable
+sealed class PrivilegeScope : IDisposable
 {
     private static readonly object Gate = new();
     private readonly SafeFileHandle _token;
     private readonly List<TokenPrivileges> _previous = [];
-    public FilePolicyPrivileges()
+    public static PrivilegeScope FilePolicy() => new("File permission recovery", "SeBackupPrivilege", "SeRestorePrivilege");
+    public PrivilegeScope(string operation, params string[] names)
     {
         Monitor.Enter(Gate);
         try
         {
             if (!OpenProcessToken(GetCurrentProcess(), 0x28, out _token)) throw Error("OpenProcessToken");
-            foreach (var name in new[] { "SeBackupPrivilege", "SeRestorePrivilege" })
+            foreach (var name in names)
             {
                 if (!LookupPrivilegeValue(null, name, out var luid)) throw Error("LookupPrivilegeValue(" + name + ")");
                 var request = new TokenPrivileges { Count = 1, Luid = luid, Attributes = 2 };
                 if (!AdjustTokenPrivileges(_token, false, ref request, Marshal.SizeOf<TokenPrivileges>(), out var previous, out _)) throw Error("AdjustTokenPrivileges(" + name + ")");
-                if (Marshal.GetLastWin32Error() == 1300) throw new Win32Exception(1300, "File permission recovery requires an administrator token with " + name + ".");
+                if (Marshal.GetLastWin32Error() == 1300) throw new Win32Exception(1300, operation + " requires an administrator token with " + name + ".");
                 _previous.Add(previous);
             }
         }

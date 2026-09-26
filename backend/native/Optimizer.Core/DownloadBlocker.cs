@@ -41,7 +41,7 @@ public static class DownloadBlocker
     }
     public static TweakControlRead Read(ControlAddress address)
     {
-        var target = Target(address); using var privileges = new FilePolicyPrivileges();
+        var target = Target(address); using var privileges = PrivilegeScope.FilePolicy();
         using var parent = FileLease.OpenPolicy(Path.GetDirectoryName(target.Path)!); var parentId = parent.ReadPolicy().Identity;
         var current = Policy(target.Policy, target.Path); var receipt = Receipt(target.Receipt, target.Path); var active = false;
         if (receipt is not null && receipt.Phase != "retained")
@@ -62,7 +62,7 @@ public static class DownloadBlocker
     public static void Write(TweakControlRead before, JsonElement desired)
     {
         var target = Target(before.Address); Directory.CreateDirectory(Path.GetDirectoryName(target.Receipt)!);
-        using var guard = OperationFiles.Lock(target.Receipt); using var privileges = new FilePolicyPrivileges();
+        using var guard = OperationFiles.Lock(target.Receipt); using var privileges = PrivilegeScope.FilePolicy();
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("The download folder changed after review.");
         var receipt = Receipt(target.Receipt, target.Path); var current = Policy(target.Policy, target.Path);
         if (desired.GetBoolean())
