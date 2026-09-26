@@ -11,8 +11,10 @@ if(-not $RequestPath){
 }
 if($Action -ne 'Preview' -and -not $ConfirmApply){throw 'This action requires ConfirmApply.'}
 $RequestPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RequestPath)
-if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}
 $hostPath=Join-Path $root 'backend/bin/optimizer/Optimizer.Host.dll'
 if(-not(Test-Path $hostPath)){throw 'Build the optimizer helper with backend/scripts/Build-OptimizerHost.ps1 first.'}
-& $DotNetPath $hostPath ('tweak-'+$Action.ToLowerInvariant()) $RequestPath $root
+$hostArgs=@($hostPath)
+if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path (Split-Path $hostPath -Parent) 'hostpolicy.dll'))){$DotNetPath=Join-Path (Split-Path $hostPath -Parent) 'Optimizer.Host.exe';$hostArgs=@()}
+if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}
+& $DotNetPath @hostArgs ('tweak-'+$Action.ToLowerInvariant()) $RequestPath $root
 if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}

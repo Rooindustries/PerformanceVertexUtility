@@ -11,10 +11,12 @@ $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(-not $HostDirectory){$HostDirectory=Join-Path $root 'backend\bin\optimizer'}
 $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build the optimizer host with Build-OptimizerHost.ps1 before invoking this endpoint.'}
+$hostArgs=@($hostDll)
+if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){
     $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     if(Test-Path -LiteralPath $candidate){$DotNetPath=$candidate}else{$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 }
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
-& $DotNetPath $hostDll $Action ([IO.Path]::GetFullPath($RequestPath))
+& $DotNetPath @hostArgs $Action ([IO.Path]::GetFullPath($RequestPath))
 exit $LASTEXITCODE
