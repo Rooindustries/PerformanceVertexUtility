@@ -21326,7 +21326,7 @@
     },
     {
       "id": "windows.1a312f189b5815d5",
-      "name": "Virtualization-Based Security (VBS): Hyper VVirtualization Based Security Optout",
+      "name": "Virtualization-Based Security (VBS): Hyper-V Virtualization Based Security Optout",
       "category": "Devices",
       "description": "Value meanings have not been verified. Review the exact target and value before applying.",
       "minimumBuild": 10240,
