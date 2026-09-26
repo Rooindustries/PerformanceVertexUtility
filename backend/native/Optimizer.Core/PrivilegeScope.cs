@@ -12,6 +12,7 @@ sealed class PrivilegeScope : IDisposable
     private readonly List<TokenPrivileges> _previous = [];
     private bool _disposed;
     internal static Func<bool>? SimulateRestoreFailure;
+    internal static Func<bool>? SimulateDisableFailure;
     public static PrivilegeScope FilePolicy() => new("File permission recovery", "SeBackupPrivilege", "SeRestorePrivilege");
     public PrivilegeScope(string operation, params string[] names)
     {
@@ -31,7 +32,12 @@ sealed class PrivilegeScope : IDisposable
         catch (Exception error)
         {
             try { Dispose(); }
-            catch (Exception cleanup) { error.Data["PrivilegeRestoreFailure"] = cleanup.Message; }
+            catch (Exception cleanup)
+            {
+                var message = error.Message + " A privilege could not be returned to its previous state afterwards: " + cleanup.Message;
+                if (error is Win32Exception win32) throw new Win32Exception(win32.NativeErrorCode, message);
+                throw new InvalidOperationException(message, error);
+            }
             throw;
         }
     }
@@ -50,7 +56,7 @@ sealed class PrivilegeScope : IDisposable
                     if (value.Count == 0) continue;
                     if (SimulateRestoreFailure?.Invoke() != true && RestoreTokenPrivileges(_token, false, ref value, 0, IntPtr.Zero, IntPtr.Zero)) continue;
                     var disable = new TokenPrivileges { Count = 1, Luid = value.Luid, Attributes = 0 };
-                    if (!RestoreTokenPrivileges(_token, false, ref disable, 0, IntPtr.Zero, IntPtr.Zero)) stuck ??= Error("AdjustTokenPrivileges(disable)");
+                    if (SimulateDisableFailure?.Invoke() == true || !RestoreTokenPrivileges(_token, false, ref disable, 0, IntPtr.Zero, IntPtr.Zero)) stuck ??= Error("AdjustTokenPrivileges(disable)");
                 }
             }
         }
