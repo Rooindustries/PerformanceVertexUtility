@@ -228,7 +228,7 @@ public sealed class FileLease : IDisposable
     {
         if (!_writable || original.SecurityCoverage != 7 || original.Security is not { Length: > 0 })
             throw new InvalidDataException("File permissions were not captured for restoration.");
-        WindowsPermissions.Restore(_handle, 1, original.Security);
+        using (new PrivilegeScope("File ownership recovery", "SeRestorePrivilege")) WindowsPermissions.Restore(_handle, 1, original.Security);
         var basic = new FileBasicInfo
         {
             CreationTime = original.CreationTime, LastAccessTime = original.LastAccessTime, LastWriteTime = original.LastWriteTime,
