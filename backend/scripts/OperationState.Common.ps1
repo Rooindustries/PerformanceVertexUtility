@@ -14,6 +14,12 @@ function Write-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)]$Value, [Parameter(Mandatory=$true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
+    foreach ($stale in @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*') -File -ErrorAction SilentlyContinue)) {
+        $suffix = $stale.Name.Substring([IO.Path]::GetFileName($full).Length + 1)
+        if ($suffix -match '^[0-9a-f]{32}\.(tmp|writing)$' -and ([DateTime]::UtcNow - $stale.LastWriteTimeUtc).TotalMinutes -ge 1) {
+            try { [IO.File]::Delete($stale.FullName) } catch { }
+        }
+    }
     $operation = $full + '.' + [guid]::NewGuid().ToString('N')
     $temporary = $operation + '.tmp'
     $marker = $operation + '.writing'
