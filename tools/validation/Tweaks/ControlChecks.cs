@@ -151,6 +151,64 @@ static class ControlChecks
         check(store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "NOTSET", "Undo returns a kept field to its true original, not an admin's temporary value");
         Apply("n");
         check(store.ReadState()!.Controls!.Length == 0, "Both policy profiles undo after the temporary admin change");
+        var multiCatalog = new TweakCatalog(1, "multi-field", [new("multi", "multi", "Fixture", "Fixture", 10240, 26200, ["*"], "none",
+            [new("set", "Set", [], Controls: [new(policyAddress, ControlValues.From(new Dictionary<string, object> { ["dep"] = "ON", ["cfg"] = "OFF", ["other"] = "OFF" }), true)])], [new("Roo Industries", "fixture", "one choice, many fields")])], []);
+        var policyEngine = engine; engine = new(multiCatalog, store);
+        SetPolicy("dep", "NOTSET"); SetPolicy("cfg", "NOTSET"); SetPolicy("other", "ON");
+        Apply("devices", new TweakSelection("multi", "set"));
+        SetPolicy("dep", "ON"); SetPolicy("other", "ON");
+        var partial = engine.Preview("devices", []);
+        check(partial.LeftAsChanged.Length == 0, "A field Windows put back to its original is not reported");
+        Apply("devices");
+        check(store.ReadControl(policyAddress).Value.GetProperty("cfg").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("other").GetString() == "ON" && store.ReadState()!.Controls!.Length == 0,
+            "Undo still restores every field of a multi-field choice that Windows did not touch, like device power after a reboot");
+        Apply("devices", new TweakSelection("multi", "set"));
+        SetPolicy("other", "NOTSET");
+        check(engine.Preview("devices", []).LeftAsChanged.SequenceEqual(new[] { "multi" }), "A multi-field choice with one field changed to a new value is reported");
+        Apply("devices");
+        check(store.ReadControl(policyAddress).Value.GetProperty("cfg").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("other").GetString() == "NOTSET" && store.ReadState()!.Controls!.Length == 0,
+            "Undo restores the untouched fields and keeps the one changed elsewhere");
+        engine = policyEngine;
+        var devicePower = new ControlAddress("device-power", "non-network", "allow-off");
+        var deviceCatalog = new TweakCatalog(1, "device-power", [new("devices-off", "devices-off", "Fixture", "Fixture", 10240, 26200, ["*"], "none",
+            [new("set", "Set", [], Controls: [new(devicePower, ControlValues.From(false))])], [new("Roo Industries", "fixture", "device power map")])], []);
+        var devicesFixture = OperationFiles.Read<TweakFixture>(path);
+        devicesFixture.Controls[devicePower.Key] = new TweakControlRead(devicePower, devicePower.Key, "device-map", ControlValues.From(new Dictionary<string, object> { ["hid"] = true, ["usb"] = true, ["usb4"] = true, ["wifi"] = false }));
+        OperationFiles.Write(path, devicesFixture);
+        var deviceEngine = new TweakEngine(deviceCatalog, store); var savedEngine = engine; engine = deviceEngine;
+        Apply("power", new TweakSelection("devices-off", "set"));
+        devicesFixture = OperationFiles.Read<TweakFixture>(path);
+        devicesFixture.Controls[devicePower.Key] = devicesFixture.Controls[devicePower.Key] with { Value = ControlValues.From(new Dictionary<string, object> { ["hid"] = false, ["usb"] = false, ["usb4"] = true, ["wifi"] = false }) };
+        OperationFiles.Write(path, devicesFixture);
+        var devicePlan = engine.Preview("power", []);
+        Apply("power");
+        var devices = store.ReadControl(devicePower).Value;
+        check(devicePlan.LeftAsChanged.Length == 0 && devices.GetProperty("hid").GetBoolean() && devices.GetProperty("usb").GetBoolean() && devices.GetProperty("usb4").GetBoolean() && !devices.GetProperty("wifi").GetBoolean() && store.ReadState()!.Controls!.Length == 0,
+            "Undo after a reboot reset one device still restores every other device's power setting");
+        Apply("power", new TweakSelection("devices-off", "set"));
+        Apply("power2", new TweakSelection("devices-off", "set"));
+        devicesFixture = OperationFiles.Read<TweakFixture>(path);
+        devicesFixture.Controls[devicePower.Key] = devicesFixture.Controls[devicePower.Key] with { Value = ControlValues.From(new Dictionary<string, object> { ["hid"] = false, ["usb"] = false, ["usb4"] = true, ["wifi"] = false }) };
+        OperationFiles.Write(path, devicesFixture);
+        Apply("power");
+        devices = store.ReadControl(devicePower).Value;
+        check(!devices.GetProperty("hid").GetBoolean() && !devices.GetProperty("usb").GetBoolean() && store.ReadState()!.Controls!.Length == 1,
+            "Undoing one of two profiles after a reboot reset one device keeps the other profile's device power settings");
+        var secondPlan = engine.Preview("power2", []);
+        Apply("power2");
+        devices = store.ReadControl(devicePower).Value;
+        check(secondPlan.LeftAsChanged.Length == 0 && devices.GetProperty("hid").GetBoolean() && devices.GetProperty("usb").GetBoolean() && devices.GetProperty("usb4").GetBoolean() && !devices.GetProperty("wifi").GetBoolean() && store.ReadState()!.Controls!.Length == 0,
+            "Undoing the last profile then restores every device");
+        Apply("power", new TweakSelection("devices-off", "set"));
+        devicesFixture = OperationFiles.Read<TweakFixture>(path);
+        devicesFixture.Controls[devicePower.Key] = devicesFixture.Controls[devicePower.Key] with { Value = ControlValues.From(new Dictionary<string, object> { ["hid"] = false, ["usb"] = false, ["wifi"] = false }) };
+        OperationFiles.Write(path, devicesFixture);
+        var unplugged = engine.Preview("power", []);
+        Apply("power");
+        devices = store.ReadControl(devicePower).Value;
+        check(unplugged.LeftAsChanged.SequenceEqual(new[] { "devices-off" }) && devices.GetProperty("hid").GetBoolean() && devices.GetProperty("usb").GetBoolean() && store.ReadState()!.Controls!.Length == 0,
+            "Undo after a device was unplugged restores the others and reports the missing one");
+        engine = savedEngine;
         var mitigation = new ControlAddress("mitigations", "system", "policy");
         TweakDefinition Mitigation(string id, string field, string value) => new(id, id, "Fixture", "Fixture", 10240, 26200, ["*"], "none",
             [new("set", "Set", [], Controls: [new(mitigation, ControlValues.From(new Dictionary<string, object> { [field] = value }), true)])], [new("Roo Industries", "fixture", "mitigation fields")]);
