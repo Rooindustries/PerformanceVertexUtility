@@ -39,12 +39,12 @@ static class RecoveryChecks
             File.WriteAllText(explicitOnly, "explicit");
             SetSecurity(explicitOnly, 4, "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")");
             File.WriteAllText(systemFile, "system");
-            File.WriteAllBytes(strictChild, [1, 2, 3]);
             using (PrivilegeScope.FilePolicy())
             {
                 SetSecurity(systemFile, 1, "O:SY");
                 SetSecurity(strict, 5, "O:SYD:P(A;OICI;FA;;;SY)(A;OICI;0x1301bf;;;BA)(A;OICI;0x1301bf;;;" + user + ")");
             }
+            File.WriteAllBytes(strictChild, [1, 2, 3]);
             var targets = new[] { source, inherited, explicitOnly, systemFile, strict, strictChild };
             var before = targets.ToDictionary(path => path, Sddl);
             check(!before[explicitOnly].Contains("BU", StringComparison.Ordinal) && !before[explicitOnly].Contains(":AI", StringComparison.Ordinal) && before[inherited].Contains("D:AI", StringComparison.Ordinal), "The recovery fixture has an explicit-only file inside a folder with inheritable Users access");
