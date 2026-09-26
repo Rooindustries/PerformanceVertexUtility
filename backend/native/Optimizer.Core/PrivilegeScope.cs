@@ -32,7 +32,12 @@ sealed class PrivilegeScope : IDisposable
         catch (Exception error)
         {
             try { Dispose(); }
-            catch (Exception cleanup) { throw new InvalidOperationException(error.Message + " A privilege could not be returned to its previous state afterwards: " + cleanup.Message, error); }
+            catch (Exception cleanup)
+            {
+                var message = error.Message + " A privilege could not be returned to its previous state afterwards: " + cleanup.Message;
+                if (error is Win32Exception win32) throw new Win32Exception(win32.NativeErrorCode, message);
+                throw new InvalidOperationException(message, error);
+            }
             throw;
         }
     }
