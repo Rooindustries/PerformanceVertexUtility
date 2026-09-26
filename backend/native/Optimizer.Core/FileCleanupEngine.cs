@@ -157,14 +157,16 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         {
             try
             {
-                using var directory = OpenDirectoryForRestore(entry.Original.Path);
-                var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
-                if (directory.Capture().Identity != createdDirectories[entry.Original.Path] || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Directory contents changed during restoration; metadata was left unchanged.");
-                if (journal.Entries.Any(child => child.Original.Path != entry.Original.Path && Within(child.Original.Path, entry.Original.Path) && (child.Status != "restored" || child.Error is not null)))
-                    throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
-                directory.RestoreMetadata(entry.Original);
-                if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
+                using (var directory = OpenDirectoryForRestore(entry.Original.Path))
+                {
+                    var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
+                    if (directory.Capture().Identity != createdDirectories[entry.Original.Path] || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Directory contents changed during restoration; metadata was left unchanged.");
+                    if (journal.Entries.Any(child => child.Original.Path != entry.Original.Path && Within(child.Original.Path, entry.Original.Path) && (child.Status != "restored" || child.Error is not null)))
+                        throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
+                    directory.RestoreMetadata(entry.Original);
+                    if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
+                }
                 foreach (var child in journal.Entries.Where(child => string.Equals(Path.GetDirectoryName(child.Original.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)))
                 {
                     using var restoredChild = FileLease.Open(child.Original.Path);
