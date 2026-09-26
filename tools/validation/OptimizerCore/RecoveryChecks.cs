@@ -13,6 +13,7 @@ static class RecoveryChecks
         Permissions(check);
         InterruptedCleanup(check);
         RepeatedRestore(check);
+        FolderPermissionFailure(check);
         RegistryPermissions(check);
         ReplaceRace(check);
         PrivilegeRestoreFailure(check);
@@ -198,6 +199,46 @@ static class RecoveryChecks
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Repeated-recovery validation removes its fixture");
+    }
+
+    static void FolderPermissionFailure(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-folder-permission-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "App");
+        var folder = Path.Combine(source, "Locked");
+        var inside = Path.Combine(folder, "inside.txt");
+        var beside = Path.Combine(source, "beside.txt");
+        var operations = Path.Combine(root, "Operations");
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Directory.CreateDirectory(operations);
+            File.WriteAllText(inside, "inside");
+            File.WriteAllText(beside, "beside");
+            var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("folder permission fixture"));
+            var authority = new CleanupAuthority
+            {
+                AppId = "fixture:folder-permission", ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+                RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var engine = new FileCleanupEngine(() => authority);
+            var reviewPath = Path.Combine(operations, "review.json");
+            var journalPath = Path.Combine(operations, "journal.json");
+            OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+            engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
+            var normalized = FileLease.NormalizePath(folder);
+            FileLease.SimulatePermissionFailure = path => string.Equals(path, normalized, StringComparison.OrdinalIgnoreCase);
+            FileCleanupJournal restored;
+            try { restored = engine.Restore(journalPath); }
+            finally { FileLease.SimulatePermissionFailure = null; }
+            var folderEntry = restored.Entries.Single(entry => entry.Original.Path == normalized);
+            var insideEntry = restored.Entries.Single(entry => string.Equals(entry.Original.Path, FileLease.NormalizePath(inside), StringComparison.OrdinalIgnoreCase));
+            check(restored.Status == "needsReconciliation" && folderEntry.Error?.Contains("Simulated permission write failure", StringComparison.Ordinal) == true, "A folder whose permissions cannot be written reports the failure");
+            check(!File.Exists(inside) && insideEntry.Status != "restored" && insideEntry.Error is not null, "Nothing is restored inside a folder whose permissions could not be written");
+            check(File.ReadAllText(beside) == "beside", "Items outside that folder are still restored");
+        }
+        finally { FileLease.SimulatePermissionFailure = null; if (Directory.Exists(root)) Directory.Delete(root, true); }
+        check(!Directory.Exists(root), "Folder-permission failure validation removes its fixture");
     }
 
     static void RegistryPermissions(Action<bool, string> check)
