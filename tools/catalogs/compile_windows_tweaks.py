@@ -345,7 +345,7 @@ def label(name):
 
 
 def words(name):
-    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name).replace('_', ' ').strip() or 'Default value'
+    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name.replace('HyperV', 'Hyper-V ')).replace('_', ' ').replace('  ', ' ').strip() or 'Default value'
 
 
 def category(record, change):
