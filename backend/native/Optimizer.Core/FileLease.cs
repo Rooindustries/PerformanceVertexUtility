@@ -227,10 +227,13 @@ public sealed class FileLease : IDisposable
         RestoreMetadata(original);
     }
 
+    internal static Func<string, bool>? SimulatePermissionFailure;
+
     public void RestoreMetadata(FileSnapshot original)
     {
         if (!_writable || original.SecurityCoverage != 7 || original.Security is not { Length: > 0 })
             throw new InvalidDataException("File permissions were not captured for restoration.");
+        if (SimulatePermissionFailure?.Invoke(Path) == true) throw new Win32Exception(5, "Simulated permission write failure.");
         try { WindowsPermissions.Restore(_handle, 1, original.Security); }
         catch (Win32Exception error) when (error.NativeErrorCode is 5 or 1307)
         {
