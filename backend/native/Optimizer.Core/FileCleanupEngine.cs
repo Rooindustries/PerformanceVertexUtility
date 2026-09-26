@@ -157,7 +157,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         {
             try
             {
-                using (var directory = OpenDirectoryForRestore(entry.Original.Path))
+                using (var directory = OpenForRestore(entry.Original.Path))
                 {
                     var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
                     if (directory.Capture().Identity != createdDirectories[entry.Original.Path] || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
@@ -167,24 +167,31 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     directory.RestoreMetadata(entry.Original);
                     if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
                 }
-                foreach (var child in journal.Entries.Where(child => string.Equals(Path.GetDirectoryName(child.Original.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)))
-                {
-                    using var restoredChild = FileLease.Open(child.Original.Path);
-                    var current = restoredChild.Capture();
-                    if (!child.Original.SameRestorableData(child.Original.Directory ? current with { LastWriteTime = child.Original.LastWriteTime } : current))
-                        throw new InvalidDataException("Restoring the folder changed a restored item inside it: " + child.Original.Path);
-                }
                 entry.DirectoryMetadataRestored = true;
                 entry.Error = null;
             }
             catch (Exception error) { entry.Error = error.Message; conflicts = true; }
+        }
+        if (!conflicts && createdDirectories.Count != 0)
+        {
+            foreach (var entry in journal.Entries.OrderByDescending(entry => Depth(entry.Original.Path)))
+            {
+                try
+                {
+                    using (var restored = OpenForRestore(entry.Original.Path)) restored.RestoreBasicInformation(entry.Original);
+                    using var current = FileLease.Open(entry.Original.Path);
+                    var differences = entry.Original.Differences(current.Capture());
+                    if (differences.Length != 0) throw new InvalidDataException("Restoring a folder changed the " + string.Join(", ", differences) + " of a restored item inside it.");
+                }
+                catch (Exception error) { entry.Error = error.Message; conflicts = true; }
+            }
         }
         journal.Status = conflicts ? "needsReconciliation" : "restored";
         Save(journalPath, journal);
         return journal;
     }
 
-    private static FileLease OpenDirectoryForRestore(string path)
+    private static FileLease OpenForRestore(string path)
     {
         try { return FileLease.OpenForRestore(path); }
         catch (Win32Exception error) when (error.NativeErrorCode == 5)

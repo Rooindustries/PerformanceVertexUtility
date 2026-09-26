@@ -233,6 +233,12 @@ public sealed class FileLease : IDisposable
         {
             using (new PrivilegeScope("File ownership recovery", "SeRestorePrivilege")) WindowsPermissions.Restore(_handle, 1, original.Security);
         }
+        RestoreBasicInformation(original);
+    }
+
+    public void RestoreBasicInformation(FileSnapshot original)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot restore file metadata.");
         var basic = new FileBasicInfo
         {
             CreationTime = original.CreationTime, LastAccessTime = original.LastAccessTime, LastWriteTime = original.LastWriteTime,
