@@ -196,13 +196,14 @@ public sealed class RegistryTweakStore : ITweakStore
         RegistryNative.SetTweak(_stateAddress, saved.NativeKey, new("State", 3, TweakEngine.SerializeState(next)), transaction);
         foreach (var change in plan.Changes)
             if (!TweakRead.SameValue(RegistryNative.ReadTweak(change.Before.Address, transaction).Value, change.After)) throw new InvalidOperationException("Registry readback differs from the reviewed value.");
-        foreach (var expected in plan.Controls?.Expected ?? [])
+        foreach (var expected in plan.Controls?.Owned ?? [])
         {
             var observed = ReadControl(expected.Address);
             var desired = plan.Controls!.Changes.SingleOrDefault(change => change.Before.Id == expected.Id)?.After ?? expected.Value;
             if (observed.Id != expected.Id || observed.Binding != expected.Binding || !ControlValues.Equal(observed.Value, desired))
                 throw new InvalidDataException("A Windows control changed before recovery state was committed.");
         }
+        plan.Controls?.CheckReleased(ReadControl);
         var pending = RegistryNative.ReadTweak(PendingAddress, transaction);
         if (!restartPending && pending.Value is not null) RegistryNative.SetTweak(PendingAddress, pending.NativeKey, null, transaction);
         transaction.Commit();

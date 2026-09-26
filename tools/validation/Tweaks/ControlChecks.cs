@@ -47,6 +47,96 @@ static class ControlChecks
         check(elsewherePlan.Controls!.Changes.Length == 0 && elsewherePlan.LeftAsChanged.SequenceEqual(new[] { "disabled" }), "Restore reports a service changed outside Roo Industries instead of overwriting it");
         Apply("changed-elsewhere");
         check(store.ReadControl(startup).Value.GetInt32() == 3 && store.ReadState()!.Controls!.Length == 0, "Restore keeps the outside service value and releases the profile");
+        SetStartup(2); Apply("flipped-released", new TweakSelection("disabled", "set")); SetStartup(3);
+        var flippedPlan = engine.Preview("flipped-released", []); SetStartup(2);
+        check(flippedPlan.Controls!.Changes.Length == 0 && flippedPlan.Controls.Released?.Select(item => item.Held.Original.Id).SequenceEqual(new[] { store.ReadControl(startup).Id }) == true, "Planning records a service it releases without writing");
+        store.Commit(flippedPlan, "flipped-released");
+        check(store.ReadControl(startup).Value.GetInt32() == 2 && store.ReadState()!.Controls!.Length == 0 && store.ReadState()!.Profiles.Length == 0, "An undo commit finishes when Windows changes a service it releases without writing");
+        Apply("retaken", new TweakSelection("disabled", "set")); SetStartup(3);
+        var retakenPlan = engine.Preview("retaken", []); SetStartup(4);
+        reject(() => store.Commit(retakenPlan, "retaken"), "An undo commit refuses a released service that went back to the tweaked value");
+        SetStartup(3); Apply("retaken");
+        check(store.ReadControl(startup).Value.GetInt32() == 3 && store.ReadState()!.Controls!.Length == 0, "The undo reviewed again after the refusal releases the service");
+        void SetRunning(bool value) { var current = OperationFiles.Read<TweakFixture>(path); current.Controls[running.Key] = current.Controls[running.Key] with { Value = ControlValues.From(value) }; OperationFiles.Write(path, current); }
+        SetRunning(true); Apply("run-flip", new TweakSelection("stop", "set")); SetRunning(true);
+        var runPlan = engine.Preview("run-flip", []); SetRunning(false);
+        store.Commit(runPlan, "run-flip");
+        check(store.ReadState()!.Profiles.All(profile => profile.Id != "run-flip"), "An undo commit finishes when a released service stops again on its own");
+        SetRunning(true);
+        SetStartup(2); Apply("gone", new TweakSelection("disabled", "set")); SetStartup(3);
+        var gonePlan = engine.Preview("gone", []);
+        var goneFixture = OperationFiles.Read<TweakFixture>(path); var goneService = goneFixture.Controls[startup.Key]; goneFixture.Controls.Remove(startup.Key); OperationFiles.Write(path, goneFixture);
+        store.Commit(gonePlan, "gone");
+        check(store.ReadState()!.Profiles.All(profile => profile.Id != "gone"), "An undo commit finishes when a released service disappeared during the undo");
+        goneFixture = OperationFiles.Read<TweakFixture>(path); goneFixture.Controls[startup.Key] = goneService with { Value = ControlValues.From(2) }; OperationFiles.Write(path, goneFixture);
+        var doh = new ControlAddress("dns-over-https", "fixture", "entry");
+        var dohFixture = OperationFiles.Read<TweakFixture>(path);
+        dohFixture.Controls[doh.Key] = new(doh, doh.Key, "doh-entry", ControlValues.From(new Dictionary<string, object> { ["template"] = "t", ["autoUpgrade"] = false, ["allowFallback"] = false })); OperationFiles.Write(path, dohFixture);
+        var dohEngine = new TweakEngine(new TweakCatalog(1, "doh", [Setting("doh", doh, new Dictionary<string, object> { ["template"] = "t", ["autoUpgrade"] = true, ["allowFallback"] = false })], []), store);
+        var dohApply = dohEngine.Preview("doh", [new("doh", "set")]); store.Commit(dohApply, "doh");
+        dohFixture = OperationFiles.Read<TweakFixture>(path); dohFixture.Controls[doh.Key] = dohFixture.Controls[doh.Key] with { Value = ControlValues.From(new Dictionary<string, object> { ["template"] = "t", ["autoUpgrade"] = true, ["allowFallback"] = true }) }; OperationFiles.Write(path, dohFixture);
+        var dohUndo = dohEngine.Preview("doh", []);
+        dohFixture = OperationFiles.Read<TweakFixture>(path); var dohDrifted = dohFixture.Controls[doh.Key]; dohFixture.Controls[doh.Key] = dohDrifted with { Value = ControlValues.From(new Dictionary<string, object> { ["template"] = "t", ["autoUpgrade"] = true, ["allowFallback"] = false }) }; OperationFiles.Write(path, dohFixture);
+        reject(() => store.Commit(dohUndo, "doh-retake"), "An undo commit refuses when a whole-value setting went back to the tweaked value");
+        dohFixture = OperationFiles.Read<TweakFixture>(path); dohFixture.Controls[doh.Key] = dohDrifted; OperationFiles.Write(path, dohFixture);
+        store.Commit(dohUndo, "doh-undo");
+        check(store.ReadState()!.Profiles.All(profile => profile.Id != "doh") && store.ReadState()!.Controls!.Length == 0, "Undo of a whole-value setting finishes when Windows changed a field the tweak did not set");
+        dohFixture = OperationFiles.Read<TweakFixture>(path); dohFixture.Controls.Remove(doh.Key); OperationFiles.Write(path, dohFixture);
+        SetStartup(2); Apply("held-a", new TweakSelection("disabled", "set")); Apply("held-b", new TweakSelection("disabled", "set"));
+        var heldPlan = engine.Preview("held-a", []); SetStartup(3);
+        reject(() => store.Commit(heldPlan, "held-a"), "An undo commit still refuses when a service another profile keeps changed");
+        SetStartup(4); Apply("held-a"); Apply("held-b");
+        check(store.ReadControl(startup).Value.GetInt32() == 2 && store.ReadState()!.Controls!.Length == 0, "Both owners restore the original after the refused undo");
+        var memory = new ControlAddress("memory", "system", "compression"); var sysMain = new ControlAddress("service", "SysMain", "startup");
+        var memoryFixture = OperationFiles.Read<TweakFixture>(path);
+        memoryFixture.Controls[memory.Key] = new(memory, memory.Key, "memory-manager", ControlValues.From(false));
+        memoryFixture.Controls[sysMain.Key] = new(sysMain, sysMain.Key, "sysmain-binary", ControlValues.From(2)); OperationFiles.Write(path, memoryFixture);
+        var compressPlan = new TweakEngine(new TweakCatalog(1, "memory", [Setting("compress", memory, true)], []), store).Preview("compress", [new("compress", "set")]);
+        memoryFixture = OperationFiles.Read<TweakFixture>(path); memoryFixture.Controls[sysMain.Key] = memoryFixture.Controls[sysMain.Key] with { Value = ControlValues.From(4) }; OperationFiles.Write(path, memoryFixture);
+        reject(() => store.Commit(compressPlan, "compress"), "Turning on memory compression still refuses when SysMain was disabled after the review");
+        var memoryEngine = new TweakEngine(new TweakCatalog(1, "memory", [Setting("compress", memory, true), Setting("compress-off", memory, false), Setting("sysmain-auto", sysMain, 2), Setting("sysmain-off", sysMain, 4)], []), store);
+        void SetSysMain(uint value) { var current = OperationFiles.Read<TweakFixture>(path); current.Controls[sysMain.Key] = current.Controls[sysMain.Key] with { Value = ControlValues.From(value) }; OperationFiles.Write(path, current); }
+        TweakState MemoryApply(string profile, params TweakSelection[] choices) { var plan = memoryEngine.Preview(profile, choices); var review = Path.Combine(root, plan.OperationId + ".json"); OperationFiles.Write(review, plan); return memoryEngine.Apply(review, OperationFiles.HashFile(review)).State; }
+        SetSysMain(2); MemoryApply("memory", new TweakSelection("sysmain-auto", "set"));
+        var swapPlan = memoryEngine.Preview("memory", [new("compress", "set")]);
+        check(swapPlan.Controls!.SysMainGuard is not null, "A SysMain choice given up while turning on memory compression stays guarded at commit");
+        SetSysMain(4);
+        reject(() => store.Commit(swapPlan, "swap"), "Swapping a SysMain choice for memory compression refuses when SysMain was disabled during the undo");
+        SetSysMain(3); store.Commit(swapPlan, "swap");
+        check(store.ReadControl(memory).Value.GetBoolean(), "Swapping still finishes when SysMain moved to another enabled startup during the undo");
+        SetSysMain(2); MemoryApply("memory");
+        SetSysMain(4); MemoryApply("b", new TweakSelection("sysmain-auto", "set")); MemoryApply("a", new TweakSelection("compress", "set"));
+        reject(() => memoryEngine.Preview("b", []), "Undoing a SysMain choice back to disabled is refused while another profile keeps memory compression on");
+        MemoryApply("a"); MemoryApply("b");
+        SetSysMain(2); MemoryApply("b", new TweakSelection("sysmain-auto", "set")); MemoryApply("a", new TweakSelection("compress", "set")); SetSysMain(4);
+        MemoryApply("b");
+        check(store.ReadState()!.Profiles.All(profile => profile.Id != "b"), "Undoing a SysMain choice that writes nothing is not blocked by a SysMain change made outside the app");
+        SetSysMain(2); MemoryApply("a");
+        void SetMemory(bool value) { var current = OperationFiles.Read<TweakFixture>(path); current.Controls[memory.Key] = current.Controls[memory.Key] with { Value = ControlValues.From(value) }; OperationFiles.Write(path, current); }
+        SetMemory(true); MemoryApply("x", new TweakSelection("compress-off", "set")); MemoryApply("y", new TweakSelection("sysmain-off", "set"));
+        reject(() => memoryEngine.Preview("x", []), "Undoing a compression-off choice is refused at review while SysMain is disabled");
+        MemoryApply("y"); MemoryApply("x");
+        check(store.ReadControl(memory).Value.GetBoolean() && store.ReadControl(sysMain).Value.GetUInt32() == 2 && store.ReadState()!.Controls!.Length == 0, "Undoing SysMain first then compression-off restores both");
+        SetMemory(false); MemoryApply("owner", new TweakSelection("sysmain-auto", "set")); SetSysMain(4);
+        reject(() => memoryEngine.Preview("c", [new("compress", "set")]), "Turning on compression is refused at review when SysMain is disabled even if a profile wants it enabled");
+        SetSysMain(2);
+        var guardPlan = memoryEngine.Preview("c", [new("compress", "set")]); SetSysMain(3);
+        store.Commit(guardPlan, "guard");
+        check(store.ReadControl(memory).Value.GetBoolean(), "Turning on compression finishes when another profile's SysMain moved to another enabled startup during the change");
+        SetSysMain(2); MemoryApply("c"); MemoryApply("owner");
+        SetMemory(true); MemoryApply("y", new TweakSelection("sysmain-off", "set"));
+        reject(() => memoryEngine.Preview("c", [new("compress", "set")]), "Choosing memory compression that is already on is refused while another profile disables SysMain");
+        MemoryApply("y"); SetMemory(false);
+        check(store.ReadState()!.Controls!.Length == 0 && store.ReadControl(sysMain).Value.GetUInt32() == 2, "The already-on compression check leaves nothing owned");
+        SetMemory(false); MemoryApply("p", new TweakSelection("compress", "set")); SetSysMain(4);
+        MemoryApply("p", new TweakSelection("compress", "set"));
+        check(store.ReadState()!.Profiles.Any(profile => profile.Id == "p"), "Re-applying an unchanged compression choice is not refused by a SysMain change made outside the app");
+        SetSysMain(2); MemoryApply("p"); SetMemory(false);
+        SetSysMain(4); MemoryApply("memory", new TweakSelection("sysmain-auto", "set"));
+        reject(() => memoryEngine.Preview("memory", [new("compress", "set")]), "Memory compression is refused when the same review puts SysMain back to disabled");
+        MemoryApply("memory");
+        check(store.ReadControl(sysMain).Value.GetUInt32() == 4 && store.ReadState()!.Controls!.Length == 0, "The SysMain checks leave no memory ownership behind");
+        memoryFixture = OperationFiles.Read<TweakFixture>(path); memoryFixture.Controls.Remove(memory.Key); memoryFixture.Controls.Remove(sysMain.Key); OperationFiles.Write(path, memoryFixture);
         SetStartup(2); Apply("shared-one", new TweakSelection("disabled", "set")); Apply("shared-two", new TweakSelection("disabled", "set")); SetStartup(3);
         Apply("shared-one"); Apply("shared-two");
         check(store.ReadControl(startup).Value.GetInt32() == 3 && store.ReadState()!.Controls!.Length == 0 && store.ReadState()!.Profiles.Length == 0, "Two owners of a service Windows changed can both be restored");
@@ -168,6 +258,13 @@ static class ControlChecks
         Apply("devices");
         check(store.ReadControl(policyAddress).Value.GetProperty("cfg").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("other").GetString() == "NOTSET" && store.ReadState()!.Controls!.Length == 0,
             "Undo restores the untouched fields and keeps the one changed elsewhere");
+        SetPolicy("other", "ON"); Apply("patch-retake", new TweakSelection("multi", "set"));
+        SetPolicy("dep", "NOTSET"); SetPolicy("cfg", "NOTSET"); SetPolicy("other", "ON");
+        var patchPlan = engine.Preview("patch-retake", []); SetPolicy("cfg", "OFF");
+        reject(() => store.Commit(patchPlan, "patch-retake"), "An undo commit refuses when one released policy field went back to the tweaked value");
+        SetPolicy("cfg", "NOTSET"); Apply("patch-retake");
+        check(store.ReadState()!.Controls!.Length == 0, "The policy undo reviewed again after the refusal finishes");
+        SetPolicy("other", "NOTSET");
         engine = policyEngine;
         var devicePower = new ControlAddress("device-power", "non-network", "allow-off");
         var deviceCatalog = new TweakCatalog(1, "device-power", [new("devices-off", "devices-off", "Fixture", "Fixture", 10240, 26200, ["*"], "none",
@@ -208,6 +305,15 @@ static class ControlChecks
         devices = store.ReadControl(devicePower).Value;
         check(unplugged.LeftAsChanged.SequenceEqual(new[] { "devices-off" }) && devices.GetProperty("hid").GetBoolean() && devices.GetProperty("usb").GetBoolean() && store.ReadState()!.Controls!.Length == 0,
             "Undo after a device was unplugged restores the others and reports the missing one");
+        void SetDevices(Dictionary<string, object> map) { var current = OperationFiles.Read<TweakFixture>(path); current.Controls[devicePower.Key] = current.Controls[devicePower.Key] with { Value = ControlValues.From(map) }; OperationFiles.Write(path, current); }
+        SetDevices(new() { ["hid"] = true, ["usb"] = true, ["usb4"] = true, ["wifi"] = false });
+        Apply("power", new TweakSelection("devices-off", "set"));
+        SetDevices(new() { ["hid"] = true, ["usb"] = true, ["usb4"] = true, ["wifi"] = false });
+        var retakePlan = engine.Preview("power", []);
+        SetDevices(new() { ["hid"] = false, ["usb"] = true, ["usb4"] = true, ["wifi"] = false });
+        reject(() => store.Commit(retakePlan, "power-retake"), "An undo commit refuses when one released device went back to the tweaked power setting");
+        SetDevices(new() { ["hid"] = true, ["usb"] = true, ["usb4"] = true, ["wifi"] = false }); Apply("power");
+        check(store.ReadState()!.Controls!.Length == 0, "The device undo reviewed again after the refusal finishes");
         engine = savedEngine;
         var mitigation = new ControlAddress("mitigations", "system", "policy");
         TweakDefinition Mitigation(string id, string field, string value) => new(id, id, "Fixture", "Fixture", 10240, 26200, ["*"], "none",

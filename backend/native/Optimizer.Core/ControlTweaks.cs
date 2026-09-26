@@ -43,7 +43,42 @@ public sealed record TweakControlRead([property: JsonRequired] ControlAddress Ad
 public sealed record ControlClaim([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId, [property: JsonRequired] TweakControlRead Target, [property: JsonRequired] JsonElement Desired, bool Patch = false);
 public sealed record ControlHeld([property: JsonRequired] TweakControlRead Original, [property: JsonRequired] JsonElement Applied, JsonElement? RestoreValue = null);
 public sealed record ControlMutation([property: JsonRequired] TweakControlRead Before, [property: JsonRequired] JsonElement After, string[]? Fields = null);
-public sealed record ControlPlan([property: JsonRequired] TweakControlRead[] Expected, [property: JsonRequired] ControlMutation[] Changes, [property: JsonRequired] ControlHeld[] Held, string[]? LeftAsChanged = null);
+public sealed record ControlRelease([property: JsonRequired] ControlHeld Held, bool Fields = false);
+public sealed record ControlPlan([property: JsonRequired] TweakControlRead[] Expected, [property: JsonRequired] ControlMutation[] Changes, [property: JsonRequired] ControlHeld[] Held, string[]? LeftAsChanged = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ControlRelease[]? Released = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SysMainGuard = null)
+{
+    private bool Unowned(TweakControlRead read) => !Changes.Any(change => change.Before.Id == read.Id) &&
+        ((Released ?? []).Any(item => item.Held.Original.Id == read.Id) || read.Id == SysMainGuard);
+    [JsonIgnore] public IEnumerable<TweakControlRead> Owned => Expected.Where(read => !Unowned(read));
+    public void CheckReleased(Func<ControlAddress, TweakControlRead> read)
+    {
+        if (SysMainGuard is not null)
+        {
+            var sysMain = read(Expected.First(item => item.Id == SysMainGuard).Address);
+            if (sysMain.Value.ValueKind != JsonValueKind.Number || sysMain.Value.GetUInt32() == 4) throw new InvalidDataException("Memory compression needs the SysMain service enabled. Keep SysMain enabled, or turn memory compression off first.");
+        }
+        foreach (var release in Released ?? [])
+        {
+            var item = release.Held;
+            var reviewed = Expected.FirstOrDefault(entry => entry.Id == item.Original.Id);
+            if (reviewed is null || item.Original.Address is { Kind: "service", Property: "running" } || Changes.Any(change => change.Before.Id == item.Original.Id)) continue;
+            TweakControlRead observed;
+            try { observed = read(reviewed.Address); }
+            catch (Exception error) when (error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException)) { continue; }
+            if (observed.Id == item.Original.Id && Retaken(observed.Value, reviewed.Value, item.Applied, item.RestoreValue ?? item.Original.Value, release.Fields))
+                throw new InvalidDataException("A released Windows control returned to the tweaked value before undo finished: " + item.Original.Address.Target);
+        }
+    }
+    private static bool Retaken(JsonElement now, JsonElement reviewed, JsonElement applied, JsonElement baseline, bool fields)
+    {
+        bool Took(JsonElement current, JsonElement before, JsonElement tweaked, JsonElement original) => ControlValues.Equal(current, tweaked) && !ControlValues.Equal(before, tweaked) && !ControlValues.Equal(tweaked, original);
+        if (!fields || now.ValueKind != JsonValueKind.Object || reviewed.ValueKind != JsonValueKind.Object || applied.ValueKind != JsonValueKind.Object || baseline.ValueKind != JsonValueKind.Object)
+            return Took(now, reviewed, applied, baseline);
+        return applied.EnumerateObject().Any(property => property.Name != MitigationControl.SnapshotField && now.TryGetProperty(property.Name, out var current) &&
+            Took(current, reviewed.TryGetProperty(property.Name, out var before) ? before : default, property.Value, baseline.TryGetProperty(property.Name, out var original) ? original : default));
+    }
+}
 public sealed record ControlJournal([property: JsonRequired] TweakPlan Plan, [property: JsonRequired] string ReviewHash, [property: JsonRequired] int Attempted, string Phase = "applying");
 
 public static class ControlValues
@@ -68,13 +103,16 @@ public static class ControlPlanning
         var wanted = profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id).ToDictionary(group => group.Key, group => group.ToArray());
         foreach (var claims in wanted.Values) ControlComposition.Check(claims);
         var held = (state?.Controls ?? []).ToDictionary(item => item.Original.Id);
-        var expected = new List<TweakControlRead>(); var changes = new List<ControlMutation>(); var next = new List<ControlHeld>(); var left = new List<string>();
+        var expected = new List<TweakControlRead>(); var changes = new List<ControlMutation>(); var next = new List<ControlHeld>(); var left = new List<string>(); var released = new List<ControlRelease>(); string? guard = null;
+        static bool Linked(ControlAddress address) => address.Kind == "memory" || address.Kind == "service" && address.Target.Equals("SysMain", StringComparison.OrdinalIgnoreCase);
+        var requestsLinked = false;
         foreach (var id in held.Keys.Concat(wanted.Keys).Distinct().Order(StringComparer.Ordinal))
         {
             held.TryGetValue(id, out var original); wanted.TryGetValue(id, out var claims);
             if (!affected.Contains(id)) { next.Add(original!); continue; }
             var before = (state?.Profiles ?? []).SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == id).ToArray();
             var asks = (claims ?? []).Any(claim => !before.Any(old => ReferenceEquals(old, claim)));
+            requestsLinked |= (claims ?? []).Any(claim => Linked(claim.Target.Address) && !before.Any(old => old.SettingId == claim.SettingId && old.OptionId == claim.OptionId));
             TweakControlRead observed; (JsonElement Desired, JsonElement? Restore, string[]? LeftAsChanged, JsonElement? Applied) composed = default;
             try
             {
@@ -99,16 +137,26 @@ public static class ControlPlanning
             left.AddRange(composed.LeftAsChanged ?? []);
             if (!ControlValues.Equal(observed.Value, composed.Desired) || observed.Address.Kind is "timer" or "timer-startup" or "download-blocker" && observed.LostLease && claims is null) changes.Add(new(observed, composed.Desired, before.Concat(claims ?? []).All(claim => claim.Patch) ? before.Concat(claims ?? []).SelectMany(claim => claim.Desired.EnumerateObject().Select(property => property.Name)).Distinct(StringComparer.Ordinal).ToArray() : null));
             if (claims is not null) next.Add(new(original is null ? observed : original.Original with { Address = observed.Address }, composed.Applied ?? composed.Desired, composed.Restore));
+            else if (original is not null && changes.All(change => change.Before.Id != observed.Id))
+                released.Add(new(original, before.Length > 0 && before.All(claim => claim.Patch) || observed.Address.Kind is "device-power" or "network-adapter" && observed.Value.ValueKind == JsonValueKind.Object));
         }
-        var relevant = affected.Any(id => wanted.GetValueOrDefault(id)?.Any(claim => claim.Target.Address.Kind == "memory" || claim.Target.Address.Kind == "service" && claim.Target.Address.Target.Equals("SysMain", StringComparison.OrdinalIgnoreCase)) == true);
-        if (relevant && wanted.Values.Any(claims => claims[0].Target.Address.Kind == "memory" && claims[0].Desired.ValueKind == JsonValueKind.True))
+        var turnsOn = changes.Any(change => change.Before.Address.Kind == "memory" && change.After.ValueKind == JsonValueKind.True);
+        var relevant = turnsOn || affected.Any(id => wanted.GetValueOrDefault(id)?.Any(claim => Linked(claim.Target.Address)) == true || held.TryGetValue(id, out var owned) && Linked(owned.Original.Address));
+        if (relevant && (turnsOn || wanted.Values.Any(claims => claims[0].Target.Address.Kind == "memory" && claims[0].Desired.ValueKind == JsonValueKind.True)))
         {
             var dependency = read(new("service", "SysMain", "startup")); dependency.Validate();
-            var value = wanted.TryGetValue(dependency.Id, out var owners) ? owners[0].Desired : dependency.Value;
-            if (value.GetUInt32() == 4) throw new InvalidDataException("Memory compression requires SysMain startup to remain enabled.");
-            if (expected.All(item => item.Id != dependency.Id)) expected.Add(dependency);
+            var planned = changes.FirstOrDefault(change => change.Before.Id == dependency.Id);
+            if (turnsOn || planned is not null || requestsLinked)
+            {
+                var owners = wanted.GetValueOrDefault(dependency.Id) ?? [];
+                if ((planned?.After ?? dependency.Value).GetUInt32() == 4 || owners.Any(claim => claim.Desired.GetUInt32() == 4))
+                    throw new InvalidDataException("Memory compression needs the SysMain service enabled. Keep SysMain enabled, or turn memory compression off first.");
+                var added = expected.All(item => item.Id != dependency.Id);
+                if (added) expected.Add(dependency);
+                if (planned is null && (added || released.Any(item => item.Held.Original.Id == dependency.Id))) guard = dependency.Id;
+            }
         }
-        return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray(), left.Count > 0 ? left.Distinct().Order(StringComparer.Ordinal).ToArray() : null);
+        return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray(), left.Count > 0 ? left.Distinct().Order(StringComparer.Ordinal).ToArray() : null, released.Count > 0 ? released.OrderBy(item => item.Held.Original.Id, StringComparer.Ordinal).ToArray() : null, guard);
     }
     private static int ChangeOrder(ControlMutation change) => change.Before.Address.Kind == "timer" && change.After.ValueKind == JsonValueKind.False ? 0 : change.Before.Address.Kind == "memory" ? 25 : change.Before.Address.Property switch
     {
@@ -133,8 +181,9 @@ public static class ControlExecution
     public static bool Apply(ControlPlan plan, IControlStore store, Action<int> saveAttempt)
     {
         var pending = false;
-        foreach (var expected in plan.Expected)
+        foreach (var expected in plan.Owned)
             if (!store.Read(expected.Address).Same(expected)) throw new InvalidDataException("A Windows control changed after review: " + expected.Address.Target);
+        plan.CheckReleased(store.Read);
         for (var index = 0; index < plan.Changes.Length; index++)
         {
             var change = plan.Changes[index];
@@ -189,7 +238,8 @@ public static class ControlExecution
                 store.Write(current, change.Before.Value);
                 var restoredRead = store.Read(current.Address);
                 if (restoredRead.RestartPending) throw new InvalidDataException("Restart Windows to finish feature recovery, then check recovery again.");
-                if (!restoredRead.Same(change.Before)) throw new InvalidDataException("Restoration readback differs from the original.");
+                if (!(change.Before.Address.Kind == "download-blocker" ? restoredRead.Id == change.Before.Id && restoredRead.Binding == change.Before.Binding && ControlValues.Equal(restoredRead.Value, change.Before.Value) && !restoredRead.LostLease : restoredRead.Same(change.Before)))
+                    throw new InvalidDataException("Restoration readback differs from the original.");
             }
             catch (Exception error) { failures.Add(change.Before.Address.Target + ": " + error.Message); }
         }

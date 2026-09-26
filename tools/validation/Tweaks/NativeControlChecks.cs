@@ -89,6 +89,17 @@ static class NativeControlChecks
             check(native.Read(startup).Value.GetInt32() == 4 && !native.Read(running).Value.GetBoolean(), "Native service stop occurs before disabling startup");
             Apply("service");
             check(native.Read(startup).Same(originalStartup) && native.Read(running).Same(originalRunning), "Native service restore returns its original configuration and running state");
+            Apply("flip", new TweakSelection("disabled", "set")); native.Write(native.Read(startup), ControlValues.From(2));
+            var flipPlan = engine.Preview("flip", []); native.Write(native.Read(startup), ControlValues.From(3));
+            store.Commit(flipPlan, "flip");
+            check(native.Read(startup).Value.GetInt32() == 3 && store.ReadState()!.Profiles.All(profile => profile.Id != "flip") && store.Recovery().Pending is null,
+                "The Windows store finishes an undo when a released service changes again during it");
+            Apply("flip", new TweakSelection("disabled", "set")); native.Write(native.Read(startup), ControlValues.From(2));
+            var retakePlan = engine.Preview("flip", []); native.Write(native.Read(startup), ControlValues.From(4));
+            reject(() => store.Commit(retakePlan, "flip-retake"), "The Windows store refuses an undo when a released service went back to the tweaked value");
+            check(store.Recovery().Pending is null && store.ReadState()!.Profiles.Any(profile => profile.Id == "flip"), "The refused undo keeps ownership and leaves no pending journal");
+            Apply("flip");
+            check(native.Read(startup).Same(originalStartup) && store.ReadState()!.Profiles.All(profile => profile.Id != "flip"), "The undo reviewed again restores the original service startup");
             Apply("task-one", new TweakSelection("task", "set")); Apply("task-two", new TweakSelection("task", "set")); Apply("task-one");
             check(native.Read(task).Value.GetBoolean(), "Task enabled state remains while a second profile owns it");
             Apply("task-two"); check(native.Read(task).Same(originalTask), "Task restoration retains the original definition and disabled state");
