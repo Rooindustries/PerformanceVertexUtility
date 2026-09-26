@@ -30,7 +30,7 @@ try {
     $replaceFailed=$false
     try{Write-RooIndustriesOperationJson @{value='replacement'} $path}catch{$replaceFailed=$true}finally{$script:RooIndustriesSimulateReplaceFailure=$null}
     $kept=(Read-RooIndustriesOperationJson $path).data
-    Assert ($replaceFailed -and $kept.value -ne 'replacement' -and @(Get-ChildItem -LiteralPath $root -Filter 'state.json.*' -Force).Count -eq 0) 'A failed PowerShell replace keeps the previous file and leaves no backup behind'
+    Assert ($replaceFailed -and $kept.value -ne 'replacement' -and @(Get-ChildItem -LiteralPath $root -File -Force | Where-Object { $_.Name.StartsWith('state.json.') }).Count -eq 0) 'A failed PowerShell replace keeps the previous file and leaves no backup behind'
     $missing=$false
     try{Read-RooIndustriesOperationJson (Join-Path $root 'absent.json')|Out-Null}catch{$missing=$true}
     Assert $missing 'A missing operation file still fails after its bounded wait'

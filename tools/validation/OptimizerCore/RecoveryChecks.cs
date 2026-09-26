@@ -273,7 +273,7 @@ static class RecoveryChecks
             var replaceFailed = false;
             try { OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -3 }); } catch (IOException) { replaceFailed = true; }
             finally { OperationFiles.SimulateReplaceFailure = null; }
-            check(replaceFailed && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2 && !Directory.EnumerateFiles(root, "state.json.*").Any(), "A failed replace keeps the previous file and leaves no backup behind");
+            check(replaceFailed && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2 && !Directory.EnumerateFiles(root).Any(file => Path.GetFileName(file).StartsWith("state.json.", StringComparison.OrdinalIgnoreCase)), "A failed replace keeps the previous file and leaves no backup behind");
             var orphan = path + "." + Guid.NewGuid().ToString("N") + ".bak";
             File.Move(path, orphan);
             File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddMinutes(-5));
