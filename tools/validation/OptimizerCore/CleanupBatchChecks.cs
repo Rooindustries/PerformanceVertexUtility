@@ -98,7 +98,7 @@ static class CleanupBatchChecks
                 OperationFiles.Write(journalPath, partial);
                 var rejected = false;
                 try { engineBatch.Apply(batchPath, hash, journalPath); }
-                catch (InvalidDataException error) { rejected = error.Message.Contains("missing its restoration evidence"); }
+                catch (InvalidDataException error) { rejected = error.Message.Contains("contradicts its restore state"); }
                 check(rejected, "A favorable partial status cannot override missing restoration evidence");
             }
             finally { File.WriteAllBytes(journalPath, partialBytes); }
