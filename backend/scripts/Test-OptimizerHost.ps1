@@ -10,7 +10,8 @@ $hostDirectory=Join-Path $root 'host'
 $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
-$exclusionPath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+$exclusionPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
 $exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
 $ownedExclusionHash=$null
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
