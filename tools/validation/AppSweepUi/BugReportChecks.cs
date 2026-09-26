@@ -95,6 +95,9 @@ static class BugReportChecks
             var spaced = new BugRedactor(@"C:\Users\John Smith", "John Smith", "PC").Redact(@"{""p"":""C:\\Users\\John Smith\\x""} C:/Users/John Smith/y");
             check(!spaced.Contains("John", StringComparison.Ordinal) && !spaced.Contains("Smith", StringComparison.Ordinal),
                 "A user name with a space is fully redacted in escaped and forward-slash paths");
+            var renamed = new BugRedactor(@"C:\Users\jsmith", "John Smith", "PC").Redact(@"C:/Users/John Smith/y and {""p"":""C:\\Users\\John Smith\\z""}");
+            check(!renamed.Contains("John", StringComparison.Ordinal) && !renamed.Contains("Smith", StringComparison.Ordinal),
+                "A user name that differs from the profile folder is still fully redacted inside other paths");
             var others = redactor.Redact(@"C:\Users\Bob\AppData and {""p"":""D:\\Users\\Carol\\x""} and C:\Users\Public\Desktop and C:\Users\Default User\x");
             check(!others.Contains("Bob", StringComparison.Ordinal) && !others.Contains("Carol", StringComparison.Ordinal)
                 && others.Contains(@"C:\Users\Public\Desktop", StringComparison.Ordinal) && others.Contains(@"C:\Users\Default User\x", StringComparison.Ordinal),

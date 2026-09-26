@@ -82,14 +82,17 @@ public partial class BugReportViewModel : ObservableObject
                     if (property.Value.ValueKind == JsonValueKind.String && property.Value.GetString() is { Length: > 0 } value) values[property.Name] = value.Trim();
             }
         }
-        catch (Exception error) when (error is JsonException or InvalidOperationException)
+        catch (Exception error)
         {
             AppLog.Write("bug-report", error.ToString());
         }
-        Specs.Clear();
-        foreach (var (key, label) in SpecLabels) Specs.Add(new(key, label, values.TryGetValue(key, out var value) ? value : "Unknown"));
-        Specs.Add(new("app", "App version", App.VersionText));
-        LoadingSpecs = false;
+        finally
+        {
+            Specs.Clear();
+            foreach (var (key, label) in SpecLabels) Specs.Add(new(key, label, values.TryGetValue(key, out var value) ? value : "Unknown"));
+            Specs.Add(new("app", "App version", App.VersionText));
+            LoadingSpecs = false;
+        }
     }
 
     public async Task AttachAsync()
