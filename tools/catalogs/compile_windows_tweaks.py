@@ -685,7 +685,7 @@ def compile_catalog():
                 raise ValueError('The FPS preset names a setting or choice that is not in the catalog: ' + item['settingId'])
         if combines_incompatible(selections):
             raise ValueError('The FPS preset combines settings that cannot be used together')
-        catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections})
+        catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections, 'availableOnly': True})
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 
 

@@ -5,6 +5,8 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 
+NEVER_IN_FPS_PRESET = {'windows.6ae403065279ea14'}
+
 def check(root):
     failures = []
     catalog = json.loads((root / 'backend/catalogs/windows-tweaks.json').read_text())
@@ -58,6 +60,8 @@ def check(root):
         measured = json.loads(fps_source.read_text())['selections']
         if [(item['settingId'], item['optionId']) for item in measured] != [(item['settingId'], item['optionId']) for item in fps['selections']]:
             failures.append('The fps-boost preset must list exactly the measured winners.')
+        if any(item['settingId'] in NEVER_IN_FPS_PRESET for item in measured):
+            failures.append('The fps-boost preset includes a setting that must never ship in it (it breaks the PC after a reboot).')
         for item in measured:
             option_ids = {option['id'] for option in settings_by_id.get(item['settingId'], {}).get('options', [])}
             if item['optionId'] not in option_ids or not item.get('evidence'):
