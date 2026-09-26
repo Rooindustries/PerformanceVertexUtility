@@ -476,8 +476,8 @@
         {
           "capabilityId": "system-optimizations.windows-settings",
           "frontendLabel": "Windows settings",
-          "displayName": "Privacy and Explorer settings",
-          "riskLevel": "medium",
+          "displayName": "Windows settings",
+          "riskLevel": "high",
           "approvalRequired": true,
           "applyStatus": "fixture-proven"
         }
