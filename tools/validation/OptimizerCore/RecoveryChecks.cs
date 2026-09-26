@@ -13,6 +13,9 @@ static class RecoveryChecks
         Permissions(check);
         InterruptedCleanup(check);
         RepeatedRestore(check);
+        UnfinishedRecovery(check);
+        StuckFolder(check);
+        ReplacedBeforeFinalize(check);
         FolderPermissionFailure(check);
         RegistryPermissions(check);
         ReplaceRace(check);
@@ -192,13 +195,124 @@ static class RecoveryChecks
             engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
             var first = engine.Restore(journalPath);
             check(first.Status == "restored" && Directory.GetLastWriteTimeUtc(folder) == folderWritten, "A completed recovery restores the folder's original write time");
+            File.SetAttributes(folder, File.GetAttributes(folder) | FileAttributes.Hidden);
             File.Delete(child);
             var second = engine.Restore(journalPath);
             if (second.Status != "restored") Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(second, OperationFiles.Json));
             check(second.Status == "restored" && File.ReadAllText(child) == "child" && Directory.GetLastWriteTimeUtc(folder) == folderWritten, "A later recovery that restores a child into an already-restored folder puts the folder's write time back");
+            check((File.GetAttributes(folder) & FileAttributes.Hidden) != 0, "A later recovery keeps attribute changes made after the folder was first restored");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Repeated-recovery validation removes its fixture");
+    }
+
+    static (string Root, string Source, string File, string Journal, FileCleanupEngine Engine) SimpleFixture(string label)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "App");
+        var file = Path.Combine(source, "item.txt");
+        var operations = Path.Combine(root, "Operations");
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(operations);
+        File.WriteAllText(file, "item");
+        File.SetLastWriteTimeUtc(file, new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        Directory.SetLastWriteTimeUtc(source, new DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc));
+        var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes(label + " fixture"));
+        var authority = new CleanupAuthority
+        {
+            AppId = "fixture:" + label, ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+            RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+        };
+        var engine = new FileCleanupEngine(() => authority);
+        var reviewPath = Path.Combine(operations, "review.json");
+        var journalPath = Path.Combine(operations, "journal.json");
+        OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+        engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
+        return (root, source, file, journalPath, engine);
+    }
+
+    static void UnfinishedRecovery(Action<bool, string> check)
+    {
+        foreach (var (label, status, error) in new[] { ("final-pass-failed", "restored", "A previous final pass failed."), ("crashed-after-rename", "restoreIntent", (string?)null) })
+        {
+            var fixture = SimpleFixture(label);
+            try
+            {
+                check(fixture.Engine.Restore(fixture.Journal).Status == "restored", "The " + label + " fixture restores once");
+                var journal = OperationFiles.Read<FileCleanupJournal>(fixture.Journal);
+                var entry = journal.Entries.Single(item => string.Equals(item.Original.Path, FileLease.NormalizePath(fixture.File), StringComparison.OrdinalIgnoreCase));
+                entry.Status = status; entry.Error = error; entry.FinalVerified = false;
+                journal.Status = "needsReconciliation";
+                OperationFiles.Write(fixture.Journal, journal);
+                File.SetLastWriteTimeUtc(fixture.File, DateTime.UtcNow.AddMinutes(-3));
+                File.SetAttributes(fixture.File, FileAttributes.ReadOnly);
+                var result = fixture.Engine.Restore(fixture.Journal);
+                var after = result.Entries.Single(item => string.Equals(item.Original.Path, FileLease.NormalizePath(fixture.File), StringComparison.OrdinalIgnoreCase));
+                check(result.Status == "restored" && after.FinalVerified && File.GetLastWriteTimeUtc(fixture.File) == new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc) && (uint)File.GetAttributes(fixture.File) == entry.Original.Attributes,
+                    "Recovery after " + label.Replace('-', ' ') + " finalizes the item's dates and attributes before reporting restored");
+            }
+            finally { foreach (var file in Directory.EnumerateFiles(fixture.Root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal); Directory.Delete(fixture.Root, true); }
+        }
+    }
+
+    static void StuckFolder(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-stuck-folder-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "App");
+        var file = Path.Combine(source, "item.txt");
+        var operations = Path.Combine(root, "Operations");
+        try
+        {
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(operations);
+            File.WriteAllText(file, "item");
+            var folderWritten = new DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+            Directory.SetLastWriteTimeUtc(source, folderWritten);
+            var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("stuck fixture"));
+            var authority = new CleanupAuthority
+            {
+                AppId = "fixture:stuck", ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+                RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var engine = new FileCleanupEngine(() => authority);
+            var reviewPath = Path.Combine(operations, "review.json");
+            var journalPath = Path.Combine(operations, "journal.json");
+            OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+            var normalized = FileLease.NormalizePath(source);
+            FileLease.SimulateDeleteFailure = path => string.Equals(path, normalized, StringComparison.OrdinalIgnoreCase);
+            FileCleanupJournal applied;
+            try { applied = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath); }
+            finally { FileLease.SimulateDeleteFailure = null; }
+            check(applied.Entries.Single(entry => entry.Original.Path == normalized).Status == "deleteIntent" && Directory.Exists(source) && !File.Exists(file), "The stuck-folder fixture leaves its original folder at delete intent");
+            var restored = engine.Restore(journalPath);
+            if (restored.Status != "restored") Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(restored, OperationFiles.Json));
+            check(restored.Status == "restored" && File.ReadAllText(file) == "item" && Directory.GetLastWriteTimeUtc(source) == folderWritten, "Recovery restores into a folder that was never deleted and puts its write time back");
+        }
+        finally { FileLease.SimulateDeleteFailure = null; if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    static void ReplacedBeforeFinalize(Action<bool, string> check)
+    {
+        var fixture = SimpleFixture("replaced-before-finalize");
+        try
+        {
+            var target = FileLease.NormalizePath(fixture.File);
+            DateTime replacedAt = default;
+            FileLease.SimulateBeforeFinalize = path =>
+            {
+                if (!string.Equals(path, target, StringComparison.OrdinalIgnoreCase) || replacedAt != default) return;
+                File.Delete(fixture.File);
+                File.WriteAllText(fixture.File, "item");
+                replacedAt = File.GetLastWriteTimeUtc(fixture.File);
+            };
+            FileCleanupJournal restored;
+            try { restored = fixture.Engine.Restore(fixture.Journal); }
+            finally { FileLease.SimulateBeforeFinalize = null; }
+            var entry = restored.Entries.Single(item => string.Equals(item.Original.Path, target, StringComparison.OrdinalIgnoreCase));
+            check(restored.Status == "needsReconciliation" && entry.Error?.Contains("A different item now occupies", StringComparison.Ordinal) == true && !entry.FinalVerified && File.GetLastWriteTimeUtc(fixture.File) == replacedAt,
+                "Recovery refuses to finalize an item that was replaced after it was restored");
+        }
+        finally { FileLease.SimulateBeforeFinalize = null; Directory.Delete(fixture.Root, true); }
     }
 
     static void FolderPermissionFailure(Action<bool, string> check)
@@ -215,6 +329,7 @@ static class RecoveryChecks
             Directory.CreateDirectory(operations);
             File.WriteAllText(inside, "inside");
             File.WriteAllText(beside, "beside");
+            File.SetLastWriteTimeUtc(beside, new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc));
             var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("folder permission fixture"));
             var authority = new CleanupAuthority
             {
@@ -235,7 +350,7 @@ static class RecoveryChecks
             var insideEntry = restored.Entries.Single(entry => string.Equals(entry.Original.Path, FileLease.NormalizePath(inside), StringComparison.OrdinalIgnoreCase));
             check(restored.Status == "needsReconciliation" && folderEntry.Error?.Contains("Simulated permission write failure", StringComparison.Ordinal) == true, "A folder whose permissions cannot be written reports the failure");
             check(!File.Exists(inside) && insideEntry.Status != "restored" && insideEntry.Error is not null, "Nothing is restored inside a folder whose permissions could not be written");
-            check(File.ReadAllText(beside) == "beside", "Items outside that folder are still restored");
+            check(File.ReadAllText(beside) == "beside" && File.GetLastWriteTimeUtc(beside) == new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc) && restored.Entries.Single(entry => string.Equals(entry.Original.Path, FileLease.NormalizePath(beside), StringComparison.OrdinalIgnoreCase)).FinalVerified, "Items outside that folder are still restored and finalized while another item conflicts");
         }
         finally { FileLease.SimulatePermissionFailure = null; if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Folder-permission failure validation removes its fixture");
@@ -336,17 +451,11 @@ static class RecoveryChecks
             check(absent && clock.ElapsedMilliseconds < 25, "An expected-missing file is reported absent without waiting");
             Directory.CreateDirectory(Path.Combine(root, "folder.json"));
             check(!OperationFiles.Absent(Path.Combine(root, "folder.json")), "A folder at an operation file path is not reported as a missing file");
-            var stale = path + "." + Guid.NewGuid().ToString("N") + ".writing";
-            File.WriteAllText(stale, "");
-            File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddMinutes(-5));
             OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -1 });
-            check(!File.Exists(stale), "A later write removes a marker left by an interrupted write");
-            var young = path + "." + Guid.NewGuid().ToString("N") + ".writing";
-            File.WriteAllText(young, "");
-            File.SetLastWriteTimeUtc(young, DateTime.UtcNow.AddSeconds(-30));
+            var leftover = path + "." + Guid.NewGuid().ToString("N") + ".bak";
+            File.WriteAllText(leftover, "{}");
             OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -2 });
-            check(File.Exists(young), "A write keeps a marker younger than one minute");
-            File.Delete(young);
+            check(!File.Exists(leftover) && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2, "A write clears a leftover backup next to an existing file");
             OperationFiles.SimulateReplaceFailure = (target, backup) => { File.Move(target, backup); throw new IOException("Simulated replace failure 1176.", unchecked((int)0x80070498)); };
             var replaceFailed = false;
             try { OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -3 }); } catch (IOException) { replaceFailed = true; }
@@ -354,11 +463,17 @@ static class RecoveryChecks
             check(replaceFailed && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2 && !Directory.EnumerateFiles(root).Any(file => Path.GetFileName(file).StartsWith("state.json.", StringComparison.OrdinalIgnoreCase)), "A failed replace keeps the previous file and leaves no backup behind");
             var orphan = path + "." + Guid.NewGuid().ToString("N") + ".bak";
             File.Move(path, orphan);
-            File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddMinutes(-5));
-            var failedClosed = false;
-            try { OperationFiles.Read<Dictionary<string, int>>(path); } catch (InvalidDataException) { failedClosed = true; }
-            check(failedClosed && !OperationFiles.Absent(path), "A file lost mid-replace fails closed instead of reading as absent");
-            File.Move(orphan, path);
+            check(OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2 && File.Exists(path) && !File.Exists(orphan), "A read recovers the last saved version left only as a backup");
+            File.Move(path, orphan);
+            check(OperationFiles.Exists(path) && !OperationFiles.Absent(path) && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2, "An existence check recovers the saved list instead of treating it as empty");
+            File.Move(path, orphan);
+            OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -4 });
+            check(OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -4 && !File.Exists(orphan) && !Directory.EnumerateFiles(root).Any(file => Path.GetFileName(file).StartsWith("state.json.", StringComparison.OrdinalIgnoreCase)), "A write over an orphaned backup recovers it first and leaves no leftovers");
+            var receipt = Path.Combine(root, "receipt.json");
+            OperationFiles.Write(receipt, new Dictionary<string, int> { ["value"] = 1 });
+            File.WriteAllText(receipt + "." + Guid.NewGuid().ToString("N") + ".bak", "{\"value\":0}");
+            OperationFiles.Delete(receipt);
+            check(!OperationFiles.Exists(receipt) && !Directory.EnumerateFiles(root).Any(file => Path.GetFileName(file).StartsWith("receipt.json.", StringComparison.OrdinalIgnoreCase)), "A deleted receipt stays deleted even when a backup was left beside it");
         }
         finally { Directory.Delete(root, true); }
     }
@@ -386,7 +501,8 @@ static class RecoveryChecks
         try { using (new PrivilegeScope("fixture", "SeTimeZonePrivilege", "SeRooIndustriesMissingPrivilege")) { } }
         catch (Exception error) { observed = error; }
         finally { PrivilegeScope.SimulateRestoreFailure = null; PrivilegeScope.SimulateDisableFailure = null; }
-        check(observed is InvalidOperationException && observed.InnerException is Win32Exception && observed.Message.Contains("could not be returned to its previous state", StringComparison.Ordinal), "A privilege setup failure reports both the original error and a privilege left enabled");
+        DisablePrivilege("SeTimeZonePrivilege");
+        check(observed is Win32Exception { NativeErrorCode: 1313 } && observed.Message.Contains("could not be returned to its previous state", StringComparison.Ordinal), "A privilege setup failure keeps its Windows error code and reports the privilege left enabled");
     }
 
     static void StartupScript(Action<bool, string> check)
@@ -405,6 +521,17 @@ static class RecoveryChecks
             check(bundled.Contains("Get-FileHash -LiteralPath '" + assembly + "'", StringComparison.Ordinal) && framework.Contains("Get-FileHash -LiteralPath '" + assembly + "'", StringComparison.Ordinal), "Timer startup verifies the helper assembly in both layouts");
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    static void DisablePrivilege(string name)
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), 0x28, out var token)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        using (token)
+        {
+            if (!LookupPrivilegeValue(null, name, out var luid)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            var state = new TokenPrivilege { Count = 1, Luid = luid, Attributes = 0 };
+            if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
     }
 
     static string Sddl(string path)
@@ -444,6 +571,11 @@ static class RecoveryChecks
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text, uint revision, out IntPtr descriptor, out uint size);
     [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
     [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [StructLayout(LayoutKind.Sequential)] struct PrivilegeLuid { public uint Low; public int High; }
+    [StructLayout(LayoutKind.Sequential)] struct TokenPrivilege { public uint Count; public PrivilegeLuid Luid; public uint Attributes; }
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out SafeFileHandle token);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool LookupPrivilegeValue(string? system, string name, out PrivilegeLuid luid);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool AdjustTokenPrivileges(SafeFileHandle token, bool disableAll, ref TokenPrivilege state, int length, IntPtr previous, IntPtr needed);
     [DllImport("advapi32.dll")] static extern int RegSetKeySecurity(Microsoft.Win32.SafeHandles.SafeRegistryHandle key, uint information, byte[] descriptor);
     [DllImport("ntdll.dll")] static extern int NtSetInformationProcess(IntPtr process, int informationClass, ref int information, int length);
 }
