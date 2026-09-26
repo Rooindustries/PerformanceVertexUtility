@@ -103,8 +103,9 @@ public class FileTweakStore : ITweakStore
         if (fixture.State?.Revision != plan.BeforeRevision || fixture.Context != plan.Context) throw new InvalidDataException("The fixture changed after review.");
         foreach (var expected in plan.Expected)
             if (!Read(fixture, expected.Address).Same(expected)) throw new InvalidDataException("A fixture setting changed after review.");
-        foreach (var expected in plan.Controls?.Expected ?? [])
+        foreach (var expected in plan.Controls?.Owned ?? [])
             if (!fixture.Controls.TryGetValue(expected.Address.Key, out var current) || !current.Same(expected)) throw new InvalidDataException("A fixture control changed after review.");
+        plan.Controls?.CheckReleased(address => fixture.Controls.GetValueOrDefault(address.Key) ?? new(address, "", "", default));
         foreach (var change in plan.Controls?.Changes ?? [])
             { fixture.Controls[change.Before.Address.Key] = change.Before with { Value = change.After }; fixture.Writes++; }
         var next = TweakEngine.NextState(plan, reviewHash, fixture.State);

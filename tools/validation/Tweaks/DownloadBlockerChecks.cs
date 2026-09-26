@@ -30,6 +30,25 @@ static class DownloadBlockerChecks
             store.Write(store.Read(address), ControlValues.From(false));
             check(Directory.Exists(path) && File.ReadAllText(Path.Combine(path, "new-data.txt")) == "preserve new data" && !store.Read(address).Value.GetBoolean(), "Undo retains an app-created folder that acquired unrelated data");
             check(store.Read(policy).Same(record.Original), "Retaining new data still restores the original folder permissions");
+            Directory.Delete(path, true);
+            before = store.Read(address); plan = new([before], [new(before, ControlValues.From(true))], []);
+            ControlExecution.Apply(plan, store, _ => { });
+            var released = true; try { ControlExecution.Apply(new([before], [], [], null, [new(new ControlHeld(before, ControlValues.From(false)))]), store, _ => { }); } catch (InvalidDataException) { released = false; }
+            check(released, "A commit ignores a control it releases without writing even if Windows changed it meanwhile");
+            var retaken = false; try { ControlExecution.Apply(new([before], [], [], null, [new(new ControlHeld(before, ControlValues.From(true)))]), store, _ => { }); } catch (InvalidDataException) { retaken = true; }
+            check(retaken, "A commit refuses a released control that went back to the tweaked value");
+            var kept = false; try { ControlExecution.Apply(new([before], [], [new(before, ControlValues.From(false))]), store, _ => { }); } catch (InvalidDataException) { kept = true; }
+            check(kept, "A commit still refuses when a control it keeps ownership of changed");
+            var active = store.Read(address); var undo = new ControlPlan([active], [new(active, ControlValues.From(false))], []);
+            ControlExecution.Apply(undo, store, _ => { });
+            check(!Directory.Exists(path), "Undo removes the folder it created");
+            ControlExecution.Rollback(undo, 1, store);
+            var recreated = store.Read(address);
+            check(Directory.Exists(path) && recreated.Value.GetBoolean() && !recreated.LostLease, "Recovery after a failed undo recreates the blocked folder and verifies it");
+            ControlExecution.Rollback(undo, 1, store);
+            check(store.Read(address).Value.GetBoolean(), "Checking recovery again after the folder was recreated succeeds");
+            store.Write(recreated, ControlValues.From(false));
+            check(!Directory.Exists(path) && !File.Exists(path + ".blocker.json"), "A later undo removes the recreated folder");
         }
         finally
         {
