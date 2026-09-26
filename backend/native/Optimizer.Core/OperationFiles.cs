@@ -54,6 +54,7 @@ public static class OperationFiles
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        RemoveStaleMarkers(path);
         var operation = path + "." + Guid.NewGuid().ToString("N");
         var temporary = operation + ".tmp";
         var marker = operation + ".writing";
@@ -88,7 +89,18 @@ public static class OperationFiles
         }
     }
 
-    public static bool Absent(string path) => !File.Exists(path) && !WriteInProgress(path) && !File.Exists(path);
+    public static bool Absent(string path) => !File.Exists(path) && !Directory.Exists(path) && !WriteInProgress(path) && !File.Exists(path);
+
+    private static void RemoveStaleMarkers(string path)
+    {
+        foreach (var file in Directory.EnumerateFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".*"))
+        {
+            var suffix = Path.GetFileName(file)[(Path.GetFileName(path).Length + 1)..];
+            if (suffix.Length != 32 + 4 && suffix.Length != 32 + 8 || !Guid.TryParseExact(suffix[..32], "N", out _) || suffix[32..] is not (".tmp" or ".writing")) continue;
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromMinutes(1)) continue;
+            try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
 
     private static bool WriteInProgress(string path)
     {
