@@ -29,7 +29,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         if (preview.Roots.Any(root => Within(directory, root)) || string.Equals(Path.GetFullPath(previewPath), Path.GetFullPath(journalPath), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Recovery files and the journal must stay outside deletion targets and reviewed inputs.");
         using var lease = OperationFiles.Lock(journalPath);
-        if (File.Exists(journalPath)) return ReconcileApplied(journalPath, ReadJournal(journalPath, reviewHash));
+        if (OperationFiles.Exists(journalPath)) return ReconcileApplied(journalPath, ReadJournal(journalPath, reviewHash));
         var journal = new FileCleanupJournal
         {
             SchemaVersion = 1, Preview = preview, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash,
@@ -105,15 +105,15 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         var journal = ReadJournal(journalPath);
         currentAuthority().Verify(journal.Preview.AppId, journal.Preview.ProviderIdentityHash);
         var conflicts = false;
-        var touched = new List<string>();
         var createdDirectories = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
-        var unsafeDirectories = new List<string>();
+        var skippedDirectories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var finalize = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in journal.Entries.Where(entry => entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
         {
             try
             {
-                if (unsafeDirectories.Any(directory => entry.Original.Path != directory && Within(entry.Original.Path, directory)))
-                    throw new InvalidDataException("Its restored folder could not receive its original permissions, so nothing was restored inside it.");
+                var blocked = BlockingAncestor(entry.Original.Path, skippedDirectories);
+                if (blocked is not null) throw new InvalidDataException("Nothing was restored inside " + blocked.Value.Key + " because " + blocked.Value.Value);
                 if (entry.BackupHash is null || OperationFiles.HashFile(entry.BackupPath) != entry.BackupHash) throw new InvalidDataException("The file backup is missing or changed.");
                 FileLease? existing = null;
                 try { existing = FileLease.Open(entry.Original.Path); }
@@ -123,15 +123,12 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     using (existing)
                     {
                         var current = existing.Capture();
-                        var unfinishedDirectory = entry.Original.Directory && !entry.DirectoryMetadataRestored && entry.RestoredIdentity == current.Identity;
-                        var ours = entry.RestoredIdentity == current.Identity;
-                        var compared = unfinishedDirectory || ours ? current with { LastWriteTime = entry.Original.LastWriteTime, LastAccessTime = entry.Original.LastAccessTime, Attributes = entry.Original.Attributes } : current;
+                        var ours = current.Identity == entry.RestoredIdentity || current.Identity == entry.Original.Identity;
+                        var compared = ours ? current with { LastWriteTime = entry.Original.LastWriteTime, LastAccessTime = entry.Original.LastAccessTime, Attributes = entry.Original.Attributes } : current;
                         if (!entry.Original.SameRestorableData(compared)) throw new InvalidDataException("New or changed data occupies the restore destination.");
-                        if (unfinishedDirectory || entry.Original.Directory && entry.Status == "restoreIntent" && entry.RestoredIdentity is null)
-                        {
-                            entry.RestoredIdentity = current.Identity;
-                            createdDirectories.Add(entry.Original.Path, current.Identity);
-                        }
+                        if (ours) entry.RestoredIdentity = current.Identity;
+                        if (entry.Original.Directory && ours && !entry.DirectoryMetadataRestored) createdDirectories[entry.Original.Path] = current.Identity;
+                        if (ours && !entry.FinalVerified) finalize.Add(entry.Original.Path);
                     }
                     entry.Status = "restored";
                     entry.Error = null;
@@ -139,6 +136,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     continue;
                 }
                 entry.Status = "restoreIntent";
+                entry.FinalVerified = false;
                 Save(journalPath, journal);
                 if (entry.Original.Directory)
                 {
@@ -148,23 +146,25 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     restored.RestoreData(entry.BackupPath, entry.Original);
                     var snapshot = restored.Capture();
                     if (!entry.Original.SameRestorableData(snapshot)) throw new InvalidDataException("Restored directory data or permissions differ from the backup.");
-                    createdDirectories.Add(entry.Original.Path, snapshot.Identity);
-                    entry.RestoredIdentity = snapshot.Identity;
+                    createdDirectories[entry.Original.Path] = snapshot.Identity;
                     entry.DirectoryMetadataRestored = false;
                     Save(journalPath, journal);
                 }
                 else RestoreFile(entry, journalPath, journal);
-                touched.Add(entry.Original.Path);
+                finalize.Add(entry.Original.Path);
                 entry.Status = "restored";
                 entry.Error = null;
                 Save(journalPath, journal);
             }
             catch (Exception error)
             {
-                if (entry.Original.Directory) unsafeDirectories.Add(entry.Original.Path);
+                if (entry.Original.Directory && !skippedDirectories.ContainsKey(entry.Original.Path)) skippedDirectories[entry.Original.Path] = "the folder itself could not be restored: " + error.Message;
                 entry.Error = error.Message; conflicts = true; Save(journalPath, journal);
             }
         }
+        var unresolved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in journal.Entries.Where(entry => entry.Status != "restored" || entry.Error is not null))
+            for (var path = Path.GetDirectoryName(entry.Original.Path); path is not null; path = Path.GetDirectoryName(path)) unresolved.Add(path);
         foreach (var entry in journal.Entries.Where(entry => createdDirectories.ContainsKey(entry.Original.Path)).OrderByDescending(entry => Depth(entry.Original.Path)))
         {
             try
@@ -174,34 +174,38 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
                     if (directory.Capture().Identity != createdDirectories[entry.Original.Path] || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
                         throw new InvalidDataException("Directory contents changed during restoration; metadata was left unchanged.");
-                    if (journal.Entries.Any(child => child.Original.Path != entry.Original.Path && Within(child.Original.Path, entry.Original.Path) && (child.Status != "restored" || child.Error is not null)))
-                        throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
+                    if (unresolved.Contains(entry.Original.Path)) throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
                     directory.RestoreMetadata(entry.Original);
                     if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
                 }
                 entry.DirectoryMetadataRestored = true;
                 entry.Error = null;
+                finalize.Add(entry.Original.Path);
             }
-            catch (Exception error) { entry.Error = error.Message; conflicts = true; }
+            catch (Exception error)
+            {
+                entry.Error = error.Message; conflicts = true;
+                for (var parent = Path.GetDirectoryName(entry.Original.Path); parent is not null; parent = Path.GetDirectoryName(parent)) unresolved.Add(parent);
+            }
         }
-        foreach (var entry in journal.Entries.Where(entry => touched.Any(path => Within(path, entry.Original.Path)) && entry.Status == "restored" && entry.Error is null && entry.RestoredIdentity is not null && (!entry.Original.Directory || entry.DirectoryMetadataRestored)).OrderByDescending(entry => Depth(entry.Original.Path)))
+        foreach (var path in finalize.ToArray())
+            for (var parent = Path.GetDirectoryName(path); parent is not null; parent = Path.GetDirectoryName(parent)) finalize.Add(parent);
+        foreach (var entry in journal.Entries.Where(entry => finalize.Contains(entry.Original.Path) && entry.Status == "restored" && entry.Error is null && entry.RestoredIdentity is not null
+            && (!entry.Original.Directory || entry.DirectoryMetadataRestored && !unresolved.Contains(entry.Original.Path))).OrderByDescending(entry => Depth(entry.Original.Path)))
         {
             try
             {
-                using (var before = FileLease.Open(entry.Original.Path))
-                {
-                    var observed = before.Capture();
-                    if (observed.Identity != entry.RestoredIdentity || !entry.Original.SameRestorableData(observed with { LastWriteTime = entry.Original.LastWriteTime, LastAccessTime = entry.Original.LastAccessTime, Attributes = entry.Original.Attributes }))
-                        throw new InvalidDataException("A restored item changed before its dates and attributes were finalized; they were left unchanged.");
-                }
-                using (var restored = OpenAttributes(entry.Original.Path))
-                {
-                    if (restored.CurrentIdentity() != entry.RestoredIdentity) throw new InvalidDataException("A different item now occupies this restored path; its dates and attributes were left unchanged.");
-                    restored.RestoreBasicInformation(entry.Original);
-                }
-                using var current = FileLease.Open(entry.Original.Path);
-                var differences = entry.Original.Differences(current.Capture());
-                if (differences.Length != 0) throw new InvalidDataException("Restored item differs in " + string.Join(", ", differences) + " after its folder was restored.");
+                using var item = OpenFinalize(entry.Original.Path);
+                var observed = item.Capture();
+                var datesOnly = entry.FinalVerified;
+                var expected = datesOnly ? entry.Original with { Attributes = observed.Attributes, CreationTime = observed.CreationTime } : entry.Original;
+                if (observed.Identity != entry.RestoredIdentity) throw new InvalidDataException("A different item now occupies this restored path; its dates and attributes were left unchanged.");
+                if (!expected.SameRestorableData(observed with { LastWriteTime = expected.LastWriteTime, LastAccessTime = expected.LastAccessTime, Attributes = expected.Attributes }))
+                    throw new InvalidDataException("A restored item changed before its dates and attributes were finalized; they were left unchanged.");
+                item.RestoreBasicInformation(expected);
+                var differences = expected.Differences(item.Capture());
+                if (differences.Length != 0) throw new InvalidDataException("Restored item differs in " + string.Join(", ", differences) + " after recovery.");
+                entry.FinalVerified = true;
             }
             catch (Exception error) { entry.Error = error.Message; conflicts = true; }
         }
@@ -210,12 +214,19 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         return journal;
     }
 
-    private static FileLease OpenAttributes(string path)
+    private static KeyValuePair<string, string>? BlockingAncestor(string path, Dictionary<string, string> skipped)
     {
-        try { return FileLease.OpenAttributes(path); }
+        for (var parent = Path.GetDirectoryName(path); parent is not null; parent = Path.GetDirectoryName(parent))
+            if (skipped.TryGetValue(parent, out var reason)) return new(parent, reason);
+        return null;
+    }
+
+    private static FileLease OpenFinalize(string path)
+    {
+        try { return FileLease.OpenFinalize(path); }
         catch (Win32Exception error) when (error.NativeErrorCode == 5)
         {
-            using (PrivilegeScope.FilePolicy()) return FileLease.OpenAttributes(path);
+            using (PrivilegeScope.FilePolicy()) return FileLease.OpenFinalize(path);
         }
     }
 

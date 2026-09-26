@@ -59,6 +59,7 @@ public sealed class FileBackupEntry
     public string? RestoreStagingPath { get; set; }
     public FileIdentity? RestoredIdentity { get; set; }
     public bool DirectoryMetadataRestored { get; set; }
+    public bool FinalVerified { get; set; }
 }
 
 public sealed class FileCleanupJournal
