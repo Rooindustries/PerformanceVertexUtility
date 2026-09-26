@@ -16,6 +16,9 @@ function Get-ValidationTempPaths {
     }
     return @($paths | Sort-Object -Unique)
 }
+$baselineProcess = [Diagnostics.Process]::GetCurrentProcess()
+$baselineProcess.PriorityClass = [Diagnostics.ProcessPriorityClass]::Normal
+$baselineProcess.Dispose()
 $tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
 $testScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
