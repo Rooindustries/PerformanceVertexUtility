@@ -230,10 +230,10 @@ public static partial class RegistryNative
         {
             if (disposition != 1) throw new InvalidDataException("A new key occupies the registry restore destination.");
             VerifyName(key, node.NativeName);
-            if (node.SecurityCoverage != 7 || node.Security is null) throw new InvalidDataException("Registry permission backup is incomplete.");
-            WindowsPermissions.Restore(key, 4, node.Security);
             foreach (var value in node.Values) WriteValue(key, value);
             foreach (var child in node.Children) CreateNode(key, child, view, transaction);
+            if (node.SecurityCoverage != 7 || node.Security is null) throw new InvalidDataException("Registry permission backup is incomplete.");
+            WindowsPermissions.Restore(key, 4, node.Security);
         }
     }
 
