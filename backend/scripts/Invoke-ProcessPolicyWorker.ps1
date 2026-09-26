@@ -71,7 +71,7 @@ if($Action -in @('Start','EnableLogon','DisableLogon')) {
     [IO.Directory]::CreateDirectory($PolicyRoot)|Out-Null
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
     $atLogon=($Action -eq 'EnableLogon' -or ($Action -eq 'Start' -and $task -and @($task.Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0))
-    $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run','"'+$requestPath+'"')) -join ' '
+    $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run',('"'+$requestPath+'"'))) -join ' '
     $execute=New-ScheduledTaskAction -Execute $DotNetPath -Argument $arguments -WorkingDirectory $HostDirectory
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel $(if($admin){'Highest'}else{'Limited'})
