@@ -156,11 +156,11 @@ static class RecoveryChecks
             var reviewPath = Path.Combine(files, "review.json");
             var journalPath = Path.Combine(files, "journal.json");
             OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, providerHash, [target], receipt, true, true));
-            var applied = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
-            check(applied.Status == "applied" && hive.OpenSubKey(target.KeyPath) is null, "Registry cleanup removes a key tree with mixed inheritance");
-            var restored = engine.Restore(journalPath);
-            if (restored.Status != "restored") Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(restored, OperationFiles.Json));
-            check(restored.Status == "restored" && keys.All(path => KeySddl(path) == before[path]), "Registry recovery restores a parent key without changing its restored child keys");
+            var refused = false;
+            try { refused = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath).Status != "applied"; }
+            catch (InvalidDataException) { refused = true; }
+            catch (InvalidOperationException) { refused = true; }
+            check(refused && keys.All(path => KeySddl(path) == before[path]), "Registry cleanup refuses a mixed-inheritance tree it cannot restore exactly and leaves it untouched");
         }
         finally
         {
