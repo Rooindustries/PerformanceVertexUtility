@@ -193,7 +193,9 @@ public sealed class ProcessTarget : IDisposable
         switch (name)
         {
             case "cpuPriority":
-                if (!SetPriorityClass(_handle, PriorityValue(value.GetString()!))) Fail("SetPriorityClass");
+                var priority = PriorityValue(value.GetString()!);
+                using (priority == 0x100 ? new PrivilegeScope("Realtime CPU priority", "SeIncreaseBasePriorityPrivilege") : null)
+                    if (!SetPriorityClass(_handle, priority)) Fail("SetPriorityClass");
                 break;
             case "affinity":
                 var affinity = value.Deserialize<AffinityState>(OperationFiles.Json) ?? throw new InvalidDataException("Affinity is missing.");
@@ -220,7 +222,8 @@ public sealed class ProcessTarget : IDisposable
             case "gpuPriority":
                 var gpu = value.GetInt32();
                 if (gpu is < 0 or > 5) throw new InvalidDataException("GPU priority is outside the Windows range.");
-                CheckStatus(D3DKMTSetProcessSchedulingPriorityClass(_handle, gpu), "D3DKMTSetProcessSchedulingPriorityClass");
+                using (gpu == 5 ? new PrivilegeScope("Realtime GPU priority", "SeIncreaseBasePriorityPrivilege") : null)
+                    CheckStatus(D3DKMTSetProcessSchedulingPriorityClass(_handle, gpu), "D3DKMTSetProcessSchedulingPriorityClass");
                 break;
             case "memoryPriority":
                 var memory = value.GetUInt32();
