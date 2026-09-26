@@ -9,7 +9,7 @@ $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-policy-worker-'+[Gui
 $hostDirectory=Join-Path $root 'host'
 $probeDirectory=Join-Path $root 'probe'
 $policyRoot=Join-Path $root 'saved rules'
-$probe=$null;$taskName=$null
+$probe=$null;$taskName=$null;$installedTaskName=$null
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 function Worker([string]$WorkerAction){
     $text=@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action $WorkerAction -PolicyRoot $policyRoot -DotNetPath $DotNetPath -HostDirectory $hostDirectory -ConfirmApply) -join "`n"
@@ -78,7 +78,27 @@ try {
     Worker 'Start'|Out-Null
     $stopped=Worker 'Stop'
     Assert (-not $stopped.worker.hostRunning -and [RooIndustriesPolicyWorkerOracle]::Memory($probe.Handle) -eq $original) 'Normal worker shutdown completes restoration before reporting stopped'
+    $installedHost=Join-Path $root 'installed host'
+    [IO.Directory]::CreateDirectory($installedHost)|Out-Null
+    Add-Type -TypeDefinition 'public static class RooIndustriesInstalledHostStub { public static void Main(string[] args) { System.Console.WriteLine("{\"schemaVersion\":1,\"status\":\"completed\",\"data\":{\"hostRunning\":false,\"state\":null}}"); } }' -OutputAssembly (Join-Path $installedHost 'Optimizer.Host.exe') -OutputType ConsoleApplication
+    foreach($name in 'Optimizer.Host.dll','hostpolicy.dll'){[IO.File]::WriteAllText((Join-Path $installedHost $name),'installed layout fixture')}
+    $installedRules=Join-Path $root 'installed rules'
+    $installedRegistration=((@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action EnableLogon -PolicyRoot $installedRules -DotNetPath '' -HostDirectory $installedHost -ConfirmApply) -join "`n")|ConvertFrom-Json).data
+    $installedTaskName=$installedRegistration.taskName
+    $installedAction=(Get-ScheduledTask -TaskName $installedTaskName).Actions[0]
+    Write-Output ('Installed worker action: '+$installedAction.Execute+' '+$installedAction.Arguments)
+    Assert ($installedAction.Execute -eq (Join-Path $installedHost 'Optimizer.Host.exe') -and $installedAction.Arguments -ceq ('policy-run "'+(Join-Path $installedRules 'worker-request.json')+'"')) 'An installed worker receives its request path as one exact argument'
+    $installedSettings=(Get-ScheduledTask -TaskName $installedTaskName).Settings
+    Assert ($installedSettings.Priority -eq 6) 'The saved-rules worker task runs at normal priority'
+    ((@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action Remove -PolicyRoot $installedRules -DotNetPath '' -HostDirectory $installedHost -ConfirmApply) -join "`n")|ConvertFrom-Json)|Out-Null
+    Assert (-not(Get-ScheduledTask -TaskName $installedTaskName -ErrorAction SilentlyContinue)) 'The installed-layout worker registration is removed'
+    $installedTaskName=$null
+    $sessionScript=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'),[ref]$null,[ref]$null)
+    $sessionSettings=@($sessionScript.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'New-ScheduledTaskSettingsSet'},$true))
+    $sessionPriority=@($sessionSettings|ForEach-Object {$elements=$_.CommandElements;for($i=0;$i -lt $elements.Count-1;$i++){if($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'Priority'){$elements[$i+1].Extent.Text}}})
+    Assert ($sessionSettings.Count -eq 1 -and $sessionPriority.Count -eq 1 -and $sessionPriority[0] -eq '6') 'The protected-session host task is registered at normal priority'
 } finally {
+    if($installedTaskName -and (Get-ScheduledTask -TaskName $installedTaskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $installedTaskName -Confirm:$false}
     if(Test-Path -LiteralPath (Join-Path $hostDirectory 'Optimizer.Host.dll')){Worker 'Remove'|Out-Null}
     if($probe){if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()}
     if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
