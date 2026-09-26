@@ -11,9 +11,11 @@ static class RecoveryChecks
     public static void Run(Action<bool, string> check)
     {
         Permissions(check);
+        InterruptedCleanup(check);
         RegistryPermissions(check);
         ReplaceRace(check);
         PrivilegeRestoreFailure(check);
+        PrivilegeSetupFailure(check);
         StartupScript(check);
     }
 
@@ -51,6 +53,11 @@ static class RecoveryChecks
             File.WriteAllText(explicitOnly, "explicit");
             SetSecurity(explicitOnly, 4, "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")");
             File.WriteAllText(ordinary, "ordinary");
+            var aged = Path.Combine(inherited, "aged.txt");
+            File.WriteAllText(aged, "aged");
+            File.SetLastWriteTimeUtc(aged, new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+            File.SetAttributes(aged, FileAttributes.ReadOnly | FileAttributes.Archive);
+            var agedBefore = (File.GetLastWriteTimeUtc(aged), File.GetAttributes(aged));
             File.WriteAllText(systemFile, "system");
             var pinnedInfo = new DirectoryInfo(pinned);
             var pinnedAcl = pinnedInfo.GetAccessControl();
@@ -98,6 +105,7 @@ static class RecoveryChecks
             check(Sddl(strict) == before[strict] && Sddl(strictChild) == before[strictChild], "A SYSTEM-owned folder that denies administrators permission changes is restored exactly");
             check(Sddl(pinned) == before[pinned] && Sddl(pinnedFile) == before[pinnedFile], "Protected auto-inherited entries are restored exactly");
             check(changed.Length == 0, "Every restored entry matches its captured permissions");
+            check(File.GetLastWriteTimeUtc(aged) == agedBefore.Item1 && File.GetAttributes(aged) == agedBefore.Item2, "A read-only child keeps its original attributes and write time after its folder is restored");
         }
         finally
         {
@@ -106,10 +114,52 @@ static class RecoveryChecks
                 using (PrivilegeScope.FilePolicy())
                     foreach (var path in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories).Append(root))
                         try { SetSecurity(path, 5, "O:" + user + "D:(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;" + user + ")"); } catch (Win32Exception) { }
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
                 Directory.Delete(root, true);
             }
         }
         check(!Directory.Exists(root), "Recovery permission validation removes its fixture");
+    }
+
+    static void InterruptedCleanup(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-interrupted-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "App");
+        var removed = Path.Combine(source, "removed.txt");
+        var kept = Path.Combine(source, "kept.txt");
+        var operations = Path.Combine(root, "Operations");
+        try
+        {
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(operations);
+            File.WriteAllText(removed, "removed original");
+            File.WriteAllText(kept, "kept original");
+            File.SetLastWriteTimeUtc(kept, new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+            var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("interrupted fixture"));
+            var authority = new CleanupAuthority
+            {
+                AppId = "fixture:interrupted", ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+                RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var engine = new FileCleanupEngine(() => authority);
+            var reviewPath = Path.Combine(operations, "review.json");
+            var journalPath = Path.Combine(operations, "journal.json");
+            OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+            check(engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath).Status == "applied", "The interrupted-cleanup fixture is removed");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(kept, "edited by the user");
+            var editedAt = DateTime.UtcNow.AddMinutes(-1);
+            File.SetLastWriteTimeUtc(kept, editedAt);
+            var journal = OperationFiles.Read<FileCleanupJournal>(journalPath);
+            foreach (var entry in journal.Entries.Where(entry => entry.Original.Path == source || entry.Original.Path == kept)) entry.Status = "backedUp";
+            journal.Status = "needsReconciliation";
+            OperationFiles.Write(journalPath, journal);
+            engine.Restore(journalPath);
+            check(File.ReadAllText(kept) == "edited by the user" && File.GetLastWriteTimeUtc(kept) == editedAt, "Recovery leaves a never-deleted, later-edited sibling's content and write time untouched");
+            check(File.ReadAllText(removed) == "removed original", "Recovery still restores the deleted sibling inside the never-deleted folder");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        check(!Directory.Exists(root), "Interrupted-cleanup validation removes its fixture");
     }
 
     static void RegistryPermissions(Action<bool, string> check)
@@ -157,10 +207,18 @@ static class RecoveryChecks
             var journalPath = Path.Combine(files, "journal.json");
             OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, providerHash, [target], receipt, true, true));
             var refused = false;
-            try { refused = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath).Status != "applied"; }
-            catch (InvalidDataException) { refused = true; }
-            catch (InvalidOperationException) { refused = true; }
-            check(refused && keys.All(path => KeySddl(path) == before[path]), "Registry cleanup refuses a mixed-inheritance tree it cannot restore exactly and leaves it untouched");
+            var reason = "";
+            try
+            {
+                var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
+                refused = result.Status != "applied";
+                reason = System.Text.Json.JsonSerializer.Serialize(result, OperationFiles.Json);
+            }
+            catch (Exception error) when (error is InvalidDataException or InvalidOperationException) { refused = true; reason = error.Message; }
+            Console.WriteLine("Registry refusal: " + (reason.Length > 300 ? reason[..300] : reason));
+            string? Kind(string path) { using var key = hive.OpenSubKey(path); return key?.GetValue("Kind") as string; }
+            check(refused && keys.All(path => KeySddl(path) == before[path]) && Kind(keys[0]) == "app" && Kind(keys[1]) == "ordinary" && Kind(keys[2]) == "explicit", "Registry cleanup refuses a mixed-inheritance tree it cannot restore exactly and leaves its keys, values and permissions untouched");
+            check(reason.Contains("could not reproduce", StringComparison.Ordinal), "Registry cleanup explains that recovery could not be reproduced");
         }
         finally
         {
@@ -204,6 +262,24 @@ static class RecoveryChecks
             File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddMinutes(-5));
             OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -1 });
             check(!File.Exists(stale), "A later write removes a marker left by an interrupted write");
+            var young = path + "." + Guid.NewGuid().ToString("N") + ".writing";
+            File.WriteAllText(young, "");
+            File.SetLastWriteTimeUtc(young, DateTime.UtcNow.AddSeconds(-30));
+            OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -2 });
+            check(File.Exists(young), "A write keeps a marker younger than one minute");
+            File.Delete(young);
+            OperationFiles.SimulateReplaceFailure = (target, backup) => { File.Move(target, backup); throw new IOException("Simulated replace failure 1176.", unchecked((int)0x80070498)); };
+            var replaceFailed = false;
+            try { OperationFiles.Write(path, new Dictionary<string, int> { ["value"] = -3 }); } catch (IOException) { replaceFailed = true; }
+            finally { OperationFiles.SimulateReplaceFailure = null; }
+            check(replaceFailed && OperationFiles.Read<Dictionary<string, int>>(path)["value"] == -2 && !Directory.EnumerateFiles(root, "state.json.*").Any(), "A failed replace keeps the previous file and leaves no backup behind");
+            var orphan = path + "." + Guid.NewGuid().ToString("N") + ".bak";
+            File.Move(path, orphan);
+            File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddMinutes(-5));
+            var failedClosed = false;
+            try { OperationFiles.Read<Dictionary<string, int>>(path); } catch (InvalidDataException) { failedClosed = true; }
+            check(failedClosed && !OperationFiles.Absent(path), "A file lost mid-replace fails closed instead of reading as absent");
+            File.Move(orphan, path);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -221,6 +297,17 @@ static class RecoveryChecks
         NtSetInformationProcess(GetCurrentProcess(), 33, ref io, 4);
         check(preserved, "A failed privilege restore keeps the original error");
         check(status < 0, "A failed privilege restore still leaves the privilege disabled");
+    }
+
+    static void PrivilegeSetupFailure(Action<bool, string> check)
+    {
+        Exception? observed = null;
+        PrivilegeScope.SimulateRestoreFailure = () => true;
+        PrivilegeScope.SimulateDisableFailure = () => true;
+        try { using (new PrivilegeScope("fixture", "SeTimeZonePrivilege", "SeRooIndustriesMissingPrivilege")) { } }
+        catch (Exception error) { observed = error; }
+        finally { PrivilegeScope.SimulateRestoreFailure = null; PrivilegeScope.SimulateDisableFailure = null; }
+        check(observed is InvalidOperationException && observed.InnerException is Win32Exception && observed.Message.Contains("could not be returned to its previous state", StringComparison.Ordinal), "A privilege setup failure reports both the original error and a privilege left enabled");
     }
 
     static void StartupScript(Action<bool, string> check)
