@@ -100,6 +100,13 @@ static class CleanupBatchChecks
                 try { engineBatch.Apply(batchPath, hash, journalPath); }
                 catch (InvalidDataException error) { rejected = error.Message.Contains("contradicts its restore state"); }
                 check(rejected, "A favorable partial status cannot override missing restoration evidence");
+                partial.RestoreStarted = true;
+                foreach (var entry in partial.Entries.Where(entry => entry.Status == "restored")) entry.Status = "applied";
+                OperationFiles.Write(journalPath, partial);
+                var unproven = false;
+                try { engineBatch.Apply(batchPath, hash, journalPath); }
+                catch (InvalidDataException error) { unproven = error.Message.Contains("missing its restoration evidence"); }
+                check(unproven, "A started partial restore without a restored application is rejected");
             }
             finally { File.WriteAllBytes(journalPath, partialBytes); }
             check(engineBatch.Apply(batchPath, hash, journalPath).Status == "partiallyRestored" && Directory.Exists(Path.Combine(root, "Roo Industries Batch One")),
