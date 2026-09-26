@@ -40,7 +40,7 @@ public static class Naming
         "smss", "csrss", "wininit", "winlogon", "services", "lsass", "fontdrvhost", "dwm",
         "sihost", "taskhostw", "runtimebroker", "searchindexer", "searchhost", "ctfmon",
         "shellexperiencehost", "startmenuexperiencehost", "textinputhost", "applicationframehost",
-        "rooindustries.optimizationsuite.app", "dotnet", "conhost", "powershell", "pwsh",
+        "rooindustries.optimizationsuite.app", "optimizer.host", "rooindustries.sessionhost", "dotnet", "conhost", "powershell", "pwsh",
         "windowsterminal", "openconsole", "node", "msbuild",
     };
 
