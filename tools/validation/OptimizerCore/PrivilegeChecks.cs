@@ -14,7 +14,7 @@ static class PrivilegeChecks
 
     static void PrivilegeRestoreFailure(Action<bool, string> check)
     {
-        var initial = PrivilegeEnabled("SeIncreaseBasePriorityPrivilege");
+        var initial = SetPrivilege("SeIncreaseBasePriorityPrivilege", false);
         var preserved = false;
         PrivilegeScope.SimulateRestoreFailure = () => true;
         try { using (new PrivilegeScope("fixture", "SeIncreaseBasePriorityPrivilege")) throw new InvalidOperationException("original failure"); }
@@ -32,7 +32,7 @@ static class PrivilegeChecks
 
     static void PrivilegeSetupFailure(Action<bool, string> check)
     {
-        var initial = PrivilegeEnabled("SeTimeZonePrivilege");
+        var initial = SetPrivilege("SeTimeZonePrivilege", false);
         Exception? observed = null;
         PrivilegeScope.SimulateRestoreFailure = () => true;
         PrivilegeScope.SimulateDisableFailure = () => true;
