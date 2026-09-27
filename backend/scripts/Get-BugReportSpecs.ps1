@@ -16,7 +16,7 @@ function Format-GB {
     return ([math]::Round($Bytes / 1GB)).ToString([Globalization.CultureInfo]::InvariantCulture) + ' GB'
 }
 
-$videoControllers = @(try { Get-CimInstance -ClassName Win32_VideoController -Property Name,DriverVersion,CurrentHorizontalResolution,CurrentVerticalResolution,CurrentRefreshRate } catch { })
+$videoControllers = @(try { Get-CimInstance -ClassName Win32_VideoController -Property Name,DriverVersion } catch { })
 
 $windows = Read-Spec {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem -Property Caption,BuildNumber,OSArchitecture
@@ -40,11 +40,51 @@ $gpu = Read-Spec {
 }
 
 $display = Read-Spec {
-    $active = $videoControllers | Where-Object { $_.CurrentHorizontalResolution -and $_.CurrentVerticalResolution } | Select-Object -First 1
-    if (-not $active) { return }
-    $text = "$($active.CurrentHorizontalResolution) x $($active.CurrentVerticalResolution)"
-    if ($active.CurrentRefreshRate) { $text += " at $($active.CurrentRefreshRate) Hz" }
-    $text
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class RooIndustriesPrimaryDisplay
+{
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DisplayDevice
+    {
+        public int Size;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceId;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DeviceMode
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        public short SpecVersion, DriverVersion, Size, DriverExtra;
+        public int Fields, PositionX, PositionY, Orientation, FixedOutput;
+        public short Color, Duplex, YResolution, TrueTypeOption, Collate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FormName;
+        public short LogPixels;
+        public int BitsPerPixel, Width, Height, DisplayFlags, Frequency, IcmMethod, IcmIntent, MediaType, DitherType, Reserved1, Reserved2, PanningWidth, PanningHeight;
+    }
+    [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool EnumDisplayDevices(string device, uint index, ref DisplayDevice info, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool EnumDisplaySettings(string device, int mode, ref DeviceMode info);
+    public static string Describe()
+    {
+        SetProcessDPIAware();
+        for (uint index = 0; ; index++)
+        {
+            var device = new DisplayDevice(); device.Size = Marshal.SizeOf(typeof(DisplayDevice));
+            if (!EnumDisplayDevices(null, index, ref device, 0)) return null;
+            if ((device.StateFlags & 5) != 5) continue;
+            var mode = new DeviceMode(); mode.Size = (short)Marshal.SizeOf(typeof(DeviceMode));
+            if (!EnumDisplaySettings(device.DeviceName, -1, ref mode) || mode.Width <= 0 || mode.Height <= 0) return null;
+            return mode.Width + " x " + mode.Height + (mode.Frequency > 1 ? " at " + mode.Frequency + " Hz" : "");
+        }
+    }
+}
+'@
+    [RooIndustriesPrimaryDisplay]::Describe()
 }
 
 $ram = Read-Spec {
