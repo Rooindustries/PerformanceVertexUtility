@@ -52,9 +52,15 @@ function Copy-Tree([string]$Source, [string]$Destination, [string[]]$Include = @
     }
 }
 
+function Remove-Tree([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    & cmd.exe /d /c ('rd /s /q "\\?\' + $Path + '"')
+    if (Test-Path -LiteralPath $Path) { throw "Could not remove $Path." }
+}
+
 function Invoke-Obfuscar([string]$Tool, [string]$Directory, [string[]]$Modules, [string]$MapDirectory) {
     $out = Join-Path $work ('obfuscated-' + [IO.Path]::GetFileName($Directory))
-    if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+    Remove-Tree $out
     $moduleXml = ($Modules | ForEach-Object { '  <Module file="$(InPath)\' + $_ + '"><SkipMethod type="*" rx="^\.ctor$" /></Module>' }) -join "`r`n"
     $config = [IO.File]::ReadAllText((Join-Path $releaseTools 'obfuscar.xml')).Replace('{InPath}', [Security.SecurityElement]::Escape($Directory)).Replace('{OutPath}', [Security.SecurityElement]::Escape($out)).Replace('{Modules}', $moduleXml)
     $configPath = Join-Path $work ('obfuscar-' + [IO.Path]::GetFileName($Directory) + '.xml')
@@ -82,8 +88,8 @@ Write-Host ('Bug report webhook: ' + $(if ([string]::IsNullOrWhiteSpace($env:ROO
 $work = Join-Path $OutputRoot ('work-' + $version)
 $stage = Join-Path $work 'stage'
 $maps = Join-Path $OutputRoot ($version + '-obfuscation-maps')
-if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
-if (Test-Path -LiteralPath $maps) { Remove-Item -LiteralPath $maps -Recurse -Force }
+Remove-Tree $work
+Remove-Tree $maps
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_ROOT = Split-Path $dotnet -Parent
