@@ -206,6 +206,20 @@ try {
     Add-Failure "Leftover scan sample check failed: $($_.Exception.Message)"
 }
 
+try {
+    $leftoverAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1'), [ref]$null, [ref]$null)
+    $ownedFunction = $leftoverAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-MicrosoftOwnedFilePath' }, $true)
+    $withoutLocalData = $ownedFunction.Extent.Text.Replace("[Environment]::GetFolderPath('LocalApplicationData')", "''")
+    $ownedWithoutLocalData = & ([scriptblock]::Create($withoutLocalData + "`nTest-MicrosoftOwnedFilePath 'C:\Vendor\App\uninstall.exe'"))
+    if ($withoutLocalData -ne $ownedFunction.Extent.Text -and $ownedWithoutLocalData -eq $false) {
+        Add-Pass 'The Windows-owned path check skips the package root when the local app data folder is unavailable'
+    } else {
+        Add-Failure 'The Windows-owned path check did not handle a missing local app data folder'
+    }
+} catch {
+    Add-Failure "The Windows-owned path check failed without a local app data folder: $($_.Exception.Message)"
+}
+
 $ownershipRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-ownership-' + [guid]::NewGuid().ToString('N'))
 try {
     [IO.Directory]::CreateDirectory($ownershipRoot) | Out-Null

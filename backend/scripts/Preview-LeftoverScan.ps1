@@ -52,8 +52,11 @@ function Test-MicrosoftOwnedFilePath {
         $root = $root.TrimEnd('\')
         if ($text -ieq $root -or $text.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
-    $packages = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Packages').TrimEnd('\') + '\'
-    if ($text.StartsWith($packages, [StringComparison]::OrdinalIgnoreCase) -and $text.Substring($packages.Length).Split('\')[0] -match '_(8wekyb3d8bbwe|cw5n1h2txyewy)$') { return $true }
+    $localData = [Environment]::GetFolderPath('LocalApplicationData')
+    if (-not [string]::IsNullOrWhiteSpace($localData)) {
+        $packages = $localData.TrimEnd('\') + '\Packages\'
+        if ($text.StartsWith($packages, [StringComparison]::OrdinalIgnoreCase) -and $text.Substring($packages.Length).Split('\')[0] -match '_(8wekyb3d8bbwe|cw5n1h2txyewy)$') { return $true }
+    }
     foreach ($programs in @('ProgramFiles', 'ProgramFilesX86', 'CommonProgramFiles', 'CommonProgramFilesX86' | ForEach-Object { [Environment]::GetFolderPath($_) })) {
         if ([string]::IsNullOrWhiteSpace($programs)) { continue }
         $prefix = $programs.TrimEnd('\') + '\'
