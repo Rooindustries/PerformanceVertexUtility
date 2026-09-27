@@ -177,6 +177,8 @@ public class RooIndustriesHandoffFixture {
     $journal=Get-Content -LiteralPath $a.RollbackManifestPath -Raw | ConvertFrom-Json
     $rootProcess=[Diagnostics.Process]::GetProcessById([int]$journal.officialInvocation.processId)
     Assert ($rootHung.status -eq 'needs-reconciliation' -and -not $rootProcess.HasExited) 'A remover that never exits is reported as needing checking and is not killed'
+    $hungClaim=(Read-RooIndustriesOperationJson $claimPath).data
+    Assert ($hungClaim.invocation.treeContained -eq $true -and $journal.officialInvocation.treeContained -eq $true) 'The claim records that the remover was placed in its tracking job'
     $rootProcess.Kill(); Assert ($rootProcess.WaitForExit(10000)) 'Disposable hung remover is explicitly stopped and its exit verified'
     $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
     $afterStale=Read-Result (& $applyScript @secondArgs)
@@ -242,6 +244,25 @@ $values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
     $case=New-HandoffCase 'unconfirmed-after-remover-exits' 'handoff'; $a=$case.args
     $clearedPending=Read-Result (& $applyScript @a)
     Assert ($clearedPending.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($case.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim is cleared once no process of its remover file is running'
+    $claimDir=Join-Path $tempRoot 'claim checks'; New-Item -ItemType Directory -Path $claimDir | Out-Null
+    $namedExe=Join-Path $claimDir 'Vendor Uninstaller With Long Name.exe'; Copy-Item -LiteralPath $handoffExe -Destination $namedExe
+    $shortExe=(New-Object -ComObject Scripting.FileSystemObject).GetFile($namedExe).ShortPath
+    $claimedNow=Get-RooIndustriesUtcStamp
+    $longStart=[Diagnostics.ProcessStartInfo]::new($namedExe, ('"' + (Join-Path $claimDir 'long state') + '" hang')); $longStart.UseShellExecute=$false; $longStart.CreateNoWindow=$true
+    $longProcess=[Diagnostics.Process]::Start($longStart)
+    try { $shortLive=Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$shortExe; claimedAtUtc=$claimedNow; invocation=$null }) } finally { $longProcess.Kill(); [void]$longProcess.WaitForExit(10000) }
+    Assert ($shortExe -ne $namedExe -and $shortLive) "An unconfirmed claim recorded with a short 8.3 path still sees its running remover ($shortExe)"
+    $nsisDir=Join-Path $claimDir '~nsu.tmp'; New-Item -ItemType Directory -Path $nsisDir | Out-Null
+    $nsisCopy=Join-Path $nsisDir 'Au_.exe'; Copy-Item -LiteralPath $handoffExe -Destination $nsisCopy
+    $claimedNow=Get-RooIndustriesUtcStamp
+    $copyStart=[Diagnostics.ProcessStartInfo]::new($nsisCopy, ('"' + (Join-Path $claimDir 'copy state') + '" hang')); $copyStart.UseShellExecute=$false; $copyStart.CreateNoWindow=$true
+    $copyProcess=[Diagnostics.Process]::Start($copyStart)
+    try { $copyLive=Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$namedExe; claimedAtUtc=$claimedNow; invocation=$null }) } finally { $copyProcess.Kill(); [void]$copyProcess.WaitForExit(10000) }
+    Assert $copyLive 'An unconfirmed claim still sees a remover that handed off to its temporary Au_.exe copy'
+    function Get-CimInstance { throw 'Simulated WMI failure' }
+    try { $wmiMessage=''; try { [void](Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$namedExe; claimedAtUtc=(Get-RooIndustriesUtcStamp); invocation=$null })) } catch { $wmiMessage=$_.Exception.Message } }
+    finally { Remove-Item -LiteralPath Function:\Get-CimInstance }
+    Assert ($wmiMessage -like 'Windows could not list running processes*') "A broken process list refuses with a clear message ($wmiMessage)"
     $waitShell=[powershell]::Create()
     [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
     $waitWatch=[Diagnostics.Stopwatch]::StartNew()
