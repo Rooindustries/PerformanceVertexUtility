@@ -25,18 +25,6 @@ function Get-MatchingKnownRules {
     return @($matches.ToArray())
 }
 
-function Get-ProductGuid {
-    param([object]$App)
-    $packageId = [string](Get-RooIndustriesUninstallPropertyValue $App 'packageId' '')
-    $uninstallString = [string](Get-RooIndustriesUninstallPropertyValue $App 'uninstallString' '')
-    foreach ($value in @($packageId, $uninstallString)) {
-        if ($value -match '\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}') {
-            return $Matches[0].ToUpperInvariant()
-        }
-    }
-    return $null
-}
-
 function Test-MicrosoftProduct {
     param([object]$App)
     $family = [string](Get-RooIndustriesUninstallPropertyValue $App 'packageFamilyName' '')
@@ -257,21 +245,6 @@ try {
                 -Reason 'Vendor registry key candidate; registry export is required before any future cleanup.' `
                 -Metadata ([pscustomobject]@{ previewOnly = $true }))
         }
-    }
-
-    $productGuid = Get-ProductGuid $app
-    if ($microsoftProduct -and -not [string]::IsNullOrWhiteSpace($productGuid)) {
-        Add-UniqueLeftoverItem $items (New-RooIndustriesLeftoverItem `
-            -ItemId ("registry:uninstall-" + (ConvertTo-RooIndustriesStableId $productGuid)) `
-            -Type 'registryKey' `
-            -Target ("HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\" + $productGuid) `
-            -MatchedBy @('productGuid', 'uninstallMetadata') `
-            -Confidence 'medium' `
-            -Risk 'medium' `
-            -DefaultSelected $false `
-            -Protected $false `
-            -Reason 'Product GUID uninstall metadata candidate; registry export is required before any future cleanup.' `
-            -Metadata ([pscustomobject]@{ productGuid = $productGuid; previewOnly = $true }))
     }
 
     Add-ServiceCandidates $items $app $knownRules $microsoftProduct
