@@ -164,6 +164,8 @@ try {
     $reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $command 'reviewRequired' $true)
     $commandExecutable = [string](Get-RooIndustriesUninstallPropertyValue $command 'executable' '')
     $hasOfficialCommand = -not [string]::IsNullOrWhiteSpace($commandExecutable)
+    if (-not [string]::IsNullOrWhiteSpace($FixtureRoot) -and -not $AllowFixtureClaims) { throw 'A fixture claim root is accepted only by validation runs that pass AllowFixtureClaims.' }
+    $claimRoot = if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { '' } else { Assert-RooIndustriesBulkFixtureRoot $FixtureRoot }
     $argumentText = ''
     $commandLineReviewed = -not $hasOfficialCommand
     $executableReviewed = -not $hasOfficialCommand
@@ -176,8 +178,6 @@ try {
         $reviewedExecutableSha256 = [string](Get-RooIndustriesUninstallPropertyValue $command 'executableSha256' '')
         $executableReviewed = -not [string]::IsNullOrWhiteSpace($reviewedExecutableSha256) -and -not (Test-RooIndustriesCleanupReparsePath $commandExecutable) -and (Get-RooIndustriesReviewedUninstallExecutableHash $commandExecutable) -ceq $reviewedExecutableSha256
     }
-    if (-not [string]::IsNullOrWhiteSpace($FixtureRoot) -and -not $AllowFixtureClaims) { throw 'A fixture claim root is accepted only by validation runs that pass AllowFixtureClaims.' }
-    $claimRoot = if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { '' } else { Assert-RooIndustriesBulkFixtureRoot $FixtureRoot }
     if ($AllowFixtureClaims -and ([string]::IsNullOrWhiteSpace($claimRoot) -or ($hasOfficialCommand -and -not (Test-RooIndustriesCleanupPathWithin $commandExecutable $claimRoot)))) { throw 'Fixture claims apply only to removers inside the fixture root.' }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
