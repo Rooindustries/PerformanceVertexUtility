@@ -683,17 +683,24 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
     {
         DryRun = true,
-        Commands = [new UninstallCommand { AppId = id, CommandType = "msi-uninstall-string", RawCommand = "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}", CommandLine = reviewedLine }],
+        Commands = [new UninstallCommand { AppId = id, CommandType = "msi-uninstall-string", RawCommand = "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}", CommandLine = reviewedLine, ExecutableSha256 = new string('a', 64) }],
     });
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
     {
         DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", CommandLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", ExecutableSha256 = null }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A remover whose file is missing is not marked as checked and says so");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
         Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null }],
     });
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
-    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal), "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
     {
         DryRun = true,
