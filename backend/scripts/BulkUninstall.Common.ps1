@@ -178,14 +178,15 @@ function Wait-RooIndustriesRemoverTree {
             if($null -ne $OnChange){& $OnChange $waitingFor}
         }
         if($settled){return [pscustomobject]@{completed=$true;rootRunning=$false;running=''}}
-        if($live.Count -gt 0 -and [DateTime]::UtcNow -ge $deadline){return [pscustomobject]@{completed=$false;rootRunning=(-not $Process.HasExited);running=$names}}
-        if($live.Count -gt 0){Start-Sleep -Milliseconds 250}
+        if([DateTime]::UtcNow -ge $deadline){return [pscustomobject]@{completed=$false;rootRunning=(-not $Process.HasExited);running=$names}}
+        Start-Sleep -Milliseconds 250
     }
 }
 
 function Get-RooIndustriesRemoverTimeoutMessage {
     param($Wait)
     if($Wait.rootRunning){return 'Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'}
+    if(-not $Wait.running){return 'The remover kept starting short-lived helper processes until the observation timeout. They were not killed or automatically repeated.'}
     return "The remover handed off to $($Wait.running), which was still running at the observation timeout. It was not killed or automatically repeated."
 }
 

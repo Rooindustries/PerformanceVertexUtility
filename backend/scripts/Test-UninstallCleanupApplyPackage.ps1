@@ -30,11 +30,11 @@ function New-Case([string]$Name) {
         OfficialPreviewSha256=(Get-FileHash $officialPath -Algorithm SHA256).Hash; CleanupManifestSha256=(Get-FileHash $manifestPath -Algorithm SHA256).Hash }
     return @{root=$root; targets=$targets; official=$official; manifest=$manifest; args=$args}
 }
-function New-HandoffCase([string]$Name, [string]$Mode) {
+function New-HandoffCase([string]$Name, [string]$Mode, [string[]]$Extra = @()) {
     $case = New-Case $Name
     $case.remover = Join-Path $case.root 'remover state'
     $case.official.commands[0].executable = $handoffExe
-    $case.official.commands[0].arguments = @($case.remover, $Mode)
+    $case.official.commands[0].arguments = @($case.remover, $Mode) + $Extra
     $case.args.AllowedOfficialExecutablePath = $handoffExe; Refresh-Hashes $case
     return $case
 }
@@ -124,6 +124,22 @@ public class RooIndustriesHandoffFixture {
     public static int Main(string[] args) {
         if(args[1]=="child"){Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
         if(args[1]=="child-hang"){Thread.Sleep(120000);return 0;}
+        if(args[1]=="noop")return 0;
+        if(args[1]=="spawner"){
+            long until=Int64.Parse(args[2]);
+            string self=System.Reflection.Assembly.GetEntryAssembly().Location;
+            ThreadStart work=delegate{
+                while(!File.Exists(args[0]+".stop")&&DateTime.UtcNow.Ticks<until){
+                    ProcessStartInfo helper=new ProcessStartInfo(self,"\""+args[0]+"\" noop");
+                    helper.UseShellExecute=false;helper.CreateNoWindow=true;
+                    try{Process.Start(helper).Dispose();}catch(Exception){}
+                }
+            };
+            Thread[] threads=new Thread[3];
+            for(int i=0;i<threads.Length;i++){threads[i]=new Thread(work);threads[i].Start();}
+            foreach(Thread thread in threads)thread.Join();
+            return 0;
+        }
         File.AppendAllText(args[0]+".launches","launched"+Environment.NewLine);
         if(args[1]=="hang"){Thread.Sleep(120000);return 0;}
         string copy=Path.Combine(Path.GetDirectoryName(args[0]),"temp copy\\~nsu1.tmp\\Au_.exe");
@@ -159,8 +175,24 @@ public class RooIndustriesHandoffFixture {
     $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
     $afterStale=Read-Result (& $applyScript @secondArgs)
     Assert ($afterStale.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($second.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An exited earlier remover no longer blocks the app and a completed removal releases its claim'
+    $waitShell=[powershell]::Create()
+    [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
+    $waitHandle=$waitShell.BeginInvoke()
+    $waitFinished=$waitHandle.AsyncWaitHandle.WaitOne(30000)
+    $waitResult=@(if ($waitFinished) { $waitShell.EndInvoke($waitHandle) } else { $waitShell.Stop() })
+    $waitShell.Dispose()
+    Assert ($waitFinished -and $waitResult.Count -eq 1 -and -not $waitResult[0].completed -and -not $waitResult[0].rootRunning) 'A remover tree whose helpers keep appearing and exiting reaches the timeout instead of spinning without a pause'
+    $case=New-HandoffCase 'endless-helpers' 'spawner' @([DateTime]::UtcNow.AddSeconds(90).Ticks.ToString()); $a=$case.args; $a.TimeoutSeconds=3
+    $watch=[Diagnostics.Stopwatch]::StartNew()
+    $endless=Read-Result (& $applyScript @a)
+    $watch.Stop()
+    [IO.File]::WriteAllText($case.remover+'.stop','stop')
+    $settleDeadline=[DateTime]::UtcNow.AddSeconds(30)
+    while (@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -ieq $handoffExe }).Count -gt 0 -and [DateTime]::UtcNow -lt $settleDeadline) { Start-Sleep -Milliseconds 200 }
+    Assert ($endless.status -eq 'needs-reconciliation' -and $watch.Elapsed.TotalSeconds -lt 45) "A remover that keeps starting helpers is reported at the timeout instead of refreshing its process tree forever ($([int]$watch.Elapsed.TotalSeconds) s)"
+    if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
 } finally {
-    foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
+    foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
