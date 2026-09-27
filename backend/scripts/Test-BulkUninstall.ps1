@@ -43,6 +43,7 @@ public class RooIndustriesBulkFixture {
     public static int Main(string[] args) {
         if(args[3]=="child"){Thread.Sleep(1500);File.Delete(args[0]);Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
         if(args[3]=="child-hang"){File.Delete(args[0]);Thread.Sleep(120000);return 0;}
+        if(args[3]=="child-shell"){Thread.Sleep(120000);return 0;}
         Console.WriteLine("A vendor console message must not corrupt the JSON response.");
         Console.Error.WriteLine("Vendor diagnostic output.");
         if(args.Length!=6||args[5]!="quoted \"value\" with trailing\\") return 87;
@@ -57,6 +58,14 @@ public class RooIndustriesBulkFixture {
             start.UseShellExecute=true;start.WindowStyle=ProcessWindowStyle.Hidden;
             Process.Start(start).Dispose();
             return 0;
+        }
+        if(args[3]=="shell"){
+            string shell=Path.Combine(Path.GetDirectoryName(args[1]),"shell host\\explorer.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(shell));
+            File.Copy(System.Reflection.Assembly.GetEntryAssembly().Location,shell,true);
+            ProcessStartInfo start=new ProcessStartInfo(shell,"\""+args[0]+"\" \""+args[1]+"\" 0 child-shell");
+            start.UseShellExecute=true;start.WindowStyle=ProcessWindowStyle.Hidden;
+            Process.Start(start).Dispose();
         }
         if(args[3]=="wait") Thread.Sleep(15000);
         if(args[3]=="cancel") File.WriteAllText(args[4],"stop after this entry");
@@ -149,6 +158,12 @@ public class RooIndustriesBulkFixture {
     $liveDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
     Assert ($liveDismiss.status -eq 'failed' -and $liveDismiss.errors[0].message -like '*still running*' -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -eq 'needs-reconciliation') 'Start over refuses a list whose remover process is still running'
     $process.Kill();Assert ($process.WaitForExit(10000)) 'Disposable timed-out remover is explicitly stopped and its exit verified'
+    $case=New-Case 'shell-host' 'shell';$a=$case.args;$a.TimeoutSeconds=20
+    $shellRun=Read-Result (& $runScript @a)
+    $shellHost=@(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" | Where-Object { $_.ExecutablePath -like (Join-Path $case.directory 'shell host\*') })
+    foreach($member in $shellHost){$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$member.ProcessId))|Out-Null}
+    Assert ($shellRun.status -eq 'cleanup-review-required' -and $shellHost.Count -eq 1 -and @($shellRun.data.entries[0].invocation.descendants|Where-Object {$_.name -ieq 'explorer.exe'}).Count -eq 0) 'A remover that restarts Explorer or opens a browser is verified without waiting for that long-lived process, which is left running'
+    foreach($member in $shellHost){Stop-Process -Id $member.ProcessId -Force;Wait-Process -Id $member.ProcessId -Timeout 10 -ErrorAction SilentlyContinue}
     $case=New-Case 'handoff' 'handoff';$a=$case.args
     $handoff=Read-Result (& $runScript @a)
     Assert ($handoff.status -eq 'cleanup-review-required' -and (Test-Path ($case.markers[0]+'.done')) -and @($handoff.data.entries[0].invocation.descendants|Where-Object {$_.name -ieq 'Au_.exe'}).Count -eq 1) 'A remover that hands off to a temporary copy is verified only after that copy finishes'
