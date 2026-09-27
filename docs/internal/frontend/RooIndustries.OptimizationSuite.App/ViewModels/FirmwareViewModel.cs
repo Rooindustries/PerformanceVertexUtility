@@ -208,10 +208,14 @@ public partial class FirmwareViewModel : ObservableObject
     public static void ApplyWriteTests(IEnumerable<FirmwareSettingRow> rows, FirmwareWriteTestMatch? tests)
     {
         if (tests is null) return;
-        foreach (var row in rows)
+        var all = rows.ToArray();
+        var unique = all.GroupBy(row => FirmwareScript.NamePattern(row.Name), StringComparer.Ordinal).Where(group => group.Count() == 1).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var row in all)
         {
             if (row.IsReadOnly) continue;
-            if (!tests.ById.TryGetValue(row.Question.Id, out var result) && !tests.ByName.TryGetValue(row.Name.Trim(), out result)) continue;
+            var pattern = FirmwareScript.NamePattern(row.Name);
+            if (!tests.ById.TryGetValue(row.Question.Id, out var result) && !tests.ByName.TryGetValue(row.Name.Trim(), out result)
+                && !(tests.ByNamePattern is { } drifting && pattern != row.Name.Trim() && unique.Contains(pattern) && drifting.TryGetValue(pattern, out result))) continue;
             var where = tests.SameBoard ? "on this motherboard and BIOS version" : "on the motherboards tested so far (" + tests.Source + "); this motherboard has not been tested";
             var (status, reason) = result.Outcome switch
             {
@@ -327,7 +331,7 @@ public partial class FirmwareViewModel : ObservableObject
         {
             var trial = match.Trial;
             var binding = trial.Binding;
-            var question = script.Questions.SingleOrDefault(item => item.Id == binding.QuestionId);
+            var question = script.Questions.SingleOrDefault(item => item.Id == (match.CurrentQuestionId.Length > 0 ? match.CurrentQuestionId : binding.QuestionId));
             if (question is null || trial.BaselineValue == trial.TestValue || script.Validate(question, question.Current) != trial.BaselineValue) continue;
             _verificationMatches[question.Id] = match;
         }
