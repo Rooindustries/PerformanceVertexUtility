@@ -284,8 +284,7 @@ try {
                     $journal.executionStarted = $true
                     Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                     $executionStarted = $true
-                    $claimedAtUtc = Get-RooIndustriesUtcStamp
-                    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; executable = $commandExecutable; claimedAtUtc = $claimedAtUtc; launchConfirmed = $false; invocation = $null }) $claimPath
+                    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; launchConfirmed = $false; invocation = $null }) $claimPath
                     $executableLease = $null
                     try {
                         $executableLease = [IO.File]::Open($commandExecutable, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -295,7 +294,7 @@ try {
                         if (Test-RooIndustriesCleanupReparsePath $commandExecutable) { throw 'The remover is now reached through a link. Check the removal path again.' }
                         $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
                             param($invocation)
-                            Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; executable = $commandExecutable; claimedAtUtc = $claimedAtUtc; launchConfirmed = $true; invocation = $invocation }) $claimPath
+                            Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; launchConfirmed = [bool]$invocation.resumed; invocation = $invocation }) $claimPath
                             $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
                             Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                         } $reviewedCommandLine $executableLease
@@ -305,19 +304,23 @@ try {
                     } finally {
                         if ($null -ne $executableLease) { $executableLease.Dispose() }
                     }
-                    if (-not $officialResult.timedOut -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
+                    if (-not $officialResult.timedOut -and -not $officialResult.outputIncomplete -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
                 } finally { $claimLease.Dispose() }
                 $sequence.Add([pscustomobject]@{ runner = 'official-uninstaller'; result = $officialResult }) | Out-Null
                 $policy = if ([string](Get-RooIndustriesUninstallPropertyValue $command 'commandType' '') -eq 'msi-uninstall-string' -and [IO.Path]::GetFileName($commandExecutable) -ieq 'msiexec.exe') { 'windows-installer' } else { 'generic' }
                 if ($officialResult.processStarted -and -not $officialResult.timedOut -and $null -ne $officialResult.exitCode) {
                     $journal.officialOutcome = Get-RooIndustriesUninstallOutcome $policy ([int]$officialResult.exitCode)
                 }
-                $journal.officialRunnerCompleted = ($null -ne $journal.officialOutcome -and $journal.officialOutcome.success)
+                $journal.officialRunnerCompleted = ($null -ne $journal.officialOutcome -and $journal.officialOutcome.success -and -not $officialResult.outputIncomplete)
                 Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                 if ($officialResult.timedOut) {
                     $status = 'needs-reconciliation'
                     $errors = @((New-RooIndustriesUninstallIssue 'OFFICIAL_REMOVER_STILL_RUNNING' ([string]$officialResult.error) 'warning' 'apps.uninstallCleanupApplyPackage' $appId $true 'Let the app remover finish, then scan for leftovers again before cleaning up.' $null))
-                } elseif (-not $journal.officialRunnerCompleted) { throw 'The vendor remover failed; leftover cleanup was not started.' }
+                } elseif ($officialResult.outputIncomplete) {
+                    $status = 'needs-reconciliation'
+                    $errors = @((New-RooIndustriesUninstallIssue 'OFFICIAL_REMOVER_STILL_RUNNING' 'The remover exited but its output did not finish. A process it started may still be running.' 'warning' 'apps.uninstallCleanupApplyPackage' $appId $true 'Let the app remover finish, then scan for leftovers again before cleaning up.' $null))
+                } elseif (-not $officialResult.processStarted) { throw ('The remover could not be started: ' + [string]$(if ($officialResult.startError) { $officialResult.startError } else { $officialResult.error })) }
+                elseif (-not $journal.officialRunnerCompleted) { throw 'The vendor remover failed; leftover cleanup was not started.' }
                 else {
                     $journal.postUninstallReview = Get-RooIndustriesPostUninstallReview $fileFolderItems
                     $status = 'cleanup-review-required'
