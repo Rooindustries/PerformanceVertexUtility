@@ -45,6 +45,13 @@ static class FeatureChecks
             check(Refusal(() => WindowsFeatures.Expand(before, ControlValues.From(new Dictionary<string, string> { ["Windows-Defender-Default-Definitions"] = "Disabled" }), false)).Contains("does not offer feature"),
                 "A feature Windows lists as not present is refused as not offered");
         });
+        Scenario("restart detection from boot time", () =>
+        {
+            check(RegistryTweakStore.SameBoot("boot:1000", "boot:1030") && !RegistryTweakStore.SameBoot("boot:1000", "boot:5000") && !RegistryTweakStore.SameBoot("223", "boot:1000") && !RegistryTweakStore.SameBoot(null, "boot:1000"),
+                "A restart is recognised from the boot time, so a prefetcher boot counter that never advances cannot lock recovery");
+            var now = "boot:" + (DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).ToUnixTimeSeconds();
+            check(RegistryTweakStore.SameBoot(now), "The current boot is recognised as the same boot, so a pending feature check still asks for a restart");
+        });
         Scenario("pending enable read by a later process", () =>
         {
             var dism = new FakeDism(); dism.Listed["HypervisorPlatform"] = 4; dism.Info["HypervisorPlatform"] = 5;
