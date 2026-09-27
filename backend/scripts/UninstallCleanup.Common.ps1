@@ -480,6 +480,13 @@ function Get-RooIndustriesAppClassification {
     }
 }
 
+function Get-RooIndustriesMsiUninstallArguments {
+    param([guid]$ProductCode,[switch]$Quiet)
+    $code = $ProductCode.ToString('B').ToUpperInvariant()
+    if ($Quiet) { return "/x $code /qn /norestart" }
+    return "/x $code /norestart"
+}
+
 function Split-RooIndustriesUninstallCommandLine {
     param([string]$CommandLine)
     if ([string]::IsNullOrWhiteSpace($CommandLine)) {

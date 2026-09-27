@@ -35,7 +35,7 @@ try {
             if(-not [guid]::TryParseExact([string]$app.packageId,'B',[ref]$productCode)){throw 'MSI plan requires a valid ProductCode.'}
             if(@($inventory.apps|Where-Object {$_.sourceType -eq 'msi' -and $_.packageId -ieq $app.packageId}).Count -ne 1){throw 'MSI ProductCode is registered in multiple contexts; its uninstall context needs review.'}
             $exe=Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
-            $arguments=@('/x',$productCode.ToString('B'),'/norestart');if($Quiet){$arguments+=@('/qn')}
+            $rawArguments=Get-RooIndustriesMsiUninstallArguments $productCode -Quiet:$Quiet;$mode='raw'
             $exitPolicy='windows-installer'
         } elseif ($identity.kind -eq 'appx') {
             $exe=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
@@ -50,15 +50,17 @@ try {
         }
         $hash=Get-RooIndustriesBulkExecutableHash $exe
         if ($FixtureRoot -and -not (Test-RooIndustriesCleanupPathWithin $exe $FixtureRoot)) {throw 'Fixture executable is outside the fixture directory.'}
-        $entries.Add([pscustomobject]@{
+        $entry=[pscustomobject]@{
             entryId=[guid]::NewGuid().ToString('N'); appId=$id; displayName=$app.displayName; sourceType=$app.sourceType; identity=$identity
             appSnapshot=$app
             registrationFingerprint=$registration.fingerprint
-            executable=[IO.Path]::GetFullPath($exe); executableSha256=$hash; argumentMode=$mode; arguments=@($arguments); rawArguments=$rawArguments
+            executable=[IO.Path]::GetFullPath($exe); executableSha256=$hash; argumentMode=$mode; arguments=@($arguments); rawArguments=$rawArguments; commandLine=$null
             workingDirectory=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($exe)); exitCodePolicy=$exitPolicy
             protected=[bool]$classification.protected; reviewRequired=[bool]$classification.reviewRequired
             risk=$classification.risk; dependencyReasons=@($classification.reasons)
-        })|Out-Null
+        }
+        $entry.commandLine=Get-RooIndustriesBulkCommandLine $entry
+        $entries.Add($entry)|Out-Null
     }
     $result.status='preview'
     $result.data=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-plan';queueId=[guid]::NewGuid().ToString('N');owner=Get-RooIndustriesOperationOwner;

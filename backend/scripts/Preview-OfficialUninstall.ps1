@@ -32,9 +32,9 @@ function Get-OfficialCommandPreview {
         }
         $commandType = 'msi-uninstall-string'
         $msiexec = Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
-        $rawCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /norestart'
-        $quietCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /qn /norestart'
-        $metadata = [pscustomobject]@{ productCode=$productCode.ToString('B'); exitCodePolicy='windows-installer'; automaticRestartAllowed=$false }
+        $rawCommand = '"'+$msiexec+'" '+(Get-RooIndustriesMsiUninstallArguments $productCode)
+        $quietCommand = '"'+$msiexec+'" '+(Get-RooIndustriesMsiUninstallArguments $productCode -Quiet)
+        $metadata = [pscustomobject]@{ productCode=$productCode.ToString('B').ToUpperInvariant(); exitCodePolicy='windows-installer'; automaticRestartAllowed=$false }
     } elseif (-not [string]::IsNullOrWhiteSpace([string]$uninstallString)) {
         $commandType = 'registry-uninstall-string'
     } elseif ($sourceType -eq 'appx') {
