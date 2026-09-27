@@ -526,14 +526,21 @@ public partial class WindowsTweaksViewModel : ObservableObject
         Detail = CheckingRestart ? "Restart Windows first. This checks the final feature states before closing the pending record." : "Only values still matching the interrupted operation will be restored. Newer edits are preserved.";
         Notify();
     }
+    public const string OwnershipRefresh = "Re-take ownership (no value change)";
     private void AddNativeChange(ControlMutation change, IEnumerable<TweakProfile> profiles)
     {
         var read = change.Before;
-        if (ControlValues.Equal(read.Value, change.After)) return;
         var claims = profiles.SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == read.Id).ToArray();
         var claimed = claims.Length > 0;
         var rows = claimed ? claims.Select(claim => claim.SettingId).Distinct().Select(id => _all.FirstOrDefault(row => row.Id == id)).OfType<WindowsTweakRow>().ToArray()
             : _all.Where(row => ControlsFor(row.Definition, read.Address, false).Any()).ToArray();
+        if (ControlValues.Equal(read.Value, change.After))
+        {
+            var owner = rows.FirstOrDefault(row => row.Definition.Options.All(option => (option.Controls ?? []).All(control => control.Address == read.Address))) ?? rows.FirstOrDefault();
+            var current = owner is null ? null : ControlChoice(owner, read, read.Value, claims.Where(claim => claim.SettingId == owner.Id).Select(claim => claim.OptionId).ToArray(), claimed);
+            Changes.Add(new(owner?.Name ?? read.DisplayName ?? read.Address.Target, current ?? (owner is null ? DescribeControl(read.Address, read.Value) : ControlFallback(owner, read, read.Value, claimed)), OwnershipRefresh, owner?.Scope ?? "Entire PC"));
+            return;
+        }
         var shown = false;
         foreach (var row in rows)
         {
