@@ -62,6 +62,14 @@ static class BulkRemovalChecks
         model = await Start();
         await model.StartOverCommand.ExecuteAsync(null);
         check(model.CanSelect && model.HasRemovedApps && model.RemovedApps.Single().Id == "registry:editor", "Starting over a partly finished list keeps the finished app ready for leftover review");
+        check(!model.Detail.Contains("can't tell", StringComparison.Ordinal), "Starting over a list with no interrupted launch shows no launch warning");
+
+        var interrupted = Journal("running", ("registry:editor", "dispatching", false), ("registry:player", "pending", false));
+        App.Operations.LastRemoval = Session(interrupted); App.Operations.RemovalHistory = [(interrupted.Status + "-journal.json", interrupted)];
+        App.Operations.DismissRemoval = _ => { App.Operations.LastRemoval = null; return Task.FromResult(new OptimizerResult<BulkRemovalJournal> { Status = "dismissed", Data = interrupted }); };
+        model = await Start();
+        await model.StartOverCommand.ExecuteAsync(null);
+        check(model.CanSelect && model.Detail.Contains("can't tell whether it ran", StringComparison.Ordinal), "Starting over a list interrupted while a remover was starting warns that the launch could not be verified");
 
         foreach (var status in new[] { "running", "canceled", "ready", "reboot-required" })
         {

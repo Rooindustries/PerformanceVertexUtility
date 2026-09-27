@@ -293,11 +293,15 @@ public partial class BulkRemovalViewModel : ObservableObject
         Busy = true;
         try
         {
-            await App.Operations.DismissRemovalAsync(_review.JournalPath);
+            var dismissed = await App.Operations.DismissRemovalAsync(_review.JournalPath);
+            var interrupted = dismissed.Data?.Entries.Any(entry => entry.State == "dispatching") == true;
             _review = null; _phase = "selection"; _journalObserved = false; _cancelRequested = false; _selected.Clear(); ReviewRows.Clear();
             DependenciesReviewed = false; RequiresDependencyReview = false; HasProtectedSelection = false;
             SelectionSummary = "Select applications to remove."; ApplyLabel = "Remove selected apps";
-            Status = "Pick the apps to remove."; Detail = "The last list was cleared. Apps already removed stay removed. Pick any app again to try once more.";
+            Status = "Pick the apps to remove.";
+            Detail = interrupted
+                ? "The last list was cleared. One removal stopped while its remover was starting, so Roo Industries can't tell whether it ran. Check that app before removing it again."
+                : "The last list was cleared. Apps already removed stay removed. Pick any app again to try once more.";
             await LoadAppsAsync();
         }
         catch (Exception error) when (_review is not null) { Status = "Couldn't clear this list yet."; Detail = error.Message; }
