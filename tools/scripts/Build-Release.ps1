@@ -109,6 +109,7 @@ Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x6
     ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest'))) + $common) 'App publish'
 
 $productAssemblies = @((Join-Path $hostOut 'Optimizer.Core.dll'), (Join-Path $hostOut 'Optimizer.Host.dll'), (Join-Path $sessionOut 'RooIndustries.SessionHost.dll'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.dll'))
+Invoke-Checked $dotnet @('run', '--project', (Join-Path $repoRoot 'tools\validation\DynamicBinding\DynamicBinding.csproj'), '-c', 'Release', '--', '--self-test') 'Dynamic binding guard self-test'
 Invoke-Checked $dotnet (@('run', '--project', (Join-Path $repoRoot 'tools\validation\DynamicBinding\DynamicBinding.csproj'), '-c', 'Release', '--') + $productAssemblies) 'Dynamic binding check'
 
 Invoke-Obfuscar $obfuscar $hostOut @('Optimizer.Core.dll', 'Optimizer.Host.dll') $maps

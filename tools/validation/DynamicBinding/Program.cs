@@ -1,60 +1,119 @@
+using System.Reflection;
 using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 
-if (args.Length == 0) { Console.Error.WriteLine("Provide the product assemblies to check, before obfuscation."); return 2; }
 var operandTypes = typeof(OpCodes).GetFields().Select(field => (OpCode)field.GetValue(null)!).GroupBy(code => (ushort)code.Value).ToDictionary(group => group.Key, group => group.First().OperandType);
-var assemblies = args.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).Select(path => (Path: path, Pe: new PEReader(File.OpenRead(path)))).ToArray();
-var ownMethods = new HashSet<string>(StringComparer.Ordinal);
-foreach (var (_, pe) in assemblies)
+if (args is ["--self-test"])
 {
-    var metadata = pe.GetMetadataReader();
-    foreach (var handle in metadata.MethodDefinitions) ownMethods.Add(metadata.GetString(metadata.GetMethodDefinition(handle).Name));
+    var self = Analyze([typeof(RooIndustries.Optimizer.GuardFixtures.Misuse).Assembly.Location], out _);
+    string[] expected = ["Misuse.Property", "Misuse.Index", "Misuse.ProductConnect", "Misuse.Operator", "Misuse.SimpleName"];
+    var missing = expected.Where(name => !self.Any(finding => finding.Contains(name + ":", StringComparison.Ordinal))).ToArray();
+    var unexpected = self.Where(finding => !expected.Any(name => finding.Contains(name + ":", StringComparison.Ordinal))).ToArray();
+    foreach (var finding in self) Console.WriteLine("FOUND " + finding);
+    if (missing.Length > 0 || unexpected.Length > 0) { Console.Error.WriteLine("FAIL guard self-test missed: " + string.Join(", ", missing) + " unexpected: " + string.Join(" | ", unexpected)); return 1; }
+    Console.WriteLine("PASS the guard rejects dynamic property, index, operator and same-name product calls in its fixture");
+    return 0;
 }
-const string Binder = "Microsoft.CSharp.RuntimeBinder.Binder::InvokeMember";
-string[] operators = ["Microsoft.CSharp.RuntimeBinder.Binder::BinaryOperation", "Microsoft.CSharp.RuntimeBinder.Binder::UnaryOperation"];
-var comMembers = new HashSet<string>(["Connect", "GetFolder", "GetTask", "GetTasks", "DeleteTask", "NewTask", "Create", "RegisterTaskDefinition", "GetSecurityDescriptor", "GetInstances", "Run", "Item"], StringComparer.Ordinal);
-const string ArgumentInfo = "Microsoft.CSharp.RuntimeBinder.CSharpArgumentInfo";
-var findings = new List<string>(); var sites = 0;
-foreach (var (path, pe) in assemblies)
+if (args.Length == 0) { Console.Error.WriteLine("Provide the product assemblies to check, before obfuscation."); return 2; }
+var findings = Analyze(args, out var sites);
+foreach (var finding in findings) Console.Error.WriteLine("FAIL " + finding);
+if (findings.Count > 0) { Console.Error.WriteLine("Pass product objects as statically typed values (for example object) and use dynamic only for COM objects inside the COM interop classes."); return 1; }
+Console.WriteLine("PASS " + sites + " dynamic operations in " + args.Length + " assemblies stay inside COM interop code and share no name with a renamed product member.");
+return 0;
+
+List<string> Analyze(IEnumerable<string> paths, out int sites)
 {
-    var metadata = pe.GetMetadataReader();
-    foreach (var typeHandle in metadata.TypeDefinitions)
+    string[] comInterop = ["RooIndustries.Optimizer.TimerStartupControl", "RooIndustries.Optimizer.WindowsControlStore"];
+    const string ArgumentInfo = "Microsoft.CSharp.RuntimeBinder.CSharpArgumentInfo";
+    const string BinderType = "Microsoft.CSharp.RuntimeBinder.Binder::";
+    string[] named = ["InvokeMember", "GetMember", "SetMember", "IsEvent"];
+    string[] unnamed = ["GetIndex", "SetIndex", "Invoke"];
+    var assemblies = paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).Select(path => (Path: path, Pe: new PEReader(File.OpenRead(path)))).ToArray();
+    var ownMethods = new HashSet<string>(StringComparer.Ordinal); var renamedBy = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+    foreach (var (_, pe) in assemblies)
     {
-        var type = metadata.GetTypeDefinition(typeHandle);
-        foreach (var methodHandle in type.GetMethods())
+        var metadata = pe.GetMetadataReader();
+        var assemblyName = metadata.GetString(metadata.GetAssemblyDefinition().Name);
+        if (!renamedBy.TryGetValue(assemblyName, out var renamed)) renamedBy[assemblyName] = renamed = new(StringComparer.Ordinal);
+        foreach (var typeHandle in metadata.TypeDefinitions)
         {
-            var method = metadata.GetMethodDefinition(methodHandle);
-            if (method.RelativeVirtualAddress == 0) continue;
-            var code = Decode(pe.GetMethodBody(method.RelativeVirtualAddress).GetILReader(), metadata);
-            for (var index = 0; index < code.Count; index++)
+            var visible = Visible(metadata, typeHandle); var type = metadata.GetTypeDefinition(typeHandle);
+            foreach (var handle in type.GetMethods())
             {
-                var where = Path.GetFileName(path) + " " + TypeName(metadata, typeHandle) + "." + metadata.GetString(method.Name);
-                if (operators.Contains(code[index].Callee)) { findings.Add(where + ": applies an operator to a dynamic value, so the runtime binder can look up a product operator by name. Cast the operands first."); continue; }
-                if (code[index].Callee != Binder) continue;
-                sites++;
-                var array = code.FindLastIndex(index, item => item.Op == OpCodes.Newarr.Value && item.Type == ArgumentInfo);
-                var name = array < 0 ? -1 : code.FindLastIndex(array, item => item.Op == OpCodes.Ldstr.Value);
-                var receiver = array < 0 ? -1 : code.FindIndex(array, index - array, item => item.Callee == ArgumentInfo + "::Create");
-                if (name < 1 || receiver < 2 || code[name - 1].Constant is not { } binderFlags || code[receiver - 2].Constant is not { } receiverFlags)
-                {
-                    findings.Add(where + ": a dynamic call site has an unrecognized shape; check it by hand and extend this guard.");
-                    continue;
-                }
-                var member = code[name].Text!;
-                if ((binderFlags & 2) != 0 || (receiverFlags & (1 | 32)) != 0 && ownMethods.Contains(member))
-                    findings.Add(where + ": calls '" + member + "' with a dynamic argument, so the runtime binder looks up a product method by a name that obfuscation can rename.");
-                else if ((receiverFlags & (1 | 32)) == 0 && ownMethods.Contains(member) && !comMembers.Contains(member))
-                    findings.Add(where + ": calls '" + member + "' on a dynamic value; if that value is a product object, obfuscation renames the method. Add the name to the COM member list only if the receiver is always a COM object.");
+                var method = metadata.GetMethodDefinition(handle); var name = metadata.GetString(method.Name);
+                ownMethods.Add(name);
+                var access = method.Attributes & MethodAttributes.MemberAccessMask;
+                if (name is not (".ctor" or ".cctor") && !(visible && access is MethodAttributes.Public or MethodAttributes.Family or MethodAttributes.FamORAssem)) renamed.TryAdd(name, TypeName(metadata, typeHandle) + "." + name);
+            }
+            foreach (var handle in type.GetFields())
+            {
+                var field = metadata.GetFieldDefinition(handle);
+                if (!(visible && (field.Attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public)) renamed.TryAdd(metadata.GetString(field.Name), TypeName(metadata, typeHandle) + "." + metadata.GetString(field.Name));
             }
         }
     }
+    var found = new List<string>(); sites = 0;
+    foreach (var (path, pe) in assemblies)
+    {
+        var metadata = pe.GetMetadataReader();
+        var reachable = new[] { metadata.GetString(metadata.GetAssemblyDefinition().Name) }.Concat(metadata.AssemblyReferences.Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name)))
+            .Where(renamedBy.ContainsKey).SelectMany(name => renamedBy[name]).GroupBy(item => item.Key).ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
+        foreach (var typeHandle in metadata.TypeDefinitions)
+        {
+            var type = metadata.GetTypeDefinition(typeHandle);
+            var owner = TypeName(metadata, typeHandle); var interop = comInterop.Any(name => owner == name || owner.StartsWith(name + "+", StringComparison.Ordinal));
+            foreach (var methodHandle in type.GetMethods())
+            {
+                var method = metadata.GetMethodDefinition(methodHandle);
+                if (method.RelativeVirtualAddress == 0) continue;
+                var code = Decode(pe.GetMethodBody(method.RelativeVirtualAddress).GetILReader(), metadata);
+                var where = Path.GetFileName(path) + " " + owner + "." + metadata.GetString(method.Name);
+                for (var index = 0; index < code.Count; index++)
+                {
+                    var callee = code[index].Callee;
+                    if (callee is null || !callee.StartsWith(BinderType, StringComparison.Ordinal)) continue;
+                    var kind = callee[BinderType.Length..];
+                    if (kind is "BinaryOperation" or "UnaryOperation") { found.Add(where + ": applies an operator to a dynamic value, so the runtime binder can look up a product operator by name. Cast the operands first."); continue; }
+                    if (!named.Contains(kind) && !unnamed.Contains(kind)) continue;
+                    sites++;
+                    var array = code.FindLastIndex(index, item => item.Op == OpCodes.Newarr.Value && item.Type == ArgumentInfo);
+                    var receiver = array < 0 ? -1 : code.FindIndex(array, index - array, item => item.Callee == ArgumentInfo + "::Create");
+                    var name = !named.Contains(kind) || array < 0 ? -1 : code.FindLastIndex(array, item => item.Op == OpCodes.Ldstr.Value);
+                    var flags = name < 1 ? null : code[name - 1].Constant;
+                    if (receiver < 2 || code[receiver - 2].Constant is not { } receiverFlags || named.Contains(kind) && (name < 1 || flags is null))
+                    {
+                        found.Add(where + ": a dynamic " + kind + " site has an unrecognized shape; check it by hand and extend this guard.");
+                        continue;
+                    }
+                    var member = name < 0 ? "[" + kind + "]" : code[name].Text!;
+                    var dynamicReceiver = (receiverFlags & (1 | 32)) == 0 && ((flags ?? 0) & 2) == 0;
+                    if (!dynamicReceiver)
+                    {
+                        if (kind == "InvokeMember" && (((flags ?? 0) & 2) != 0 || ownMethods.Contains(member)))
+                            found.Add(where + ": calls '" + member + "' with a dynamic argument, so the runtime binder looks up a product method by a name that obfuscation can rename.");
+                        continue;
+                    }
+                    if (!interop)
+                        found.Add(where + ": uses '" + member + "' on a dynamic value outside the COM interop classes; the value could be a product object whose members obfuscation renames.");
+                    else if (reachable.TryGetValue(member, out var clash))
+                        found.Add(where + ": uses '" + member + "' on a dynamic value, and the product member " + clash + " has that name and is renamed by obfuscation. Rename the product member.");
+                }
+            }
+        }
+    }
+    foreach (var (_, pe) in assemblies) pe.Dispose();
+    return found;
 }
-foreach (var finding in findings) Console.Error.WriteLine("FAIL " + finding);
-if (findings.Count > 0) { Console.Error.WriteLine("Pass product objects as statically typed values (for example object) and convert to dynamic only for COM calls."); return 1; }
-Console.WriteLine("PASS " + sites + " dynamic member calls in " + assemblies.Length + " assemblies bind only on COM or framework receivers, with no dynamic operators.");
-return 0;
+
+static bool Visible(MetadataReader metadata, TypeDefinitionHandle handle)
+{
+    var type = metadata.GetTypeDefinition(handle);
+    var access = type.Attributes & TypeAttributes.VisibilityMask;
+    if (access == TypeAttributes.Public) return true;
+    return access is TypeAttributes.NestedPublic or TypeAttributes.NestedFamily or TypeAttributes.NestedFamORAssem && Visible(metadata, type.GetDeclaringType());
+}
 
 List<Instruction> Decode(BlobReader reader, MetadataReader metadata)
 {
