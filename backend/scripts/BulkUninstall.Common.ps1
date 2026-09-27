@@ -113,6 +113,18 @@ function Assert-RooIndustriesBulkInventoryBinding {
     if(($App.sourceType -eq 'msi') -ne $msi){throw 'Installer identity changed after inventory capture.'}
 }
 
+function Get-RooIndustriesBulkArguments {
+    param($Entry)
+    if($Entry.argumentMode -eq 'raw'){return [string]$Entry.rawArguments}
+    return Join-RooIndustriesWindowsArguments ([string[]]@($Entry.arguments))
+}
+
+function Get-RooIndustriesBulkCommandLine {
+    param($Entry)
+    $arguments=Get-RooIndustriesBulkArguments $Entry
+    return '"'+[string]$Entry.executable+'"'+$(if($arguments){' '+$arguments}else{''})
+}
+
 function Get-RooIndustriesBulkClaimPath {
     param($Entry,[string]$FixtureRoot='')
     $root=if($FixtureRoot){Join-Path $FixtureRoot '.removal-claims'}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\uninstall-claims'}
@@ -171,6 +183,7 @@ function Invoke-RooIndustriesBulkEntry {
             if($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }
         if((Get-RooIndustriesBulkRegistrationFingerprint $Entry.identity $FixtureRoot) -cne $Entry.registrationFingerprint){throw 'App registration changed after review. Create a fresh plan for the current installed version.'}
+        if((Get-RooIndustriesBulkCommandLine $Entry) -cne [string]$Entry.commandLine){throw 'The removal command differs from the reviewed command. Create a fresh plan.'}
         # Retain a read lease through CreateProcess so the reviewed executable
         # cannot be replaced between its hash check and launch.
         $executableLease=[IO.File]::Open($Entry.executable,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
@@ -181,7 +194,7 @@ function Invoke-RooIndustriesBulkEntry {
         $start.FileName=$Entry.executable; $start.WorkingDirectory=$Entry.workingDirectory
         $start.UseShellExecute=$false; $start.CreateNoWindow=$true
         $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
-        $start.Arguments=if($Entry.argumentMode -eq 'raw') {[string]$Entry.rawArguments} else {Join-RooIndustriesWindowsArguments ([string[]]@($Entry.arguments))}
+        $start.Arguments=Get-RooIndustriesBulkArguments $Entry
         $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
         Write-RooIndustriesOperationJson $Journal $JournalPath
         Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
