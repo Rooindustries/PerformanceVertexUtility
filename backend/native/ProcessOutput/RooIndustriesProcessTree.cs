@@ -50,8 +50,9 @@ namespace RooIndustries.Optimization.ProcessOutput
 
         public void Refresh()
         {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(2);
             bool added = true;
-            while (added)
+            while (added && DateTime.UtcNow < deadline)
             {
                 added = false;
                 List<Entry> snapshot = Snapshot();
@@ -71,6 +72,7 @@ namespace RooIndustries.Optimization.ProcessOutput
                     tracked[entry.ProcessId] = new Tracked { Handle = handle, Created = created, Member = Member(entry.ProcessId, created, entry.Name) };
                     added = true;
                 }
+                if (added) System.Threading.Thread.Sleep(20);
             }
         }
 
@@ -93,19 +95,23 @@ namespace RooIndustries.Optimization.ProcessOutput
         public static bool IsRunning(int processId, string creationTimeFileTimeUtc)
         {
             IntPtr handle = OpenProcess(0x101000, false, processId);
-            if (handle == IntPtr.Zero)
-            {
-                int error = Marshal.GetLastWin32Error();
-                if (error == 87 || error == 5) return false;
-                throw new Win32Exception(error, "Process " + processId + " could not be inspected.");
-            }
+            if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error() != 87;
             try
             {
                 long created;
-                if (!Created(handle, out created)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Process " + processId + " start time could not be read.");
-                return created.ToString(System.Globalization.CultureInfo.InvariantCulture) == creationTimeFileTimeUtc && WaitForSingleObject(handle, 0) == 0x102;
+                if (!Created(handle, out created)) return true;
+                return created.ToString(System.Globalization.CultureInfo.InvariantCulture) == creationTimeFileTimeUtc && WaitForSingleObject(handle, 0) != 0;
             }
             finally { CloseHandle(handle); }
+        }
+
+        public static string LongPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            System.Text.StringBuilder buffer = new System.Text.StringBuilder(1024);
+            uint length = GetLongPathNameW(path, buffer, (uint)buffer.Capacity);
+            if (length == 0 || length >= buffer.Capacity) return path;
+            return buffer.ToString();
         }
 
         public void Dispose()
@@ -217,5 +223,6 @@ namespace RooIndustries.Optimization.ProcessOutput
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(IntPtr handle);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint length);
     }
 }

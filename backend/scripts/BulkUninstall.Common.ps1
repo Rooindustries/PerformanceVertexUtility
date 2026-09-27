@@ -121,8 +121,7 @@ function Get-RooIndustriesBulkArguments {
 
 function Get-RooIndustriesBulkCommandLine {
     param($Entry)
-    $arguments=Get-RooIndustriesBulkArguments $Entry
-    return '"'+[string]$Entry.executable+'"'+$(if($arguments){' '+$arguments}else{''})
+    return Get-RooIndustriesUninstallCommandLine ([string]$Entry.executable) (Get-RooIndustriesBulkArguments $Entry)
 }
 
 function Get-RooIndustriesBulkClaimPath {
@@ -154,10 +153,64 @@ function Test-RooIndustriesBulkInvocationLive {
     Import-RooIndustriesBulkProcessTypes
     $members=@($Invocation)
     if($null -ne $Invocation.PSObject.Properties['descendants']){$members+=@($Invocation.descendants)}
+    $recordedBoot=[string](Get-RooIndustriesUninstallPropertyValue $Invocation 'bootId' '')
+    $currentBoot=Get-RooIndustriesBootId
+    if($recordedBoot -and $currentBoot){
+        if($recordedBoot -cne $currentBoot){return $false}
+    }
+    $boot=$null
     foreach($member in $members){
+        $created=[long]0
+        if(-not ($recordedBoot -and $currentBoot) -and [long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created) -and $created -gt 0) {
+            if($null -eq $boot){
+                try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().AddMinutes(-30)}
+                catch {$boot=[datetime]::MinValue}
+            }
+            if([datetime]::FromFileTimeUtc($created) -lt $boot){continue}
+        }
         if([RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning([int]$member.processId,[string]$member.creationTimeFileTimeUtc)){return $true}
     }
     return $false
+}
+
+function Test-RooIndustriesBulkClaimLive {
+    param($Claim)
+    $invocation=Get-RooIndustriesUninstallPropertyValue $Claim 'invocation' $null
+    if($null -ne $invocation){return Test-RooIndustriesBulkInvocationLive $invocation}
+    $executable=[string](Get-RooIndustriesUninstallPropertyValue $Claim 'executable' '')
+    $claimed=[string](Get-RooIndustriesUninstallPropertyValue $Claim 'claimedAtUtc' '')
+    if(-not $executable -or -not $claimed){return $false}
+    Import-RooIndustriesBulkProcessTypes
+    $since=[datetime]::Parse($claimed,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().AddSeconds(-1)
+    $longPath=[RooIndustries.Optimization.ProcessOutput.Tree]::LongPath($executable)
+    $names=@([IO.Path]::GetFileName($longPath),[IO.Path]::GetFileName($executable),'Au_.exe','Un_A.exe','Un_B.exe','Un.exe')
+    try {$processes=@(Get-CimInstance Win32_Process -ErrorAction Stop)}
+    catch {throw 'Windows could not list running processes, so Roo Industries can''t tell whether the last remover is still running. Restart Windows, then try again.'}
+    foreach($process in $processes){
+        if($null -eq $process.CreationDate -or $process.CreationDate.ToUniversalTime() -lt $since){continue}
+        $image=[string]$process.ExecutablePath
+        if($image -and [RooIndustries.Optimization.ProcessOutput.Tree]::LongPath($image) -ieq $longPath){return $true}
+        if(([string]$process.Name) -in $names){return $true}
+    }
+    return $false
+}
+
+function Test-RooIndustriesBulkUnrecordedLaunchLive {
+    param($Entry,$State,$Plan,[string]$FixtureRoot='')
+    if($null -ne $State.invocation -or [int]$State.attemptCount -eq 0 -or [bool](Get-RooIndustriesUninstallPropertyValue $State 'startFailed' $false)){return $false}
+    $claimPath=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
+    if(-not(Test-Path -LiteralPath $claimPath)){return $false}
+    $claim=(Read-RooIndustriesOperationJson $claimPath).data
+    if([string](Get-RooIndustriesUninstallPropertyValue $claim 'queueId' '') -cne [string]$Plan.queueId -or [string](Get-RooIndustriesUninstallPropertyValue $claim 'entryId' '') -cne [string]$Entry.entryId){return $false}
+    return Test-RooIndustriesBulkClaimLive $claim
+}
+
+function Get-RooIndustriesBootId {
+    try {
+        $value=(Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters' -Name BootId -ErrorAction Stop).BootId
+        if($null -eq $value){return ''}
+        return [string]$value
+    } catch {return ''}
 }
 
 function ConvertTo-RooIndustriesRemoverMembers {
@@ -178,22 +231,25 @@ function Wait-RooIndustriesRemoverTree {
             if($null -ne $OnChange){& $OnChange $waitingFor}
         }
         if($settled){return [pscustomobject]@{completed=$true;rootRunning=$false;running=''}}
-        if($live.Count -gt 0 -and [DateTime]::UtcNow -ge $deadline){return [pscustomobject]@{completed=$false;rootRunning=(-not $Process.HasExited);running=$names}}
-        if($live.Count -gt 0){Start-Sleep -Milliseconds 250}
+        if([DateTime]::UtcNow -ge $deadline){return [pscustomobject]@{completed=$false;rootRunning=(-not $Process.HasExited);running=$names}}
+        Start-Sleep -Milliseconds 250
     }
 }
 
 function Get-RooIndustriesRemoverTimeoutMessage {
     param($Wait)
     if($Wait.rootRunning){return 'Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'}
+    if(-not $Wait.running){return 'The remover kept starting short-lived helper processes until the observation timeout. They were not killed or automatically repeated.'}
     return "The remover handed off to $($Wait.running), which was still running at the observation timeout. It was not killed or automatically repeated."
 }
 
 function Invoke-RooIndustriesObservedRemover {
-    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress)
+    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress,[string]$ExpectedCommandLine,[IDisposable]$ExecutableLease)
+    $commandLine=Get-RooIndustriesUninstallCommandLine $FilePath $Arguments
+    if($commandLine -cne $ExpectedCommandLine){throw 'The remover command differs from the reviewed command. Check the removal path again.'}
     Import-RooIndustriesBulkProcessTypes
     $result=[ordered]@{startedAtUtc=Get-RooIndustriesUtcStamp;completedAtUtc=$null;filePath=$FilePath;rawArguments=$Arguments
-        commandLine=('"'+$FilePath+'"'+$(if($Arguments){' '+$Arguments}else{''}));processStarted=$false;startError=$null;exitCode=$null
+        commandLine=$commandLine;processStarted=$false;startError=$null;exitCode=$null
         timedOut=$false;processExitVerified=$false;descendantExitVerified=$false;outputIncomplete=$false;stillRunning='';error=$null
         timeoutSeconds=$TimeoutSeconds;invocation=$null;stdout='';stderr=''}
     $start=[Diagnostics.ProcessStartInfo]::new()
@@ -205,10 +261,13 @@ function Invoke-RooIndustriesObservedRemover {
     try {
         try {$result.processStarted=$process.Start()} catch {$result.startError=$_.Exception.Message}
         if($result.processStarted) {
-            $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
-            $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
-            $result.invocation=[pscustomobject]@{processId=$process.Id;creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();startedAtUtc=$result.startedAtUtc;treeContained=$tree.Contained;descendants=@()}
+            if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
+            $treeError=$null
+            try {$tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)} catch {$treeError=$_}
+            $result.invocation=[pscustomobject]@{processId=$process.Id;creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();startedAtUtc=$result.startedAtUtc;bootId=(Get-RooIndustriesBootId);treeContained=($null -ne $tree -and $tree.Contained);descendants=@()}
             if($null -ne $OnProgress){& $OnProgress $result.invocation}
+            $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
+            if($null -ne $treeError){throw $treeError}
             $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
                 param($waitingFor)
                 $result.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
@@ -228,6 +287,7 @@ function Invoke-RooIndustriesObservedRemover {
     } finally {
         if($null -ne $capture){$result.stdout=$capture.Stdout;$result.stderr=$capture.Stderr;$capture.Dispose()}
         if($null -ne $tree){$tree.Dispose()}
+        if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
         $process.Dispose()
         $result.completedAtUtc=Get-RooIndustriesUtcStamp
     }
@@ -261,7 +321,7 @@ function Invoke-RooIndustriesBulkEntry {
         if(Test-Path -LiteralPath $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -eq 'cleanup-apply') {
-                if(Test-RooIndustriesBulkInvocationLive $claim.invocation){throw 'An earlier removal of this app from Leftover cleanup is still running. Let it finish, then try again.'}
+                if(Test-RooIndustriesBulkClaimLive $claim){throw 'An earlier removal of this app from Leftover cleanup is still running or can''t be checked. Let it finish, then try again.'}
                 Remove-Item -LiteralPath $claimPath -Force
             } elseif($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }
@@ -280,14 +340,18 @@ function Invoke-RooIndustriesBulkEntry {
         $start.Arguments=Get-RooIndustriesBulkArguments $Entry
         $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
         Write-RooIndustriesOperationJson $Journal $JournalPath
-        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
+        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath;executable=[string]$Entry.executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $claimPath
         $process=[Diagnostics.Process]::new();$process.StartInfo=$start
-        if(-not $process.Start()){throw 'CreateProcess returned false.'}
-        $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
-        $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
+        $started=$false
+        try {$started=$process.Start()} catch {$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw}
+        if(-not $started){$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw 'CreateProcess returned false.'}
         $executableLease.Dispose();$executableLease=$null
-        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp; treeContained=$tree.Contained; descendants=@()}
+        $treeError=$null
+        try {$tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)} catch {$treeError=$_}
+        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp; bootId=(Get-RooIndustriesBootId); treeContained=($null -ne $tree -and $tree.Contained); descendants=@()}
         $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
+        $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
+        if($null -ne $treeError){throw $treeError}
         $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
             param($waitingFor)
             $JournalEntry.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree

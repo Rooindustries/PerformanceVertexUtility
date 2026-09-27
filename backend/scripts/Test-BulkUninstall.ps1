@@ -10,9 +10,10 @@ $msiCode=[guid]::NewGuid().ToString('B').ToUpperInvariant()
 $msiKeyPath='Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$msiCode
 $msiAppId='registry:roo-industries-msi-fixture-'+$msiCode
 $msiClaim=Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId=$msiAppId})
-function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted) {
+function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted,[switch]$BrokenExe) {
     $directory=Join-Path $root $Name;[IO.Directory]::CreateDirectory($directory)|Out-Null
     $exe=Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
+    if($BrokenExe){[IO.File]::WriteAllText($exe,'This fixture is not a Windows program.')}
     $journalPath=Join-Path $directory 'journal.json';$counter=Join-Path $directory 'launch count.txt'
     $apps=@();$markers=@()
     foreach($i in 1..2){
@@ -31,6 +32,46 @@ function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[s
     return @{directory=$directory;markers=$markers;counter=$counter;plan=$preview.data;planPath=$planPath;exe=$exe;
         args=@{Action='Apply';InputPath=$planPath;ReviewSha256=(Get-FileHash $planPath).Hash;JournalPath=$journalPath;AllowFixtureExecution=$true;ConfirmApply=$true;ManualReviewApproved=$true}}
 }
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class RooIndustriesBulkAccessFixture {
+    [StructLayout(LayoutKind.Sequential, Pack=4)] private struct Privilege { public int Count; public long Luid; public int Attributes; }
+    [DllImport("advapi32.dll", SetLastError=true)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] private static extern bool LookupPrivilegeValueW(string system, string name, out long luid);
+    [DllImport("advapi32.dll", SetLastError=true)] private static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref Privilege state, int length, ref Privilege previous, out int returned);
+    [DllImport("advapi32.dll")] private static extern uint SetSecurityInfo(IntPtr handle, int type, uint information, IntPtr owner, IntPtr group, byte[] dacl, IntPtr sacl);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+    [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+    public static void DenyAll(IntPtr process) {
+        byte[] dacl = new byte[8];
+        new System.Security.AccessControl.RawAcl(2, 0).GetBinaryForm(dacl, 0);
+        uint error = SetSecurityInfo(process, 6, 4, IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);
+        if (error != 0) throw new Win32Exception((int)error);
+    }
+    public static int OpenError(int processId) {
+        IntPtr handle = OpenProcess(0x101000, false, processId);
+        if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error();
+        CloseHandle(handle);
+        return 0;
+    }
+    private static int Adjust(int attributes) {
+        IntPtr token;
+        if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        try {
+            Privilege state = new Privilege { Count = 1, Attributes = attributes }, previous = new Privilege();
+            if (!LookupPrivilegeValueW(null, "SeDebugPrivilege", out state.Luid)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            int returned;
+            if (!AdjustTokenPrivileges(token, false, ref state, Marshal.SizeOf(typeof(Privilege)), ref previous, out returned) || Marshal.GetLastWin32Error() != 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+            return previous.Count == 0 ? attributes : previous.Attributes;
+        } finally { CloseHandle(token); }
+    }
+    public static int SetDebug(bool enabled) { return Adjust(enabled ? 2 : 0); }
+    public static void RestoreDebug(int attributes) { Adjust(attributes & 2); }
+}
+'@
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
     $script:fixtureExe=Join-Path $root 'RooIndustriesBulkFixture.exe'
@@ -189,6 +230,80 @@ public class RooIndustriesBulkFixture {
     Write-RooIndustriesOperationJson ([pscustomobject]@{kind='cleanup-apply';appId=$case.plan.entries[0].appId;invocation=[pscustomobject]@{processId=$PID;creationTimeFileTimeUtc='1';descendants=@()}}) $claimFile
     $staleClaim=Read-Result (& $runScript @a)
     Assert ($staleClaim.status -eq 'cleanup-review-required' -and -not(Test-Path -LiteralPath $claimFile)) 'A finished Leftover cleanup remover no longer blocks the removal queue'
+    $case=New-Case 'unreadable-remover';$a=$case.args
+    $deniedExe=Join-Path $case.directory 'unreadable remover.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $deniedExe
+    $deniedStart=[Diagnostics.ProcessStartInfo]::new($deniedExe,'x y 0 child-shell');$deniedStart.UseShellExecute=$false;$deniedStart.CreateNoWindow=$true
+    $denied=[Diagnostics.Process]::Start($deniedStart);$liveFixtures.Add($denied)|Out-Null
+    $deniedCreated=$denied.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
+    [RooIndustriesBulkAccessFixture]::DenyAll($denied.Handle)
+    $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='needs-reconciliation';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;bootTimeUtc=Get-RooIndustriesBulkBootTime;updatedAtUtc=Get-RooIndustriesUtcStamp;
+        entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
+    $journal.entries[0].state='needs-reconciliation';$journal.entries[0].attemptCount=1
+    $journal.entries[0].invocation=[pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;descendants=@()}
+    Remove-Item -LiteralPath $case.markers[0]
+    Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $deniedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath}) $deniedClaim
+    Import-RooIndustriesBulkProcessTypes
+    $debug=[RooIndustriesBulkAccessFixture]::SetDebug($false)
+    try {
+        $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
+        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
+        $lastBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime()
+        $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();descendants=@()})
+        $nearBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddMinutes(-1).ToFileTimeUtc().ToString();descendants=@()})
+        $currentBootId=Get-RooIndustriesBootId
+        $otherBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId='roo-industries-other-boot';descendants=@()})
+        $sameBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId=$currentBootId;descendants=@()})
+        $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+        $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
+    Assert ($openError -eq 5) "The unreadable remover fixture refuses inspection with access denied (error $openError)"
+    Assert $unreadable 'A remover Windows refuses to open is treated as still running, never as stopped'
+    Assert (-not $reusedAfterRestart) 'A remover recorded well before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
+    Assert $nearBoot 'A remover recorded just before the reported boot time is still checked, so a clock jump cannot make it look stopped'
+    Assert ($currentBootId -and -not $otherBoot -and $sameBoot) "The recorded Windows boot ID decides whether a remover belongs to an earlier boot (current boot ID $currentBootId)"
+    Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
+    Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
+    $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
+    $case=New-Case 'queue-stopped-after-launch' 'wait';$a=$case.args
+    $childArgs=Join-Path $case.directory 'child arguments.json';$a|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $childArgs -Encoding UTF8
+    $childScript=Join-Path $case.directory 'stopped after launch.ps1';$childLog=$childScript+'.log'
+    Set-Content -LiteralPath $childScript -Encoding UTF8 -Value @'
+param([string]$RunScript,[string]$ArgumentsPath,[string]$OutputPath)
+$ErrorActionPreference='Stop'
+Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public int Count { get { return 0; } } public void Dispose() {} } }'
+$values=@{};(Get-Content -LiteralPath $ArgumentsPath -Raw|ConvertFrom-Json).PSObject.Properties|ForEach-Object {$values[$_.Name]=$_.Value}
+& $RunScript @values *> $OutputPath
+'@
+    $childStart=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -ExecutionPolicy Bypass -File "'+$childScript+'" -RunScript "'+$runScript+'" -ArgumentsPath "'+$childArgs+'" -OutputPath "'+$childLog+'"'))
+    $childStart.UseShellExecute=$false;$childStart.CreateNoWindow=$true
+    $childRun=[Diagnostics.Process]::Start($childStart);Assert ($childRun.WaitForExit(90000)) 'The interrupted queue run returns without waiting for its remover'
+    $stoppedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
+    $stoppedPid=[int](@($stoppedJournal.entries)[0].invocation.processId)
+    $stoppedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $stoppedAlive=$stoppedPid -gt 0 -and $null -ne (Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue)
+    Assert ($stoppedPid -gt 0 -and $stoppedAlive -and $stoppedDismiss.status -eq 'failed' -and $stoppedDismiss.errors[0].message -like "*still running or can't be checked*") "Start over refuses while a queue remover that started just before a failure is still alive (pid $stoppedPid)"
+    if($stoppedPid -gt 0){$stoppedProcess=Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue;if($stoppedProcess){$stoppedProcess.Kill();[void]$stoppedProcess.WaitForExit(10000)}}
+    $case=New-Case 'queue-unrecorded-launch' 'keep';$a=$case.args
+    $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;bootTimeUtc=Get-RooIndustriesBulkBootTime;updatedAtUtc=Get-RooIndustriesUtcStamp;
+        entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
+    $journal.entries[0].state='dispatching';$journal.entries[0].attemptCount=1
+    Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $unrecordedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath;executable=[string]$case.plan.entries[0].executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $unrecordedClaim
+    $unrecordedStart=[Diagnostics.ProcessStartInfo]::new([string]$case.plan.entries[0].executable,'x y 0 child-shell');$unrecordedStart.UseShellExecute=$false;$unrecordedStart.CreateNoWindow=$true
+    $unrecorded=[Diagnostics.Process]::Start($unrecordedStart);$liveFixtures.Add($unrecorded)|Out-Null
+    $unrecordedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $unrecordedCheck=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($unrecordedDismiss.status -eq 'failed' -and $unrecordedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $unrecordedClaim) -and $unrecordedCheck.data.entries[0].state -eq 'needs-reconciliation' -and $unrecordedCheck.data.entries[0].error -like "*still running or can't be checked*") 'Start over and Check state refuse while a remover whose launch was never recorded is running'
+    $unrecorded.Kill();Assert ($unrecorded.WaitForExit(10000)) 'Disposable unrecorded remover is explicitly stopped and its exit verified'
+    $unrecordedDone=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($unrecordedDone.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $unrecordedClaim)) 'Once that remover exits, Start over clears the list and its claim'
+    $case=New-Case 'queue-start-failed' -BrokenExe;$a=$case.args
+    $startFailed=Read-Result (& $runScript @a)
+    $startChecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($startFailed.data.entries[0].attemptCount -eq 1 -and $null -eq $startFailed.data.entries[0].invocation -and $startChecked.data.entries[0].launchUnconfirmed -ne $true) "A remover Windows refused to start is not marked as an unconfirmed launch ($($startFailed.data.entries[0].error))"
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
@@ -196,6 +311,8 @@ public class RooIndustriesBulkFixture {
     Write-RooIndustriesOperationJson $journal $a.JournalPath
     $crash=Read-Result (& $runScript @a)
     Assert ($crash.status -eq 'needs-reconciliation' -and -not(Test-Path $case.counter)) 'A crash after durable dispatch intent cannot silently launch the uncertain entry again'
+    $crashChecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($crashChecked.data.entries[0].launchUnconfirmed -eq $true -and $crashChecked.data.entries[0].state -eq 'needs-reconciliation' -and -not(Test-Path $case.counter)) 'Check state keeps the mark that a remover launch was never confirmed'
     $journal|Add-Member -NotePropertyName bootTimeUtc -NotePropertyValue (Get-RooIndustriesBulkBootTime)
     $journal.entries[0].state='reboot-required';$journal.entries[0].outcome=Get-RooIndustriesUninstallOutcome windows-installer 3010
     $journal.entries[0].invocation=@{processId=$PID;creationTimeFileTimeUtc=([Diagnostics.Process]::GetCurrentProcess()).StartTime.ToUniversalTime().ToFileTimeUtc().ToString()}
@@ -294,10 +411,20 @@ public class RooIndustriesBulkFixture {
 
 } finally {
     foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.Name -ieq 'msiexec.exe' -and $_.CommandLine -like "*$msiCode*"})){Stop-Process -Id $process.ProcessId -Force}
-    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)})){$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$process.ProcessId))|Out-Null}
+    $tracked=@($liveFixtures|ForEach-Object {$_.Id})
+    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)})){
+        if([int]$process.ProcessId -in $tracked){continue}
+        try {$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$process.ProcessId))|Out-Null} catch {}
+    }
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($msiKeyPath,$false)
     if(Test-Path -LiteralPath $msiClaim){Remove-Item -LiteralPath $msiClaim -Force}
-    foreach($process in $liveFixtures){if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){throw 'Bulk fixture process did not exit'};$process.Dispose()}
-    if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}
+    $cleanupErrors=@()
+    foreach($process in $liveFixtures){
+        try {if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){$cleanupErrors+='Bulk fixture process '+$process.Id+' did not exit'}}
+        catch {$cleanupErrors+='Bulk fixture process cleanup failed: '+$_.Exception.Message}
+        finally {$process.Dispose()}
+    }
+    if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}
 }
+if($cleanupErrors.Count){throw ($cleanupErrors -join '; ')}
 Assert (-not(Test-Path $root) -and -not(Test-Path -LiteralPath ('HKCU:\'+$msiKeyPath)) -and -not(Test-Path -LiteralPath $msiClaim)) 'Bulk tests leave no fixture process, presence marker, registration, claim or journal behind'

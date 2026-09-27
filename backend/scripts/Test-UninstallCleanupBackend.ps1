@@ -149,6 +149,33 @@ try {
     Add-Failure "Official uninstall preview failed: $($_.Exception.Message)"
 }
 
+$commandLineRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-command-line-' + [guid]::NewGuid().ToString('N'))
+try {
+    $spacedRemover = Join-Path $commandLineRoot 'Roo Fixture\Uninstall Me.exe'
+    [IO.Directory]::CreateDirectory((Split-Path $spacedRemover -Parent)) | Out-Null
+    [IO.File]::WriteAllText($spacedRemover, 'fixture')
+    $productCode = '{11111111-2222-3333-4444-555555555555}'
+    $commandLineInventory = Join-Path $commandLineRoot 'inventory.json'
+    [IO.File]::WriteAllText($commandLineInventory, ([pscustomobject]@{ schemaVersion = 1; apps = @(
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-msi'; displayName = 'Roo Industries MSI command'; publisher = 'Roo Industries'; sourceType = 'msi'; packageId = $productCode; uninstallString = "MsiExec.exe /X$productCode"; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-spaced'; displayName = 'Roo Industries spaced command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = "$spacedRemover /S /quiet"; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-relative'; displayName = 'Roo Industries relative command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = 'uninstall.exe /S'; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-long'; displayName = 'Roo Industries long command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = ('C:\' + ('a' * 300) + '\uninstall.exe /S'); categories = @('application'); risk = 'low'; protected = $false }
+    ) } | ConvertTo-Json -Depth 8))
+    $lines = ((& (Join-Path $PSScriptRoot 'Preview-OfficialUninstall.ps1') -InventoryPath $commandLineInventory -AppId @('registry:roo-industries-command-msi', 'registry:roo-industries-command-spaced', 'registry:roo-industries-command-relative', 'registry:roo-industries-command-long')) -join [Environment]::NewLine) | ConvertFrom-Json
+    $byId = @{}; foreach ($entry in @($lines.commands)) { $byId[[string]$entry.appId] = $entry }
+    $msiLine = '"' + (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') + '" /x ' + $productCode + ' /norestart'
+    if ($byId['registry:roo-industries-command-msi'].commandLine -ceq $msiLine -and $byId['registry:roo-industries-command-spaced'].commandLine -ceq ('"' + $spacedRemover + '" /S /quiet') -and $null -eq $byId['registry:roo-industries-command-relative'].commandLine -and $lines.status -eq 'preview' -and $byId.ContainsKey('registry:roo-industries-command-long') -and $null -eq $byId['registry:roo-industries-command-long'].commandLine -and $byId['registry:roo-industries-command-spaced'].executableSha256 -ceq (Get-FileHash -LiteralPath $spacedRemover -Algorithm SHA256).Hash.ToLowerInvariant()) {
+        Add-Pass 'Removal path review returns the exact command and file hash that run, and none for an unresolvable or overlong remover'
+    } else {
+        Add-Failure ('Removal path review command lines differ from what runs: status ' + [string]$lines.status + ' ' + (@($lines.commands | ForEach-Object { [string]$_.appId + ' => ' + [string]$_.commandLine + ' ' + [string]$_.executableSha256 }) -join '; ') + ' ' + (@($lines.errors | ForEach-Object { $_.message }) -join '; '))
+    }
+} catch {
+    Add-Failure "Removal path command-line review failed: $($_.Exception.Message)"
+} finally {
+    if (Test-Path -LiteralPath $commandLineRoot) { Remove-Item -LiteralPath $commandLineRoot -Recurse -Force }
+}
+
 try {
     $scanOutput = & (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -InventoryPath $sampleInventory -AppId 'registry:overwolf'
     $scan = ($scanOutput -join [Environment]::NewLine) | ConvertFrom-Json
@@ -167,13 +194,46 @@ try {
     Add-Failure "Leftover scan preview failed: $($_.Exception.Message)"
 }
 
+try {
+    $sampleItems = @((Get-Content -LiteralPath $sampleScan -Raw | ConvertFrom-Json).items)
+    $sampleOwned = @($sampleItems | Where-Object { $_.type -eq 'startupEntry' -or ($_.type -in @('registryKey', 'registryValue') -and @([string]$_.target -split '\\' | Where-Object { $_ -in @('Microsoft', 'Policies') }).Count -gt 0) })
+    if ($sampleItems.Count -gt 0 -and $sampleOwned.Count -eq 0) {
+        Add-Pass 'The leftover scan sample shows no Microsoft or Windows owned items'
+    } else {
+        Add-Failure ('The leftover scan sample shows Microsoft or Windows owned items: ' + (($sampleOwned | ForEach-Object { $_.target }) -join '; '))
+    }
+} catch {
+    Add-Failure "Leftover scan sample check failed: $($_.Exception.Message)"
+}
+
+try {
+    $leftoverAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1'), [ref]$null, [ref]$null)
+    $ownedFunction = $leftoverAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-MicrosoftOwnedFilePath' }, $true)
+    $withoutLocalData = $ownedFunction.Extent.Text.Replace("[Environment]::GetFolderPath('LocalApplicationData')", "''")
+    $ownedWithoutLocalData = & ([scriptblock]::Create($withoutLocalData + "`nTest-MicrosoftOwnedFilePath 'C:\Vendor\App\uninstall.exe'"))
+    if ($withoutLocalData -ne $ownedFunction.Extent.Text -and $ownedWithoutLocalData -eq $false) {
+        Add-Pass 'The Windows-owned path check skips the package root when the local app data folder is unavailable'
+    } else {
+        Add-Failure 'The Windows-owned path check did not handle a missing local app data folder'
+    }
+} catch {
+    Add-Failure "The Windows-owned path check failed without a local app data folder: $($_.Exception.Message)"
+}
+
 $ownershipRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-ownership-' + [guid]::NewGuid().ToString('N'))
 try {
     [IO.Directory]::CreateDirectory($ownershipRoot) | Out-Null
     $guid = '{12345678-1234-1234-1234-1234567890AB}'
+    $microsoftInstall = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('Microsoft\RooIndustriesOwnership' + [guid]::NewGuid().ToString('N'))
+    $windowsOwnedData = @(
+        (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Packages\Microsoft.GamingApp_8wekyb3d8bbwe\LocalState'),
+        (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'ModifiableWindowsApps\RooIndustriesFixture'),
+        (Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('Windows'))) 'XboxGames\RooIndustriesFixture'),
+        (Join-Path ([Environment]::GetFolderPath('UserProfile')) 'AppData\LocalLow\Microsoft\RooIndustriesFixture')
+    )
     $apps = @(
         [pscustomobject]@{ appId = 'registry:roo-industries-fixture-notepad++'; displayName = 'Notepad++'; publisher = 'Notepad++ Team'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; categories = @('application'); risk = 'low'; protected = $false },
-        [pscustomobject]@{ appId = 'registry:roo-industries-fixture-microsoft'; displayName = 'Roo Industries Microsoft fixture'; publisher = 'Microsoft Corporation'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; categories = @('application'); risk = 'low'; protected = $false }
+        [pscustomobject]@{ appId = 'registry:roo-industries-fixture-microsoft'; displayName = 'Roo Industries Microsoft fixture'; publisher = 'Microsoft Corporation'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; installLocation = $microsoftInstall; categories = @('application'); risk = 'low'; protected = $false }
     )
     $ownershipInventory = Join-Path $ownershipRoot 'inventory.json'
     [IO.File]::WriteAllText($ownershipInventory, ([pscustomobject]@{ schemaVersion = 1; apps = $apps } | ConvertTo-Json -Depth 8))
@@ -181,6 +241,7 @@ try {
     $ownershipRules.knownAppRules = @([pscustomobject]@{
         ruleId = 'roo-industries-fixture-everything'; match = [pscustomobject]@{ displayNamePatterns = @('Notepad++', 'Roo Industries Microsoft fixture') }
         vendorRegistryKeys = @('HKCU\Software\Microsoft\Notepad', 'HKLM\Software\Policies\Notepad++', 'HKCU\Software\Notepad++')
+        knownAppDataPaths = $windowsOwnedData
         serviceNamePatterns = @('*'); scheduledTaskPatterns = @('*'); startupValuePatterns = @('*')
     })
     $ownershipRulesPath = Join-Path $ownershipRoot 'rules.json'
@@ -202,17 +263,30 @@ try {
             ($Item.type -eq 'scheduledTask' -and @($knownTasks | Where-Object { $leaf -like $_ }).Count -gt 0) -or
             ($Item.type -eq 'startupEntry' -and @($knownStartup | Where-Object { $leaf -like $_ }).Count -gt 0)
     }
-    $owned = @($thirdParty.items | Where-Object { (Test-WindowsOwnedItem $_) -or (Test-KnownWindowsItem $_) })
+    $owned = @($thirdParty.items | Where-Object { (Test-WindowsOwnedItem $_) -or (Test-KnownWindowsItem $_) -or $_.type -eq 'startupEntry' })
     if (@($thirdParty.errors).Count -eq 0 -and $owned.Count -eq 0 -and @($thirdParty.items | Where-Object { $_.target -eq 'HKCU\Software\Notepad++' }).Count -eq 1) {
         Add-Pass 'A third-party leftover scan never offers Microsoft or Windows owned keys, tasks or services'
     } else {
         Add-Failure ('A third-party leftover scan offered Windows-owned items: ' + (($owned | ForEach-Object { $_.type + ' ' + $_.target }) -join '; ') + ' ' + (@($thirdParty.errors | ForEach-Object { $_.message }) -join '; '))
     }
     $microsoft = Read-OwnershipScan 'registry:roo-industries-fixture-microsoft'
-    if (@($microsoft.errors).Count -eq 0 -and @($microsoft.items | Where-Object { $_.target -eq "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\$guid" }).Count -eq 1 -and @($microsoft.items | Where-Object { $_.target -eq 'HKCU\Software\Microsoft\Notepad' }).Count -eq 1) {
-        Add-Pass 'A Microsoft-published app still reviews its own Microsoft registry leftovers'
+    $microsoftOwned = @($microsoft.items | Where-Object { (Test-WindowsOwnedItem $_) -or (Test-KnownWindowsItem $_) -or $_.type -eq 'startupEntry' -or ([string]$_.target).StartsWith($microsoftInstall, [StringComparison]::OrdinalIgnoreCase) })
+    if (@($microsoft.errors).Count -eq 0 -and $microsoftOwned.Count -eq 0 -and @($microsoft.items | Where-Object { $_.target -eq 'HKCU\Software\Notepad++' }).Count -eq 1) {
+        Add-Pass 'A Microsoft-published app is never offered Microsoft or Windows owned keys, files, tasks, services or its Uninstall entry'
     } else {
-        Add-Failure 'A Microsoft-published app lost its own Microsoft registry leftovers'
+        Add-Failure ('A Microsoft-published app was offered Microsoft or Windows owned items: ' + (($microsoftOwned | ForEach-Object { $_.type + ' ' + $_.target }) -join '; ') + ' ' + (@($microsoft.errors | ForEach-Object { $_.message }) -join '; '))
+    }
+    $ownedDataOffers = @(@($thirdParty.items) + @($microsoft.items) | Where-Object { [string]$_.target -in $windowsOwnedData })
+    if ($ownedDataOffers.Count -eq 0) {
+        Add-Pass 'Microsoft package data, ModifiableWindowsApps, XboxGames and LocalLow\Microsoft are never offered as leftovers'
+    } else {
+        Add-Failure ('Windows-owned data folders were offered as leftovers: ' + (($ownedDataOffers | ForEach-Object { $_.target }) -join '; '))
+    }
+    $uninstallOffers = @(@($thirdParty.items) + @($microsoft.items) | Where-Object { ([string]$_.target) -like '*\CurrentVersion\Uninstall\*' })
+    if ($uninstallOffers.Count -eq 0) {
+        Add-Pass 'No app is offered its product GUID Uninstall entry as a leftover'
+    } else {
+        Add-Failure ('A product GUID Uninstall entry was offered as a leftover: ' + (($uninstallOffers | ForEach-Object { $_.target }) -join '; '))
     }
 } catch {
     Add-Failure "Leftover ownership scan failed: $($_.Exception.Message)"

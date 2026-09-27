@@ -79,4 +79,5 @@ try {
     }
     $result.completedAtUtc=(Get-Date).ToUniversalTime().ToString('o')
     Save-Result
+    if($result.status -ne 'passed'){Write-Host "Real MSI removal check $($result.status): $($result.error)";exit 1}
 }

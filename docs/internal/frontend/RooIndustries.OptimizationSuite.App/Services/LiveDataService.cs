@@ -507,6 +507,7 @@ public sealed class LiveDataService
             {
                 args += " -AllowedOfficialExecutablePath " + QuotePowerShell(officialExecutable);
                 args += " -OfficialRunnerWorkingDirectory " + QuotePowerShell(runRoot);
+                args += " -TimeoutSeconds 600";
             }
 
             if (officialUninstallCommandApproved)

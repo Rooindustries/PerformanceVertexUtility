@@ -36,12 +36,12 @@
     "reviewRequired": false
   },
   "summary": {
-    "itemCount": 8,
+    "itemCount": 6,
     "highConfidenceCount": 4,
-    "mediumConfidenceCount": 3,
+    "mediumConfidenceCount": 1,
     "lowConfidenceCount": 1,
     "defaultSelectedCount": 3,
-    "protectedCount": 2,
+    "protectedCount": 1,
     "estimatedRecoverableBytes": 805306368,
     "deletionMode": "preview-only"
   },
@@ -119,20 +119,6 @@
       "reason": "Registry key matches the app vendor. Export first."
     },
     {
-      "itemId": "startup:overwolf",
-      "type": "startupEntry",
-      "target": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Overwolf",
-      "matchedBy": [
-        "runKeyValue",
-        "binaryPath"
-      ],
-      "confidence": "medium",
-      "risk": "medium",
-      "defaultSelected": false,
-      "protected": false,
-      "reason": "Startup entry should wait until the official uninstall is done."
-    },
-    {
       "itemId": "folder:shared-cef-cache",
       "type": "folder",
       "target": "C:\\Users\\Client\\AppData\\Local\\CEF",
@@ -144,19 +130,6 @@
       "defaultSelected": false,
       "protected": true,
       "reason": "Shared Chromium cache path. Other apps may use it."
-    },
-    {
-      "itemId": "runtime:vc-redist",
-      "type": "registryKey",
-      "target": "HKLM\\Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-      "matchedBy": [
-        "dependency"
-      ],
-      "confidence": "medium",
-      "risk": "protected",
-      "defaultSelected": false,
-      "protected": true,
-      "reason": "Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup."
     }
   ],
   "warnings": [

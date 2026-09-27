@@ -679,6 +679,38 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("Controlled route failure", StringComparison.Ordinal),
         "A null removal-route response remains unavailable with its operation error");
 
+    const string reviewedLine = "\"C:\\Windows\\system32\\msiexec.exe\" /x {11111111-2222-3333-4444-555555555555} /norestart";
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "msi-uninstall-string", RawCommand = "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}", CommandLine = reviewedLine, ExecutableSha256 = new string('a', 64) }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", CommandLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", ExecutableSha256 = null }],
+    });
+    cleanup.PrimaryRemovalButtonLabel = "Check path";
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A remover whose file is missing is not marked as checked and says so");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null }],
+    });
+    cleanup.PrimaryRemovalButtonLabel = "Check path";
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState == "Use Remove apps to remove this app.", "A Store app in Leftover cleanup points to Remove apps instead of offering a removal that cannot run");
+
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed, "A successful empty removal route remains a valid Roo Industries route");
