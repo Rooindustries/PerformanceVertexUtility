@@ -28,11 +28,12 @@ static class ActionChecks
         defaultRow.ToggleOn = true;
         check(defaultRow.Selected.Name == "Windows default", "Windows default remains a separate intentional queued action");
 
-        var inverted = catalog.Settings.First(setting => setting.Options[0].Name == "Remove this override" && setting.Options[1].Name.StartsWith("Value ", StringComparison.Ordinal));
+        static bool Numeric(string name) => System.Text.RegularExpressions.Regex.IsMatch(name, @"^(On \(1\)|Off \(0\)|.+: -?\d+)$");
+        var inverted = catalog.Settings.First(setting => setting.Options.Length > 1 && setting.Options[0].Name == "Remove this override" && Numeric(setting.Options[1].Name));
         var invertedRow = Row(inverted.Id);
         check(invertedRow.Action.Id == inverted.Options[1].Id, "An inverted catalog pair shows the concrete action before its reset action");
 
-        var numeric = catalog.Settings.First(setting => setting.Options.Length > 2 && setting.Options.Count(option => option.Name.StartsWith("Value ", StringComparison.Ordinal)) > 1);
+        var numeric = catalog.Settings.First(setting => setting.Options.Length > 2 && setting.Options.Count(option => Numeric(option.Name)) > 1);
         var numericRow = Row(numeric.Id);
         check(numericRow.ActionChoices.Select(choice => choice.Id).SequenceEqual(numeric.Options.Select(option => option.Id)),
             "Numeric choices preserve every catalog option and its identity");
