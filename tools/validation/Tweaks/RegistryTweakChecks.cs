@@ -67,7 +67,10 @@ static class RegistryTweakChecks
                 key.SetValue("Pending", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new ControlJournal(restart.Plan with { Controls = new([], [], []) }, restart.Hash, 0, "awaiting-restart", bootId), OperationFiles.Json), RegistryValueKind.Binary);
             }
             AwaitRestart(boot!);
-            reject(() => store.Recover(store.Recovery().PendingHash!), "A restart check in the same boot keeps the pending feature record");
+            var sameBoot = "";
+            try { store.Recover(store.Recovery().PendingHash!); } catch (InvalidDataException error) { sameBoot = error.Message; }
+            check(sameBoot == RegistryTweakStore.RestartAgain && sameBoot.Contains("not Shut down", StringComparison.Ordinal),
+                "A restart check with the same boot marker, as after a Fast Startup shutdown, keeps the pending feature record and says to choose Restart: " + sameBoot);
             check(store.Recovery().Pending is not null, "The pending feature record survives a same-boot restart check");
             AwaitRestart("boot:" + Guid.NewGuid().ToString("N"));
             check(store.Recover(store.Recovery().PendingHash!) && store.Recovery().Pending is null, "A restart check after a new boot closes the pending feature record");

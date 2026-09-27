@@ -707,7 +707,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
                 ? "Restart required to finish Windows settings recovery"
                 : "Windows settings recovery needs review";
             Detail = pending.Phase == "awaiting-restart"
-                ? "Restart Windows, then refresh and review recovery before selecting more settings."
+                ? "Restart Windows (choose Restart, not Shut down), then refresh and review recovery before selecting more settings."
                 : "An earlier Windows settings change was interrupted. Review recovery before selecting more settings.";
             return;
         }
