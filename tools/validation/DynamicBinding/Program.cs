@@ -13,6 +13,8 @@ foreach (var (_, pe) in assemblies)
     foreach (var handle in metadata.MethodDefinitions) ownMethods.Add(metadata.GetString(metadata.GetMethodDefinition(handle).Name));
 }
 const string Binder = "Microsoft.CSharp.RuntimeBinder.Binder::InvokeMember";
+string[] operators = ["Microsoft.CSharp.RuntimeBinder.Binder::BinaryOperation", "Microsoft.CSharp.RuntimeBinder.Binder::UnaryOperation"];
+var comMembers = new HashSet<string>(["Connect", "GetFolder", "GetTask", "GetTasks", "DeleteTask", "NewTask", "Create", "RegisterTaskDefinition", "GetSecurityDescriptor", "GetInstances", "Run", "Item"], StringComparer.Ordinal);
 const string ArgumentInfo = "Microsoft.CSharp.RuntimeBinder.CSharpArgumentInfo";
 var findings = new List<string>(); var sites = 0;
 foreach (var (path, pe) in assemblies)
@@ -28,9 +30,10 @@ foreach (var (path, pe) in assemblies)
             var code = Decode(pe.GetMethodBody(method.RelativeVirtualAddress).GetILReader(), metadata);
             for (var index = 0; index < code.Count; index++)
             {
+                var where = Path.GetFileName(path) + " " + TypeName(metadata, typeHandle) + "." + metadata.GetString(method.Name);
+                if (operators.Contains(code[index].Callee)) { findings.Add(where + ": applies an operator to a dynamic value, so the runtime binder can look up a product operator by name. Cast the operands first."); continue; }
                 if (code[index].Callee != Binder) continue;
                 sites++;
-                var where = Path.GetFileName(path) + " " + TypeName(metadata, typeHandle) + "." + metadata.GetString(method.Name);
                 var array = code.FindLastIndex(index, item => item.Op == OpCodes.Newarr.Value && item.Type == ArgumentInfo);
                 var name = array < 0 ? -1 : code.FindLastIndex(array, item => item.Op == OpCodes.Ldstr.Value);
                 var receiver = array < 0 ? -1 : code.FindIndex(array, index - array, item => item.Callee == ArgumentInfo + "::Create");
@@ -42,13 +45,15 @@ foreach (var (path, pe) in assemblies)
                 var member = code[name].Text!;
                 if ((binderFlags & 2) != 0 || (receiverFlags & (1 | 32)) != 0 && ownMethods.Contains(member))
                     findings.Add(where + ": calls '" + member + "' with a dynamic argument, so the runtime binder looks up a product method by a name that obfuscation can rename.");
+                else if ((receiverFlags & (1 | 32)) == 0 && ownMethods.Contains(member) && !comMembers.Contains(member))
+                    findings.Add(where + ": calls '" + member + "' on a dynamic value; if that value is a product object, obfuscation renames the method. Add the name to the COM member list only if the receiver is always a COM object.");
             }
         }
     }
 }
 foreach (var finding in findings) Console.Error.WriteLine("FAIL " + finding);
 if (findings.Count > 0) { Console.Error.WriteLine("Pass product objects as statically typed values (for example object) and convert to dynamic only for COM calls."); return 1; }
-Console.WriteLine("PASS " + sites + " dynamic member calls in " + assemblies.Length + " assemblies bind only on COM or framework receivers.");
+Console.WriteLine("PASS " + sites + " dynamic member calls in " + assemblies.Length + " assemblies bind only on COM or framework receivers, with no dynamic operators.");
 return 0;
 
 List<Instruction> Decode(BlobReader reader, MetadataReader metadata)
