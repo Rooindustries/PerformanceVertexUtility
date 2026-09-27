@@ -10,7 +10,7 @@ $msiCode=[guid]::NewGuid().ToString('B').ToUpperInvariant()
 $msiKeyPath='Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$msiCode
 $msiAppId='registry:roo-industries-msi-fixture-'+$msiCode
 $msiClaim=Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId=$msiAppId})
-function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0) {
+function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted) {
     $directory=Join-Path $root $Name;[IO.Directory]::CreateDirectory($directory)|Out-Null
     $exe=Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
     $journalPath=Join-Path $directory 'journal.json';$counter=Join-Path $directory 'launch count.txt'
@@ -22,7 +22,7 @@ function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0) {
         $install=Join-Path $directory ('app-'+$i);[IO.Directory]::CreateDirectory($install)|Out-Null;[IO.File]::WriteAllText((Join-Path $install 'settings.txt'),'original settings')
         $apps+=@([pscustomobject]@{appId="fixture:$Name-$i";displayName="Roo Industries disposable app $i";publisher='Roo Industries Fixture';sourceType='registry';
             sourceIdentity=@{kind='fixture';presencePath=$marker};installLocation=$install;risk='low';protected=$false;categories=@('application');
-            uninstallString=((ConvertTo-RooIndustriesWindowsArgument $exe)+' '+(Join-RooIndustriesWindowsArguments $arguments))})
+            uninstallString=$(if(-not $Unquoted){ConvertTo-RooIndustriesWindowsArgument $exe}elseif($i -eq 1){$exe}else{$exe.Substring(0,$exe.Length-4)})+' '+(Join-RooIndustriesWindowsArguments $arguments)})
     }
     $inventory=Join-Path $directory 'inventory.json';Write-RooIndustriesOperationJson @{schemaVersion=1;apps=$apps} $inventory
     $planPath=Join-Path $directory 'plan.json'
@@ -104,6 +104,19 @@ public class RooIndustriesBulkFixture {
     Assert ($again.status -eq 'cleanup-review-required' -and (Get-Content $case.counter).Count -eq 2) 'Replaying a completed bulk queue does not run either remover again'
     $commandLines=@(Get-Content -LiteralPath ($case.counter+'.command-lines'))
     Assert ($commandLines.Count -eq 2 -and $commandLines[0] -ceq $case.plan.entries[0].commandLine -and $commandLines[1] -ceq $case.plan.entries[1].commandLine) 'Each remover receives exactly the reviewed command line, including spaces, quotes and a trailing backslash'
+    $case=New-Case 'unquoted' -Unquoted;$a=$case.args
+    $argumentText=Join-RooIndustriesWindowsArguments @($case.markers[0],$case.counter,'0','remove',($a.JournalPath+'.cancel'),'quoted "value" with trailing\')
+    Assert (@($case.plan.entries|Where-Object {$_.executable -ceq $case.exe}).Count -eq 2 -and $case.plan.entries[0].rawArguments -ceq $argumentText -and $case.plan.entries[0].commandLine -ceq ('"'+$case.exe+'" '+$argumentText)) 'An unquoted registry path with spaces, with or without .exe, resolves to the existing program and the rest becomes its arguments'
+    $unquoted=Read-Result (& $runScript @a)
+    $commandLines=@(Get-Content -LiteralPath ($case.counter+'.command-lines'))
+    Assert ($unquoted.status -eq 'cleanup-review-required' -and $commandLines.Count -eq 2 -and $commandLines[0] -ceq $case.plan.entries[0].commandLine -and $commandLines[1] -ceq $case.plan.entries[1].commandLine) 'Unquoted removal commands run exactly as reviewed'
+    $missingInventory=Join-Path $case.directory 'missing-inventory.json'
+    $missingApp=[pscustomobject]@{appId='fixture:unquoted-missing';displayName='Roo Industries missing remover';publisher='Roo Industries Fixture';sourceType='registry';
+        sourceIdentity=@{kind='fixture';presencePath=$case.markers[0]};risk='low';protected=$false;categories=@('application');uninstallString=(Join-Path $case.directory 'Missing Folder\uninst.exe')+' /S'}
+    [IO.File]::WriteAllText($case.markers[0],'installed')
+    Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($missingApp)} $missingInventory
+    $missing=Read-Result (& $planScript -AppId @($missingApp.appId) -InventoryPath $missingInventory -FixtureRoot $case.directory)
+    Assert ($missing.status -eq 'failed' -and $missing.errors[0].message -like '*does not start with an existing program*') 'An unquoted command whose program cannot be found is refused instead of guessed'
     $case=New-Case 'cancel' 'cancel';$a=$case.args
     $canceled=Read-Result (& $runScript @a)
     Assert ($canceled.status -eq 'canceled' -and -not(Test-Path $case.markers[0]) -and (Test-Path $case.markers[1]) -and $canceled.data.entries[1].attemptCount -eq 0) 'Cancellation between entries leaves untouched applications installed'

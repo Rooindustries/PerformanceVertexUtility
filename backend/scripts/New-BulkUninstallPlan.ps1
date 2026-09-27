@@ -44,9 +44,10 @@ try {
         } else {
             $command=[string](Get-RooIndustriesUninstallPropertyValue $app 'uninstallString' '')
             if($Quiet){$command=[string](Get-RooIndustriesUninstallPropertyValue $app 'quietUninstallString' '');if(-not $command){throw 'This app did not publish a quiet removal command.'}}
-            $parsed=Split-RooIndustriesUninstallCommandLine $command
-            $exe=[Environment]::ExpandEnvironmentVariables([string]$parsed.executable)
-            $rawArguments=[string]$parsed.arguments;$mode='raw'
+            $resolved=Resolve-RooIndustriesUninstallCommandLine $command
+            if($null -eq $resolved){throw "The removal command does not start with an existing program path, so it cannot be reviewed exactly: $command"}
+            $exe=$resolved.executable
+            $rawArguments=[string]$resolved.arguments;$mode='raw'
         }
         $hash=Get-RooIndustriesBulkExecutableHash $exe
         if ($FixtureRoot -and -not (Test-RooIndustriesCleanupPathWithin $exe $FixtureRoot)) {throw 'Fixture executable is outside the fixture directory.'}
