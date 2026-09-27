@@ -23,7 +23,7 @@ if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
 if (args is ["--firmware-native", var evidenceRoot]) { FirmwareScriptNativeChecks.Run(Check, evidenceRoot); return; }
 if (args is ["--firmware-verification"]) { FirmwareVerificationChecks.Run(Check); return; }
 if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Check); return; }
-if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
+if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
@@ -201,6 +201,7 @@ finally
 }
 Check(!Directory.Exists(root), "Core validation removes its process and operation files");
 OperationFileChecks.Run(Check);
+ReplaceRaceChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 RegistryRefusalChecks.Run(Check);
