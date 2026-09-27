@@ -109,8 +109,8 @@ which tweaks are applied. Your Windows username, PC name and user folder paths
 are removed first, and no serial numbers are collected.
 
 If this beta can't send reports online, or sending fails, press "Save report
-to a file" instead, then "Open folder", and send that zip file to the Roo
-Industries contact who gave you the beta.
+to a file" instead, then "Open folder", and send that zip file to the
+Roo Industries contact who gave you the beta.
 
 
 9. Updating and uninstalling
