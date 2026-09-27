@@ -105,7 +105,9 @@ public sealed class FirmwareWorkflow
         }
         VerifyIdentity(session, requireSameBoot: true);
         var current = new FirmwareScript(_provider.Export(directory));
+        if (!original.SameLayout(current)) throw new InvalidDataException("The BIOS layout changed after loading. Nothing was written. Load the settings again and review your changes.");
         if (!original.SameValues(current)) throw new InvalidDataException("BIOS settings changed after they were loaded. Load them again and review your changes.");
+        if (current.Crc != original.Crc) throw new InvalidDataException("The BIOS checksum changed after loading because a setting name shows a live reading. Nothing was written. Load the settings again and review your changes.");
         VerifyIdentity(session, requireSameBoot: true);
         var changeBytes = File.ReadAllBytes(Path.Combine(directory, "changes.txt"));
         if (OperationFiles.Hash(changeBytes) != review.ScriptHash) throw new InvalidDataException("The reviewed BIOS changes were modified. Review again.");
@@ -144,7 +146,9 @@ public sealed class FirmwareWorkflow
         VerifyIdentity(session, requireSameBoot: false);
         var bytes = _provider.Export(directory);
         File.WriteAllBytes(Path.Combine(directory, "verification.txt"), bytes);
-        var match = original.SameValues(new FirmwareScript(bytes), Selections(review));
+        var verification = new FirmwareScript(bytes);
+        var sameLayout = original.SameLayout(verification);
+        var match = sameLayout && original.SameValues(verification, Selections(review));
         var identity = _provider.ReadIdentity();
         if (!session.Identity.SameFirmware(identity)) throw new InvalidDataException("The motherboard or BIOS changed during verification.");
         var cleanImport = journal.Result is { Succeeded: true } && (journal.Status is "restartRequired" or "applied");
@@ -152,7 +156,8 @@ public sealed class FirmwareWorkflow
         var updated = journal with
         {
             Status = status,
-            Message = !match ? "Current BIOS values differ from the reviewed changes. Open the saved export and import log."
+            Message = !sameLayout ? "The BIOS layout no longer matches the saved export, so the reviewed values cannot be confirmed. Open the saved export and import log."
+                : !match ? "Current BIOS values differ from the reviewed changes. Open the saved export and import log."
                 : !cleanImport ? "The reviewed values are present, but the import did not finish cleanly. Inspect the import log before making another change."
                 : status == "applied" ? "The reviewed settings are still present after restart." : "The reviewed settings are present. Restart is still pending.",
             UpdatedAt = DateTimeOffset.UtcNow
@@ -164,7 +169,7 @@ public sealed class FirmwareWorkflow
     public string ReviewUndo(string directory)
     {
         var journal = OperationFiles.Read<FirmwareJournal>(Path.Combine(directory, "journal.json"));
-        var (session, _, review) = ReadReview(directory, journal.ReviewHash);
+        var (session, original, review) = ReadReview(directory, journal.ReviewHash);
         VerifyIdentity(session, requireSameBoot: false);
         var next = Load();
         try
@@ -173,11 +178,11 @@ public sealed class FirmwareWorkflow
             var selections = new Dictionary<string, string>();
             foreach (var change in review.Changes)
             {
-                var current = script.Questions.SingleOrDefault(q => q.Id == change.Id) ?? throw new InvalidDataException("A changed setting is no longer present in this BIOS.");
+                var current = original.Counterpart(original.Questions.Single(q => q.Id == change.Id), script) ?? throw new InvalidDataException("A changed setting is no longer present in this BIOS.");
                 var value = script.Validate(current, current.Current);
                 if (value == change.Before) continue;
                 if (value != change.After) throw new InvalidDataException(change.Name + " was changed again. Review it manually instead of overwriting it.");
-                selections.Add(change.Id, change.Before);
+                selections.Add(current.Id, change.Before);
             }
             Review(next, selections);
             return next;

@@ -16,7 +16,8 @@ public sealed record FirmwareWriteTestResult([property: JsonRequired] string Nam
 public sealed record FirmwareWriteTestBoard(
     [property: JsonRequired] string Board, [property: JsonRequired] string Bios, [property: JsonRequired] string Crc,
     [property: JsonRequired] int Tested, [property: JsonRequired] Dictionary<string, FirmwareWriteTestResult> Experimental);
-public sealed record FirmwareWriteTestMatch(bool SameBoard, string Source, IReadOnlyDictionary<string, FirmwareWriteTestResult> ById, IReadOnlyDictionary<string, FirmwareWriteTestResult> ByName);
+public sealed record FirmwareWriteTestMatch(bool SameBoard, string Source, IReadOnlyDictionary<string, FirmwareWriteTestResult> ById, IReadOnlyDictionary<string, FirmwareWriteTestResult> ByName,
+    IReadOnlyDictionary<string, FirmwareWriteTestResult>? ByNamePattern = null);
 public sealed record FirmwareWriteTests([property: JsonRequired] int SchemaVersion, [property: JsonRequired] FirmwareWriteTestBoard[] Boards)
 {
     public static FirmwareWriteTests Read(string path)
@@ -32,7 +33,11 @@ public sealed record FirmwareWriteTests([property: JsonRequired] int SchemaVersi
     public FirmwareWriteTestMatch For(FirmwareIdentity identity)
     {
         var same = Boards.FirstOrDefault(board => board.Board == identity.Board && board.Bios == identity.Bios);
-        if (same is not null) return new(true, same.Board, same.Experimental, new Dictionary<string, FirmwareWriteTestResult>());
+        if (same is not null)
+            return new(true, same.Board, same.Experimental, new Dictionary<string, FirmwareWriteTestResult>(),
+                same.Experimental.Values.Where(result => FirmwareScript.NamePattern(result.Name) != result.Name.Trim())
+                    .GroupBy(result => FirmwareScript.NamePattern(result.Name), StringComparer.Ordinal).Where(group => group.Count() == 1)
+                    .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal));
         var byName = new Dictionary<string, FirmwareWriteTestResult>(StringComparer.OrdinalIgnoreCase);
         foreach (var result in Boards.SelectMany(board => board.Experimental.Values).Where(result => result.Outcome != FirmwareWriteOutcomes.Protected))
             byName.TryAdd(result.Name.Trim(), result);
