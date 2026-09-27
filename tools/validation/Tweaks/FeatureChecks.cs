@@ -49,9 +49,21 @@ static class FeatureChecks
         {
             var boot = RegistryTweakStore.CurrentBoot();
             check(boot is not null && boot.Length == 37 && RegistryTweakStore.SameBoot(boot) && RegistryTweakStore.SameBoot(boot, boot),
-                "The current boot is recognised from Windows' per-boot identifier, so a pending feature check still asks for a restart");
+                "The current boot is recognised from the boot marker, so a pending feature check still asks for a restart");
             check(!RegistryTweakStore.SameBoot(boot, "boot:" + Guid.NewGuid().ToString("N")) && !RegistryTweakStore.SameBoot(null, boot) && !RegistryTweakStore.SameBoot("223", boot) && !RegistryTweakStore.SameBoot("boot:1000", boot),
-                "A different boot identifier counts as a restart");
+                "A different boot marker counts as a restart");
+            using (var machine = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64))
+            using (var product = machine.OpenSubKey(@"SOFTWARE\RooIndustriesOptimizationSuite", true)!)
+            using (var marker = product.OpenSubKey("BootMarker", true)!)
+            {
+                var name = "RooIndustriesBootMarkerProbe" + Guid.NewGuid().ToString("N");
+                using (product.CreateSubKey(name, Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree, Microsoft.Win32.RegistryOptions.None)) { }
+                product.DeleteSubKey(name);
+                var volatileOnly = false;
+                try { using (marker.CreateSubKey(name, Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree, Microsoft.Win32.RegistryOptions.None)) { } marker.DeleteSubKey(name, false); }
+                catch (IOException) { volatileOnly = true; }
+                check(volatileOnly && (string?)marker.GetValue("Id") == boot![5..], "The boot marker lives in a volatile key that Windows clears at restart, while the product key stays persistent");
+            }
         });
         Scenario("pending enable read by a later process", () =>
         {
