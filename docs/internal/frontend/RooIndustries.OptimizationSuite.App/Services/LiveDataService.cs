@@ -1056,7 +1056,7 @@ public sealed class LiveDataService
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        if (BackendScriptPolicy.Timeout(scriptPath) is { } limit) timeout.CancelAfter(limit);
 
         try
         {
@@ -1064,7 +1064,7 @@ public sealed class LiveDataService
         }
         catch (OperationCanceledException)
         {
-            TryKill(process);
+            TryKill(process, BackendScriptPolicy.StopWholeTree(scriptPath));
             AppLog.Write("backend", "Timed out running " + Path.GetFileName(scriptPath));
             return new(null, AppLog.TimedOut);
         }
@@ -1087,13 +1087,13 @@ public sealed class LiveDataService
         return new(stdout, null);
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(Process process, bool entireTree = true)
     {
         try
         {
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill(entireProcessTree: entireTree);
             }
         }
         catch
