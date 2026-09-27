@@ -50,8 +50,9 @@ namespace RooIndustries.Optimization.ProcessOutput
 
         public void Refresh()
         {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(2);
             bool added = true;
-            while (added)
+            while (added && DateTime.UtcNow < deadline)
             {
                 added = false;
                 List<Entry> snapshot = Snapshot();
@@ -71,6 +72,7 @@ namespace RooIndustries.Optimization.ProcessOutput
                     tracked[entry.ProcessId] = new Tracked { Handle = handle, Created = created, Member = Member(entry.ProcessId, created, entry.Name) };
                     added = true;
                 }
+                if (added) System.Threading.Thread.Sleep(20);
             }
         }
 
