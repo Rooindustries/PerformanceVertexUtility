@@ -42,8 +42,7 @@ try {
             $journal=(Read-RooIndustriesOperationJson $JournalPath).data
             if($journal.kind -ne 'bulk-uninstall-journal' -or $journal.plan.queueId -cne $plan.queueId){throw 'Journal belongs to a different reviewed queue.'}
             foreach($state in @($journal.entries)) {
-                $stateEntry=@($plan.entries|Where-Object {$_.entryId -ceq $state.entryId})
-                if((Test-RooIndustriesBulkInvocationLive $state.invocation) -or ($stateEntry.Count -eq 1 -and (Test-RooIndustriesBulkUnrecordedLaunchLive $stateEntry[0] $state $plan $fixtureRoot))){throw 'An app remover from this list is still running or can''t be checked. Let it finish, then start over.'}
+                if(Test-RooIndustriesBulkInvocationLive $state.invocation){throw 'An app remover from this list is still running or can''t be checked. Let it finish, then start over.'}
                 if($state.state -notin @('reboot-required','restart-initiated')){continue}
                 try {$restarted=Test-RooIndustriesBulkRestartAfterInvocation $state.invocation}
                 catch {
@@ -92,7 +91,7 @@ try {
                 if($null -ne $state.outcome -and $state.outcome.rebootRequired -and $state.state -in @('reboot-required','restart-initiated')) {
                     if(-not(Test-RooIndustriesBulkRestartAfterInvocation $state.invocation)){continue}
                 }
-                if((Test-RooIndustriesBulkInvocationLive $state.invocation) -or (Test-RooIndustriesBulkUnrecordedLaunchLive $entry $state $plan $fixtureRoot)){$state.state='needs-reconciliation';$state.error='The remover is still running or can''t be checked. Let it finish, then check again.';continue}
+                if((Test-RooIndustriesBulkInvocationLive $state.invocation)){$state.state='needs-reconciliation';$state.error='The remover is still running or can''t be checked. Let it finish, then check again.';continue}
                 if(-not(Test-RooIndustriesBulkAppPresent $entry.identity $fixtureRoot)){$state.state='removed';$state.registrationAbsent=$true;$state.error=$null;Remove-RooIndustriesBulkOwnedClaim $entry $plan $fixtureRoot}
                 else {$state.state='needs-reconciliation'}
                 continue

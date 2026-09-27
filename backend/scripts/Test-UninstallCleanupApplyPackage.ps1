@@ -201,6 +201,22 @@ public class RooIndustriesHandoffFixture {
     $jobState=Join-Path $tempRoot 'job check state'
     $jobRun=Invoke-RooIndustriesObservedRemover $handoffExe ('"' + $jobState + '" noop') $tempRoot 10 { param($invocation) if ($null -eq $script:firstRecord) { $script:firstRecord=[pscustomobject]@{ treeContained=[bool]$invocation.treeContained; processId=$invocation.processId } } } ('"' + $handoffExe + '" "' + $jobState + '" noop')
     Assert ($jobRun.processStarted -and $null -ne $script:firstRecord -and $script:firstRecord.treeContained -and [int]$script:firstRecord.processId -gt 0) 'The first record of a launched remover already shows it inside its tracking job'
+    $powershellExe=Join-Path $PSHOME 'powershell.exe'
+    $powershellArgs='-NoProfile -NonInteractive -Command "[Console]::Out.Write(''appx route''); exit 7"'
+    $powershellRun=Invoke-RooIndustriesObservedRemover $powershellExe $powershellArgs $tempRoot 30 $null (Get-RooIndustriesUninstallCommandLine $powershellExe $powershellArgs)
+    Assert ($powershellRun.processStarted -and $powershellRun.exitCode -eq 7 -and $powershellRun.stdout -like '*appx route*') "A PowerShell (Appx-style) remover starts suspended, resumes and reports its exit code and output ($($powershellRun.exitCode) $($powershellRun.startError))"
+    $manifest=Join-Path $tempRoot 'require-administrator.manifest'
+    Set-Content -LiteralPath $manifest -Encoding UTF8 -Value '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges><requestedExecutionLevel level="requireAdministrator" uiAccess="false"/></requestedPrivileges></security></trustInfo></assembly>'
+    $adminExe=Join-Path $tempRoot 'Roo Industries Admin Remover.exe'
+    $adminSource=Join-Path $tempRoot 'admin remover.cs'
+    Set-Content -LiteralPath $adminSource -Encoding UTF8 -Value 'public static class RooIndustriesAdminRemover { public static int Main() { return 3; } }'
+    & (Join-Path ([Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'csc.exe') /nologo /target:exe "/win32manifest:$manifest" "/out:$adminExe" "$adminSource" | Out-Null
+    $adminRun=Invoke-RooIndustriesObservedRemover $adminExe '' $tempRoot 30 $null (Get-RooIndustriesUninstallCommandLine $adminExe '')
+    Assert ($adminRun.processStarted -and $adminRun.exitCode -eq 3) "A remover whose manifest requires administrator starts from the elevated host ($($adminRun.exitCode) $($adminRun.startError))"
+    $msiexec=Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
+    $msiArgs='/x {00000000-1111-2222-3333-444444444444} /qn /norestart'
+    $msiRun=Invoke-RooIndustriesObservedRemover $msiexec $msiArgs $tempRoot 60 $null (Get-RooIndustriesUninstallCommandLine $msiexec $msiArgs)
+    Assert ($msiRun.processStarted -and $msiRun.exitCode -eq 1605) "msiexec starts suspended, resumes and reports an unknown product ($($msiRun.exitCode) $($msiRun.startError))"
     $rootProcess.Kill(); Assert ($rootProcess.WaitForExit(10000)) 'Disposable hung remover is explicitly stopped and its exit verified'
     $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
     $afterStale=Read-Result (& $applyScript @secondArgs)
@@ -224,48 +240,56 @@ public class RooIndustriesHandoffFixture {
     $case=New-HandoffCase 'fixture-root-without-switch' 'handoff'; $a=$case.args; $a.Remove('AllowFixtureClaims')
     $result=Read-Result (& $applyScript @a)
     Assert ($result.status -eq 'failed' -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) 'A fixture claim root is refused unless the validation switch is passed'
-    $case=New-HandoffCase 'stopped-after-launch' 'hang'; $a=$case.args
-    $argsPath=Join-Path $case.root 'apply arguments.json'
-    $a | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
-    $stoppedScript=Join-Path $case.root 'stopped after launch.ps1'
-    Set-Content -LiteralPath $stoppedScript -Encoding UTF8 -Value @'
-param([string]$ApplyScript,[string]$ArgumentsPath,[string]$OutputPath)
-$ErrorActionPreference='Stop'
-Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public void Dispose() {} } }'
-$values=@{}; (Get-Content -LiteralPath $ArgumentsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $values[$_.Name]=$_.Value }
-$values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
-& $ApplyScript @values *> $OutputPath
+    $killBeforeRecord=@'
+Import-Module Microsoft.PowerShell.Management
+function global:Get-ItemProperty {
+    [CmdletBinding()] param([string]$LiteralPath, [string[]]$Name)
+    if ($Name -contains 'BootId') { [Diagnostics.Process]::GetCurrentProcess().Kill() }
+    Microsoft.PowerShell.Management\Get-ItemProperty @PSBoundParameters
+}
 '@
-    $stoppedLog=Join-Path $case.root 'stopped after launch.log'
-    $stoppedStart=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'), ('-NoProfile -ExecutionPolicy Bypass -File "' + $stoppedScript + '" -ApplyScript "' + $applyScript + '" -ArgumentsPath "' + $argsPath + '" -OutputPath "' + $stoppedLog + '"'))
-    $stoppedStart.UseShellExecute=$false; $stoppedStart.CreateNoWindow=$true
-    $stoppedRun=[Diagnostics.Process]::Start($stoppedStart)
-    Assert ($stoppedRun.WaitForExit(60000)) 'The interrupted leftover run returns without waiting for its remover'
-    $stoppedOutput=if (Test-Path -LiteralPath $stoppedLog) { Get-Content -LiteralPath $stoppedLog } else { @() }
+    $killAfterRecord=@'
+Import-Module Microsoft.PowerShell.Utility
+function global:Start-Sleep {
+    [CmdletBinding()] param([int]$Seconds, [int]$Milliseconds)
+    if ($Milliseconds -eq 250) { [Diagnostics.Process]::GetCurrentProcess().Kill() }
+    Microsoft.PowerShell.Utility\Start-Sleep @PSBoundParameters
+}
+'@
+    $case=New-HandoffCase 'host-killed-before-record' 'hang'; $a=$case.args
+    [void](Invoke-ChildApply $a $killBeforeRecord $case.root)
+    $settle=[DateTime]::UtcNow.AddSeconds(10)
+    while (@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) }).Count -gt 0 -and [DateTime]::UtcNow -lt $settle) { Start-Sleep -Milliseconds 100 }
+    Start-Sleep -Seconds 1
+    $unrecordedClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    $leftBehind=@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) }).Count
+    Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and $leftBehind -eq 0 -and $null -ne $unrecordedClaim -and $null -eq $unrecordedClaim.invocation) "A leftover run killed before it records its remover leaves a remover that never ran ($leftBehind left)"
+    $afterKilled=New-HandoffCase 'after-host-killed-before-record' 'handoff'; $afterArgs=$afterKilled.args
+    $clearedKilled=Read-Result (& $applyScript @afterArgs)
+    Assert ($clearedKilled.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterKilled.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'The next leftover run clears a claim whose remover never ran'
+    $case=New-HandoffCase 'host-killed-after-record' 'hang'; $a=$case.args
+    [void](Invoke-ChildApply $a $killAfterRecord $case.root)
     $launchDeadline=[DateTime]::UtcNow.AddSeconds(15)
     while (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and [DateTime]::UtcNow -lt $launchDeadline) { Start-Sleep -Milliseconds 100 }
-    $stoppedClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
-    if ($null -eq $stoppedClaim -or $null -eq $stoppedClaim.invocation) { Write-Host ($stoppedOutput -join [Environment]::NewLine) }
-    Assert ((Test-Path -LiteralPath ($case.remover+'.launches')) -and $null -ne $stoppedClaim -and $stoppedClaim.kind -eq 'cleanup-apply' -and $stoppedClaim.launchConfirmed -and [int]$stoppedClaim.invocation.processId -gt 0 -and $stoppedClaim.executable -ieq $handoffExe) 'A stop right after launch still leaves the remover process and its file in the claim'
-    $blockedCase=New-HandoffCase 'while-stopped-remover-runs' 'handoff'; $blockedArgs=$blockedCase.args
+    $recordedClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    Assert ($null -ne $recordedClaim -and [int]$recordedClaim.invocation.processId -gt 0 -and (Test-Path -LiteralPath ($case.remover+'.launches'))) 'A leftover run killed after it records its remover leaves that remover running and recorded'
+    $blockedCase=New-HandoffCase 'while-recorded-remover-runs' 'handoff'; $blockedArgs=$blockedCase.args
     $refused=Read-Result (& $applyScript @blockedArgs)
-    Assert ($refused.status -eq 'failed' -and -not (Test-Path -LiteralPath ($blockedCase.remover+'.launches')) -and (Test-Path -LiteralPath $claimPath)) 'Another removal is refused while the remover from an interrupted run is still alive'
-    $stoppedProcess=[Diagnostics.Process]::GetProcessById([int]$stoppedClaim.invocation.processId)
-    $stoppedProcess.Kill(); Assert ($stoppedProcess.WaitForExit(10000)) 'Disposable interrupted remover is explicitly stopped and its exit verified'
-    $afterStopped=New-HandoffCase 'after-stopped-remover' 'handoff'; $afterArgs=$afterStopped.args
-    $cleared=Read-Result (& $applyScript @afterArgs)
-    Assert ($cleared.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterStopped.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'Once the interrupted remover has exited, a later removal clears its claim'
-    $pendingRemover=Join-Path $tempRoot 'pending remover state'
-    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind='cleanup-apply'; appId='fixture:app'; executable=$handoffExe; claimedAtUtc=(Get-RooIndustriesUtcStamp); launchConfirmed=$false; invocation=$null }) $claimPath
-    $pendingStart=[Diagnostics.ProcessStartInfo]::new($handoffExe, ('"' + $pendingRemover + '" hang')); $pendingStart.UseShellExecute=$false; $pendingStart.CreateNoWindow=$true
-    $pending=[Diagnostics.Process]::Start($pendingStart)
-    $case=New-HandoffCase 'unconfirmed-while-remover-runs' 'handoff'; $a=$case.args
-    $refusedPending=Read-Result (& $applyScript @a)
-    Assert ($refusedPending.status -eq 'failed' -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim still blocks while a process of its remover file started after the claim'
-    $pending.Kill(); Assert ($pending.WaitForExit(10000)) 'Disposable pending remover is explicitly stopped and its exit verified'
-    $case=New-HandoffCase 'unconfirmed-after-remover-exits' 'handoff'; $a=$case.args
-    $clearedPending=Read-Result (& $applyScript @a)
-    Assert ($clearedPending.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($case.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim is cleared once no process of its remover file is running'
+    Assert ($refused.status -eq 'failed' -and -not (Test-Path -LiteralPath ($blockedCase.remover+'.launches')) -and (Test-Path -LiteralPath $claimPath)) 'Another removal is refused while the recorded remover from a killed run is alive'
+    $recordedProcess=[Diagnostics.Process]::GetProcessById([int]$recordedClaim.invocation.processId)
+    $recordedProcess.Kill(); Assert ($recordedProcess.WaitForExit(10000)) 'Disposable recorded remover is explicitly stopped and its exit verified'
+    $afterRecorded=New-HandoffCase 'after-recorded-remover' 'handoff'; $afterArgs=$afterRecorded.args
+    $clearedRecorded=Read-Result (& $applyScript @afterArgs)
+    Assert ($clearedRecorded.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterRecorded.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'Once the recorded remover has exited, a later removal clears its claim'
+    $powershellExe=Join-Path $PSHOME 'powershell.exe'
+    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind='cleanup-apply'; appId='fixture:app'; executable=$powershellExe; claimedAtUtc=(Get-RooIndustriesUtcStamp); launchConfirmed=$false; invocation=$null }) $claimPath
+    $unrelatedStart=[Diagnostics.ProcessStartInfo]::new($powershellExe, '-NoProfile -Command Start-Sleep -Seconds 60'); $unrelatedStart.UseShellExecute=$false; $unrelatedStart.CreateNoWindow=$true
+    $unrelated=[Diagnostics.Process]::Start($unrelatedStart)
+    try {
+        $case=New-HandoffCase 'appx-style-claim' 'handoff'; $a=$case.args
+        $appxCleared=Read-Result (& $applyScript @a)
+    } finally { if (-not $unrelated.HasExited) { $unrelated.Kill() }; [void]$unrelated.WaitForExit(10000) }
+    Assert ($appxCleared.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($case.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'A claim with no recorded remover is cleared even while an unrelated powershell.exe runs'
     $case=New-Case 'self-deleting-remover'; $a=$case.args
     $ownExe=Join-Path $case.root 'Roo Industries Self Deleting Remover.exe'; Copy-Item -LiteralPath $handoffExe -Destination $ownExe
     $case.remover=Join-Path $case.root 'remover state'
@@ -303,7 +327,7 @@ function global:Get-FileHash {
     Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path -LiteralPath $claimPath) -and (($swappedOutput -join ' ') -like '*changed after review*')) 'A remover swapped after the review gate but before launch is caught by the locked re-hash'
     $case=New-HandoffCase 'capture-dispose-throws' 'hang'; $a=$case.args; $a.TimeoutSeconds=3
     $capturePrelude=@'
-Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Capture : System.IDisposable { public Capture(System.Diagnostics.Process process, int limit) {} public bool Complete(int timeout) { return true; } public string Stdout { get { return ""; } } public string Stderr { get { return ""; } } public bool Truncated { get { return false; } } public void Dispose() { throw new System.InvalidOperationException("Simulated failure while closing output."); } } }'
+Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Capture : System.IDisposable { public Capture(System.IO.Stream stdout, System.IO.Stream stderr, int limit) {} public bool Complete(int timeout) { return true; } public string Stdout { get { return ""; } } public string Stderr { get { return ""; } } public bool Truncated { get { return false; } } public void Dispose() { throw new System.InvalidOperationException("Simulated failure while closing output."); } } }'
 '@
     $captureOutput=Invoke-ChildApply $a $capturePrelude $case.root
     $keptClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
@@ -317,25 +341,29 @@ Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { p
     Set-Remover $case $whoami @()
     $realRemover=Read-Result (& $applyScript @a)
     Assert ($realRemover.status -eq 'failed' -and @($realRemover.executionSequence).Count -eq 0 -and -not (Test-Path $a.RollbackManifestPath)) 'Fixture claims are refused for a remover outside the fixture root'
-    $claimDir=Join-Path $tempRoot 'claim checks'; New-Item -ItemType Directory -Path $claimDir | Out-Null
-    $namedExe=Join-Path $claimDir 'Vendor Uninstaller With Long Name.exe'; Copy-Item -LiteralPath $handoffExe -Destination $namedExe
-    $shortExe=(New-Object -ComObject Scripting.FileSystemObject).GetFile($namedExe).ShortPath
-    $claimedNow=Get-RooIndustriesUtcStamp
-    $longStart=[Diagnostics.ProcessStartInfo]::new($namedExe, ('"' + (Join-Path $claimDir 'long state') + '" hang')); $longStart.UseShellExecute=$false; $longStart.CreateNoWindow=$true
-    $longProcess=[Diagnostics.Process]::Start($longStart)
-    try { $shortLive=Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$shortExe; claimedAtUtc=$claimedNow; invocation=$null }) } finally { $longProcess.Kill(); [void]$longProcess.WaitForExit(10000) }
-    Assert ($shortExe -ne $namedExe -and $shortLive) "An unconfirmed claim recorded with a short 8.3 path still sees its running remover ($shortExe)"
-    $nsisDir=Join-Path $claimDir '~nsu.tmp'; New-Item -ItemType Directory -Path $nsisDir | Out-Null
-    $nsisCopy=Join-Path $nsisDir 'Au_.exe'; Copy-Item -LiteralPath $handoffExe -Destination $nsisCopy
-    $claimedNow=Get-RooIndustriesUtcStamp
-    $copyStart=[Diagnostics.ProcessStartInfo]::new($nsisCopy, ('"' + (Join-Path $claimDir 'copy state') + '" hang')); $copyStart.UseShellExecute=$false; $copyStart.CreateNoWindow=$true
-    $copyProcess=[Diagnostics.Process]::Start($copyStart)
-    try { $copyLive=Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$namedExe; claimedAtUtc=$claimedNow; invocation=$null }) } finally { $copyProcess.Kill(); [void]$copyProcess.WaitForExit(10000) }
-    Assert $copyLive 'An unconfirmed claim still sees a remover that handed off to its temporary Au_.exe copy'
-    function Get-CimInstance { throw 'Simulated WMI failure' }
-    try { $wmiMessage=''; try { [void](Test-RooIndustriesBulkClaimLive ([pscustomobject]@{ executable=$namedExe; claimedAtUtc=(Get-RooIndustriesUtcStamp); invocation=$null })) } catch { $wmiMessage=$_.Exception.Message } }
-    finally { Remove-Item -LiteralPath Function:\Get-CimInstance }
-    Assert ($wmiMessage -like 'Windows could not list running processes*') "A broken process list refuses with a clear message ($wmiMessage)"
+    $case=New-Case 'linked-inside-lease'; $a=$case.args
+    $binDir=Join-Path $case.root 'bin'; New-Item -ItemType Directory -Path $binDir | Out-Null
+    Copy-Item -LiteralPath $handoffExe -Destination (Join-Path $binDir 'remover.exe')
+    $case.remover=Join-Path $case.root 'remover state'
+    Set-Remover $case (Join-Path $binDir 'remover.exe') @($case.remover, 'handoff')
+    $linkPrelude=@'
+Import-Module Microsoft.PowerShell.Utility
+function global:Get-FileHash {
+    [CmdletBinding()] param([string]$LiteralPath, [string]$Algorithm)
+    $value = Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
+    if ($LiteralPath -like '*\linked-inside-lease\bin\remover.exe' -and -not $global:RooLinked) {
+        $global:RooLinked = $true
+        $bin = Split-Path $LiteralPath -Parent
+        [IO.Directory]::Move($bin, $bin + '-real')
+        cmd.exe /c mklink /J "$bin" "$bin-real" | Out-Null
+    }
+    return $value
+}
+'@
+    $linkedOutput=Invoke-ChildApply $a $linkPrelude $case.root
+    $linkedJunction=(Get-Item -LiteralPath $binDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint
+    cmd.exe /c rmdir "$binDir" | Out-Null
+    Assert ($linkedJunction -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path -LiteralPath $claimPath) -and (($linkedOutput -join ' ') -like '*reached through a link*')) 'A remover path that becomes a link after the review gate is refused inside the launch lease'
     $waitShell=[powershell]::Create()
     [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null; $tree.Count')
     $waitWatch=[Diagnostics.Stopwatch]::StartNew()
