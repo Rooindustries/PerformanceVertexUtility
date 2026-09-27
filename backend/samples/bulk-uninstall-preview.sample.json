@@ -32,6 +32,7 @@
         "argumentMode": "raw",
         "arguments": [],
         "rawArguments": "/uninstall",
+        "commandLine": "\"C:\\Fixture\\Example\\Uninstall.exe\" /uninstall",
         "workingDirectory": "C:\\Fixture\\Example",
         "exitCodePolicy": "generic",
         "protected": false,
