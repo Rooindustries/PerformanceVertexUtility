@@ -366,10 +366,20 @@ public class RooIndustriesBulkFixture {
 
 } finally {
     foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.Name -ieq 'msiexec.exe' -and $_.CommandLine -like "*$msiCode*"})){Stop-Process -Id $process.ProcessId -Force}
-    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)})){$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$process.ProcessId))|Out-Null}
+    $tracked=@($liveFixtures|ForEach-Object {$_.Id})
+    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)})){
+        if([int]$process.ProcessId -in $tracked){continue}
+        try {$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$process.ProcessId))|Out-Null} catch {}
+    }
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($msiKeyPath,$false)
     if(Test-Path -LiteralPath $msiClaim){Remove-Item -LiteralPath $msiClaim -Force}
-    foreach($process in $liveFixtures){if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){throw 'Bulk fixture process did not exit'};$process.Dispose()}
-    if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}
+    $cleanupErrors=@()
+    foreach($process in $liveFixtures){
+        try {if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){$cleanupErrors+='Bulk fixture process '+$process.Id+' did not exit'}}
+        catch {$cleanupErrors+='Bulk fixture process cleanup failed: '+$_.Exception.Message}
+        finally {$process.Dispose()}
+    }
+    if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}
 }
+if($cleanupErrors.Count){throw ($cleanupErrors -join '; ')}
 Assert (-not(Test-Path $root) -and -not(Test-Path -LiteralPath ('HKCU:\'+$msiKeyPath)) -and -not(Test-Path -LiteralPath $msiClaim)) 'Bulk tests leave no fixture process, presence marker, registration, claim or journal behind'
