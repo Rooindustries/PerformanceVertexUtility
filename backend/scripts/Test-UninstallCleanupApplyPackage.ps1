@@ -267,6 +267,15 @@ function global:Start-Sleep {
     $afterKilled=New-HandoffCase 'after-host-killed-before-record' 'handoff'; $afterArgs=$afterKilled.args
     $clearedKilled=Read-Result (& $applyScript @afterArgs)
     Assert ($clearedKilled.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterKilled.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'The next leftover run clears a claim whose remover never ran'
+    $case=New-HandoffCase 'host-killed-after-create' 'hang'; $a=$case.args
+    $treeSource=Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessTree.cs'
+    $killAfterCreate="Add-Type -Path '$treeSource'`n[RooIndustries.Optimization.ProcessOutput.Launch]::AfterCreateForTests=[Action]{ [Diagnostics.Process]::GetCurrentProcess().Kill() }"
+    [void](Invoke-ChildApply $a $killAfterCreate $case.root)
+    $settle=[DateTime]::UtcNow.AddSeconds(10)
+    while (@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) }).Count -gt 0 -and [DateTime]::UtcNow -lt $settle) { Start-Sleep -Milliseconds 100 }
+    $orphans=@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) })
+    foreach ($orphan in $orphans) { Stop-Process -Id $orphan.ProcessId -Force -ErrorAction SilentlyContinue }
+    Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and $orphans.Count -eq 0) "A host killed right after creating the suspended remover leaves no remover process behind ($($orphans.Count) left)"
     $case=New-HandoffCase 'host-killed-after-record' 'hang'; $a=$case.args
     [void](Invoke-ChildApply $a $killAfterRecord $case.root)
     $launchDeadline=[DateTime]::UtcNow.AddSeconds(15)
