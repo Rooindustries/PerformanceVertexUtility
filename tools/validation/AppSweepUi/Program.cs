@@ -906,6 +906,11 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     finally { File.Delete(rollback); }
 }
 
+Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\Invoke-UninstallCleanupApplyPackage.ps1") is null
+    && !RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\invoke-uninstallcleanupapplypackage.ps1"),
+    "The Leftover cleanup remover script has no app-side time limit and a cancel never kills the uninstaller it started");
+Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1") == TimeSpan.FromSeconds(45) && RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1"),
+    "Other backend scripts keep the 45 second limit and stop their whole process tree");
 await BulkRemovalChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 
