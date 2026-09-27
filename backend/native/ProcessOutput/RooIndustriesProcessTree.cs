@@ -23,6 +23,7 @@ namespace RooIndustries.Optimization.ProcessOutput
         }
 
         private readonly IntPtr job;
+        private readonly bool ownsJob = true;
         private readonly int rootId;
         private readonly Dictionary<int, Tracked> tracked = new Dictionary<int, Tracked>();
         private readonly HashSet<int> ignored = new HashSet<int>();
@@ -46,6 +47,19 @@ namespace RooIndustries.Optimization.ProcessOutput
             long created;
             if (!Created(handle, out created)) { int error = Marshal.GetLastWin32Error(); CloseHandle(handle); if (job != IntPtr.Zero) CloseHandle(job); throw new Win32Exception(error, "The remover start time could not be read."); }
             tracked[rootId] = new Tracked { Handle = handle, Created = created, Member = Member(rootId, created, System.IO.Path.GetFileName(root.StartInfo.FileName)) };
+        }
+
+        public Tree(Launch launch)
+        {
+            rootId = launch.Id;
+            job = launch.JobHandle;
+            ownsJob = false;
+            Contained = true;
+            IntPtr handle = OpenProcess(0x101000, false, rootId);
+            if (handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover process could not be observed.");
+            long created;
+            if (!Created(handle, out created)) { int error = Marshal.GetLastWin32Error(); CloseHandle(handle); throw new Win32Exception(error, "The remover start time could not be read."); }
+            tracked[rootId] = new Tracked { Handle = handle, Created = created, Member = Member(rootId, created, System.IO.Path.GetFileName(launch.FileName)) };
         }
 
         public void Refresh()
@@ -92,33 +106,31 @@ namespace RooIndustries.Optimization.ProcessOutput
             return result.ToArray();
         }
 
-        public static bool IsRunning(int processId, string creationTimeFileTimeUtc)
+        public static int Probe(int processId, string creationTimeFileTimeUtc)
         {
             IntPtr handle = OpenProcess(0x101000, false, processId);
-            if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error() != 87;
+            if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error() == 87 ? 0 : 2;
             try
             {
                 long created;
-                if (!Created(handle, out created)) return true;
-                return created.ToString(System.Globalization.CultureInfo.InvariantCulture) == creationTimeFileTimeUtc && WaitForSingleObject(handle, 0) != 0;
+                if (!Created(handle, out created)) return 2;
+                if (created.ToString(System.Globalization.CultureInfo.InvariantCulture) != creationTimeFileTimeUtc) return 0;
+                uint state = WaitForSingleObject(handle, 0);
+                return state == 0x102 ? 1 : state == 0 ? 0 : 2;
             }
             finally { CloseHandle(handle); }
         }
 
-        public static string LongPath(string path)
+        public static bool IsRunning(int processId, string creationTimeFileTimeUtc)
         {
-            if (string.IsNullOrEmpty(path)) return path;
-            System.Text.StringBuilder buffer = new System.Text.StringBuilder(1024);
-            uint length = GetLongPathNameW(path, buffer, (uint)buffer.Capacity);
-            if (length == 0 || length >= buffer.Capacity) return path;
-            return buffer.ToString();
+            return Probe(processId, creationTimeFileTimeUtc) != 0;
         }
 
         public void Dispose()
         {
             foreach (Tracked item in tracked.Values) CloseHandle(item.Handle);
             tracked.Clear();
-            if (job != IntPtr.Zero) CloseHandle(job);
+            if (ownsJob && job != IntPtr.Zero) CloseHandle(job);
         }
 
         private static TreeMember Member(int processId, long created, string name)
@@ -223,6 +235,158 @@ namespace RooIndustries.Optimization.ProcessOutput
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(IntPtr handle);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint length);
+    }
+
+    public sealed class Launch : IDisposable
+    {
+        private IntPtr job, process, thread;
+
+        public int Id { get; private set; }
+        public string FileName { get; private set; }
+        public string CreationTimeFileTimeUtc { get; private set; }
+        public System.IO.Stream Stdout { get; private set; }
+        public System.IO.Stream Stderr { get; private set; }
+        public bool Resumed { get; private set; }
+        public IntPtr JobHandle { get { return job; } }
+        public bool HasExited { get { return WaitForSingleObject(process, 0) == 0; } }
+        public int ExitCode
+        {
+            get
+            {
+                uint code;
+                if (!GetExitCodeProcess(process, out code)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover exit code could not be read.");
+                return unchecked((int)code);
+            }
+        }
+
+        private Launch() { }
+
+        public static Launch Suspended(string fileName, string arguments, string workingDirectory)
+        {
+            Launch launch = new Launch();
+            launch.FileName = fileName;
+            IntPtr outRead = IntPtr.Zero, outWrite = IntPtr.Zero, errorRead = IntPtr.Zero, errorWrite = IntPtr.Zero;
+            try
+            {
+                launch.job = CreateJobObjectW(IntPtr.Zero, null);
+                if (launch.job == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover job could not be created.");
+                ExtendedLimits limits = new ExtendedLimits();
+                limits.LimitFlags = 0x2000 | 0x800;
+                if (!SetInformationJobObject(launch.job, 9, ref limits, (uint)Marshal.SizeOf(typeof(ExtendedLimits)))) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover job could not be prepared.");
+                SecurityAttributes inherit = new SecurityAttributes();
+                inherit.Length = Marshal.SizeOf(typeof(SecurityAttributes));
+                inherit.InheritHandle = 1;
+                if (!CreatePipe(out outRead, out outWrite, ref inherit, 0) || !CreatePipe(out errorRead, out errorWrite, ref inherit, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover output pipes could not be created.");
+                if (!SetHandleInformation(outRead, 1, 0) || !SetHandleInformation(errorRead, 1, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover output pipes could not be prepared.");
+                StartupInfo startup = new StartupInfo();
+                startup.Size = Marshal.SizeOf(typeof(StartupInfo));
+                startup.Flags = 0x100;
+                startup.StdInput = GetStdHandle(-10);
+                startup.StdOutput = outWrite;
+                startup.StdError = errorWrite;
+                System.Text.StringBuilder commandLine = new System.Text.StringBuilder("\"" + fileName + "\"" + (string.IsNullOrEmpty(arguments) ? "" : " " + arguments));
+                ProcessInformation info;
+                if (!CreateProcessW(fileName, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0x4 | 0x08000000, IntPtr.Zero, string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory, ref startup, out info))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                launch.process = info.Process;
+                launch.thread = info.Thread;
+                launch.Id = info.ProcessId;
+                if (!AssignProcessToJobObject(launch.job, launch.process))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    TerminateProcess(launch.process, 1);
+                    throw new Win32Exception(error, "The remover could not be placed in its tracking job, so it was not started.");
+                }
+                long created, exit, kernel, user;
+                if (!GetProcessTimes(launch.process, out created, out exit, out kernel, out user))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    TerminateProcess(launch.process, 1);
+                    throw new Win32Exception(error, "The remover start time could not be read, so it was not started.");
+                }
+                launch.CreationTimeFileTimeUtc = created.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                CloseHandle(outWrite); outWrite = IntPtr.Zero;
+                CloseHandle(errorWrite); errorWrite = IntPtr.Zero;
+                launch.Stdout = new System.IO.FileStream(new Microsoft.Win32.SafeHandles.SafeFileHandle(outRead, true), System.IO.FileAccess.Read, 4096, false); outRead = IntPtr.Zero;
+                launch.Stderr = new System.IO.FileStream(new Microsoft.Win32.SafeHandles.SafeFileHandle(errorRead, true), System.IO.FileAccess.Read, 4096, false); errorRead = IntPtr.Zero;
+                return launch;
+            }
+            catch
+            {
+                foreach (IntPtr handle in new[] { outRead, outWrite, errorRead, errorWrite }) if (handle != IntPtr.Zero) CloseHandle(handle);
+                launch.Dispose();
+                throw;
+            }
+        }
+
+        public void Resume()
+        {
+            ExtendedLimits limits = new ExtendedLimits();
+            limits.LimitFlags = 0x800;
+            if (!SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf(typeof(ExtendedLimits)))) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover job could not be released, so the remover was not started.");
+            if (ResumeThread(thread) == 0xFFFFFFFF) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover could not be resumed.");
+            Resumed = true;
+        }
+
+        public void Dispose()
+        {
+            if (Stdout != null) Stdout.Dispose();
+            if (Stderr != null) Stderr.Dispose();
+            if (thread != IntPtr.Zero) { CloseHandle(thread); thread = IntPtr.Zero; }
+            if (process != IntPtr.Zero) { CloseHandle(process); process = IntPtr.Zero; }
+            if (job != IntPtr.Zero) { CloseHandle(job); job = IntPtr.Zero; }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ExtendedLimits
+        {
+            public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+            public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
+            public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SecurityAttributes
+        {
+            public int Length;
+            public IntPtr Descriptor;
+            public int InheritHandle;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct StartupInfo
+        {
+            public int Size;
+            public string Reserved, Desktop, Title;
+            public int X, Y, XSize, YSize, XCountChars, YCountChars, FillAttribute, Flags;
+            public short ShowWindow, Reserved2;
+            public IntPtr Reserved3, StdInput, StdOutput, StdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ProcessInformation
+        {
+            public IntPtr Process, Thread;
+            public int ProcessId, ThreadId;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits value, uint size);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CreatePipe(out IntPtr read, out IntPtr write, ref SecurityAttributes attributes, uint size);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr GetStdHandle(int kind);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool CreateProcessW(string application, System.Text.StringBuilder commandLine, IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, uint flags, IntPtr environment, string directory, ref StartupInfo startup, out ProcessInformation information);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern uint ResumeThread(IntPtr thread);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool TerminateProcess(IntPtr process, uint code);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(IntPtr handle);
     }
 }

@@ -10,9 +10,21 @@ $msiCode=[guid]::NewGuid().ToString('B').ToUpperInvariant()
 $msiKeyPath='Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$msiCode
 $msiAppId='registry:roo-industries-msi-fixture-'+$msiCode
 $msiClaim=Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId=$msiAppId})
-function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted,[switch]$BrokenExe) {
+function Invoke-ChildQueue([hashtable]$Arguments,[string]$Prelude,[string]$Directory) {
+    $argsPath=Join-Path $Directory ('child arguments '+[guid]::NewGuid().ToString('N')+'.json');$Arguments|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $argsPath -Encoding UTF8
+    $script=Join-Path $Directory ('child run '+[guid]::NewGuid().ToString('N')+'.ps1');$log=$script+'.log'
+    Set-Content -LiteralPath $script -Encoding UTF8 -Value ("param([string]`$RunScript,[string]`$ArgumentsPath,[string]`$OutputPath)`n`$ErrorActionPreference='Stop'`n"+$Prelude+"`n`$values=@{};(Get-Content -LiteralPath `$ArgumentsPath -Raw|ConvertFrom-Json).PSObject.Properties|ForEach-Object {`$values[`$_.Name]=`$_.Value}`n& `$RunScript @values *> `$OutputPath`n")
+    $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -ExecutionPolicy Bypass -File "'+$script+'" -RunScript "'+$runScript+'" -ArgumentsPath "'+$argsPath+'" -OutputPath "'+$log+'"'))
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $child=[Diagnostics.Process]::Start($start)
+    if(-not $child.WaitForExit(90000)){$child.Kill();throw 'The child queue run did not return.'}
+    if(Test-Path -LiteralPath $log){return @(Get-Content -LiteralPath $log)}
+    return @()
+}
+function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted,[switch]$BrokenExe,[switch]$ExeInBin) {
     $directory=Join-Path $root $Name;[IO.Directory]::CreateDirectory($directory)|Out-Null
-    $exe=Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
+    $exe=if($ExeInBin){Join-Path $directory 'bin\Roo Industries Bulk Removal Fixture.exe'}else{Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe'}
+    [IO.Directory]::CreateDirectory((Split-Path $exe -Parent))|Out-Null;Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
     if($BrokenExe){[IO.File]::WriteAllText($exe,'This fixture is not a Windows program.')}
     $journalPath=Join-Path $directory 'journal.json';$counter=Join-Path $directory 'launch count.txt'
     $apps=@();$markers=@()
@@ -255,6 +267,10 @@ public class RooIndustriesBulkFixture {
         $currentBootId=Get-RooIndustriesBootId
         $otherBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId='roo-industries-other-boot';descendants=@()})
         $sameBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId=$currentBootId;descendants=@()})
+        $self=[Diagnostics.Process]::GetCurrentProcess()
+        $hibernated=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();bootId='roo-industries-other-boot';descendants=@()})
+        $shiftedSameBoot=Test-RooIndustriesBulkRestartAfterInvocation ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();bootId=$currentBootId})
+        $shiftedOtherBoot=Test-RooIndustriesBulkRestartAfterInvocation ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(1).ToFileTimeUtc().ToString();bootId='roo-industries-other-boot'})
         $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
         $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
     } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
@@ -263,43 +279,79 @@ public class RooIndustriesBulkFixture {
     Assert (-not $reusedAfterRestart) 'A remover recorded well before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
     Assert $nearBoot 'A remover recorded just before the reported boot time is still checked, so a clock jump cannot make it look stopped'
     Assert ($currentBootId -and -not $otherBoot -and $sameBoot) "The recorded Windows boot ID decides whether a remover belongs to an earlier boot (current boot ID $currentBootId)"
+    Assert $hibernated 'A readable process whose ID and start time still match stays running even under a different boot ID'
+    Assert (-not $shiftedSameBoot -and $shiftedOtherBoot) 'A restart is recognised only when the boot ID changed, even when the boot time looks later than the remover'
     Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
     Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
     $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
-    $case=New-Case 'queue-stopped-after-launch' 'wait';$a=$case.args
-    $childArgs=Join-Path $case.directory 'child arguments.json';$a|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $childArgs -Encoding UTF8
-    $childScript=Join-Path $case.directory 'stopped after launch.ps1';$childLog=$childScript+'.log'
-    Set-Content -LiteralPath $childScript -Encoding UTF8 -Value @'
-param([string]$RunScript,[string]$ArgumentsPath,[string]$OutputPath)
-$ErrorActionPreference='Stop'
-Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public int Count { get { return 0; } } public void Dispose() {} } }'
-$values=@{};(Get-Content -LiteralPath $ArgumentsPath -Raw|ConvertFrom-Json).PSObject.Properties|ForEach-Object {$values[$_.Name]=$_.Value}
-& $RunScript @values *> $OutputPath
+    $killBeforeRecord=@'
+Import-Module Microsoft.PowerShell.Management
+function global:Get-ItemProperty {
+    [CmdletBinding()] param([string]$LiteralPath,[string[]]$Name)
+    if($Name -contains 'BootId'){[Diagnostics.Process]::GetCurrentProcess().Kill()}
+    Microsoft.PowerShell.Management\Get-ItemProperty @PSBoundParameters
+}
 '@
-    $childStart=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -ExecutionPolicy Bypass -File "'+$childScript+'" -RunScript "'+$runScript+'" -ArgumentsPath "'+$childArgs+'" -OutputPath "'+$childLog+'"'))
-    $childStart.UseShellExecute=$false;$childStart.CreateNoWindow=$true
-    $childRun=[Diagnostics.Process]::Start($childStart);Assert ($childRun.WaitForExit(90000)) 'The interrupted queue run returns without waiting for its remover'
-    $stoppedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
-    $stoppedPid=[int](@($stoppedJournal.entries)[0].invocation.processId)
-    $stoppedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
-    $stoppedAlive=$stoppedPid -gt 0 -and $null -ne (Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue)
-    Assert ($stoppedPid -gt 0 -and $stoppedAlive -and $stoppedDismiss.status -eq 'failed' -and $stoppedDismiss.errors[0].message -like "*still running or can't be checked*") "Start over refuses while a queue remover that started just before a failure is still alive (pid $stoppedPid)"
-    if($stoppedPid -gt 0){$stoppedProcess=Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue;if($stoppedProcess){$stoppedProcess.Kill();[void]$stoppedProcess.WaitForExit(10000)}}
-    $case=New-Case 'queue-unrecorded-launch' 'keep';$a=$case.args
+    $killAfterRecord=@'
+Import-Module Microsoft.PowerShell.Utility
+function global:Start-Sleep {
+    [CmdletBinding()] param([int]$Seconds,[int]$Milliseconds)
+    if($Milliseconds -eq 250){[Diagnostics.Process]::GetCurrentProcess().Kill()}
+    Microsoft.PowerShell.Utility\Start-Sleep @PSBoundParameters
+}
+'@
+    $case=New-Case 'queue-killed-before-record' 'wait';$a=$case.args
+    [void](Invoke-ChildQueue $a $killBeforeRecord $case.directory)
+    $settle=[DateTime]::UtcNow.AddSeconds(10)
+    while(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $case.exe}).Count -gt 0 -and [DateTime]::UtcNow -lt $settle){Start-Sleep -Milliseconds 100}
+    $killedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
+    $killedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    $killedLeft=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $case.exe}).Count
+    $killedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert (-not(Test-Path $case.counter) -and $killedLeft -eq 0 -and $killedJournal.entries[0].state -eq 'dispatching' -and $null -eq $killedJournal.entries[0].invocation -and $killedDismiss.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $killedClaim)) "A queue killed before it records its remover leaves a remover that never ran, and Start over clears it ($killedLeft left)"
+    $case=New-Case 'queue-killed-after-record' 'wait';$a=$case.args
+    [void](Invoke-ChildQueue $a $killAfterRecord $case.directory)
+    $recordedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
+    $recordedPid=[int](@($recordedJournal.entries)[0].invocation.processId)
+    $recordedAlive=$recordedPid -gt 0 -and $null -ne (Get-Process -Id $recordedPid -ErrorAction SilentlyContinue)
+    $recordedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($recordedAlive -and $recordedDismiss.status -eq 'failed' -and $recordedDismiss.errors[0].message -like "*still running or can't be checked*") "Start over refuses while a queue remover recorded before the host was killed is alive (pid $recordedPid)"
+    if($recordedPid -gt 0){$recordedProcess=Get-Process -Id $recordedPid -ErrorAction SilentlyContinue;if($recordedProcess){$recordedProcess.Kill();[void]$recordedProcess.WaitForExit(10000)}}
+    $case=New-Case 'queue-appx-style-claim' 'keep';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;bootTimeUtc=Get-RooIndustriesBulkBootTime;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
     $journal.entries[0].state='dispatching';$journal.entries[0].attemptCount=1
     Write-RooIndustriesOperationJson $journal $a.JournalPath
-    $unrecordedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
-    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath;executable=[string]$case.plan.entries[0].executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $unrecordedClaim
-    $unrecordedStart=[Diagnostics.ProcessStartInfo]::new([string]$case.plan.entries[0].executable,'x y 0 child-shell');$unrecordedStart.UseShellExecute=$false;$unrecordedStart.CreateNoWindow=$true
-    $unrecorded=[Diagnostics.Process]::Start($unrecordedStart);$liveFixtures.Add($unrecorded)|Out-Null
-    $unrecordedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
-    $unrecordedCheck=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
-    Assert ($unrecordedDismiss.status -eq 'failed' -and $unrecordedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $unrecordedClaim) -and $unrecordedCheck.data.entries[0].state -eq 'needs-reconciliation' -and $unrecordedCheck.data.entries[0].error -like "*still running or can't be checked*") 'Start over and Check state refuse while a remover whose launch was never recorded is running'
-    $unrecorded.Kill();Assert ($unrecorded.WaitForExit(10000)) 'Disposable unrecorded remover is explicitly stopped and its exit verified'
-    $unrecordedDone=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
-    Assert ($unrecordedDone.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $unrecordedClaim)) 'Once that remover exits, Start over clears the list and its claim'
+    $appxClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    $powershellExe=Join-Path $PSHOME 'powershell.exe'
+    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath;executable=$powershellExe;claimedAtUtc=Get-RooIndustriesUtcStamp}) $appxClaim
+    $unrelatedStart=[Diagnostics.ProcessStartInfo]::new($powershellExe,'-NoProfile -Command Start-Sleep -Seconds 60');$unrelatedStart.UseShellExecute=$false;$unrelatedStart.CreateNoWindow=$true
+    $unrelated=[Diagnostics.Process]::Start($unrelatedStart)
+    try {$appxDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)}
+    finally {if(-not $unrelated.HasExited){$unrelated.Kill()};[void]$unrelated.WaitForExit(10000)}
+    Assert ($appxDismiss.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $appxClaim)) 'Start over clears an Appx-style claim with no recorded remover even while an unrelated powershell.exe runs'
+    $case=New-Case 'queue-linked-remover' -ExeInBin;$a=$case.args
+    $binDir=Split-Path $case.exe -Parent
+    $linkPrelude=@'
+Import-Module Microsoft.PowerShell.Utility
+function global:Get-FileHash {
+    [CmdletBinding()] param([string]$LiteralPath,[string]$Algorithm)
+    $value=Microsoft.PowerShell.Utility\Get-FileHash @PSBoundParameters
+    if($LiteralPath -like '*\queue-linked-remover\installed 1.txt' -and -not $global:RooLinked){
+        $global:RooLinked=$true
+        $bin=Join-Path (Split-Path $LiteralPath -Parent) 'bin'
+        [IO.Directory]::Move($bin,$bin+'-real')
+        cmd.exe /c mklink /J "$bin" "$bin-real" | Out-Null
+    }
+    return $value
+}
+'@
+    $linkedOutput=Invoke-ChildQueue $a $linkPrelude $case.directory
+    $linkedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
+    $wasLinked=(Get-Item -LiteralPath $binDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint
+    cmd.exe /c rmdir "$binDir" | Out-Null
+    [IO.Directory]::Move($binDir+'-real',$binDir)
+    Assert ($wasLinked -and -not(Test-Path $case.counter) -and $linkedJournal.entries[0].state -eq 'failed-before-start' -and $linkedJournal.entries[0].error -like '*reached through a link*') "A queue remover whose path becomes a link after review is refused inside the launch lease ($($linkedJournal.entries[0].state): $($linkedJournal.entries[0].error))"
     $case=New-Case 'queue-start-failed' -BrokenExe;$a=$case.args
     $startFailed=Read-Result (& $runScript @a)
     $startChecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)

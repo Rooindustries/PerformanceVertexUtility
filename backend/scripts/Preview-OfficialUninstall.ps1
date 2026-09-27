@@ -63,6 +63,7 @@ function Get-OfficialCommandPreview {
     if ($null -eq $parsed) { $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand }
     $parsedQuiet = Resolve-RooIndustriesUninstallCommandLine $quietCommand
     if ($null -eq $parsedQuiet) { $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand }
+    $executableFacts = Get-RooIndustriesUninstallExecutableFacts ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null))
     $blocked = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'blockByDefault' $false)
     $protected = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'protected' $false)
     $warnings = New-Object System.Collections.Generic.List[object]
@@ -85,7 +86,8 @@ function Get-OfficialCommandPreview {
         rawCommand = $rawCommand
         commandLine = Get-RooIndustriesReviewedUninstallCommandLine ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null)) ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null))
         executable = Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null
-        executableSha256 = Get-RooIndustriesReviewedUninstallExecutableHash ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null))
+        executableSha256 = $executableFacts.sha256
+        executableState = $executableFacts.state
         arguments = Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null
         quietRawCommand = $quietCommand
         quietExecutable = Get-RooIndustriesUninstallPropertyValue $parsedQuiet 'executable' $null
