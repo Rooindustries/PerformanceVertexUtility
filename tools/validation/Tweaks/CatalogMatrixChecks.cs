@@ -33,7 +33,7 @@ static class CatalogMatrixChecks
     public static void Presets(string root, TweakCatalog catalog, string output)
     {
         var results = new List<object>(); var failed = 0; var total = 0; var refused = 0;
-        var expectedRefusals = new Dictionary<string, string>(StringComparer.Ordinal) { ["gaming.hyper-v.54.enabled"] = ControlPlanning.HypervisorTogether, ["gaming.vbs.76.enabled"] = ControlPlanning.HypervisorTogether };
+        var expectedRefusals = ControlPlanning.HiddenPresets.ToDictionary(id => id, _ => ControlPlanning.HypervisorTogether, StringComparer.Ordinal);
         foreach (var preset in catalog.Presets)
         {
             total++;
@@ -53,7 +53,7 @@ static class CatalogMatrixChecks
         }
         OperationFiles.Write(output, new { presets = total, passed = total - failed - refused, refused, failed, results });
         if (total != catalog.Presets.Length || failed != 0 || refused != expectedRefusals.Count) throw new InvalidOperationException($"Preset matrix failed {failed} of {total} presets and refused {refused} of {expectedRefusals.Count} expected. See {output}");
-        Console.WriteLine($"PASS {total - refused} presets apply, share ownership, replay and restore in isolated file fixtures; {refused} Hyper-V presets are refused as expected");
+        Console.WriteLine($"PASS {total - refused} presets apply, share ownership, replay and restore in isolated file fixtures; {refused} presets hidden from the app are refused as expected");
     }
     private static bool Supported(TweakDefinition definition, TweakOption option, Context context)
     {
