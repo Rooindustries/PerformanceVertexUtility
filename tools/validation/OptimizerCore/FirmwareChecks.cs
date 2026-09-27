@@ -259,6 +259,7 @@ Value =0A
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
         check(!Directory.Exists(root), "Firmware fixtures leave no helper, state or export behind");
+        RestartChecks.Run(check);
     }
 
     private sealed class VcoreProvider : IFirmwareProvider
