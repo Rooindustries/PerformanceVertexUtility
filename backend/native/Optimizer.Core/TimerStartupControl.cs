@@ -111,8 +111,9 @@ public static class TimerStartupControl
                 definition.Settings.DisallowStartIfOnBatteries = false; definition.Settings.StopIfGoingOnBatteries = false; definition.Settings.StartWhenAvailable = true;
                 dynamic trigger = definition.Triggers.Create(9); trigger.UserId = receipt.Owner.UserSid;
                 dynamic action = definition.Actions.Create(0);
-                action.Path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
-                action.Arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + scriptPath + "\"";
+                var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                action.Path = Path.Combine(system, "conhost.exe");
+                action.Arguments = "--headless \"" + Path.Combine(system, @"WindowsPowerShell\v1.0\powershell.exe") + "\" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + scriptPath + "\"";
                 object created = service.GetFolder(@"\").RegisterTaskDefinition(target.Name, definition, 2, receipt.Owner.UserSid, null, 3, null);
                 try { OperationFiles.Write(ReceiptPath(target.Root), receipt with { Phase = "created", DefinitionHash = Fingerprint(created) }); }
                 finally { Marshal.FinalReleaseComObject(created); }
