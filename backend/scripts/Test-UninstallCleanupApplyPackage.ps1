@@ -1,8 +1,10 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
-$claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId='fixture:app'})
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-uninstall-apply-package-' + [guid]::NewGuid().ToString('N'))
+$claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId='fixture:app'}) $tempRoot
+$userClaimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId='fixture:app'})
+$userClaimBefore = Test-Path -LiteralPath $userClaimPath
 $applyScript = Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1'
 $restoreScript = Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1'
 function Assert([bool]$Condition, [string]$Message) {
@@ -26,7 +28,7 @@ function New-Case([string]$Name) {
     Write-Input $official $officialPath; Write-Input $manifest $manifestPath
     $args = @{OfficialPreviewPath=$officialPath; CleanupManifestPath=$manifestPath; ApprovedAppId='fixture:app'; ExecutorMode='Real';
         ExactTargetAllowlist=$targets; BackupRoot=(Join-Path $root 'backup'); RollbackManifestPath=(Join-Path $root 'backup\rollback.json');
-        ConfirmApply=$true; OfficialUninstallCommandApproved=$true; CleanupDeletionManifestApproved=$true; UserApproved=$true; AllowRealSystemExecution=$true;
+        ConfirmApply=$true; OfficialUninstallCommandApproved=$true; CleanupDeletionManifestApproved=$true; UserApproved=$true; AllowRealSystemExecution=$true; FixtureRoot=$tempRoot;
         OfficialPreviewSha256=(Get-FileHash $officialPath -Algorithm SHA256).Hash; CleanupManifestSha256=(Get-FileHash $manifestPath -Algorithm SHA256).Hash }
     return @{root=$root; targets=$targets; official=$official; manifest=$manifest; args=$args}
 }
@@ -159,6 +161,7 @@ public class RooIndustriesHandoffFixture {
     Assert ($handoff.status -eq 'cleanup-review-required' -and $handoff.summary.officialRunnerCompleted -and (Test-Path -LiteralPath ($case.remover+'.done'))) 'A leftover-tab remover that hands off to a temporary copy completes only after that copy finishes'
     $case=New-HandoffCase 'handoff-hang' 'handoff-hang'; $a=$case.args; $a.TimeoutSeconds=3
     $hung=Read-Result (& $applyScript @a)
+    Assert ((Test-Path -LiteralPath $claimPath) -and ((Test-Path -LiteralPath $userClaimPath) -eq $userClaimBefore)) 'A running leftover-tab remover keeps its claim in the fixture root, never in the user profile'
     $journal=Get-Content -LiteralPath $a.RollbackManifestPath -Raw | ConvertFrom-Json
     $child=@($journal.officialInvocation.descendants | Where-Object { $_.name -ieq 'Au_.exe' })
     Assert ($hung.status -eq 'needs-reconciliation' -and -not $hung.summary.officialRunnerCompleted -and $child.Count -eq 1) 'A handed-off remover still running at the timeout is reported as needing checking'
@@ -221,8 +224,8 @@ $values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
     if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
 } finally {
     foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
-    if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
+Assert ((Test-Path -LiteralPath $userClaimPath) -eq $userClaimBefore) 'Leftover cleanup tests leave the user profile removal claims untouched'
 $stateRoot=Join-Path $repoRoot 'backend\state'
 Assert ((-not (Test-Path $stateRoot)) -or @(Get-ChildItem $stateRoot -Force -Recurse).Count -eq 0) 'backend/state remains empty'
