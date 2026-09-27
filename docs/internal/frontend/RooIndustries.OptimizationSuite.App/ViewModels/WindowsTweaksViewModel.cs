@@ -462,7 +462,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
                 Changes.Add(new(row?.Name ?? change.Before.Address.ValueName ?? "Setting", DescribeSetting(row?.Definition, change.Before.Value), DescribeSetting(row?.Definition, change.After),
                     row?.Scope ?? (change.Before.Address.Hive == "CurrentUser" ? "This user" : "Entire PC")));
             }
-            foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change);
+            foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change, (_inspection?.State?.Profiles ?? []).Concat(_review.Plan.Profiles));
             Status = Changes.Count == 0 ? "Selected values already match" : Changes.Count == 1 ? "1 change ready to review" : Changes.Count + " changes ready to review";
             Detail = restore ? "Shared settings stay active while another profile needs them." : Changes.Count == 0 ? "Save this profile to keep track of these choices." : "Review these values and confirm before applying.";
             if (deferred.Length > 0) Detail += "\n" + deferred.Length + " choices will be saved with requirements pending:\n" + _deferredDetail;
@@ -521,39 +521,82 @@ public partial class WindowsTweaksViewModel : ObservableObject
         if (!CanReviewRecovery || _recovery?.Pending is not { } pending) return;
         Invalidate(); _reviewingRecovery = true;
         if (!CheckingRestart) foreach (var change in pending.Plan.Controls!.Changes.Take(pending.Attempted))
-            AddNativeChange(new(change.Before with { Value = change.After }, change.Before.Value));
+            AddNativeChange(new(change.Before with { Value = change.After }, change.Before.Value), (_recovery.State?.Profiles ?? []).Concat(pending.Plan.Profiles));
         Status = CheckingRestart ? "Check Windows feature changes after restarting" : "Review recovery of the interrupted operation";
         Detail = CheckingRestart ? "Restart Windows first. This checks the final feature states before closing the pending record." : "Only values still matching the interrupted operation will be restored. Newer edits are preserved.";
         Notify();
     }
-    private void AddNativeChange(ControlMutation change)
+    private void AddNativeChange(ControlMutation change, IEnumerable<TweakProfile> profiles)
     {
-        var row = _all.FirstOrDefault(item => item.Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address == change.Before.Address));
-        if (row?.IsNetwork == true)
+        var read = change.Before;
+        if (ControlValues.Equal(read.Value, change.After)) return;
+        var claims = profiles.SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == read.Id).ToArray();
+        var claimed = claims.Length > 0;
+        var rows = claimed ? claims.Select(claim => claim.SettingId).Distinct().Select(id => _all.FirstOrDefault(row => row.Id == id)).OfType<WindowsTweakRow>().ToArray()
+            : _all.Where(row => ControlsFor(row.Definition, read.Address, false).Any()).ToArray();
+        var shown = false;
+        foreach (var row in rows)
         {
-            string Label(System.Text.Json.JsonElement value)
-            {
-                if (value.ValueKind == System.Text.Json.JsonValueKind.Null) return "No override";
-                var choice = row.Definition.Options.FirstOrDefault(option => (option.Controls ?? []).Any(control => control.Address == change.Before.Address && ControlValues.Equal(change.Before.Expand(control.Value, true), value)));
-                return choice is null ? "Custom preference" : WindowsTweakRow.DisplayChoice(WindowsTweakPresentation.Choice(row.Definition, choice));
-            }
-            Changes.Add(new(row.Name, Label(change.Before.Value), Label(change.After), row.Scope));
+            var chosen = claims.Where(claim => claim.SettingId == row.Id).Select(claim => claim.OptionId).ToArray();
+            var before = ControlChoice(row, read, read.Value, _restoringChoices ? chosen : [], claimed);
+            var after = ControlChoice(row, read, change.After, _restoringChoices ? [] : chosen, claimed);
+            if (before is null && after is null || before == after) continue;
+            Changes.Add(new(row.Name, before ?? ControlFallback(row, read, read.Value, claimed), after ?? ControlFallback(row, read, change.After, claimed), row.Scope));
+            shown = true;
+        }
+        if (shown) return;
+        var scope = read.Address.Kind is "file-acl" or "file-ownership" ? (read.Address.Target.StartsWith("selected:", StringComparison.Ordinal) ? read.Address.Target[9..] : read.Address.Target) : "Entire PC";
+        if (read.Address.Kind is "windows-features" or "mitigations" && read.Value.ValueKind == System.Text.Json.JsonValueKind.Object && change.After.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            var fields = change.After.EnumerateObject().Where(property => property.Name != MitigationControl.SnapshotField && !(read.Value.TryGetProperty(property.Name, out var old) && ControlValues.Equal(property.Value, old))).Select(property => property.Name).ToArray();
+            var owners = _all.Where(row => ControlsFor(row.Definition, read.Address, false).Any(control => control.Value.ValueKind == System.Text.Json.JsonValueKind.Object && control.Value.EnumerateObject().Any(property => fields.Contains(property.Name)))).Select(row => row.Name).Distinct().ToArray();
+            string Fields(System.Text.Json.JsonElement value) => string.Join("; ", fields.Select(field => field + ": " + (value.TryGetProperty(field, out var state) ? Humanize(state) : "Not set")));
+            Changes.Add(new(owners.Length > 0 ? string.Join(", ", owners) : read.Address.Kind == "mitigations" ? "Windows security mitigations" : "Windows features", Fields(read.Value), Fields(change.After), scope));
             return;
         }
-        var name = _catalog?.Settings.FirstOrDefault(row => row.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address == change.Before.Address))?.Name ?? change.Before.Address.Target;
-        if (change.Before.Address.Kind is "windows-features" or "mitigations")
-        {
-            var fields = change.After.EnumerateObject().Where(property => property.Name != MitigationControl.SnapshotField && !ControlValues.Equal(property.Value, change.Before.Value.GetProperty(property.Name))).Select(property => property.Name).ToArray();
-            Changes.Add(new(name, string.Join("; ", fields.Select(field => field + ": " + change.Before.Value.GetProperty(field))), string.Join("; ", fields.Select(field => field + ": " + change.After.GetProperty(field))), change.Before.Address.Kind + " · " + change.Before.Address.Target));
-            return;
-        }
-        Changes.Add(new(name, DescribeControl(change.Before.Address, change.Before.Value), DescribeControl(change.Before.Address, change.After), change.Before.Address.Kind + " · " + change.Before.Address.Target + " · " + change.Before.Address.Property));
+        Changes.Add(new(read.DisplayName ?? rows.FirstOrDefault()?.Name ?? read.Address.Target, DescribeControl(read.Address, read.Value), DescribeControl(read.Address, change.After), scope));
     }
+    private static IEnumerable<ControlAssignment> ControlsFor(TweakDefinition definition, ControlAddress address, bool claimed)
+        => definition.Options.SelectMany(option => option.Controls ?? []).Where(control => Same(control.Address, address, claimed));
+    private static bool Same(ControlAddress control, ControlAddress read, bool claimed) => control == read || claimed && Loose(control, read);
+    private static bool Loose(ControlAddress control, ControlAddress read) =>
+        string.Equals(control.Kind, read.Kind, StringComparison.OrdinalIgnoreCase) && string.Equals(control.Property, read.Property, StringComparison.OrdinalIgnoreCase);
+    private static string? ControlChoice(WindowsTweakRow row, TweakControlRead read, System.Text.Json.JsonElement value, string[] chosen, bool claimed)
+    {
+        if (value.ValueKind == System.Text.Json.JsonValueKind.Null) return "No override";
+        claimed = claimed && row.Definition.Options.SelectMany(option => option.Controls ?? []).Where(control => Loose(control.Address, read.Address)).Select(control => control.Address.Target).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1;
+        var matches = row.Definition.Options.Where(option =>
+        {
+            var controls = (option.Controls ?? []).Where(control => control.Address == read.Address).ToArray();
+            if (controls.Length == 0) controls = (option.Controls ?? []).Where(control => Same(control.Address, read.Address, claimed)).ToArray();
+            return controls.Length > 0 && controls.All(control => Matches(read, control, value));
+        }).ToArray();
+        var match = matches.FirstOrDefault(option => chosen.Contains(option.Id)) ?? matches.FirstOrDefault();
+        return match is null ? null : Capitalize(row.Choices.First(choice => choice.Id == match.Id).Name);
+    }
+    private static bool Matches(TweakControlRead read, ControlAssignment control, System.Text.Json.JsonElement value)
+    {
+        try { return ControlComposition.Matches(new(read.Address.Target, "", read, read.Expand(control.Value, allowPending: true), control.Patch), value); }
+        catch (Exception error) when (error is not OperationCanceledException) { return false; }
+    }
+    private static string ControlFallback(WindowsTweakRow row, TweakControlRead read, System.Text.Json.JsonElement value, bool claimed)
+    {
+        var patches = ControlsFor(row.Definition, read.Address, claimed).Where(control => control.Patch && control.Value.ValueKind == System.Text.Json.JsonValueKind.Object).ToArray();
+        if (patches.Length == 0 || value.ValueKind != System.Text.Json.JsonValueKind.Object) return DescribeControl(read.Address, value);
+        var field = patches[0].Value.EnumerateObject().First().Name;
+        return value.TryGetProperty(field, out var state) ? Humanize(state) : "Not set";
+    }
+    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+    private static string Humanize(System.Text.Json.JsonElement value) => value.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.String => value.GetString() switch { "ON" => "On", "OFF" => "Off", "NOTSET" => "Not set", var text => text ?? "" },
+        System.Text.Json.JsonValueKind.True => "On", System.Text.Json.JsonValueKind.False => "Off", System.Text.Json.JsonValueKind.Null => "Not set",
+        _ => value.ToString(),
+    };
     private static string DescribeControl(ControlAddress address, System.Text.Json.JsonElement value)
     {
         if (value.ValueKind == System.Text.Json.JsonValueKind.Null) return "No override";
-        if (value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
-            return address.Property == "running" ? value.GetBoolean() ? "Running" : "Stopped" : value.GetBoolean() ? "Enabled" : "Disabled";
+        if (value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) return Switch(address.Property, value.GetBoolean());
         if (address.Kind == "service" && address.Property == "startup") return value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => value.ToString() };
         if (address.Kind == "hibernation") return value.GetProperty("mode").GetString() + " · Fast Startup " + (value.GetProperty("fastStartup").ValueKind == System.Text.Json.JsonValueKind.Null ? "not configured" : value.GetProperty("fastStartup").GetUInt32() == 0 ? "off" : "on");
         if (address.Kind == "hosts") return value.GetProperty("block").ValueKind == System.Text.Json.JsonValueKind.Null ? "No Roo Industries hosts block" : "Reviewed hosts block present";
@@ -566,8 +609,24 @@ public partial class WindowsTweaksViewModel : ObservableObject
         }
         if (address.Kind == "power-plan") return "Active plan: " + value.GetProperty("active").GetString();
         if (value.ValueKind == System.Text.Json.JsonValueKind.Object && value.TryGetProperty("addresses", out var addresses)) return addresses.GetArrayLength() + " blocked addresses or ranges";
-        var text = value.ToString(); return text.Length > 1000 ? text[..1000] + "…" : text;
+        if (address.Kind is "network-adapter" or "device-power" && value.ValueKind == System.Text.Json.JsonValueKind.Object)
+            return string.Join(", ", value.EnumerateObject().GroupBy(device => device.Value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? Switch(address.Property, device.Value.GetBoolean())
+                : device.Value.ValueKind == System.Text.Json.JsonValueKind.Object ? string.Join(", ", device.Value.EnumerateObject().Select(item => item.Name + " " + Humanize(item.Value))) : Humanize(device.Value))
+                .Select(group => group.Key + " on " + group.Count() + (group.Count() == 1 ? " device" : " devices")));
+        if (value.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            var text = string.Join("; ", value.EnumerateObject().Where(property => property.Name != MitigationControl.SnapshotField).Select(property => property.Name + ": " + Humanize(property.Value)));
+            return text.Length > 300 ? text[..300] + "…" : text;
+        }
+        return Humanize(value);
     }
+    private static string Switch(string property, bool value) => property switch
+    {
+        "running" => value ? "Running" : "Stopped",
+        "blocked" => value ? "Blocked" : "Not blocked",
+        _ when property.StartsWith("disable", StringComparison.OrdinalIgnoreCase) => value ? "Disabled" : "Enabled",
+        _ => value ? "Enabled" : "Disabled",
+    };
     private static string Account(string sid)
     {
         if (sid == OperationOwner.Current().UserSid) return "this Windows user";
@@ -617,7 +676,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             var review = await App.Operations.PreviewOwnershipAsync(path);
             _catalog = (await App.Operations.ReadWindowsTweakCatalogAsync()).Catalog;
             ProfileId = review.Plan.ProfileId; _review = review;
-            foreach (var change in review.Plan.Controls?.Changes ?? []) AddNativeChange(change);
+            foreach (var change in review.Plan.Controls?.Changes ?? []) AddNativeChange(change, review.Plan.Profiles);
             Status = "Review file ownership"; Detail = path + "\nChanges this item's permissions only. File contents and child items are not changed.";
         }
         catch (Exception error) { Status = "Couldn't review file ownership."; Detail = error.Message; }
