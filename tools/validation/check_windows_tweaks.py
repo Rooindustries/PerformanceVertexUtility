@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -71,6 +72,31 @@ def check(root):
             failures.append('A shared source feature must reference real setting resources: ' + feature['id'])
         if feature['status'] == 'shared-preset' and feature.get('implementation') not in preset_ids:
             failures.append('A grouped source feature must reference a real preset: ' + feature['id'])
+    failures.extend(label_failures(root, catalog))
+    return failures
+
+
+def label_failures(root, catalog):
+    presentation = json.loads((root / 'docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json').read_text())
+    unreadable, numbered, sections = [], [], {}
+    for setting in catalog['settings']:
+        entry = presentation.get(setting['id'], {})
+        name = (entry.get('name') or setting['name']).strip()
+        if not re.match(r'^(?:[A-Za-z0-9]|"[A-Za-z0-9])', name):
+            unreadable.append(setting['id'] + ' ' + repr(name))
+        for option in setting['options']:
+            label = (entry.get('choices') or {}).get(option['id'], option['name'])
+            if re.fullmatch(r'Value -?\d+(?: \(.*\))?', label):
+                numbered.append(setting['id'] + ' ' + label)
+        sections.setdefault((entry.get('section', 'windows'), name.casefold()), []).append(setting['id'])
+    duplicates = [key[1] + ' in ' + key[0] + ': ' + ', '.join(members) for key, members in sections.items() if len(members) > 1]
+    failures = []
+    if unreadable:
+        failures.append(str(len(unreadable)) + ' setting names are empty or start with punctuation: ' + '; '.join(unreadable[:5]))
+    if numbered:
+        failures.append(str(len(numbered)) + ' choices are labelled only as a bare value number: ' + '; '.join(numbered[:5]))
+    if duplicates:
+        failures.append(str(len(duplicates)) + ' setting names repeat within a section: ' + '; '.join(duplicates[:5]))
     return failures
 
 
