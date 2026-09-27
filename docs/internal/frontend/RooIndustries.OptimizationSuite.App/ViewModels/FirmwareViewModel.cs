@@ -378,6 +378,7 @@ public partial class FirmwareViewModel : ObservableObject
         FirmwareVerificationMatchStatuses.DifferentBios => "This test belongs to a different BIOS.",
         FirmwareVerificationMatchStatuses.DifferentPackage => "This test belongs to a different SCEWIN package.",
         FirmwareVerificationMatchStatuses.DifferentProfile => "The current BIOS settings profile differs from the tested baseline.",
+        FirmwareVerificationMatchStatuses.Unavailable => "This test's saved BIOS export is missing or unreadable, so it can't be matched.",
         _ => "The current BIOS context could not be matched to this test."
     };
     private void LoadHistory()

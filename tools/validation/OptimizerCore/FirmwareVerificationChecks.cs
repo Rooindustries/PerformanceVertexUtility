@@ -268,6 +268,17 @@ static class FirmwareVerificationChecks
             var driftMatch = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline).Single(item => item.Trial.Id == vcoreTrial.Id);
             check(driftMatch.Matches && driftMatch.CurrentQuestionId == driftedQuestion.Id && driftMatch.CurrentQuestionId != vcoreBinding.QuestionId,
                 "A matched trial names the drifted question in the current export so the editor can show its result");
+            var original = store.Read(vcoreTrial.Id).Binding.OriginalExportPath;
+            var others = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline).Where(item => item.Trial.Id != vcoreTrial.Id && item.Trial.Binding.OriginalExportPath != original)
+                .Select(item => (item.Trial.Id, item.CurrentStatus)).ToArray();
+            File.Move(original, original + ".moved");
+            IReadOnlyList<FirmwareVerificationMatch>? isolated = null; string failure = "";
+            try { isolated = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline); }
+            catch (Exception error) { failure = error.GetType().Name + ": " + error.Message; }
+            finally { File.Move(original + ".moved", original); }
+            check(isolated is not null && others.Length > 0 && isolated.SingleOrDefault(item => item.Trial.Id == vcoreTrial.Id)?.CurrentStatus is null or FirmwareVerificationMatchStatuses.Unavailable
+                && others.All(other => isolated.SingleOrDefault(item => item.Trial.Id == other.Id)?.CurrentStatus == other.CurrentStatus),
+                "A trial whose saved export is missing is shown as unavailable while every other trial keeps its result " + failure);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
         check(!Directory.Exists(root), "Firmware verification fixtures remove all evidence and state");

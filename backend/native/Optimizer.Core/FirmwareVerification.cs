@@ -49,6 +49,7 @@ public static class FirmwareVerificationMatchStatuses
     public const string DifferentPackage = "differentPackage";
     public const string DifferentProfile = "differentProfile";
     public const string UnknownCurrent = "unknownCurrent";
+    public const string Unavailable = "unavailable";
 }
 
 public static class FirmwareBehaviorOutcomes
@@ -355,15 +356,24 @@ public sealed class FirmwareVerificationStore
     public IReadOnlyList<FirmwareVerificationMatch> ReadMatchingTrials(FirmwareIdentity currentIdentity,
         string packageFingerprint, string currentExportPath)
     {
-        var trials = Directory.EnumerateFiles(_root, "*.json", SearchOption.TopDirectoryOnly)
-            .Where(path => Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _))
-            .Select(path => Read(Path.GetFileNameWithoutExtension(path)))
-            .ToArray();
+        var trials = new List<FirmwareVerificationTrial>();
+        foreach (var path in Directory.EnumerateFiles(_root, "*.json", SearchOption.TopDirectoryOnly).Where(path => Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _)))
+        {
+            try { trials.Add(Read(Path.GetFileNameWithoutExtension(path))); }
+            catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+        }
         var current = ReadCurrent(currentIdentity, packageFingerprint, currentExportPath);
         return trials.Select(trial =>
         {
-            var (status, questionId) = MatchStatus(trial, current);
-            return new FirmwareVerificationMatch(trial, status, questionId);
+            try
+            {
+                var (status, questionId) = MatchStatus(trial, current);
+                return new FirmwareVerificationMatch(trial, status, questionId);
+            }
+            catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                return new FirmwareVerificationMatch(trial, FirmwareVerificationMatchStatuses.Unavailable, "");
+            }
         }).ToArray();
     }
 
