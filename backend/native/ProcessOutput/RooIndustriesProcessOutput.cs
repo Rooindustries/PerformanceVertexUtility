@@ -20,9 +20,6 @@ namespace RooIndustries.Optimization.ProcessOutput
         private readonly Task outTask, errorTask;
         private readonly int limit;
 
-        public Capture(Process process, int characterLimit)
-            : this(process.StandardOutput, process.StandardError, characterLimit) { }
-
         public Capture(Stream stdout, Stream stderr, int characterLimit)
             : this(new StreamReader(stdout, ConsoleEncoding()), new StreamReader(stderr, ConsoleEncoding()), characterLimit) { }
 

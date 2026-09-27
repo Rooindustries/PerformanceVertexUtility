@@ -260,17 +260,20 @@ public class RooIndustriesBulkFixture {
     $debug=[RooIndustriesBulkAccessFixture]::SetDebug($false)
     try {
         $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
-        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
+        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::Probe($denied.Id,$deniedCreated) -ne 0
         $lastBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime()
         $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();descendants=@()})
         $nearBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddMinutes(-1).ToFileTimeUtc().ToString();descendants=@()})
         $currentBootId=Get-RooIndustriesBootId
-        $otherBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId='roo-industries-other-boot';descendants=@()})
+        $bootIdOnly=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId='roo-industries-other-boot';descendants=@()})
+        $bootTimeOnly=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();bootId=$currentBootId;descendants=@()})
+        $bothChanged=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();bootId='roo-industries-other-boot';descendants=@()})
         $sameBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId=$currentBootId;descendants=@()})
         $self=[Diagnostics.Process]::GetCurrentProcess()
         $hibernated=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();bootId='roo-industries-other-boot';descendants=@()})
         $shiftedSameBoot=Test-RooIndustriesBulkRestartAfterInvocation ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();bootId=$currentBootId})
         $shiftedOtherBoot=Test-RooIndustriesBulkRestartAfterInvocation ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(1).ToFileTimeUtc().ToString();bootId='roo-industries-other-boot'})
+        $restartedBoth=Test-RooIndustriesBulkRestartAfterInvocation ([pscustomobject]@{processId=$self.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();bootId='roo-industries-other-boot'})
         $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
         $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
     } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
@@ -278,9 +281,9 @@ public class RooIndustriesBulkFixture {
     Assert $unreadable 'A remover Windows refuses to open is treated as still running, never as stopped'
     Assert (-not $reusedAfterRestart) 'A remover recorded well before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
     Assert $nearBoot 'A remover recorded just before the reported boot time is still checked, so a clock jump cannot make it look stopped'
-    Assert ($currentBootId -and -not $otherBoot -and $sameBoot) "The recorded Windows boot ID decides whether a remover belongs to an earlier boot (current boot ID $currentBootId)"
+    Assert ($currentBootId -and $bootIdOnly -and $bootTimeOnly -and -not $bothChanged -and $sameBoot) "An unreadable remover counts as gone only when both the boot ID changed and the boot time is later than its start (boot ID $currentBootId)"
     Assert $hibernated 'A readable process whose ID and start time still match stays running even under a different boot ID'
-    Assert (-not $shiftedSameBoot -and $shiftedOtherBoot) 'A restart is recognised only when the boot ID changed, even when the boot time looks later than the remover'
+    Assert (-not $shiftedSameBoot -and -not $shiftedOtherBoot -and $restartedBoth) 'A restart is recognised only when the boot ID changed and the boot time is later than the remover'
     Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
     Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
     $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
