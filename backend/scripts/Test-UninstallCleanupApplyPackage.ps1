@@ -197,8 +197,10 @@ public class RooIndustriesHandoffFixture {
     $journal=Get-Content -LiteralPath $a.RollbackManifestPath -Raw | ConvertFrom-Json
     $rootProcess=[Diagnostics.Process]::GetProcessById([int]$journal.officialInvocation.processId)
     Assert ($rootHung.status -eq 'needs-reconciliation' -and -not $rootProcess.HasExited) 'A remover that never exits is reported as needing checking and is not killed'
-    $hungClaim=(Read-RooIndustriesOperationJson $claimPath).data
-    Assert ($hungClaim.invocation.treeContained -eq $true -and $journal.officialInvocation.treeContained -eq $true) 'The claim records that the remover was placed in its tracking job'
+    $script:firstRecord=$null
+    $jobState=Join-Path $tempRoot 'job check state'
+    $jobRun=Invoke-RooIndustriesObservedRemover $handoffExe ('"' + $jobState + '" noop') $tempRoot 10 { param($invocation) if ($null -eq $script:firstRecord) { $script:firstRecord=[pscustomobject]@{ treeContained=[bool]$invocation.treeContained; processId=$invocation.processId } } } ('"' + $handoffExe + '" "' + $jobState + '" noop')
+    Assert ($jobRun.processStarted -and $null -ne $script:firstRecord -and $script:firstRecord.treeContained -and [int]$script:firstRecord.processId -gt 0) 'The first record of a launched remover already shows it inside its tracking job'
     $rootProcess.Kill(); Assert ($rootProcess.WaitForExit(10000)) 'Disposable hung remover is explicitly stopped and its exit verified'
     $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
     $afterStale=Read-Result (& $applyScript @secondArgs)
