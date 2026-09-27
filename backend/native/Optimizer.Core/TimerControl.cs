@@ -131,9 +131,17 @@ public static class TimerControl
         OperationFiles.Write(StatePath(launch.Root), state);
         try
         {
+            var power = new TimerPower { Version = 1, ControlMask = 4, StateMask = 0 };
+            SetProcessInformation(process.Handle, 4, ref power, (uint)Marshal.SizeOf<TimerPower>());
             var result = NtSetTimerResolution(5000, true, out var interval);
             state = state with { AcquireStatus = result, ReturnedInterval = interval, Acquired = result >= 0 };
             OperationFiles.Write(StatePath(launch.Root), state); Check(result, "NtSetTimerResolution(acquire)");
+            var applied = Stopwatch.StartNew(); uint current;
+            while (NtQueryTimerResolution(out _, out _, out current) < 0 || current > 5000)
+            {
+                if (applied.Elapsed > TimeSpan.FromSeconds(2)) throw new InvalidOperationException("Windows did not apply the 0.5 ms timer request (current interval " + (current / 10000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " ms).");
+                Thread.Sleep(50);
+            }
             ready?.Invoke();
             while (true)
             {
@@ -256,6 +264,8 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [StructLayout(LayoutKind.Sequential)] private struct TimerPower { public uint Version, ControlMask, StateMask; }
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetProcessInformation(IntPtr process, int informationClass, ref TimerPower value, uint size);
     [DllImport("ntdll.dll")] private static extern int NtQueryTimerResolution(out uint coarsest, out uint finest, out uint current);
     [DllImport("ntdll.dll")] private static extern int NtSetTimerResolution(uint requested, [MarshalAs(UnmanagedType.U1)] bool acquire, out uint current);
 }
