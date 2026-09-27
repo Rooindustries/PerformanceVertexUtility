@@ -143,15 +143,21 @@ function Remove-RooIndustriesBulkOwnedClaim {
     } finally {$lease.Dispose()}
 }
 
+function Import-RooIndustriesBulkProcessTypes {
+    if($null -eq ('RooIndustries.Optimization.ProcessOutput.Capture' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessOutput.cs')}
+    if($null -eq ('RooIndustries.Optimization.ProcessOutput.Tree' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessTree.cs')}
+}
+
 function Test-RooIndustriesBulkInvocationLive {
     param($Invocation)
     if ($null -eq $Invocation -or $null -eq $Invocation.processId) {return $false}
-    $process=$null
-    try {
-        $process=[Diagnostics.Process]::GetProcessById([int]$Invocation.processId)
-        return -not $process.HasExited -and $process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -ceq $Invocation.creationTimeFileTimeUtc
-    } catch [ArgumentException] {return $false}
-    finally {if($null -ne $process){$process.Dispose()}}
+    Import-RooIndustriesBulkProcessTypes
+    $members=@($Invocation)
+    if($null -ne $Invocation.PSObject.Properties['descendants']){$members+=@($Invocation.descendants)}
+    foreach($member in $members){
+        if([RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning([int]$member.processId,[string]$member.creationTimeFileTimeUtc)){return $true}
+    }
+    return $false
 }
 
 function Get-RooIndustriesBulkBootTime {
@@ -173,9 +179,9 @@ function Test-RooIndustriesBulkRestartAfterInvocation {
 
 function Invoke-RooIndustriesBulkEntry {
     param($Entry,$JournalEntry,$Journal,[string]$JournalPath,[int]$TimeoutSeconds,[string]$FixtureRoot='')
-    $process=$null; $executableLease=$null; $claimLease=$null; $capture=$null
+    $process=$null; $executableLease=$null; $claimLease=$null; $capture=$null; $tree=$null
     try {
-        if($null -eq ('RooIndustries.Optimization.ProcessOutput.Capture' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessOutput.cs')}
+        Import-RooIndustriesBulkProcessTypes
         $claimPath=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
         $claimLease=Lock-RooIndustriesOperation $claimPath
         if(Test-Path -LiteralPath $claimPath) {
@@ -201,14 +207,31 @@ function Invoke-RooIndustriesBulkEntry {
         $process=[Diagnostics.Process]::new();$process.StartInfo=$start
         if(-not $process.Start()){throw 'CreateProcess returned false.'}
         $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
+        $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
         $executableLease.Dispose();$executableLease=$null
-        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp}
+        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp; treeContained=$tree.Contained; descendants=@()}
         $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
-        if (-not $process.WaitForExit($TimeoutSeconds*1000)) {
-            $JournalEntry.state='needs-reconciliation'
-            $JournalEntry.error='Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'
-            return
+        $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds); $recorded=1; $waitingFor=''
+        while($true) {
+            $tree.Refresh()
+            $live=@($tree.Live()); $settled=$false
+            if($live.Count -eq 0){$known=$tree.Count;$tree.Refresh();$settled=($tree.Count -eq $known)}
+            $names=(@($live|Where-Object {$_.ProcessId -ne $process.Id}|ForEach-Object {$_.Name}|Sort-Object -Unique) -join ', ')
+            if($tree.Count -ne $recorded -or ($process.HasExited -and $names -cne $waitingFor)) {
+                $recorded=$tree.Count; $waitingFor=if($process.HasExited){$names}else{''}
+                $JournalEntry.invocation.descendants=@($tree.Descendants()|ForEach-Object {[pscustomobject]@{processId=$_.ProcessId;creationTimeFileTimeUtc=$_.CreationTimeFileTimeUtc;name=$_.Name}})
+                $JournalEntry.error=if($waitingFor){"Waiting for $waitingFor to finish."}else{$null}
+                $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp; Write-RooIndustriesOperationJson $Journal $JournalPath
+            }
+            if($settled){break}
+            if($live.Count -gt 0 -and [DateTime]::UtcNow -ge $deadline) {
+                $JournalEntry.state='needs-reconciliation'
+                $JournalEntry.error=if(-not $process.HasExited){'Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'}else{"The remover handed off to $names, which was still running at the observation timeout. It was not killed or automatically repeated."}
+                return
+            }
+            if($live.Count -gt 0){Start-Sleep -Milliseconds 250}
         }
+        $JournalEntry.error=$null
         $JournalEntry.outcome=Get-RooIndustriesUninstallOutcome $Entry.exitCodePolicy $process.ExitCode
         $JournalEntry.state=$JournalEntry.outcome.state
         if(-not $capture.Complete(2000)) {
@@ -224,6 +247,7 @@ function Invoke-RooIndustriesBulkEntry {
             $JournalEntry|Add-Member -NotePropertyName output -NotePropertyValue ([pscustomobject]@{stdout=$capture.Stdout;stderr=$capture.Stderr;truncated=$capture.Truncated}) -Force
             $capture.Dispose()
         }
+        if($null -ne $tree){$tree.Dispose()}
         if($null -ne $process){$process.Dispose()}
         if($null -ne $claimLease){$claimLease.Dispose()}
         $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
