@@ -61,8 +61,11 @@ static class ReviewLabelChecks
         await model.RefreshCommand.ExecuteAsync(null);
         await model.ReviewRestoreCommand.ExecuteAsync(null);
         Print(model);
+        var refresh = model.Changes.Where(change => change.Name == rows[Logitech].Name).ToArray();
+        check(refresh.Length == 1 && refresh[0].After == WindowsTweaksViewModel.OwnershipRefresh && refresh[0].Before == "Disabled",
+            "A same-value lease release is listed as re-taking ownership instead of being hidden: " + string.Join(" | ", refresh.Select(change => change.Before + " → " + change.After)));
         check(model.HasReview && model.Changes.Count > 0 && model.Changes.All(change => change.Before != change.After),
-            "The undo review lists only real value changes, never Disabled → Disabled: " + string.Join(" | ", model.Changes.Select(change => change.Name + ": " + change.Before + " → " + change.After)));
+            "The undo review never shows a value changing to itself, like Disabled → Disabled: " + string.Join(" | ", model.Changes.Select(change => change.Name + ": " + change.Before + " → " + change.After)));
         check(model.Changes.All(change => Readable(change.Name) && Readable(change.Before) && Readable(change.After) && Readable(change.Target)), "Every undo review line is plain text");
         string Undo(string id) { var found = model.Changes.SingleOrDefault(change => change.Name == rows[id].Name); return found is null ? "missing" : found.Before + " → " + found.After; }
         check(Undo(DynamicTicks) == "Disabled → No override" && Undo(Hypervisor) == "Off → Automatic" && Undo(Ipv6) == "Disabled → Enabled" && Undo(Sehop) == "Disabled → Not set" && Undo(DevicePower) == "Disabled → Enabled",
