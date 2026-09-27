@@ -209,10 +209,16 @@ try {
         Add-Failure ('A third-party leftover scan offered Windows-owned items: ' + (($owned | ForEach-Object { $_.type + ' ' + $_.target }) -join '; ') + ' ' + (@($thirdParty.errors | ForEach-Object { $_.message }) -join '; '))
     }
     $microsoft = Read-OwnershipScan 'registry:roo-industries-fixture-microsoft'
-    if (@($microsoft.errors).Count -eq 0 -and @($microsoft.items | Where-Object { $_.target -eq "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\$guid" }).Count -eq 1 -and @($microsoft.items | Where-Object { $_.target -eq 'HKCU\Software\Microsoft\Notepad' }).Count -eq 1) {
+    if (@($microsoft.errors).Count -eq 0 -and @($microsoft.items | Where-Object { $_.target -eq 'HKCU\Software\Microsoft\Notepad' }).Count -eq 1) {
         Add-Pass 'A Microsoft-published app still reviews its own Microsoft registry leftovers'
     } else {
         Add-Failure 'A Microsoft-published app lost its own Microsoft registry leftovers'
+    }
+    $uninstallOffers = @(@($thirdParty.items) + @($microsoft.items) | Where-Object { ([string]$_.target) -like '*\CurrentVersion\Uninstall\*' })
+    if ($uninstallOffers.Count -eq 0) {
+        Add-Pass 'No app is offered its product GUID Uninstall entry as a leftover'
+    } else {
+        Add-Failure ('A product GUID Uninstall entry was offered as a leftover: ' + (($uninstallOffers | ForEach-Object { $_.target }) -join '; '))
     }
 } catch {
     Add-Failure "Leftover ownership scan failed: $($_.Exception.Message)"
