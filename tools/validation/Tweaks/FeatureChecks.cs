@@ -105,14 +105,14 @@ static class FeatureChecks
                 var plan = engine.Preview(profile, choices); var file = Path.Combine(root, plan.OperationId + ".json");
                 OperationFiles.Write(file, plan); return engine.Apply(file, OperationFiles.HashFile(file)).State;
             }
-            check(Refusal(() => engine.Preview("both", [new(platform, platformOn), new(launch, launchOff)])).Contains("Hypervisor at startup"), "One review cannot change a Hyper-V feature and Hypervisor at startup together");
+            check(Refusal(() => engine.Preview("both", [new(platform, platformOn), new(launch, launchOff)])) == "Hyper-V features and Hypervisor at startup can't change in the same apply. Apply one, restart Windows, then apply the other.", "One review cannot change a Hyper-V feature and Hypervisor at startup together, and says to apply them separately");
             Apply("fps", new TweakSelection(launch, launchOff));
-            check(Refusal(() => engine.Preview("mine", [new(platform, platformOn)])).Contains("Hypervisor at startup"), "A Hyper-V feature change is refused while a profile owns Hypervisor at startup");
+            check(Refusal(() => engine.Preview("mine", [new(platform, platformOn)])) == "Undo the FPS preset (or set Hypervisor at startup back to No override) first, apply, restart Windows, then change Hyper-V features. Windows resets Hypervisor at startup when it finishes Hyper-V changes.", "A Hyper-V feature change is refused while a profile owns Hypervisor at startup, and says to undo the FPS preset first");
             Apply("fps");
             Apply("mine", new TweakSelection(platform, platformOn));
             var pending = OperationFiles.Read<TweakFixture>(path);
             pending.Controls[Features.Key] = pending.Controls[Features.Key] with { RestartPending = true }; OperationFiles.Write(path, pending);
-            check(Refusal(() => engine.Preview("fps", [new(launch, launchOff)])).Contains("Restart Windows before changing Hypervisor at startup"), "Hypervisor at startup is refused while a feature change waits for restart");
+            check(Refusal(() => engine.Preview("fps", [new(launch, launchOff)])) == "Restart Windows first, then change Hypervisor at startup. A Windows feature change is still waiting for restart and can reset it.", "Hypervisor at startup is refused while a feature change waits for restart, and says to restart first");
             check(Refusal(() => engine.Preview("mine", [])).Contains("Restart Windows"), "Undoing a pending feature change before restart is refused");
             var status = engine.Detect().Settings.Single(setting => setting.Id == platform);
             check(status.ConfiguredChoices.SequenceEqual([platformOn]) && status.Controls!.Any(control => control.RestartPending), "Detection shows a pending enable as on and marks it pending");

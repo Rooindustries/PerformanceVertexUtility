@@ -96,6 +96,9 @@ public interface IControlStore
 
 public static class ControlPlanning
 {
+    public const string HypervisorTogether = "Hyper-V features and Hypervisor at startup can't change in the same apply. Apply one, restart Windows, then apply the other.";
+    public const string HypervisorOwned = "Undo the FPS preset (or set Hypervisor at startup back to No override) first, apply, restart Windows, then change Hyper-V features. Windows resets Hypervisor at startup when it finishes Hyper-V changes.";
+    public const string HypervisorPending = "Restart Windows first, then change Hypervisor at startup. A Windows feature change is still waiting for restart and can reset it.";
     public static ControlPlan Plan(TweakState? state, TweakProfile[] profiles, string profileId, Func<ControlAddress, TweakControlRead> read)
     {
         var affected = (state?.Profiles.SingleOrDefault(profile => profile.Id == profileId)?.Controls ?? []).Select(claim => claim.Target.Id)
@@ -160,13 +163,13 @@ public static class ControlPlanning
         var launchChanges = changes.Any(change => change.Before.Address.Key == launch);
         if (changes.Any(change => change.Before.Address.Kind == "windows-features" && WindowsFeatures.Changed(change).Any(WindowsFeatures.IsHypervisor)) &&
             (launchChanges || next.Any(item => item.Original.Address.Key == launch)))
-            throw new InvalidDataException("Windows resets Hypervisor at startup when it finishes Hyper-V feature changes at restart. Leave Hypervisor at startup unchanged and unowned while changing Hyper-V features, restart Windows, then set Hypervisor at startup again.");
+            throw new InvalidDataException(launchChanges ? HypervisorTogether : HypervisorOwned);
         if (launchChanges)
         {
             TweakControlRead? features;
             try { features = read(new("windows-features", "system", "features")); }
             catch (FileNotFoundException) { features = null; }
-            if (features?.RestartPending == true) throw new InvalidDataException("Restart Windows before changing Hypervisor at startup. Pending Windows feature changes can reset it when they finish.");
+            if (features?.RestartPending == true) throw new InvalidDataException(HypervisorPending);
         }
         return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray(), left.Count > 0 ? left.Distinct().Order(StringComparer.Ordinal).ToArray() : null, released.Count > 0 ? released.OrderBy(item => item.Held.Original.Id, StringComparer.Ordinal).ToArray() : null, guard);
     }
