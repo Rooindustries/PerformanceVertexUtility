@@ -364,7 +364,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
                 Profiles.Add(new(profile.Id, label));
             }
             foreach (var profile in _savedChoices.Profiles.Where(profile => Profiles.All(existing => existing.Id != profile.Id))) Profiles.Add(new(profile.Id, profile.Id + " · saved choices"));
-            _presets.Clear(); foreach (var preset in _catalog.Presets) _presets.Add(new(preset.Id, preset.Name));
+            _presets.Clear(); foreach (var preset in _catalog.Presets.Where(preset => !ControlPlanning.HiddenPresets.Contains(preset.Id))) _presets.Add(new(preset.Id, preset.Name));
             FilterPresets("");
             SelectedPreset = null; _loading = false;
             LoadProfile(); Filter();

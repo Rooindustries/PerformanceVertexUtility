@@ -69,6 +69,11 @@ try
             var shipped = new Fixture(Path.Combine(root, "shipped-fps-preset"), catalog) { Missing = false };
             var shippedModel = await Load(shipped);
             Check(shippedModel.HasFpsPreset, "The shipped catalog's FPS preset shows the preset button");
+            shippedModel.FilterPresets("FSOS-X Dash · Hyper-V"); var hyperV = shippedModel.Presets.Select(preset => preset.Id).ToArray();
+            shippedModel.FilterPresets("Virtualization-Based Security"); var vbs = shippedModel.Presets.Select(preset => preset.Id).ToArray();
+            Check(ControlPlanning.HiddenPresets.All(id => catalog.Presets.Any(preset => preset.Id == id)) && !hyperV.Concat(vbs).Any(ControlPlanning.HiddenPresets.Contains) && hyperV.Length > 0,
+                "Presets that always refuse to apply are hidden from the preset list while the rest stay: " + string.Join(", ", hyperV.Concat(vbs)));
+            shippedModel.FilterPresets("");
             shippedModel.SelectFpsPresetCommand.Execute(null);
             var queued = shippedModel.Rows.Where(row => row.Selected.Id.Length > 0).Select(row => (row.Id, row.Selected.Id)).OrderBy(item => item.Item1).ToArray();
             var expected = fpsPreset.Selections.Select(item => (item.SettingId, item.OptionId)).OrderBy(item => item.Item1).ToArray();
