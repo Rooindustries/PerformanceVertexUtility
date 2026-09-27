@@ -145,6 +145,8 @@ public class RooIndustriesBulkFixture {
     $whileRunning=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($whileRunning.status -eq 'needs-reconciliation' -and $whileRunning.data.entries[0].state -eq 'needs-reconciliation' -and -not(Test-Path $case.markers[0]) -and -not $childProcess.HasExited) 'Check state does not report removal while the handed-off remover is still running, and does not stop it'
     $childProcess.Kill();Assert ($childProcess.WaitForExit(10000)) 'Disposable handed-off remover is explicitly stopped and its exit verified'
+    Write-Host ('Recorded remover tree: '+(@($hung.data.entries[0].invocation.descendants|ForEach-Object {$_.name})-join ', '))
+    foreach($member in @($hung.data.entries[0].invocation.descendants)){Wait-Process -Id ([int]$member.processId) -Timeout 10 -ErrorAction SilentlyContinue}
     $afterExit=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($afterExit.status -eq 'ready' -and $afterExit.data.entries[0].state -eq 'removed' -and $afterExit.data.entries[1].attemptCount -eq 0) 'Check state reports removal once the handed-off remover has exited and the registration is gone'
     $case=New-Case 'crash-intent';$a=$case.args
