@@ -22,6 +22,7 @@ public static class WindowsFeatures
             var pending = false;
             foreach (var feature in features)
             {
+                if (feature.State is 0 or 6 or 7) continue;
                 states.Add(feature.Name, State(feature.Name, feature.State));
                 pending |= feature.State is 1 or 5;
             }

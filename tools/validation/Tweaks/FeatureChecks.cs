@@ -34,6 +34,17 @@ static class FeatureChecks
             var dism = new FakeDism { ChangeResult = 3010, InfoShowsPending = false }; var store = new FeatureStore(dism);
             check(ControlExecution.Apply(Enable(store.Read(Features)), store, _ => { }), "A 3010 feature change is pending even when the DISM feature list shows only the target state");
         });
+        Scenario("features Windows lists as not present, superseded or partly installed", () =>
+        {
+            var dism = new FakeDism(); dism.Listed["Windows-Defender-Default-Definitions"] = 0; dism.Listed["SupersededFeature"] = 6; dism.Listed["PartialFeature"] = 7;
+            var store = new FeatureStore(dism); var before = store.Read(Features);
+            check(!before.Value.TryGetProperty("Windows-Defender-Default-Definitions", out _) && !before.Value.TryGetProperty("SupersededFeature", out _) && !before.Value.TryGetProperty("PartialFeature", out _) && before.Value.GetProperty("HypervisorPlatform").GetString() == "Disabled",
+                "Features Windows lists as not present, superseded or partly installed are left out instead of blocking every feature read");
+            ControlExecution.Apply(Enable(before), store, _ => { });
+            check(store.Read(Features).Value.GetProperty("HypervisorPlatform").GetString() == "Enabled", "Other features still apply when Windows lists a feature that is not present");
+            check(Refusal(() => WindowsFeatures.Expand(before, ControlValues.From(new Dictionary<string, string> { ["Windows-Defender-Default-Definitions"] = "Disabled" }), false)).Contains("does not offer feature"),
+                "A feature Windows lists as not present is refused as not offered");
+        });
         Scenario("pending enable read by a later process", () =>
         {
             var dism = new FakeDism(); dism.Listed["HypervisorPlatform"] = 4; dism.Info["HypervisorPlatform"] = 5;
