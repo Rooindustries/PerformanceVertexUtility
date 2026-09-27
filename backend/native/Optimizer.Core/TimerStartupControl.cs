@@ -28,7 +28,7 @@ public static class TimerStartupControl
         if (receipt.TaskName != name || receipt.Phase is not ("creating" or "created")) throw new InvalidDataException("Timer startup ownership is incomplete.");
         return receipt;
     }
-    private static object Connect()
+    private static object ConnectScheduler()
     {
         dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true)!)!;
         try { scheduler.Connect(); return scheduler; }
@@ -57,7 +57,7 @@ public static class TimerStartupControl
     public static TweakControlRead Read(ControlAddress address)
     {
         var target = Target(address); var receipt = Receipt(target.Root, target.Name);
-        var scheduler = Connect(); object? found = null;
+        var scheduler = ConnectScheduler(); object? found = null;
         try
         {
             found = Find(scheduler, target.Name); dynamic task = found!;
@@ -77,7 +77,7 @@ public static class TimerStartupControl
         var target = Target(before.Address); Directory.CreateDirectory(target.Root);
         using var guard = OperationFiles.Lock(Path.Combine(target.Root, "startup"));
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer startup state changed after review.");
-        var scheduler = Connect(); dynamic service = scheduler; object? found = null;
+        var scheduler = ConnectScheduler(); dynamic service = scheduler; object? found = null;
         try
         {
             found = Find(scheduler, target.Name);

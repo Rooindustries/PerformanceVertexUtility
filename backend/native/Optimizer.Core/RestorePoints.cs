@@ -75,14 +75,14 @@ public static class RestorePoints
             if (journal.Phase == "prepared")
             {
                 journal = journal with { Phase = "creating" }; OperationFiles.Write(journalPath, journal);
-                var begin = new RestoreInfo { EventType = 100, PointType = 12, Description = plan.Description };
+                var begin = new RestoreInfo { EventType = 100, PointType = 12, Label = plan.Description };
                 Set(ref begin, out var status);
                 journal = journal with { Sequence = status.Sequence }; OperationFiles.Write(journalPath, journal);
             }
             else if (journal.Sequence == 0) throw new InvalidOperationException("Creation was interrupted before its Windows sequence was recorded. Inspect System Protection before starting another request.");
             if (journal.Sequence > 0 && !journal.EndConfirmed)
             {
-                var end = new RestoreInfo { EventType = 101, PointType = 12, Sequence = journal.Sequence, Description = plan.Description };
+                var end = new RestoreInfo { EventType = 101, PointType = 12, Sequence = journal.Sequence, Label = plan.Description };
                 Set(ref end, out _); journal = journal with { EndConfirmed = true }; OperationFiles.Write(journalPath, journal);
             }
             var verified = VerifyUntil(plan, journal.Sequence, journal.EndConfirmed, List, () => Thread.Sleep(1000), 30);
@@ -108,7 +108,7 @@ public static class RestorePoints
         var ok = SRSetRestorePoint(ref info, out status);
         if (!ok || status.Status != 0) { var error = status.Status != 0 ? (int)status.Status : Marshal.GetLastWin32Error(); throw new Win32Exception(error, "SRSetRestorePointW failed with Win32 " + error + ". Check System Protection for the Windows drive."); }
     }
-    [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)] private struct RestoreInfo { public uint EventType, PointType; public long Sequence; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Description; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)] private struct RestoreInfo { public uint EventType, PointType; public long Sequence; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Label; }
     [StructLayout(LayoutKind.Sequential, Pack = 1)] private struct RestoreStatus { public uint Status; public long Sequence; }
     [DllImport("srclient.dll", EntryPoint = "SRSetRestorePointW", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SRSetRestorePoint(ref RestoreInfo info, out RestoreStatus status);
 }
