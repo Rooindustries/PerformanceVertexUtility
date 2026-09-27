@@ -487,6 +487,20 @@ function Get-RooIndustriesMsiUninstallArguments {
     return "/x $code /norestart"
 }
 
+function Get-RooIndustriesUninstallCommandLine {
+    param([string]$Executable, [string]$Arguments)
+    return '"' + $Executable + '"' + $(if ($Arguments) { ' ' + $Arguments } else { '' })
+}
+
+function Get-RooIndustriesReviewedUninstallCommandLine {
+    param([string]$Executable, [string]$Arguments)
+    try {
+        if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable)) { return $null }
+        return Get-RooIndustriesUninstallCommandLine ([IO.Path]::GetFullPath($Executable)) $Arguments
+    } catch [ArgumentException] { return $null }
+    catch [NotSupportedException] { return $null }
+}
+
 function Split-RooIndustriesUninstallCommandLine {
     param([string]$CommandLine)
     if ([string]::IsNullOrWhiteSpace($CommandLine)) {

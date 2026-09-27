@@ -283,9 +283,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             }
 
             SelectedHasOfficialRemover = IsVendorRemover(command);
-            OfficialCommand = string.IsNullOrWhiteSpace(command.RawCommand)
-                ? "Roo Industries route. The cleanup run starts from app traces and leftovers."
-                : command.RawCommand;
+            OfficialCommand = !string.IsNullOrWhiteSpace(command.CommandLine)
+                ? command.CommandLine
+                : string.IsNullOrWhiteSpace(command.RawCommand)
+                    ? "Roo Industries route. The cleanup run starts from app traces and leftovers."
+                    : "This remover can't run as published: " + command.RawCommand;
             PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
             OfficialPreviewState = command.Blocked
                 ? "This route needs review, but it does not stop the cleanup plan."

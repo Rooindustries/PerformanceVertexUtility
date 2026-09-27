@@ -30,12 +30,16 @@ function New-Case([string]$Name) {
         OfficialPreviewSha256=(Get-FileHash $officialPath -Algorithm SHA256).Hash; CleanupManifestSha256=(Get-FileHash $manifestPath -Algorithm SHA256).Hash }
     return @{root=$root; targets=$targets; official=$official; manifest=$manifest; args=$args}
 }
+function Set-Remover($Case, [string]$Executable, [string[]]$Arguments) {
+    $Case.official.commands[0].executable = $Executable
+    $Case.official.commands[0].arguments = $Arguments
+    $Case.official.commands[0].commandLine = Get-RooIndustriesUninstallCommandLine $Executable (Join-RooIndustriesWindowsArguments $Arguments)
+    $Case.args.AllowedOfficialExecutablePath = $Executable; Refresh-Hashes $Case
+}
 function New-HandoffCase([string]$Name, [string]$Mode, [string[]]$Extra = @()) {
     $case = New-Case $Name
     $case.remover = Join-Path $case.root 'remover state'
-    $case.official.commands[0].executable = $handoffExe
-    $case.official.commands[0].arguments = @($case.remover, $Mode) + $Extra
-    $case.args.AllowedOfficialExecutablePath = $handoffExe; Refresh-Hashes $case
+    Set-Remover $case $handoffExe (@($case.remover, $Mode) + $Extra)
     return $case
 }
 function Refresh-Hashes($Case) {
@@ -104,9 +108,7 @@ try {
     $case=New-Case 'vendor-changes-content'; $a=$case.args
     $vendorExe=Join-Path $case.root 'Roo Industries Vendor Fixture.exe'
     Add-Type -TypeDefinition 'using System.IO; public class RooIndustriesVendorFixture {public static int Main(string[] args) {File.WriteAllText(Path.Combine(args[0],"nested","data.txt"),"changed by vendor"); File.WriteAllText(Path.Combine(args[0],"new user file.txt"),"created during removal"); return 0;}}' -OutputAssembly $vendorExe -OutputType ConsoleApplication
-    $case.official.commands[0].executable=$vendorExe
-    $case.official.commands[0].arguments=@($case.targets[0])
-    $a.AllowedOfficialExecutablePath=$vendorExe; Refresh-Hashes $case
+    Set-Remover $case $vendorExe @($case.targets[0])
     $review=Read-Result (& $applyScript @a)
     if ($review.status -ne 'cleanup-review-required' -or -not $review.summary.officialRunnerCompleted -or $review.summary.restoreReady -or $review.summary.deletedCount -ne 0) {Write-Host ($review|ConvertTo-Json -Depth 20)}
     Assert ($review.status -eq 'cleanup-review-required' -and $review.summary.officialRunnerCompleted -and $review.summary.deletedCount -eq 0 -and -not $review.summary.restoreReady) 'Vendor removal invalidates the old cleanup approval and creates no misleading file rollback'
@@ -175,6 +177,13 @@ public class RooIndustriesHandoffFixture {
     $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
     $afterStale=Read-Result (& $applyScript @secondArgs)
     Assert ($afterStale.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($second.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An exited earlier remover no longer blocks the app and a completed removal releases its claim'
+    foreach ($scenario in @('changed-command-line','missing-command-line')) {
+        $case=New-HandoffCase $scenario 'handoff'; $a=$case.args
+        if ($scenario -eq 'changed-command-line') { $case.official.commands[0].commandLine = $case.official.commands[0].commandLine + ' /extra' } else { $case.official.commands[0].commandLine = $null }
+        Refresh-Hashes $case
+        $result=Read-Result (& $applyScript @a)
+        Assert ($result.status -eq 'blocked' -and @($result.gates | Where-Object { $_.gateId -eq 'reviewed-command-line' -and $_.blocking }).Count -eq 1 -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) "A remover whose command differs from the reviewed command ($scenario) never launches"
+    }
     $waitShell=[powershell]::Create()
     [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
     $waitHandle=$waitShell.BeginInvoke()
