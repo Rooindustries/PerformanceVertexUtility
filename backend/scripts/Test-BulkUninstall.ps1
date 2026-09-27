@@ -6,6 +6,10 @@ $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-bulk-uninstall-'+[gu
 $planScript=Join-Path $PSScriptRoot 'New-BulkUninstallPlan.ps1'
 $runScript=Join-Path $PSScriptRoot 'Invoke-BulkUninstall.ps1'
 $liveFixtures=New-Object System.Collections.Generic.List[object]
+$msiCode=[guid]::NewGuid().ToString('B').ToUpperInvariant()
+$msiKeyPath='Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$msiCode
+$msiAppId='registry:roo-industries-msi-fixture-'+$msiCode
+$msiClaim=Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId=$msiAppId})
 function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0) {
     $directory=Join-Path $root $Name;[IO.Directory]::CreateDirectory($directory)|Out-Null
     $exe=Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
@@ -14,7 +18,7 @@ function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0) {
     foreach($i in 1..2){
         $marker=Join-Path $directory "installed $i.txt";[IO.File]::WriteAllText($marker,'installed');$markers+=@($marker)
         $mode=if($i -eq 1){$FirstMode}else{'remove'};$code=if($i -eq 1){$FirstExit}else{0}
-        $arguments=@($marker,$counter,[string]$code,$mode,($journalPath+'.cancel'))
+        $arguments=@($marker,$counter,[string]$code,$mode,($journalPath+'.cancel'),'quoted "value" with trailing\')
         $install=Join-Path $directory ('app-'+$i);[IO.Directory]::CreateDirectory($install)|Out-Null;[IO.File]::WriteAllText((Join-Path $install 'settings.txt'),'original settings')
         $apps+=@([pscustomobject]@{appId="fixture:$Name-$i";displayName="Roo Industries disposable app $i";publisher='Roo Industries Fixture';sourceType='registry';
             sourceIdentity=@{kind='fixture';presencePath=$marker};installLocation=$install;risk='low';protected=$false;categories=@('application');
@@ -38,6 +42,8 @@ public class RooIndustriesBulkFixture {
     public static int Main(string[] args) {
         Console.WriteLine("A vendor console message must not corrupt the JSON response.");
         Console.Error.WriteLine("Vendor diagnostic output.");
+        if(args.Length!=6||args[5]!="quoted \"value\" with trailing\\") return 87;
+        File.AppendAllText(args[1]+".command-lines",Environment.CommandLine+Environment.NewLine);
         if(args[3]=="verbose") Console.Write(new String('x',200000));
         File.AppendAllText(args[1],args[0]+Environment.NewLine);
         if(args[3]=="wait") Thread.Sleep(15000);
@@ -47,6 +53,23 @@ public class RooIndustriesBulkFixture {
     }
 }
 '@ -OutputAssembly $script:fixtureExe -OutputType ConsoleApplication
+    $msiDirectory=Join-Path $root 'msi';[IO.Directory]::CreateDirectory($msiDirectory)|Out-Null
+    $msiKey=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($msiKeyPath)
+    try {$msiKey.SetValue('DisplayName','Roo Industries MSI command fixture');$msiKey.SetValue('UninstallString',"MsiExec.exe /X$msiCode");$msiKey.SetValue('WindowsInstaller',1,[Microsoft.Win32.RegistryValueKind]::DWord)}
+    finally {$msiKey.Dispose()}
+    $msiApp=[pscustomobject]@{appId=$msiAppId;displayName='Roo Industries MSI command fixture';sourceType='msi';packageId=$msiCode;risk='low';protected=$false;categories=@('application');
+        sourceIdentity=@{kind='registry';hive='CurrentUser';view='Registry64';keyPath=$msiKeyPath;userSid=(Get-RooIndustriesOperationOwner).userSid};uninstallString="MsiExec.exe /X$msiCode"}
+    $msiInventory=Join-Path $msiDirectory 'inventory.json';Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($msiApp)} $msiInventory
+    $msiPlanPath=Join-Path $msiDirectory 'plan.json'
+    $msiPlan=Read-Result (& $planScript -AppId @($msiAppId) -InventoryPath $msiInventory -Quiet -OutputPath $msiPlanPath)
+    $msiexec=Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
+    Assert ($msiPlan.status -eq 'preview' -and $msiPlan.data.entries[0].commandLine -ceq ('"'+$msiexec+'" /x '+$msiCode+' /qn /norestart')) 'MSI removal is reviewed as one unquoted msiexec command line built from the ProductCode'
+    $msiJournal=Join-Path $msiDirectory 'journal.json'
+    $msiRun=Read-Result (& $runScript -Action Apply -InputPath $msiPlanPath -ReviewSha256 (Get-FileHash $msiPlanPath).Hash -JournalPath $msiJournal -TimeoutSeconds 30 -ConfirmApply -ManualReviewApproved)
+    Assert ($null -ne $msiRun.data.entries[0].outcome -and $msiRun.data.entries[0].outcome.exitCode -eq 1605) 'msiexec parses the executed MSI command and reports the unknown ProductCode instead of showing its usage window'
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($msiKeyPath)
+    $msiReconciled=Read-Result (& $runScript -Action Reconcile -JournalPath $msiJournal -ConfirmApply)
+    Assert ($msiReconciled.data.entries[0].state -eq 'removed' -and -not(Test-Path -LiteralPath $msiClaim)) 'The MSI fixture queue reconciles after its registration is removed and releases its removal claim'
     $case=New-Case 'success';$a=$case.args
     Assert ((Test-Path $case.markers[0]) -and -not(Test-Path $case.counter) -and -not(Test-Path $a.JournalPath)) 'Bulk preview executes nothing and creates no journal'
     $withoutApproval=@{};foreach($key in $a.Keys){$withoutApproval[$key]=$a[$key]};$withoutApproval.ConfirmApply=$false
@@ -67,6 +90,8 @@ public class RooIndustriesBulkFixture {
     Assert ($run.data.entries[0].output.stdout -like '*vendor console message*' -and $run.data.entries[0].output.stderr -like '*Vendor diagnostic*') 'Vendor stdout and stderr are captured inside the response without contaminating its JSON'
     $again=Read-Result (& $runScript @a)
     Assert ($again.status -eq 'cleanup-review-required' -and (Get-Content $case.counter).Count -eq 2) 'Replaying a completed bulk queue does not run either remover again'
+    $commandLines=@(Get-Content -LiteralPath ($case.counter+'.command-lines'))
+    Assert ($commandLines.Count -eq 2 -and $commandLines[0] -ceq $case.plan.entries[0].commandLine -and $commandLines[1] -ceq $case.plan.entries[1].commandLine) 'Each remover receives exactly the reviewed command line, including spaces, quotes and a trailing backslash'
     $case=New-Case 'cancel' 'cancel';$a=$case.args
     $canceled=Read-Result (& $runScript @a)
     Assert ($canceled.status -eq 'canceled' -and -not(Test-Path $case.markers[0]) -and (Test-Path $case.markers[1]) -and $canceled.data.entries[1].attemptCount -eq 0) 'Cancellation between entries leaves untouched applications installed'
@@ -164,7 +189,10 @@ public class RooIndustriesBulkFixture {
     Assert ($wrong.status -eq 'failed' -and (Test-Path $target)) 'A cleanup review cannot be replayed against another app in the queue'
 
 } finally {
+    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.Name -ieq 'msiexec.exe' -and $_.CommandLine -like "*$msiCode*"})){Stop-Process -Id $process.ProcessId -Force}
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($msiKeyPath,$false)
+    if(Test-Path -LiteralPath $msiClaim){Remove-Item -LiteralPath $msiClaim -Force}
     foreach($process in $liveFixtures){if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){throw 'Bulk fixture process did not exit'};$process.Dispose()}
     if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}
 }
-Assert (-not(Test-Path $root)) 'Bulk tests leave no fixture process, presence marker or journal behind'
+Assert (-not(Test-Path $root) -and -not(Test-Path -LiteralPath ('HKCU:\'+$msiKeyPath)) -and -not(Test-Path -LiteralPath $msiClaim)) 'Bulk tests leave no fixture process, presence marker, registration, claim or journal behind'
