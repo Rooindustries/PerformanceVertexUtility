@@ -282,10 +282,32 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(command.CommandLine) && !string.IsNullOrWhiteSpace(command.RawCommand))
+            {
+                SelectedHasOfficialRemover = false;
+                OfficialCommand = command.RawCommand;
+                OfficialPreviewState = command.CommandType == "appx-package-removal-preview"
+                    ? "Use Remove apps to remove this app."
+                    : "Couldn't check this path: its remover doesn't point to one exact file, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                PrimaryRemovalButtonLabel = "Plan removal";
+                RemovalPathReviewed = false;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(command.CommandLine) && string.IsNullOrWhiteSpace(command.ExecutableSha256))
+            {
+                SelectedHasOfficialRemover = false;
+                OfficialCommand = command.CommandLine;
+                OfficialPreviewState = "Couldn't check this path: the remover file is missing, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                PrimaryRemovalButtonLabel = "Plan removal";
+                RemovalPathReviewed = false;
+                return;
+            }
+
             SelectedHasOfficialRemover = IsVendorRemover(command);
-            OfficialCommand = string.IsNullOrWhiteSpace(command.RawCommand)
-                ? "Roo Industries route. The cleanup run starts from app traces and leftovers."
-                : command.RawCommand;
+            OfficialCommand = !string.IsNullOrWhiteSpace(command.CommandLine)
+                ? command.CommandLine
+                : "Roo Industries route. The cleanup run starts from app traces and leftovers.";
             PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
             OfficialPreviewState = command.Blocked
                 ? "This route needs review, but it does not stop the cleanup plan."

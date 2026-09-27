@@ -98,6 +98,7 @@ public sealed class BulkRemovalEntryState
     public string AppId { get; set; } = "";
     public string State { get; set; } = "pending";
     public bool RegistrationAbsent { get; set; }
+    public bool LaunchUnconfirmed { get; set; }
     public string? Error { get; set; }
 }
 

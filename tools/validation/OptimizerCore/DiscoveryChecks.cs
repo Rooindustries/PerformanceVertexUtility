@@ -77,8 +77,27 @@ static class DiscoveryChecks
                 "Notepad++ matches only its own key and folder, never Notepad or Microsoft\\Notepad: " + string.Join(", ", Keys(plus).Concat(Folders(plus))));
             check(plus.All(item => item.SharedOwners.Count == 0), "Windows Notepad is not recorded as a co-owner of Notepad++ leftovers");
             var notepad = Scan(windowsNotepad, notepadPlus);
-            check(Keys(notepad).SequenceEqual(["Microsoft\\Notepad", "Notepad"]) && Folders(notepad).SequenceEqual(["Notepad"]),
-                "A Microsoft-published Notepad keeps its Microsoft key and never matches Notepad++: " + string.Join(", ", Keys(notepad).Concat(Folders(notepad))));
+            check(Keys(notepad).SequenceEqual(["Notepad"]) && Folders(notepad).SequenceEqual(["Notepad"]),
+                "A Microsoft-published Notepad is never offered the shared Microsoft key and never matches Notepad++: " + string.Join(", ", Keys(notepad).Concat(Folders(notepad))));
+            var microsoftEdge = Scan(Product("registry:microsoft-edge", "Edge", "Microsoft Corporation"));
+            check(Keys(microsoftEdge).SequenceEqual(["Edge"]), "A Microsoft-published desktop app is never offered keys under a Microsoft root: " + string.Join(", ", Keys(microsoftEdge)));
+            var microsoftData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "RooIndustriesDiscovery" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(microsoftData);
+            try
+            {
+                using (var progIds = hive.CreateSubKey(registryRoot + "\\ProgIds")) progIds.SetValue("Open", "\"" + Path.Combine(microsoftData, "app.exe") + "\" \"%1\"");
+                var installed = new LeftoverDiscovery(Product("registry:microsoft-data", "Roo Industries Microsoft Data", "Roo Industries") with { InstallLocation = microsoftData }, []).Scan(CancellationToken.None, [root], scopes).Candidates;
+                check(!installed.Any(item => item.Target.StartsWith(microsoftData, StringComparison.OrdinalIgnoreCase)), "An install location under a Microsoft-owned folder is never offered as a leftover: " + string.Join(", ", installed.Select(item => item.Target)));
+                check(!installed.Any(item => item.Kind == "registryValue"), "Registry values pointing into a Microsoft-owned install location are never offered: " + string.Join(", ", installed.Select(item => item.Target)));
+            }
+            finally { Directory.Delete(microsoftData, true); }
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var drive = Path.GetPathRoot(local)!;
+            string[] owned = [Path.Combine(local, "Packages", "Microsoft.GamingApp_8wekyb3d8bbwe", "LocalState"), Path.Combine(local, "Packages", "Microsoft.Windows.Photos_cw5n1h2txyewy"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ModifiableWindowsApps", "Game"), Path.Combine(drive, "XboxGames", "Game"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Microsoft", "CryptnetUrlCache")];
+            check(owned.All(LeftoverDiscovery.MicrosoftOwnedPath), "Microsoft package data, ModifiableWindowsApps, XboxGames and LocalLow\\Microsoft are Windows-owned: " + string.Join(", ", owned.Where(path => !LeftoverDiscovery.MicrosoftOwnedPath(path))));
+            check(!LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(local, "Packages", "Vendor.App_abcdefghjk123")) && !LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(drive, "Games", "XboxGames")), "Third-party package data and similarly named folders elsewhere stay eligible");
             var edge = Scan(Product("registry:edge", "Edge", "Edge Labs"));
             check(Keys(edge).SequenceEqual(["Edge"]), "A short third-party name never offers the Microsoft key it shares: " + string.Join(", ", Keys(edge)));
             var folder = Scan(Product("registry:folder", "Folder", "Folder Tools"));

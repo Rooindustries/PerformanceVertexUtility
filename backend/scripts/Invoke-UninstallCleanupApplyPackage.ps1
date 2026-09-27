@@ -18,7 +18,9 @@ param(
     [switch]$OfficialUninstallCommandApproved,
     [switch]$CleanupDeletionManifestApproved,
     [switch]$UserApproved,
-    [switch]$AllowRealSystemExecution
+    [switch]$AllowRealSystemExecution,
+    [string]$FixtureRoot = '',
+    [switch]$AllowFixtureClaims
 )
 
 $ErrorActionPreference = 'Stop'
@@ -162,13 +164,34 @@ try {
     $reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $command 'reviewRequired' $true)
     $commandExecutable = [string](Get-RooIndustriesUninstallPropertyValue $command 'executable' '')
     $hasOfficialCommand = -not [string]::IsNullOrWhiteSpace($commandExecutable)
-    if ($hasOfficialCommand) { $commandExecutable = Resolve-RooIndustriesUninstallPath $commandExecutable $commandExecutable }
+    $argumentText = ''
+    $commandLineReviewed = -not $hasOfficialCommand
+    $executableReviewed = -not $hasOfficialCommand
+    if ($hasOfficialCommand) {
+        $commandExecutable = Resolve-RooIndustriesUninstallPath $commandExecutable $commandExecutable
+        $argumentProperty = $command.PSObject.Properties['arguments']
+        $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
+        $reviewedCommandLine = [string](Get-RooIndustriesUninstallPropertyValue $command 'commandLine' '')
+        $commandLineReviewed = -not [string]::IsNullOrWhiteSpace($reviewedCommandLine) -and (Get-RooIndustriesUninstallCommandLine $commandExecutable $argumentText) -ceq $reviewedCommandLine
+        $reviewedExecutableSha256 = [string](Get-RooIndustriesUninstallPropertyValue $command 'executableSha256' '')
+        $executableReviewed = -not [string]::IsNullOrWhiteSpace($reviewedExecutableSha256) -and -not (Test-RooIndustriesCleanupReparsePath $commandExecutable) -and (Get-RooIndustriesReviewedUninstallExecutableHash $commandExecutable) -ceq $reviewedExecutableSha256
+    }
+    if (-not [string]::IsNullOrWhiteSpace($FixtureRoot) -and -not $AllowFixtureClaims) { throw 'A fixture claim root is accepted only by validation runs that pass AllowFixtureClaims.' }
+    $claimRoot = if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { '' } else { Assert-RooIndustriesBulkFixtureRoot $FixtureRoot }
+    if ($AllowFixtureClaims -and ([string]::IsNullOrWhiteSpace($claimRoot) -or ($hasOfficialCommand -and -not (Test-RooIndustriesCleanupPathWithin $commandExecutable $claimRoot)))) { throw 'Fixture claims apply only to removers inside the fixture root.' }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
         Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('RooIndustriesOptimizationSuite\cleanup-backups\' + [guid]::NewGuid().ToString('N'))
     } else { [System.IO.Path]::GetFullPath($BackupRoot) }
     $resolvedRollbackManifestPath = if ([string]::IsNullOrWhiteSpace($RollbackManifestPath)) { Join-Path $resolvedBackupRoot 'rollback-manifest.json' } else { [System.IO.Path]::GetFullPath($RollbackManifestPath) }
+    $replayingSavedRun = $false
+    if ($hasOfficialCommand -and (Test-Path -LiteralPath $resolvedRollbackManifestPath)) {
+        try {
+            $saved = Read-RooIndustriesUninstallJsonFile $resolvedRollbackManifestPath
+            $replayingSavedRun = $saved.appId -ceq $appId -and $saved.officialPreviewSha256 -eq $officialInput.sha256 -and $saved.cleanupManifestSha256 -eq $cleanupInput.sha256
+        } catch { $replayingSavedRun = $false }
+    }
 
     $safeTargets = $true
     $ids = @{}
@@ -205,6 +228,8 @@ try {
         (New-ApplyPackageGate 'manual-review-approved' 'Dependency review completed' $true ((-not $reviewRequired) -or $ManualReviewApproved) 'Apps marked for review require explicit dependency review approval.' $null),
         (New-ApplyPackageGate 'valid-preview' 'Preview completed without errors' $true ($inputErrors.Count -eq 0 -and -not [bool](Get-RooIndustriesUninstallPropertyValue $command 'blocked' $true) -and -not [bool](Get-RooIndustriesUninstallPropertyValue $command 'protected' $true)) 'Failed, incomplete or protected routes cannot run.' $null),
         (New-ApplyPackageGate 'official-executable-allowlisted' 'Official executable approved' $true $officialExecutableAllowlisted 'The executable must match the allowlist exactly.' $null),
+        (New-ApplyPackageGate 'reviewed-command-line' 'Reviewed remover command unchanged' $true $commandLineReviewed 'The remover runs only when the command it will start matches the reviewed command exactly.' $null),
+        (New-ApplyPackageGate 'reviewed-executable-unchanged' 'Reviewed remover file unchanged' $true ($executableReviewed -or $replayingSavedRun) 'The remover runs only when its file still has the SHA-256 recorded at review.' $null),
         (New-ApplyPackageGate 'exact-target-allowlist' 'Exact cleanup targets approved' $true $exactTargetsApproved 'Every cleanup target must be on the exact allowlist.' $null),
         (New-ApplyPackageGate 'manual-review-items-excluded' 'Protected leftovers excluded' $true ($reviewItems.Count -eq 0) 'Protected leftovers require a separate workflow.' $null),
         (New-ApplyPackageGate 'supported-cleanup-types' 'Only files and folders selected' $true ($unsupportedItems.Count -eq 0) 'Registry, services and tasks remain outside this executor.' $null),
@@ -245,14 +270,12 @@ try {
             $journal.status = 'prepared'
             Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
             if ($hasOfficialCommand) {
-                $argumentProperty = $command.PSObject.Properties['arguments']
-                $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
-                $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId })
+                $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId }) $claimRoot
                 try { $claimLease = Lock-RooIndustriesOperation $claimPath } catch [IO.IOException] { throw 'Another removal of this app is running right now. Let it finish, then try again.' }
                 try {
                     if (Test-Path -LiteralPath $claimPath) {
                         $claim = (Read-RooIndustriesOperationJson $claimPath).data
-                        if ([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -ne 'cleanup-apply' -or (Test-RooIndustriesBulkInvocationLive (Get-RooIndustriesUninstallPropertyValue $claim 'invocation' $null))) {
+                        if ([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -ne 'cleanup-apply' -or (Test-RooIndustriesBulkClaimLive $claim)) {
                             throw 'An earlier removal of this app is still running or unresolved. Let it finish, then try again.'
                         }
                         Remove-Item -LiteralPath $claimPath -Force
@@ -261,11 +284,26 @@ try {
                     $journal.executionStarted = $true
                     Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                     $executionStarted = $true
-                    $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
-                        param($invocation)
-                        $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
-                        Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
-                        Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; invocation = $invocation }) $claimPath
+                    $claimedAtUtc = Get-RooIndustriesUtcStamp
+                    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; executable = $commandExecutable; claimedAtUtc = $claimedAtUtc; launchConfirmed = $false; invocation = $null }) $claimPath
+                    $executableLease = $null
+                    try {
+                        $executableLease = [IO.File]::Open($commandExecutable, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+                        $sha = [Security.Cryptography.SHA256]::Create()
+                        try { $digest = ([BitConverter]::ToString($sha.ComputeHash($executableLease))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
+                        if ($digest -cne $reviewedExecutableSha256) { throw 'The remover file changed after review. Check the removal path again.' }
+                        if (Test-RooIndustriesCleanupReparsePath $commandExecutable) { throw 'The remover is now reached through a link. Check the removal path again.' }
+                        $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
+                            param($invocation)
+                            Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; executable = $commandExecutable; claimedAtUtc = $claimedAtUtc; launchConfirmed = $true; invocation = $invocation }) $claimPath
+                            $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
+                            Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
+                        } $reviewedCommandLine $executableLease
+                    } catch {
+                        if ($null -eq (Get-RooIndustriesUninstallPropertyValue $journal 'officialInvocation' $null)) { Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue }
+                        throw
+                    } finally {
+                        if ($null -ne $executableLease) { $executableLease.Dispose() }
                     }
                     if (-not $officialResult.timedOut -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
                 } finally { $claimLease.Dispose() }

@@ -3995,6 +3995,18 @@
             "null"
           ]
         },
+        "commandLine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executableSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "executable": {
           "type": [
             "string",

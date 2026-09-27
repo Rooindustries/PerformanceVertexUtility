@@ -16,6 +16,7 @@
       "primaryClassification": "overlay",
       "commandType": "registry-uninstall-string",
       "rawCommand": "\"C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe\"",
+      "commandLine": "\"C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe\"",
       "executable": "C:\\Program Files (x86)\\Overwolf\\OWUninstaller.exe",
       "arguments": null,
       "quietRawCommand": null,

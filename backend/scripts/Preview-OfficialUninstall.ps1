@@ -83,7 +83,9 @@ function Get-OfficialCommandPreview {
         primaryClassification = [string](Get-RooIndustriesUninstallPropertyValue $Classification 'primaryClassification' '')
         commandType = $commandType
         rawCommand = $rawCommand
+        commandLine = Get-RooIndustriesReviewedUninstallCommandLine ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null)) ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null))
         executable = Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null
+        executableSha256 = Get-RooIndustriesReviewedUninstallExecutableHash ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null))
         arguments = Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null
         quietRawCommand = $quietCommand
         quietExecutable = Get-RooIndustriesUninstallPropertyValue $parsedQuiet 'executable' $null
