@@ -175,6 +175,7 @@ public static class TimerControl
         var error = Marshal.GetLastWin32Error();
         if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
+        if (!IsProcessInJob(Process.GetCurrentProcess().Handle, IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start Roo Industries from the Start menu or desktop shortcut and try again.");
         if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out created)) return created;
         error = Marshal.GetLastWin32Error();
@@ -190,6 +191,7 @@ public static class TimerControl
         {
             if (!OpenProcessToken(shell, 0x0008, out var token)) return null;
             try { using var identity = new WindowsIdentity(token); if (identity.User?.Value != OperationOwner.Current().UserSid) return null; }
+            catch (Exception error) when (error is UnauthorizedAccessException or System.Security.SecurityException or ArgumentException) { return null; }
             finally { CloseHandle(token); }
             var size = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
             var list = Marshal.AllocHGlobal(size); var parent = Marshal.AllocHGlobal(IntPtr.Size);
@@ -236,6 +238,7 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcessWithParent(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfoEx startup, out ProcessInfo process);
     [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsProcessInJob(IntPtr process, IntPtr job, [MarshalAs(UnmanagedType.Bool)] out bool result);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out int processId);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
     [DllImport("advapi32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
