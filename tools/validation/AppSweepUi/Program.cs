@@ -687,29 +687,32 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     });
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
-    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    async Task CheckRoute(UninstallCommand command)
     {
-        DryRun = true,
-        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", CommandLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", ExecutableSha256 = null }],
-    });
-    cleanup.PrimaryRemovalButtonLabel = "Check path";
+        App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [command] });
+        cleanup.SelectedApp = appB;
+        cleanup.SelectedApp = appA;
+        command.AppId = appA.AppId;
+        await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    }
+    bool RouteBlocked() => !cleanup.RemovalPathReviewed && !cleanup.CanReviewRemovalAction && cleanup.PrimaryRemovalButtonLabel == "Use Remove apps"
+        && cleanup.ApplyApprovalSummary == "Roo Industries can't run this app's remover. Use Remove apps to remove it.";
+    const string goneLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S";
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "missing" });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal), "A remover whose file is missing is blocked and says the file is missing");
+    var routeCalls = 0;
+    App.Live.OfficialPreview = _ => { routeCalls++; return Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial()); };
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
-    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A remover whose file is missing is not marked as checked and says so");
-    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
-    {
-        DryRun = true,
-        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null }],
-    });
-    cleanup.PrimaryRemovalButtonLabel = "Check path";
-    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
-    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
-    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
-    {
-        DryRun = true,
-        Commands = [new UninstallCommand { AppId = id, CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null }],
-    });
-    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
-    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState == "Use Remove apps to remove this app.", "A Store app in Leftover cleanup points to Remove apps instead of offering a removal that cannot run");
+    Check(routeCalls == 0 && RouteBlocked(), "A blocked route cannot be re-run from the same button");
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "unreadable" });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file can't be read", StringComparison.Ordinal), "A remover file that exists but can't be read says so instead of calling it missing");
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal), "A vendor remover that cannot be resolved to one file is blocked and says why");
+    await CheckRoute(new UninstallCommand { CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState == "Use Remove apps to remove this app.", "A Store app in Leftover cleanup points to Remove apps instead of offering a removal that cannot run");
+    cleanup.SelectedApp = appB;
+    cleanup.SelectedApp = appA;
+    Check(cleanup.CanReviewRemovalAction && !cleanup.RemovalRouteBlocked, "Picking the app again unlocks the route check");
 
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
