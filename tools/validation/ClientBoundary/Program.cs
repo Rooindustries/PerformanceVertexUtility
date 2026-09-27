@@ -21,7 +21,7 @@ try
     var scripts = Path.Combine(fixture, "backend", "scripts");
     Directory.CreateDirectory(scripts);
     Directory.CreateDirectory(Path.Combine(fixture, "backend", "samples"));
-    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BackendExecutor.Common.ps1", "ProcessProfile.Common.ps1" })
+    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BulkUninstall.Common.ps1", "OperationState.Common.ps1", "AppxInventory.Common.ps1", "ProcessProfile.Common.ps1" })
         File.Copy(Path.Combine(repo, "backend", "scripts", name), Path.Combine(scripts, name));
     File.WriteAllText(Path.Combine(scripts, "Invoke-CleanupExclusions.ps1"), "param([string]$Action,[string[]]$FileTarget)\n'{\"schemaVersion\":1,\"status\":\"completed\",\"data\":{\"allowed\":true}}'\n");
     File.WriteAllText(Path.Combine(scripts, "Preview-OfficialUninstall.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'official.json') -Raw -Encoding UTF8\n");

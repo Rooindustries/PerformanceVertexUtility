@@ -162,6 +162,16 @@ public class RooIndustriesBulkFixture {
     foreach($member in @($hung.data.entries[0].invocation.descendants)){Wait-Process -Id ([int]$member.processId) -Timeout 10 -ErrorAction SilentlyContinue}
     $afterExit=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($afterExit.status -eq 'ready' -and $afterExit.data.entries[0].state -eq 'removed' -and $afterExit.data.entries[1].attemptCount -eq 0) 'Check state reports removal once the handed-off remover has exited and the registration is gone'
+    $case=New-Case 'leftover-tab-claim';$a=$case.args
+    $claimFile=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    $self=[Diagnostics.Process]::GetCurrentProcess()
+    Write-RooIndustriesOperationJson ([pscustomobject]@{kind='cleanup-apply';appId=$case.plan.entries[0].appId;invocation=[pscustomobject]@{processId=$PID;creationTimeFileTimeUtc=$self.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();descendants=@()}}) $claimFile
+    $busyClaim=Read-Result (& $runScript @a)
+    Assert ($busyClaim.status -eq 'needs-reconciliation' -and $busyClaim.data.entries[0].error -like '*Leftover cleanup is still running*' -and -not(Test-Path $case.counter)) 'A running Leftover cleanup remover blocks the same app in the removal queue'
+    Remove-Item -LiteralPath $a.JournalPath
+    Write-RooIndustriesOperationJson ([pscustomobject]@{kind='cleanup-apply';appId=$case.plan.entries[0].appId;invocation=[pscustomobject]@{processId=$PID;creationTimeFileTimeUtc='1';descendants=@()}}) $claimFile
+    $staleClaim=Read-Result (& $runScript @a)
+    Assert ($staleClaim.status -eq 'cleanup-review-required' -and -not(Test-Path -LiteralPath $claimFile)) 'A finished Leftover cleanup remover no longer blocks the removal queue'
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
