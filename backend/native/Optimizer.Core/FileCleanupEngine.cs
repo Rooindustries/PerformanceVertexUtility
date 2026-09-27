@@ -123,7 +123,8 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                     using (existing)
                     {
                         var current = existing.Capture();
-                        var ours = current.Identity == entry.RestoredIdentity || current.Identity == entry.Original.Identity;
+                        var ours = current.Identity == entry.RestoredIdentity || current.Identity == entry.Original.Identity
+                            || entry.Original.Directory && entry.Status == "restoreIntent" && entry.RestoredIdentity is null;
                         var compared = ours ? current with { LastWriteTime = entry.Original.LastWriteTime, LastAccessTime = entry.Original.LastAccessTime, Attributes = entry.Original.Attributes } : current;
                         if (!entry.Original.SameRestorableData(compared)) throw new InvalidDataException("New or changed data occupies the restore destination.");
                         if (ours) entry.RestoredIdentity = current.Identity;
