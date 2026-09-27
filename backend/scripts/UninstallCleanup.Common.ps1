@@ -500,12 +500,19 @@ function Get-RooIndustriesReviewedUninstallCommandLine {
     } catch { return $null }
 }
 
-function Get-RooIndustriesReviewedUninstallExecutableHash {
+function Get-RooIndustriesUninstallExecutableFacts {
     param([string]$Executable)
     try {
-        if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable) -or -not [IO.File]::Exists($Executable)) { return $null }
-        return (Get-FileHash -LiteralPath ([IO.Path]::GetFullPath($Executable)) -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
-    } catch { return $null }
+        if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable)) { return [pscustomobject]@{ state = 'unresolved'; sha256 = $null } }
+        $full = [IO.Path]::GetFullPath($Executable)
+        if (-not [IO.File]::Exists($full)) { return [pscustomobject]@{ state = 'missing'; sha256 = $null } }
+        return [pscustomobject]@{ state = 'present'; sha256 = (Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() }
+    } catch { return [pscustomobject]@{ state = 'unreadable'; sha256 = $null } }
+}
+
+function Get-RooIndustriesReviewedUninstallExecutableHash {
+    param([string]$Executable)
+    return (Get-RooIndustriesUninstallExecutableFacts $Executable).sha256
 }
 
 function Split-RooIndustriesUninstallCommandLine {
