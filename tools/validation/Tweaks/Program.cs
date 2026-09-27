@@ -72,6 +72,8 @@ try
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
     if (args is [_, "--controls-fixture"]) { NativeControlChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native control checks."); return; }
     if (args is [_, "--feature-read"]) { FeatureChecks.Native(Check); return; }
+    if (args is [_, "--boot-clock-shift"]) { FeatureChecks.ClockShift(Check); Console.WriteLine($"Completed {count} boot clock checks."); return; }
+    if (args is [_, "--boot-identity"]) { Console.WriteLine("BOOT " + RegistryTweakStore.CurrentBoot()); return; }
     if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();

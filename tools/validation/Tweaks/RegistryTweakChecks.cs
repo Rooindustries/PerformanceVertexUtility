@@ -59,18 +59,17 @@ static class RegistryTweakChecks
             check(Equals(Value("Enabled"), 91) && Value("Other") is null, "Native full apply and restore preserve an original value and an absent value together");
 
             var restart = Preview("restart", [new("other", "one")]); engine.Apply(restart.Path, restart.Hash);
-            var bootSeconds = (DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).ToUnixTimeSeconds();
-            var boot = "boot:" + bootSeconds;
-            check(RegistryTweakStore.SameBoot(boot), "Windows exposes a boot time for restart checks");
+            var boot = RegistryTweakStore.CurrentBoot();
+            check(boot is not null && RegistryTweakStore.SameBoot(boot), "Windows exposes a boot identifier for restart checks");
             void AwaitRestart(string bootId)
             {
                 using var key = hive.CreateSubKey(recovery.KeyPath);
                 key.SetValue("Pending", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new ControlJournal(restart.Plan with { Controls = new([], [], []) }, restart.Hash, 0, "awaiting-restart", bootId), OperationFiles.Json), RegistryValueKind.Binary);
             }
-            AwaitRestart(boot);
+            AwaitRestart(boot!);
             reject(() => store.Recover(store.Recovery().PendingHash!), "A restart check in the same boot keeps the pending feature record");
             check(store.Recovery().Pending is not null, "The pending feature record survives a same-boot restart check");
-            AwaitRestart("boot:" + (bootSeconds - 3600));
+            AwaitRestart("boot:" + Guid.NewGuid().ToString("N"));
             check(store.Recover(store.Recovery().PendingHash!) && store.Recovery().Pending is null, "A restart check after a new boot closes the pending feature record");
             Apply("restart", []);
         }

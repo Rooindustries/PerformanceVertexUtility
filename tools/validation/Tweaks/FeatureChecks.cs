@@ -45,12 +45,13 @@ static class FeatureChecks
             check(Refusal(() => WindowsFeatures.Expand(before, ControlValues.From(new Dictionary<string, string> { ["Windows-Defender-Default-Definitions"] = "Disabled" }), false)).Contains("does not offer feature"),
                 "A feature Windows lists as not present is refused as not offered");
         });
-        Scenario("restart detection from boot time", () =>
+        Scenario("restart detection from the boot identifier", () =>
         {
-            check(RegistryTweakStore.SameBoot("boot:1000", "boot:1030") && !RegistryTweakStore.SameBoot("boot:1000", "boot:5000") && !RegistryTweakStore.SameBoot("223", "boot:1000") && !RegistryTweakStore.SameBoot(null, "boot:1000"),
-                "A restart is recognised from the boot time, so a prefetcher boot counter that never advances cannot lock recovery");
-            var now = "boot:" + (DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).ToUnixTimeSeconds();
-            check(RegistryTweakStore.SameBoot(now), "The current boot is recognised as the same boot, so a pending feature check still asks for a restart");
+            var boot = RegistryTweakStore.CurrentBoot();
+            check(boot is not null && boot.Length == 37 && RegistryTweakStore.SameBoot(boot) && RegistryTweakStore.SameBoot(boot, boot),
+                "The current boot is recognised from Windows' per-boot identifier, so a pending feature check still asks for a restart");
+            check(!RegistryTweakStore.SameBoot(boot, "boot:" + Guid.NewGuid().ToString("N")) && !RegistryTweakStore.SameBoot(null, boot) && !RegistryTweakStore.SameBoot("223", boot) && !RegistryTweakStore.SameBoot("boot:1000", boot),
+                "A different boot identifier counts as a restart");
         });
         Scenario("pending enable read by a later process", () =>
         {
@@ -159,6 +160,20 @@ static class FeatureChecks
             if (before.Address.Key == Fail) throw new IOException("Controlled native failure");
             _values[before.Address.Key] = before with { Value = after };
         }
+    }
+    public static void ClockShift(Action<bool, string> check)
+    {
+        static void Shift(string amount)
+        {
+            using var shift = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -Command \"Set-Date -Adjust " + amount + " | Out-Null\"") { UseShellExecute = false })!;
+            shift.WaitForExit(); if (shift.ExitCode != 0) throw new InvalidOperationException("The clock could not be adjusted by " + amount);
+        }
+        var before = RegistryTweakStore.CurrentBoot(); var clock = DateTimeOffset.UtcNow; string? after; TimeSpan moved;
+        Shift("00:10:00");
+        try { after = RegistryTweakStore.CurrentBoot(); moved = DateTimeOffset.UtcNow - clock; }
+        finally { Shift("-00:10:00"); }
+        Console.WriteLine("Boot identity before and after moving the clock " + moved + ": " + before + " / " + after);
+        check(moved > TimeSpan.FromMinutes(9) && before is not null && RegistryTweakStore.SameBoot(before, after), "Moving the clock 10 minutes without a restart keeps the same boot, so a pending feature change is not closed early");
     }
     sealed class FakeDism : DismServicing
     {

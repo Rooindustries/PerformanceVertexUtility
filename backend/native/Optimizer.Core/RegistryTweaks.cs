@@ -130,10 +130,20 @@ public sealed class RegistryTweakStore : ITweakStore
         }
         finally { guard.ReleaseMutex(); }
     }
-    private static string BootIdentity() => "boot:" + (DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
-    public static bool SameBoot(string? recorded, string? current = null) => recorded is not null && recorded.StartsWith("boot:", StringComparison.Ordinal)
-        && long.TryParse(recorded[5..], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var then)
-        && long.TryParse((current ?? BootIdentity())[5..], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var now) && Math.Abs(now - then) < 120;
+    public static string? CurrentBoot()
+    {
+        var info = new byte[32];
+        if (NtQuerySystemInformation(90, info, info.Length, out _) < 0) return null;
+        var id = new Guid(info.AsSpan(0, 16));
+        return id == Guid.Empty ? null : "boot:" + id.ToString("N");
+    }
+    public static bool SameBoot(string? recorded, string? current = null)
+    {
+        if (recorded is null) return false;
+        var now = current ?? CurrentBoot();
+        return now is null || string.Equals(recorded, now, StringComparison.Ordinal);
+    }
+    [System.Runtime.InteropServices.DllImport("ntdll.dll")] private static extern int NtQuerySystemInformation(int kind, byte[] information, int length, out int returned);
     private TweakState? Decode(RegistryValueData? value)
     {
         if (value is null) return null;
@@ -153,7 +163,7 @@ public sealed class RegistryTweakStore : ITweakStore
             if (plan.Context != Context || ReadState()?.Revision != plan.BeforeRevision) throw new InvalidDataException("Settings changed after review.");
             foreach (var expected in plan.Expected)
                 if (!Read(expected.Address).Same(expected)) throw new InvalidDataException("A registry setting changed after review.");
-            var boot = BootIdentity();
+            var boot = CurrentBoot();
             var journal = new ControlJournal(plan, reviewHash, 0);
             WritePending(journal);
             try
