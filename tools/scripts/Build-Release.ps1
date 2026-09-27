@@ -54,7 +54,8 @@ function Copy-Tree([string]$Source, [string]$Destination, [string[]]$Include = @
 
 function Remove-Tree([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return }
-    & cmd.exe /d /c ('rd /s /q "\\?\' + $Path + '"')
+    $long = if ($Path.StartsWith('\\')) { '\\?\UNC\' + $Path.Substring(2) } else { '\\?\' + $Path }
+    & cmd.exe /d /c ('rd /s /q "' + $long + '"')
     if (Test-Path -LiteralPath $Path) { throw "Could not remove $Path." }
 }
 
