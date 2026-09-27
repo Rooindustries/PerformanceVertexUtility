@@ -248,11 +248,14 @@ public class RooIndustriesBulkFixture {
     try {
         $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
         $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
+        $beforeBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime().AddMinutes(-1).ToFileTimeUtc().ToString()
+        $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$beforeBoot;descendants=@()})
         $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
         $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
     } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
     Assert ($openError -eq 5) "The unreadable remover fixture refuses inspection with access denied (error $openError)"
     Assert $unreadable 'A remover Windows refuses to open is treated as still running, never as stopped'
+    Assert (-not $reusedAfterRestart) 'A remover recorded before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
     Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
     Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
     $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
@@ -263,6 +266,8 @@ public class RooIndustriesBulkFixture {
     Write-RooIndustriesOperationJson $journal $a.JournalPath
     $crash=Read-Result (& $runScript @a)
     Assert ($crash.status -eq 'needs-reconciliation' -and -not(Test-Path $case.counter)) 'A crash after durable dispatch intent cannot silently launch the uncertain entry again'
+    $crashChecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($crashChecked.data.entries[0].launchUnconfirmed -eq $true -and $crashChecked.data.entries[0].state -eq 'needs-reconciliation' -and -not(Test-Path $case.counter)) 'Check state keeps the mark that a remover launch was never confirmed'
     $journal|Add-Member -NotePropertyName bootTimeUtc -NotePropertyValue (Get-RooIndustriesBulkBootTime)
     $journal.entries[0].state='reboot-required';$journal.entries[0].outcome=Get-RooIndustriesUninstallOutcome windows-installer 3010
     $journal.entries[0].invocation=@{processId=$PID;creationTimeFileTimeUtc=([Diagnostics.Process]::GetCurrentProcess()).StartTime.ToUniversalTime().ToFileTimeUtc().ToString()}

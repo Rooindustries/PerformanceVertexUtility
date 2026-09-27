@@ -153,7 +153,16 @@ function Test-RooIndustriesBulkInvocationLive {
     Import-RooIndustriesBulkProcessTypes
     $members=@($Invocation)
     if($null -ne $Invocation.PSObject.Properties['descendants']){$members+=@($Invocation.descendants)}
+    $boot=$null
     foreach($member in $members){
+        $created=[long]0
+        if([long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created) -and $created -gt 0) {
+            if($null -eq $boot){
+                try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()}
+                catch {$boot=[datetime]::MinValue}
+            }
+            if([datetime]::FromFileTimeUtc($created) -lt $boot){continue}
+        }
         if([RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning([int]$member.processId,[string]$member.creationTimeFileTimeUtc)){return $true}
     }
     return $false
