@@ -1,6 +1,7 @@
 import argparse
 import base64
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -138,7 +139,57 @@ def compile_presentation():
         result[setting['id']] = entry
     if len(result) != len(catalog['settings']):
         raise ValueError('Setting identity is not unique')
+    distinguish(catalog, result)
     return result
+
+
+def detail(setting, where):
+    first = setting['options'][0]
+    change = (first['changes'] or first.get('controls', []))[0]
+    selector = change.get('selector') or {}
+    value = change.get('value')
+    if where.get('kind') == 'mitigations' and isinstance(value, dict):
+        text = ', '.join(key.replace('.', ': ') for key in value if not key.split('.')[-1].startswith('Override'))
+    elif selector.get('suffix'):
+        text = selector['suffix'].rsplit('\\', 1)[-1]
+    elif selector.get('filter'):
+        text = {'primary-network-devices': 'active network adapters', 'network-devices': 'all network adapters', 'primary-interfaces': 'active connections'}.get(selector['filter'], selector['filter'].replace('-', ' '))
+    elif any(option['changes'] and option['changes'][0].get('bits') for option in setting['options']):
+        masks = sorted({option['changes'][0]['bits']['mask'] for option in setting['options'] if option['changes'] and option['changes'][0].get('bits')})
+        text = 'flags ' + ', '.join(hex(mask) for mask in masks)
+    elif first['changes'] and first['changes'][0].get('dword') is None and not first['changes'][0].get('value'):
+        text = 'whole value'
+    else:
+        text = where.get('valueName') or where.get('target') or where.get('keyPath', '').rsplit('\\', 1)[-1]
+    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', text).replace('_', ' ').strip() or 'default value'
+
+
+def distinguish(catalog, result):
+    settings = {setting['id']: setting for setting in catalog['settings']}
+    def address(setting):
+        first = setting['options'][0]
+        return (first['changes'] or first.get('controls', []))[0]['address']
+    def groups():
+        names = {}
+        for identifier, entry in result.items():
+            names.setdefault((entry['section'], (entry.get('name') or settings[identifier]['name']).casefold()), []).append(identifier)
+        return [members for members in names.values() if len(members) > 1]
+    scopes = {'CurrentUser': 'this user', 'LocalMachine': 'all users'}
+    for members in groups():
+        if len({address(settings[identifier]).get('hive') for identifier in members}) > 1:
+            for identifier in members:
+                hive = address(settings[identifier]).get('hive')
+                if hive in scopes:
+                    result[identifier]['name'] = (result[identifier].get('name') or settings[identifier]['name']) + ' (' + scopes[hive] + ')'
+    for members in groups():
+        for identifier in members:
+            result[identifier]['name'] = (result[identifier].get('name') or settings[identifier]['name']) + ' · ' + detail(settings[identifier], address(settings[identifier]))
+    for members in groups():
+        for identifier in members:
+            where = address(settings[identifier])
+            result[identifier]['name'] = (result[identifier].get('name') or settings[identifier]['name']) + ' · ' + (where.get('keyPath') or where.get('property') or identifier)
+    if groups():
+        raise ValueError('Setting names are not unique within a section')
 
 
 def main():
