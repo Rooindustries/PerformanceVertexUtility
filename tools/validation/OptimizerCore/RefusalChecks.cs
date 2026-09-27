@@ -23,6 +23,9 @@ static class RefusalChecks
             File.WriteAllText(ordinary, "ordinary");
             SetDacl(explicitOnly, "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")");
             var before = Sddl(explicitOnly);
+            var ordinaryBefore = Sddl(ordinary);
+            var sourceBefore = Sddl(source);
+            var bytesBefore = (File.ReadAllBytes(explicitOnly), File.ReadAllBytes(ordinary));
             check(!before.Contains(":AI", StringComparison.Ordinal) && !before.Contains("ID;", StringComparison.Ordinal), "The refusal fixture has a file with an explicit-only DACL");
             var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("explicit refusal fixture"));
             var authority = new CleanupAuthority
@@ -38,8 +41,12 @@ static class RefusalChecks
             var error = string.Join(" | ", applied.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error));
             Console.WriteLine("Explicit-only refusal: " + applied.Status + " " + error);
             check(applied.Status != "applied" && error.Contains("Backup verification differs in permissions", StringComparison.Ordinal), "Cleanup refuses an item whose explicit-only permissions it cannot restore exactly and says why");
-            check(applied.Entries.All(entry => entry.Status is "pending" or "backedUp"), "A refused cleanup deletes nothing");
-            check(File.ReadAllText(explicitOnly) == "explicit" && File.ReadAllText(ordinary) == "ordinary" && Sddl(explicitOnly) == before, "A refused cleanup leaves the files and their permissions unchanged");
+            check(applied.Status == "needsReconciliation" && applied.Entries.All(entry => entry.Status == "pending" && entry.BackupHash is null), "A refused cleanup deletes nothing and records that no backup is kept");
+            check(!Directory.EnumerateFiles(operations, "file-backup-*").Any(), "A refused cleanup removes the backup copies it had already made");
+            check(File.ReadAllBytes(explicitOnly).SequenceEqual(bytesBefore.Item1) && File.ReadAllBytes(ordinary).SequenceEqual(bytesBefore.Item2) && Sddl(explicitOnly) == before && Sddl(ordinary) == ordinaryBefore && Sddl(source) == sourceBefore, "A refused cleanup leaves the files, the folder and their permissions unchanged");
+            var journalBytes = File.ReadAllBytes(journalPath);
+            var restored = engine.Restore(journalPath);
+            check(restored.Status == "needsReconciliation" && File.ReadAllBytes(journalPath).SequenceEqual(journalBytes) && File.ReadAllBytes(explicitOnly).SequenceEqual(bytesBefore.Item1) && Sddl(ordinary) == ordinaryBefore, "Restore does nothing after a refused cleanup");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         check(!Directory.Exists(root), "Refusal validation removes its fixture");
