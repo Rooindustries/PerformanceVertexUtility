@@ -71,6 +71,8 @@ try
     if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
     if (args is [_, "--controls-fixture"]) { NativeControlChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native control checks."); return; }
+    if (args is [_, "--feature-read"]) { FeatureChecks.Native(Check); return; }
+    if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();
     Check(catalog.Settings.Select(item => item.Id).Distinct().Count() == catalog.Settings.Length, "Catalog setting identities are unique");
@@ -354,6 +356,7 @@ try
     Reject(() => OperationFiles.Deserialize<TweakState>(duplicate), "Duplicate properties are rejected in registry-backed recovery data");
     CompositionChecks.Run(root, Check, Reject);
     ControlChecks.Run(root, Check, Reject);
+    FeatureChecks.Run(root, catalog, Check);
     SelectionChecks.Run(root, Check, Reject);
     PowerCompositionChecks.Run(root, Check, Reject);
     HostsChecks.Run(root, Check, Reject);
