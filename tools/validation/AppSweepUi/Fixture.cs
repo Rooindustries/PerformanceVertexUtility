@@ -183,8 +183,32 @@ namespace RooIndustries.OptimizationSuite.Services
         public void DiscardCleanupReview() => LastCleanupRollbackPath = null;
     }
 
+    public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
+    public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
+
     public sealed class FakeOptimizerService
     {
+        public BulkRemovalSession? LastRemoval { get; set; }
+        public (string Path, BulkRemovalJournal State)[] RemovalHistory { get; set; } = [];
+        public Func<string, Task<OptimizerResult<BulkRemovalJournal>>> DismissRemoval { get; set; } = _ => throw new InvalidOperationException("Unexpected dismiss call.");
+        public Func<string, Task<OptimizerResult<BulkRemovalJournal>>> ReconcileRemoval { get; set; } = _ => throw new InvalidOperationException("Unexpected reconcile call.");
+        public List<string> Dismissed { get; } = new();
+        public Task<BulkRemovalSession?> ReadLastRemovalAsync() => Task.FromResult(LastRemoval);
+        public Task<(string Path, BulkRemovalJournal State)[]> ReadRemovalHistoryAsync() => Task.FromResult(RemovalHistory);
+        public Task<CleanupBatchSession[]> ReadCleanupHistoryAsync() => Task.FromResult(Array.Empty<CleanupBatchSession>());
+        public Task<RemovalCleanupReview?> ReadLastFileCleanupAsync() => Task.FromResult<RemovalCleanupReview?>(null);
+        public Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal) { Dismissed.Add(journal); return DismissRemoval(journal); }
+        public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal) => ReconcileRemoval(journal);
+        public Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false) => throw new InvalidOperationException("Unexpected removal preview call.");
+        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress) => throw new InvalidOperationException("Unexpected removal call.");
+        public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal) => throw new InvalidOperationException("Unexpected cancel call.");
+        public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken) => throw new InvalidOperationException("Unexpected leftover scan.");
+        public Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation) => throw new InvalidOperationException("Unexpected cleanup preview.");
+        public Task<CleanupBatchReview> PreviewCleanupBatchAsync(CleanupPart[] applications) => throw new InvalidOperationException("Unexpected cleanup batch preview.");
+        public Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress) => throw new InvalidOperationException("Unexpected cleanup apply.");
+        public Task<CleanupBatchCancellation> CancelCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup cancel.");
+        public Task<CleanupBatchJournal> RestoreCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup restore.");
+        public Task<OptimizerResult<FileCleanupResult>> RestoreRemovedFilesAsync(RemovalCleanupReview review) => throw new InvalidOperationException("Unexpected file restore.");
         public ProcessControlSnapshot? ProcessSnapshot { get; set; }
         public GameSessionEntry[] GameSessions { get; set; } = [];
         public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);

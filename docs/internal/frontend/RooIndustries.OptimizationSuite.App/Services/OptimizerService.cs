@@ -104,11 +104,19 @@ public sealed partial class OptimizerService
     public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal)
         => RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Reconcile -JournalPath " + Quote(journal) + " -ConfirmApply");
 
+    public async Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal)
+    {
+        var result = await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Dismiss -JournalPath " + Quote(journal) + " -ConfirmApply");
+        if (string.Equals(FindLastJournal("removal"), journal, StringComparison.OrdinalIgnoreCase)) Forget("removal");
+        return result;
+    }
+
     public async Task<BulkRemovalSession?> ReadLastRemovalAsync()
     {
         var journal = FindLastJournal("removal");
         if (journal is null) return null;
         var state = await ReadJournalAsync<BulkRemovalJournal>(journal) ?? throw new InvalidDataException("Saved removal state is empty.");
+        if (state.Status == "dismissed") { Forget("removal"); return null; }
         var preview = Path.Combine(Path.GetDirectoryName(journal)!, "preview.json");
         return new BulkRemovalSession(new BulkRemovalReview(state.Plan, preview, Hash(preview), journal), state);
     }
