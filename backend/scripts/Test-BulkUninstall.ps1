@@ -96,6 +96,8 @@ public class RooIndustriesBulkFixture {
     Assert ($timed.status -eq 'needs-reconciliation' -and -not $process.HasExited -and $timed.data.entries[1].attemptCount -eq 0) 'Observation timeout leaves the remover intact and prevents the next entry from starting'
     $check=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($check.status -eq 'needs-reconciliation' -and (Test-Path $case.markers[0])) 'A still-running exact process cannot be reconciled as completed'
+    $liveDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($liveDismiss.status -eq 'failed' -and $liveDismiss.errors[0].message -like '*still running*' -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -eq 'needs-reconciliation') 'Start over refuses a list whose remover process is still running'
     $process.Kill();Assert ($process.WaitForExit(10000)) 'Disposable timed-out remover is explicitly stopped and its exit verified'
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
@@ -111,6 +113,11 @@ public class RooIndustriesBulkFixture {
     Write-RooIndustriesOperationJson $journal $a.JournalPath
     $beforeReboot=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($beforeReboot.status -eq 'reboot-required' -and $beforeReboot.data.entries[1].attemptCount -eq 0) 'Registration absence cannot clear an MSI reboot requirement during the same boot'
+    $exitedRemover=($journal|ConvertTo-Json -Depth 32)|ConvertFrom-Json
+    $exitedRemover.entries[0].invocation=[pscustomobject]@{processId=2147483646;creationTimeFileTimeUtc=[DateTime]::UtcNow.ToFileTimeUtc().ToString()}
+    Write-RooIndustriesOperationJson $exitedRemover $a.JournalPath
+    $pendingDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($pendingDismiss.status -eq 'failed' -and $pendingDismiss.errors[0].message -like 'Restart Windows*' -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -eq $exitedRemover.status) 'Start over waits for the restart a removal still needs'
     $journal.bootTimeUtc='2000-01-01T00:00:00Z';Write-RooIndustriesOperationJson $journal $a.JournalPath
     $resumedQueue=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($resumedQueue.status -eq 'reboot-required' -and $resumedQueue.data.entries[1].attemptCount -eq 0) 'An earlier reboot recorded for the queue cannot clear a later remover restart requirement'
@@ -128,6 +135,38 @@ public class RooIndustriesBulkFixture {
     $otherPath=Join-Path $case.directory 'second-plan.json';Write-RooIndustriesOperationJson $otherPlan.data $otherPath
     $other=Read-Result (& $runScript -Action Apply -InputPath $otherPath -ReviewSha256 (Get-FileHash $otherPath).Hash -JournalPath (Join-Path $case.directory 'second-journal.json') -ConfirmApply -ManualReviewApproved -AllowFixtureExecution)
     Assert ($other.status -eq 'needs-reconciliation' -and $other.data.entries[0].attemptCount -eq 0 -and @(Get-Content $case.counter).Count -eq 1) 'A different queue cannot relaunch an app with an unresolved durable removal claim'
+    $stuck=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($stuck.status -eq 'needs-reconciliation' -and (Test-Path $case.markers[0])) 'A failed removal whose app is still installed stays unresolved after checking its state'
+    $claimPath=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] ([string]$case.plan.fixtureRoot)
+    $unconfirmed=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath)
+    Assert ($unconfirmed.status -eq 'preview' -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -eq 'needs-reconciliation' -and (Test-Path -LiteralPath $claimPath)) 'Start over without confirmation changes nothing'
+    $lease=Lock-RooIndustriesOperation $a.JournalPath
+    try{$busyDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)}finally{$lease.Dispose()}
+    Assert ($busyDismiss.status -eq 'failed' -and $busyDismiss.errors[0].message -like '*still running*' -and (Test-Path -LiteralPath $claimPath)) 'Start over refuses a list another process is still running'
+    $dismissed=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($dismissed.status -eq 'dismissed' -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $claimPath) -and @(Get-Content $case.counter).Count -eq 1) 'Start over clears a failed list and releases its app without running anything'
+    $replayed=Read-Result (& $runScript @a)
+    $rechecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($replayed.status -eq 'failed' -and $rechecked.status -eq 'failed' -and @(Get-Content $case.counter).Count -eq 1) 'A cleared list cannot be resumed or checked again'
+    $retryPlan=Read-RooIndustriesOperationJson $case.planPath;$retryPlan.data.data.queueId=[guid]::NewGuid().ToString('N')
+    $retryPath=Join-Path $case.directory 'retry-plan.json';Write-RooIndustriesOperationJson $retryPlan.data $retryPath
+    $retry=Read-Result (& $runScript -Action Apply -InputPath $retryPath -ReviewSha256 (Get-FileHash $retryPath).Hash -JournalPath (Join-Path $case.directory 'retry-journal.json') -ConfirmApply -ManualReviewApproved -AllowFixtureExecution)
+    Assert ($retry.data.entries[0].attemptCount -eq 1 -and @(Get-Content $case.counter).Count -eq 2) 'After starting over, a new list can retry the app that failed'
+    $case=New-Case 'partial-dismiss' 'cancel';$a=$case.args
+    $partial=Read-Result (& $runScript @a)
+    $partialDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $kept=(Read-RooIndustriesOperationJson $a.JournalPath).data.entries
+    $partialScan=Read-Result (& (Join-Path $PSScriptRoot 'Invoke-RemovalLeftovers.ps1') -Action Scan -QueueJournalPath $a.JournalPath -AppId $case.plan.entries[0].appId)
+    $case=New-Case 'restart-no-invocation';$a=$case.args
+    $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='reboot-required';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
+        entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
+    $journal.entries[0].state='reboot-required';$journal.entries[0].attemptCount=1
+    Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $sameBoot=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $journal.entries[0].updatedAtUtc='2000-01-01T00:00:00.0000000Z';Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $afterBoot=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($sameBoot.status -eq 'failed' -and $sameBoot.errors[0].message -like 'Restart Windows*' -and $afterBoot.status -eq 'dismissed') 'A restart-pending entry without remover details can still be cleared once Windows has restarted'
+    Assert ($partial.status -eq 'canceled' -and $partialDismiss.status -eq 'dismissed' -and $kept[0].state -eq 'removed' -and $kept[0].registrationAbsent -and $kept[1].attemptCount -eq 0 -and (Test-Path $case.markers[1]) -and $partialScan.status -eq 'preview') 'Starting over a partly finished list keeps finished removals available for leftover review'
     $case=New-Case 'bounded-output' 'verbose';$a=$case.args
     $verbose=Read-Result (& $runScript @a)
     Assert ($verbose.status -eq 'cleanup-review-required' -and $verbose.data.entries[0].output.truncated -and $verbose.data.entries[0].output.stdout.Length -eq 65536) 'Verbose vendor output is drained while retained text stays within its explicit memory limit'
