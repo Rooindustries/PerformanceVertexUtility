@@ -18,7 +18,8 @@ param(
     [switch]$OfficialUninstallCommandApproved,
     [switch]$CleanupDeletionManifestApproved,
     [switch]$UserApproved,
-    [switch]$AllowRealSystemExecution
+    [switch]$AllowRealSystemExecution,
+    [string]$FixtureRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -171,6 +172,7 @@ try {
         $reviewedCommandLine = [string](Get-RooIndustriesUninstallPropertyValue $command 'commandLine' '')
         $commandLineReviewed = -not [string]::IsNullOrWhiteSpace($reviewedCommandLine) -and (Get-RooIndustriesUninstallCommandLine $commandExecutable $argumentText) -ceq $reviewedCommandLine
     }
+    $claimRoot = if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { '' } else { Assert-RooIndustriesBulkFixtureRoot $FixtureRoot }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
@@ -254,7 +256,7 @@ try {
             $journal.status = 'prepared'
             Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
             if ($hasOfficialCommand) {
-                $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId })
+                $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId }) $claimRoot
                 try { $claimLease = Lock-RooIndustriesOperation $claimPath } catch [IO.IOException] { throw 'Another removal of this app is running right now. Let it finish, then try again.' }
                 try {
                     if (Test-Path -LiteralPath $claimPath) {
