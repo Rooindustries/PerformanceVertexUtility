@@ -43,6 +43,7 @@ public sealed class LeftoverDiscovery
     private readonly (CleanupApplication App, HashSet<string> Names)[] _peerNames;
     private readonly (string Name, string Path)[] _peerPaths;
     private readonly string? _installPath;
+    private readonly bool _microsoftProduct;
     private readonly Dictionary<string, LeftoverCandidate> _found = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _errors = [];
     private readonly Dictionary<string, HashSet<string>> _registryOwners = new(StringComparer.OrdinalIgnoreCase);
@@ -59,6 +60,7 @@ public sealed class LeftoverDiscovery
         _peerNames = _peers.Select(peer => (peer, NameKeys(peer.DisplayName))).ToArray();
         _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (peer.DisplayName, ExpandPath(peer.InstallLocation!))).ToArray();
         _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) ? null : ExpandPath(application.InstallLocation);
+        _microsoftProduct = MicrosoftProduct(application);
     }
 
     public LeftoverDiscoveryResult Scan(CancellationToken cancellationToken, IEnumerable<string>? fileRoots = null,
@@ -175,6 +177,13 @@ public sealed class LeftoverDiscovery
         _visited++;
         try
         {
+            if (WindowsOwned(address.KeyPath) || !_microsoftProduct && MicrosoftOwned(address.KeyPath))
+            {
+                var windowsName = RegistryNative.NativeName(handle);
+                if (_registryOwners.TryGetValue(windowsName, out var windowsOwners)) windowsOwners.Add("Windows");
+                else _registryOwners.Add(windowsName, new(StringComparer.OrdinalIgnoreCase) { "Windows" });
+                return;
+            }
             using var key = RegistryKey.FromHandle(handle, address.View == "Registry32" ? RegistryView.Registry32 : RegistryView.Registry64);
             var leaf = Compact(address.KeyPath.Split('\\')[^1]);
             var productNameMatch = _names.Contains(leaf);
@@ -259,7 +268,26 @@ public sealed class LeftoverDiscovery
 
     private string Id(string kind, string path) => kind + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_app.AppId + "|" + path.ToUpperInvariant())));
     private static bool Within(string path, string root) => !string.IsNullOrWhiteSpace(root) && (string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
-    private static string Compact(string text) => new(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    private static string Compact(string text) => new(text.Where(character => char.IsLetterOrDigit(character) || character is '+' or '#' or '&').Select(char.ToLowerInvariant).ToArray());
+    private static bool MicrosoftOwned(string keyPath) => keyPath.Split('\\').Any(segment => segment.Equals("Microsoft", StringComparison.OrdinalIgnoreCase));
+    private static bool WindowsOwned(string keyPath)
+    {
+        var segments = keyPath.Split('\\');
+        string[] shared = ["Policies", "PolicyManager"];
+        string[] software = ["Clients", "RegisteredApplications", "ODBC", "DefaultUserEnvironment", "OpenSSH"];
+        string[] classes = ["CLSID", "Interface", "TypeLib", "AppID", "Installer", "Folder", "Directory", "Drive", "Unknown", "*", "AllFilesystemObjects", "SystemFileAssociations", "Local Settings"];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            if (shared.Contains(segments[index], StringComparer.OrdinalIgnoreCase)) return true;
+            var parent = index == 0 ? "" : segments[index - 1];
+            if ((parent.Equals("Software", StringComparison.OrdinalIgnoreCase) || parent.Equals("WOW6432Node", StringComparison.OrdinalIgnoreCase)) && software.Contains(segments[index], StringComparer.OrdinalIgnoreCase)) return true;
+            if (parent.Equals("Classes", StringComparison.OrdinalIgnoreCase) && classes.Contains(segments[index], StringComparer.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+    private static bool MicrosoftProduct(CleanupApplication app) =>
+        app.PackageFamilyName is { } family && (family.EndsWith("_8wekyb3d8bbwe", StringComparison.OrdinalIgnoreCase) || family.EndsWith("_cw5n1h2txyewy", StringComparison.OrdinalIgnoreCase))
+        || app.Publisher is { } publisher && Regex.IsMatch(publisher.Trim(), @"^(?:CN=)?Microsoft(?: Corporation| Corp\.?| Windows)?(?:,|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static HashSet<string> NameKeys(string name)
     {
         var clean = Regex.Replace(name, @"\s*[\(\[]?(?:x64|x86|64-bit|32-bit)[\)\]]?", "", RegexOptions.IgnoreCase);
