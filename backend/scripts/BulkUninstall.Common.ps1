@@ -168,6 +168,19 @@ function Test-RooIndustriesBulkInvocationLive {
     return $false
 }
 
+function Test-RooIndustriesBulkClaimLive {
+    param($Claim)
+    $invocation=Get-RooIndustriesUninstallPropertyValue $Claim 'invocation' $null
+    if($null -ne $invocation){return Test-RooIndustriesBulkInvocationLive $invocation}
+    $executable=[string](Get-RooIndustriesUninstallPropertyValue $Claim 'executable' '')
+    $claimed=[string](Get-RooIndustriesUninstallPropertyValue $Claim 'claimedAtUtc' '')
+    if(-not $executable -or -not $claimed){return $false}
+    try {
+        $since=[datetime]::Parse($claimed,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().AddSeconds(-1)
+        return @(Get-CimInstance Win32_Process -ErrorAction Stop|Where-Object {$_.ExecutablePath -and $_.ExecutablePath -ieq $executable -and $_.CreationDate.ToUniversalTime() -ge $since}).Count -gt 0
+    } catch {return $true}
+}
+
 function ConvertTo-RooIndustriesRemoverMembers {
     param($Tree)
     return @($Tree.Descendants()|ForEach-Object {[pscustomobject]@{processId=$_.ProcessId;creationTimeFileTimeUtc=$_.CreationTimeFileTimeUtc;name=$_.Name}})
@@ -199,7 +212,7 @@ function Get-RooIndustriesRemoverTimeoutMessage {
 }
 
 function Invoke-RooIndustriesObservedRemover {
-    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress,[string]$ExpectedCommandLine)
+    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress,[string]$ExpectedCommandLine,[IDisposable]$ExecutableLease)
     $commandLine=Get-RooIndustriesUninstallCommandLine $FilePath $Arguments
     if($commandLine -cne $ExpectedCommandLine){throw 'The remover command differs from the reviewed command. Check the removal path again.'}
     Import-RooIndustriesBulkProcessTypes
@@ -216,10 +229,12 @@ function Invoke-RooIndustriesObservedRemover {
     try {
         try {$result.processStarted=$process.Start()} catch {$result.startError=$_.Exception.Message}
         if($result.processStarted) {
+            if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
+            $result.invocation=[pscustomobject]@{processId=$process.Id;creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();startedAtUtc=$result.startedAtUtc;treeContained=$false;descendants=@()}
+            if($null -ne $OnProgress){& $OnProgress $result.invocation}
             $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
             $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
-            $result.invocation=[pscustomobject]@{processId=$process.Id;creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();startedAtUtc=$result.startedAtUtc;treeContained=$tree.Contained;descendants=@()}
-            if($null -ne $OnProgress){& $OnProgress $result.invocation}
+            $result.invocation.treeContained=$tree.Contained
             $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
                 param($waitingFor)
                 $result.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
@@ -239,6 +254,7 @@ function Invoke-RooIndustriesObservedRemover {
     } finally {
         if($null -ne $capture){$result.stdout=$capture.Stdout;$result.stderr=$capture.Stderr;$capture.Dispose()}
         if($null -ne $tree){$tree.Dispose()}
+        if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
         $process.Dispose()
         $result.completedAtUtc=Get-RooIndustriesUtcStamp
     }
@@ -272,7 +288,7 @@ function Invoke-RooIndustriesBulkEntry {
         if(Test-Path -LiteralPath $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -eq 'cleanup-apply') {
-                if(Test-RooIndustriesBulkInvocationLive $claim.invocation){throw 'An earlier removal of this app from Leftover cleanup is still running or can''t be checked. Let it finish, then try again.'}
+                if(Test-RooIndustriesBulkClaimLive $claim){throw 'An earlier removal of this app from Leftover cleanup is still running or can''t be checked. Let it finish, then try again.'}
                 Remove-Item -LiteralPath $claimPath -Force
             } elseif($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }

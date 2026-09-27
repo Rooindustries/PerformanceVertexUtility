@@ -159,15 +159,16 @@ try {
     [IO.File]::WriteAllText($commandLineInventory, ([pscustomobject]@{ schemaVersion = 1; apps = @(
         [pscustomobject]@{ appId = 'registry:roo-industries-command-msi'; displayName = 'Roo Industries MSI command'; publisher = 'Roo Industries'; sourceType = 'msi'; packageId = $productCode; uninstallString = "MsiExec.exe /X$productCode"; categories = @('application'); risk = 'low'; protected = $false },
         [pscustomobject]@{ appId = 'registry:roo-industries-command-spaced'; displayName = 'Roo Industries spaced command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = "$spacedRemover /S /quiet"; categories = @('application'); risk = 'low'; protected = $false },
-        [pscustomobject]@{ appId = 'registry:roo-industries-command-relative'; displayName = 'Roo Industries relative command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = 'uninstall.exe /S'; categories = @('application'); risk = 'low'; protected = $false }
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-relative'; displayName = 'Roo Industries relative command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = 'uninstall.exe /S'; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-long'; displayName = 'Roo Industries long command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = ('C:\' + ('a' * 300) + '\uninstall.exe /S'); categories = @('application'); risk = 'low'; protected = $false }
     ) } | ConvertTo-Json -Depth 8))
-    $lines = ((& (Join-Path $PSScriptRoot 'Preview-OfficialUninstall.ps1') -InventoryPath $commandLineInventory -AppId @('registry:roo-industries-command-msi', 'registry:roo-industries-command-spaced', 'registry:roo-industries-command-relative')) -join [Environment]::NewLine) | ConvertFrom-Json
+    $lines = ((& (Join-Path $PSScriptRoot 'Preview-OfficialUninstall.ps1') -InventoryPath $commandLineInventory -AppId @('registry:roo-industries-command-msi', 'registry:roo-industries-command-spaced', 'registry:roo-industries-command-relative', 'registry:roo-industries-command-long')) -join [Environment]::NewLine) | ConvertFrom-Json
     $byId = @{}; foreach ($entry in @($lines.commands)) { $byId[[string]$entry.appId] = $entry }
     $msiLine = '"' + (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') + '" /x ' + $productCode + ' /norestart'
-    if ($byId['registry:roo-industries-command-msi'].commandLine -ceq $msiLine -and $byId['registry:roo-industries-command-spaced'].commandLine -ceq ('"' + $spacedRemover + '" /S /quiet') -and $null -eq $byId['registry:roo-industries-command-relative'].commandLine) {
-        Add-Pass 'Removal path review returns the exact command that runs, and none for an unresolvable remover'
+    if ($byId['registry:roo-industries-command-msi'].commandLine -ceq $msiLine -and $byId['registry:roo-industries-command-spaced'].commandLine -ceq ('"' + $spacedRemover + '" /S /quiet') -and $null -eq $byId['registry:roo-industries-command-relative'].commandLine -and $lines.status -eq 'preview' -and $byId.ContainsKey('registry:roo-industries-command-long') -and $null -eq $byId['registry:roo-industries-command-long'].commandLine -and $byId['registry:roo-industries-command-spaced'].executableSha256 -ceq (Get-FileHash -LiteralPath $spacedRemover -Algorithm SHA256).Hash.ToLowerInvariant()) {
+        Add-Pass 'Removal path review returns the exact command and file hash that run, and none for an unresolvable or overlong remover'
     } else {
-        Add-Failure ('Removal path review command lines differ from what runs: ' + (@($lines.commands | ForEach-Object { [string]$_.appId + ' => ' + [string]$_.commandLine }) -join '; '))
+        Add-Failure ('Removal path review command lines differ from what runs: status ' + [string]$lines.status + ' ' + (@($lines.commands | ForEach-Object { [string]$_.appId + ' => ' + [string]$_.commandLine + ' ' + [string]$_.executableSha256 }) -join '; ') + ' ' + (@($lines.errors | ForEach-Object { $_.message }) -join '; '))
     }
 } catch {
     Add-Failure "Removal path command-line review failed: $($_.Exception.Message)"

@@ -28,7 +28,7 @@ function New-Case([string]$Name) {
     Write-Input $official $officialPath; Write-Input $manifest $manifestPath
     $args = @{OfficialPreviewPath=$officialPath; CleanupManifestPath=$manifestPath; ApprovedAppId='fixture:app'; ExecutorMode='Real';
         ExactTargetAllowlist=$targets; BackupRoot=(Join-Path $root 'backup'); RollbackManifestPath=(Join-Path $root 'backup\rollback.json');
-        ConfirmApply=$true; OfficialUninstallCommandApproved=$true; CleanupDeletionManifestApproved=$true; UserApproved=$true; AllowRealSystemExecution=$true; FixtureRoot=$tempRoot;
+        ConfirmApply=$true; OfficialUninstallCommandApproved=$true; CleanupDeletionManifestApproved=$true; UserApproved=$true; AllowRealSystemExecution=$true; FixtureRoot=$tempRoot; AllowFixtureClaims=$true;
         OfficialPreviewSha256=(Get-FileHash $officialPath -Algorithm SHA256).Hash; CleanupManifestSha256=(Get-FileHash $manifestPath -Algorithm SHA256).Hash }
     return @{root=$root; targets=$targets; official=$official; manifest=$manifest; args=$args}
 }
@@ -36,6 +36,7 @@ function Set-Remover($Case, [string]$Executable, [string[]]$Arguments) {
     $Case.official.commands[0].executable = $Executable
     $Case.official.commands[0].arguments = $Arguments
     $Case.official.commands[0].commandLine = Get-RooIndustriesUninstallCommandLine $Executable (Join-RooIndustriesWindowsArguments $Arguments)
+    $Case.official.commands[0].executableSha256 = (Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash.ToLowerInvariant()
     $Case.args.AllowedOfficialExecutablePath = $Executable; Refresh-Hashes $Case
 }
 function New-HandoffCase([string]$Name, [string]$Mode, [string[]]$Extra = @()) {
@@ -187,32 +188,69 @@ public class RooIndustriesHandoffFixture {
         $result=Read-Result (& $applyScript @a)
         Assert ($result.status -eq 'blocked' -and @($result.gates | Where-Object { $_.gateId -eq 'reviewed-command-line' -and $_.blocking }).Count -eq 1 -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) "A remover whose command differs from the reviewed command ($scenario) never launches"
     }
-    $case=New-HandoffCase 'stopped-after-launch' 'handoff'; $a=$case.args
+    foreach ($scenario in @('swapped-remover','missing-remover-hash')) {
+        $case=New-Case $scenario; $a=$case.args
+        $ownExe=Join-Path $case.root 'Roo Industries Own Remover.exe'; Copy-Item -LiteralPath $handoffExe -Destination $ownExe
+        $case.remover=Join-Path $case.root 'remover state'
+        Set-Remover $case $ownExe @($case.remover, 'handoff')
+        if ($scenario -eq 'swapped-remover') { [IO.File]::AppendAllText($ownExe, 'swapped after review') } else { $case.official.commands[0].executableSha256 = $null; Refresh-Hashes $case }
+        $result=Read-Result (& $applyScript @a)
+        Assert ($result.status -eq 'blocked' -and @($result.gates | Where-Object { $_.gateId -eq 'reviewed-executable-unchanged' -and $_.blocking }).Count -eq 1 -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) "A remover file that no longer matches its reviewed hash ($scenario) never launches"
+    }
+    $case=New-HandoffCase 'fixture-root-without-switch' 'handoff'; $a=$case.args; $a.Remove('AllowFixtureClaims')
+    $result=Read-Result (& $applyScript @a)
+    Assert ($result.status -eq 'failed' -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) 'A fixture claim root is refused unless the validation switch is passed'
+    $case=New-HandoffCase 'stopped-after-launch' 'hang'; $a=$case.args
     $argsPath=Join-Path $case.root 'apply arguments.json'
     $a | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
     $stoppedScript=Join-Path $case.root 'stopped after launch.ps1'
     Set-Content -LiteralPath $stoppedScript -Encoding UTF8 -Value @'
-param([string]$ApplyScript,[string]$ArgumentsPath)
+param([string]$ApplyScript,[string]$ArgumentsPath,[string]$OutputPath)
 $ErrorActionPreference='Stop'
 Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public void Dispose() {} } }'
 $values=@{}; (Get-Content -LiteralPath $ArgumentsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $values[$_.Name]=$_.Value }
 $values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
-& $ApplyScript @values
+& $ApplyScript @values *> $OutputPath
 '@
-    $stoppedOutput=& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $stoppedScript -ApplyScript $applyScript -ArgumentsPath $argsPath
-    $unconfirmed=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
-    if ($null -eq $unconfirmed) { Write-Host ($stoppedOutput -join [Environment]::NewLine) }
-    Assert ((Test-Path -LiteralPath ($case.remover+'.launches')) -and $null -ne $unconfirmed -and $unconfirmed.kind -eq 'cleanup-apply' -and -not $unconfirmed.launchConfirmed -and $null -eq $unconfirmed.invocation) 'A leftover-tab removal claims the app before launch, and a stop before the launch is recorded leaves an unconfirmed claim'
-    $afterUnconfirmed=New-HandoffCase 'after-unconfirmed-claim' 'handoff'; $afterArgs=$afterUnconfirmed.args
+    $stoppedLog=Join-Path $case.root 'stopped after launch.log'
+    $stoppedStart=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'), ('-NoProfile -ExecutionPolicy Bypass -File "' + $stoppedScript + '" -ApplyScript "' + $applyScript + '" -ArgumentsPath "' + $argsPath + '" -OutputPath "' + $stoppedLog + '"'))
+    $stoppedStart.UseShellExecute=$false; $stoppedStart.CreateNoWindow=$true
+    $stoppedRun=[Diagnostics.Process]::Start($stoppedStart)
+    Assert ($stoppedRun.WaitForExit(60000)) 'The interrupted leftover run returns without waiting for its remover'
+    $stoppedOutput=if (Test-Path -LiteralPath $stoppedLog) { Get-Content -LiteralPath $stoppedLog } else { @() }
+    $launchDeadline=[DateTime]::UtcNow.AddSeconds(15)
+    while (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and [DateTime]::UtcNow -lt $launchDeadline) { Start-Sleep -Milliseconds 100 }
+    $stoppedClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    if ($null -eq $stoppedClaim -or $null -eq $stoppedClaim.invocation) { Write-Host ($stoppedOutput -join [Environment]::NewLine) }
+    Assert ((Test-Path -LiteralPath ($case.remover+'.launches')) -and $null -ne $stoppedClaim -and $stoppedClaim.kind -eq 'cleanup-apply' -and $stoppedClaim.launchConfirmed -and [int]$stoppedClaim.invocation.processId -gt 0 -and $stoppedClaim.executable -ieq $handoffExe) 'A stop right after launch still leaves the remover process and its file in the claim'
+    $blockedCase=New-HandoffCase 'while-stopped-remover-runs' 'handoff'; $blockedArgs=$blockedCase.args
+    $refused=Read-Result (& $applyScript @blockedArgs)
+    Assert ($refused.status -eq 'failed' -and -not (Test-Path -LiteralPath ($blockedCase.remover+'.launches')) -and (Test-Path -LiteralPath $claimPath)) 'Another removal is refused while the remover from an interrupted run is still alive'
+    $stoppedProcess=[Diagnostics.Process]::GetProcessById([int]$stoppedClaim.invocation.processId)
+    $stoppedProcess.Kill(); Assert ($stoppedProcess.WaitForExit(10000)) 'Disposable interrupted remover is explicitly stopped and its exit verified'
+    $afterStopped=New-HandoffCase 'after-stopped-remover' 'handoff'; $afterArgs=$afterStopped.args
     $cleared=Read-Result (& $applyScript @afterArgs)
-    Assert ($cleared.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterUnconfirmed.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'A later removal clears a claim that recorded no remover process'
+    Assert ($cleared.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterStopped.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'Once the interrupted remover has exited, a later removal clears its claim'
+    $pendingRemover=Join-Path $tempRoot 'pending remover state'
+    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind='cleanup-apply'; appId='fixture:app'; executable=$handoffExe; claimedAtUtc=(Get-RooIndustriesUtcStamp); launchConfirmed=$false; invocation=$null }) $claimPath
+    $pendingStart=[Diagnostics.ProcessStartInfo]::new($handoffExe, ('"' + $pendingRemover + '" hang')); $pendingStart.UseShellExecute=$false; $pendingStart.CreateNoWindow=$true
+    $pending=[Diagnostics.Process]::Start($pendingStart)
+    $case=New-HandoffCase 'unconfirmed-while-remover-runs' 'handoff'; $a=$case.args
+    $refusedPending=Read-Result (& $applyScript @a)
+    Assert ($refusedPending.status -eq 'failed' -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim still blocks while a process of its remover file started after the claim'
+    $pending.Kill(); Assert ($pending.WaitForExit(10000)) 'Disposable pending remover is explicitly stopped and its exit verified'
+    $case=New-HandoffCase 'unconfirmed-after-remover-exits' 'handoff'; $a=$case.args
+    $clearedPending=Read-Result (& $applyScript @a)
+    Assert ($clearedPending.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($case.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim is cleared once no process of its remover file is running'
     $waitShell=[powershell]::Create()
     [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
+    $waitWatch=[Diagnostics.Stopwatch]::StartNew()
     $waitHandle=$waitShell.BeginInvoke()
     $waitFinished=$waitHandle.AsyncWaitHandle.WaitOne(30000)
+    $waitWatch.Stop()
     $waitResult=@(if ($waitFinished) { $waitShell.EndInvoke($waitHandle) } else { $waitShell.Stop() })
     $waitShell.Dispose()
-    Assert ($waitFinished -and $waitResult.Count -eq 1 -and -not $waitResult[0].completed -and -not $waitResult[0].rootRunning) 'A remover tree whose helpers keep appearing and exiting reaches the timeout instead of spinning without a pause'
+    Assert ($waitFinished -and $waitWatch.Elapsed.TotalSeconds -lt 10 -and $waitResult.Count -eq 1 -and -not $waitResult[0].completed -and -not $waitResult[0].rootRunning) "A remover tree whose helpers keep appearing and exiting returns at its 2 s deadline instead of spinning ($([math]::Round($waitWatch.Elapsed.TotalSeconds,1)) s)"
     $case=New-HandoffCase 'endless-helpers' 'spawner' @([DateTime]::UtcNow.AddSeconds(90).Ticks.ToString()); $a=$case.args; $a.TimeoutSeconds=3
     $watch=[Diagnostics.Stopwatch]::StartNew()
     $endless=Read-Result (& $applyScript @a)
