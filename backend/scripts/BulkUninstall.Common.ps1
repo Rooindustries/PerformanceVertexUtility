@@ -257,7 +257,7 @@ function Invoke-RooIndustriesBulkEntry {
     try {
         Import-RooIndustriesBulkProcessTypes
         $claimPath=Get-RooIndustriesBulkClaimPath $Entry $FixtureRoot
-        $claimLease=Lock-RooIndustriesOperation $claimPath
+        try {$claimLease=Lock-RooIndustriesOperation $claimPath} catch [IO.IOException] {throw 'Another removal of this app is running right now. Let it finish, then try again.'}
         if(Test-Path -LiteralPath $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -eq 'cleanup-apply') {

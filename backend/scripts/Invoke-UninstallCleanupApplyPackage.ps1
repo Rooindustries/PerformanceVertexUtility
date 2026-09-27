@@ -248,7 +248,7 @@ try {
                 $argumentProperty = $command.PSObject.Properties['arguments']
                 $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
                 $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId })
-                $claimLease = Lock-RooIndustriesOperation $claimPath
+                try { $claimLease = Lock-RooIndustriesOperation $claimPath } catch [IO.IOException] { throw 'Another removal of this app is running right now. Let it finish, then try again.' }
                 try {
                     if (Test-Path -LiteralPath $claimPath) {
                         $claim = (Read-RooIndustriesOperationJson $claimPath).data
