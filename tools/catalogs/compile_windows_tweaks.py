@@ -61,6 +61,20 @@ def value_label(change):
     return 'Remove this override'
 
 
+def name_numbers(settings):
+    for setting in settings:
+        numbered = [(option, re.fullmatch(r'Value (-?\d+)(?: \(.*\))?', option['name'])) for option in setting['options']]
+        if not any(match for _, match in numbered):
+            continue
+        values = {option['changes'][0].get('dword') for option in setting['options'] if option['changes'] and option['changes'][0].get('dword') is not None}
+        switch = values <= {0, 1}
+        field = words(setting['options'][0]['changes'][0]['address'].get('valueName', '')) if setting['options'][0]['changes'] else setting['name']
+        for option, match in numbered:
+            if match:
+                number = int(match.group(1))
+                option['name'] = ('On (1)' if number else 'Off (0)') if switch else field + ': ' + str(number)
+
+
 def apply_availability(settings):
     alternatives = json.loads((ROOT / 'backend/catalogs/windows-setting-alternatives.json').read_text())
     ids = {setting['id'] for setting in settings}
@@ -650,6 +664,7 @@ def compile_catalog():
                     hint = str(value['dword']) if value.get('dword') is not None else 'value ' + option['id'][-4:]
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
+    name_numbers(settings)
     apply_availability(settings)
     mark_protected_services(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))

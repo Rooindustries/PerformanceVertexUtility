@@ -631,7 +631,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -856,7 +856,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -928,7 +928,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1000,7 +1000,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -1072,7 +1072,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1144,7 +1144,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -1216,7 +1216,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1288,7 +1288,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1360,7 +1360,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1432,7 +1432,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -1504,7 +1504,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -1576,7 +1576,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -1648,7 +1648,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -2572,7 +2572,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -2644,7 +2644,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -3196,7 +3196,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -3268,7 +3268,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -3343,7 +3343,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6082,7 +6082,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6234,7 +6234,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -6309,7 +6309,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6334,7 +6334,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -6384,7 +6384,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6756,7 +6756,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6908,7 +6908,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -6980,7 +6980,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7052,7 +7052,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7124,7 +7124,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7196,7 +7196,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7414,7 +7414,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7636,7 +7636,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7711,7 +7711,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -7758,7 +7758,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -8142,7 +8142,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -8289,7 +8289,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -8982,7 +8982,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -9054,7 +9054,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -9459,7 +9459,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -9708,7 +9708,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -9783,7 +9783,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -9855,7 +9855,7 @@
       "options": [
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Sign In Options: 3",
           "changes": [
             {
               "address": {
@@ -10086,7 +10086,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -10158,7 +10158,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -10255,7 +10255,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -10629,7 +10629,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -10704,7 +10704,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -10779,7 +10779,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -10854,7 +10854,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -10926,7 +10926,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -11616,7 +11616,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -11688,7 +11688,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -11760,7 +11760,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -11832,7 +11832,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -11857,7 +11857,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -11909,7 +11909,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -11934,7 +11934,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -11981,7 +11981,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12028,7 +12028,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12053,7 +12053,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12100,7 +12100,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12125,7 +12125,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12172,7 +12172,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12197,7 +12197,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12244,7 +12244,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12269,7 +12269,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12316,7 +12316,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12341,7 +12341,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12388,7 +12388,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12413,7 +12413,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12460,7 +12460,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12485,7 +12485,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12532,7 +12532,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12557,7 +12557,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12604,7 +12604,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12629,7 +12629,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12676,7 +12676,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12701,7 +12701,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12748,7 +12748,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12773,7 +12773,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -12820,7 +12820,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12954,7 +12954,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -12979,7 +12979,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -13083,7 +13083,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Font Smoothing Type: 2",
           "changes": [
             {
               "address": {
@@ -13130,7 +13130,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -13177,7 +13177,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -13202,7 +13202,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -13254,7 +13254,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -13279,7 +13279,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -13418,7 +13418,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -13443,7 +13443,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -13637,7 +13637,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "Visual FXSetting: 1",
           "changes": [
             {
               "address": {
@@ -13662,7 +13662,7 @@
         },
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Visual FXSetting: 3",
           "changes": [
             {
               "address": {
@@ -13918,7 +13918,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "MMTaskbar Glom Level: 0",
           "changes": [
             {
               "address": {
@@ -13943,7 +13943,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "MMTaskbar Glom Level: 2",
           "changes": [
             {
               "address": {
@@ -13990,7 +13990,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Taskbar Glom Level: 0",
           "changes": [
             {
               "address": {
@@ -14015,7 +14015,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Taskbar Glom Level: 2",
           "changes": [
             {
               "address": {
@@ -14062,7 +14062,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14146,7 +14146,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14178,7 +14178,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -14255,7 +14255,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14327,7 +14327,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14556,7 +14556,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14581,7 +14581,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -14675,7 +14675,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -14700,7 +14700,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -14795,7 +14795,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Hidden: 0",
           "changes": [
             {
               "address": {
@@ -14996,7 +14996,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -15068,7 +15068,7 @@
         },
         {
           "id": "choice-950ca1b1a0b488e2",
-          "name": "Value 5",
+          "name": "Overlay Test Mode: 5",
           "changes": [
             {
               "address": {
@@ -15197,7 +15197,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "Launch To: 1",
           "changes": [
             {
               "address": {
@@ -15222,7 +15222,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Launch To: 2",
           "changes": [
             {
               "address": {
@@ -15299,7 +15299,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -15324,7 +15324,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15652,7 +15652,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -15677,7 +15677,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15724,7 +15724,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -15749,7 +15749,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15796,7 +15796,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -15821,7 +15821,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15868,7 +15868,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15956,7 +15956,7 @@
       "options": [
         {
           "id": "show",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -15972,7 +15972,7 @@
         },
         {
           "id": "hide",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -16105,7 +16105,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -16177,7 +16177,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -16249,7 +16249,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -16274,7 +16274,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -16321,7 +16321,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -16346,7 +16346,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -16393,7 +16393,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -16418,7 +16418,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -16712,7 +16712,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -18333,7 +18333,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18417,7 +18417,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18495,7 +18495,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18567,7 +18567,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18592,7 +18592,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -18644,7 +18644,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -18763,7 +18763,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18788,7 +18788,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -18835,7 +18835,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Was Enabled By: 2",
           "changes": [
             {
               "address": {
@@ -18860,7 +18860,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Was Enabled By: 0",
           "changes": [
             {
               "address": {
@@ -18907,7 +18907,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -18979,7 +18979,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -19076,7 +19076,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -19148,7 +19148,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -19220,7 +19220,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -19292,7 +19292,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -19364,7 +19364,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -19471,7 +19471,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -19496,7 +19496,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -19608,7 +19608,7 @@
         },
         {
           "id": "choice-4b2161bf9c2d794a",
-          "name": "Value 6",
+          "name": "Mouse Threshold1: 6",
           "changes": [
             {
               "address": {
@@ -19633,7 +19633,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Mouse Threshold1: 0",
           "changes": [
             {
               "address": {
@@ -19745,7 +19745,7 @@
         },
         {
           "id": "choice-58acca08b103278c",
-          "name": "Value 10",
+          "name": "Mouse Threshold2: 10",
           "changes": [
             {
               "address": {
@@ -19770,7 +19770,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Mouse Threshold2: 0",
           "changes": [
             {
               "address": {
@@ -19986,7 +19986,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20017,7 +20017,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20070,7 +20070,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20101,7 +20101,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20154,7 +20154,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20185,7 +20185,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20238,7 +20238,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20269,7 +20269,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20322,7 +20322,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20353,7 +20353,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20406,7 +20406,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20437,7 +20437,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20490,7 +20490,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20521,7 +20521,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20574,7 +20574,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20605,7 +20605,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20658,7 +20658,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20683,7 +20683,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20730,7 +20730,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20755,7 +20755,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20802,7 +20802,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -20827,7 +20827,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20956,7 +20956,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -20981,7 +20981,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21075,7 +21075,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21100,7 +21100,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21147,7 +21147,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21172,7 +21172,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21219,7 +21219,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21244,7 +21244,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21363,7 +21363,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21457,7 +21457,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21482,7 +21482,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21529,7 +21529,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21554,7 +21554,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21648,7 +21648,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21673,7 +21673,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21720,7 +21720,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -21745,7 +21745,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -21792,7 +21792,7 @@
       "options": [
         {
           "id": "choice-58acca08b103278c",
-          "name": "Value 10",
+          "name": "Tdr Ddi Delay: 10",
           "changes": [
             {
               "address": {
@@ -21864,7 +21864,7 @@
       "options": [
         {
           "id": "choice-58acca08b103278c",
-          "name": "Value 10",
+          "name": "Tdr Delay: 10",
           "changes": [
             {
               "address": {
@@ -21936,7 +21936,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Hw Sch Mode: 2",
           "changes": [
             {
               "address": {
@@ -21961,7 +21961,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "Hw Sch Mode: 1",
           "changes": [
             {
               "address": {
@@ -22033,7 +22033,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -22190,7 +22190,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -22317,7 +22317,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -22342,7 +22342,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -22394,7 +22394,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -22419,7 +22419,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -22496,7 +22496,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -22548,7 +22548,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -22573,7 +22573,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -26431,7 +26431,7 @@
       "options": [
         {
           "id": "choice-21e10415fb773217",
-          "name": "Value 32",
+          "name": "Disabled Components: 32",
           "changes": [
             {
               "address": {
@@ -26456,7 +26456,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Disabled Components: 0",
           "changes": [
             {
               "address": {
@@ -26481,7 +26481,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "Disabled Components: 1",
           "changes": [
             {
               "address": {
@@ -26506,7 +26506,7 @@
         },
         {
           "id": "choice-baea08173082f2c8",
-          "name": "Value 255",
+          "name": "Disabled Components: 255",
           "changes": [
             {
               "address": {
@@ -27639,7 +27639,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -27692,7 +27692,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Netbios Options: 0",
           "changes": [
             {
               "address": {
@@ -27723,7 +27723,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Netbios Options: 2",
           "changes": [
             {
               "address": {
@@ -27854,7 +27854,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -27963,7 +27963,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -28595,7 +28595,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -28835,7 +28835,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -29465,7 +29465,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -29490,7 +29490,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -29537,7 +29537,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -29614,7 +29614,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -34136,7 +34136,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -34161,7 +34161,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -34208,7 +34208,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -34233,7 +34233,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -35088,7 +35088,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -35138,7 +35138,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -35267,7 +35267,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -35483,7 +35483,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -35555,7 +35555,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -35699,7 +35699,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -35939,7 +35939,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -36107,7 +36107,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -36179,7 +36179,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Let Apps Access Generative AI: 2",
           "changes": [
             {
               "address": {
@@ -36743,7 +36743,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -36768,7 +36768,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -36815,7 +36815,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -36959,7 +36959,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37039,7 +37039,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37183,7 +37183,7 @@
       "options": [
         {
           "id": "blocked",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -37218,7 +37218,7 @@
         },
         {
           "id": "allowed",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37454,7 +37454,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37504,7 +37504,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -37561,7 +37561,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37611,7 +37611,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -37668,7 +37668,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -37718,7 +37718,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -37775,7 +37775,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -37825,7 +37825,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -38026,7 +38026,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -38098,7 +38098,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -38710,7 +38710,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -39380,7 +39380,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -39452,7 +39452,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -39698,7 +39698,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -39770,7 +39770,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -39842,7 +39842,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -39914,7 +39914,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -39939,7 +39939,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -39986,7 +39986,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40011,7 +40011,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -40058,7 +40058,7 @@
       "options": [
         {
           "id": "choice-950ca1b1a0b488e2",
-          "name": "Value 5",
+          "name": "Sync Policy: 5",
           "changes": [
             {
               "address": {
@@ -40130,7 +40130,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40155,7 +40155,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -40202,7 +40202,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40227,7 +40227,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -40274,7 +40274,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40299,7 +40299,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -40418,7 +40418,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40490,7 +40490,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -40515,7 +40515,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -41054,7 +41054,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -41126,7 +41126,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -41198,7 +41198,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -41223,7 +41223,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -41270,7 +41270,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -41707,7 +41707,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -41779,7 +41779,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -43497,7 +43497,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -43628,7 +43628,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -44247,7 +44247,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Submit Samples Consent: 2",
           "changes": [
             {
               "address": {
@@ -44319,7 +44319,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -44344,7 +44344,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -52941,7 +52941,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53025,7 +53025,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53097,7 +53097,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -53122,7 +53122,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53777,7 +53777,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53802,7 +53802,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -53874,7 +53874,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53946,7 +53946,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -53993,7 +53993,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -54018,7 +54018,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -54132,7 +54132,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -54204,7 +54204,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -54251,7 +54251,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -54323,7 +54323,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -54490,7 +54490,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -54515,7 +54515,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -54604,7 +54604,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -54903,7 +54903,7 @@
         },
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Feature Settings Override: 3",
           "changes": [
             {
               "address": {
@@ -54975,7 +54975,7 @@
         },
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Feature Settings Override Mask: 3",
           "changes": [
             {
               "address": {
@@ -55022,7 +55022,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55094,7 +55094,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55244,7 +55244,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55316,7 +55316,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -55388,7 +55388,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55413,7 +55413,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -55485,7 +55485,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55557,7 +55557,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55641,7 +55641,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55713,7 +55713,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55785,7 +55785,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55832,7 +55832,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55857,7 +55857,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -55904,7 +55904,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -55929,7 +55929,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -55976,7 +55976,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56001,7 +56001,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56048,7 +56048,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56073,7 +56073,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56120,7 +56120,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56145,7 +56145,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56197,7 +56197,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56222,7 +56222,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56274,7 +56274,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56299,7 +56299,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56351,7 +56351,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56376,7 +56376,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56428,7 +56428,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56453,7 +56453,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56500,7 +56500,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56525,7 +56525,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56572,7 +56572,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56597,7 +56597,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56644,7 +56644,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56669,7 +56669,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56716,7 +56716,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56741,7 +56741,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56788,7 +56788,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56813,7 +56813,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56897,7 +56897,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56922,7 +56922,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -56969,7 +56969,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -56994,7 +56994,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57041,7 +57041,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57066,7 +57066,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57118,7 +57118,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57143,7 +57143,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57227,7 +57227,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57252,7 +57252,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57336,7 +57336,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57361,7 +57361,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57445,7 +57445,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57470,7 +57470,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57554,7 +57554,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57579,7 +57579,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57663,7 +57663,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57688,7 +57688,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57772,7 +57772,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57797,7 +57797,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57844,7 +57844,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57869,7 +57869,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57916,7 +57916,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -57941,7 +57941,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -57988,7 +57988,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -58013,7 +58013,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -60925,7 +60925,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -60950,7 +60950,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61147,7 +61147,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61172,7 +61172,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61219,7 +61219,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61244,7 +61244,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61291,7 +61291,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61316,7 +61316,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61363,7 +61363,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61388,7 +61388,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61626,7 +61626,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61698,7 +61698,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61745,7 +61745,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -61802,7 +61802,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -61930,7 +61930,7 @@
       "options": [
         {
           "id": "choice-dc3cfa3b87cfe8b7",
-          "name": "Value 64000",
+          "name": "Fast Send Datagram Threshold: 64000",
           "changes": [
             {
               "address": {
@@ -62002,7 +62002,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -62027,7 +62027,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62074,7 +62074,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62151,7 +62151,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62280,7 +62280,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62352,7 +62352,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62424,7 +62424,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Win32 Priority Separation: 2",
           "changes": [
             {
               "address": {
@@ -62471,7 +62471,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62496,7 +62496,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -62543,7 +62543,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62615,7 +62615,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Game DVR FSEBehavior: 2",
           "changes": [
             {
               "address": {
@@ -62662,7 +62662,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Game DVR FSEBehavior Mode: 2",
           "changes": [
             {
               "address": {
@@ -62709,7 +62709,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62734,7 +62734,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -62865,7 +62865,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -62890,7 +62890,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63252,7 +63252,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63324,7 +63324,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63490,7 +63490,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -63515,7 +63515,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63562,7 +63562,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63587,7 +63587,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -63634,7 +63634,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -63731,7 +63731,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -63874,7 +63874,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -63899,7 +63899,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64048,7 +64048,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64125,7 +64125,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64202,7 +64202,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64395,7 +64395,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64434,7 +64434,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -64530,7 +64530,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -64577,7 +64577,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -64602,7 +64602,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -64856,7 +64856,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -65000,7 +65000,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65025,7 +65025,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -65221,7 +65221,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65246,7 +65246,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -65371,7 +65371,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65396,7 +65396,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -65443,7 +65443,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65540,7 +65540,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65617,7 +65617,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65689,7 +65689,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65808,7 +65808,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -65840,7 +65840,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -65894,7 +65894,7 @@
       "options": [
         {
           "id": "choice-58acca08b103278c",
-          "name": "Value 10",
+          "name": "Network Throttling Index: 10",
           "changes": [
             {
               "address": {
@@ -65919,7 +65919,7 @@
         },
         {
           "id": "choice-9c7e371fb9f33b0d",
-          "name": "Value 4294967295",
+          "name": "Network Throttling Index: 4294967295",
           "changes": [
             {
               "address": {
@@ -65966,7 +65966,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66041,7 +66041,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66113,7 +66113,7 @@
       "options": [
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Shell Feeds Taskbar View Mode: 2",
           "changes": [
             {
               "address": {
@@ -66138,7 +66138,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Shell Feeds Taskbar View Mode: 0",
           "changes": [
             {
               "address": {
@@ -66188,7 +66188,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66260,7 +66260,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -66285,7 +66285,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66409,7 +66409,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -66481,7 +66481,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66506,7 +66506,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -66741,7 +66741,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -66772,7 +66772,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -66825,7 +66825,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -66856,7 +66856,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -67285,7 +67285,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -67316,7 +67316,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -67400,7 +67400,7 @@
         },
         {
           "id": "choice-e96f3cdb4275553e",
-          "name": "Value 24",
+          "name": "Pn PCapabilities: 24",
           "changes": [
             {
               "address": {
@@ -67484,7 +67484,7 @@
         },
         {
           "id": "choice-e96f3cdb4275553e",
-          "name": "Value 24",
+          "name": "Pn PCapabilities: 24",
           "changes": [
             {
               "address": {
@@ -67568,7 +67568,7 @@
         },
         {
           "id": "choice-e96f3cdb4275553e",
-          "name": "Value 24",
+          "name": "Pn PCapabilities: 24",
           "changes": [
             {
               "address": {
@@ -67652,7 +67652,7 @@
         },
         {
           "id": "choice-e96f3cdb4275553e",
-          "name": "Value 24",
+          "name": "Pn PCapabilities: 24",
           "changes": [
             {
               "address": {
@@ -67736,7 +67736,7 @@
         },
         {
           "id": "choice-e96f3cdb4275553e",
-          "name": "Value 24",
+          "name": "Pn PCapabilities: 24",
           "changes": [
             {
               "address": {
@@ -67883,7 +67883,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -67914,7 +67914,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -68584,7 +68584,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -68631,7 +68631,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -68703,7 +68703,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -69072,7 +69072,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -69144,7 +69144,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -69172,7 +69172,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -69222,7 +69222,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -69294,7 +69294,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "System Restore Point Creation Frequency: 0",
           "changes": [
             {
               "address": {
@@ -69319,7 +69319,7 @@
         },
         {
           "id": "choice-cf71ae23934834f7",
-          "name": "Value 1440",
+          "name": "System Restore Point Creation Frequency: 1440",
           "changes": [
             {
               "address": {
@@ -69366,7 +69366,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -69438,7 +69438,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -69463,7 +69463,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -70036,7 +70036,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Searchbox Taskbar Mode: 0",
           "changes": [
             {
               "address": {
@@ -70068,7 +70068,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Searchbox Taskbar Mode: 2",
           "changes": [
             {
               "address": {
@@ -70093,7 +70093,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "Searchbox Taskbar Mode: 1",
           "changes": [
             {
               "address": {
@@ -70150,7 +70150,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -70175,7 +70175,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -70270,7 +70270,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -70295,7 +70295,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -70342,7 +70342,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -70367,7 +70367,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -70414,7 +70414,7 @@
       "options": [
         {
           "id": "choice-21e10415fb773217",
-          "name": "Value 32",
+          "name": "Icon Size: 32",
           "changes": [
             {
               "address": {
@@ -70439,7 +70439,7 @@
         },
         {
           "id": "choice-c1cc1edbb3f40a0d",
-          "name": "Value 48",
+          "name": "Icon Size: 48",
           "changes": [
             {
               "address": {
@@ -70486,7 +70486,7 @@
       "options": [
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Logical View Mode: 3",
           "changes": [
             {
               "address": {
@@ -70533,7 +70533,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -70657,7 +70657,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -70947,7 +70947,7 @@
         },
         {
           "id": "choice-c55db10b623ad078",
-          "name": "Value 506",
+          "name": "Flags: 506",
           "changes": [
             {
               "address": {
@@ -70972,7 +70972,7 @@
         },
         {
           "id": "choice-e514bb8e79d6a267",
-          "name": "Value 58",
+          "name": "Flags: 58",
           "changes": [
             {
               "address": {
@@ -71153,7 +71153,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -71178,7 +71178,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71255,7 +71255,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71302,7 +71302,7 @@
       "options": [
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Enable Prefetcher: 3",
           "changes": [
             {
               "address": {
@@ -71327,7 +71327,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Enable Prefetcher: 0",
           "changes": [
             {
               "address": {
@@ -71374,7 +71374,7 @@
       "options": [
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Enable Superfetch: 3",
           "changes": [
             {
               "address": {
@@ -71399,7 +71399,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Enable Superfetch: 0",
           "changes": [
             {
               "address": {
@@ -71446,7 +71446,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -71471,7 +71471,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71518,7 +71518,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71739,7 +71739,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71764,7 +71764,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -71883,7 +71883,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -71908,7 +71908,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -71955,7 +71955,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -71980,7 +71980,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72027,7 +72027,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72099,7 +72099,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72171,7 +72171,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72243,7 +72243,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72468,7 +72468,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72540,7 +72540,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72612,7 +72612,7 @@
       "options": [
         {
           "id": "choice-950ca1b1a0b488e2",
-          "name": "Value 5",
+          "name": "Consent Prompt Behavior Admin: 5",
           "changes": [
             {
               "address": {
@@ -72637,7 +72637,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Consent Prompt Behavior Admin: 0",
           "changes": [
             {
               "address": {
@@ -72684,7 +72684,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72709,7 +72709,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72756,7 +72756,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72781,7 +72781,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72828,7 +72828,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72853,7 +72853,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -72900,7 +72900,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -72925,7 +72925,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73021,7 +73021,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73046,7 +73046,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -73093,7 +73093,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -73267,7 +73267,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73339,7 +73339,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73411,7 +73411,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73483,7 +73483,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Allow Telemetry: 0",
           "changes": [
             {
               "address": {
@@ -73508,7 +73508,7 @@
         },
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "Allow Telemetry: 3",
           "changes": [
             {
               "address": {
@@ -73590,7 +73590,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73662,7 +73662,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73734,7 +73734,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -73818,7 +73818,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -73890,7 +73890,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -73962,7 +73962,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74009,7 +74009,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74034,7 +74034,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74313,7 +74313,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74385,7 +74385,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74410,7 +74410,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74457,7 +74457,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74482,7 +74482,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74534,7 +74534,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74606,7 +74606,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -74678,7 +74678,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74750,7 +74750,7 @@
       "options": [
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -74847,7 +74847,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -75352,7 +75352,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Allow Optional Content: 0",
           "changes": [
             {
               "address": {
@@ -75429,7 +75429,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "DODownload Mode: 0",
           "changes": [
             {
               "address": {
@@ -75454,7 +75454,7 @@
         },
         {
           "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Value 3",
+          "name": "DODownload Mode: 3",
           "changes": [
             {
               "address": {
@@ -75883,7 +75883,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -76027,7 +76027,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -76099,7 +76099,7 @@
         },
         {
           "id": "choice-959723ea7b62f95c",
-          "name": "Value 2",
+          "name": "Auto Download: 2",
           "changes": [
             {
               "address": {
@@ -76124,7 +76124,7 @@
         },
         {
           "id": "choice-d0c2833c4617d73e",
-          "name": "Value 4",
+          "name": "Auto Download: 4",
           "changes": [
             {
               "address": {
@@ -76278,7 +76278,7 @@
         },
         {
           "id": "choice-fb53c74afee33613",
-          "name": "Value 3650",
+          "name": "Flight Settings Max Pause Days: 3650",
           "changes": [
             {
               "address": {
@@ -76350,7 +76350,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -76422,7 +76422,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -76494,7 +76494,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -76566,7 +76566,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -76638,7 +76638,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -77219,7 +77219,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -77291,7 +77291,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -77363,7 +77363,7 @@
         },
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
@@ -77435,7 +77435,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -77507,7 +77507,7 @@
         },
         {
           "id": "choice-6b253977ea5987f3",
-          "name": "Value 1",
+          "name": "On (1)",
           "changes": [
             {
               "address": {
@@ -77554,7 +77554,7 @@
       "options": [
         {
           "id": "choice-95a6ed84299d0109",
-          "name": "Value 0",
+          "name": "Off (0)",
           "changes": [
             {
               "address": {
