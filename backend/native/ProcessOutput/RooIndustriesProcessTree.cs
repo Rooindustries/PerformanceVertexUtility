@@ -25,6 +25,8 @@ namespace RooIndustries.Optimization.ProcessOutput
         private readonly IntPtr job;
         private readonly int rootId;
         private readonly Dictionary<int, Tracked> tracked = new Dictionary<int, Tracked>();
+        private readonly HashSet<int> ignored = new HashSet<int>();
+        private static readonly HashSet<string> ShellHosts = new HashSet<string>(new[] { "explorer.exe", "msedge.exe", "chrome.exe", "firefox.exe", "brave.exe", "opera.exe", "iexplore.exe" }, StringComparer.OrdinalIgnoreCase);
 
         public bool Contained { get; private set; }
 
@@ -40,9 +42,9 @@ namespace RooIndustries.Optimization.ProcessOutput
                     Contained = AssignProcessToJobObject(job, root.Handle);
             }
             IntPtr handle = OpenProcess(0x101000, false, rootId);
-            if (handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover process could not be observed.");
+            if (handle == IntPtr.Zero) { int error = Marshal.GetLastWin32Error(); if (job != IntPtr.Zero) CloseHandle(job); throw new Win32Exception(error, "The remover process could not be observed."); }
             long created;
-            if (!Created(handle, out created)) { CloseHandle(handle); throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover start time could not be read."); }
+            if (!Created(handle, out created)) { int error = Marshal.GetLastWin32Error(); CloseHandle(handle); if (job != IntPtr.Zero) CloseHandle(job); throw new Win32Exception(error, "The remover start time could not be read."); }
             tracked[rootId] = new Tracked { Handle = handle, Created = created, Member = Member(rootId, created, System.IO.Path.GetFileName(root.StartInfo.FileName)) };
         }
 
@@ -56,10 +58,12 @@ namespace RooIndustries.Optimization.ProcessOutput
                 HashSet<int> members = new HashSet<int>(JobProcessIds());
                 foreach (Entry entry in snapshot)
                 {
-                    if (tracked.ContainsKey(entry.ProcessId)) continue;
+                    if (tracked.ContainsKey(entry.ProcessId) || ignored.Contains(entry.ProcessId)) continue;
                     Tracked parent;
                     bool child = tracked.TryGetValue(entry.ParentProcessId, out parent);
-                    if (!members.Contains(entry.ProcessId) && !child) continue;
+                    bool shellChild = ignored.Contains(entry.ParentProcessId);
+                    if (!members.Contains(entry.ProcessId) && !child && !shellChild) continue;
+                    if (shellChild || ShellHosts.Contains(entry.Name ?? "")) { ignored.Add(entry.ProcessId); added = true; continue; }
                     IntPtr handle = OpenProcess(0x101000, false, entry.ProcessId);
                     if (handle == IntPtr.Zero) continue;
                     long created;
@@ -92,7 +96,7 @@ namespace RooIndustries.Optimization.ProcessOutput
             if (handle == IntPtr.Zero)
             {
                 int error = Marshal.GetLastWin32Error();
-                if (error == 87) return false;
+                if (error == 87 || error == 5) return false;
                 throw new Win32Exception(error, "Process " + processId + " could not be inspected.");
             }
             try
