@@ -176,6 +176,7 @@ public partial class WindowsTweakRow : ObservableObject
         _recommended = _action;
         _selected = Choices[0];
     }
+    public static bool ReadableName(string name) => name.Trim().Length > 0 && char.IsLetterOrDigit(name.Trim()[0]);
     public static string DisplayChoice(string name) => name is "Remove this override" or "Not configured" ? "Use Windows default" : name;
     private static bool IsDefaultAction(string name) => name is "Remove this override" or "Windows default" or "Use Windows default" or "Not configured" or "source-default" or "Return to previous plan" or "Remove boot override";
     public void Observe(TweakSettingStatus? status)
@@ -185,7 +186,7 @@ public partial class WindowsTweakRow : ObservableObject
         _cannotRevert = false;
         if (AppliedChoice is not null && Selected.Id.Length == 0 && _action != AppliedChoice) { _action = AppliedChoice; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
         OnPropertyChanged(nameof(AppliedChoice)); OnPropertyChanged(nameof(IsApplied));
-        Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } ? serviceName : Definition.Name);
+        Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } && ReadableName(serviceName) ? serviceName : Definition.Name);
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
         Detail = status is null ? "Refresh to read this setting." : status.Controls?.Any(control => control.RestartPending) == true ? "Restart Windows to finish this feature change." : status.Error ?? (status.Supported == false ? "Not available on this Windows build or edition." : "");
         if (Detail.Length == 0) Detail = string.Join("\n", (status?.Controls ?? []).Where(control => control.Address.Kind is "timer" or "download-blocker" or "firewall-profile").Select(control => control.DisplayName).Where(text => !string.IsNullOrWhiteSpace(text)));

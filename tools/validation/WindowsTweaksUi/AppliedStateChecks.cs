@@ -17,6 +17,16 @@ static class AppliedStateChecks
         TweakSettingStatus Status(TweakDefinition definition, string[] configured, bool supported = true, string? error = null) =>
             new(definition.Id, definition.Name, supported, configured, [], error, definition.Options.Select(option => option.Id).ToArray());
 
+        var serviceAddress = new ControlAddress("service", "UsoSvc", "delayed-start");
+        var service = new TweakDefinition("fixture.service-name", "UsoSvc: delayed start", "Services", "Fixture", 10240, 26200, ["*"], "none",
+            [new("on", "Delayed", [], Controls: [new(serviceAddress, ControlValues.From(true))]), new("off", "Not delayed", [], Controls: [new(serviceAddress, ControlValues.From(false))])], [new("Fixture", "fixture", "isolated UI validation")]);
+        var serviceRow = new WindowsTweakRow(service, new Dictionary<string, TweakDefinition> { [service.Id] = service }, _ => { });
+        TweakSettingStatus ServiceStatus(string displayName) => new(service.Id, service.Name, true, ["on"], [], null, ["on", "off"], [new(serviceAddress, "service:USOSVC:delayed-start", "fixture", ControlValues.From(true), displayName)]);
+        serviceRow.Observe(ServiceStatus(": delayed start"));
+        var blank = serviceRow.Name;
+        serviceRow.Observe(ServiceStatus("Update Orchestrator Service: delayed start"));
+        check(blank == "UsoSvc: delayed start" && serviceRow.Name == "Update Orchestrator Service: delayed start",
+            "A service without a readable display name keeps its catalog name instead of showing ': delayed start': " + blank);
         var row = Row(withReset);
         check(!row.ToggleOn && !row.IsApplied && row.StateLabel == "Off", "A setting that has not been read starts off");
         row.Observe(Status(withReset, ["off"]));
