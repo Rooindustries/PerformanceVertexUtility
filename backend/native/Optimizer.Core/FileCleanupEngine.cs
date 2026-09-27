@@ -93,6 +93,14 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             journal.Status = "needsReconciliation";
             var active = journal.Entries.FirstOrDefault(entry => entry.Status is "deleteIntent" or "pending") ?? journal.Entries.First();
             active.Error = error.Message;
+            if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp"))
+                foreach (var entry in journal.Entries)
+                {
+                    try { File.Delete(entry.BackupPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    if (File.Exists(entry.BackupPath)) continue;
+                    entry.BackupHash = null;
+                    entry.Status = "pending";
+                }
             Save(journalPath, journal);
         }
         finally { foreach (var source in held.Values) source.Dispose(); }
@@ -104,6 +112,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         using var lease = OperationFiles.Lock(journalPath);
         var journal = ReadJournal(journalPath);
         currentAuthority().Verify(journal.Preview.AppId, journal.Preview.ProviderIdentityHash);
+        if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp")) return journal;
         var conflicts = false;
         var createdDirectories = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in journal.Entries.Where(entry => entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
