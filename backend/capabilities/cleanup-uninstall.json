@@ -227,7 +227,7 @@
       "capabilityId": "cleanup-uninstall.leftover-scan",
       "family": "cleanup-uninstall",
       "displayName": "Leftover Scan",
-      "technicalName": "metadata-derived leftover scan over installLocation, knownAppDataPaths, vendorRegistryKeys, services, scheduled tasks, and Run-key startup entries",
+      "technicalName": "metadata-derived leftover scan over installLocation, knownAppDataPaths, vendorRegistryKeys, services and scheduled tasks outside Microsoft and Windows owned roots",
       "source": "revo",
       "implementedBy": "roo-industries-script",
       "frontendLabel": "Leftover Scan",

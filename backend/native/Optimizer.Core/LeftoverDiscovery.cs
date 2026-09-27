@@ -43,7 +43,6 @@ public sealed class LeftoverDiscovery
     private readonly (CleanupApplication App, HashSet<string> Names)[] _peerNames;
     private readonly (string Name, string Path)[] _peerPaths;
     private readonly string? _installPath;
-    private readonly bool _microsoftProduct;
     private readonly Dictionary<string, LeftoverCandidate> _found = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _errors = [];
     private readonly Dictionary<string, HashSet<string>> _registryOwners = new(StringComparer.OrdinalIgnoreCase);
@@ -60,7 +59,6 @@ public sealed class LeftoverDiscovery
         _peerNames = _peers.Select(peer => (peer, NameKeys(peer.DisplayName))).ToArray();
         _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (peer.DisplayName, ExpandPath(peer.InstallLocation!))).ToArray();
         _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) ? null : ExpandPath(application.InstallLocation);
-        _microsoftProduct = MicrosoftProduct(application);
     }
 
     public LeftoverDiscoveryResult Scan(CancellationToken cancellationToken, IEnumerable<string>? fileRoots = null,
@@ -136,6 +134,7 @@ public sealed class LeftoverDiscovery
         try
         {
             path = FileLease.NormalizePath(path);
+            if (MicrosoftOwnedPath(path)) return;
             var attributes = File.GetAttributes(path);
             var id = Id("path", path);
             if (_found.TryGetValue(id, out var present)) { if (!present.Evidence.Contains(evidence)) present.Evidence.Add(evidence); return; }
@@ -177,7 +176,7 @@ public sealed class LeftoverDiscovery
         _visited++;
         try
         {
-            if (WindowsOwned(address.KeyPath) || !_microsoftProduct && MicrosoftOwned(address.KeyPath))
+            if (WindowsOwned(address.KeyPath) || MicrosoftOwned(address.KeyPath))
             {
                 var windowsName = RegistryNative.NativeName(handle);
                 if (_registryOwners.TryGetValue(windowsName, out var windowsOwners)) windowsOwners.Add("Windows");
@@ -285,9 +284,23 @@ public sealed class LeftoverDiscovery
         }
         return false;
     }
-    private static bool MicrosoftProduct(CleanupApplication app) =>
-        app.PackageFamilyName is { } family && (family.EndsWith("_8wekyb3d8bbwe", StringComparison.OrdinalIgnoreCase) || family.EndsWith("_cw5n1h2txyewy", StringComparison.OrdinalIgnoreCase))
-        || app.Publisher is { } publisher && Regex.IsMatch(publisher.Trim(), @"^(?:CN=)?Microsoft(?: Corporation| Corp\.?| Windows)?(?:,|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static bool MicrosoftOwnedPath(string path)
+    {
+        if (Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
+        foreach (var folder in new[] { Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolder.ApplicationData })
+        {
+            var root = Environment.GetFolderPath(folder);
+            if (!string.IsNullOrWhiteSpace(root) && Within(path, Path.Combine(root, "Microsoft"))) return true;
+        }
+        foreach (var folder in new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.CommonProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86 })
+        {
+            var root = Environment.GetFolderPath(folder).TrimEnd('\\');
+            if (string.IsNullOrWhiteSpace(root) || !path.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase)) continue;
+            var first = path[(root.Length + 1)..].Split('\\')[0];
+            if (first.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase) || first.StartsWith("Windows", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return Within(path, Path.Combine(Path.GetPathRoot(path) ?? "", "WindowsApps"));
+    }
     private static HashSet<string> NameKeys(string name)
     {
         var clean = Regex.Replace(name, @"\s*[\(\[]?(?:x64|x86|64-bit|32-bit)[\)\]]?", "", RegexOptions.IgnoreCase);
