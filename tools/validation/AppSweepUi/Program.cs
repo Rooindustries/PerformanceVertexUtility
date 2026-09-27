@@ -692,6 +692,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         DryRun = true,
         Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", CommandLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S", ExecutableSha256 = null }],
     });
+    cleanup.PrimaryRemovalButtonLabel = "Check path";
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A remover whose file is missing is not marked as checked and says so");
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
@@ -699,6 +700,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         DryRun = true,
         Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null }],
     });
+    cleanup.PrimaryRemovalButtonLabel = "Check path";
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal) && cleanup.PrimaryRemovalButtonLabel == "Plan removal", "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
