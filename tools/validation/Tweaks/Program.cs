@@ -8,6 +8,7 @@ if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerL
 if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
 if (args is ["--timer-detached-start", var detachedRoot]) { TimerChecks.DetachedStart(detachedRoot); return; }
 if (args is ["--timer-detached-stop", var stopRoot]) { TimerChecks.DetachedStop(stopRoot); return; }
+if (args is ["--timer-job-start", var jobRoot, var jobMode]) { TimerChecks.JobStart(jobRoot, jobMode == "ends-on-close"); return; }
 var repo = Path.GetFullPath(args[0]);
 var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(repo, "backend/catalogs/windows-tweaks.json"));
 var root = Path.Combine(Path.GetTempPath(), "roo-industries-tweak-checks-" + Guid.NewGuid().ToString("N"));
@@ -63,7 +64,7 @@ try
     if (args is [_, "--power-fixture"]) { PowerChecks.Run(root, Check); Console.WriteLine($"Completed {count} native power checks."); return; }
     if (args is [_, "--file-controls-fixture"]) { NativeFileControlChecks.Run(Check, Reject); Console.WriteLine($"Completed {count} native file-control checks."); return; }
     if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
-    if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
+    if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); TimerChecks.Job(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
     if (args is [_, "--power-plan-fixture"]) { PowerPlanChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native power-plan checks."); return; }
     if (args is [_, "--timer-startup-fixture"]) { TimerStartupChecks.Native(Check); Console.WriteLine($"Completed {count} native startup checks."); return; }
     if (args is [_, "--download-blocker-fixture"]) { DownloadBlockerChecks.Native(Check); Console.WriteLine($"Completed {count} native download blocker checks."); return; }
