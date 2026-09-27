@@ -261,7 +261,7 @@ function Invoke-RooIndustriesBulkEntry {
         if(Test-Path -LiteralPath $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
             if([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -eq 'cleanup-apply') {
-                if(Test-RooIndustriesBulkInvocationLive $claim.invocation){throw 'An earlier removal of this app from Leftover cleanup is still running. Let it finish, then try again.'}
+                if(Test-RooIndustriesBulkInvocationLive $claim.invocation){throw 'An earlier removal of this app from Leftover cleanup is still running or can''t be checked. Let it finish, then try again.'}
                 Remove-Item -LiteralPath $claimPath -Force
             } elseif($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }

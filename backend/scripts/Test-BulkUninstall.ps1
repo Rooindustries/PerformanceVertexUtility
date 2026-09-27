@@ -31,6 +31,46 @@ function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[s
     return @{directory=$directory;markers=$markers;counter=$counter;plan=$preview.data;planPath=$planPath;exe=$exe;
         args=@{Action='Apply';InputPath=$planPath;ReviewSha256=(Get-FileHash $planPath).Hash;JournalPath=$journalPath;AllowFixtureExecution=$true;ConfirmApply=$true;ManualReviewApproved=$true}}
 }
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class RooIndustriesBulkAccessFixture {
+    [StructLayout(LayoutKind.Sequential, Pack=4)] private struct Privilege { public int Count; public long Luid; public int Attributes; }
+    [DllImport("advapi32.dll", SetLastError=true)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] private static extern bool LookupPrivilegeValueW(string system, string name, out long luid);
+    [DllImport("advapi32.dll", SetLastError=true)] private static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref Privilege state, int length, ref Privilege previous, out int returned);
+    [DllImport("advapi32.dll")] private static extern uint SetSecurityInfo(IntPtr handle, int type, uint information, IntPtr owner, IntPtr group, byte[] dacl, IntPtr sacl);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+    [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+    public static void DenyAll(IntPtr process) {
+        byte[] dacl = new byte[8];
+        new System.Security.AccessControl.RawAcl(2, 0).GetBinaryForm(dacl, 0);
+        uint error = SetSecurityInfo(process, 6, 4, IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);
+        if (error != 0) throw new Win32Exception((int)error);
+    }
+    public static int OpenError(int processId) {
+        IntPtr handle = OpenProcess(0x101000, false, processId);
+        if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error();
+        CloseHandle(handle);
+        return 0;
+    }
+    private static int Adjust(int attributes) {
+        IntPtr token;
+        if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        try {
+            Privilege state = new Privilege { Count = 1, Attributes = attributes }, previous = new Privilege();
+            if (!LookupPrivilegeValueW(null, "SeDebugPrivilege", out state.Luid)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            int returned;
+            if (!AdjustTokenPrivileges(token, false, ref state, Marshal.SizeOf(typeof(Privilege)), ref previous, out returned) || Marshal.GetLastWin32Error() != 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+            return previous.Count == 0 ? attributes : previous.Attributes;
+        } finally { CloseHandle(token); }
+    }
+    public static int SetDebug(bool enabled) { return Adjust(enabled ? 2 : 0); }
+    public static void RestoreDebug(int attributes) { Adjust(attributes & 2); }
+}
+'@
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
     $script:fixtureExe=Join-Path $root 'RooIndustriesBulkFixture.exe'
@@ -189,6 +229,33 @@ public class RooIndustriesBulkFixture {
     Write-RooIndustriesOperationJson ([pscustomobject]@{kind='cleanup-apply';appId=$case.plan.entries[0].appId;invocation=[pscustomobject]@{processId=$PID;creationTimeFileTimeUtc='1';descendants=@()}}) $claimFile
     $staleClaim=Read-Result (& $runScript @a)
     Assert ($staleClaim.status -eq 'cleanup-review-required' -and -not(Test-Path -LiteralPath $claimFile)) 'A finished Leftover cleanup remover no longer blocks the removal queue'
+    $case=New-Case 'unreadable-remover';$a=$case.args
+    $deniedExe=Join-Path $case.directory 'unreadable remover.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $deniedExe
+    $deniedStart=[Diagnostics.ProcessStartInfo]::new($deniedExe,'x y 0 child-shell');$deniedStart.UseShellExecute=$false;$deniedStart.CreateNoWindow=$true
+    $denied=[Diagnostics.Process]::Start($deniedStart);$liveFixtures.Add($denied)|Out-Null
+    $deniedCreated=$denied.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
+    [RooIndustriesBulkAccessFixture]::DenyAll($denied.Handle)
+    $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='needs-reconciliation';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;bootTimeUtc=Get-RooIndustriesBulkBootTime;updatedAtUtc=Get-RooIndustriesUtcStamp;
+        entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
+    $journal.entries[0].state='needs-reconciliation';$journal.entries[0].attemptCount=1
+    $journal.entries[0].invocation=[pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;descendants=@()}
+    Remove-Item -LiteralPath $case.markers[0]
+    Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $deniedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath}) $deniedClaim
+    Import-RooIndustriesBulkProcessTypes
+    $debug=[RooIndustriesBulkAccessFixture]::SetDebug($false)
+    try {
+        $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
+        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
+        $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+        $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
+    Assert ($openError -eq 5) "The unreadable remover fixture refuses inspection with access denied (error $openError)"
+    Assert $unreadable 'A remover Windows refuses to open is treated as still running, never as stopped'
+    Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
+    Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
+    $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}

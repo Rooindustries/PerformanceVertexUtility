@@ -93,17 +93,12 @@ namespace RooIndustries.Optimization.ProcessOutput
         public static bool IsRunning(int processId, string creationTimeFileTimeUtc)
         {
             IntPtr handle = OpenProcess(0x101000, false, processId);
-            if (handle == IntPtr.Zero)
-            {
-                int error = Marshal.GetLastWin32Error();
-                if (error == 87 || error == 5) return false;
-                throw new Win32Exception(error, "Process " + processId + " could not be inspected.");
-            }
+            if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error() != 87;
             try
             {
                 long created;
-                if (!Created(handle, out created)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Process " + processId + " start time could not be read.");
-                return created.ToString(System.Globalization.CultureInfo.InvariantCulture) == creationTimeFileTimeUtc && WaitForSingleObject(handle, 0) == 0x102;
+                if (!Created(handle, out created)) return true;
+                return created.ToString(System.Globalization.CultureInfo.InvariantCulture) == creationTimeFileTimeUtc && WaitForSingleObject(handle, 0) != 0;
             }
             finally { CloseHandle(handle); }
         }
