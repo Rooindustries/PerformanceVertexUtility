@@ -106,6 +106,7 @@ public sealed class RegistryTweakStore : ITweakStore
             var state = Decode(RegistryNative.ReadTweak(_stateAddress).Value);
             if (journal.Phase == "awaiting-restart" && state?.History.Any(item => item.OperationId == journal.Plan.OperationId) == true)
             {
+                if (journal.Boot is not null && journal.Boot == BootIdentity()) throw new InvalidDataException("Restart Windows to finish the feature changes, then check them again.");
                 foreach (var change in journal.Plan.Controls!.Changes)
                 {
                     var observed = ReadControl(change.Before.Address);
@@ -129,6 +130,8 @@ public sealed class RegistryTweakStore : ITweakStore
         }
         finally { guard.ReleaseMutex(); }
     }
+    private static string? BootIdentity() => RegistryNative.ReadTweak(new("LocalMachine", "Registry64", @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters", "value", "BootId")).Value is { Type: 4, Bytes.Length: 4 } value
+        ? BitConverter.ToUInt32(value.Bytes).ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
     private TweakState? Decode(RegistryValueData? value)
     {
         if (value is null) return null;
@@ -148,12 +151,13 @@ public sealed class RegistryTweakStore : ITweakStore
             if (plan.Context != Context || ReadState()?.Revision != plan.BeforeRevision) throw new InvalidDataException("Settings changed after review.");
             foreach (var expected in plan.Expected)
                 if (!Read(expected.Address).Same(expected)) throw new InvalidDataException("A registry setting changed after review.");
+            var boot = BootIdentity();
             var journal = new ControlJournal(plan, reviewHash, 0);
             WritePending(journal);
             try
             {
                 var pending = ControlExecution.Apply(plan.Controls, new WindowsControlStore(), attempted => { journal = journal with { Attempted = attempted }; WritePending(journal); });
-                if (pending) { journal = journal with { Phase = "awaiting-restart" }; WritePending(journal); }
+                if (pending) { journal = journal with { Phase = "awaiting-restart", Boot = boot }; WritePending(journal); }
                 return CommitRegistry(plan, reviewHash, pending);
             }
             catch (Exception failure)
