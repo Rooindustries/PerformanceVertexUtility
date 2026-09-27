@@ -193,11 +193,29 @@ try {
     Add-Failure "Leftover scan preview failed: $($_.Exception.Message)"
 }
 
+try {
+    $sampleItems = @((Get-Content -LiteralPath $sampleScan -Raw | ConvertFrom-Json).items)
+    $sampleOwned = @($sampleItems | Where-Object { $_.type -eq 'startupEntry' -or ($_.type -in @('registryKey', 'registryValue') -and @([string]$_.target -split '\\' | Where-Object { $_ -in @('Microsoft', 'Policies') }).Count -gt 0) })
+    if ($sampleItems.Count -gt 0 -and $sampleOwned.Count -eq 0) {
+        Add-Pass 'The leftover scan sample shows no Microsoft or Windows owned items'
+    } else {
+        Add-Failure ('The leftover scan sample shows Microsoft or Windows owned items: ' + (($sampleOwned | ForEach-Object { $_.target }) -join '; '))
+    }
+} catch {
+    Add-Failure "Leftover scan sample check failed: $($_.Exception.Message)"
+}
+
 $ownershipRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-ownership-' + [guid]::NewGuid().ToString('N'))
 try {
     [IO.Directory]::CreateDirectory($ownershipRoot) | Out-Null
     $guid = '{12345678-1234-1234-1234-1234567890AB}'
     $microsoftInstall = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('Microsoft\RooIndustriesOwnership' + [guid]::NewGuid().ToString('N'))
+    $windowsOwnedData = @(
+        (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Packages\Microsoft.GamingApp_8wekyb3d8bbwe\LocalState'),
+        (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'ModifiableWindowsApps\RooIndustriesFixture'),
+        (Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('Windows'))) 'XboxGames\RooIndustriesFixture'),
+        (Join-Path ([Environment]::GetFolderPath('UserProfile')) 'AppData\LocalLow\Microsoft\RooIndustriesFixture')
+    )
     $apps = @(
         [pscustomobject]@{ appId = 'registry:roo-industries-fixture-notepad++'; displayName = 'Notepad++'; publisher = 'Notepad++ Team'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; categories = @('application'); risk = 'low'; protected = $false },
         [pscustomobject]@{ appId = 'registry:roo-industries-fixture-microsoft'; displayName = 'Roo Industries Microsoft fixture'; publisher = 'Microsoft Corporation'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; installLocation = $microsoftInstall; categories = @('application'); risk = 'low'; protected = $false }
@@ -208,6 +226,7 @@ try {
     $ownershipRules.knownAppRules = @([pscustomobject]@{
         ruleId = 'roo-industries-fixture-everything'; match = [pscustomobject]@{ displayNamePatterns = @('Notepad++', 'Roo Industries Microsoft fixture') }
         vendorRegistryKeys = @('HKCU\Software\Microsoft\Notepad', 'HKLM\Software\Policies\Notepad++', 'HKCU\Software\Notepad++')
+        knownAppDataPaths = $windowsOwnedData
         serviceNamePatterns = @('*'); scheduledTaskPatterns = @('*'); startupValuePatterns = @('*')
     })
     $ownershipRulesPath = Join-Path $ownershipRoot 'rules.json'
@@ -241,6 +260,12 @@ try {
         Add-Pass 'A Microsoft-published app is never offered Microsoft or Windows owned keys, files, tasks, services or its Uninstall entry'
     } else {
         Add-Failure ('A Microsoft-published app was offered Microsoft or Windows owned items: ' + (($microsoftOwned | ForEach-Object { $_.type + ' ' + $_.target }) -join '; ') + ' ' + (@($microsoft.errors | ForEach-Object { $_.message }) -join '; '))
+    }
+    $ownedDataOffers = @(@($thirdParty.items) + @($microsoft.items) | Where-Object { [string]$_.target -in $windowsOwnedData })
+    if ($ownedDataOffers.Count -eq 0) {
+        Add-Pass 'Microsoft package data, ModifiableWindowsApps, XboxGames and LocalLow\Microsoft are never offered as leftovers'
+    } else {
+        Add-Failure ('Windows-owned data folders were offered as leftovers: ' + (($ownedDataOffers | ForEach-Object { $_.target }) -join '; '))
     }
     $uninstallOffers = @(@($thirdParty.items) + @($microsoft.items) | Where-Object { ([string]$_.target) -like '*\CurrentVersion\Uninstall\*' })
     if ($uninstallOffers.Count -eq 0) {
