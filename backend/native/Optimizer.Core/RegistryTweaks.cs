@@ -132,10 +132,25 @@ public sealed class RegistryTweakStore : ITweakStore
     }
     public static string? CurrentBoot()
     {
-        var info = new byte[32];
-        if (NtQuerySystemInformation(90, info, info.Length, out _) < 0) return null;
-        var id = new Guid(info.AsSpan(0, 16));
-        return id == Guid.Empty ? null : "boot:" + id.ToString("N");
+        try
+        {
+            using var guard = new Mutex(false, @"Global\RooIndustriesBootMarker");
+            bool owned;
+            try { owned = guard.WaitOne(TimeSpan.FromSeconds(10)); } catch (AbandonedMutexException) { owned = true; }
+            if (!owned) return null;
+            try
+            {
+                using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+                using var product = machine.CreateSubKey(@"SOFTWARE\RooIndustriesOptimizationSuite", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryOptions.None);
+                using var marker = product.CreateSubKey("BootMarker", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryOptions.Volatile);
+                if (marker.GetValue("Id") is string existing && Guid.TryParseExact(existing, "N", out _)) return "boot:" + existing;
+                var id = Guid.NewGuid().ToString("N");
+                marker.SetValue("Id", id, RegistryValueKind.String);
+                return "boot:" + id;
+            }
+            finally { guard.ReleaseMutex(); }
+        }
+        catch (Exception error) when (error is UnauthorizedAccessException or System.Security.SecurityException or IOException or ApplicationException) { return null; }
     }
     public static bool SameBoot(string? recorded, string? current = null)
     {
@@ -143,7 +158,6 @@ public sealed class RegistryTweakStore : ITweakStore
         var now = current ?? CurrentBoot();
         return now is null || string.Equals(recorded, now, StringComparison.Ordinal);
     }
-    [System.Runtime.InteropServices.DllImport("ntdll.dll")] private static extern int NtQuerySystemInformation(int kind, byte[] information, int length, out int returned);
     private TweakState? Decode(RegistryValueData? value)
     {
         if (value is null) return null;
