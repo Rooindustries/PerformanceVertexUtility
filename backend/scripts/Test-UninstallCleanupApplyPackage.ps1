@@ -184,6 +184,25 @@ public class RooIndustriesHandoffFixture {
         $result=Read-Result (& $applyScript @a)
         Assert ($result.status -eq 'blocked' -and @($result.gates | Where-Object { $_.gateId -eq 'reviewed-command-line' -and $_.blocking }).Count -eq 1 -and -not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path $a.RollbackManifestPath)) "A remover whose command differs from the reviewed command ($scenario) never launches"
     }
+    $case=New-HandoffCase 'stopped-after-launch' 'handoff'; $a=$case.args
+    $argsPath=Join-Path $case.root 'apply arguments.json'
+    $a | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
+    $stoppedScript=Join-Path $case.root 'stopped after launch.ps1'
+    Set-Content -LiteralPath $stoppedScript -Encoding UTF8 -Value @'
+param([string]$ApplyScript,[string]$ArgumentsPath)
+$ErrorActionPreference='Stop'
+Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public void Dispose() {} } }'
+$values=@{}; (Get-Content -LiteralPath $ArgumentsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $values[$_.Name]=$_.Value }
+$values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
+& $ApplyScript @values
+'@
+    $stoppedOutput=& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $stoppedScript -ApplyScript $applyScript -ArgumentsPath $argsPath
+    $unconfirmed=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    if ($null -eq $unconfirmed) { Write-Host ($stoppedOutput -join [Environment]::NewLine) }
+    Assert ((Test-Path -LiteralPath ($case.remover+'.launches')) -and $null -ne $unconfirmed -and $unconfirmed.kind -eq 'cleanup-apply' -and -not $unconfirmed.launchConfirmed -and $null -eq $unconfirmed.invocation) 'A leftover-tab removal claims the app before launch, and a stop before the launch is recorded leaves an unconfirmed claim'
+    $afterUnconfirmed=New-HandoffCase 'after-unconfirmed-claim' 'handoff'; $afterArgs=$afterUnconfirmed.args
+    $cleared=Read-Result (& $applyScript @afterArgs)
+    Assert ($cleared.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterUnconfirmed.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'A later removal clears a claim that recorded no remover process'
     $waitShell=[powershell]::Create()
     [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
     $waitHandle=$waitShell.BeginInvoke()

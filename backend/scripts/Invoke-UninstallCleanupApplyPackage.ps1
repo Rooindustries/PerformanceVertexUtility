@@ -268,12 +268,18 @@ try {
                     $journal.executionStarted = $true
                     Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                     $executionStarted = $true
-                    $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
-                        param($invocation)
-                        $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
-                        Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
-                        Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; invocation = $invocation }) $claimPath
-                    } $reviewedCommandLine
+                    Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; launchConfirmed = $false; invocation = $null; claimedAtUtc = Get-RooIndustriesUtcStamp }) $claimPath
+                    try {
+                        $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
+                            param($invocation)
+                            Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; launchConfirmed = $true; invocation = $invocation }) $claimPath
+                            $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
+                            Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
+                        } $reviewedCommandLine
+                    } catch {
+                        Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
+                        throw
+                    }
                     if (-not $officialResult.timedOut -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
                 } finally { $claimLease.Dispose() }
                 $sequence.Add([pscustomobject]@{ runner = 'official-uninstaller'; result = $officialResult }) | Out-Null
