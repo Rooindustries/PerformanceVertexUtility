@@ -5,7 +5,7 @@ static class CleanupBatchChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-batch-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("cleanup-batch");
         var registryRoot = "Software\\RooIndustriesCleanupBatchTests\\" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         var contexts = new Dictionary<string, CleanupContext>();
