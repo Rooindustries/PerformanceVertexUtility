@@ -238,10 +238,12 @@ function Invoke-RooIndustriesObservedRemover {
         } catch {$result.startError=$_.Exception.Message}
         if($null -eq $result.startError) {
             if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
-            $result.invocation=[pscustomobject]@{processId=$launch.Id;creationTimeFileTimeUtc=$launch.CreationTimeFileTimeUtc;startedAtUtc=$result.startedAtUtc;bootId=(Get-RooIndustriesBootId);treeContained=$true;descendants=@()}
+            $result.invocation=[pscustomobject]@{processId=$launch.Id;creationTimeFileTimeUtc=$launch.CreationTimeFileTimeUtc;startedAtUtc=$result.startedAtUtc;bootId=(Get-RooIndustriesBootId);treeContained=$tree.Contained;resumed=$false;descendants=@()}
             if($null -ne $OnProgress){& $OnProgress $result.invocation}
-            $launch.Resume()
+            try {$launch.Resume()} catch {$result.startError=$_.Exception.Message;throw}
             $result.processStarted=$true
+            $result.invocation.resumed=$true
+            if($null -ne $OnProgress){& $OnProgress $result.invocation}
             $wait=Wait-RooIndustriesRemoverTree $launch $tree $TimeoutSeconds {
                 param($waitingFor)
                 $result.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
@@ -313,16 +315,18 @@ function Invoke-RooIndustriesBulkEntry {
         if (Test-RooIndustriesCleanupReparsePath ([string]$Entry.executable)) {throw 'The removal executable is now reached through a link. Create a fresh plan.'}
         $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
         Write-RooIndustriesOperationJson $Journal $JournalPath
-        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath;executable=[string]$Entry.executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $claimPath
+        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
         try {
             $process=[RooIndustries.Optimization.ProcessOutput.Launch]::Suspended([string]$Entry.executable,(Get-RooIndustriesBulkArguments $Entry),[string]$Entry.workingDirectory)
             $executableLease.Dispose();$executableLease=$null
             $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
             $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process.Stdout,$process.Stderr,65536)
         } catch {$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw}
-        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.CreationTimeFileTimeUtc; startedAtUtc=Get-RooIndustriesUtcStamp; bootId=(Get-RooIndustriesBootId); treeContained=$true; descendants=@()}
-        $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
+        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.CreationTimeFileTimeUtc; startedAtUtc=Get-RooIndustriesUtcStamp; bootId=(Get-RooIndustriesBootId); treeContained=$tree.Contained; resumed=$false; descendants=@()}
+        Write-RooIndustriesOperationJson $Journal $JournalPath
         try {$process.Resume()} catch {$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw}
+        $JournalEntry.invocation.resumed=$true
+        $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
         $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
             param($waitingFor)
             $JournalEntry.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree

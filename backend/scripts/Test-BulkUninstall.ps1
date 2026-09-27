@@ -260,7 +260,7 @@ public class RooIndustriesBulkFixture {
     $debug=[RooIndustriesBulkAccessFixture]::SetDebug($false)
     try {
         $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
-        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
+        $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::Probe($denied.Id,$deniedCreated) -ne 0
         $lastBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime()
         $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();descendants=@()})
         $nearBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddMinutes(-1).ToFileTimeUtc().ToString();descendants=@()})
