@@ -167,6 +167,59 @@ try {
     Add-Failure "Leftover scan preview failed: $($_.Exception.Message)"
 }
 
+$ownershipRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-ownership-' + [guid]::NewGuid().ToString('N'))
+try {
+    [IO.Directory]::CreateDirectory($ownershipRoot) | Out-Null
+    $guid = '{12345678-1234-1234-1234-1234567890AB}'
+    $apps = @(
+        [pscustomobject]@{ appId = 'registry:roo-industries-fixture-notepad++'; displayName = 'Notepad++'; publisher = 'Notepad++ Team'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-fixture-microsoft'; displayName = 'Roo Industries Microsoft fixture'; publisher = 'Microsoft Corporation'; sourceType = 'registry'; uninstallString = "MsiExec.exe /X$guid"; categories = @('application'); risk = 'low'; protected = $false }
+    )
+    $ownershipInventory = Join-Path $ownershipRoot 'inventory.json'
+    [IO.File]::WriteAllText($ownershipInventory, ([pscustomobject]@{ schemaVersion = 1; apps = $apps } | ConvertTo-Json -Depth 8))
+    $ownershipRules = Get-Content -LiteralPath (Join-Path $repoRoot 'backend\uninstall\leftover-scan-rules.json') -Raw | ConvertFrom-Json
+    $ownershipRules.knownAppRules = @([pscustomobject]@{
+        ruleId = 'roo-industries-fixture-everything'; match = [pscustomobject]@{ displayNamePatterns = @('Notepad++', 'Roo Industries Microsoft fixture') }
+        vendorRegistryKeys = @('HKCU\Software\Microsoft\Notepad', 'HKLM\Software\Policies\Notepad++', 'HKCU\Software\Notepad++')
+        serviceNamePatterns = @('*'); scheduledTaskPatterns = @('*'); startupValuePatterns = @('*')
+    })
+    $ownershipRulesPath = Join-Path $ownershipRoot 'rules.json'
+    [IO.File]::WriteAllText($ownershipRulesPath, ($ownershipRules | ConvertTo-Json -Depth 16))
+    function Read-OwnershipScan([string]$Id) { return ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -InventoryPath $ownershipInventory -RulesPath $ownershipRulesPath -AppId $Id) -join [Environment]::NewLine) | ConvertFrom-Json }
+    $windowsRoot = [Environment]::GetFolderPath('Windows').TrimEnd('\') + '\'
+    function Test-WindowsOwnedItem($Item) {
+        return ($Item.type -in @('registryKey', 'registryValue') -and @([string]$Item.target -split '\\' | Where-Object { $_ -in @('Microsoft', 'Policies') }).Count -gt 0) -or
+            ($Item.type -eq 'scheduledTask' -and ([string]$Item.target).StartsWith('\Microsoft\', [StringComparison]::OrdinalIgnoreCase)) -or
+            ($Item.type -eq 'service' -and [Environment]::ExpandEnvironmentVariables(([string]$Item.metadata.pathName).Trim('"')).StartsWith($windowsRoot, [StringComparison]::OrdinalIgnoreCase))
+    }
+    $thirdParty = Read-OwnershipScan 'registry:roo-industries-fixture-notepad++'
+    $knownServices = @('WinDefend', 'WdNisSvc', 'Sense', 'wuauserv', 'Winmgmt', 'EventLog', 'MicrosoftEdgeElevationService', 'edgeupdate', 'edgeupdatem', 'WMPNetworkSvc')
+    $knownTasks = @('MicrosoftEdgeUpdateTask*', 'OneDrive*', 'CreateExplorerShellUnelevatedTask')
+    $knownStartup = @('SecurityHealth', 'OneDrive', 'MicrosoftEdgeAutoLaunch*')
+    function Test-KnownWindowsItem($Item) {
+        $leaf = ([string]$Item.target).Split('\')[-1]
+        return ($Item.type -eq 'service' -and $Item.target -in $knownServices) -or
+            ($Item.type -eq 'scheduledTask' -and @($knownTasks | Where-Object { $leaf -like $_ }).Count -gt 0) -or
+            ($Item.type -eq 'startupEntry' -and @($knownStartup | Where-Object { $leaf -like $_ }).Count -gt 0)
+    }
+    $owned = @($thirdParty.items | Where-Object { (Test-WindowsOwnedItem $_) -or (Test-KnownWindowsItem $_) })
+    if (@($thirdParty.errors).Count -eq 0 -and $owned.Count -eq 0 -and @($thirdParty.items | Where-Object { $_.target -eq 'HKCU\Software\Notepad++' }).Count -eq 1) {
+        Add-Pass 'A third-party leftover scan never offers Microsoft or Windows owned keys, tasks or services'
+    } else {
+        Add-Failure ('A third-party leftover scan offered Windows-owned items: ' + (($owned | ForEach-Object { $_.type + ' ' + $_.target }) -join '; ') + ' ' + (@($thirdParty.errors | ForEach-Object { $_.message }) -join '; '))
+    }
+    $microsoft = Read-OwnershipScan 'registry:roo-industries-fixture-microsoft'
+    if (@($microsoft.errors).Count -eq 0 -and @($microsoft.items | Where-Object { $_.target -eq "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\$guid" }).Count -eq 1 -and @($microsoft.items | Where-Object { $_.target -eq 'HKCU\Software\Microsoft\Notepad' }).Count -eq 1) {
+        Add-Pass 'A Microsoft-published app still reviews its own Microsoft registry leftovers'
+    } else {
+        Add-Failure 'A Microsoft-published app lost its own Microsoft registry leftovers'
+    }
+} catch {
+    Add-Failure "Leftover ownership scan failed: $($_.Exception.Message)"
+} finally {
+    if (Test-Path -LiteralPath $ownershipRoot) { Remove-Item -LiteralPath $ownershipRoot -Recurse -Force }
+}
+
 try {
     $manifestOutput = & (Join-Path $PSScriptRoot 'New-CleanupDeletionManifest.ps1') -ScanPath $sampleScan
     $manifest = ($manifestOutput -join [Environment]::NewLine) | ConvertFrom-Json
