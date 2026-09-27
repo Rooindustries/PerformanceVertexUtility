@@ -497,8 +497,7 @@ function Get-RooIndustriesReviewedUninstallCommandLine {
     try {
         if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable)) { return $null }
         return Get-RooIndustriesUninstallCommandLine ([IO.Path]::GetFullPath($Executable)) $Arguments
-    } catch [ArgumentException] { return $null }
-    catch [NotSupportedException] { return $null }
+    } catch { return $null }
 }
 
 function Split-RooIndustriesUninstallCommandLine {
