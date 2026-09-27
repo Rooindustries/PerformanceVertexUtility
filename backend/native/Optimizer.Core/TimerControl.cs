@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
@@ -76,12 +77,7 @@ public static class TimerControl
         var command = new StringBuilder().Append('"').Append(executable).Append('"');
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) command.Append(" \"").Append(assembly).Append('"');
         command.Append(" --timer-worker \"").Append(path).Append('"');
-        var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-        if (!CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x09000000, IntPtr.Zero, null, ref startup, out var created))
-        {
-            var error = Marshal.GetLastWin32Error();
-            throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ". Its parent job must permit an independent worker.");
-        }
+        var created = LaunchWorker(executable, command);
         Process worker;
         try { worker = Process.GetProcessById(created.ProcessId); }
         finally { CloseHandle(created.Thread); CloseHandle(created.Process); }
@@ -172,7 +168,80 @@ public static class TimerControl
         var path = Path.Combine(root, "launch.json"); OperationFiles.Write(path, launch);
         RunWorker(path, guard.Dispose);
     }
+    private static ProcessInfo LaunchWorker(string executable, StringBuilder command)
+    {
+        var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x09000000, IntPtr.Zero, null, ref startup, out var created)) return created;
+        var error = Marshal.GetLastWin32Error();
+        if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
+        if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
+        if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start Roo Industries from the Start menu or desktop shortcut and try again.");
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out created)) return created;
+        error = Marshal.GetLastWin32Error();
+        throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
+    }
+    private static ProcessInfo? LaunchFromShell(string executable, StringBuilder command)
+    {
+        var window = GetShellWindow();
+        if (window == IntPtr.Zero || GetWindowThreadProcessId(window, out var shellId) == 0 || shellId == 0) return null;
+        var shell = OpenProcess(0x0080 | 0x0400, false, shellId);
+        if (shell == IntPtr.Zero) return null;
+        try
+        {
+            if (!OpenProcessToken(shell, 0x0008, out var token)) return null;
+            try { using var identity = new WindowsIdentity(token); if (identity.User?.Value != OperationOwner.Current().UserSid) return null; }
+            finally { CloseHandle(token); }
+            var size = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+            var list = Marshal.AllocHGlobal(size); var parent = Marshal.AllocHGlobal(IntPtr.Size);
+            try
+            {
+                if (!InitializeProcThreadAttributeList(list, 1, 0, ref size)) return null;
+                try
+                {
+                    Marshal.WriteIntPtr(parent, shell);
+                    if (!UpdateProcThreadAttribute(list, 0, 0x00020000, parent, IntPtr.Size, IntPtr.Zero, IntPtr.Zero)) return null;
+                    var startup = new StartupInfoEx { Startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfoEx>() }, Attributes = list };
+                    return CreateProcessWithParent(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08080000, IntPtr.Zero, null, ref startup, out var created) ? created : null;
+                }
+                finally { DeleteProcThreadAttributeList(list); }
+            }
+            finally { Marshal.FreeHGlobal(parent); Marshal.FreeHGlobal(list); }
+        }
+        finally { CloseHandle(shell); }
+    }
+    private static bool JobEndsProcessesOnClose()
+    {
+        if (!QueryInformationJobObject(IntPtr.Zero, 9, out var limits, (uint)Marshal.SizeOf<JobLimits>(), IntPtr.Zero))
+        {
+            var error = Marshal.GetLastWin32Error();
+            throw new Win32Exception(error, "QueryInformationJobObject(timer worker job) failed with Win32 " + error + ".");
+        }
+        return (limits.Flags & 0x2000) != 0;
+    }
     private static void Check(int status, string api) { if (status < 0) throw new InvalidOperationException(api + " failed with NTSTATUS 0x" + status.ToString("X8")); }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobLimits
+    {
+        public long ProcessTime, JobTime;
+        public uint Flags;
+        public UIntPtr MinimumWorkingSet, MaximumWorkingSet;
+        public uint ActiveProcesses;
+        public UIntPtr Affinity;
+        public uint PriorityClass, SchedulingClass;
+        public ulong ReadOperations, WriteOperations, OtherOperations, ReadBytes, WriteBytes, OtherBytes;
+        public UIntPtr ProcessMemory, JobMemory, PeakProcessMemory, PeakJobMemory;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool QueryInformationJobObject(IntPtr job, int kind, out JobLimits value, uint size, IntPtr returned);
+    [StructLayout(LayoutKind.Sequential)] private struct StartupInfoEx { public StartupInfo Startup; public IntPtr Attributes; }
+    [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcessWithParent(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfoEx startup, out ProcessInfo process);
+    [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out int processId);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
+    [DllImport("advapi32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returned);
+    [DllImport("kernel32.dll")] private static extern void DeleteProcThreadAttributeList(IntPtr list);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct StartupInfo
     {
