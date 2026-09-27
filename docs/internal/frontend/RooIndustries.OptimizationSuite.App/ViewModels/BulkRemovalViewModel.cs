@@ -101,6 +101,7 @@ public partial class BulkRemovalViewModel : ObservableObject
     public bool CanApply => !Busy && _review is not null && (_phase is "preview" or "canceled" or "ready") && !HasProtectedSelection && (!RequiresDependencyReview || DependenciesReviewed);
     public bool CanCancel => _removalRunning && _journalObserved;
     public bool CanReconcile => !Busy && _review is not null && (_phase is "running" or "needs-reconciliation" or "reboot-required");
+    public bool CanStartOver => !Busy && !_removalRunning && _review is not null && (_phase is "running" or "canceled" or "needs-reconciliation" or "reboot-required" or "ready");
     public bool CanScanFiles => !Busy && (ScanAllApps ? RemovedApps.Count > 0 : SelectedRemovedApp is not null);
     public bool CanPreviewFiles => !Busy && Leftovers.Any(item => item.Selected && item.CanSelect) && (!HasSelectedKeys || AcceptKeyRecreation);
     public bool CanApplyFiles => !Busy && FileReviewReady && FilesReviewed;
@@ -158,18 +159,19 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (Busy) return;
         if (CanSelect) SetSelection(Array.Empty<InstalledApp>());
         Busy = true;
-        try
-        {
-            var inventory = await App.Live.GetInstalledAppsAsync(includeAllAppxUsers: IncludeAllAppxUsers);
-            if (inventory?.Apps is null) throw new InvalidOperationException(App.Live.LastError ?? "Installed applications could not be read.");
-            _all.Clear();
-            _all.AddRange(inventory.Apps.Where(app => app.IsListable || app.SourceType == "appx" && !app.Protected).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));
-            InstalledAppCount = _all.Count;
-            Filter();
-            if (inventory.Complete == false) { Status = "Some app registrations could not be read."; Detail = string.Join("\n", inventory.Errors ?? new()); }
-        }
+        try { await LoadAppsAsync(); }
         catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
         finally { Busy = false; }
+    }
+    private async Task LoadAppsAsync()
+    {
+        var inventory = await App.Live.GetInstalledAppsAsync(includeAllAppxUsers: IncludeAllAppxUsers);
+        if (inventory?.Apps is null) throw new InvalidOperationException(App.Live.LastError ?? "Installed applications could not be read.");
+        _all.Clear();
+        _all.AddRange(inventory.Apps.Where(app => app.IsListable || app.SourceType == "appx" && !app.Protected).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));
+        InstalledAppCount = _all.Count;
+        Filter();
+        if (inventory.Complete == false) { Status = "Some app registrations could not be read."; Detail = string.Join("\n", inventory.Errors ?? new()); }
     }
 
     public void ShowGroup(string group)
@@ -284,6 +286,25 @@ public partial class BulkRemovalViewModel : ObservableObject
         finally { Busy = false; }
     }
 
+    [RelayCommand]
+    private async Task StartOverAsync()
+    {
+        if (!CanStartOver || _review is null) return;
+        Busy = true;
+        try
+        {
+            await App.Operations.DismissRemovalAsync(_review.JournalPath);
+            _review = null; _phase = "selection"; _journalObserved = false; _cancelRequested = false; _selected.Clear(); ReviewRows.Clear();
+            DependenciesReviewed = false; RequiresDependencyReview = false; HasProtectedSelection = false;
+            SelectionSummary = "Select applications to remove."; ApplyLabel = "Remove selected apps";
+            Status = "Pick the apps to remove."; Detail = "The last list was cleared. Apps already removed stay removed. Pick any app again to try once more.";
+            await LoadAppsAsync();
+        }
+        catch (Exception error) when (_review is not null) { Status = "Couldn't clear this list yet."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
+        finally { Busy = false; }
+    }
+
     private void UpdateProgress(BulkRemovalJournal state)
     {
         if (_review is null || state.Plan.QueueId != _review.Plan.QueueId) return;
@@ -296,11 +317,11 @@ public partial class BulkRemovalViewModel : ObservableObject
         (Status, Detail) = state.Status switch
         {
             "cleanup-review-required" => ("Selected removals completed.", "The selected registrations are gone. Review leftover files and registry data before cleanup."),
-            "canceled" => ("Queue stopped.", "Resume runs only applications that were never attempted."),
-            "needs-reconciliation" => ("Removal needs checking.", "An earlier result is uncertain. Check its state before continuing; it will not be repeated automatically."),
-            "reboot-required" => ("Windows restart required.", "Check this queue again after restarting Windows."),
-            "ready" => ("Ready to resume.", "Confirmed removals stay completed. Only untouched entries will run."),
-            "running" when !_removalRunning => ("A previous removal is unfinished.", "Check its state before continuing. An attempted removal will not run again automatically."),
+            "canceled" => ("Queue stopped.", "Resume runs only applications that were never attempted. Start over clears this list."),
+            "needs-reconciliation" => ("Removal needs checking.", "An earlier result is uncertain. Check state to look again, or Start over to clear this list and pick apps again."),
+            "reboot-required" => ("Windows restart required.", "Restart Windows, then check this list again or start over."),
+            "ready" => ("Ready to resume.", "Confirmed removals stay completed. Only untouched entries will run. Start over clears this list."),
+            "running" when !_removalRunning => ("A previous removal is unfinished.", "Check state to look again, or Start over to clear this list. An attempted removal will not run again automatically."),
             "running" when _cancelRequested => ("Stopping after the current app.", "The current remover is allowed to finish. No further application will start."),
             _ => ("Removing selected apps.", "Applications run one at a time. You can stop the remaining queue."),
         };
@@ -491,6 +512,6 @@ public partial class BulkRemovalViewModel : ObservableObject
     };
     private void RefreshCommands()
     {
-        foreach (var property in new[] { nameof(CanSelect), nameof(NoMatches), nameof(CanPreview), nameof(CanApply), nameof(CanCancel), nameof(CanReconcile), nameof(CanScanFiles), nameof(CanPreviewFiles), nameof(CanApplyFiles), nameof(CanRestoreFiles), nameof(CanRestoreLegacyFiles), nameof(CanCancelCleanup), nameof(CanCancelScan), nameof(HasSelectedKeys), nameof(HasCleanupHistory) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(CanSelect), nameof(NoMatches), nameof(CanPreview), nameof(CanApply), nameof(CanCancel), nameof(CanReconcile), nameof(CanStartOver), nameof(CanScanFiles), nameof(CanPreviewFiles), nameof(CanApplyFiles), nameof(CanRestoreFiles), nameof(CanRestoreLegacyFiles), nameof(CanCancelCleanup), nameof(CanCancelScan), nameof(HasSelectedKeys), nameof(HasCleanupHistory) }) OnPropertyChanged(property);
     }
 }
