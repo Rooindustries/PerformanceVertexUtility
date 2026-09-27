@@ -121,6 +121,20 @@ public static class FirmwareEditorChecks
             var sameBoardOtherId = Named("other-id", "Locked mode");
             FirmwareViewModel.ApplyWriteTests([sameBoardOtherId], catalog.For(identity));
             check(!sameBoardOtherId.IsExperimental, "On a tested motherboard only exact setting identities count, not names");
+            File.WriteAllText(writeTests, """
+                {"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":4,"experimental":{
+                  "frequency":{"name":"CPU Frequency 3.50GHz","outcome":"rejected"},
+                  "gp2":{"name":"GP_2","outcome":"rejected"},
+                  "gp1":{"name":"GP_1","outcome":"rejected"}}}]}
+                """);
+            var drifted = Named("frequency-after-bclk-change", "CPU Frequency 3.60GHz");
+            var gpOther = Named("gp-9", "GP_9"); var gpTwin = Named("gp-8", "GP_8");
+            var plain = Named("other-id", "Locked mode");
+            FirmwareViewModel.ApplyWriteTests([drifted, gpOther, gpTwin, plain], FirmwareWriteTests.Read(writeTests).For(identity));
+            check(drifted.IsExperimental && drifted.VerificationStatus == "Can't be changed here",
+                "On a tested motherboard a setting whose name shows a changed reading keeps its test result");
+            check(!gpOther.IsExperimental && !gpTwin.IsExperimental && !plain.IsExperimental,
+                "Numbered settings that share a name pattern and names without numbers still need their exact identity");
             var untestedBoard = identity with { Board = "other board", Bios = "other bios" };
             var byNameLinked = Named("x1", "linked MODE"); var byNameRefused = Named("x2", "Refused mode"); var byNameFuse = Named("x3", "Fuse mode"); var byNameKept = Named("x4", "Kept mode"); var byNameLocked = Named("x5", "Locked mode"); var byNameFine = Named("x6", "Fine mode");
             FirmwareViewModel.ApplyWriteTests([byNameLinked, byNameRefused, byNameFuse, byNameKept, byNameLocked, byNameFine], catalog.For(untestedBoard));

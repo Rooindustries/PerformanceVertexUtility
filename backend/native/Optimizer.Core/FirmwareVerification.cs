@@ -61,7 +61,8 @@ public static class FirmwareBehaviorOutcomes
 
 public sealed record FirmwareVerificationMatch(
     [property: JsonRequired] FirmwareVerificationTrial Trial,
-    [property: JsonRequired] string CurrentStatus)
+    [property: JsonRequired] string CurrentStatus,
+    string CurrentQuestionId = "")
 {
     [JsonIgnore] public bool Matches => CurrentStatus == FirmwareVerificationMatchStatuses.Matched;
 }
@@ -88,6 +89,8 @@ public sealed record FirmwareVerificationQuestion(
             string.Join("|", new[] { storageGuid, storageName, token.ToUpperInvariant(), offset.ToUpperInvariant(), question.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) }),
             storageGuid, storageName);
     }
+
+    internal bool SameTarget(FirmwareVerificationQuestion other) => this == other with { Id = Id };
 
     internal void Validate()
     {
@@ -357,7 +360,11 @@ public sealed class FirmwareVerificationStore
             .Select(path => Read(Path.GetFileNameWithoutExtension(path)))
             .ToArray();
         var current = ReadCurrent(currentIdentity, packageFingerprint, currentExportPath);
-        return trials.Select(trial => new FirmwareVerificationMatch(trial, MatchStatus(trial, current))).ToArray();
+        return trials.Select(trial =>
+        {
+            var (status, questionId) = MatchStatus(trial, current);
+            return new FirmwareVerificationMatch(trial, status, questionId);
+        }).ToArray();
     }
 
     public Task<IReadOnlyList<FirmwareVerificationMatch>> ReadMatchingTrialsAsync(FirmwareIdentity currentIdentity,
@@ -376,11 +383,12 @@ public sealed class FirmwareVerificationStore
         try
         {
             var trial = Read(id);
-            return MatchStatus(trial, ReadCurrent(currentIdentity, packageFingerprint, currentExportPath))
+            return MatchStatus(trial, ReadCurrent(currentIdentity, packageFingerprint, currentExportPath)).Status
                 == FirmwareVerificationMatchStatuses.Matched;
         }
         catch (InvalidDataException) { return false; }
         catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     private static (FirmwareIdentity Identity, string Package, FirmwareScript? Script, string Status) ReadCurrent(
@@ -396,20 +404,22 @@ public sealed class FirmwareVerificationStore
         catch (IOException) { return (currentIdentity, packageFingerprint, null, FirmwareVerificationMatchStatuses.UnknownCurrent); }
     }
 
-    private static string MatchStatus(FirmwareVerificationTrial trial,
+    private static (string Status, string QuestionId) MatchStatus(FirmwareVerificationTrial trial,
         (FirmwareIdentity Identity, string Package, FirmwareScript? Script, string Status) current)
     {
-        if (current.Status == FirmwareVerificationMatchStatuses.UnknownCurrent) return current.Status;
-        if (!trial.Binding.MachineId.Equals(current.Identity.MachineId, StringComparison.Ordinal)) return FirmwareVerificationMatchStatuses.DifferentMachine;
-        if (!trial.Binding.Board.Equals(current.Identity.Board, StringComparison.Ordinal)) return FirmwareVerificationMatchStatuses.DifferentBoard;
-        if (!trial.Binding.BiosRevision.Equals(current.Identity.Bios, StringComparison.Ordinal)) return FirmwareVerificationMatchStatuses.DifferentBios;
-        if (!string.Equals(trial.Binding.PackageFingerprint, current.Package, StringComparison.Ordinal)) return FirmwareVerificationMatchStatuses.DifferentPackage;
-        if (current.Script is null || FirmwareSemanticProfile.Hash(current.Script) != trial.Binding.BaselineProfileHash)
-            return FirmwareVerificationMatchStatuses.DifferentProfile;
-        var question = current.Script.Questions.SingleOrDefault(item => item.Id == trial.Binding.Question.Id);
-        return question is not null && FirmwareVerificationQuestion.From(question) == trial.Binding.Question
-            ? FirmwareVerificationMatchStatuses.Matched
-            : FirmwareVerificationMatchStatuses.DifferentProfile;
+        if (current.Status == FirmwareVerificationMatchStatuses.UnknownCurrent) return (current.Status, "");
+        if (!trial.Binding.MachineId.Equals(current.Identity.MachineId, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentMachine, "");
+        if (!trial.Binding.Board.Equals(current.Identity.Board, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentBoard, "");
+        if (!trial.Binding.BiosRevision.Equals(current.Identity.Bios, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentBios, "");
+        if (!string.Equals(trial.Binding.PackageFingerprint, current.Package, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentPackage, "");
+        if (current.Script is null) return (FirmwareVerificationMatchStatuses.DifferentProfile, "");
+        var original = new FirmwareScript(File.ReadAllBytes(trial.Binding.OriginalExportPath));
+        var reviewed = original.Questions.SingleOrDefault(item => item.Id == trial.Binding.Question.Id);
+        var question = reviewed is null || FirmwareSemanticProfile.Hash(original) != trial.Binding.BaselineProfileHash || !original.SameValues(current.Script)
+            ? null : original.Counterpart(reviewed, current.Script);
+        return question is not null && FirmwareVerificationQuestion.From(question).SameTarget(trial.Binding.Question)
+            ? (FirmwareVerificationMatchStatuses.Matched, question.Id)
+            : (FirmwareVerificationMatchStatuses.DifferentProfile, "");
     }
 
     private void VerifyBinding(FirmwareVerificationTrial trial, FirmwareVerificationBinding binding)
@@ -502,16 +512,19 @@ public sealed class FirmwareVerificationStore
         if (evidence.Phase != FirmwareEvidencePhases.Baseline
             && string.Equals(Path.GetFullPath(evidence.FilePath), trial.Binding.OriginalExportPath, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("A later firmware readback cannot reuse the original pre-write artifact.");
+        var original = new FirmwareScript(File.ReadAllBytes(trial.Binding.OriginalExportPath));
+        var reviewed = original.Questions.SingleOrDefault(item => item.Id == trial.Binding.Question.Id)
+            ?? throw new InvalidDataException("The original firmware export does not contain the reviewed question.");
         var script = new FirmwareScript(File.ReadAllBytes(evidence.FilePath));
-        if (script.Crc != trial.Binding.HiiChecksum)
+        if (original.Crc != trial.Binding.HiiChecksum || !original.SameLayout(script))
             throw new InvalidDataException("Firmware readback has a different HII checksum.");
-        var question = script.Questions.SingleOrDefault(item => item.Id == trial.Binding.Question.Id)
+        var question = original.Counterpart(reviewed, script)
             ?? throw new InvalidDataException("Firmware readback does not contain the reviewed question.");
-        if (FirmwareVerificationQuestion.From(question) != trial.Binding.Question)
+        if (!FirmwareVerificationQuestion.From(question).SameTarget(trial.Binding.Question))
             throw new InvalidDataException("Firmware readback question type, options or storage binding changed.");
         if (script.Validate(question, question.Current) != evidence.ObservedValue)
             throw new InvalidDataException("Firmware readback value disagrees with the recorded observation.");
-        if (evidence.Phase == FirmwareEvidencePhases.Restoration && FirmwareSemanticProfile.Hash(script) != trial.Binding.BaselineProfileHash)
+        if (evidence.Phase == FirmwareEvidencePhases.Restoration && !original.SameValues(script))
             throw new InvalidDataException("Restoration readback differs from the complete original firmware profile.");
     }
 
