@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
+$claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId='fixture:app'})
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-uninstall-apply-package-' + [guid]::NewGuid().ToString('N'))
 $applyScript = Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1'
@@ -27,6 +29,14 @@ function New-Case([string]$Name) {
         ConfirmApply=$true; OfficialUninstallCommandApproved=$true; CleanupDeletionManifestApproved=$true; UserApproved=$true; AllowRealSystemExecution=$true;
         OfficialPreviewSha256=(Get-FileHash $officialPath -Algorithm SHA256).Hash; CleanupManifestSha256=(Get-FileHash $manifestPath -Algorithm SHA256).Hash }
     return @{root=$root; targets=$targets; official=$official; manifest=$manifest; args=$args}
+}
+function New-HandoffCase([string]$Name, [string]$Mode) {
+    $case = New-Case $Name
+    $case.remover = Join-Path $case.root 'remover state'
+    $case.official.commands[0].executable = $handoffExe
+    $case.official.commands[0].arguments = @($case.remover, $Mode)
+    $case.args.AllowedOfficialExecutablePath = $handoffExe; Refresh-Hashes $case
+    return $case
 }
 function Refresh-Hashes($Case) {
     Write-Input $Case.official $Case.args.OfficialPreviewPath; Write-Input $Case.manifest $Case.args.CleanupManifestPath
@@ -104,7 +114,54 @@ try {
     Assert ($review.postUninstallReview.reviewRequired -and @($review.postUninstallReview.targets[0].entries | Where-Object {$_.path -like '*new user file.txt' -and $_.sha256}).Count -eq 1) 'A fresh post-vendor scan returns current content hashes for separate review'
     $replay=Read-Result (& $applyScript @a)
     Assert ($replay.executionReused -and $replay.status -eq 'cleanup-review-required' -and $replay.executionSequence.Count -eq 0) 'Replaying vendor completion neither relaunches it nor deletes leftovers'
+    $handoffExe = Join-Path $tempRoot 'Roo Industries Handoff Fixture.exe'
+    Add-Type -TypeDefinition @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+public class RooIndustriesHandoffFixture {
+    public static int Main(string[] args) {
+        if(args[1]=="child"){Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
+        if(args[1]=="child-hang"){Thread.Sleep(120000);return 0;}
+        File.AppendAllText(args[0]+".launches","launched"+Environment.NewLine);
+        if(args[1]=="hang"){Thread.Sleep(120000);return 0;}
+        string copy=Path.Combine(Path.GetDirectoryName(args[0]),"temp copy\\~nsu1.tmp\\Au_.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(copy));
+        File.Copy(System.Reflection.Assembly.GetEntryAssembly().Location,copy,true);
+        ProcessStartInfo start=new ProcessStartInfo(copy,"\""+args[0]+"\" "+(args[1]=="handoff"?"child":"child-hang"));
+        start.UseShellExecute=true;start.WindowStyle=ProcessWindowStyle.Hidden;
+        Process.Start(start).Dispose();
+        return 0;
+    }
+}
+'@ -OutputAssembly $handoffExe -OutputType ConsoleApplication
+    $case=New-HandoffCase 'handoff' 'handoff'; $a=$case.args
+    $handoff=Read-Result (& $applyScript @a)
+    Assert ($handoff.status -eq 'cleanup-review-required' -and $handoff.summary.officialRunnerCompleted -and (Test-Path -LiteralPath ($case.remover+'.done'))) 'A leftover-tab remover that hands off to a temporary copy completes only after that copy finishes'
+    $case=New-HandoffCase 'handoff-hang' 'handoff-hang'; $a=$case.args; $a.TimeoutSeconds=3
+    $hung=Read-Result (& $applyScript @a)
+    $journal=Get-Content -LiteralPath $a.RollbackManifestPath -Raw | ConvertFrom-Json
+    $child=@($journal.officialInvocation.descendants | Where-Object { $_.name -ieq 'Au_.exe' })
+    Assert ($hung.status -eq 'needs-reconciliation' -and -not $hung.summary.officialRunnerCompleted -and $child.Count -eq 1) 'A handed-off remover still running at the timeout is reported as needing checking'
+    $childProcess=[Diagnostics.Process]::GetProcessById([int]$child[0].processId)
+    Assert (-not $childProcess.HasExited) 'The handed-off remover is not stopped at the timeout'
+    $second=New-HandoffCase 'handoff-second' 'handoff'; $secondArgs=$second.args
+    $blocked=Read-Result (& $applyScript @secondArgs)
+    Assert ($blocked.status -eq 'failed' -and -not (Test-Path -LiteralPath ($second.remover+'.launches')) -and -not $childProcess.HasExited) 'Another removal of the same app cannot launch while the earlier remover is still running'
+    $childProcess.Kill(); Assert ($childProcess.WaitForExit(10000)) 'Disposable handed-off remover is explicitly stopped and its exit verified'
+    $case=New-HandoffCase 'root-hang' 'hang'; $a=$case.args; $a.TimeoutSeconds=3
+    $rootHung=Read-Result (& $applyScript @a)
+    $journal=Get-Content -LiteralPath $a.RollbackManifestPath -Raw | ConvertFrom-Json
+    $rootProcess=[Diagnostics.Process]::GetProcessById([int]$journal.officialInvocation.processId)
+    Assert ($rootHung.status -eq 'needs-reconciliation' -and -not $rootProcess.HasExited) 'A remover that never exits is reported as needing checking and is not killed'
+    $rootProcess.Kill(); Assert ($rootProcess.WaitForExit(10000)) 'Disposable hung remover is explicitly stopped and its exit verified'
+    $second=New-HandoffCase 'after-stale-claim' 'handoff'; $secondArgs=$second.args
+    $afterStale=Read-Result (& $applyScript @secondArgs)
+    Assert ($afterStale.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($second.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An exited earlier remover no longer blocks the app and a completed removal releases its claim'
 } finally {
+    foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
 $stateRoot=Join-Path $repoRoot 'backend\state'

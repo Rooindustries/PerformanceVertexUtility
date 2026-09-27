@@ -23,8 +23,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'UninstallCleanup.Common.ps1')
-. (Join-Path $PSScriptRoot 'BackendExecutor.Common.ps1')
 . (Join-Path $PSScriptRoot 'UninstallOutcome.Common.ps1')
+. (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
 
 function Test-ApplyPackageTargetAllowlist {
     param(
@@ -220,7 +220,7 @@ try {
             if ($existing.appId -cne $appId -or $existing.officialPreviewSha256 -ne $officialInput.sha256 -or $existing.cleanupManifestSha256 -ne $cleanupInput.sha256) { throw 'Recovery path already belongs to another operation.' }
             $journal = $existing
             $reused = $true
-            $status = if ($journal.status -in @('success','cleanup-review-required')) { $journal.status } else { 'partial' }
+            $status = if ($journal.status -in @('success','cleanup-review-required','needs-reconciliation')) { $journal.status } else { 'partial' }
             $executionStarted = [bool]$journal.executionStarted
         } else {
             $journal = [pscustomobject]@{
@@ -245,15 +245,30 @@ try {
             $journal.status = 'prepared'
             Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
             if ($hasOfficialCommand) {
-                $journal.officialRunnerAttempted = $true
-                $journal.executionStarted = $true
-                Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
-                $executionStarted = $true
-                $runner = @{ FilePath = $commandExecutable; TimeoutSeconds = $TimeoutSeconds; WorkingDirectory = $OfficialRunnerWorkingDirectory }
                 $argumentProperty = $command.PSObject.Properties['arguments']
-                if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { $runner.Arguments = @($argumentProperty.Value) }
-                else { $runner.RawArguments = if ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value } }
-                $officialResult = Invoke-RooIndustriesBackendHiddenProcess @runner
+                $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
+                $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId })
+                $claimLease = Lock-RooIndustriesOperation $claimPath
+                try {
+                    if (Test-Path -LiteralPath $claimPath) {
+                        $claim = (Read-RooIndustriesOperationJson $claimPath).data
+                        if ([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -ne 'cleanup-apply' -or (Test-RooIndustriesBulkInvocationLive (Get-RooIndustriesUninstallPropertyValue $claim 'invocation' $null))) {
+                            throw 'An earlier removal of this app is still running or unresolved. Let it finish, then try again.'
+                        }
+                        Remove-Item -LiteralPath $claimPath -Force
+                    }
+                    $journal.officialRunnerAttempted = $true
+                    $journal.executionStarted = $true
+                    Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
+                    $executionStarted = $true
+                    $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
+                        param($invocation)
+                        $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
+                        Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
+                        Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; invocation = $invocation }) $claimPath
+                    }
+                    if (-not $officialResult.timedOut -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
+                } finally { $claimLease.Dispose() }
                 $sequence.Add([pscustomobject]@{ runner = 'official-uninstaller'; result = $officialResult }) | Out-Null
                 $policy = if ([string](Get-RooIndustriesUninstallPropertyValue $command 'commandType' '') -eq 'msi-uninstall-string' -and [IO.Path]::GetFileName($commandExecutable) -ieq 'msiexec.exe') { 'windows-installer' } else { 'generic' }
                 if ($officialResult.processStarted -and -not $officialResult.timedOut -and $null -ne $officialResult.exitCode) {
@@ -261,9 +276,14 @@ try {
                 }
                 $journal.officialRunnerCompleted = ($null -ne $journal.officialOutcome -and $journal.officialOutcome.success)
                 Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
-                if (-not $journal.officialRunnerCompleted) { throw 'The vendor remover failed or timed out; leftover cleanup was not started.' }
-                $journal.postUninstallReview = Get-RooIndustriesPostUninstallReview $fileFolderItems
-                $status = 'cleanup-review-required'
+                if ($officialResult.timedOut) {
+                    $status = 'needs-reconciliation'
+                    $errors = @((New-RooIndustriesUninstallIssue 'OFFICIAL_REMOVER_STILL_RUNNING' ([string]$officialResult.error) 'warning' 'apps.uninstallCleanupApplyPackage' $appId $true 'Let the app remover finish, then scan for leftovers again before cleaning up.' $null))
+                } elseif (-not $journal.officialRunnerCompleted) { throw 'The vendor remover failed; leftover cleanup was not started.' }
+                else {
+                    $journal.postUninstallReview = Get-RooIndustriesPostUninstallReview $fileFolderItems
+                    $status = 'cleanup-review-required'
+                }
             }
             foreach ($backup in $backupRecords) {
                 if ((Test-RooIndustriesCleanupReparsePath $backup.source -Recurse) -or (Test-RooIndustriesCleanupReparsePath $backup.backupPath -Recurse)) { throw 'A cleanup or backup path changed to a reparse path.' }

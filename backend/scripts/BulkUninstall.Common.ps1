@@ -160,6 +160,80 @@ function Test-RooIndustriesBulkInvocationLive {
     return $false
 }
 
+function ConvertTo-RooIndustriesRemoverMembers {
+    param($Tree)
+    return @($Tree.Descendants()|ForEach-Object {[pscustomobject]@{processId=$_.ProcessId;creationTimeFileTimeUtc=$_.CreationTimeFileTimeUtc;name=$_.Name}})
+}
+
+function Wait-RooIndustriesRemoverTree {
+    param($Process,$Tree,[int]$TimeoutSeconds,[scriptblock]$OnChange)
+    $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds); $recorded=1; $waitingFor=''
+    while($true) {
+        $Tree.Refresh()
+        $live=@($Tree.Live()); $settled=$false
+        if($live.Count -eq 0){$known=$Tree.Count;$Tree.Refresh();$settled=($Tree.Count -eq $known)}
+        $names=(@($live|Where-Object {$_.ProcessId -ne $Process.Id}|ForEach-Object {$_.Name}|Sort-Object -Unique) -join ', ')
+        if($Tree.Count -ne $recorded -or ($Process.HasExited -and $names -cne $waitingFor)) {
+            $recorded=$Tree.Count; $waitingFor=if($Process.HasExited){$names}else{''}
+            if($null -ne $OnChange){& $OnChange $waitingFor}
+        }
+        if($settled){return [pscustomobject]@{completed=$true;rootRunning=$false;running=''}}
+        if($live.Count -gt 0 -and [DateTime]::UtcNow -ge $deadline){return [pscustomobject]@{completed=$false;rootRunning=(-not $Process.HasExited);running=$names}}
+        if($live.Count -gt 0){Start-Sleep -Milliseconds 250}
+    }
+}
+
+function Get-RooIndustriesRemoverTimeoutMessage {
+    param($Wait)
+    if($Wait.rootRunning){return 'Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'}
+    return "The remover handed off to $($Wait.running), which was still running at the observation timeout. It was not killed or automatically repeated."
+}
+
+function Invoke-RooIndustriesObservedRemover {
+    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress)
+    Import-RooIndustriesBulkProcessTypes
+    $result=[ordered]@{startedAtUtc=Get-RooIndustriesUtcStamp;completedAtUtc=$null;filePath=$FilePath;rawArguments=$Arguments
+        commandLine=('"'+$FilePath+'"'+$(if($Arguments){' '+$Arguments}else{''}));processStarted=$false;startError=$null;exitCode=$null
+        timedOut=$false;processExitVerified=$false;descendantExitVerified=$false;outputIncomplete=$false;stillRunning='';error=$null
+        timeoutSeconds=$TimeoutSeconds;invocation=$null;stdout='';stderr=''}
+    $start=[Diagnostics.ProcessStartInfo]::new()
+    $start.FileName=$FilePath; $start.Arguments=$Arguments
+    if($WorkingDirectory){$start.WorkingDirectory=$WorkingDirectory}
+    $start.UseShellExecute=$false; $start.CreateNoWindow=$true
+    $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
+    $process=[Diagnostics.Process]::new(); $process.StartInfo=$start; $capture=$null; $tree=$null
+    try {
+        try {$result.processStarted=$process.Start()} catch {$result.startError=$_.Exception.Message}
+        if($result.processStarted) {
+            $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process,65536)
+            $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
+            $result.invocation=[pscustomobject]@{processId=$process.Id;creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString();startedAtUtc=$result.startedAtUtc;treeContained=$tree.Contained;descendants=@()}
+            if($null -ne $OnProgress){& $OnProgress $result.invocation}
+            $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
+                param($waitingFor)
+                $result.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
+                if($null -ne $OnProgress){& $OnProgress $result.invocation}
+            }
+            if($wait.completed) {
+                $result.processExitVerified=$true; $result.descendantExitVerified=$true; $result.exitCode=$process.ExitCode
+                if(-not $capture.Complete(2000)){$result.outputIncomplete=$true}
+            } else {
+                $result.timedOut=$true; $result.processExitVerified=-not $wait.rootRunning; $result.stillRunning=$wait.running
+                $result.error=Get-RooIndustriesRemoverTimeoutMessage $wait
+            }
+        }
+    } catch {
+        $result.error=$_.Exception.Message
+        if($result.processStarted){$result.timedOut=$true}
+    } finally {
+        if($null -ne $capture){$result.stdout=$capture.Stdout;$result.stderr=$capture.Stderr;$capture.Dispose()}
+        if($null -ne $tree){$tree.Dispose()}
+        $process.Dispose()
+        $result.completedAtUtc=Get-RooIndustriesUtcStamp
+    }
+    return [pscustomobject]$result
+}
+
 function Get-RooIndustriesBulkBootTime {
     # Preserve the reboot boundary separately from command/registration success.
     $system=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -186,7 +260,10 @@ function Invoke-RooIndustriesBulkEntry {
         $claimLease=Lock-RooIndustriesOperation $claimPath
         if(Test-Path -LiteralPath $claimPath) {
             $claim=(Read-RooIndustriesOperationJson $claimPath).data
-            if($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
+            if([string](Get-RooIndustriesUninstallPropertyValue $claim 'kind' '') -eq 'cleanup-apply') {
+                if(Test-RooIndustriesBulkInvocationLive $claim.invocation){throw 'An earlier removal of this app from Leftover cleanup is still running. Let it finish, then try again.'}
+                Remove-Item -LiteralPath $claimPath -Force
+            } elseif($claim.queueId -cne $Journal.plan.queueId -or $claim.entryId -cne $Entry.entryId){throw 'Another queue has an unresolved removal claim for this app. Reconcile that queue before starting a new one.'}
         }
         if((Get-RooIndustriesBulkRegistrationFingerprint $Entry.identity $FixtureRoot) -cne $Entry.registrationFingerprint){throw 'App registration changed after review. Create a fresh plan for the current installed version.'}
         if((Get-RooIndustriesBulkCommandLine $Entry) -cne [string]$Entry.commandLine){throw 'The removal command differs from the reviewed command. Create a fresh plan.'}
@@ -211,25 +288,16 @@ function Invoke-RooIndustriesBulkEntry {
         $executableLease.Dispose();$executableLease=$null
         $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(); startedAtUtc=Get-RooIndustriesUtcStamp; treeContained=$tree.Contained; descendants=@()}
         $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
-        $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds); $recorded=1; $waitingFor=''
-        while($true) {
-            $tree.Refresh()
-            $live=@($tree.Live()); $settled=$false
-            if($live.Count -eq 0){$known=$tree.Count;$tree.Refresh();$settled=($tree.Count -eq $known)}
-            $names=(@($live|Where-Object {$_.ProcessId -ne $process.Id}|ForEach-Object {$_.Name}|Sort-Object -Unique) -join ', ')
-            if($tree.Count -ne $recorded -or ($process.HasExited -and $names -cne $waitingFor)) {
-                $recorded=$tree.Count; $waitingFor=if($process.HasExited){$names}else{''}
-                $JournalEntry.invocation.descendants=@($tree.Descendants()|ForEach-Object {[pscustomobject]@{processId=$_.ProcessId;creationTimeFileTimeUtc=$_.CreationTimeFileTimeUtc;name=$_.Name}})
-                $JournalEntry.error=if($waitingFor){"Waiting for $waitingFor to finish."}else{$null}
-                $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp; Write-RooIndustriesOperationJson $Journal $JournalPath
-            }
-            if($settled){break}
-            if($live.Count -gt 0 -and [DateTime]::UtcNow -ge $deadline) {
-                $JournalEntry.state='needs-reconciliation'
-                $JournalEntry.error=if(-not $process.HasExited){'Removal exceeded the observation timeout. It may still be running; it was not killed or automatically repeated.'}else{"The remover handed off to $names, which was still running at the observation timeout. It was not killed or automatically repeated."}
-                return
-            }
-            if($live.Count -gt 0){Start-Sleep -Milliseconds 250}
+        $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
+            param($waitingFor)
+            $JournalEntry.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
+            $JournalEntry.error=if($waitingFor){"Waiting for $waitingFor to finish."}else{$null}
+            $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp; Write-RooIndustriesOperationJson $Journal $JournalPath
+        }
+        if(-not $wait.completed) {
+            $JournalEntry.state='needs-reconciliation'
+            $JournalEntry.error=Get-RooIndustriesRemoverTimeoutMessage $wait
+            return
         }
         $JournalEntry.error=$null
         $JournalEntry.outcome=Get-RooIndustriesUninstallOutcome $Entry.exitCodePolicy $process.ExitCode

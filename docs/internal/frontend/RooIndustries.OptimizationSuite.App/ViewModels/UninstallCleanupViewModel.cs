@@ -689,6 +689,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 return;
             }
 
+            if (status == "needs-reconciliation")
+            {
+                CleanupExecutionState = "App removal needs checking.";
+                CleanupExecutionDetail = "The app's remover was still running when the check ended. It was not stopped. Let it finish, then scan for leftovers again.";
+                FinalCheckPassed = false;
+                SetSelectedRecovery(expectedAppId);
+                return;
+            }
             if (status is "partial" or "failed")
             {
                 CleanupExecutionState = status == "partial" ? "Cleanup stopped partway through." : "Cleanup failed.";
