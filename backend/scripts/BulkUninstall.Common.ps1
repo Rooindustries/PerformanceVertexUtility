@@ -160,18 +160,18 @@ function Test-RooIndustriesBulkInvocationLive {
         if($state -eq 1){return $true}
         if($state -eq 0){continue}
         if($null -eq $currentBoot){$currentBoot=Get-RooIndustriesBootId}
+        $created=[long]0
+        if(-not([long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created)) -or $created -le 0){return $true}
+        if($null -eq $boot){
+            try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()}
+            catch {return $true}
+        }
+        $createdUtc=[datetime]::FromFileTimeUtc($created)
         if($recordedBoot -and $currentBoot){
-            if($recordedBoot -cne $currentBoot){continue}
+            if($recordedBoot -cne $currentBoot -and $boot -gt $createdUtc){continue}
             return $true
         }
-        $created=[long]0
-        if([long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created) -and $created -gt 0) {
-            if($null -eq $boot){
-                try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().AddMinutes(-30)}
-                catch {$boot=[datetime]::MinValue}
-            }
-            if([datetime]::FromFileTimeUtc($created) -lt $boot){continue}
-        }
+        if($createdUtc -lt $boot.AddMinutes(-30)){continue}
         return $true
     }
     return $false
@@ -238,10 +238,12 @@ function Invoke-RooIndustriesObservedRemover {
         } catch {$result.startError=$_.Exception.Message}
         if($null -eq $result.startError) {
             if($null -ne $ExecutableLease){$ExecutableLease.Dispose()}
-            $result.invocation=[pscustomobject]@{processId=$launch.Id;creationTimeFileTimeUtc=$launch.CreationTimeFileTimeUtc;startedAtUtc=$result.startedAtUtc;bootId=(Get-RooIndustriesBootId);treeContained=$true;descendants=@()}
+            $result.invocation=[pscustomobject]@{processId=$launch.Id;creationTimeFileTimeUtc=$launch.CreationTimeFileTimeUtc;startedAtUtc=$result.startedAtUtc;bootId=(Get-RooIndustriesBootId);treeContained=$tree.Contained;resumed=$false;descendants=@()}
             if($null -ne $OnProgress){& $OnProgress $result.invocation}
-            $launch.Resume()
+            try {$launch.Resume()} catch {$result.startError=$_.Exception.Message;throw}
             $result.processStarted=$true
+            $result.invocation.resumed=$true
+            if($null -ne $OnProgress){& $OnProgress $result.invocation}
             $wait=Wait-RooIndustriesRemoverTree $launch $tree $TimeoutSeconds {
                 param($waitingFor)
                 $result.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree
@@ -282,9 +284,9 @@ function Test-RooIndustriesBulkRestartAfterInvocation {
     }
     $recordedBoot=[string](Get-RooIndustriesUninstallPropertyValue $Invocation 'bootId' '')
     $currentBoot=Get-RooIndustriesBootId
-    if($recordedBoot -and $currentBoot){return $recordedBoot -cne $currentBoot}
     $created=[datetime]::FromFileTimeUtc($createdFileTime)
     $boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    if($recordedBoot -and $currentBoot){return $recordedBoot -cne $currentBoot -and $boot -gt $created}
     return $boot -gt $created
 }
 
@@ -313,16 +315,18 @@ function Invoke-RooIndustriesBulkEntry {
         if (Test-RooIndustriesCleanupReparsePath ([string]$Entry.executable)) {throw 'The removal executable is now reached through a link. Create a fresh plan.'}
         $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
         Write-RooIndustriesOperationJson $Journal $JournalPath
-        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath;executable=[string]$Entry.executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $claimPath
+        Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath
         try {
             $process=[RooIndustries.Optimization.ProcessOutput.Launch]::Suspended([string]$Entry.executable,(Get-RooIndustriesBulkArguments $Entry),[string]$Entry.workingDirectory)
             $executableLease.Dispose();$executableLease=$null
             $tree=[RooIndustries.Optimization.ProcessOutput.Tree]::new($process)
             $capture=[RooIndustries.Optimization.ProcessOutput.Capture]::new($process.Stdout,$process.Stderr,65536)
         } catch {$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw}
-        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.CreationTimeFileTimeUtc; startedAtUtc=Get-RooIndustriesUtcStamp; bootId=(Get-RooIndustriesBootId); treeContained=$true; descendants=@()}
-        $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
+        $JournalEntry.invocation=[pscustomobject]@{processId=$process.Id; creationTimeFileTimeUtc=$process.CreationTimeFileTimeUtc; startedAtUtc=Get-RooIndustriesUtcStamp; bootId=(Get-RooIndustriesBootId); treeContained=$tree.Contained; resumed=$false; descendants=@()}
+        Write-RooIndustriesOperationJson $Journal $JournalPath
         try {$process.Resume()} catch {$JournalEntry|Add-Member -NotePropertyName startFailed -NotePropertyValue $true -Force;throw}
+        $JournalEntry.invocation.resumed=$true
+        $JournalEntry.state='running'; Write-RooIndustriesOperationJson $Journal $JournalPath
         $wait=Wait-RooIndustriesRemoverTree $process $tree $TimeoutSeconds {
             param($waitingFor)
             $JournalEntry.invocation.descendants=ConvertTo-RooIndustriesRemoverMembers $tree

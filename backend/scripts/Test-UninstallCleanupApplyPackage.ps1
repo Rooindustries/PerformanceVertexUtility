@@ -45,6 +45,20 @@ function New-HandoffCase([string]$Name, [string]$Mode, [string[]]$Extra = @()) {
     Set-Remover $case $handoffExe (@($case.remover, $Mode) + $Extra)
     return $case
 }
+function Measure-PipedChildApply([hashtable]$Arguments, [string]$Root, [int]$WaitSeconds) {
+    $argsPath = Join-Path $Root ('piped arguments ' + [guid]::NewGuid().ToString('N') + '.json')
+    $Arguments | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
+    $script = Join-Path $Root ('piped apply ' + [guid]::NewGuid().ToString('N') + '.ps1')
+    Set-Content -LiteralPath $script -Encoding UTF8 -Value "param([string]`$ApplyScript,[string]`$ArgumentsPath)`n`$ErrorActionPreference='Stop'`n`$values=@{}; (Get-Content -LiteralPath `$ArgumentsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { `$values[`$_.Name]=`$_.Value }`n`$values.ExactTargetAllowlist=[string[]]@(`$values.ExactTargetAllowlist)`n& `$ApplyScript @values`n"
+    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'), ('-NoProfile -ExecutionPolicy Bypass -File "' + $script + '" -ApplyScript "' + $applyScript + '" -ArgumentsPath "' + $argsPath + '"'))
+    $start.UseShellExecute = $false; $start.CreateNoWindow = $true; $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $child = [Diagnostics.Process]::Start($start)
+    $stdout = $child.StandardOutput.ReadToEndAsync(); $stderr = $child.StandardError.ReadToEndAsync()
+    $finished = [Threading.Tasks.Task]::WaitAll(@($stdout, $stderr), $WaitSeconds * 1000)
+    $watch.Stop()
+    return [pscustomobject]@{ finished = $finished; seconds = $watch.Elapsed.TotalSeconds; hostExited = $child.WaitForExit(0) }
+}
 function Invoke-ChildApply([hashtable]$Arguments, [string]$Prelude, [string]$Root) {
     $argsPath = Join-Path $Root ('child arguments ' + [guid]::NewGuid().ToString('N') + '.json')
     $Arguments | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
@@ -143,6 +157,15 @@ public class RooIndustriesHandoffFixture {
         if(args[1]=="child"){Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
         if(args[1]=="child-hang"){Thread.Sleep(120000);return 0;}
         if(args[1]=="noop")return 0;
+        if(args[1]=="pipe-holder"){
+            string shell=Path.Combine(Path.GetDirectoryName(args[0]),"shell host\\explorer.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(shell));
+            File.Copy(System.Reflection.Assembly.GetEntryAssembly().Location,shell,true);
+            ProcessStartInfo holder=new ProcessStartInfo(shell,"\""+args[0]+"\" child-hang");
+            holder.UseShellExecute=false;holder.CreateNoWindow=true;
+            Process.Start(holder).Dispose();
+            return 0;
+        }
         if(args[1]=="self-delete"){
             File.AppendAllText(args[0]+".launches","launched"+Environment.NewLine);
             ProcessStartInfo remove=new ProcessStartInfo("cmd.exe","/c ping -n 3 127.0.0.1 >nul & del /f /q \""+System.Reflection.Assembly.GetEntryAssembly().Location+"\"");
@@ -267,6 +290,41 @@ function global:Start-Sleep {
     $afterKilled=New-HandoffCase 'after-host-killed-before-record' 'handoff'; $afterArgs=$afterKilled.args
     $clearedKilled=Read-Result (& $applyScript @afterArgs)
     Assert ($clearedKilled.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($afterKilled.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'The next leftover run clears a claim whose remover never ran'
+    $case=New-HandoffCase 'remover-outlives-host' 'hang'; $a=$case.args; $a.TimeoutSeconds=3
+    $piped=Measure-PipedChildApply $a $case.root 40
+    $outlivingClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    if ($null -ne $outlivingClaim -and [int]$outlivingClaim.invocation.processId -gt 0) { Stop-Process -Id ([int]$outlivingClaim.invocation.processId) -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
+    Assert ($piped.finished -and $piped.seconds -lt 35 -and $null -ne $outlivingClaim) "The host's own output ends when the host exits, even while its remover keeps running ($([math]::Round($piped.seconds,1)) s)"
+    $case=New-HandoffCase 'untracked-pipe-holder' 'pipe-holder'; $a=$case.args
+    $holderRun=Read-Result (& $applyScript @a)
+    $holderClaim=Test-Path -LiteralPath $claimPath
+    foreach ($holder in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($case.root, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $holder.ProcessId -Force -ErrorAction SilentlyContinue }
+    if ($holderClaim) { Remove-Item -LiteralPath $claimPath -Force }
+    Assert ($holderRun.status -eq 'needs-reconciliation' -and $holderClaim -and -not $holderRun.summary.officialRunnerCompleted) "A remover whose untracked child still holds its output keeps its claim and needs checking ($($holderRun.status))"
+    $treeSource=Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessTree.cs'
+    $case=New-HandoffCase 'host-killed-before-resume' 'hang'; $a=$case.args
+    $killBeforeResume="Add-Type -Path '$treeSource'`n[RooIndustries.Optimization.ProcessOutput.Launch]::AfterJobReleaseForTests=[Action]{ [Diagnostics.Process]::GetCurrentProcess().Kill() }"
+    [void](Invoke-ChildApply $a $killBeforeResume $case.root)
+    $suspendedClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    Import-RooIndustriesBulkProcessTypes
+    [RooIndustries.Optimization.ProcessOutput.Tree]::NeverRanGraceSeconds=1
+    Start-Sleep -Seconds 2
+    try {
+        $afterSuspended=New-HandoffCase 'after-suspended-remover' 'handoff'; $afterArgs=$afterSuspended.args
+        $clearedSuspended=Read-Result (& $applyScript @afterArgs)
+    } finally { [RooIndustries.Optimization.ProcessOutput.Tree]::NeverRanGraceSeconds=60 }
+    $suspendedLeft=@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) })
+    foreach ($orphan in $suspendedLeft) { Stop-Process -Id $orphan.ProcessId -Force -ErrorAction SilentlyContinue }
+    Assert ($null -ne $suspendedClaim -and [int]$suspendedClaim.invocation.processId -gt 0 -and -not $suspendedClaim.launchConfirmed) 'A remover recorded but never resumed is claimed as not yet confirmed'
+    Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and $suspendedLeft.Count -eq 0 -and $clearedSuspended.status -eq 'cleanup-review-required' -and -not (Test-Path -LiteralPath $claimPath)) "A recorded remover that never ran is ended and its claim cleared by the next run ($($suspendedLeft.Count) left, $($clearedSuspended.status))"
+    $case=New-HandoffCase 'resume-fails' 'hang'; $a=$case.args
+    $failResume="Add-Type -Path '$treeSource'`n[RooIndustries.Optimization.ProcessOutput.Launch]::SimulateResumeFailureForTests=[Func[bool]]{ `$true }"
+    $resumeOutput=Invoke-ChildApply $a $failResume $case.root
+    Start-Sleep -Seconds 1
+    $resumeLeft=@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($case.remover) })
+    foreach ($orphan in $resumeLeft) { Stop-Process -Id $orphan.ProcessId -Force -ErrorAction SilentlyContinue }
+    Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and $resumeLeft.Count -eq 0 -and -not (Test-Path -LiteralPath $claimPath) -and (($resumeOutput -join ' ') -like '*The remover could not be started*')) "A remover that fails to resume is ended before it runs and reported as not started ($($resumeLeft.Count) left)"
     $case=New-HandoffCase 'host-killed-after-create' 'hang'; $a=$case.args
     $treeSource=Join-Path $PSScriptRoot '..\native\ProcessOutput\RooIndustriesProcessTree.cs'
     $killAfterCreate="Add-Type -Path '$treeSource'`n[RooIndustries.Optimization.ProcessOutput.Launch]::AfterCreateForTests=[Action]{ [Diagnostics.Process]::GetCurrentProcess().Kill() }"
