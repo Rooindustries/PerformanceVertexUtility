@@ -58,7 +58,7 @@ public sealed class LeftoverDiscovery
         _names = NameKeys(application.DisplayName);
         _peerNames = _peers.Select(peer => (peer, NameKeys(peer.DisplayName))).ToArray();
         _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (peer.DisplayName, ExpandPath(peer.InstallLocation!))).ToArray();
-        _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) ? null : ExpandPath(application.InstallLocation);
+        _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) || MicrosoftOwnedPath(ExpandPath(application.InstallLocation)) ? null : ExpandPath(application.InstallLocation);
     }
 
     public LeftoverDiscoveryResult Scan(CancellationToken cancellationToken, IEnumerable<string>? fileRoots = null,
@@ -284,9 +284,17 @@ public sealed class LeftoverDiscovery
         }
         return false;
     }
-    private static bool MicrosoftOwnedPath(string path)
+    internal static bool MicrosoftOwnedPath(string path)
     {
         if (Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(profile) && Within(path, Path.Combine(profile, "AppData", "LocalLow", "Microsoft"))) return true;
+        var packages = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages").TrimEnd('\\');
+        if (path.StartsWith(packages + "\\", StringComparison.OrdinalIgnoreCase))
+        {
+            var family = path[(packages.Length + 1)..].Split('\\')[0];
+            if (family.EndsWith("_8wekyb3d8bbwe", StringComparison.OrdinalIgnoreCase) || family.EndsWith("_cw5n1h2txyewy", StringComparison.OrdinalIgnoreCase)) return true;
+        }
         foreach (var folder in new[] { Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolder.ApplicationData })
         {
             var root = Environment.GetFolderPath(folder);
@@ -297,9 +305,10 @@ public sealed class LeftoverDiscovery
             var root = Environment.GetFolderPath(folder).TrimEnd('\\');
             if (string.IsNullOrWhiteSpace(root) || !path.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase)) continue;
             var first = path[(root.Length + 1)..].Split('\\')[0];
-            if (first.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase) || first.StartsWith("Windows", StringComparison.OrdinalIgnoreCase)) return true;
+            if (first.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase) || first.StartsWith("Windows", StringComparison.OrdinalIgnoreCase) || first.Equals("ModifiableWindowsApps", StringComparison.OrdinalIgnoreCase)) return true;
         }
-        return Within(path, Path.Combine(Path.GetPathRoot(path) ?? "", "WindowsApps"));
+        var drive = Path.GetPathRoot(path) ?? "";
+        return Within(path, Path.Combine(drive, "WindowsApps")) || Within(path, Path.Combine(drive, "XboxGames"));
     }
     private static HashSet<string> NameKeys(string name)
     {

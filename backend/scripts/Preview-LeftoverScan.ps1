@@ -45,19 +45,23 @@ function Test-MicrosoftOwnedFilePath {
     $text = $text.TrimEnd('\')
     if ([string]::IsNullOrWhiteSpace($text)) { return $false }
     $roots = @([Environment]::GetFolderPath('Windows')) + @('CommonApplicationData', 'LocalApplicationData', 'ApplicationData' | ForEach-Object { [Environment]::GetFolderPath($_) } | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'Microsoft' })
+    $userProfile = [Environment]::GetFolderPath('UserProfile')
+    if ($userProfile) { $roots += Join-Path $userProfile 'AppData\LocalLow\Microsoft' }
     foreach ($root in $roots) {
         if ([string]::IsNullOrWhiteSpace($root)) { continue }
         $root = $root.TrimEnd('\')
         if ($text -ieq $root -or $text.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
+    $packages = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Packages').TrimEnd('\') + '\'
+    if ($text.StartsWith($packages, [StringComparison]::OrdinalIgnoreCase) -and $text.Substring($packages.Length).Split('\')[0] -match '_(8wekyb3d8bbwe|cw5n1h2txyewy)$') { return $true }
     foreach ($programs in @('ProgramFiles', 'ProgramFilesX86', 'CommonProgramFiles', 'CommonProgramFilesX86' | ForEach-Object { [Environment]::GetFolderPath($_) })) {
         if ([string]::IsNullOrWhiteSpace($programs)) { continue }
         $prefix = $programs.TrimEnd('\') + '\'
         if (-not $text.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
         $first = $text.Substring($prefix.Length).Split('\')[0]
-        if ($first -like 'Microsoft*' -or $first -like 'Windows*') { return $true }
+        if ($first -like 'Microsoft*' -or $first -like 'Windows*' -or $first -ieq 'ModifiableWindowsApps') { return $true }
     }
-    return $text -match '^[A-Za-z]:\\WindowsApps(\\|$)'
+    return $text -match '^[A-Za-z]:\\(WindowsApps|XboxGames)(\\|$)'
 }
 
 function Add-UniqueLeftoverItem {
