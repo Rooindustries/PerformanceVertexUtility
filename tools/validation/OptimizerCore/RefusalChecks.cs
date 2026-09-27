@@ -1,0 +1,84 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+using RooIndustries.Optimizer;
+
+static class RefusalChecks
+{
+    public static void Run(Action<bool, string> check)
+    {
+        var root = TestFixtures.InheritingRoot("explicit-refusal");
+        var source = Path.Combine(root, "App");
+        var explicitOnly = Path.Combine(source, "explicit.txt");
+        var ordinary = Path.Combine(source, "ordinary.txt");
+        var operations = Path.Combine(root, "Operations");
+        var user = WindowsIdentity.GetCurrent().User!.Value;
+        try
+        {
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(operations);
+            File.WriteAllText(explicitOnly, "explicit");
+            File.WriteAllText(ordinary, "ordinary");
+            SetDacl(explicitOnly, "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")");
+            var before = Sddl(explicitOnly);
+            check(!before.Contains(":AI", StringComparison.Ordinal) && !before.Contains("ID;", StringComparison.Ordinal), "The refusal fixture has a file with an explicit-only DACL");
+            var identityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("explicit refusal fixture"));
+            var authority = new CleanupAuthority
+            {
+                AppId = "fixture:explicit-refusal", ProviderIdentityHash = identityHash, Owner = OperationOwner.Current(),
+                RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var engine = new FileCleanupEngine(() => authority);
+            var reviewPath = Path.Combine(operations, "review.json");
+            var journalPath = Path.Combine(operations, "journal.json");
+            OperationFiles.Write(reviewPath, engine.Preview(authority.AppId, identityHash, [source], true));
+            var applied = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
+            var error = string.Join(" | ", applied.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error));
+            Console.WriteLine("Explicit-only refusal: " + applied.Status + " " + error);
+            check(applied.Status != "applied" && error.Contains("Backup verification differs in permissions", StringComparison.Ordinal), "Cleanup refuses an item whose explicit-only permissions it cannot restore exactly and says why");
+            check(applied.Entries.All(entry => entry.Status is "pending" or "backedUp"), "A refused cleanup deletes nothing");
+            check(File.ReadAllText(explicitOnly) == "explicit" && File.ReadAllText(ordinary) == "ordinary" && Sddl(explicitOnly) == before, "A refused cleanup leaves the files and their permissions unchanged");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        check(!Directory.Exists(root), "Refusal validation removes its fixture");
+    }
+
+    static string Sddl(string path)
+    {
+        using var handle = Open(path, 0x20000);
+        GetKernelObjectSecurity(handle, 7, null, 0, out var needed);
+        var bytes = new byte[needed];
+        if (!GetKernelObjectSecurity(handle, 7, bytes, needed, out _)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        if (!ConvertSecurityDescriptorToStringSecurityDescriptor(bytes, 1, 7, out var text, out _)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        try { return Marshal.PtrToStringUni(text) ?? ""; } finally { LocalFree(text); }
+    }
+
+    static void SetDacl(string path, string sddl)
+    {
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptor(sddl, 1, out var descriptor, out var size)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        try
+        {
+            var bytes = new byte[size];
+            Marshal.Copy(descriptor, bytes, 0, (int)size);
+            using var handle = Open(path, 0x20000 | 0x40000);
+            if (!SetKernelObjectSecurity(handle, 4, bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        finally { LocalFree(descriptor); }
+    }
+
+    static SafeFileHandle Open(string path, uint access)
+    {
+        var handle = CreateFile(path, access, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), path);
+        return handle;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetKernelObjectSecurity(SafeHandle handle, uint information, [Out] byte[]? descriptor, uint size, out uint needed);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetKernelObjectSecurity(SafeHandle handle, uint information, byte[] descriptor);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool ConvertSecurityDescriptorToStringSecurityDescriptor(byte[] descriptor, uint revision, uint information, out IntPtr text, out uint length);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text, uint revision, out IntPtr descriptor, out uint size);
+    [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+}

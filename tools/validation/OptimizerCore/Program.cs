@@ -25,7 +25,7 @@ if (args is ["--firmware-verification"]) { FirmwareVerificationChecks.Run(Check)
 if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
-if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
+if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
@@ -205,6 +205,7 @@ RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 FileChecks.Run(Check);
 FileConflictChecks.Run(Check);
+RefusalChecks.Run(Check);
 ProcessIdentityChecks.Run(Check);
 PolicyChecks.Run(Check);
 DiscoveryChecks.Run(Check);
