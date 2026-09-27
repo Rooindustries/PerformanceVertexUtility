@@ -10,9 +10,10 @@ $msiCode=[guid]::NewGuid().ToString('B').ToUpperInvariant()
 $msiKeyPath='Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$msiCode
 $msiAppId='registry:roo-industries-msi-fixture-'+$msiCode
 $msiClaim=Get-RooIndustriesBulkClaimPath ([pscustomobject]@{appId=$msiAppId})
-function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted) {
+function New-Case([string]$Name,[string]$FirstMode='remove',[int]$FirstExit=0,[switch]$Unquoted,[switch]$BrokenExe) {
     $directory=Join-Path $root $Name;[IO.Directory]::CreateDirectory($directory)|Out-Null
     $exe=Join-Path $directory 'Roo Industries Bulk Removal Fixture.exe';Copy-Item -LiteralPath $script:fixtureExe -Destination $exe
+    if($BrokenExe){[IO.File]::WriteAllText($exe,'This fixture is not a Windows program.')}
     $journalPath=Join-Path $directory 'journal.json';$counter=Join-Path $directory 'launch count.txt'
     $apps=@();$markers=@()
     foreach($i in 1..2){
@@ -248,17 +249,61 @@ public class RooIndustriesBulkFixture {
     try {
         $openError=[RooIndustriesBulkAccessFixture]::OpenError($denied.Id)
         $unreadable=[RooIndustries.Optimization.ProcessOutput.Tree]::IsRunning($denied.Id,$deniedCreated)
-        $beforeBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime().AddMinutes(-1).ToFileTimeUtc().ToString()
-        $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$beforeBoot;descendants=@()})
+        $lastBoot=([datetime](Get-RooIndustriesBulkBootTime)).ToUniversalTime()
+        $reusedAfterRestart=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddHours(-2).ToFileTimeUtc().ToString();descendants=@()})
+        $nearBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$lastBoot.AddMinutes(-1).ToFileTimeUtc().ToString();descendants=@()})
+        $currentBootId=Get-RooIndustriesBootId
+        $otherBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId='roo-industries-other-boot';descendants=@()})
+        $sameBoot=Test-RooIndustriesBulkInvocationLive ([pscustomobject]@{processId=$denied.Id;creationTimeFileTimeUtc=$deniedCreated;bootId=$currentBootId;descendants=@()})
         $deniedReconcile=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
         $deniedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
     } finally {[RooIndustriesBulkAccessFixture]::RestoreDebug($debug)}
     Assert ($openError -eq 5) "The unreadable remover fixture refuses inspection with access denied (error $openError)"
     Assert $unreadable 'A remover Windows refuses to open is treated as still running, never as stopped'
-    Assert (-not $reusedAfterRestart) 'A remover recorded before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
+    Assert (-not $reusedAfterRestart) 'A remover recorded well before the last restart is not running, even when its process ID now belongs to a process that cannot be opened'
+    Assert $nearBoot 'A remover recorded just before the reported boot time is still checked, so a clock jump cannot make it look stopped'
+    Assert ($currentBootId -and -not $otherBoot -and $sameBoot) "The recorded Windows boot ID decides whether a remover belongs to an earlier boot (current boot ID $currentBootId)"
     Assert ($deniedReconcile.status -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].state -eq 'needs-reconciliation' -and $deniedReconcile.data.entries[0].error -like "*still running or can't be checked*" -and -not $deniedReconcile.data.entries[0].registrationAbsent) 'Check state reports an unreadable remover as still running or unchecked instead of removed'
     Assert ($deniedDismiss.status -eq 'failed' -and $deniedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $deniedClaim) -and (Read-RooIndustriesOperationJson $a.JournalPath).data.status -ne 'dismissed') 'Start over refuses while a remover cannot be checked and keeps its claim'
     $denied.Kill();Assert ($denied.WaitForExit(10000)) 'Disposable unreadable remover is explicitly stopped and its exit verified'
+    $case=New-Case 'queue-stopped-after-launch' 'wait';$a=$case.args
+    $childArgs=Join-Path $case.directory 'child arguments.json';$a|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $childArgs -Encoding UTF8
+    $childScript=Join-Path $case.directory 'stopped after launch.ps1';$childLog=$childScript+'.log'
+    Set-Content -LiteralPath $childScript -Encoding UTF8 -Value @'
+param([string]$RunScript,[string]$ArgumentsPath,[string]$OutputPath)
+$ErrorActionPreference='Stop'
+Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Tree : System.IDisposable { public Tree(System.Diagnostics.Process root) { throw new System.InvalidOperationException("Simulated stop right after launch."); } public int Count { get { return 0; } } public void Dispose() {} } }'
+$values=@{};(Get-Content -LiteralPath $ArgumentsPath -Raw|ConvertFrom-Json).PSObject.Properties|ForEach-Object {$values[$_.Name]=$_.Value}
+& $RunScript @values *> $OutputPath
+'@
+    $childStart=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -ExecutionPolicy Bypass -File "'+$childScript+'" -RunScript "'+$runScript+'" -ArgumentsPath "'+$childArgs+'" -OutputPath "'+$childLog+'"'))
+    $childStart.UseShellExecute=$false;$childStart.CreateNoWindow=$true
+    $childRun=[Diagnostics.Process]::Start($childStart);Assert ($childRun.WaitForExit(90000)) 'The interrupted queue run returns without waiting for its remover'
+    $stoppedJournal=(Read-RooIndustriesOperationJson $a.JournalPath).data
+    $stoppedPid=[int](@($stoppedJournal.entries)[0].invocation.processId)
+    $stoppedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $stoppedAlive=$stoppedPid -gt 0 -and $null -ne (Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue)
+    Assert ($stoppedPid -gt 0 -and $stoppedAlive -and $stoppedDismiss.status -eq 'failed' -and $stoppedDismiss.errors[0].message -like "*still running or can't be checked*") "Start over refuses while a queue remover that started just before a failure is still alive (pid $stoppedPid)"
+    if($stoppedPid -gt 0){$stoppedProcess=Get-Process -Id $stoppedPid -ErrorAction SilentlyContinue;if($stoppedProcess){$stoppedProcess.Kill();[void]$stoppedProcess.WaitForExit(10000)}}
+    $case=New-Case 'queue-unrecorded-launch' 'keep';$a=$case.args
+    $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;bootTimeUtc=Get-RooIndustriesBulkBootTime;updatedAtUtc=Get-RooIndustriesUtcStamp;
+        entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
+    $journal.entries[0].state='dispatching';$journal.entries[0].attemptCount=1
+    Write-RooIndustriesOperationJson $journal $a.JournalPath
+    $unrecordedClaim=Get-RooIndustriesBulkClaimPath $case.plan.entries[0] $case.directory
+    Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$case.plan.queueId;entryId=$case.plan.entries[0].entryId;journalPath=$a.JournalPath;executable=[string]$case.plan.entries[0].executable;claimedAtUtc=Get-RooIndustriesUtcStamp}) $unrecordedClaim
+    $unrecordedStart=[Diagnostics.ProcessStartInfo]::new([string]$case.plan.entries[0].executable,'x y 0 child-shell');$unrecordedStart.UseShellExecute=$false;$unrecordedStart.CreateNoWindow=$true
+    $unrecorded=[Diagnostics.Process]::Start($unrecordedStart);$liveFixtures.Add($unrecorded)|Out-Null
+    $unrecordedDismiss=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    $unrecordedCheck=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($unrecordedDismiss.status -eq 'failed' -and $unrecordedDismiss.errors[0].message -like "*still running or can't be checked*" -and (Test-Path -LiteralPath $unrecordedClaim) -and $unrecordedCheck.data.entries[0].state -eq 'needs-reconciliation' -and $unrecordedCheck.data.entries[0].error -like "*still running or can't be checked*") 'Start over and Check state refuse while a remover whose launch was never recorded is running'
+    $unrecorded.Kill();Assert ($unrecorded.WaitForExit(10000)) 'Disposable unrecorded remover is explicitly stopped and its exit verified'
+    $unrecordedDone=Read-Result (& $runScript -Action Dismiss -JournalPath $a.JournalPath -ConfirmApply)
+    Assert ($unrecordedDone.status -eq 'dismissed' -and -not(Test-Path -LiteralPath $unrecordedClaim)) 'Once that remover exits, Start over clears the list and its claim'
+    $case=New-Case 'queue-start-failed' -BrokenExe;$a=$case.args
+    $startFailed=Read-Result (& $runScript @a)
+    $startChecked=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($startFailed.data.entries[0].attemptCount -eq 1 -and $null -eq $startFailed.data.entries[0].invocation -and $startChecked.data.entries[0].launchUnconfirmed -ne $true) "A remover Windows refused to start is not marked as an unconfirmed launch ($($startFailed.data.entries[0].error))"
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}

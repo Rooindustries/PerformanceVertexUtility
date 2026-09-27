@@ -105,6 +105,15 @@ namespace RooIndustries.Optimization.ProcessOutput
             finally { CloseHandle(handle); }
         }
 
+        public static string LongPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            System.Text.StringBuilder buffer = new System.Text.StringBuilder(1024);
+            uint length = GetLongPathNameW(path, buffer, (uint)buffer.Capacity);
+            if (length == 0 || length >= buffer.Capacity) return path;
+            return buffer.ToString();
+        }
+
         public void Dispose()
         {
             foreach (Tracked item in tracked.Values) CloseHandle(item.Handle);
@@ -214,5 +223,6 @@ namespace RooIndustries.Optimization.ProcessOutput
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(IntPtr handle);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint length);
     }
 }
