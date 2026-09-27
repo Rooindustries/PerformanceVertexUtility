@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.Win32.SafeHandles;
@@ -89,6 +90,7 @@ static class ServiceControls
         {
             Check(QueryServiceConfig(service, memory, needed, out _), "QueryServiceConfig");
             var config = Marshal.PtrToStructure<ServiceConfig>(memory);
+            var displayName = DisplayName(Marshal.PtrToStringUni(config.DisplayName), address.Target);
             var binding = OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(new { config.Type, Binary = Marshal.PtrToStringUni(config.Binary), Account = Marshal.PtrToStringUni(config.Account) }));
             JsonElement value;
             switch (address.Property)
@@ -107,7 +109,7 @@ static class ServiceControls
             var allowed = address.Property == "startup" ? ((config.Type & 3) != 0 ? new uint[] { 0, 1, 2, 3, 4 } : new uint[] { 2, 3, 4 }).Select(ControlValues.From).ToArray() : null;
             if (allowed is not null && !allowed.Any(choice => ControlValues.Equal(choice, value))) throw new InvalidDataException("The service has a startup value that its service type cannot restore through Windows APIs.");
             return new(address, "service:" + address.Target.ToUpperInvariant() + ":" + address.Property, binding, value,
-                Marshal.PtrToStringUni(config.DisplayName) + ": " + address.Property.Replace('-', ' '), allowed);
+                displayName + ": " + address.Property.Replace('-', ' '), allowed);
         }
         finally { Marshal.FreeHGlobal(memory); }
     }
@@ -163,6 +165,16 @@ static class ServiceControls
         public ServiceHandle() : base(true) { }
         protected override bool ReleaseHandle() => CloseServiceHandle(handle);
     }
+    internal static string DisplayName(string? display, string serviceName)
+    {
+        if (display is not null && display.StartsWith('@'))
+        {
+            var buffer = new StringBuilder(512);
+            display = SHLoadIndirectString(display, buffer, buffer.Capacity, IntPtr.Zero) == 0 ? buffer.ToString() : null;
+        }
+        return string.IsNullOrWhiteSpace(display) || !char.IsLetterOrDigit(display.Trim()[0]) ? serviceName : display.Trim();
+    }
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)] private static extern int SHLoadIndirectString(string source, StringBuilder output, int size, IntPtr reserved);
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ServiceHandle OpenSCManager(string? machine, string? database, uint access);
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ServiceHandle OpenService(ServiceHandle manager, string name, uint access);
     [DllImport("advapi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseServiceHandle(IntPtr service);

@@ -72,6 +72,21 @@ try
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
     if (args is [_, "--controls-fixture"]) { NativeControlChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native control checks."); return; }
     if (args is [_, "--feature-read"]) { FeatureChecks.Native(Check); return; }
+    if (args is [_, "--service-names"])
+    {
+        var services = catalog.Settings.SelectMany(setting => setting.Options.SelectMany(option => option.Controls ?? [])).Select(control => control.Address).Where(address => address.Kind == "service").Distinct().ToArray();
+        var names = new List<string>(); var unreadable = new List<string>();
+        foreach (var address in services)
+        {
+            try { var read = new WindowsControlStore().Read(address); names.Add(address.Target + " => " + read.DisplayName); if (read.DisplayName is not { } display || display.Length == 0 || !char.IsLetterOrDigit(display[0])) unreadable.Add(address.Target + " => '" + read.DisplayName + "'"); }
+            catch (Exception error) when (error is InvalidDataException or System.ComponentModel.Win32Exception or IOException) { }
+        }
+        foreach (var name in names.Where(name => name.Contains("UsoSvc", StringComparison.Ordinal) || name.Contains(" => :", StringComparison.Ordinal)).Take(10)) Console.WriteLine("SERVICE " + name);
+        var inconsistent = names.GroupBy(name => name.Split(" => ")[0]).Where(group => group.Select(name => name.Split(" => ")[1].Split(": ")[0]).Distinct().Count() > 1).Select(group => string.Join(" | ", group)).ToArray();
+        Check(inconsistent.Length == 0, "Each service shows the same name for every property it controls: " + string.Join("; ", inconsistent.Take(4)));
+        Check(names.Count > 0 && unreadable.Count == 0, "Every installed catalog service shows a readable name (" + names.Count + " read): " + string.Join("; ", unreadable.Take(8)));
+        Console.WriteLine($"Completed {count} service name checks."); return;
+    }
     if (args is [_, "--boot-clock-shift"]) { FeatureChecks.ClockShift(Check); Console.WriteLine($"Completed {count} boot clock checks."); return; }
     if (args is [_, "--boot-identity"]) { Console.WriteLine("BOOT " + RegistryTweakStore.CurrentBoot()); return; }
     if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
