@@ -151,7 +151,7 @@ try {
 
 $commandLineRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-command-line-' + [guid]::NewGuid().ToString('N'))
 try {
-    $spacedRemover = Join-Path $commandLineRoot 'Roo Fixture\Uninstall Me.exe'
+    $spacedRemover = Join-Path $commandLineRoot 'Roo Industries Fixture\Uninstall Me.exe'
     [IO.Directory]::CreateDirectory((Split-Path $spacedRemover -Parent)) | Out-Null
     [IO.File]::WriteAllText($spacedRemover, 'fixture')
     $productCode = '{11111111-2222-3333-4444-555555555555}'
