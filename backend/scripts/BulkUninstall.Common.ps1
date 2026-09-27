@@ -121,8 +121,7 @@ function Get-RooIndustriesBulkArguments {
 
 function Get-RooIndustriesBulkCommandLine {
     param($Entry)
-    $arguments=Get-RooIndustriesBulkArguments $Entry
-    return '"'+[string]$Entry.executable+'"'+$(if($arguments){' '+$arguments}else{''})
+    return Get-RooIndustriesUninstallCommandLine ([string]$Entry.executable) (Get-RooIndustriesBulkArguments $Entry)
 }
 
 function Get-RooIndustriesBulkClaimPath {
@@ -191,10 +190,12 @@ function Get-RooIndustriesRemoverTimeoutMessage {
 }
 
 function Invoke-RooIndustriesObservedRemover {
-    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress)
+    param([string]$FilePath,[string]$Arguments,[string]$WorkingDirectory,[int]$TimeoutSeconds,[scriptblock]$OnProgress,[string]$ExpectedCommandLine)
+    $commandLine=Get-RooIndustriesUninstallCommandLine $FilePath $Arguments
+    if($commandLine -cne $ExpectedCommandLine){throw 'The remover command differs from the reviewed command. Check the removal path again.'}
     Import-RooIndustriesBulkProcessTypes
     $result=[ordered]@{startedAtUtc=Get-RooIndustriesUtcStamp;completedAtUtc=$null;filePath=$FilePath;rawArguments=$Arguments
-        commandLine=('"'+$FilePath+'"'+$(if($Arguments){' '+$Arguments}else{''}));processStarted=$false;startError=$null;exitCode=$null
+        commandLine=$commandLine;processStarted=$false;startError=$null;exitCode=$null
         timedOut=$false;processExitVerified=$false;descendantExitVerified=$false;outputIncomplete=$false;stillRunning='';error=$null
         timeoutSeconds=$TimeoutSeconds;invocation=$null;stdout='';stderr=''}
     $start=[Diagnostics.ProcessStartInfo]::new()

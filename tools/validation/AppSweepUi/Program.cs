@@ -679,6 +679,15 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("Controlled route failure", StringComparison.Ordinal),
         "A null removal-route response remains unavailable with its operation error");
 
+    const string reviewedLine = "\"C:\\Windows\\system32\\msiexec.exe\" /x {11111111-2222-3333-4444-555555555555} /norestart";
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "msi-uninstall-string", RawCommand = "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}", CommandLine = reviewedLine }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
+
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed, "A successful empty removal route remains a valid Roo Industries route");

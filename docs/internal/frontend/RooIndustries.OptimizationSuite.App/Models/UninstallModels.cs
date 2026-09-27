@@ -252,6 +252,7 @@ public sealed class UninstallCommand
     public string? DisplayName { get; set; }
     public string? CommandType { get; set; }
     public string? RawCommand { get; set; }
+    public string? CommandLine { get; set; }
     public string? Executable { get; set; }
     public bool HasQuietCommand { get; set; }
     public bool RequiresElevation { get; set; }

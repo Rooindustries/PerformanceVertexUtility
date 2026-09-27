@@ -149,6 +149,32 @@ try {
     Add-Failure "Official uninstall preview failed: $($_.Exception.Message)"
 }
 
+$commandLineRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-command-line-' + [guid]::NewGuid().ToString('N'))
+try {
+    $spacedRemover = Join-Path $commandLineRoot 'Roo Fixture\Uninstall Me.exe'
+    [IO.Directory]::CreateDirectory((Split-Path $spacedRemover -Parent)) | Out-Null
+    [IO.File]::WriteAllText($spacedRemover, 'fixture')
+    $productCode = '{11111111-2222-3333-4444-555555555555}'
+    $commandLineInventory = Join-Path $commandLineRoot 'inventory.json'
+    [IO.File]::WriteAllText($commandLineInventory, ([pscustomobject]@{ schemaVersion = 1; apps = @(
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-msi'; displayName = 'Roo Industries MSI command'; publisher = 'Roo Industries'; sourceType = 'msi'; packageId = $productCode; uninstallString = "MsiExec.exe /X$productCode"; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-spaced'; displayName = 'Roo Industries spaced command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = "$spacedRemover /S /quiet"; categories = @('application'); risk = 'low'; protected = $false },
+        [pscustomobject]@{ appId = 'registry:roo-industries-command-relative'; displayName = 'Roo Industries relative command'; publisher = 'Roo Industries'; sourceType = 'registry'; uninstallString = 'uninstall.exe /S'; categories = @('application'); risk = 'low'; protected = $false }
+    ) } | ConvertTo-Json -Depth 8))
+    $lines = ((& (Join-Path $PSScriptRoot 'Preview-OfficialUninstall.ps1') -InventoryPath $commandLineInventory -AppId @('registry:roo-industries-command-msi', 'registry:roo-industries-command-spaced', 'registry:roo-industries-command-relative')) -join [Environment]::NewLine) | ConvertFrom-Json
+    $byId = @{}; foreach ($entry in @($lines.commands)) { $byId[[string]$entry.appId] = $entry }
+    $msiLine = '"' + (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') + '" /x ' + $productCode + ' /norestart'
+    if ($byId['registry:roo-industries-command-msi'].commandLine -ceq $msiLine -and $byId['registry:roo-industries-command-spaced'].commandLine -ceq ('"' + $spacedRemover + '" /S /quiet') -and $null -eq $byId['registry:roo-industries-command-relative'].commandLine) {
+        Add-Pass 'Removal path review returns the exact command that runs, and none for an unresolvable remover'
+    } else {
+        Add-Failure ('Removal path review command lines differ from what runs: ' + (@($lines.commands | ForEach-Object { [string]$_.appId + ' => ' + [string]$_.commandLine }) -join '; '))
+    }
+} catch {
+    Add-Failure "Removal path command-line review failed: $($_.Exception.Message)"
+} finally {
+    if (Test-Path -LiteralPath $commandLineRoot) { Remove-Item -LiteralPath $commandLineRoot -Recurse -Force }
+}
+
 try {
     $scanOutput = & (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -InventoryPath $sampleInventory -AppId 'registry:overwolf'
     $scan = ($scanOutput -join [Environment]::NewLine) | ConvertFrom-Json

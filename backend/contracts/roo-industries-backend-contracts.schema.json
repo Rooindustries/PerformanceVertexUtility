@@ -3995,6 +3995,12 @@
             "null"
           ]
         },
+        "commandLine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "executable": {
           "type": [
             "string",

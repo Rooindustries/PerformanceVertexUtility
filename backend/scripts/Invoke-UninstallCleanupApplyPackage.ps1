@@ -162,7 +162,15 @@ try {
     $reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $command 'reviewRequired' $true)
     $commandExecutable = [string](Get-RooIndustriesUninstallPropertyValue $command 'executable' '')
     $hasOfficialCommand = -not [string]::IsNullOrWhiteSpace($commandExecutable)
-    if ($hasOfficialCommand) { $commandExecutable = Resolve-RooIndustriesUninstallPath $commandExecutable $commandExecutable }
+    $argumentText = ''
+    $commandLineReviewed = -not $hasOfficialCommand
+    if ($hasOfficialCommand) {
+        $commandExecutable = Resolve-RooIndustriesUninstallPath $commandExecutable $commandExecutable
+        $argumentProperty = $command.PSObject.Properties['arguments']
+        $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
+        $reviewedCommandLine = [string](Get-RooIndustriesUninstallPropertyValue $command 'commandLine' '')
+        $commandLineReviewed = -not [string]::IsNullOrWhiteSpace($reviewedCommandLine) -and (Get-RooIndustriesUninstallCommandLine $commandExecutable $argumentText) -ceq $reviewedCommandLine
+    }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
@@ -205,6 +213,7 @@ try {
         (New-ApplyPackageGate 'manual-review-approved' 'Dependency review completed' $true ((-not $reviewRequired) -or $ManualReviewApproved) 'Apps marked for review require explicit dependency review approval.' $null),
         (New-ApplyPackageGate 'valid-preview' 'Preview completed without errors' $true ($inputErrors.Count -eq 0 -and -not [bool](Get-RooIndustriesUninstallPropertyValue $command 'blocked' $true) -and -not [bool](Get-RooIndustriesUninstallPropertyValue $command 'protected' $true)) 'Failed, incomplete or protected routes cannot run.' $null),
         (New-ApplyPackageGate 'official-executable-allowlisted' 'Official executable approved' $true $officialExecutableAllowlisted 'The executable must match the allowlist exactly.' $null),
+        (New-ApplyPackageGate 'reviewed-command-line' 'Reviewed remover command unchanged' $true $commandLineReviewed 'The remover runs only when the command it will start matches the reviewed command exactly.' $null),
         (New-ApplyPackageGate 'exact-target-allowlist' 'Exact cleanup targets approved' $true $exactTargetsApproved 'Every cleanup target must be on the exact allowlist.' $null),
         (New-ApplyPackageGate 'manual-review-items-excluded' 'Protected leftovers excluded' $true ($reviewItems.Count -eq 0) 'Protected leftovers require a separate workflow.' $null),
         (New-ApplyPackageGate 'supported-cleanup-types' 'Only files and folders selected' $true ($unsupportedItems.Count -eq 0) 'Registry, services and tasks remain outside this executor.' $null),
@@ -245,8 +254,6 @@ try {
             $journal.status = 'prepared'
             Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
             if ($hasOfficialCommand) {
-                $argumentProperty = $command.PSObject.Properties['arguments']
-                $argumentText = if ($null -ne $argumentProperty -and $argumentProperty.Value -is [System.Array]) { Join-RooIndustriesWindowsArguments ([string[]]@($argumentProperty.Value)) } elseif ($null -eq $argumentProperty) { '' } else { [string]$argumentProperty.Value }
                 $claimPath = Get-RooIndustriesBulkClaimPath ([pscustomobject]@{ appId = $appId })
                 try { $claimLease = Lock-RooIndustriesOperation $claimPath } catch [IO.IOException] { throw 'Another removal of this app is running right now. Let it finish, then try again.' }
                 try {
@@ -266,7 +273,7 @@ try {
                         $journal | Add-Member -NotePropertyName officialInvocation -NotePropertyValue $invocation -Force
                         Write-RooIndustriesCleanupJournal $journal $resolvedRollbackManifestPath
                         Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; invocation = $invocation }) $claimPath
-                    }
+                    } $reviewedCommandLine
                     if (-not $officialResult.timedOut -and (Test-Path -LiteralPath $claimPath)) { Remove-Item -LiteralPath $claimPath -Force }
                 } finally { $claimLease.Dispose() }
                 $sequence.Add([pscustomobject]@{ runner = 'official-uninstaller'; result = $officialResult }) | Out-Null
