@@ -37,6 +37,8 @@ static class RecoveryChecks
         var strictChild = Path.Combine(strict, "data.bin");
         var pinned = Path.Combine(source, "Pinned");
         var pinnedFile = Path.Combine(pinned, "pinned.txt");
+        var guarded = Path.Combine(source, "Guarded");
+        var guardedWritten = new DateTime(2019, 5, 6, 7, 8, 9, DateTimeKind.Utc);
         var operations = Path.Combine(root, "Operations");
         var user = WindowsIdentity.GetCurrent().User!.Value;
         try
@@ -51,6 +53,8 @@ static class RecoveryChecks
             Directory.CreateDirectory(inherited);
             Directory.CreateDirectory(strict);
             Directory.CreateDirectory(pinned);
+            Directory.CreateDirectory(guarded);
+            Directory.SetLastWriteTimeUtc(guarded, guardedWritten);
             var shared = new DirectoryInfo(inherited);
             var sharedAcl = shared.GetAccessControl();
             sharedAcl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier("S-1-5-4"), FileSystemRights.ReadAndExecute, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
@@ -77,9 +81,10 @@ static class RecoveryChecks
             {
                 SetSecurity(systemFile, 1, "O:SY");
                 SetSecurity(strict, 5, "O:SYD:P(A;OICI;FA;;;SY)(A;OICI;0x1301bf;;;BA)(A;OICI;0x1301bf;;;" + user + ")");
+                SetSecurity(guarded, 5, "O:SYD:P(A;OICI;FA;;;SY)(A;OICI;0x1200a9;;;BA)(A;OICI;0x1200a9;;;" + user + ")");
             }
             File.WriteAllBytes(strictChild, [1, 2, 3]);
-            var targets = new[] { source, inherited, explicitOnly, ordinary, systemFile, strict, strictChild, pinned, pinnedFile };
+            var targets = new[] { source, inherited, explicitOnly, ordinary, systemFile, strict, strictChild, pinned, pinnedFile, guarded };
             var before = targets.ToDictionary(path => path, Sddl);
             check(!before[explicitOnly].Contains("BU", StringComparison.Ordinal) && !before[explicitOnly].Contains(":AI", StringComparison.Ordinal) && before[inherited].Contains("D:AI", StringComparison.Ordinal), "The recovery fixture has an explicit-only file inside a folder with inheritable access");
             check(before[source].Contains(";BU)", StringComparison.Ordinal) && before[ordinary].Contains("ID;", StringComparison.Ordinal) && !Sddl(operations).Contains(";BU)", StringComparison.Ordinal), "The recovery fixture inherits Users access that its journal folder does not have");
@@ -109,6 +114,7 @@ static class RecoveryChecks
             check(Sddl(systemFile) == before[systemFile], "A SYSTEM-owned file is restored with its SYSTEM owner");
             check(Sddl(strict) == before[strict] && Sddl(strictChild) == before[strictChild], "A SYSTEM-owned folder that denies administrators permission changes is restored exactly");
             check(Sddl(pinned) == before[pinned] && Sddl(pinnedFile) == before[pinnedFile], "Protected auto-inherited entries are restored exactly");
+            check(Sddl(guarded) == before[guarded] && Directory.GetLastWriteTimeUtc(guarded) == guardedWritten, "Recovery escalates to restore and date a SYSTEM-owned folder that denies attribute and permission changes");
             check(changed.Length == 0, "Every restored entry matches its captured permissions");
             check(File.GetLastWriteTimeUtc(aged) == agedBefore.Item1 && File.GetAttributes(aged) == agedBefore.Item2, "A read-only child keeps its original attributes and write time after its folder is restored");
         }
