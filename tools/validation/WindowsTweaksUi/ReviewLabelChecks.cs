@@ -67,6 +67,20 @@ static class ReviewLabelChecks
         string Undo(string id) { var found = model.Changes.SingleOrDefault(change => change.Name == rows[id].Name); return found is null ? "missing" : found.Before + " → " + found.After; }
         check(Undo(DynamicTicks) == "Disabled → No override" && Undo(Hypervisor) == "Off → Automatic" && Undo(Ipv6) == "Disabled → Enabled" && Undo(Sehop) == "Disabled → Not set" && Undo(DevicePower) == "Disabled → Enabled",
             "Undo lines show the applied choice going back to the original value: " + string.Join(" | ", new[] { DynamicTicks, Hypervisor, Ipv6, Sehop, DevicePower }.Select(Undo)));
+
+        var timerFixture = new Fixture(Path.Combine(root, "review-labels-timer"), catalog) { Missing = false };
+        var timerPath = Path.Combine(root, "review-labels-timer", "windows.json");
+        var timerState = OperationFiles.Read<TweakFixture>(timerPath);
+        foreach (var address in new ControlAddress[] { new("timer-startup", "system", "enabled"), new("timer", "system", "half-millisecond") })
+            timerState.Controls[address.Key] = new(address, address.Key, "fixture", ControlValues.From(false));
+        OperationFiles.Write(timerPath, timerState);
+        App.Operations = timerFixture; var timerModel = new WindowsTweaksViewModel(); await timerModel.RefreshCommand.ExecuteAsync(null);
+        var startup = timerModel.Rows.Single(row => row.Id == "windows.e9d78835a38cf818"); var request = timerModel.Rows.Single(row => row.Id == "windows.14ff050f1e4e53b5");
+        startup.Selected = startup.Choices.Single(choice => choice.Id == "choice-88665aca77848447");
+        await timerModel.ReviewCommand.ExecuteAsync(null);
+        Print(timerModel);
+        check(timerModel.Changes.Count == 2 && timerModel.Changes.Select(change => change.Name).Distinct().Count() == 2 && timerModel.Changes.Any(change => change.Name == startup.Name) && timerModel.Changes.Any(change => change.Name == request.Name),
+            "A setting that changes two controls names each line after what it changes: " + string.Join(" | ", timerModel.Changes.Select(change => change.Name + ": " + change.Before + " → " + change.After)));
     }
 
     private static void Print(WindowsTweaksViewModel model)

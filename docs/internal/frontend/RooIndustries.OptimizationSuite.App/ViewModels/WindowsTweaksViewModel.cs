@@ -541,7 +541,10 @@ public partial class WindowsTweaksViewModel : ObservableObject
             var before = ControlChoice(row, read, read.Value, _restoringChoices ? chosen : [], claimed);
             var after = ControlChoice(row, read, change.After, _restoringChoices ? [] : chosen, claimed);
             if (before is null && after is null || before == after) continue;
-            Changes.Add(new(row.Name, before ?? ControlFallback(row, read, read.Value, claimed), after ?? ControlFallback(row, read, change.After, claimed), row.Scope));
+            var name = row.Definition.Options.SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().Count() > 1
+                ? _all.FirstOrDefault(other => other != row && ControlsFor(other.Definition, read.Address, false).Any() && other.Definition.Options.All(option => (option.Controls ?? []).All(control => control.Address == read.Address)))?.Name ?? row.Name
+                : row.Name;
+            Changes.Add(new(name, before ?? ControlFallback(row, read, read.Value, claimed), after ?? ControlFallback(row, read, change.After, claimed), row.Scope));
             shown = true;
         }
         if (shown) return;
