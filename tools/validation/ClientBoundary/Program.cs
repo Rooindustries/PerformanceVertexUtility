@@ -59,6 +59,19 @@ try
     service.DiscardCleanupReview();
     Check(await service.RequestUninstallCleanupApplyTextAsync(appId, true, true, true) is null && File.Exists(later), "Discarded approval cannot be reused to remove newly discovered files");
 
+    var applyScript = Path.Combine(scripts, "Invoke-UninstallCleanupApplyPackage.ps1");
+    File.WriteAllText(applyScript, "param([int]$TimeoutSeconds = 30)\n'{\"timeoutSeconds\":' + $TimeoutSeconds + '}'\n");
+    var vendorRemover = Path.Combine(fixture, "Vendor Uninstall.exe");
+    File.WriteAllText(vendorRemover, "fixture");
+    var vendorRoute = new { actionId = "apps.previewOfficialUninstall", commands = new[] { new { appId, blocked = false, @protected = false, reviewRequired = true, executable = (string?)vendorRemover } }, errors = Array.Empty<object>() };
+    File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(vendorRoute));
+    File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(later)));
+    Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null && await service.GetCleanupManifestAsync(appId) is not null, "Client reads a reviewed route that runs the app's own remover");
+    var vendorRun = await service.RequestUninstallCleanupApplyResultAsync(appId, true, true, false);
+    Check(vendorRun.Value?.Contains("\"timeoutSeconds\":600", StringComparison.Ordinal) == true, "An interactive Leftover-tab remover gets a 600 second observation window: " + vendorRun.Value + vendorRun.Error);
+    File.Copy(Path.Combine(repo, "backend", "scripts", "Invoke-UninstallCleanupApplyPackage.ps1"), applyScript, true);
+    service.DiscardCleanupReview();
+
     var operationsRoot = Path.Combine(fixture, "operations");
     Directory.CreateDirectory(operationsRoot);
     var operations = new OptimizerService(new BackendLocator(), operationsRoot);
