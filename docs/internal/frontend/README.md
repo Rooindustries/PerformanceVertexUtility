@@ -21,7 +21,7 @@ and WinUI app. It does not launch the app or change system settings.
 - **Games & processes:** separate Games, Processes, and Background apps tabs.
 - **Installed apps:** application removal and leftover cleanup.
 - **Startup & services:** background-process inventory and startup information.
-- **Drivers & GPU:** hardware, driver recommendations, and expandable NVIDIA profiles.
+- **Drivers & GPU:** hardware and driver recommendations. The NVIDIA profiles section is hidden (`x:Load="False"`) until Profile Inspector ships with the installer.
 - **Memory:** physical RAM use, largest processes, and diagnostic tools.
 - **Timer & cache:** timer and shader-cache actions, with expandable performance readings.
 - **Tools:** official tool names, logos, search, categories, and BIOS settings.
