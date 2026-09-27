@@ -12,6 +12,16 @@ static class SectionChecks
         App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null);
         check(model.Rows.Count == catalog.Settings.Length && model.Rows.Select(row => row.Id).Distinct().Count() == catalog.Settings.Length,
             "All catalog settings remain present exactly once in the all-tweaks view");
+        check(model.SelectedSection?.Id == "all" && model.SectionTitle == "All tweaks", "Windows tweaks opens on All tweaks");
+        const string hypervisor = "windows.f621c6877f2af1d1";
+        model.Search = "Hypervisor"; var everywhere = model.Rows.Select(row => row.Id).ToArray();
+        check(everywhere.Contains(hypervisor), "Searching Hypervisor on first open finds the Security setting");
+        model.SelectedSection = model.Sections.Single(section => section.Id == "network"); model.Category = model.Categories.First(category => category != "All groups");
+        var group = model.Category; model.Search = "Hypervisor";
+        check(model.Rows.Select(row => row.Id).SequenceEqual(everywhere), "Search from Network with a group chosen still matches every section: " + string.Join(", ", model.Rows.Select(row => row.Id)));
+        model.Search = "";
+        check(model.Rows.Count > 0 && model.Rows.All(row => row.SectionId == "network" && row.Topic == group), "Clearing search returns to the chosen section and group");
+        model.SelectedSection = model.Sections[0];
         var seen = new HashSet<string>(); var allOptions = new Dictionary<string, string[]>();
         foreach (var section in model.Sections.Skip(1))
         {
