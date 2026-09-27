@@ -36,16 +36,28 @@ try {
     $script:fixtureExe=Join-Path $root 'RooIndustriesBulkFixture.exe'
     Add-Type -TypeDefinition @'
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 public class RooIndustriesBulkFixture {
     public static int Main(string[] args) {
+        if(args[3]=="child"){Thread.Sleep(1500);File.Delete(args[0]);Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
+        if(args[3]=="child-hang"){File.Delete(args[0]);Thread.Sleep(120000);return 0;}
         Console.WriteLine("A vendor console message must not corrupt the JSON response.");
         Console.Error.WriteLine("Vendor diagnostic output.");
         if(args.Length!=6||args[5]!="quoted \"value\" with trailing\\") return 87;
         File.AppendAllText(args[1]+".command-lines",Environment.CommandLine+Environment.NewLine);
         if(args[3]=="verbose") Console.Write(new String('x',200000));
         File.AppendAllText(args[1],args[0]+Environment.NewLine);
+        if(args[3].StartsWith("handoff")){
+            string copy=Path.Combine(Path.GetDirectoryName(args[1]),"temp copy\\~nsu1.tmp\\Au_.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(copy));
+            File.Copy(System.Reflection.Assembly.GetEntryAssembly().Location,copy,true);
+            ProcessStartInfo start=new ProcessStartInfo(copy,"\""+args[0]+"\" \""+args[1]+"\" 0 "+(args[3]=="handoff"?"child":"child-hang"));
+            start.UseShellExecute=true;start.WindowStyle=ProcessWindowStyle.Hidden;
+            Process.Start(start).Dispose();
+            return 0;
+        }
         if(args[3]=="wait") Thread.Sleep(15000);
         if(args[3]=="cancel") File.WriteAllText(args[4],"stop after this entry");
         if(args[3]!="keep") File.Delete(args[0]);
@@ -122,6 +134,19 @@ public class RooIndustriesBulkFixture {
     $check=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
     Assert ($check.status -eq 'needs-reconciliation' -and (Test-Path $case.markers[0])) 'A still-running exact process cannot be reconciled as completed'
     $process.Kill();Assert ($process.WaitForExit(10000)) 'Disposable timed-out remover is explicitly stopped and its exit verified'
+    $case=New-Case 'handoff' 'handoff';$a=$case.args
+    $handoff=Read-Result (& $runScript @a)
+    Assert ($handoff.status -eq 'cleanup-review-required' -and (Test-Path ($case.markers[0]+'.done')) -and @($handoff.data.entries[0].invocation.descendants|Where-Object {$_.name -ieq 'Au_.exe'}).Count -eq 1) 'A remover that hands off to a temporary copy is verified only after that copy finishes'
+    $case=New-Case 'handoff-hang' 'handoff-hang';$a=$case.args;$a.TimeoutSeconds=5
+    $hung=Read-Result (& $runScript @a)
+    $child=@($hung.data.entries[0].invocation.descendants|Where-Object {$_.name -ieq 'Au_.exe'})
+    Assert ($hung.status -eq 'needs-reconciliation' -and $hung.data.entries[0].state -eq 'needs-reconciliation' -and -not $hung.data.entries[0].registrationAbsent -and $child.Count -eq 1 -and $hung.data.entries[1].attemptCount -eq 0) 'A handed-off remover that never exits keeps the entry unresolved'
+    $childProcess=[Diagnostics.Process]::GetProcessById([int]$child[0].processId);$liveFixtures.Add($childProcess)|Out-Null
+    $whileRunning=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($whileRunning.status -eq 'needs-reconciliation' -and $whileRunning.data.entries[0].state -eq 'needs-reconciliation' -and -not(Test-Path $case.markers[0]) -and -not $childProcess.HasExited) 'Check state does not report removal while the handed-off remover is still running, and does not stop it'
+    $childProcess.Kill();Assert ($childProcess.WaitForExit(10000)) 'Disposable handed-off remover is explicitly stopped and its exit verified'
+    $afterExit=Read-Result (& $runScript -Action Reconcile -JournalPath $a.JournalPath -AllowFixtureExecution -ConfirmApply)
+    Assert ($afterExit.status -eq 'ready' -and $afterExit.data.entries[0].state -eq 'removed' -and $afterExit.data.entries[1].attemptCount -eq 0) 'Check state reports removal once the handed-off remover has exited and the registration is gone'
     $case=New-Case 'crash-intent';$a=$case.args
     $journal=[pscustomobject]@{schemaVersion=1;kind='bulk-uninstall-journal';status='running';reviewSha256=$a.ReviewSha256.ToLowerInvariant();plan=$case.plan;updatedAtUtc=Get-RooIndustriesUtcStamp;
         entries=@($case.plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})}
@@ -190,6 +215,7 @@ public class RooIndustriesBulkFixture {
 
 } finally {
     foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.Name -ieq 'msiexec.exe' -and $_.CommandLine -like "*$msiCode*"})){Stop-Process -Id $process.ProcessId -Force}
+    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)})){$liveFixtures.Add([Diagnostics.Process]::GetProcessById([int]$process.ProcessId))|Out-Null}
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($msiKeyPath,$false)
     if(Test-Path -LiteralPath $msiClaim){Remove-Item -LiteralPath $msiClaim -Force}
     foreach($process in $liveFixtures){if(-not $process.HasExited){$process.Kill()};if(-not $process.WaitForExit(10000)){throw 'Bulk fixture process did not exit'};$process.Dispose()}
