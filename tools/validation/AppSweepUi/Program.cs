@@ -687,6 +687,20 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     });
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal), "A vendor remover that cannot be resolved to one file is not marked as reviewed and says why");
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState == "Use Remove apps to remove this app.", "A Store app in Leftover cleanup points to Remove apps instead of offering a removal that cannot run");
 
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
