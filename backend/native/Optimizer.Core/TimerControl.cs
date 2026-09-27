@@ -132,7 +132,7 @@ public static class TimerControl
         try
         {
             var power = new TimerPower { Version = 1, ControlMask = 4, StateMask = 0 };
-            SetProcessInformation(process.Handle, 4, ref power, (uint)Marshal.SizeOf<TimerPower>());
+            SetProcessInformation(CurrentProcess(), 4, ref power, (uint)Marshal.SizeOf<TimerPower>());
             var result = NtSetTimerResolution(5000, true, out var interval);
             state = state with { AcquireStatus = result, ReturnedInterval = interval, Acquired = result >= 0 };
             OperationFiles.Write(StatePath(launch.Root), state); Check(result, "NtSetTimerResolution(acquire)");
@@ -183,7 +183,7 @@ public static class TimerControl
         var error = Marshal.GetLastWin32Error();
         if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
-        if (!IsProcessInJob(Process.GetCurrentProcess().Handle, IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
+        if (!IsProcessInJob(CurrentProcess(), IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start Roo Industries from the Start menu or desktop shortcut and try again.");
         if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out created)) return created;
         error = Marshal.GetLastWin32Error();
@@ -265,6 +265,7 @@ public static class TimerControl
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
     [StructLayout(LayoutKind.Sequential)] private struct TimerPower { public uint Version, ControlMask, StateMask; }
+    [DllImport("kernel32.dll", EntryPoint = "GetCurrentProcess")] private static extern IntPtr CurrentProcess();
     [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetProcessInformation(IntPtr process, int informationClass, ref TimerPower value, uint size);
     [DllImport("ntdll.dll")] private static extern int NtQueryTimerResolution(out uint coarsest, out uint finest, out uint current);
     [DllImport("ntdll.dll")] private static extern int NtSetTimerResolution(uint requested, [MarshalAs(UnmanagedType.U1)] bool acquire, out uint current);
