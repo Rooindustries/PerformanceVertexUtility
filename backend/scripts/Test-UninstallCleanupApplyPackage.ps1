@@ -335,14 +335,15 @@ Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { p
     finally { Remove-Item -LiteralPath Function:\Get-CimInstance }
     Assert ($wmiMessage -like 'Windows could not list running processes*') "A broken process list refuses with a clear message ($wmiMessage)"
     $waitShell=[powershell]::Create()
-    [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null')
+    [void]$waitShell.AddScript(". '" + (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1') + "'`n" + '$tree=[pscustomobject]@{Count=1}; $tree | Add-Member ScriptMethod Refresh { $this.Count++ }; $tree | Add-Member ScriptMethod Live { ,@() }; Wait-RooIndustriesRemoverTree ([pscustomobject]@{Id=0;HasExited=$true}) $tree 2 $null; $tree.Count')
     $waitWatch=[Diagnostics.Stopwatch]::StartNew()
     $waitHandle=$waitShell.BeginInvoke()
     $waitFinished=$waitHandle.AsyncWaitHandle.WaitOne(30000)
     $waitWatch.Stop()
     $waitResult=@(if ($waitFinished) { $waitShell.EndInvoke($waitHandle) } else { $waitShell.Stop() })
     $waitShell.Dispose()
-    Assert ($waitFinished -and $waitWatch.Elapsed.TotalSeconds -lt 10 -and $waitResult.Count -eq 1 -and -not $waitResult[0].completed -and -not $waitResult[0].rootRunning) "A remover tree whose helpers keep appearing and exiting returns at its 2 s deadline instead of spinning ($([math]::Round($waitWatch.Elapsed.TotalSeconds,1)) s)"
+    $refreshes=if ($waitResult.Count -eq 2) { [int]$waitResult[1] - 1 } else { -1 }
+    Assert ($waitFinished -and $waitWatch.Elapsed.TotalSeconds -lt 10 -and $waitResult.Count -eq 2 -and -not $waitResult[0].completed -and -not $waitResult[0].rootRunning -and $refreshes -ge 1 -and $refreshes -le 30) "A remover tree whose helpers keep appearing and exiting returns at its 2 s deadline after a paced number of refreshes ($([math]::Round($waitWatch.Elapsed.TotalSeconds,1)) s, $refreshes refreshes)"
     $case=New-HandoffCase 'endless-helpers' 'spawner' @([DateTime]::UtcNow.AddSeconds(90).Ticks.ToString()); $a=$case.args; $a.TimeoutSeconds=3
     $watch=[Diagnostics.Stopwatch]::StartNew()
     $endless=Read-Result (& $applyScript @a)
