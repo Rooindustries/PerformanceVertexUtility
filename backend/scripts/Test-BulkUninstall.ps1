@@ -337,8 +337,8 @@ Import-Module Microsoft.PowerShell.Utility
 function global:Get-FileHash {
     [CmdletBinding()] param([string]$LiteralPath,[string]$Algorithm)
     $value=Microsoft.PowerShell.Utility\Get-FileHash @PSBoundParameters
-    if($LiteralPath -like '*\queue-linked-remover\installed 1.txt' -and -not $global:RooLinked){
-        $global:RooLinked=$true
+    if($LiteralPath -like '*\queue-linked-remover\installed 1.txt' -and -not $global:RooIndustriesLinked){
+        $global:RooIndustriesLinked=$true
         $bin=Join-Path (Split-Path $LiteralPath -Parent) 'bin'
         [IO.Directory]::Move($bin,$bin+'-real')
         cmd.exe /c mklink /J "$bin" "$bin-real" | Out-Null

@@ -351,8 +351,8 @@ Import-Module Microsoft.PowerShell.Utility
 function global:Get-FileHash {
     [CmdletBinding()] param([string]$LiteralPath, [string]$Algorithm)
     $value = Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
-    if ($LiteralPath -like '*\linked-inside-lease\bin\remover.exe' -and -not $global:RooLinked) {
-        $global:RooLinked = $true
+    if ($LiteralPath -like '*\linked-inside-lease\bin\remover.exe' -and -not $global:RooIndustriesLinked) {
+        $global:RooIndustriesLinked = $true
         $bin = Split-Path $LiteralPath -Parent
         [IO.Directory]::Move($bin, $bin + '-real')
         cmd.exe /c mklink /J "$bin" "$bin-real" | Out-Null
