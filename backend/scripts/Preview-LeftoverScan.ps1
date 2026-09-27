@@ -37,6 +37,36 @@ function Get-ProductGuid {
     return $null
 }
 
+function Test-MicrosoftProduct {
+    param([object]$App)
+    $family = [string](Get-RooIndustriesUninstallPropertyValue $App 'packageFamilyName' '')
+    $publisher = ([string](Get-RooIndustriesUninstallPropertyValue $App 'publisher' '')).Trim()
+    return $family -match '_(8wekyb3d8bbwe|cw5n1h2txyewy)$' -or $publisher -match '^(CN=)?Microsoft( Corporation| Corp\.?| Windows)?(,|$)'
+}
+
+function Test-MicrosoftOwnedRegistryPath {
+    param([string]$Path)
+    return @($Path -split '\\' | Where-Object { $_ -in @('Microsoft', 'Policies') }).Count -gt 0
+}
+
+function Test-MicrosoftOwnedFilePath {
+    param([string]$Command)
+    $text = [Environment]::ExpandEnvironmentVariables(([string]$Command).Trim())
+    if ($text.StartsWith('"')) { $text = $text.Substring(1).Split('"')[0] }
+    elseif ($text -match '^(.+?\.(exe|dll|cmd|bat|ps1))(\s|$)') { $text = $Matches[1] }
+    if ($null -eq $script:MicrosoftOwnedRoots) {
+        $script:MicrosoftOwnedRoots = @([Environment]::GetFolderPath('Windows')) + @('CommonApplicationData', 'LocalApplicationData', 'ApplicationData' | ForEach-Object { Join-Path ([Environment]::GetFolderPath($_)) 'Microsoft' })
+        foreach ($programs in @([Environment]::GetFolderPath('ProgramFiles'), [Environment]::GetFolderPath('ProgramFilesX86'))) {
+            if ([string]::IsNullOrWhiteSpace($programs)) { continue }
+            $script:MicrosoftOwnedRoots += @(Get-ChildItem -LiteralPath $programs -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Windows *' -or $_.Name -like 'Microsoft*' } | ForEach-Object { $_.FullName })
+        }
+    }
+    foreach ($owned in $script:MicrosoftOwnedRoots) {
+        if (-not [string]::IsNullOrWhiteSpace($owned) -and $text.StartsWith($owned.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
 function Add-UniqueLeftoverItem {
     param(
         [System.Collections.Generic.List[object]]$Items,
@@ -78,7 +108,8 @@ function Add-ServiceCandidates {
     param(
         [System.Collections.Generic.List[object]]$Items,
         [object]$App,
-        [object[]]$Rules
+        [object[]]$Rules,
+        [bool]$MicrosoftProduct
     )
     $patterns = New-Object System.Collections.Generic.List[string]
     foreach ($rule in @($Rules)) {
@@ -88,6 +119,7 @@ function Add-ServiceCandidates {
     try {
         $services = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue)
         foreach ($svc in $services) {
+            if (-not $MicrosoftProduct -and (Test-MicrosoftOwnedFilePath ([string]$svc.PathName))) { continue }
             $haystack = ([string]$svc.Name + ' ' + [string]$svc.DisplayName + ' ' + [string]$svc.PathName)
             if (Test-RooIndustriesPatternMatch $haystack @($patterns.ToArray())) {
                 Add-UniqueLeftoverItem $Items (New-RooIndustriesLeftoverItem `
@@ -110,7 +142,8 @@ function Add-ServiceCandidates {
 function Add-TaskCandidates {
     param(
         [System.Collections.Generic.List[object]]$Items,
-        [object[]]$Rules
+        [object[]]$Rules,
+        [bool]$MicrosoftProduct
     )
     $patterns = New-Object System.Collections.Generic.List[string]
     foreach ($rule in @($Rules)) {
@@ -121,6 +154,8 @@ function Add-TaskCandidates {
         $tasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue)
         foreach ($task in $tasks) {
             $target = ([string]$task.TaskPath + [string]$task.TaskName)
+            if (-not $MicrosoftProduct -and (([string]$task.TaskPath).StartsWith('\Microsoft\', [StringComparison]::OrdinalIgnoreCase) -or [string]$task.Author -match '^(Microsoft|\$\(@%SystemRoot%)' -or
+                @($task.Actions | Where-Object { $_.Execute -and (Test-MicrosoftOwnedFilePath ([string]$_.Execute)) }).Count -gt 0)) { continue }
             if (Test-RooIndustriesPatternMatch $target @($patterns.ToArray())) {
                 Add-UniqueLeftoverItem $Items (New-RooIndustriesLeftoverItem `
                     -ItemId ("task:" + (ConvertTo-RooIndustriesStableId $target)) `
@@ -142,7 +177,8 @@ function Add-TaskCandidates {
 function Add-StartupCandidates {
     param(
         [System.Collections.Generic.List[object]]$Items,
-        [object[]]$Rules
+        [object[]]$Rules,
+        [bool]$MicrosoftProduct
     )
     $patterns = New-Object System.Collections.Generic.List[string]
     foreach ($rule in @($Rules)) {
@@ -160,6 +196,7 @@ function Add-StartupCandidates {
             if ($null -eq $props) { continue }
             foreach ($prop in @($props.PSObject.Properties)) {
                 if ($prop.Name -like 'PS*') { continue }
+                if (-not $MicrosoftProduct -and (Test-MicrosoftOwnedFilePath ([string]$prop.Value))) { continue }
                 $haystack = ([string]$prop.Name + ' ' + [string]$prop.Value)
                 if (Test-RooIndustriesPatternMatch $haystack @($patterns.ToArray())) {
                     $target = ($key -replace '^Registry::HKEY_CURRENT_USER', 'HKCU' -replace '^Registry::HKEY_LOCAL_MACHINE', 'HKLM') + '\' + $prop.Name
@@ -190,6 +227,7 @@ try {
     if ($null -eq $app) { throw "App id not found in inventory: $AppId" }
 
     $classification = Get-RooIndustriesAppClassification $app $protectedCatalog $policy
+    $microsoftProduct = Test-MicrosoftProduct $app
     $knownRules = @(Get-MatchingKnownRules $app $rules)
     $items = New-Object System.Collections.Generic.List[object]
     $installLocation = Get-RooIndustriesUninstallPropertyValue $app 'installLocation' $null
@@ -202,6 +240,7 @@ try {
             Add-UniqueLeftoverItem $items (New-PathCandidate $rules ([string]$path) @('knownAppDataPath', 'packageId', 'publisher') 'Known app data path for selected app.' ([string]$path))
         }
         foreach ($key in @(Get-RooIndustriesUninstallPropertyArray $rule 'vendorRegistryKeys')) {
+            if (-not $microsoftProduct -and (Test-MicrosoftOwnedRegistryPath ([string]$key))) { continue }
             $protectedRegistry = $false
             foreach ($pattern in @(Get-RooIndustriesUninstallPropertyArray $rules 'protectedRegistryPatterns')) {
                 if ([string]$key -match [string]$pattern) { $protectedRegistry = $true }
@@ -221,7 +260,7 @@ try {
     }
 
     $productGuid = Get-ProductGuid $app
-    if (-not [string]::IsNullOrWhiteSpace($productGuid)) {
+    if ($microsoftProduct -and -not [string]::IsNullOrWhiteSpace($productGuid)) {
         Add-UniqueLeftoverItem $items (New-RooIndustriesLeftoverItem `
             -ItemId ("registry:uninstall-" + (ConvertTo-RooIndustriesStableId $productGuid)) `
             -Type 'registryKey' `
@@ -235,9 +274,9 @@ try {
             -Metadata ([pscustomobject]@{ productGuid = $productGuid; previewOnly = $true }))
     }
 
-    Add-ServiceCandidates $items $app $knownRules
-    Add-TaskCandidates $items $knownRules
-    Add-StartupCandidates $items $knownRules
+    Add-ServiceCandidates $items $app $knownRules $microsoftProduct
+    Add-TaskCandidates $items $knownRules $microsoftProduct
+    Add-StartupCandidates $items $knownRules $microsoftProduct
 
     $itemArray = @($items.ToArray())
     $summary = [pscustomobject]@{
