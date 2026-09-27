@@ -29,6 +29,10 @@ function Core([string]$CoreAction,[object]$Fields){
 }
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    $rootSecurity=[Security.AccessControl.DirectorySecurity]::new()
+    $rootSecurity.SetAccessRuleProtection($true,$false)
+    foreach($sid in 'S-1-5-18','S-1-5-32-544',[Security.Principal.WindowsIdentity]::GetCurrent().User.Value){$rootSecurity.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+    ([IO.DirectoryInfo]::new($root)).SetAccessControl($rootSecurity)
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
     $remover=Join-Path $root 'RooIndustriesHostRemover.exe'
