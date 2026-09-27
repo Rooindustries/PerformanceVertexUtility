@@ -40,14 +40,16 @@ public static class TimerStartupControl
         static string Verify(string file) => "if((Get-FileHash -LiteralPath " + Literal(file) + " -Algorithm SHA256).Hash -cne " + Literal(OperationFiles.HashFile(file)) + "){throw 'The timer helper changed; review its startup registration again.'}\n";
         return "$ErrorActionPreference='Stop'\n" + Verify(assembly) + (bundled ? Verify(launcher) : "") + "& " + Literal(launcher) + (bundled ? "" : " " + Literal(assembly)) + " '--timer-autostart' " + Literal(root) + "\nexit $LASTEXITCODE\n";
     }
-    private static object? Find(dynamic scheduler, string name)
+    private static object? Find(object scheduler, string name)
     {
-        try { return scheduler.GetFolder(@"\").GetTask(name); }
+        dynamic service = scheduler;
+        try { return service.GetFolder(@"\").GetTask(name); }
         catch (FileNotFoundException) { return null; }
         catch (COMException error) when (error.HResult == unchecked((int)0x80070002)) { return null; }
     }
-    private static string Fingerprint(dynamic task)
+    private static string Fingerprint(object registered)
     {
+        dynamic task = registered;
         var xml = XDocument.Parse((string)task.Xml); var ns = xml.Root!.Name.Namespace;
         xml.Root.Element(ns + "Settings")?.Element(ns + "Enabled")?.Remove();
         return OperationFiles.Hash(Encoding.UTF8.GetBytes(xml.ToString(SaveOptions.DisableFormatting) + "\n" + (string)task.GetSecurityDescriptor(7)));
@@ -55,14 +57,14 @@ public static class TimerStartupControl
     public static TweakControlRead Read(ControlAddress address)
     {
         var target = Target(address); var receipt = Receipt(target.Root, target.Name);
-        dynamic scheduler = Connect(); object? found = null;
+        var scheduler = Connect(); object? found = null;
         try
         {
             found = Find(scheduler, target.Name); dynamic task = found!;
             if (found is not null)
             {
                 if (receipt is not { Phase: "created" }) throw new InvalidDataException("The timer startup task exists without confirmed ownership and was left intact.");
-                if (Fingerprint(task) != receipt.DefinitionHash || !File.Exists(Path.Combine(target.Root, "startup.ps1")) || OperationFiles.HashFile(Path.Combine(target.Root, "startup.ps1")) != receipt.ScriptHash)
+                if (Fingerprint(found) != receipt.DefinitionHash || !File.Exists(Path.Combine(target.Root, "startup.ps1")) || OperationFiles.HashFile(Path.Combine(target.Root, "startup.ps1")) != receipt.ScriptHash)
                     throw new InvalidDataException("The timer startup task or its script changed and was left intact.");
             }
             return new(address, "timer-startup:" + target.Name, OperationOwner.Current().UserSid, ControlValues.From(found is not null && (bool)task.Enabled),
@@ -75,7 +77,7 @@ public static class TimerStartupControl
         var target = Target(before.Address); Directory.CreateDirectory(target.Root);
         using var guard = OperationFiles.Lock(Path.Combine(target.Root, "startup"));
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer startup state changed after review.");
-        dynamic scheduler = Connect(); object? found = null;
+        var scheduler = Connect(); dynamic service = scheduler; object? found = null;
         try
         {
             found = Find(scheduler, target.Name);
@@ -83,7 +85,7 @@ public static class TimerStartupControl
             {
                 var existingReceipt = Receipt(target.Root, target.Name); var existingScript = Path.Combine(target.Root, "startup.ps1");
                 if (File.Exists(existingScript) && (existingReceipt is null || OperationFiles.HashFile(existingScript) != existingReceipt.ScriptHash)) throw new InvalidDataException("The startup script has outside changes and was retained.");
-                if (found is not null) scheduler.GetFolder(@"\").DeleteTask(target.Name, 0);
+                if (found is not null) service.GetFolder(@"\").DeleteTask(target.Name, 0);
                 var retained = Find(scheduler, target.Name);
                 if (retained is not null) { Marshal.FinalReleaseComObject(retained); throw new IOException("The owned startup task remains after removal."); }
                 File.Delete(ReceiptPath(target.Root)); File.Delete(existingScript); return;
@@ -100,7 +102,7 @@ public static class TimerStartupControl
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
             OperationFiles.Write(ReceiptPath(target.Root), receipt);
             File.WriteAllText(scriptPath, script, new UTF8Encoding(false));
-            dynamic definition = scheduler.NewTask(0);
+            dynamic definition = service.NewTask(0);
             try
             {
                 definition.RegistrationInfo.Description = "Roo Industries timer request at Windows sign-in";
@@ -111,7 +113,7 @@ public static class TimerStartupControl
                 dynamic action = definition.Actions.Create(0);
                 action.Path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
                 action.Arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + scriptPath + "\"";
-                dynamic created = scheduler.GetFolder(@"\").RegisterTaskDefinition(target.Name, definition, 2, receipt.Owner.UserSid, null, 3, null);
+                object created = service.GetFolder(@"\").RegisterTaskDefinition(target.Name, definition, 2, receipt.Owner.UserSid, null, 3, null);
                 try { OperationFiles.Write(ReceiptPath(target.Root), receipt with { Phase = "created", DefinitionHash = Fingerprint(created) }); }
                 finally { Marshal.FinalReleaseComObject(created); }
             }
