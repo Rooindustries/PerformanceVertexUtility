@@ -160,18 +160,18 @@ function Test-RooIndustriesBulkInvocationLive {
         if($state -eq 1){return $true}
         if($state -eq 0){continue}
         if($null -eq $currentBoot){$currentBoot=Get-RooIndustriesBootId}
+        $created=[long]0
+        if(-not([long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created)) -or $created -le 0){return $true}
+        if($null -eq $boot){
+            try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()}
+            catch {return $true}
+        }
+        $createdUtc=[datetime]::FromFileTimeUtc($created)
         if($recordedBoot -and $currentBoot){
-            if($recordedBoot -cne $currentBoot){continue}
+            if($recordedBoot -cne $currentBoot -and $boot -gt $createdUtc){continue}
             return $true
         }
-        $created=[long]0
-        if([long]::TryParse([string]$member.creationTimeFileTimeUtc,[ref]$created) -and $created -gt 0) {
-            if($null -eq $boot){
-                try {$boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().AddMinutes(-30)}
-                catch {$boot=[datetime]::MinValue}
-            }
-            if([datetime]::FromFileTimeUtc($created) -lt $boot){continue}
-        }
+        if($createdUtc -lt $boot.AddMinutes(-30)){continue}
         return $true
     }
     return $false
@@ -282,9 +282,9 @@ function Test-RooIndustriesBulkRestartAfterInvocation {
     }
     $recordedBoot=[string](Get-RooIndustriesUninstallPropertyValue $Invocation 'bootId' '')
     $currentBoot=Get-RooIndustriesBootId
-    if($recordedBoot -and $currentBoot){return $recordedBoot -cne $currentBoot}
     $created=[datetime]::FromFileTimeUtc($createdFileTime)
     $boot=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    if($recordedBoot -and $currentBoot){return $recordedBoot -cne $currentBoot -and $boot -gt $created}
     return $boot -gt $created
 }
 
