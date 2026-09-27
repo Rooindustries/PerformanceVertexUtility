@@ -294,7 +294,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         try
         {
             var dismissed = await App.Operations.DismissRemovalAsync(_review.JournalPath);
-            var interrupted = dismissed.Data?.Entries.Any(entry => entry.State == "dispatching") == true;
+            var interrupted = dismissed.Data?.Entries.Any(entry => !entry.RegistrationAbsent && (entry.State == "dispatching" || entry.LaunchUnconfirmed)) == true;
             _review = null; _phase = "selection"; _journalObserved = false; _cancelRequested = false; _selected.Clear(); ReviewRows.Clear();
             DependenciesReviewed = false; RequiresDependencyReview = false; HasProtectedSelection = false;
             SelectionSummary = "Select applications to remove."; ApplyLabel = "Remove selected apps";

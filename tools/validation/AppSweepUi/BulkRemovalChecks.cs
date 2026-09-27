@@ -71,6 +71,14 @@ static class BulkRemovalChecks
         await model.StartOverCommand.ExecuteAsync(null);
         check(model.CanSelect && model.Detail.Contains("can't tell whether it ran", StringComparison.Ordinal), "Starting over a list interrupted while a remover was starting warns that the launch could not be verified");
 
+        var rechecked = Journal("needs-reconciliation", ("registry:editor", "needs-reconciliation", false), ("registry:player", "pending", false));
+        rechecked.Entries[0].LaunchUnconfirmed = true;
+        App.Operations.LastRemoval = Session(rechecked); App.Operations.RemovalHistory = [(rechecked.Status + "-journal.json", rechecked)];
+        App.Operations.DismissRemoval = _ => { App.Operations.LastRemoval = null; return Task.FromResult(new OptimizerResult<BulkRemovalJournal> { Status = "dismissed", Data = rechecked }); };
+        model = await Start();
+        await model.StartOverCommand.ExecuteAsync(null);
+        check(model.CanSelect && model.Detail.Contains("can't tell whether it ran", StringComparison.Ordinal), "The unconfirmed-launch warning survives Check state before Start over");
+
         foreach (var status in new[] { "running", "canceled", "ready", "reboot-required" })
         {
             App.Operations.LastRemoval = Session(Journal(status, ("registry:editor", status == "running" ? "running" : "pending", false)));

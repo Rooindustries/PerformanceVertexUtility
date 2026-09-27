@@ -87,6 +87,7 @@ try {
             if($state.state -in @('removed','already-absent') -and $state.registrationAbsent){continue}
             if($Action -eq 'Reconcile') {
                 if($state.attemptCount -eq 0){continue}
+                if($null -eq $state.invocation){$state|Add-Member -NotePropertyName launchUnconfirmed -NotePropertyValue $true -Force}
                 if($null -ne $state.outcome -and $state.outcome.rebootRequired -and $state.state -in @('reboot-required','restart-initiated')) {
                     if(-not(Test-RooIndustriesBulkRestartAfterInvocation $state.invocation)){continue}
                 }
