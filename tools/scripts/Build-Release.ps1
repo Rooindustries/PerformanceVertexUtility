@@ -101,6 +101,9 @@ Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimi
 Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x64', '-p:WindowsAppSDKSelfContained=true', '-p:WindowsPackageType=None', ('-p:SelfContainedIntermediateOutputPath=' + (Join-Path $work 'wasdk') + '/'),
     ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest'))) + $common) 'App publish'
 
+$productAssemblies = @((Join-Path $hostOut 'Optimizer.Core.dll'), (Join-Path $hostOut 'Optimizer.Host.dll'), (Join-Path $sessionOut 'RooIndustries.SessionHost.dll'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.dll'))
+Invoke-Checked $dotnet (@('run', '--project', (Join-Path $repoRoot 'tools\validation\DynamicBinding\DynamicBinding.csproj'), '-c', 'Release', '--') + $productAssemblies) 'Dynamic binding check'
+
 Invoke-Obfuscar $obfuscar $hostOut @('Optimizer.Core.dll', 'Optimizer.Host.dll') $maps
 Invoke-Obfuscar $obfuscar $sessionOut @('Optimizer.Core.dll', 'RooIndustries.SessionHost.dll') $maps
 Invoke-Obfuscar $obfuscar $appOut @('Optimizer.Core.dll', 'RooIndustries.OptimizationSuite.App.dll') $maps
