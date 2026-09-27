@@ -79,7 +79,7 @@ public sealed record ControlPlan([property: JsonRequired] TweakControlRead[] Exp
             Took(current, reviewed.TryGetProperty(property.Name, out var before) ? before : default, property.Value, baseline.TryGetProperty(property.Name, out var original) ? original : default));
     }
 }
-public sealed record ControlJournal([property: JsonRequired] TweakPlan Plan, [property: JsonRequired] string ReviewHash, [property: JsonRequired] int Attempted, string Phase = "applying");
+public sealed record ControlJournal([property: JsonRequired] TweakPlan Plan, [property: JsonRequired] string ReviewHash, [property: JsonRequired] int Attempted, string Phase = "applying", string? Boot = null);
 
 public static class ControlValues
 {
@@ -156,9 +156,21 @@ public static class ControlPlanning
                 if (planned is null && (added || released.Any(item => item.Held.Original.Id == dependency.Id))) guard = dependency.Id;
             }
         }
+        var launch = new ControlAddress("boot-configuration", "current", "hypervisorlaunchtype").Key;
+        var launchChanges = changes.Any(change => change.Before.Address.Key == launch);
+        if (changes.Any(change => change.Before.Address.Kind == "windows-features" && WindowsFeatures.Changed(change).Any(WindowsFeatures.IsHypervisor)) &&
+            (launchChanges || next.Any(item => item.Original.Address.Key == launch)))
+            throw new InvalidDataException("Windows resets Hypervisor at startup when it finishes Hyper-V feature changes at restart. Leave Hypervisor at startup unchanged and unowned while changing Hyper-V features, restart Windows, then set Hypervisor at startup again.");
+        if (launchChanges)
+        {
+            TweakControlRead? features;
+            try { features = read(new("windows-features", "system", "features")); }
+            catch (FileNotFoundException) { features = null; }
+            if (features?.RestartPending == true) throw new InvalidDataException("Restart Windows before changing Hypervisor at startup. Pending Windows feature changes can reset it when they finish.");
+        }
         return new(expected.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray(), changes.OrderBy(ChangeOrder).ThenBy(change => change.Before.Id, StringComparer.Ordinal).ToArray(), next.ToArray(), left.Count > 0 ? left.Distinct().Order(StringComparer.Ordinal).ToArray() : null, released.Count > 0 ? released.OrderBy(item => item.Held.Original.Id, StringComparer.Ordinal).ToArray() : null, guard);
     }
-    private static int ChangeOrder(ControlMutation change) => change.Before.Address.Kind == "timer" && change.After.ValueKind == JsonValueKind.False ? 0 : change.Before.Address.Kind == "memory" ? 25 : change.Before.Address.Property switch
+    private static int ChangeOrder(ControlMutation change) => change.Before.Address.Kind == "windows-features" ? 40 : change.Before.Address.Kind == "timer" && change.After.ValueKind == JsonValueKind.False ? 0 : change.Before.Address.Kind == "memory" ? 25 : change.Before.Address.Property switch
     {
         "running" => change.After.ValueKind == JsonValueKind.True ? 30 : 0,
         "delayed-start" => change.After.ValueKind == JsonValueKind.True ? 20 : 0,
@@ -216,7 +228,7 @@ public static class ControlExecution
             {
                 if (store is WindowsControlStore && change.Before.Address.Kind == "hosts") { HostsControl.Rollback(change); continue; }
                 var current = store.Read(change.Before.Address);
-                if (current.RestartPending) throw new InvalidDataException("Restart Windows before recovering pending feature changes.");
+                if (current.RestartPending) throw new InvalidDataException(WindowsFeatures.PendingRecovery(change, current));
                 if (current.Same(change.Before) && !current.LostLease) continue;
                 if (change.Fields is { Length: > 0 })
                 {
