@@ -59,8 +59,10 @@ function Get-OfficialCommandPreview {
         }
     }
 
-    $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand
-    $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand
+    $parsed = Resolve-RooIndustriesUninstallCommandLine $rawCommand
+    if ($null -eq $parsed) { $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand }
+    $parsedQuiet = Resolve-RooIndustriesUninstallCommandLine $quietCommand
+    if ($null -eq $parsedQuiet) { $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand }
     $blocked = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'blockByDefault' $false)
     $protected = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'protected' $false)
     $warnings = New-Object System.Collections.Generic.List[object]

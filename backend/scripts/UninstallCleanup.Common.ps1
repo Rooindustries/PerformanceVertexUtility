@@ -515,6 +515,35 @@ function Split-RooIndustriesUninstallCommandLine {
     }
 }
 
+function Resolve-RooIndustriesUninstallCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $null }
+    $trimmed = $CommandLine.Trim()
+    if ($trimmed.StartsWith('"')) {
+        $parsed = Split-RooIndustriesUninstallCommandLine $trimmed
+        $candidates = @([pscustomobject]@{ path = [string]$parsed.executable; arguments = [string]$parsed.arguments })
+    } else {
+        $candidates = @()
+        $index = 0
+        while ($index -le $trimmed.Length) {
+            $space = $trimmed.IndexOf(' ', $index)
+            if ($space -lt 0) { $space = $trimmed.Length }
+            $candidates += [pscustomobject]@{ path = $trimmed.Substring(0, $space); arguments = $trimmed.Substring($space).Trim() }
+            $index = $space + 1
+        }
+    }
+    foreach ($candidate in $candidates) {
+        $path = [Environment]::ExpandEnvironmentVariables($candidate.path)
+        try {
+            if ([IO.Path]::GetExtension($path) -eq '') { $path += '.exe' }
+            if ([IO.Path]::IsPathRooted($path) -and [IO.File]::Exists($path)) {
+                return [pscustomobject]@{ executable = [IO.Path]::GetFullPath($path); arguments = if ([string]::IsNullOrWhiteSpace($candidate.arguments)) { $null } else { $candidate.arguments } }
+            }
+        } catch [ArgumentException] { }
+    }
+    return $null
+}
+
 function Resolve-RooIndustriesEnvironmentPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
