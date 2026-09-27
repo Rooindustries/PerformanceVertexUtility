@@ -259,6 +259,8 @@ namespace RooIndustries.Optimization.ProcessOutput
             }
         }
 
+        public static Action AfterCreateForTests;
+
         private Launch() { }
 
         public static Launch Suspended(string fileName, string arguments, string workingDirectory)
@@ -266,6 +268,8 @@ namespace RooIndustries.Optimization.ProcessOutput
             Launch launch = new Launch();
             launch.FileName = fileName;
             IntPtr outRead = IntPtr.Zero, outWrite = IntPtr.Zero, errorRead = IntPtr.Zero, errorWrite = IntPtr.Zero;
+            IntPtr attributes = IntPtr.Zero, jobList = IntPtr.Zero;
+            bool attributesReady = false;
             try
             {
                 launch.job = CreateJobObjectW(IntPtr.Zero, null);
@@ -278,25 +282,30 @@ namespace RooIndustries.Optimization.ProcessOutput
                 inherit.InheritHandle = 1;
                 if (!CreatePipe(out outRead, out outWrite, ref inherit, 0) || !CreatePipe(out errorRead, out errorWrite, ref inherit, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover output pipes could not be created.");
                 if (!SetHandleInformation(outRead, 1, 0) || !SetHandleInformation(errorRead, 1, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover output pipes could not be prepared.");
-                StartupInfo startup = new StartupInfo();
-                startup.Size = Marshal.SizeOf(typeof(StartupInfo));
-                startup.Flags = 0x100;
-                startup.StdInput = GetStdHandle(-10);
-                startup.StdOutput = outWrite;
-                startup.StdError = errorWrite;
+                IntPtr attributeSize = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attributeSize);
+                attributes = Marshal.AllocHGlobal(attributeSize);
+                if (!InitializeProcThreadAttributeList(attributes, 1, 0, ref attributeSize)) throw new Win32Exception(Marshal.GetLastWin32Error(), "The remover start attributes could not be prepared, so it was not started.");
+                attributesReady = true;
+                jobList = Marshal.AllocHGlobal(IntPtr.Size);
+                Marshal.WriteIntPtr(jobList, launch.job);
+                if (!UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x2000D), jobList, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not start the remover inside its tracking job, so it was not started.");
+                StartupInfoEx startup = new StartupInfoEx();
+                startup.StartupInfo.Size = Marshal.SizeOf(typeof(StartupInfoEx));
+                startup.StartupInfo.Flags = 0x100;
+                startup.StartupInfo.StdInput = GetStdHandle(-10);
+                startup.StartupInfo.StdOutput = outWrite;
+                startup.StartupInfo.StdError = errorWrite;
+                startup.AttributeList = attributes;
                 System.Text.StringBuilder commandLine = new System.Text.StringBuilder("\"" + fileName + "\"" + (string.IsNullOrEmpty(arguments) ? "" : " " + arguments));
                 ProcessInformation info;
-                if (!CreateProcessW(fileName, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0x4 | 0x08000000, IntPtr.Zero, string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory, ref startup, out info))
+                if (!CreateProcessW(fileName, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0x4 | 0x08000000 | 0x80000, IntPtr.Zero, string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory, ref startup, out info))
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 launch.process = info.Process;
                 launch.thread = info.Thread;
                 launch.Id = info.ProcessId;
-                if (!AssignProcessToJobObject(launch.job, launch.process))
-                {
-                    int error = Marshal.GetLastWin32Error();
-                    TerminateProcess(launch.process, 1);
-                    throw new Win32Exception(error, "The remover could not be placed in its tracking job, so it was not started.");
-                }
+                if (AfterCreateForTests != null) AfterCreateForTests();
                 long created, exit, kernel, user;
                 if (!GetProcessTimes(launch.process, out created, out exit, out kernel, out user))
                 {
@@ -316,6 +325,12 @@ namespace RooIndustries.Optimization.ProcessOutput
                 foreach (IntPtr handle in new[] { outRead, outWrite, errorRead, errorWrite }) if (handle != IntPtr.Zero) CloseHandle(handle);
                 launch.Dispose();
                 throw;
+            }
+            finally
+            {
+                if (attributesReady) DeleteProcThreadAttributeList(attributes);
+                if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes);
+                if (jobList != IntPtr.Zero) Marshal.FreeHGlobal(jobList);
             }
         }
 
@@ -369,6 +384,13 @@ namespace RooIndustries.Optimization.ProcessOutput
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        private struct StartupInfoEx
+        {
+            public StartupInfo StartupInfo;
+            public IntPtr AttributeList;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         private struct ProcessInformation
         {
             public IntPtr Process, Thread;
@@ -377,11 +399,13 @@ namespace RooIndustries.Optimization.ProcessOutput
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits value, uint size);
-        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CreatePipe(out IntPtr read, out IntPtr write, ref SecurityAttributes attributes, uint size);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr GetStdHandle(int kind);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool CreateProcessW(string application, System.Text.StringBuilder commandLine, IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, uint flags, IntPtr environment, string directory, ref StartupInfo startup, out ProcessInformation information);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool CreateProcessW(string application, System.Text.StringBuilder commandLine, IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation information);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returned);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern void DeleteProcThreadAttributeList(IntPtr list);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern uint ResumeThread(IntPtr thread);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool TerminateProcess(IntPtr process, uint code);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetExitCodeProcess(IntPtr process, out uint code);
