@@ -45,6 +45,19 @@ function New-HandoffCase([string]$Name, [string]$Mode, [string[]]$Extra = @()) {
     Set-Remover $case $handoffExe (@($case.remover, $Mode) + $Extra)
     return $case
 }
+function Invoke-ChildApply([hashtable]$Arguments, [string]$Prelude, [string]$Root) {
+    $argsPath = Join-Path $Root ('child arguments ' + [guid]::NewGuid().ToString('N') + '.json')
+    $Arguments | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $argsPath -Encoding UTF8
+    $script = Join-Path $Root ('child apply ' + [guid]::NewGuid().ToString('N') + '.ps1')
+    $log = $script + '.log'
+    Set-Content -LiteralPath $script -Encoding UTF8 -Value ("param([string]`$ApplyScript,[string]`$ArgumentsPath,[string]`$OutputPath)`n`$ErrorActionPreference='Stop'`n" + $Prelude + "`n`$values=@{}; (Get-Content -LiteralPath `$ArgumentsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { `$values[`$_.Name]=`$_.Value }`n`$values.ExactTargetAllowlist=[string[]]@(`$values.ExactTargetAllowlist)`n& `$ApplyScript @values *> `$OutputPath`n")
+    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'), ('-NoProfile -ExecutionPolicy Bypass -File "' + $script + '" -ApplyScript "' + $applyScript + '" -ArgumentsPath "' + $argsPath + '" -OutputPath "' + $log + '"'))
+    $start.UseShellExecute = $false; $start.CreateNoWindow = $true
+    $child = [Diagnostics.Process]::Start($start)
+    if (-not $child.WaitForExit(90000)) { $child.Kill(); throw 'The child apply run did not return.' }
+    if (Test-Path -LiteralPath $log) { return @(Get-Content -LiteralPath $log) }
+    return @()
+}
 function Refresh-Hashes($Case) {
     Write-Input $Case.official $Case.args.OfficialPreviewPath; Write-Input $Case.manifest $Case.args.CleanupManifestPath
     $Case.args.OfficialPreviewSha256=(Get-FileHash $Case.args.OfficialPreviewPath -Algorithm SHA256).Hash
@@ -130,6 +143,13 @@ public class RooIndustriesHandoffFixture {
         if(args[1]=="child"){Thread.Sleep(3000);File.WriteAllText(args[0]+".done","finished");return 0;}
         if(args[1]=="child-hang"){Thread.Sleep(120000);return 0;}
         if(args[1]=="noop")return 0;
+        if(args[1]=="self-delete"){
+            File.AppendAllText(args[0]+".launches","launched"+Environment.NewLine);
+            ProcessStartInfo remove=new ProcessStartInfo("cmd.exe","/c ping -n 3 127.0.0.1 >nul & del /f /q \""+System.Reflection.Assembly.GetEntryAssembly().Location+"\"");
+            remove.UseShellExecute=false;remove.CreateNoWindow=true;
+            Process.Start(remove).Dispose();
+            return 0;
+        }
         if(args[1]=="spawner"){
             long until=Int64.Parse(args[2]);
             string self=System.Reflection.Assembly.GetEntryAssembly().Location;
@@ -244,6 +264,57 @@ $values.ExactTargetAllowlist=[string[]]@($values.ExactTargetAllowlist)
     $case=New-HandoffCase 'unconfirmed-after-remover-exits' 'handoff'; $a=$case.args
     $clearedPending=Read-Result (& $applyScript @a)
     Assert ($clearedPending.status -eq 'cleanup-review-required' -and (Test-Path -LiteralPath ($case.remover+'.done')) -and -not (Test-Path -LiteralPath $claimPath)) 'An unconfirmed claim is cleared once no process of its remover file is running'
+    $case=New-Case 'self-deleting-remover'; $a=$case.args
+    $ownExe=Join-Path $case.root 'Roo Industries Self Deleting Remover.exe'; Copy-Item -LiteralPath $handoffExe -Destination $ownExe
+    $case.remover=Join-Path $case.root 'remover state'
+    Set-Remover $case $ownExe @($case.remover, 'self-delete')
+    $firstRun=Read-Result (& $applyScript @a)
+    $replayRun=Read-Result (& $applyScript @a)
+    Assert ($firstRun.status -eq 'cleanup-review-required' -and -not (Test-Path -LiteralPath $ownExe) -and $replayRun.status -eq 'cleanup-review-required' -and $replayRun.executionReused -and @(Get-Content -LiteralPath ($case.remover+'.launches')).Count -eq 1) "Replaying a finished run whose remover deleted itself returns the recorded result ($($firstRun.status), $($replayRun.status))"
+    $case=New-Case 'linked-remover'; $a=$case.args
+    $realDir=Join-Path $case.root 'real remover'; $linkDir=Join-Path $case.root 'linked remover'
+    New-Item -ItemType Directory -Path $realDir | Out-Null
+    Copy-Item -LiteralPath $handoffExe -Destination (Join-Path $realDir 'remover.exe')
+    cmd.exe /c mklink /J "$linkDir" "$realDir" | Out-Null
+    $case.remover=Join-Path $case.root 'remover state'
+    Set-Remover $case (Join-Path $linkDir 'remover.exe') @($case.remover, 'handoff')
+    foreach ($name in @('FixtureRoot','AllowFixtureClaims','ConfirmApply','UserApproved','AllowRealSystemExecution')) { $a.Remove($name) }
+    $a.ExecutorMode='Preview'
+    $linked=Read-Result (& $applyScript @a)
+    Assert ((Test-Path -LiteralPath $linkDir) -and $linked.status -eq 'preview' -and @($linked.gates | Where-Object { $_.gateId -eq 'reviewed-executable-unchanged' -and $_.blocking }).Count -eq 1 -and -not (Test-Path -LiteralPath ($case.remover+'.launches'))) 'A remover reached through a junction fails its review gate'
+    cmd.exe /c rmdir "$linkDir" | Out-Null
+    $case=New-Case 'swapped-inside-lease'; $a=$case.args
+    $ownExe=Join-Path $case.root 'Roo Industries Swapped Remover.exe'; Copy-Item -LiteralPath $handoffExe -Destination $ownExe
+    $case.remover=Join-Path $case.root 'remover state'
+    Set-Remover $case $ownExe @($case.remover, 'handoff')
+    $swapPrelude=@'
+Import-Module Microsoft.PowerShell.Utility
+function global:Get-FileHash {
+    [CmdletBinding()] param([string]$LiteralPath, [string]$Algorithm)
+    $value = Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
+    if ($LiteralPath -like '*Roo Industries Swapped Remover.exe') { [IO.File]::AppendAllText($LiteralPath, 'swapped after the gate') }
+    return $value
+}
+'@
+    $swappedOutput=Invoke-ChildApply $a $swapPrelude $case.root
+    if (-not ((($swappedOutput -join ' ') -like '*changed after review*'))) { Write-Host ('swap output: launched=' + (Test-Path -LiteralPath ($case.remover+'.launches')) + ' claim=' + (Test-Path -LiteralPath $claimPath) + ' ' + (($swappedOutput -join ' ') -replace '\s+',' ')) }
+    Assert (-not (Test-Path -LiteralPath ($case.remover+'.launches')) -and -not (Test-Path -LiteralPath $claimPath) -and (($swappedOutput -join ' ') -like '*changed after review*')) 'A remover swapped after the review gate but before launch is caught by the locked re-hash'
+    $case=New-HandoffCase 'capture-dispose-throws' 'hang'; $a=$case.args; $a.TimeoutSeconds=3
+    $capturePrelude=@'
+Add-Type -TypeDefinition 'namespace RooIndustries.Optimization.ProcessOutput { public sealed class Capture : System.IDisposable { public Capture(System.Diagnostics.Process process, int limit) {} public bool Complete(int timeout) { return true; } public string Stdout { get { return ""; } } public string Stderr { get { return ""; } } public bool Truncated { get { return false; } } public void Dispose() { throw new System.InvalidOperationException("Simulated failure while closing output."); } } }'
+'@
+    $captureOutput=Invoke-ChildApply $a $capturePrelude $case.root
+    $keptClaim=if (Test-Path -LiteralPath $claimPath) { (Read-RooIndustriesOperationJson $claimPath).data } else { $null }
+    Assert ($null -ne $keptClaim -and [int]$keptClaim.invocation.processId -gt 0 -and (($captureOutput -join ' ') -like '*Simulated failure while closing output*')) 'A failure after the remover started keeps its claim'
+    $capturedProcess=[Diagnostics.Process]::GetProcessById([int]$keptClaim.invocation.processId)
+    $capturedProcess.Kill(); Assert ($capturedProcess.WaitForExit(10000)) 'Disposable remover from the output-failure run is stopped and its exit verified'
+    Remove-Item -LiteralPath $claimPath -Force
+    $case=New-Case 'real-remover-with-fixture-claims'; $a=$case.args
+    $case.remover=Join-Path $case.root 'remover state'
+    $whoami=Join-Path ([Environment]::SystemDirectory) 'whoami.exe'
+    Set-Remover $case $whoami @()
+    $realRemover=Read-Result (& $applyScript @a)
+    Assert ($realRemover.status -eq 'failed' -and @($realRemover.executionSequence).Count -eq 0 -and -not (Test-Path $a.RollbackManifestPath)) 'Fixture claims are refused for a remover outside the fixture root'
     $claimDir=Join-Path $tempRoot 'claim checks'; New-Item -ItemType Directory -Path $claimDir | Out-Null
     $namedExe=Join-Path $claimDir 'Vendor Uninstaller With Long Name.exe'; Copy-Item -LiteralPath $handoffExe -Destination $namedExe
     $shortExe=(New-Object -ComObject Scripting.FileSystemObject).GetFile($namedExe).ShortPath
