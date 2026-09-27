@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.Optimizer;
 using Microsoft.Windows.Storage.Pickers;
@@ -67,19 +68,19 @@ public sealed partial class FirmwarePage : Page
         try { Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); }
         catch (Exception ex) { ViewModel.Message = ex.Message; }
     }
+    private bool _restarting;
     private async void Restart(object sender, RoutedEventArgs e)
     {
-        if (!ViewModel.CanRestart) return;
+        if (_restarting || !ViewModel.CanRestart) return;
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Restart this PC now?", Content = "Save your work first. Windows will restart immediately. Reopen this BIOS session afterward to verify the settings.", PrimaryButtonText = "Restart now", CloseButtonText = "Later", DefaultButton = ContentDialogButton.Close };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         try
         {
             await ViewModel.VerifyAsync();
-            if (!ViewModel.CanRestart) return;
-            var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "shutdown.exe")) { UseShellExecute = false, CreateNoWindow = true };
-            start.ArgumentList.Add("/r"); start.ArgumentList.Add("/t"); start.ArgumentList.Add("0");
-            Process.Start(start);
+            if (_restarting || !ViewModel.CanRestart) return;
+            _restarting = true;
+            await Task.Run(() => SystemRestart.Restart((command, error) => AppLog.Write("firmware-restart", Path.GetFileName(command.FileName) + " boot target skipped: " + error.Message)));
         }
-        catch (Exception ex) { ViewModel.Message = ex.Message; }
+        catch (Exception ex) { _restarting = false; ViewModel.Message = ex.Message; }
     }
 }
