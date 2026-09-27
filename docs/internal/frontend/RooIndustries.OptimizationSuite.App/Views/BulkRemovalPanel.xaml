@@ -110,6 +110,7 @@
                 <Button Content="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}" Click="Apply_Click" IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" AutomationProperties.AutomationId="RemovalApply" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" />
                 <Button Content="Stop queue" Command="{x:Bind ViewModel.CancelCommand}" Visibility="{x:Bind ViewModel.CanCancel, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalCancel" />
                 <Button Content="Check state" Command="{x:Bind ViewModel.ReconcileCommand}" Visibility="{x:Bind ViewModel.CanReconcile, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalReconcile" />
+                <Button Content="Start over" Click="StartOver_Click" Visibility="{x:Bind ViewModel.CanStartOver, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalStartOver" />
             </views:AdaptivePanel>
         </StackPanel>
     </Grid>
