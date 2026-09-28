@@ -47,6 +47,10 @@ no "Run anyway" button. The beta can't run while it's on.
   points button that does it for you.
 - Close your games before you apply tweaks.
 - Some tweaks need a restart. The app tells you when.
+- If this PC has more than one operating system, check your boot order after
+  you change BIOS settings. Some boards move another system to the front when
+  BIOS settings are saved. The app's "Restart now" button always starts this
+  Windows, but later restarts follow the BIOS boot order.
 
 
 5. The FPS preset
