@@ -415,6 +415,13 @@ if (args is [] or ["history"])
     await history.InitializeAsync();
     Check(history.HistoryRows.Count == 1 && history.HistoryRows.Single().Action == "Restrained",
         "Dry-run filtering is independent for game and governor session history");
+
+    App.Live.GameStatusModel = new GameTuneSessionStatus { Status = "notFound", Restorable = false };
+    App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus { Status = "notFound", Restorable = false };
+    history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(history.RestoreRows.Take(2).Select(row => row.Value).SequenceEqual(new[] { "No session backup recorded", "No restraint backup recorded" }),
+        "A PC that never ran a session shows no backup instead of unavailable recovery status");
 }
 
 if (args is [] or ["responses"] or ["cleanup"] or ["race"])
