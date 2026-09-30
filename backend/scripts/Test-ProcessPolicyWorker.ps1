@@ -21,14 +21,14 @@ function Assert([bool]$Condition,[string]$Message){
     Write-Output ('PASS '+$Message)
 }
 function Note([string]$Name,$Value){$evidence.measurements[$Name]=$Value;Write-Output ('MEASURE '+$Name+' = '+($Value|ConvertTo-Json -Compress -Depth 6))}
-function Worker([string]$WorkerAction,[string]$Root=$policyRoot){
-    $text=@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action $WorkerAction -PolicyRoot $Root -DotNetPath $DotNetPath -HostDirectory $hostDirectory -ConfirmApply) -join "`n"
+function Worker([string]$WorkerAction,[string]$Folder=$policyRoot){
+    $text=@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action $WorkerAction -PolicyRoot $Folder -DotNetPath $DotNetPath -HostDirectory $hostDirectory -ConfirmApply) -join "`n"
     $result=$text|ConvertFrom-Json
     if($result.status -ne 'completed'){throw ('Governor '+$WorkerAction+' failed: '+(@($result.errors|ForEach-Object {$_.message}) -join '; '))}
     return $result.data
 }
-function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Root=$policyRoot){
-    $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$Root;confirm=$true}
+function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Folder=$policyRoot){
+    $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$Folder;confirm=$true}
     foreach($key in $Values.Keys){$request[$key]=$Values[$key]}
     $path=Join-Path $root ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
     Write-RooIndustriesOperationJson $request $path
