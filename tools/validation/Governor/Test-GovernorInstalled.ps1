@@ -47,7 +47,7 @@ function Read-Controls([Diagnostics.Process]$Process){
         executionQoS=[RooIndustriesInstalledOracle]::Qos($Process.Handle);priorityBoostDisabled=[RooIndustriesInstalledOracle]::BoostDisabled($Process.Handle)}
 }
 function Same($Left,$Right){return (($Left|ConvertTo-Json -Compress) -eq ($Right|ConvertTo-Json -Compress))}
-function Wait-Until([scriptblock]$Condition,[double]$Seconds){$clock=[Diagnostics.Stopwatch]::StartNew();while(-not (& $Condition)){if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null};Start-Sleep -Milliseconds 50};return [Math]::Round($clock.Elapsed.TotalSeconds,3)}
+function Wait-Until([scriptblock]$Condition,[double]$Seconds){$clock=[Diagnostics.Stopwatch]::StartNew();while($true){$met=$false;try{$met=[bool](& $Condition)}catch{};if($met){break};if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null};Start-Sleep -Milliseconds 50};return [Math]::Round($clock.Elapsed.TotalSeconds,3)}
 $probeExe=Join-Path $work 'probe\RooIndustriesGovernorProbe.exe'
 function Start-Probe {
     $info=[Diagnostics.ProcessStartInfo]::new($probeExe,'7200');$info.UseShellExecute=$false;$info.CreateNoWindow=$true
@@ -82,6 +82,7 @@ switch($Phase){
         [IO.Directory]::CreateDirectory((Split-Path $probeExe -Parent))|Out-Null
         if(-not (Test-Path -LiteralPath $probeExe)){Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication}
         $probe=Start-Probe
+        Wait-Until {$null -ne (Read-Controls $probe)} 15|Out-Null
         $original=Read-Controls $probe
         $snapshot=Host-Call 'process-status' @{processId=$probe.Id}
         $topology=@($snapshot.topology|Sort-Object group,index)

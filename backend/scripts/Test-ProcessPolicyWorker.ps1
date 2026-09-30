@@ -46,7 +46,12 @@ function Start-Probe {
 }
 function Wait-Until([scriptblock]$Condition,[double]$Seconds,[int]$PollMilliseconds=50){
     $clock=[Diagnostics.Stopwatch]::StartNew()
-    while(-not (& $Condition)){if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null};Start-Sleep -Milliseconds $PollMilliseconds}
+    while($true){
+        $met=$false;try {$met=[bool](& $Condition)} catch {}
+        if($met){break}
+        if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null}
+        Start-Sleep -Milliseconds $PollMilliseconds
+    }
     return $clock.Elapsed.TotalSeconds
 }
 Add-Type -TypeDefinition @'
@@ -106,6 +111,7 @@ try {
     Assert (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count -eq 0) 'The desktop app is not running during governor validation'
 
     $first=Start-Probe
+    if($null -eq (Wait-Until {$null -ne (Read-Controls $first)} 15)){throw 'The probe did not become readable.'}
     $original=Read-Controls $first
     $snapshot=Core 'process-status' @{processId=$first.Id}
     $topology=@($snapshot.topology|Sort-Object group,index)
