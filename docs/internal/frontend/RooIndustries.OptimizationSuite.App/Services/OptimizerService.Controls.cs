@@ -194,7 +194,7 @@ public sealed partial class OptimizerService
             start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
             foreach (var argument in bundled ? new[] { action, path } : new[] { host, action, path }) start.ArgumentList.Add(argument);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-            var output = process.StandardOutput.ReadToEndAsync();
+            var output = ReadAllAsync(process.StandardOutput.BaseStream);
             var errors = process.StandardError.ReadToEndAsync();
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (timeout is { } duration) limit.CancelAfter(duration);
@@ -209,7 +209,7 @@ public sealed partial class OptimizerService
             }
             var text = await output.ConfigureAwait(false);
             var stderr = await errors.ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(text))
+            if (text.Span.Trim(" \t\r\n"u8).IsEmpty)
             {
                 AppLog.Write("helper", action + " exited with code " + process.ExitCode);
                 throw new InvalidOperationException(AppLog.Explain("helper", stderr, AppLog.Failed));
@@ -219,11 +219,19 @@ public sealed partial class OptimizerService
             if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
             {
                 var message = result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : null;
-                AppLog.Write("helper", action + " failed: " + (message ?? text));
+                AppLog.Write("helper", action + " failed: " + (message ?? Encoding.UTF8.GetString(text.Span)));
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? AppLog.Failed : message);
             }
             return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
         }
         finally { File.Delete(path); }
+    }
+
+    private static async Task<ReadOnlyMemory<byte>> ReadAllAsync(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer).ConfigureAwait(false);
+        var bytes = new ReadOnlyMemory<byte>(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+        return bytes.Span.StartsWith("\uFEFF"u8) ? bytes[3..] : bytes;
     }
 }

@@ -33,7 +33,7 @@ public partial class DashboardViewModel : PageViewModelBase
     protected override async Task LoadCoreAsync()
     {
         var inventoryRead = App.Live.GetProcessInventoryResultAsync(fresh: Fresh);
-        var hardwareRead = App.Live.GetDriverHardwareResultAsync();
+        var hardwareRead = App.Live.GetDriverHardwareResultAsync(fresh: Fresh && !Quiet);
         var inventoryResult = await inventoryRead;
         var hardware = (await hardwareRead).Value;
         var inventory = inventoryResult.Value;

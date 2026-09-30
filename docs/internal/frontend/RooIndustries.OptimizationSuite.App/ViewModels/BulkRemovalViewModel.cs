@@ -163,9 +163,15 @@ public partial class BulkRemovalViewModel : ObservableObject
         catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
         finally { Busy = false; }
     }
+    public async Task RefreshIfIdleAsync()
+    {
+        if (!Busy && _selected.Count == 0 && _review is null && CanSelect) await RefreshAsync();
+    }
+    private bool _appsLoaded;
     private async Task LoadAppsAsync()
     {
-        var inventory = await App.Live.GetInstalledAppsAsync(includeAllAppxUsers: IncludeAllAppxUsers);
+        var inventory = await App.Live.GetInstalledAppsAsync(includeAllAppxUsers: IncludeAllAppxUsers, fresh: _appsLoaded);
+        _appsLoaded = true;
         if (inventory?.Apps is null) throw new InvalidOperationException(App.Live.LastError ?? "Installed applications could not be read.");
         _all.Clear();
         _all.AddRange(inventory.Apps.Where(app => app.IsListable || app.SourceType == "appx" && !app.Protected).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));

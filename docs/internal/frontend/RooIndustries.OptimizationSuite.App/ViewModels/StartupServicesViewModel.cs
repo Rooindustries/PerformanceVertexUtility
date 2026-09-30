@@ -21,8 +21,9 @@ public partial class StartupServicesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var classification = await App.Live.GetProcessClassificationAsync();
-        if (classification?.Processes is null) throw new InvalidOperationException(App.Live.LastError ?? "The background process list is unavailable.");
+        var read = await App.Live.GetProcessClassificationResultAsync();
+        var classification = read.Value;
+        if (classification?.Processes is null) throw new InvalidOperationException(read.Error ?? "The background process list is unavailable.");
         var processes = classification.Processes;
 
         var background = processes

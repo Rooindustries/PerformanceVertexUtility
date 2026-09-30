@@ -16,7 +16,7 @@ public sealed partial class BulkRemovalPanel : UserControl
         InitializeComponent();
         Loaded += async (_, _) =>
         {
-            if (_loaded) return;
+            if (_loaded) { await ViewModel.RefreshIfIdleAsync(); return; }
             _loaded = true;
             await ViewModel.InitializeAsync();
         };

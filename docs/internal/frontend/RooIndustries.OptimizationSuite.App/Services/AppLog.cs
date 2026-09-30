@@ -34,7 +34,10 @@ public static class AppLog
     }
 
     public static void Timing(string call, System.Diagnostics.Stopwatch elapsed, string outcome)
-        => Write("timing", call + " " + elapsed.ElapsedMilliseconds + " ms " + outcome);
+    {
+        if (call is "process-status" or "protected-session-status" && outcome == "completed" && elapsed.ElapsedMilliseconds < 1000) return;
+        Write("timing", call + " " + elapsed.ElapsedMilliseconds + " ms " + outcome);
+    }
 
     public static void Write(string source, string? detail)
     {

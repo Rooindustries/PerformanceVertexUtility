@@ -46,6 +46,7 @@ public sealed partial class OptimizerService
     public Task<TweakCatalogResult> ImportWindowsSettingsAsync(string path) => RunCoreAsync<TweakCatalogResult>("tweak-custom-import", new() { ["customSettingsPath"] = path, ["confirm"] = true });
     public async Task<WindowsTweakReview> PreviewOwnershipAsync(string selectedPath)
     {
+        using var change = DataGeneration.BeginChange();
         var directory = NewOperationDirectory("file-permissions"); var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<TweakPlan>("tweak-ownership-preview", new() { ["selectedFilePath"] = selectedPath, ["outputPath"] = path });
         return new(plan, path, Hash(path));

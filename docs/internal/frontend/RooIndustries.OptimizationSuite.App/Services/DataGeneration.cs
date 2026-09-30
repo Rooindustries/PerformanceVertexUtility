@@ -33,7 +33,7 @@ public static class DataGeneration
 
 public sealed class SharedReads
 {
-    private sealed record Entry(Task<object?> Read, long Generation, DateTime StartedUtc, Func<object?, bool> Good);
+    private sealed record Entry(Task<object?> Read, long Generation, long StartedTicks, Func<object?, bool> Good);
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
@@ -43,10 +43,10 @@ public sealed class SharedReads
         Entry entry;
         lock (_gate)
         {
-            if (!_entries.TryGetValue(key, out entry!) || !Usable(entry, maxAge))
+            if (maxAge <= TimeSpan.Zero || !_entries.TryGetValue(key, out entry!) || !Usable(entry, maxAge))
             {
                 var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
-                entry = new(Wrap(read), generation, DateTime.UtcNow, keep);
+                entry = new(Wrap(read), generation, Environment.TickCount64, keep);
                 _entries[key] = entry;
             }
         }
@@ -69,7 +69,7 @@ public sealed class SharedReads
     }
 
     private static bool Usable(Entry entry, TimeSpan maxAge) => DataGeneration.IsCurrent(entry.Generation)
-        && (!entry.Read.IsCompleted || entry.Read.IsCompletedSuccessfully && entry.Good(entry.Read.Result) && DateTime.UtcNow - entry.StartedUtc < maxAge);
+        && (!entry.Read.IsCompleted || entry.Read.IsCompletedSuccessfully && entry.Good(entry.Read.Result) && TimeSpan.FromMilliseconds(Environment.TickCount64 - entry.StartedTicks) < maxAge);
 
     private static async Task<object?> Wrap<T>(Func<Task<T>> read) where T : class
     {
