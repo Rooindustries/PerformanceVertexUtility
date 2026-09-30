@@ -21,15 +21,17 @@ public static class PolicyRootSecurity
     private const FileSystemRights WriteRights = FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.WriteExtendedAttributes |
         FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.WriteAttributes | FileSystemRights.Delete | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
 
-    public static bool Secure(string root)
+    public static bool Secure(string root, string? userSid = null)
     {
         root = Normalize(root);
         var parent = Path.GetDirectoryName(root) ?? throw new InvalidDataException("The saved rules folder needs a parent folder.");
         var name = Path.GetFileName(root);
         RequireElevated();
-        var local = Canonical(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        using var identity = WindowsIdentity.GetCurrent();
+        var user = userSid is null ? identity.User ?? throw new InvalidOperationException("The current Windows user SID is unavailable.") : new SecurityIdentifier(userSid);
+        var local = Canonical(user == identity.User ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) : Path.Combine(ProfilePath(user), "AppData", "Local"));
         if (!Canonical(root).StartsWith(local + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new UnauthorizedAccessException("The saved rules folder must be inside this Windows user's local app data.");
+            throw new UnauthorizedAccessException("The saved rules folder must be inside the Windows user's local app data.");
         var marker = MarkerName(root);
         using var mutex = new Mutex(false, @"Global\RooIndustriesGovernorSecure-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(marker)))[..32]);
         bool held;
@@ -43,19 +45,19 @@ public static class PolicyRootSecurity
             if (!Directory.Exists(root))
             {
                 Directory.CreateDirectory(parent);
-                CreateSecured(root);
-                Mark(marker);
+                CreateSecured(root, user);
+                Mark(marker, user);
                 RemoveLeftovers(parent, name);
                 return false;
             }
-            if (Problem(root) is null) { Mark(marker); RemoveLeftovers(parent, name); return false; }
+            if (Problem(root) is null) { Mark(marker, user); RemoveLeftovers(parent, name); return false; }
             if (Marked(marker))
                 throw new UnauthorizedAccessException("The saved rules folder was changed without administrator rights after it was protected, so it is not trusted. Delete " + root + " and save your rules again.");
             RequireMigratable(root);
             var temporary = Path.Combine(parent, name + ".secure-" + Guid.NewGuid().ToString("N"));
             try
             {
-                CreateSecured(temporary);
+                CreateSecured(temporary, user);
                 Copy(root, temporary);
                 File.WriteAllBytes(Path.Combine(temporary, ".migrated"), []);
                 if (Problem(temporary) is { } copied) throw new UnauthorizedAccessException("The protected copy of saved rules is not protected: " + copied);
@@ -69,7 +71,7 @@ public static class PolicyRootSecurity
                 if (Directory.Exists(temporary) && Directory.Exists(root)) Directory.Delete(temporary, true);
                 throw;
             }
-            Mark(marker);
+            Mark(marker, user);
             RemoveLeftovers(parent, name);
             return true;
         }
@@ -135,11 +137,16 @@ public static class PolicyRootSecurity
         return key?.GetValue(marker) is not null;
     }
 
-    private static void Mark(string marker)
+    private static void Mark(string marker, SecurityIdentifier user)
     {
-        using var identity = WindowsIdentity.GetCurrent();
         using var key = Registry.LocalMachine.CreateSubKey(MarkerKey, true);
-        if (key.GetValue(marker) is null) key.SetValue(marker, identity.User?.Value ?? "", RegistryValueKind.String);
+        if (key.GetValue(marker) is null) key.SetValue(marker, user.Value, RegistryValueKind.String);
+    }
+
+    private static string ProfilePath(SecurityIdentifier user)
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + user.Value);
+        return key?.GetValue("ProfileImagePath") is string path ? Environment.ExpandEnvironmentVariables(path) : throw new InvalidDataException("That Windows user has no profile on this PC.");
     }
 
     private static void RequireElevated()
@@ -148,10 +155,8 @@ public static class PolicyRootSecurity
         if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)) throw new UnauthorizedAccessException(NotAdministrator);
     }
 
-    private static void CreateSecured(string path)
+    private static void CreateSecured(string path, SecurityIdentifier user)
     {
-        using var identity = WindowsIdentity.GetCurrent();
-        var user = identity.User ?? throw new InvalidOperationException("The current Windows user SID is unavailable.");
         var security = new DirectorySecurity();
         security.SetOwner(Administrators);
         security.SetAccessRuleProtection(true, false);

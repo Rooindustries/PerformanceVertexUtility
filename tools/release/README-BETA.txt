@@ -124,7 +124,8 @@ your saved process rules on). When you install a new beta, it pauses the
 governor, gives your apps their old settings back, updates the files and then
 starts the governor again. When you uninstall, it stops the governor, gives
 your apps their old settings back and removes it. Your saved rules stay on
-your PC, so they come back if you install the app again.
+your PC, so they come back if you install the app again. Only install a newer
+beta over the one you have. Going back to an older beta is not supported.
 
 Before you install a new beta or uninstall, still stop a running game session
 and turn off the timer setting. Otherwise Windows may keep some files in use.

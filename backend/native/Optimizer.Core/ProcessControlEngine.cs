@@ -204,6 +204,7 @@ public sealed class ProcessControlEngine
                 }
                 catch (Exception error) { change.Error = error.Message; conflicts = true; }
                 Save(journalPath, journal);
+                if (int.TryParse(BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
             }
             journal.Status = conflicts ? "needsReconciliation" : "restored";
             Save(journalPath, journal);
