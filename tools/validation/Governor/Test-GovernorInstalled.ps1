@@ -136,7 +136,7 @@ switch($Phase){
         . (Join-Path $app 'backend\scripts\ProcessProfile.Common.ps1')
         $current=Get-RooIndustriesProcessControlState $fresh.Id
         $plan=Get-RooIndustriesApplicableProcessControlChanges @([pscustomobject]@{control='priorityClass';proposedValue='High';blocked=$false},[pscustomobject]@{control='ioPriority';proposedValue='VeryLow';blocked=$false}) $current
-        $out.powerShellPlan=$plan
+        $out.powerShellPlan=@($plan.skippedControls|ForEach-Object {[string]$_.control+": "+[string]$_.category+" "+[string]$_.reason})
         $thrown=$null;try {Invoke-RooIndustriesProcessControlChange $fresh ([pscustomobject]@{control='priorityClass';proposedValue='High'})} catch {$thrown=$_.Exception.Message}
         Check (@($plan.changes).Count -eq 0 -and @($plan.skippedControls|Where-Object {$_.category -eq 'managed' -and $_.reason -eq 'Managed by the governor'}).Count -eq 2 -and $thrown -eq 'Managed by the governor' -and (Same (Read-Controls $fresh) $state.wanted)) 'GameTune, Background limits and Background profile skip or refuse fields the governor owns and report Managed by the governor'
         $fresh.Kill();$fresh.WaitForExit()
