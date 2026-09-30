@@ -159,6 +159,7 @@ public sealed class ProcessPolicyStore
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
+        if (rule.Enabled) RequireNoGameSession(rule);
         foreach (var existing in ReadRules(rule.RuleId).Select(pair => pair.Rule).Where(existing => existing.Enabled && rule.Enabled))
         {
             var overlaps = string.Equals(Path.GetFileName(existing.ExecutablePath), Path.GetFileName(rule.ExecutablePath), StringComparison.OrdinalIgnoreCase) &&
@@ -167,6 +168,27 @@ public sealed class ProcessPolicyStore
                 throw new InvalidDataException("Another enabled rule already owns a matching process control. Edit that rule or disable it first.");
         }
         OperationFiles.Write(Path.Combine(RulesDirectory, rule.RuleId + ".json"), rule);
+    }
+
+    private void RequireNoGameSession(SavedProcessRule rule)
+    {
+        var operations = Path.Combine(Path.GetDirectoryName(Root)!, "operations");
+        if (!Directory.Exists(operations)) return;
+        var fields = rule.Controls.Keys.Concat(rule.CpuSelection is null ? [] : new[] { "cpuSets" }).ToHashSet(StringComparer.Ordinal);
+        foreach (var directory in Directory.EnumerateDirectories(operations, "game-session-*"))
+        {
+            var session = Path.Combine(directory, "session");
+            if (!File.Exists(Path.Combine(session, "session.json"))) continue;
+            ProtectedSessionStatus status;
+            try { status = new ProtectedSessions(_ => false).Status(session); }
+            catch (Exception) { continue; }
+            if (status.State is not { } state || status.HostRunning == false && state.Status is "stopped" or "stoppedWithErrors") continue;
+            if (!Matches(rule, state.Preview.GamePath) && !Matches(rule, state.Preview.Launcher.ExecutablePath)) continue;
+            var shared = state.Preview.Controls.Keys.Where(fields.Contains).Order(StringComparer.Ordinal).ToArray();
+            if (shared.Length > 0)
+                throw new InvalidOperationException("A game session for " + Path.GetFileName(state.Preview.GamePath) + " already controls " + string.Join(", ", shared) +
+                    ". Stop that game session first, or save this rule without those settings.");
+        }
     }
 
     public void Delete(string ruleId)

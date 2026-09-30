@@ -183,47 +183,43 @@ public sealed partial class OptimizerService
             AppLog.Write("helper", "Missing " + dotnet);
             throw new FileNotFoundException(bundled ? "Some app files are missing. Reinstall the app." : "This app needs the Microsoft .NET 8 Desktop Runtime. Install it from Microsoft, then reopen the app.", dotnet);
         }
-        Directory.CreateDirectory(_storage);
-        var path = Path.Combine(_storage, "request-" + Guid.NewGuid().ToString("N") + ".json");
         request["schemaVersion"] = 1;
         request["repoRoot"] = root;
-        OperationFiles.Write(path, request);
-        try
+        var payload = JsonSerializer.SerializeToUtf8Bytes(request, OperationFiles.Json);
+        var start = new ProcessStartInfo(dotnet)
         {
-            var start = new ProcessStartInfo(dotnet)
-            {
-                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
-            };
-            start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
-            foreach (var argument in bundled ? new[] { action, path } : new[] { host, action, path }) start.ArgumentList.Add(argument);
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = process.StandardError.ReadToEndAsync();
-            try { await process.WaitForExitAsync(cancellationToken); }
-            catch (OperationCanceledException)
-            {
-                if (!process.HasExited) process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync();
-                throw;
-            }
-            var text = await output;
-            var stderr = await errors;
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                AppLog.Write("helper", action + " exited with code " + process.ExitCode);
-                throw new InvalidOperationException(AppLog.Explain("helper", stderr, AppLog.Failed));
-            }
-            using var document = JsonDocument.Parse(text);
-            var result = document.RootElement;
-            if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
-            {
-                var message = result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : null;
-                AppLog.Write("helper", action + " failed: " + (message ?? text));
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? AppLog.Failed : message);
-            }
-            return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
+        };
+        start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
+        foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
+        await process.StandardInput.BaseStream.WriteAsync(payload, cancellationToken);
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var errors = process.StandardError.ReadToEndAsync();
+        try { await process.WaitForExitAsync(cancellationToken); }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw;
         }
-        finally { File.Delete(path); }
+        var text = await output;
+        var stderr = await errors;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            AppLog.Write("helper", action + " exited with code " + process.ExitCode);
+            throw new InvalidOperationException(AppLog.Explain("helper", stderr, AppLog.Failed));
+        }
+        using var document = JsonDocument.Parse(text);
+        var result = document.RootElement;
+        if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
+        {
+            var message = result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : null;
+            AppLog.Write("helper", action + " failed: " + (message ?? text));
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? AppLog.Failed : message);
+        }
+        return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
     }
 }

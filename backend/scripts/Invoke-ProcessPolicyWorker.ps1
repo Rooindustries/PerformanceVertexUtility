@@ -35,20 +35,15 @@ $requestPath=Join-Path $PolicyRoot 'worker-request.json'
 $task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIdentity.policyTask+$suffix) $description ($script:RooIndustriesLegacyIdentity.policyDescription+$owner.userSid+' | '+$PolicyRoot)
 if($task){$taskName=$task.TaskName;$description=$task.Description}
 
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
-    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-policy-request-'+[Guid]::NewGuid().ToString('N'))
-    [IO.Directory]::CreateDirectory($directory)|Out-Null
-    $path=Join-Path $directory 'request.json'
-    try {
-        $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true}
-        foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
-        Write-RooIndustriesOperationJson $request $path
-        $text=@(& $DotNetPath @hostArgs $CoreAction $path) -join "`n"
-        $exitCode=$LASTEXITCODE
-        $result=$text|ConvertFrom-Json
-        if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}
-        return $result.data
-    } finally {Remove-Item -LiteralPath $directory -Recurse -Force}
+    $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true}
+    foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
+    $text=@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath @hostArgs $CoreAction '-') -join "`n"
+    $exitCode=$LASTEXITCODE
+    $result=$text|ConvertFrom-Json
+    if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}
+    return $result.data
 }
 
 function Stop-Worker {

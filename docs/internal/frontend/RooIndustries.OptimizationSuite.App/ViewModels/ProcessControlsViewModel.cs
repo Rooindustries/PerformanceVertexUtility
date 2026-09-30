@@ -104,6 +104,8 @@ public static class GovernorDisplay
             foreach (var instance in state?.Instances.Where(instance => instance.RuleId == rule.RuleId && instance.Status is "active" or "applying" or "conflict") ?? [])
             {
                 var name = Path.GetFileName(instance.Process.ExecutablePath) + " (" + instance.Process.ProcessId + ")";
+                if (instance.Status == "conflict" && instance.Error is { } denied && (denied.Contains("Win32 5 ", StringComparison.Ordinal) || denied.Contains("denied", StringComparison.OrdinalIgnoreCase)))
+                { lines.Add(name + ": unavailable · Windows denied access to this app"); continue; }
                 if (instance.Status == "conflict") { lines.Add(name + ": the rule stepped back for this app" + (instance.Error is { Length: > 0 } reason ? " · " + reason : "")); continue; }
                 if (!snapshot.Journals.TryGetValue(instance.JournalPath, out var journal)) { lines.Add(name + ": starting"); continue; }
                 lines.Add(name + ": " + string.Join(", ", journal.Changes.Select(change => ProcessControlsViewModel.Label(change.Name) + " " +

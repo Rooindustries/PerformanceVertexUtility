@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Phase)
+param([Parameter(Mandatory=$true)][string]$Phase,[string]$Installer='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $app='C:\Program Files\Roo Industries\Optimization Suite'
@@ -12,9 +12,15 @@ $policyRoot=Join-Path $dataRoot 'process-rules'
 [IO.Directory]::CreateDirectory($work)|Out-Null
 $out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;user=[Security.Principal.WindowsIdentity]::GetCurrent().Name;policyRoot=$policyRoot;checks=@()}
 function Check([bool]$Condition,[string]$Message){$script:out.checks+=[ordered]@{passed=$Condition;check=$Message};if($Condition){"PASS $Message"}else{"FAIL $Message"}}
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Host-Call([string]$Action,[hashtable]$Extra=@{}){
     $request=@{schemaVersion=1;repoRoot=$app;policyRoot=$policyRoot;confirm=$true}
     foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
+    if((Test-Path -LiteralPath $workerScript) -and ([IO.File]::ReadAllText($workerScript) -match "'-'")){
+        $result=(@(($request|ConvertTo-Json -Depth 12 -Compress)|& $hostExe $Action '-') -join "`n")|ConvertFrom-Json
+        if($result.status -ne 'completed'){throw ($Action+': '+$result.error.message)}
+        return $result.data
+    }
     $path=Join-Path $work ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
     [IO.File]::WriteAllText($path,($request|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
     try {$result=(@(& $hostExe $Action $path) -join "`n")|ConvertFrom-Json} finally {Remove-Item -LiteralPath $path -Force}
@@ -181,6 +187,49 @@ switch($Phase){
         Set-StateValue 'probePid' $probe.Id;Save-State
         $out.appliedSeconds=$seconds
         Check ($null -ne $seconds) ('A new long-running probe gets all 8 controls ('+$seconds+' s)')
+    }
+    'pause' {
+        $text=@(& $workerScript -Action Pause -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
+        $out.pauseResult=$text|ConvertFrom-Json
+        $probe=Get-Probe $state.probePid
+        $s=Describe-State;$out.state=$s
+        Check ($out.pauseResult.status -eq 'completed' -and $out.pauseResult.data.paused -and @($s.workers).Count -eq 0 -and @($s.tasks).Count -eq 1 -and $s.tasks[0].state -eq 'Disabled') 'Pause stops the installed governor and disables its task'
+        if($probe){Check (Same (Read-Controls $probe) $state.original) 'Pause gives the probe its original 8 controls back'}
+    }
+    'verify-paused' {
+        $probe=Get-Probe $state.probePid
+        $s=Describe-State;$out.state=$s
+        Check (@($s.tasks).Count -eq 1 -and $s.tasks[0].state -eq 'Disabled' -and @($s.workers).Count -eq 0 -and [string]$s.governorJson -match '"paused":\s*true') 'After setup the governor is still paused: task disabled, no worker, pause kept'
+        if($probe){Check (Same (Read-Controls $probe) $state.original) 'After setup the paused rules are not applied to the probe'}
+        Start-Sleep -Seconds 75
+        $later=Describe-State;$out.later=$later
+        Check (@($later.workers).Count -eq 0 -and $later.tasks[0].state -eq 'Disabled' -and (-not $probe -or (Same (Read-Controls $probe) $state.original))) 'Seventy-five seconds later nothing restarted the paused governor'
+    }
+    'kill-setup' {
+        $probe=Get-Probe $state.probePid
+        $before=Describe-State;$out.before=$before
+        $setupLog=Join-Path $work 'setup-killed.log'
+        Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
+        $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
+        $suspended=Wait-Until {(Test-Path -LiteralPath $setupLog) -and ([IO.File]::ReadAllText($setupLog) -match 'Governor Suspend finished')} 120
+        $killed=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')})
+        foreach($process in $killed){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
+        $killedAt=[DateTime]::UtcNow
+        Start-Sleep -Seconds 2
+        $afterKill=Describe-State;$out.afterKill=$afterKill
+        $out.killedProcesses=@($killed|ForEach-Object {$_.Name+' '+$_.ProcessId})
+        $out.setupLogTail=@(Get-Content -LiteralPath $setupLog -Tail 15)
+        $watchdog=Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue
+        $out.watchdog=if($watchdog){[ordered]@{state=[string]$watchdog.State;actions=@($watchdog.Actions|ForEach-Object {$_.Arguments});triggers=@($watchdog.Triggers|ForEach-Object {[string]$_.CimClass.CimClassName+' '+$_.StartBoundary})}}else{$null}
+        Check ($null -ne $suspended -and $killed.Count -ge 1 -and @($afterKill.workers).Count -eq 0 -and $afterKill.tasks[0].state -eq 'Disabled' -and $null -ne $watchdog) 'Setup was killed right after it stopped the governor; the task is disabled and a recovery task is waiting'
+        Check ($afterKill.hostFile.sha256 -eq $before.hostFile.sha256 -and (Test-Path -LiteralPath $hostExe)) 'The killed setup left the installed files unchanged'
+        if($probe){Check (Same (Read-Controls $probe) $state.original) 'The stopped governor gave the probe its original values'}
+        $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 480
+        $out.recoveredSecondsAfterKill=if($back){[Math]::Round(([DateTime]::UtcNow-$killedAt).TotalSeconds,1)}else{$null}
+        $recovered=Describe-State;$out.recovered=$recovered
+        Check ($null -ne $back -and $recovered.tasks[0].state -ne 'Disabled') ('The governor came back on its own after the killed setup ('+$out.recoveredSecondsAfterKill+' s) and enforces the rule again')
+        Check ($null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'The recovery task removed itself'
+        $out.leftoverSetupFolders=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp' -ErrorAction SilentlyContinue|ForEach-Object {$_.Name})
     }
     'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
     'verify-replaced' {

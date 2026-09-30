@@ -12,7 +12,7 @@ $policyParent=Join-Path $root 'rules parent'
 $policyRoot=Join-Path $policyParent 'saved rules'
 $limitedOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.json')
 $probes=New-Object System.Collections.Generic.List[Diagnostics.Process]
-$taskName=$null;$moved=$null
+$taskName=$null;$moved=$null;$sessionActive=$false;$sessionRoot=$null
 $legacyRoot=Join-Path $root 'legacy rules\process-rules'
 $evidence=[ordered]@{startedAtUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;checks=New-Object System.Collections.Generic.List[object];measurements=[ordered]@{}}
 function Assert([bool]$Condition,[string]$Message){
@@ -27,15 +27,18 @@ function Worker([string]$WorkerAction,[string]$Folder=$policyRoot){
     if($result.status -ne 'completed'){throw ('Governor '+$WorkerAction+' failed: '+(@($result.errors|ForEach-Object {$_.message}) -join '; '))}
     return $result.data
 }
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Folder=$policyRoot){
     $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$Folder;confirm=$true}
     foreach($key in $Values.Keys){$request[$key]=$Values[$key]}
-    $path=Join-Path $root ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
-    Write-RooIndustriesOperationJson $request $path
-    try {$result=(@(& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') $CoreAction $path) -join "`n")|ConvertFrom-Json}
-    finally {Remove-Item -LiteralPath $path -Force}
+    $result=(@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') $CoreAction '-') -join "`n")|ConvertFrom-Json
     if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw $result.error.message}
     return $result.data
+}
+function Start-Limited([string]$Script){
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
+    $runas=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -PassThru -Wait
+    if($runas.ExitCode -ne 0){throw ('runas /trustlevel failed with exit code '+$runas.ExitCode)}
 }
 function Start-Probe {
     $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe'),'3600')
@@ -98,6 +101,8 @@ function Invoke-Limited([string]$Script){
 try {
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Policy host publish failed.'}
+    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $hostDirectory 'session') | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'Session host publish failed.'}
     [IO.Directory]::CreateDirectory($probeDirectory)|Out-Null
     Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly (Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe') -OutputType ConsoleApplication
     Assert (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count -eq 0) 'The desktop app is not running during governor validation'
@@ -264,6 +269,156 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     $removed=Worker 'Sync'
     Assert (-not $removed.registered -and $removed.worker.hostRunning -eq $false -and -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) 'Deleting the last rule stops the governor and removes its task and triggers'
     Assert ((Same (Read-Controls $first) $original) -and (Same (Read-Controls $third) $original)) 'Deleting the last rule restores every running process'
+    # anti-cheat style denial: a process that denies set and query access to its own user
+    $deniedExe=Join-Path $probeDirectory 'RooIndustriesGovernorDenied.exe'
+    Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Security.Principal; using System.Threading;
+public static class RooIndustriesGovernorDenied {
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct Trustee { public IntPtr Multiple; public int Operation; public int Form; public int Type; public IntPtr Name; }
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct Access { public uint Permissions; public int Mode; public uint Inheritance; public Trustee Trustee; }
+    [DllImport("advapi32.dll")] static extern uint GetSecurityInfo(IntPtr handle, int type, int info, IntPtr owner, IntPtr group, out IntPtr dacl, IntPtr sacl, out IntPtr descriptor);
+    [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern uint SetEntriesInAcl(int count, ref Access entries, IntPtr old, out IntPtr acl);
+    [DllImport("advapi32.dll")] static extern uint SetSecurityInfo(IntPtr handle, int type, int info, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    public static void Main(string[] args) {
+        Thread.Sleep(TimeSpan.FromSeconds(int.Parse(args[0])));
+        var sid = WindowsIdentity.GetCurrent().User; var bytes = new byte[sid.BinaryLength]; sid.GetBinaryForm(bytes, 0);
+        var pointer = Marshal.AllocHGlobal(bytes.Length); Marshal.Copy(bytes, 0, pointer, bytes.Length);
+        IntPtr dacl, descriptor, updated;
+        if (GetSecurityInfo(GetCurrentProcess(), 6, 4, IntPtr.Zero, IntPtr.Zero, out dacl, IntPtr.Zero, out descriptor) != 0) Environment.Exit(3);
+        var entry = new Access { Permissions = 0x200 | 0x400 | 0x1000, Mode = 3, Inheritance = 0, Trustee = new Trustee { Form = 0, Type = 1, Name = pointer } };
+        if (SetEntriesInAcl(1, ref entry, dacl, out updated) != 0 || SetSecurityInfo(GetCurrentProcess(), 6, 4, IntPtr.Zero, IntPtr.Zero, updated, IntPtr.Zero) != 0) Environment.Exit(4);
+        Thread.Sleep(TimeSpan.FromSeconds(int.Parse(args[1])));
+    }
+}
+'@ -OutputAssembly $deniedExe -OutputType ConsoleApplication
+    [Diagnostics.Process]::EnterDebugMode()
+    $deniedRule=$rule.Clone();$deniedRule.ruleId=[Guid]::NewGuid().ToString('N');$deniedRule.name='Denied fixture';$deniedRule.executablePath=$deniedExe
+    $deniedStart=[Diagnostics.ProcessStartInfo]::new($deniedExe,'0 180');$deniedStart.UseShellExecute=$false;$deniedStart.CreateNoWindow=$true
+    $deniedNow=[Diagnostics.Process]::Start($deniedStart);$probes.Add($deniedNow)
+    Start-Sleep -Seconds 2
+    $deniedBaseline=$null;$null=Wait-Until {$script:deniedBaseline=Read-Controls $deniedNow;$true} 5
+    Core 'rule-save' @{rule=$deniedRule}|Out-Null
+    $deniedSync=Worker 'Sync'
+    Assert ($deniedSync.worker.hostRunning -eq $true) 'The governor runs for the denial fixture rule' 
+    $governor=Get-Process -Id (Get-WorkerIdentity).processId
+    $governor.Refresh();$cpuBefore=$governor.TotalProcessorTime;$clock=[Diagnostics.Stopwatch]::StartNew()
+    Start-Sleep -Seconds 30
+    $governor.Refresh();$deniedCpu=[Math]::Round(100*($governor.TotalProcessorTime-$cpuBefore).TotalSeconds/$clock.Elapsed.TotalSeconds,3)
+    $deniedState=(Core 'policy-status').state
+    $deniedIssues=@($deniedState.issues|Where-Object {$_.processId -eq $deniedNow.Id})
+    $deniedInstances=@($deniedState.instances|Where-Object {$_.process.processId -eq $deniedNow.Id})
+    Note 'deniedAtStart' ([ordered]@{cpuPercentOfOneCoreWhileDenied=$deniedCpu;issues=@($deniedIssues|ForEach-Object {$_.message});instances=$deniedInstances.Count;controls=(Read-Controls $deniedNow)})
+    Assert ($deniedInstances.Count -eq 0 -and $deniedIssues.Count -eq 1 -and $deniedIssues[0].message -like '*Win32 5*' -and (Same (Read-Controls $deniedNow) $deniedBaseline)) 'A process that denies access at start is shown unavailable and never applied'
+    Assert ($deniedCpu -lt 5) ('Denied access does not cause a retry storm ('+$deniedCpu+'% of one core over 30 s)')
+    $deniedLater=[Diagnostics.Process]::Start([Diagnostics.ProcessStartInfo]@{FileName=$deniedExe;Arguments='5 120';UseShellExecute=$false;CreateNoWindow=$true});$probes.Add($deniedLater)
+    Assert ($null -ne (Wait-Until {Same (Read-Controls $deniedLater) $wanted} 4)) 'A process that denies access later first gets its rules'
+    $stepped=Wait-Until {@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $deniedLater.Id -and $_.status -eq 'conflict' -and $_.error -like '*Win32 5*'}).Count -eq 1} 15 500
+    Assert ($null -ne $stepped) 'After the process denies access its record steps back with the access error, shown as unavailable'
+    $deniedPaused=Worker 'Pause'
+    $reported=@($deniedPaused.worker.state.instances|Where-Object {$_.process.processId -eq $deniedLater.Id})
+    Note 'deniedAfterApplyPause' ([ordered]@{status=$reported[0].status;error=$reported[0].error;stateStatus=$deniedPaused.worker.state.status;controls=(Read-Controls $deniedLater)})
+    Assert ($reported.Count -eq 1 -and $reported[0].status -eq 'conflict' -and $reported[0].error -like '*Win32 5*' -and $deniedPaused.worker.state.status -eq 'stoppedWithConflicts' -and (Same (Read-Controls $deniedLater) $wanted)) 'Pause cannot restore a process that denies access and reports it instead of claiming success'
+    foreach($fixture in @($deniedNow,$deniedLater)){$fixture.Kill();$fixture.WaitForExit()}
+    Worker 'Resume'|Out-Null
+    Core 'rule-delete' @{ruleId=$deniedRule.ruleId}|Out-Null
+    $afterDenied=Worker 'Sync'
+    Assert (-not $afterDenied.registered -and @($afterDenied.worker.state.instances|Where-Object {$_.status -notin @('restored','expired')}).Count -eq 0) 'Records of the denied processes end once they exit'
+
+    # crash between restoring two fields: restart finishes every field and leaves a consistent journal
+    $crashRule=$rule.Clone();$crashRule.ruleId=[Guid]::NewGuid().ToString('N');$crashRule.name='Crash during restore'
+    Core 'rule-save' @{rule=$crashRule}|Out-Null
+    Worker 'Sync'|Out-Null
+    Assert ($null -ne (Wait-Until {Same (Read-Controls $first) $wanted} 10)) 'The crash-restore rule is applied'
+    Worker 'Pause'|Out-Null
+    Core 'policy-pause' @{paused=$false}|Out-Null
+    $env:ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS='4000'
+    $manual=Start-Process -FilePath $DotNetPath -ArgumentList ('"'+(Join-Path $hostDirectory 'Optimizer.Host.dll')+'" policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"') -WindowStyle Hidden -PassThru
+    Remove-Item Env:\ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS
+    Assert ($null -ne (Wait-Until {Same (Read-Controls $first) $wanted} 15)) 'A worker with the restore pause hook applies the rule'
+    $crashInstance=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $first.Id -and $_.status -eq 'active'})[0]
+    $crashRule.enabled=$false
+    Core 'rule-save' @{rule=$crashRule}|Out-Null
+    $midway=Wait-Until {@((Read-RooIndustriesOperationJson $crashInstance.journalPath).data.changes|Where-Object {$_.status -eq 'restored'}).Count -eq 1} 120 100
+    $manual.Kill();$manual.WaitForExit()
+    $crashJournal=(Read-RooIndustriesOperationJson $crashInstance.journalPath).data
+    $controlsAtCrash=Read-Controls $first
+    Note 'crashDuringRestore' ([ordered]@{journalStatus=$crashJournal.status;changes=@($crashJournal.changes|ForEach-Object {$_.name+':'+$_.status});controls=$controlsAtCrash})
+    Assert ($null -ne $midway -and -not (Same $controlsAtCrash $original) -and -not (Same $controlsAtCrash $wanted)) 'The worker was killed after restoring one field and before the others'
+    Worker 'Sync'|Out-Null
+    $finished=(Read-RooIndustriesOperationJson $crashInstance.journalPath).data
+    Note 'afterCrashRestart' ([ordered]@{journalStatus=$finished.status;changes=@($finished.changes|ForEach-Object {$_.name+':'+$_.status});controls=(Read-Controls $first)})
+    Assert ($finished.status -eq 'restored' -and @($finished.changes|Where-Object {$_.status -notin @('restored','unchanged')}).Count -eq 0 -and (Same (Read-Controls $first) $original)) 'After restart every field is back to its original and the journal is consistent'
+    Core 'rule-delete' @{ruleId=$crashRule.ruleId}|Out-Null
+    Worker 'Sync'|Out-Null
+
+    # a running game session owns its fields, so an overlapping rule is refused until the session stops
+    $gameDirectory=Join-Path $root 'game'
+    [IO.Directory]::CreateDirectory($gameDirectory)|Out-Null
+    $gameExe=Join-Path $gameDirectory 'RooIndustriesGovernorGame.exe'
+    $launcherExe=Join-Path $gameDirectory 'RooIndustriesGovernorLauncher.exe'
+    Copy-Item -LiteralPath (Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe') -Destination $gameExe
+    Copy-Item -LiteralPath (Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe') -Destination $launcherExe
+    $launcher=[Diagnostics.Process]::Start([Diagnostics.ProcessStartInfo]@{FileName=$launcherExe;Arguments='600';UseShellExecute=$false;CreateNoWindow=$true});$probes.Add($launcher)
+    $controlsFile=Join-Path $gameDirectory 'controls.json'
+    [IO.File]::WriteAllText($controlsFile,'{"gpuPriority":3}',[Text.UTF8Encoding]::new($false))
+    $sessionRoot=Join-Path $policyParent ('operations\game-session-'+[Guid]::NewGuid().ToString('N')+'\session')
+    $previewFile=Join-Path $gameDirectory 'preview.json'
+    $sessionScript=Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'
+    $sessionPreview=(@(& $sessionScript -Action Preview -LauncherProcessId $launcher.Id -GamePath $gameExe -ControlsPath $controlsFile -PreviewPath $previewFile -AcceptLauncherScope -HostDirectory $hostDirectory -DotNetPath $DotNetPath) -join "`n")|ConvertFrom-Json
+    & $sessionScript -Action Start -PreviewPath $previewFile -ReviewHash $sessionPreview.data.reviewHash -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
+    $sessionActive=$true
+    $gameRule=$rule.Clone();$gameRule.ruleId=[Guid]::NewGuid().ToString('N');$gameRule.name='Game rule';$gameRule.executablePath=$gameExe;$gameRule.cpuSelection=$null
+    $gameRule.controls=@{gpuPriority=1};$gameRule.affinityTopologyHash=$null
+    $sessionRefusal=$null;try {Core 'rule-save' @{rule=$gameRule}|Out-Null} catch {$sessionRefusal=$_.Exception.Message}
+    Note 'gameSessionRefusal' $sessionRefusal
+    Assert ($sessionRefusal -like 'A game session for RooIndustriesGovernorGame.exe already controls gpuPriority*') 'Saving a rule that overlaps a running game session is refused with a clear message'
+    $gameRule.controls=@{memoryPriority=3}
+    Core 'rule-save' @{rule=$gameRule}|Out-Null
+    Assert (@(Core 'rules-list').Count -eq 1) 'A rule for other fields of the same game can still be saved'
+    & $sessionScript -Action Stop -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
+    $sessionActive=$false
+    $gameRule.controls=@{gpuPriority=1}
+    Core 'rule-save' @{rule=$gameRule}|Out-Null
+    Assert (@(Core 'rules-list'|Where-Object {$_.controls.gpuPriority -eq 1}).Count -eq 1) 'After the game session stops the same rule can be saved'
+    Core 'rule-delete' @{ruleId=$gameRule.ruleId}|Out-Null
+    Worker 'Sync'|Out-Null
+
+    # governor requests travel on standard input; a request file is refused and a racing non-elevated process finds nothing to rewrite
+    $requestFile=Join-Path $root 'file-request.json'
+    Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$policyRoot;confirm=$true;paused=$true} $requestFile
+    $fileRefusal=(@(& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' $requestFile) -join "`n")|ConvertFrom-Json
+    Assert ($fileRefusal.status -ne 'completed' -and $fileRefusal.error.message -eq 'Governor requests must be passed on standard input.' -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json.tmp'))) 'A governor request passed as a file is refused'
+    $watchOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-watch-'+[Guid]::NewGuid().ToString('N')+'.json')
+    Start-Limited (@'
+$seen=New-Object System.Collections.Generic.List[string];$rewritten=New-Object System.Collections.Generic.List[string]
+$index=0
+foreach($folder in @([IO.Path]::GetTempPath(),'PARENT')){$w=[IO.FileSystemWatcher]::new($folder,'*.json');$w.IncludeSubdirectories=$true;$w.InternalBufferSize=65536;Register-ObjectEvent $w Created -SourceIdentifier ('created'+$index)|Out-Null;Register-ObjectEvent $w Changed -SourceIdentifier ('changed'+$index)|Out-Null;$w.EnableRaisingEvents=$true;$index++}
+$clock=[Diagnostics.Stopwatch]::StartNew()
+while($clock.Elapsed.TotalSeconds -lt 45){
+    $raised=Wait-Event -Timeout 1
+    if($raised){
+        $path=$raised.SourceEventArgs.FullPath;Remove-Event -EventIdentifier $raised.EventIdentifier;$seen.Add($path)
+        try{$text=[IO.File]::ReadAllText($path);if($text -match 'policyRoot'){[IO.File]::WriteAllText($path,$text.Replace('"paused":false','"paused":true').Replace('"paused": false','"paused": true'));$rewritten.Add($path)}}catch{}
+    }
+}
+@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);seen=@($seen|Select-Object -Unique);rewritten=@($rewritten)}|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
+'@).Replace('PARENT',$policyParent).Replace('OUT',$watchOutput)
+    Start-Sleep -Seconds 3
+    $raceRule=$rule.Clone();$raceRule.ruleId=[Guid]::NewGuid().ToString('N');$raceRule.name='Race rule'
+    Core 'rule-save' @{rule=$raceRule}|Out-Null
+    Worker 'Sync'|Out-Null
+    Worker 'Pause'|Out-Null
+    $raceResumed=Worker 'Resume'
+    Core 'rule-delete' @{ruleId=$raceRule.ruleId}|Out-Null
+    Worker 'Sync'|Out-Null
+    if($null -eq (Wait-Until {Test-Path -LiteralPath $watchOutput} 90 500)){throw 'The request watcher did not report.'}
+    Start-Sleep -Milliseconds 300
+    $watch=Get-Content -LiteralPath $watchOutput -Raw -Encoding UTF8|ConvertFrom-Json
+    Remove-Item -LiteralPath $watchOutput -Force
+    Note 'requestRace' ([ordered]@{elevated=$watch.elevated;seen=@($watch.seen);rewritten=@($watch.rewritten)})
+    Assert ($watch.elevated -eq $false -and @($watch.rewritten).Count -eq 0 -and $raceResumed.paused -eq $false -and $raceResumed.worker.hostRunning -eq $true) 'A non-elevated process racing governor actions finds no request it can rewrite'
+
     # migration of a folder written by the earlier version: a file written without elevation is refused, a clean folder moves byte for byte, an interrupted swap is adopted
     [IO.Directory]::CreateDirectory((Join-Path $legacyRoot 'rules'))|Out-Null
     $legacyRule=$rule.Clone();$legacyRule.ruleId=[Guid]::NewGuid().ToString('N');$legacyRule.revision=[Guid]::NewGuid().ToString('N')
@@ -308,7 +463,8 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
         if(Test-Path -LiteralPath $legacyRoot){try {Worker 'Remove' $legacyRoot|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}}
     }
     if($taskName -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
-    foreach($probe in $probes){if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()}
+    if($sessionActive){try {& (Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1') -Action Stop -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}}
+    foreach($probe in $probes){try {if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()} catch {}}
     Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue
     $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
     if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_ -like ('*\'+(Split-Path $root -Leaf).ToUpperInvariant()+'\*')})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}

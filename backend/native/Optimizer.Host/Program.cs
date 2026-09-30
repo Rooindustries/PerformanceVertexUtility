@@ -10,8 +10,11 @@ try
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
-    var requestBytes = File.ReadAllBytes(args[1]);
+    var fromInput = args[1] == "-";
+    var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
+    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" || action == "policy-run" && request.DurationSeconds is not null))
+        throw new InvalidDataException("Governor requests must be passed on standard input.");
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
@@ -179,7 +182,7 @@ try
             break;
         case "policy-secure":
             RequireConfirmation(request);
-            data = new { migrated = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Secure() };
+            data = new { migrated = PolicyRootSecurity.Secure(Require(request.PolicyRoot, "policy root"), request.UserSid) };
             break;
         case "policy-pause":
             RequireConfirmation(request);
@@ -268,6 +271,15 @@ static void StartProtectedWatch(string repoRoot, string root, string operationId
         start.ArgumentList.Add(System.Reflection.Assembly.GetEntryAssembly()!.Location);
     start.ArgumentList.Add("protected-session-watch"); start.ArgumentList.Add(path);
     using var watcher = Process.Start(start) ?? throw new InvalidOperationException("The recovery watcher did not start.");
+}
+
+static byte[] ReadInput()
+{
+    using var input = Console.OpenStandardInput();
+    using var buffer = new MemoryStream();
+    input.CopyTo(buffer);
+    var bytes = buffer.ToArray();
+    return bytes is [0xEF, 0xBB, 0xBF, ..] ? bytes[3..] : bytes;
 }
 
 static string Require(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new InvalidDataException("Missing " + name + ".") : value;
@@ -373,6 +385,7 @@ sealed record HostRequest
     public string? RuleId { get; init; }
     public double? DurationSeconds { get; init; }
     public bool? Paused { get; init; }
+    public string? UserSid { get; init; }
     public string? QueueJournalPath { get; init; }
     public string? AppId { get; init; }
     public string[]? ItemIds { get; init; }
