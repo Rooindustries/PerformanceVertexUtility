@@ -209,7 +209,19 @@ public sealed class ProcessPolicyStore
         }
         catch (ProcessEndedException) { return new(state, false, "The previous worker has exited."); }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return new(state, false, "The previous worker has exited."); }
-        catch (Exception error) { return new(state, null, error.Message); }
+        catch (Exception error) { return Exited(state.Host) ? new(state, false, "The previous worker has exited.") : new(state, null, error.Message); }
+    }
+
+    private static bool Exited(RunningProcess host)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(host.ProcessId);
+            return process.HasExited || process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture) != host.CreationTimeFileTimeUtc;
+        }
+        catch (ArgumentException) { return true; }
+        catch (InvalidOperationException) { return true; }
+        catch (System.ComponentModel.Win32Exception) { return false; }
     }
 
     public bool RequestStop()
