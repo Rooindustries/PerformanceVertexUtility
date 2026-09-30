@@ -87,7 +87,9 @@ public static class GovernorDisplay
             : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
         "off" => "",
         _ => summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
-            : summary.RulesError ?? worker.Error ?? worker.State?.Errors.FirstOrDefault() ?? "The governor stopped. Press Start governor to try again.",
+            : summary.RulesError is { } rulesError ? "Your saved rules could not be read: " + rulesError
+            : worker.HostRunning == true ? "The governor is not answering. Press Start governor to restart it."
+            : worker.State?.Errors.FirstOrDefault() ?? "The governor stopped. It starts again by itself within a minute, or press Start governor.",
     };
 
     public static GovernorRuleRow[] Rows(GovernorSnapshot snapshot)
