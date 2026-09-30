@@ -12,7 +12,7 @@ public sealed partial class CpuSetsPanel : UserControl
         InitializeComponent();
         Loaded += async (_, _) =>
         {
-            if (_loaded) return;
+            if (_loaded) { if (!ViewModel.Busy && ViewModel.SelectedProcess is null) await ViewModel.RefreshCommand.ExecuteAsync(null); return; }
             _loaded = true;
             await ViewModel.InitializeAsync();
         };

@@ -143,11 +143,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public ObservableCollection<InstalledApp> Apps { get; } = new();
     public ObservableCollection<LeftoverItem> Leftovers { get; } = new();
 
-    protected override bool RefreshOnRevisit => false;
+    protected override bool RefreshOnRevisit => SelectedApp is null;
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetInstalledAppsAsync();
+        var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
         var apps = inventory?.Apps;
         if (apps is null || apps.Count == 0)
         {

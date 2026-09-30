@@ -322,24 +322,37 @@ public partial class WindowsTweaksViewModel : ObservableObject
         SetSelectionStatus(available.Length == 1 ? "1 preset choice added" : available.Length + " preset choices added", "Review the selected values. Choices with missing requirements can be saved without changing Windows.");
     }
     private long _loadedGeneration = -2;
-    private bool _useSharedReads;
+    private long _loadedTicks;
+    private Task? _refresh;
     public async Task RevalidateAsync()
     {
-        if (_loadedGeneration == -1 && !Busy) await RefreshCommand.ExecuteAsync(null);
+        while (_refresh is { IsCompleted: false }) await _refresh;
+        if (_loadedGeneration == -1 && !Busy) await ReloadKeepingSelectionAsync();
     }
     public async Task ShowAsync()
     {
-        if (_loadedGeneration != -2 && (Busy || DataGeneration.IsCurrent(_loadedGeneration))) return;
-        _useSharedReads = _loadedGeneration == -2;
-        await RefreshCommand.ExecuteAsync(null);
+        if (_loadedGeneration == -2) { await LoadAsync(fresh: false); return; }
+        if (_focusedSetting is not null) { _focusedSetting = null; Filter(); }
+        if (Busy) return;
+        if (!DataGeneration.IsCurrent(_loadedGeneration) || Environment.TickCount64 - _loadedTicks > 60000 && !HasReview) await ReloadKeepingSelectionAsync();
+    }
+    private async Task ReloadKeepingSelectionAsync()
+    {
+        var picks = _all.Where(row => row.Selected.Id.Length > 0).Select(row => (row.Id, Choice: row.Selected.Id)).ToArray();
+        await LoadAsync(fresh: true);
+        if (picks.Length == 0 || _inspection is null || HasPendingRecovery) return;
+        _loading = true;
+        foreach (var (id, choice) in picks) if (_all.FirstOrDefault(row => row.Id == id) is { } row && row.Choices.FirstOrDefault(item => item.Id == choice) is { } selected) row.Selected = selected;
+        _loading = false; Invalidate(); Notify();
+        SetSelectionStatus("Selection kept", "Current values were refreshed. Review the selection before applying.");
     }
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => LoadAsync(fresh: true);
+    private Task LoadAsync(bool fresh) => Busy ? Task.CompletedTask : _refresh = LoadCoreAsync(fresh);
+    private async Task LoadCoreAsync(bool fresh)
     {
-        if (Busy) return;
         Busy = true; Invalidate();
         var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
-        var fresh = !_useSharedReads; _useSharedReads = false;
         var catalogRead = App.Operations.ReadWindowsTweakCatalogAsync(fresh);
         var choicesRead = App.Operations.ReadWindowsChoicesAsync();
         var recoveryRead = App.Operations.ReadWindowsRecoveryAsync(fresh);
@@ -391,7 +404,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             LoadProfile(); Filter();
             SetLoadedStatus(inspection);
             Summary = "Windows build " + inspection.Context.WindowsBuild + " · " + inspection.Context.Edition;
-            _loadedGeneration = generation;
+            _loadedGeneration = generation == DataGeneration.Current ? generation : -1; _loadedTicks = Environment.TickCount64;
         }
         catch (Exception error)
         {

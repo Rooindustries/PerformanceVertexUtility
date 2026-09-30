@@ -16,7 +16,9 @@
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBool}}" VerticalAlignment="Top" AutomationProperties.AutomationId="DriversRefresh" />
                         <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

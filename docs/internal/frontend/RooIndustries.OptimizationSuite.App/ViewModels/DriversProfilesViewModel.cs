@@ -78,7 +78,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var hardware = await App.Live.GetDriverHardwareAsync(fresh: Fresh);
+        var hardware = await App.Live.GetDriverHardwareAsync(fresh: Fresh && !Quiet);
         if (hardware?.Machine is null)
         {
             ErrorMessage = "We couldn't read your hardware yet. Close and reopen to try again.";

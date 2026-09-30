@@ -19,7 +19,7 @@ public sealed partial class ProcessControlsPanel : UserControl
         {
             if (!_initialized) { _initialized = true; await ViewModel.InitializeAsync(); }
             else if (ViewModel.SelectedProcess is null && ViewModel.CanEdit) await ViewModel.RefreshCommand.ExecuteAsync(null);
-            _timer.Start();
+            if (IsLoaded) _timer.Start();
         };
     }
 }

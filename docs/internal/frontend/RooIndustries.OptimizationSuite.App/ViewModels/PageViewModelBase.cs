@@ -27,6 +27,7 @@ public abstract partial class PageViewModelBase : ObservableObject
 
     protected virtual bool RefreshOnRevisit => true;
     protected bool Fresh { get; private set; }
+    protected bool Quiet { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -36,7 +37,7 @@ public abstract partial class PageViewModelBase : ObservableObject
             await ReloadAsync();
             return;
         }
-        if (_load is { IsCompleted: false }) await _load;
+        while (_load is { IsCompleted: false }) await _load;
         if (!DataGeneration.IsCurrent(_loadedGeneration) || !IsReady) await ReloadAsync();
         else if (RefreshOnRevisit) await RunAsync(quiet: true);
     }
@@ -46,13 +47,13 @@ public abstract partial class PageViewModelBase : ObservableObject
     public async Task RevalidateAsync()
     {
         if (!_initialized) return;
-        if (_load is { IsCompleted: false }) await _load;
+        while (_load is { IsCompleted: false }) await _load;
         if (_loadedGeneration == -1) await ReloadAsync();
     }
 
     private async Task RunAsync(bool quiet)
     {
-        if (_load is { IsCompleted: false }) await _load;
+        while (_load is { IsCompleted: false }) await _load;
         _load = LoadAsync(quiet);
         await _load;
     }
@@ -60,6 +61,7 @@ public abstract partial class PageViewModelBase : ObservableObject
     private async Task LoadAsync(bool quiet)
     {
         Fresh = _loadedGeneration != -2;
+        Quiet = quiet;
         _loadedGeneration = DataGeneration.Changing ? -1 : DataGeneration.Current;
         if (!quiet) { IsLoading = true; IsReady = false; }
         IsEmpty = false;
@@ -76,6 +78,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         finally
         {
+            if (_loadedGeneration != DataGeneration.Current) _loadedGeneration = -1;
             IsLoading = false;
             IsReady = ErrorMessage is null && !IsEmpty;
         }

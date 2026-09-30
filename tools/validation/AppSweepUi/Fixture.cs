@@ -82,6 +82,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<string, Task<string?>> CleanupRestore { get; set; } = _ => Task.FromResult<string?>(null);
         public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken cancellationToken = default) => Task.FromResult(Inventory);
         public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken cancellationToken = default) => Task.FromResult(Classification);
+        public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken cancellationToken = default, bool fresh = false)
+            => Task.FromResult(new LiveDataResult<ProcessClassification>(Classification, Classification?.Processes is null ? LastError : null));
         public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameStatusModel);
         public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
@@ -142,7 +144,7 @@ namespace RooIndustries.OptimizationSuite.Services
             => Task.FromResult(new LiveDataResult<string>(ShaderText, OperationError ?? (ShaderText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, OperationError ?? (ShaderRestoreText is null ? LastError : null)));
-        public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false) => Task.FromResult(InstalledApps);
+        public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false, bool fresh = false) => Task.FromResult(InstalledApps);
         public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken cancellationToken = default) => OfficialPreview(appId);
         public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken cancellationToken = default)
         {
