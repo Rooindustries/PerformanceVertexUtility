@@ -25,7 +25,7 @@ public sealed class RegistryTweakStore : ITweakStore
     public TweakAssignment[] Resolve(TweakAssignment assignment) => RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, TweakHardwareValues.InstalledMemoryKiB), RegistrySelections.Children, Read, RegistrySelections.PrimaryInterfaces);
     public TweakControlRead ReadControl(ControlAddress address) => new WindowsControlStore().Read(address);
     public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses) => new WindowsControlStore().ReadMany(addresses);
-    public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses) => Task.Run(() => ReadControls(addresses));
+    public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses) => Task.Factory.StartNew(() => ReadControls(addresses), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     public void CheckRequirement(string requirement)
     {
         if (requirement != "office") { TweakProducts.Check(requirement); return; }

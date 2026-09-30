@@ -25,8 +25,21 @@ static class PowerShellControls
     }
     public static Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadMany(IReadOnlyList<ControlAddress> addresses)
     {
+        var groups = addresses.Distinct().GroupBy(address => address.Kind switch
+        {
+            "network-adapter" or "teredo" or "device-power" => 0,
+            "firewall-profile" or "firewall-blocklist" or "defender" => 1,
+            _ => 2,
+        }).Select(group => group.ToList()).ToArray();
+        var parts = Task.WhenAll(groups.Select(group => Task.Factory.StartNew(() => ReadGroup(group), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))).GetAwaiter().GetResult();
+        var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+        foreach (var part in parts) foreach (var (address, result) in part) results[address] = result;
+        return results;
+    }
+    private static Dictionary<ControlAddress, (TweakControlRead?, Exception?)> ReadGroup(List<ControlAddress> addresses)
+    {
         var results = new Dictionary<ControlAddress, (TweakControlRead?, Exception?)>();
-        var remaining = addresses.Distinct().ToList();
+        var remaining = addresses;
         while (remaining.Count > 0)
         {
             var batch = new List<ControlAddress>();
@@ -48,11 +61,11 @@ static class PowerShellControls
         {
             process.StandardInput.Close();
             var lines = new BlockingCollection<string>();
-            var reader = Task.Run(() =>
+            var reader = Task.Factory.StartNew(() =>
             {
                 try { for (string? line; (line = process.StandardOutput.ReadLine()) is not null;) lines.Add(line); }
                 finally { lines.CompleteAdding(); }
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             var errors = process.StandardError.ReadToEndAsync();
             var done = 0; var stray = new StringBuilder(); var budget = Stopwatch.StartNew();
             while (done < batch.Count)
@@ -80,9 +93,14 @@ static class PowerShellControls
                 if (done < batch.Count) { results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds.")); return done + 1; }
                 return done;
             }
+            if (done == batch.Count)
+            {
+                _ = reader.ContinueWith(task => task.Exception, TaskScheduler.Default);
+                _ = errors.ContinueWith(task => task.Exception, TaskScheduler.Default);
+                return done;
+            }
             Exception? readFailure = null;
             try { reader.Wait(); } catch (AggregateException error) { readFailure = error.InnerException ?? error; }
-            if (done == batch.Count) return done;
             try
             {
                 if (readFailure is not null) throw readFailure;

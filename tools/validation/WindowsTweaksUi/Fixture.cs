@@ -54,10 +54,16 @@ namespace RooIndustries.OptimizationSuite.Services
                 ? Task.FromException<TweakRecovery>(new IOException("Controlled recovery read failure"))
                 : Task.FromResult(Recovery ?? new TweakRecovery(Windows.ReadState(), null, null));
         }
-        public Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false)
+        public event Action<TweakInspection, long>? WindowsTweaksPartial;
+        public (TweakInspection Inspection, long Generation)? PendingWindowsTweaks { get; private set; }
+        public Func<Task>? BeforeStatus { get; set; }
+        public void RaisePartial(TweakInspection partial, long generation) { PendingWindowsTweaks = (partial, generation); WindowsTweaksPartial?.Invoke(partial, generation); }
+        public async Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool streamed = true)
         {
+            if (BeforeStatus is not null) await BeforeStatus();
+            PendingWindowsTweaks = null;
             var inspection = Engine.Detect();
-            return Task.FromResult(Missing ? inspection with { Settings = [new("setting", "Office setting", false, [], [], "A supported Microsoft Office installation could not be identified.", [])] } : inspection);
+            return Missing ? inspection with { Settings = [new("setting", "Office setting", false, [], [], "A supported Microsoft Office installation could not be identified.", [])] } : inspection;
         }
         public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string id, TweakSelection[] selections)
         {

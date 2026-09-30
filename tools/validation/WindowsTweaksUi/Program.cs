@@ -145,6 +145,26 @@ try
     model.Approved = true;
     Check(!model.HasReview && !model.CanApply && fixture.Applies == 0, "Changing selection while a review is loading invalidates the old response");
 
+    fixture = new Fixture(Path.Combine(root, "partial-status")) { Missing = false };
+    App.Operations = fixture; model = new WindowsTweaksViewModel();
+    var statusHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); fixture.BeforeStatus = () => statusHold.Task;
+    var partialLoad = model.RefreshCommand.ExecuteAsync(null);
+    var fullStatus = fixture.Engine.Detect();
+    var pendingStatus = fullStatus with { Settings = fullStatus.Settings.Select(item => item with { Supported = false, Error = TweakEngine.FeaturesPending }).ToArray() };
+    fixture.RaisePartial(pendingStatus, DataGeneration.Current - 1);
+    Check(model.Busy && model.Rows[0].Current != "Checking…" && !model.Status.EndsWith("checking Windows features", StringComparison.Ordinal),
+        "A partial Windows status read before a change is never shown");
+    fixture.RaisePartial(pendingStatus, DataGeneration.Current);
+    var partialPreviews = fixture.Previews;
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(model.Busy && !model.CanReview && !model.CanApply && !model.HasReview && fixture.Previews == partialPreviews && fixture.Applies == 0 && model.Rows[0].Current == "Checking…" && model.Status.EndsWith("checking Windows features", StringComparison.Ordinal),
+        "A partial Windows status shows rows as checking and cannot be reviewed or applied");
+    statusHold.SetResult(); await partialLoad;
+    var loadedStatus = model.Status; var loadedCurrent = model.Rows[0].Current;
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null);
+    Check(!model.Busy && loadedCurrent != "Checking…" && !loadedStatus.Contains("checking", StringComparison.OrdinalIgnoreCase) && fixture.Previews == partialPreviews + 1 && model.HasReview,
+        "Review becomes available only after the full Windows status replaces the partial one");
+
     fixture = new Fixture(Path.Combine(root, "action-review")) { Missing = false }; model = await Load(fixture);
     var defaultPreviews = fixture.Previews; await model.ReviewCommand.ExecuteAsync(null);
     Check(!model.CanReview && !model.HasReview && fixture.Previews == defaultPreviews,

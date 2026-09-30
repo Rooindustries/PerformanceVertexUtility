@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -190,7 +191,7 @@ public partial class WindowsTweakRow : ObservableObject
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
         Detail = status is null ? "Refresh to read this setting." : status.Controls?.Any(control => control.RestartPending) == true ? "Restart Windows to finish this feature change." : status.Error ?? (status.Supported == false ? "Not available on this Windows build or edition." : "");
         if (Detail.Length == 0) Detail = string.Join("\n", (status?.Controls ?? []).Where(control => control.Address.Kind is "timer" or "download-blocker" or "firewall-profile").Select(control => control.DisplayName).Where(text => !string.IsNullOrWhiteSpace(text)));
-        Current = status is null || status.Error is not null ? "Not read"
+        Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : status is null || status.Error is not null ? "Not read"
             : status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null) ? "No override"
             : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
         if (Current.Length == 0) Current = "Unknown value";
@@ -347,7 +348,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         try
         {
             var recoveryRead = App.Operations.ReadWindowsRecoveryAsync(true);
-            var inspectionRead = App.Operations.ReadWindowsTweaksAsync(true);
+            var inspectionRead = App.Operations.ReadWindowsTweaksAsync(true, streamed: false);
             try { recovery = await recoveryRead; }
             finally { _ = inspectionRead.ContinueWith(task => task.Exception, TaskScheduler.Default); }
             inspection = await inspectionRead;
@@ -381,9 +382,32 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync(fresh: true);
     private Task LoadAsync(bool fresh) => Busy ? Task.CompletedTask : _refresh = LoadCoreAsync(fresh);
+    private (TweakInspection Inspection, long Generation)? _partial;
+    private bool _rowsReady;
+    private void ShowPartial(TweakInspection partial, long generation, int version)
+    {
+        if (version != _loadVersion || !Busy || _inspection is not null || !DataGeneration.IsCurrent(generation)) return;
+        _partial = (partial, generation);
+        if (!_rowsReady) return;
+        var statuses = new Dictionary<string, TweakSettingStatus>(StringComparer.Ordinal);
+        foreach (var item in partial.Settings) if (!statuses.TryAdd(item.Id, item)) return;
+        _loading = true;
+        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
+        _loading = false;
+        Status = _all.Count + " settings · checking Windows features";
+        Detail = "Settings that depend on Windows optional features are still being read. You can review changes once every setting is read.";
+    }
     private async Task LoadCoreAsync(bool fresh)
     {
-        Busy = true; Invalidate(); _loadVersion++;
+        Busy = true; _inspection = null; Invalidate(); _loadVersion++;
+        var version = _loadVersion; _partial = null; _rowsReady = false;
+        var context = SynchronizationContext.Current;
+        void OnPartial(TweakInspection partial, long partialGeneration)
+        {
+            if (context is null) ShowPartial(partial, partialGeneration, version);
+            else context.Post(_ => ShowPartial(partial, partialGeneration, version), null);
+        }
+        App.Operations.WindowsTweaksPartial += OnPartial;
         var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
         var catalogRead = App.Operations.ReadWindowsTweakCatalogAsync(fresh);
         var choicesRead = App.Operations.ReadWindowsChoicesAsync();
@@ -408,6 +432,8 @@ public partial class WindowsTweaksViewModel : ObservableObject
             }
             Filter();
             UpdateSections();
+            _rowsReady = true;
+            if ((_partial ?? App.Operations.PendingWindowsTweaks) is { } early) ShowPartial(early.Inspection, early.Generation, version);
             _savedChoices = await choicesRead;
             _recovery = await recoveryRead;
             OnPropertyChanged(nameof(HasPendingRecovery));
@@ -436,7 +462,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             _ = Task.WhenAll(catalogRead, choicesRead, recoveryRead, inspectionRead).ContinueWith(task => task.Exception, TaskScheduler.Default);
             _loadedGeneration = -1; _inspection = null; foreach (var row in _all) row.Observe(null); LoadProfile(); Filter(); Status = "Couldn't load Windows settings."; Detail = error.Message;
         }
-        finally { _loading = false; Busy = false; }
+        finally { App.Operations.WindowsTweaksPartial -= OnPartial; _partial = null; _loading = false; Busy = false; }
     }
     private static void Fill(ObservableCollection<string> target, string first, IEnumerable<string> values)
     {
