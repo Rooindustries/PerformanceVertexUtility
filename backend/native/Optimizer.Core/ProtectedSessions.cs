@@ -134,6 +134,9 @@ public sealed class ProtectedSessions
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
+        var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
+        governor.RequireUnowned(plan.GamePath, plan.Controls.Keys, includePaused: true);
+        governor.RequireUnowned(plan.Launcher.ExecutablePath, plan.Controls.Keys, includePaused: true);
         using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
         using var imageLease = ImageMutex(plan.GamePath);
         AcquireImage(imageLease, recovering: false);

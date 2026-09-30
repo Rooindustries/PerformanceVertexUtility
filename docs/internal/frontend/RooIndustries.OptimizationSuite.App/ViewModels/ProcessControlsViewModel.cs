@@ -105,7 +105,7 @@ public static class GovernorDisplay
             {
                 var name = Path.GetFileName(instance.Process.ExecutablePath) + " (" + instance.Process.ProcessId + ")";
                 if (instance.Status == "conflict" && instance.Error is { } denied && (denied.Contains("Win32 5 ", StringComparison.Ordinal) || denied.Contains("denied", StringComparison.OrdinalIgnoreCase)))
-                { lines.Add(name + ": unavailable · Windows denied access to this app"); continue; }
+                { lines.Add(name + ": unavailable · Windows denied access to this app, so it may keep the rule's settings until it closes"); continue; }
                 if (instance.Status == "conflict") { lines.Add(name + ": the rule stepped back for this app" + (instance.Error is { Length: > 0 } reason ? " · " + reason : "")); continue; }
                 if (!snapshot.Journals.TryGetValue(instance.JournalPath, out var journal)) { lines.Add(name + ": starting"); continue; }
                 lines.Add(name + ": " + string.Join(", ", journal.Changes.Select(change => ProcessControlsViewModel.Label(change.Name) + " " +

@@ -211,14 +211,16 @@ switch($Phase){
         $setupLog=Join-Path $work 'setup-killed.log'
         Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
         $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
-        $suspended=Wait-Until {(Test-Path -LiteralPath $setupLog) -and ([IO.File]::ReadAllText($setupLog) -match 'Governor Suspend finished')} 120
-        $killed=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')})
+        $started=[DateTime]::Now.AddSeconds(-2)
+        $suspended=Wait-Until {@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp'|Where-Object {$_.CreationTime -ge $started}|ForEach-Object {Join-Path $_.FullName 'governor-setup.log'}|Where-Object {(Test-Path -LiteralPath $_) -and ([IO.File]::ReadAllText($_) -match 'Suspend Suspended')}).Count -gt 0} 120
+        $killed=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')}|Sort-Object {$_.ProcessId -eq $setup.Id})
         foreach($process in $killed){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
+        [IO.File]::AppendAllText((Join-Path $work 'kill-progress.txt'),([DateTime]::UtcNow.ToString('o')+' killed '+(($killed|ForEach-Object {$_.Name+':'+$_.ProcessId}) -join ',')+"`r`n"))
         $killedAt=[DateTime]::UtcNow
         Start-Sleep -Seconds 2
-        $afterKill=Describe-State;$out.afterKill=$afterKill
+        $afterKill=Describe-State;$out.afterKill=[ordered]@{tasks=@($afterKill.tasks|ForEach-Object {$_.state});workers=@($afterKill.workers).Count;hostFile=$afterKill.hostFile.sha256}
         $out.killedProcesses=@($killed|ForEach-Object {$_.Name+' '+$_.ProcessId})
-        $out.setupLogTail=@(Get-Content -LiteralPath $setupLog -Tail 15)
+        $out.setupLogTail=@(Get-Content -LiteralPath $setupLog -Tail 5 -ErrorAction SilentlyContinue|ForEach-Object {[string]$_})
         $watchdog=Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue
         $out.watchdog=if($watchdog){[ordered]@{state=[string]$watchdog.State;actions=@($watchdog.Actions|ForEach-Object {$_.Arguments});triggers=@($watchdog.Triggers|ForEach-Object {[string]$_.CimClass.CimClassName+' '+$_.StartBoundary})}}else{$null}
         Check ($null -ne $suspended -and $killed.Count -ge 1 -and @($afterKill.workers).Count -eq 0 -and $afterKill.tasks[0].state -eq 'Disabled' -and $null -ne $watchdog) 'Setup was killed right after it stopped the governor; the task is disabled and a recovery task is waiting'
@@ -226,10 +228,29 @@ switch($Phase){
         if($probe){Check (Same (Read-Controls $probe) $state.original) 'The stopped governor gave the probe its original values'}
         $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 480
         $out.recoveredSecondsAfterKill=if($back){[Math]::Round(([DateTime]::UtcNow-$killedAt).TotalSeconds,1)}else{$null}
-        $recovered=Describe-State;$out.recovered=$recovered
+        $recovered=Describe-State;$out.recovered=[ordered]@{tasks=@($recovered.tasks|ForEach-Object {$_.state});workers=@($recovered.workers).Count;hostRunning=$recovered.hostRunning}
         Check ($null -ne $back -and $recovered.tasks[0].state -ne 'Disabled') ('The governor came back on its own after the killed setup ('+$out.recoveredSecondsAfterKill+' s) and enforces the rule again')
         Check ($null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'The recovery task removed itself'
         $out.leftoverSetupFolders=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp' -ErrorAction SilentlyContinue|ForEach-Object {$_.Name})
+    }
+    'kill-setup-rerun' {
+        $probe=Get-Probe $state.probePid
+        $setupLog=Join-Path $work 'setup-killed-rerun.log'
+        Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
+        $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
+        $started=[DateTime]::Now.AddSeconds(-2)
+        $suspended=Wait-Until {@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp'|Where-Object {$_.CreationTime -ge $started}|ForEach-Object {Join-Path $_.FullName 'governor-setup.log'}|Where-Object {(Test-Path -LiteralPath $_) -and ([IO.File]::ReadAllText($_) -match 'Suspend Suspended')}).Count -gt 0} 120
+        foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')})){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
+        Start-Sleep -Seconds 2
+        $afterKill=Describe-State;$out.afterKill=[ordered]@{tasks=@($afterKill.tasks|ForEach-Object {$_.state});workers=@($afterKill.workers).Count}
+        $rerunLog=Join-Path $work 'setup-rerun.log'
+        $rerun=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$rerunLog+'"') -PassThru -Wait
+        $out.rerunExit=$rerun.ExitCode
+        $out.rerunLog=@(Get-Content -LiteralPath $rerunLog|Where-Object {$_ -match 'Governor|Suspend|Resume|recovery'})
+        $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 60
+        $s=Describe-State;$out.state=[ordered]@{tasks=@($s.tasks|ForEach-Object {$_.state});hostRunning=$s.hostRunning}
+        Check ($null -ne $suspended -and $afterKill.tasks[0].state -eq 'Disabled' -and $rerun.ExitCode -eq 0 -and $null -ne $back -and $s.tasks[0].state -ne 'Disabled') 'Running setup again right after a killed setup brings the governor back and enforces the rule'
+        Check ($null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'No recovery task is left after the second setup'
     }
     'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
     'verify-replaced' {

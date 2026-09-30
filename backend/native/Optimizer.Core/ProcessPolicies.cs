@@ -77,6 +77,7 @@ public sealed class ProcessPolicyStore
     {
         PolicyRootSecurity.Secure(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
+        if (!paused) foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled)) RequireNoGameSession(rule);
         OperationFiles.Write(SettingsPath, new GovernorSettings(1, paused));
     }
 
@@ -93,9 +94,17 @@ public sealed class ProcessPolicyStore
         return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError);
     }
 
-    public string[] OwnedControls(string executablePath)
+    public static string RootFor(string? path)
     {
-        if (!Directory.Exists(Root) || Paused()) return [];
+        for (var directory = path is null ? null : Path.GetDirectoryName(Path.GetFullPath(path)); directory is not null; directory = Path.GetDirectoryName(directory))
+            if (string.Equals(Path.GetFileName(directory), "operations", StringComparison.OrdinalIgnoreCase))
+                return Path.Combine(Path.GetDirectoryName(directory)!, "process-rules");
+        return DefaultRoot;
+    }
+
+    public string[] OwnedControls(string executablePath, bool includePaused = false)
+    {
+        if (!Directory.Exists(Root) || !includePaused && Paused()) return [];
         var owned = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, executablePath)))
         {
@@ -105,10 +114,10 @@ public sealed class ProcessPolicyStore
         return owned.ToArray();
     }
 
-    public string[] OwnedControls(RunningProcess identity)
+    public string[] OwnedControls(RunningProcess identity, bool includePaused = false)
     {
-        if (!Directory.Exists(Root) || Paused()) return [];
-        var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath), StringComparer.Ordinal);
+        if (!Directory.Exists(Root) || !includePaused && Paused()) return [];
+        var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath, includePaused), StringComparer.Ordinal);
         if (File.Exists(StatePath))
             foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
                 instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
@@ -139,9 +148,9 @@ public sealed class ProcessPolicyStore
         }
     }
 
-    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls) => Refuse(OwnedControls(identity).Intersect(controls).ToArray());
+    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls, bool includePaused = false) => Refuse(OwnedControls(identity, includePaused).Intersect(controls).ToArray());
 
-    public void RequireUnowned(string executablePath, IEnumerable<string> controls) => Refuse(OwnedControls(executablePath).Intersect(controls).ToArray());
+    public void RequireUnowned(string executablePath, IEnumerable<string> controls, bool includePaused = false) => Refuse(OwnedControls(executablePath, includePaused).Intersect(controls).ToArray());
 
     private static void Refuse(string[] owned)
     {
@@ -181,7 +190,7 @@ public sealed class ProcessPolicyStore
             if (!File.Exists(Path.Combine(session, "session.json"))) continue;
             ProtectedSessionStatus status;
             try { status = new ProtectedSessions(_ => false).Status(session); }
-            catch (Exception) { continue; }
+            catch (Exception error) { throw new InvalidOperationException("A game session could not be read (" + error.Message + "). Open Games and stop or recover it before saving this rule.", error); }
             if (status.State is not { } state || status.HostRunning == false && state.Status is "stopped" or "stoppedWithErrors") continue;
             if (!Matches(rule, state.Preview.GamePath) && !Matches(rule, state.Preview.Launcher.ExecutablePath)) continue;
             var shared = state.Preview.Controls.Keys.Where(fields.Contains).Order(StringComparer.Ordinal).ToArray();

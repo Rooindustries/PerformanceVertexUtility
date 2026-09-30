@@ -31,7 +31,11 @@ $state=if(Test-Path -LiteralPath $statePath){Get-Content -Raw -LiteralPath $stat
 
 switch($Phase){
     'setup' {
-        [IO.Directory]::CreateDirectory($work)|Out-Null
+        $acl=New-Object Security.AccessControl.DirectorySecurity
+        $acl.SetAccessRuleProtection($true,$false)
+        foreach($sid in 'S-1-5-18','S-1-5-32-544'){$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+        if(Test-Path -LiteralPath $work){throw 'The test folder already exists; run cleanup first.'}
+        [IO.Directory]::CreateDirectory($work,$acl)|Out-Null
         Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication
         $password='Rg'+[Guid]::NewGuid().ToString('N').Substring(0,20)+'!7'
         & net.exe user $account $password /add /y|Out-Null
@@ -90,18 +94,21 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         Check (@(Governor-Task $state.sid).Count -eq 0 -and (Test-Path -LiteralPath (Join-Path $state.root 'rules'))) 'Uninstall removed their governor task and kept their rules'
     }
     'cleanup' {
-        foreach($name in 'RooIndustriesGovernorOtherSetup','RooIndustriesGovernorOtherProbe','RooIndustriesGovernorOtherWorker'){if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}
-        if($state){foreach($task in Governor-Task $state.sid){Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}}
-        Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -eq $probeExe -or ([string]$_.CommandLine -match 'policy-run' -and $state -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid -eq $state.sid)}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
-        Start-Sleep -Seconds 2
-        if($state){
+        $ErrorActionPreference='Continue'
+        $sid=if($state){$state.sid}else{try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}}
+        foreach($name in 'RooIndustriesGovernorOtherSetup','RooIndustriesGovernorOtherProbe','RooIndustriesGovernorOtherWorker'){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
+        if($sid){foreach($task in Governor-Task $sid){try{Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}catch{}}}
+        Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -eq $probeExe -or ($sid -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid -eq $sid)}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+        Start-Sleep -Seconds 3
+        if($sid){
             $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-            if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$markers.GetValue($_) -eq $state.sid})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
-            Get-CimInstance Win32_UserProfile -Filter ("SID='"+$state.sid+"'")|Remove-CimInstance
+            if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$markers.GetValue($_) -eq $sid})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
+            for($attempt=0;$attempt -lt 5 -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -gt 0;$attempt++){try{Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")|Remove-CimInstance -ErrorAction Stop}catch{Start-Sleep -Seconds 3}}
         }
-        & net.exe user $account /delete|Out-Null
+        & net.exe user $account /delete 2>&1|Out-Null
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
-        $out.left=[ordered]@{account=[bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue);work=(Test-Path -LiteralPath $work);profile=if($state){@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$state.sid+"'")).Count}else{0}}
+        $out.left=[ordered]@{account=[bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue);work=(Test-Path -LiteralPath $work);profile=if($sid){@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count}else{0};profileFolder=(Test-Path -LiteralPath ('C:\Users\'+$account))}
+        Check (-not $out.left.account -and -not $out.left.work -and $out.left.profile -eq 0) 'The second administrator account, its profile and the test folder are removed'
     }
 }
 $out|ConvertTo-Json -Depth 8
