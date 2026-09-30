@@ -35,23 +35,15 @@ static class PowerShellControls
                 if (batch.Count > 0 && Encoded(new { action = "read-batch", addresses = batch.Append(address) }).Length > 24000) break;
                 batch.Add(address);
             }
-            var (done, stray) = ReadBatch(batch, results);
-            remaining = remaining.Skip(done).ToList();
-            if (!stray) continue;
-            foreach (var address in remaining)
-            {
-                try { results[address] = (Read(address), null); }
-                catch (Exception error) { results[address] = (null, error); }
-            }
-            break;
+            remaining = remaining.Skip(ReadBatch(batch, results)).ToList();
         }
         return results;
     }
-    private static (int Done, bool Stray) ReadBatch(List<ControlAddress> batch, Dictionary<ControlAddress, (TweakControlRead?, Exception?)> results)
+    private static int ReadBatch(List<ControlAddress> batch, Dictionary<ControlAddress, (TweakControlRead?, Exception?)> results)
     {
         Process process;
         try { process = Start(new { action = "read-batch", addresses = batch }); }
-        catch (Exception error) { results[batch[0]] = (null, error); return (1, false); }
+        catch (Exception error) { results[batch[0]] = (null, error); return 1; }
         using (process)
         {
             process.StandardInput.Close();
@@ -71,24 +63,26 @@ static class PowerShellControls
                     if (lines.IsCompleted) break;
                     Stop(process, reader);
                     results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds."));
-                    return (done + 1, false);
+                    return done + 1;
                 }
-                var json = Payload(line, done);
-                if (json is null) { stray.Append(line).Append(Environment.NewLine); continue; }
-                try { results[batch[done]] = (Parse(Result(stray + json)), null); }
+                var marker = ResultPrefix + done.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ";
+                var at = line.IndexOf(marker, StringComparison.Ordinal);
+                if (at < 0) { stray.Append(line).Append(Environment.NewLine); continue; }
+                stray.Append(line, 0, at);
+                try { results[batch[done]] = (Parse(Result(stray + line[(at + marker.Length)..])), null); }
                 catch (Exception error) { results[batch[done]] = (null, error); }
                 done++; budget.Restart();
-                if (stray.Length > 0) { Stop(process, reader); return (done, true); }
+                if (stray.Length > 0) { Stop(process, reader); return done; }
             }
             if (!process.WaitForExit(ReadTimeout))
             {
                 Stop(process, reader);
-                if (done < batch.Count) { results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds.")); return (done + 1, false); }
-                return (done, false);
+                if (done < batch.Count) { results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds.")); return done + 1; }
+                return done;
             }
             Exception? readFailure = null;
             try { reader.Wait(); } catch (AggregateException error) { readFailure = error.InnerException ?? error; }
-            if (done == batch.Count) return (done, false);
+            if (done == batch.Count) return done;
             try
             {
                 if (readFailure is not null) throw readFailure;
@@ -97,15 +91,8 @@ static class PowerShellControls
                 results[batch[done]] = (Parse(Result(stray.ToString())), null);
             }
             catch (Exception error) { results[batch[done]] = (null, error); }
-            return (done + 1, stray.Length > 0);
+            return done + 1;
         }
-    }
-    private static string? Payload(string line, int expected)
-    {
-        if (!line.StartsWith(ResultPrefix, StringComparison.Ordinal)) return null;
-        var space = line.IndexOf(' ', ResultPrefix.Length);
-        if (space < 0 || !int.TryParse(line.AsSpan(ResultPrefix.Length, space - ResultPrefix.Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var index) || index != expected) return null;
-        return line[(space + 1)..];
     }
     private static void Stop(Process process, Task reader)
     {

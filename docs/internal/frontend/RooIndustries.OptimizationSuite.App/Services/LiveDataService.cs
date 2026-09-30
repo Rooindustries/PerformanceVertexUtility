@@ -251,7 +251,7 @@ public sealed class LiveDataService
     public async Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default, bool fresh = false)
         => (await GetDriverHardwareResultAsync(ct, fresh)).Value;
     public Task<LiveDataResult<DriverHardwareSummary>> GetDriverHardwareResultAsync(CancellationToken ct = default, bool fresh = false)
-        => SharedResultAsync<DriverHardwareSummary>("hardware", fresh ? TimeSpan.Zero : HardwareAge, "Get-DriverHardwareSummary.ps1", ct, hardware => hardware.Machine is not null && hardware.Memory is not null && hardware.Cpu is not null);
+        => SharedResultAsync<DriverHardwareSummary>("hardware", fresh ? TimeSpan.Zero : HardwareAge, "Get-DriverHardwareSummary.ps1", ct, hardware => hardware.Machine is not null && hardware.Memory is not null && hardware.Cpu is not null && hardware.Gpus is { Count: > 0 });
 
     public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
@@ -445,7 +445,7 @@ public sealed class LiveDataService
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
 
     public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false, bool fresh = false)
-        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.Zero : AppsAge, "Get-InstalledAppInventory.ps1", ct, apps => apps.Apps is { Count: > 0 } && apps.Complete != false, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "")).Value;
+        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.FromSeconds(2) : AppsAge, "Get-InstalledAppInventory.ps1", ct, apps => apps.Apps is { Count: > 0 } && apps.Complete != false, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "")).Value;
 
     public Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken ct = default)
         => RunResultAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
