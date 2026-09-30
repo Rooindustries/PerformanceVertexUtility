@@ -264,7 +264,7 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     $removed=Worker 'Sync'
     Assert (-not $removed.registered -and $removed.worker.hostRunning -eq $false -and -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) 'Deleting the last rule stops the governor and removes its task and triggers'
     Assert ((Same (Read-Controls $first) $original) -and (Same (Read-Controls $third) $original)) 'Deleting the last rule restores every running process'
-    # migration of a folder written by the earlier version: user-owned files are refused, a clean folder moves byte for byte, an interrupted swap is adopted
+    # migration of a folder written by the earlier version: a file written without elevation is refused, a clean folder moves byte for byte, an interrupted swap is adopted
     [IO.Directory]::CreateDirectory((Join-Path $legacyRoot 'rules'))|Out-Null
     $legacyRule=$rule.Clone();$legacyRule.ruleId=[Guid]::NewGuid().ToString('N');$legacyRule.revision=[Guid]::NewGuid().ToString('N')
     $legacyFile=Join-Path $legacyRoot ('rules\'+$legacyRule.ruleId+'.json')
@@ -276,6 +276,9 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
 '@).Replace('LEGACY',$legacyRoot).Replace('OUT',$limitedOutput)
     $limited=Invoke-Limited $legacyWrite
     Assert ($limited.write -eq 'allowed') 'BEFORE: the earlier unprotected rules folder lets a non-elevated process add files'
+    $legacyRefused=$null;try {Worker 'Sync' $legacyRoot|Out-Null} catch {$legacyRefused=$_.Exception.Message}
+    Note 'legacyRefusal' $legacyRefused
+    Assert ($legacyRefused -like '*did not write with administrator rights*' -and -not (Get-Acl -LiteralPath $legacyRoot).AreAccessRulesProtected) 'An earlier folder containing a file written without elevation is refused and left untouched'
     Remove-Item -LiteralPath (Join-Path $legacyRoot 'rules\note.txt') -Force
     $migrated=Worker 'Sync' $legacyRoot
     $legacyAcl=Get-Acl -LiteralPath $legacyRoot
@@ -308,7 +311,7 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
     foreach($probe in $probes){if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()}
     Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue
     $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_.StartsWith($root.ToUpperInvariant())})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
+    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_ -like ('*\'+(Split-Path $root -Leaf).ToUpperInvariant()+'\*')})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
     if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
     $evidence.finishedAtUtc=[DateTime]::UtcNow.ToString('o')
     if($EvidencePath){[IO.File]::WriteAllText($EvidencePath,($evidence|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))}

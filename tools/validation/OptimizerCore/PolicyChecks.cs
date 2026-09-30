@@ -82,7 +82,7 @@ static class PolicyChecks
             if (probe is not null) { if (!probe.HasExited) probe.Kill(); probe.WaitForExit(); probe.Dispose(); }
             if (Directory.Exists(root)) Directory.Delete(root, true);
             using var markers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true);
-            markers?.DeleteValue(PolicyRootSecurity.Normalize(root).ToUpperInvariant(), false);
+            markers?.DeleteValue(PolicyRootSecurity.MarkerName(root), false);
         }
         check(!Directory.Exists(root), "Policy validation removes its process, saved rules and journals");
     }

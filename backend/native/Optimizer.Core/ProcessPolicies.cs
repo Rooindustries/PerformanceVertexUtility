@@ -375,7 +375,9 @@ public sealed class ProcessPolicyHost
             {
                 if (processId == Environment.ProcessId) continue;
                 RunningProcess? identity = null;
-                string? key = null;
+                var key = rule.RuleId + "|" + hash + "|" + processId;
+                live.Add(key);
+                if (_unavailable.TryGetValue(key, out var opening) && DateTime.UtcNow < opening.Retry) { _state.Issues.Add(new(rule.RuleId, processId, null, opening.Message)); continue; }
                 PolicyInstance? created = null;
                 try
                 {
@@ -383,7 +385,7 @@ public sealed class ProcessPolicyHost
                     {
                         if (target.UserSid() != rule.Owner.UserSid) continue;
                         identity = target.Identity();
-                        key = rule.RuleId + "|" + hash + "|" + identity.ProcessId + "|" + identity.CreationTimeFileTimeUtc;
+                        key += "|" + identity.CreationTimeFileTimeUtc;
                         live.Add(key);
                         if (_unavailable.TryGetValue(key, out var known) && DateTime.UtcNow < known.Retry) { _state.Issues.Add(new(rule.RuleId, processId, identity.ExecutablePath, known.Message)); continue; }
                         if (rule.Controls.ContainsKey("affinity") && CpuSelection.Fingerprint(target.Topology()) != rule.AffinityTopologyHash)
@@ -427,10 +429,10 @@ public sealed class ProcessPolicyHost
                     if (created is not null && created.Status == "applying") Discard(created);
                     _state.Errors.Add(rule.Name + ": " + error.Message);
                     _state.Issues.Add(new(rule.RuleId, processId, identity?.ExecutablePath, error.Message));
-                    if (key is not null && !(_unavailable.TryGetValue(key, out var previous) && previous.Retry == DateTime.MaxValue))
+                    if (!(_unavailable.TryGetValue(key, out var previous) && previous.Retry == DateTime.MaxValue))
                     {
-                        var delay = _unavailable.TryGetValue(key, out var earlier) ? TimeSpan.FromSeconds(Math.Min(60, earlier.Delay.TotalSeconds * 2)) : TimeSpan.FromSeconds(1);
-                        _unavailable[key] = (error.Message, DateTime.UtcNow + delay, delay);
+                        var delay = _unavailable.TryGetValue(key, out var earlier) ? TimeSpan.FromSeconds(earlier.Delay.TotalSeconds * 2) : TimeSpan.FromSeconds(1);
+                        _unavailable[key] = (error.Message, delay > TimeSpan.FromSeconds(64) ? DateTime.MaxValue : DateTime.UtcNow + delay, delay);
                     }
                 }
             }
