@@ -132,7 +132,11 @@ try {
     Note 'task' ([ordered]@{name=$taskName;state=[string]$task.State;runLevel=[string]$task.Principal.RunLevel;logonType=[string]$task.Principal.LogonType;multipleInstances=[string]$task.Settings.MultipleInstances;executionTimeLimit=$task.Settings.ExecutionTimeLimit;triggers=@($task.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;start=$_.StartBoundary;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration;user=$_.UserId}});action=($task.Actions[0].Execute+' '+$task.Actions[0].Arguments)})
     Assert ($synced.worker.hostRunning -eq $true -and $synced.registered -and $synced.enabled -and $synced.runAtLogon -and $synced.restartEveryMinute -and $synced.secured) 'Saving the first rule registers, secures and starts the governor with sign-in and one-minute restart triggers'
     Assert ($triggerSid -eq (Get-RooIndustriesOperationOwner).userSid -and [string]$task.Principal.RunLevel -eq 'Highest' -and $task.Settings.ExecutionTimeLimit -eq 'PT0S' -and [string]$task.Settings.MultipleInstances -eq 'IgnoreNew' -and $task.Settings.Priority -eq 6) 'The governor task is bound to this user, elevated, unlimited, single-instance and normal priority'
-    Assert ($task.Actions[0].Arguments -like ('*policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"')) 'The governor receives its protected request path as one exact argument'
+    Assert ($task.Actions[0].Execute -like '*\conhost.exe' -and $task.Actions[0].Arguments -like '--headless *' -and $task.Actions[0].Arguments -like ('*policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"')) 'The governor runs without a console window and receives its protected request path as one exact argument'
+    $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$synced.worker.state.host.processId)
+    $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$worker.ParentProcessId)
+    Note 'workerProcess' ([ordered]@{name=$worker.Name;commandLine=$worker.CommandLine;parent=$parent.Name;parentCommandLine=$parent.CommandLine;session=$worker.SessionId})
+    Assert ($parent.Name -eq 'conhost.exe' -and $parent.CommandLine -like '*--headless*') 'The running governor is hosted by a headless console'
     $existingSeconds=Wait-Until {Same (Read-Controls $first) $wanted} 10
     Assert ($null -ne $existingSeconds) 'The governor applies all 8 controls to an already running matching process'
     $second=Start-Probe
