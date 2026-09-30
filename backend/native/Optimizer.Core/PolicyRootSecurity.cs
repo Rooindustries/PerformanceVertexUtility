@@ -30,8 +30,11 @@ public static class PolicyRootSecurity
         var local = Canonical(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
         if (!Canonical(root).StartsWith(local + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("The saved rules folder must be inside this Windows user's local app data.");
-        using var mutex = new Mutex(false, @"Global\RooIndustriesGovernorSecure-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..32]);
-        try { mutex.WaitOne(TimeSpan.FromMinutes(2)); } catch (AbandonedMutexException) { }
+        var marker = MarkerName(root);
+        using var mutex = new Mutex(false, @"Global\RooIndustriesGovernorSecure-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(marker)))[..32]);
+        bool held;
+        try { held = mutex.WaitOne(TimeSpan.FromMinutes(2)); } catch (AbandonedMutexException) { held = true; }
+        if (!held) throw new IOException("Another app is protecting the saved rules folder. Try again in a moment.");
         try
         {
             if (!Directory.Exists(root) && Directory.Exists(parent))
@@ -41,12 +44,12 @@ public static class PolicyRootSecurity
             {
                 Directory.CreateDirectory(parent);
                 CreateSecured(root);
-                Mark(root);
+                Mark(marker);
                 RemoveLeftovers(parent, name);
                 return false;
             }
-            if (Problem(root) is null) { Mark(root); RemoveLeftovers(parent, name); return false; }
-            if (Marked(root))
+            if (Problem(root) is null) { Mark(marker); RemoveLeftovers(parent, name); return false; }
+            if (Marked(marker))
                 throw new UnauthorizedAccessException("The saved rules folder was changed without administrator rights after it was protected, so it is not trusted. Delete " + root + " and save your rules again.");
             RequireMigratable(root);
             var temporary = Path.Combine(parent, name + ".secure-" + Guid.NewGuid().ToString("N"));
@@ -66,7 +69,7 @@ public static class PolicyRootSecurity
                 if (Directory.Exists(temporary) && Directory.Exists(root)) Directory.Delete(temporary, true);
                 throw;
             }
-            Mark(root);
+            Mark(marker);
             RemoveLeftovers(parent, name);
             return true;
         }
@@ -103,6 +106,7 @@ public static class PolicyRootSecurity
             }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
+            catch (UnauthorizedAccessException) when (!File.Exists(entry.FullName) && !Directory.Exists(entry.FullName)) { }
         }
         return null;
     }
@@ -123,17 +127,19 @@ public static class PolicyRootSecurity
     [DllImport("kernel32.dll", EntryPoint = "GetLongPathNameW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetLongPathName(string shortPath, StringBuilder longPath, uint length);
 
-    private static bool Marked(string root)
+    public static string MarkerName(string root) => Canonical(root).ToUpperInvariant();
+
+    private static bool Marked(string marker)
     {
         using var key = Registry.LocalMachine.OpenSubKey(MarkerKey);
-        return key?.GetValue(root.ToUpperInvariant()) is not null;
+        return key?.GetValue(marker) is not null;
     }
 
-    private static void Mark(string root)
+    private static void Mark(string marker)
     {
         using var identity = WindowsIdentity.GetCurrent();
         using var key = Registry.LocalMachine.CreateSubKey(MarkerKey, true);
-        if (key.GetValue(root.ToUpperInvariant()) is null) key.SetValue(root.ToUpperInvariant(), identity.User?.Value ?? "", RegistryValueKind.String);
+        if (key.GetValue(marker) is null) key.SetValue(marker, identity.User?.Value ?? "", RegistryValueKind.String);
     }
 
     private static void RequireElevated()
@@ -162,18 +168,33 @@ public static class PolicyRootSecurity
     {
         var directory = new DirectoryInfo(root);
         foreach (var entry in new FileSystemInfo[] { directory }.Concat(directory.EnumerateFileSystemInfos("*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false })))
+        {
             if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 throw new UnauthorizedAccessException("The saved rules folder contains a link (" + entry.FullName + "), so it is not trusted. Delete " + root + " and save your rules again.");
+            if (!Trusted((entry is DirectoryInfo folder ? (FileSystemSecurity)folder.GetAccessControl() : ((FileInfo)entry).GetAccessControl()).GetOwner(typeof(SecurityIdentifier))))
+                throw new UnauthorizedAccessException("The saved rules folder has files the app did not write with administrator rights (" + entry.FullName + "). Delete " + root + " and save your rules again.");
+        }
     }
 
     private static void Copy(string source, string destination)
     {
+        using var sourceHandle = PolicyRootLease.OpenDirectory(source);
+        var sourcePath = PolicyRootLease.FinalPath(sourceHandle) ?? throw new IOException("The saved rules folder path could not be read.");
         foreach (var folder in Directory.EnumerateDirectories(source, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
+        {
+            if (new DirectoryInfo(folder).Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new UnauthorizedAccessException("The saved rules folder changed into a link while it was copied.");
             Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, folder)));
+        }
         foreach (var file in Directory.EnumerateFiles(source, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
         {
             if (file.EndsWith(".lock", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) continue;
-            File.WriteAllBytes(Path.Combine(destination, Path.GetRelativePath(source, file)), File.ReadAllBytes(file));
+            using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var inputPath = PolicyRootLease.FinalPath(input.SafeFileHandle);
+            if (inputPath is null || !inputPath.StartsWith(sourcePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                !Trusted(input.GetAccessControl().GetOwner(typeof(SecurityIdentifier))))
+                throw new UnauthorizedAccessException("The saved rules folder changed while it was copied, so it is not trusted.");
+            using var output = new FileStream(Path.Combine(destination, Path.GetRelativePath(source, file)), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            input.CopyTo(output);
         }
     }
 
@@ -211,16 +232,19 @@ public sealed class PolicyRootLease : IDisposable
     private readonly string _opened;
     private PolicyRootLease(SafeFileHandle handle) { _handle = handle; _opened = FinalPath(handle) ?? throw new IOException("The saved rules folder path could not be read."); }
 
+    internal static SafeFileHandle OpenDirectory(string path)
+    {
+        var handle = CreateFile(PolicyRootSecurity.Normalize(path), 0x1 | 0x20000 | 0x100000, 0x1 | 0x2, IntPtr.Zero, 3, 0x02000000 | 0x00200000, IntPtr.Zero);
+        if (!handle.IsInvalid) return handle;
+        var error = Marshal.GetLastWin32Error();
+        handle.Dispose();
+        throw new IOException("The saved rules folder could not be opened: " + new Win32Exception(error).Message);
+    }
+
     public static PolicyRootLease Acquire(string root)
     {
         root = PolicyRootSecurity.Normalize(root);
-        var handle = CreateFile(root, 0x1 | 0x20000 | 0x100000, 0x1 | 0x2, IntPtr.Zero, 3, 0x02000000 | 0x00200000, IntPtr.Zero);
-        if (handle.IsInvalid)
-        {
-            var error = Marshal.GetLastWin32Error();
-            handle.Dispose();
-            throw new IOException("The saved rules folder could not be opened: " + new Win32Exception(error).Message);
-        }
+        var handle = OpenDirectory(root);
         PolicyRootLease lease;
         try { lease = new PolicyRootLease(handle); }
         catch { handle.Dispose(); throw; }
@@ -235,7 +259,7 @@ public sealed class PolicyRootLease : IDisposable
 
     public bool Moved => !string.Equals(FinalPath(_handle), _opened, StringComparison.OrdinalIgnoreCase);
 
-    private static string? FinalPath(SafeFileHandle handle)
+    internal static string? FinalPath(SafeFileHandle handle)
     {
         var buffer = new StringBuilder(1024);
         var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);

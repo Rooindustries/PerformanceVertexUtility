@@ -23,11 +23,11 @@ function Get-Sid([string]$Account){
 }
 
 function Get-GovernorTasks {
-    foreach($task in @(Get-ScheduledTask -ErrorAction Stop|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})){
+    foreach($task in @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)){
         $parts=@([string]$task.Description -split ' \| ',3)
         if($parts.Count -ne 3 -or $parts[1] -notmatch '^S-1-'){Write-Log ('Skipping task with an unexpected description: '+$task.TaskName);continue}
         $profile=@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$parts[1]+"'") -ErrorAction SilentlyContinue)[0]
-        $local=if($profile){[IO.Path]::GetFullPath((Join-Path $profile.LocalPath 'AppData\Local')).TrimEnd('\')+'\'}else{$null}
+        $local=if($profile){[IO.Path]::GetFullPath((Join-Path $profile.LocalPath 'AppData\Local')).TrimEnd('\')+'\'}elseif($parts[1] -eq $me){[IO.Path]::GetFullPath([Environment]::GetFolderPath('LocalApplicationData')).TrimEnd('\')+'\'}else{$null}
         $root=try{[IO.Path]::GetFullPath($parts[2])}catch{''}
         $trusted=[string]$task.Principal.RunLevel -eq 'Highest' -and (Get-Sid ([string]$task.Principal.UserId)) -eq $parts[1] -and $local -and $root.StartsWith($local,[StringComparison]::OrdinalIgnoreCase)
         [pscustomobject]@{taskName=$task.TaskName;taskPath=$task.TaskPath;userSid=$parts[1];policyRoot=$root;enabled=([string]$task.State -ne 'Disabled');trusted=[bool]$trusted}
@@ -121,8 +121,8 @@ switch($Action){
         $records=New-Object System.Collections.Generic.List[object]
         if($StatePath -and (Test-Path -LiteralPath $StatePath)){foreach($item in @((Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8|ConvertFrom-Json))){if($null -ne $item){$records.Add($item)}}}
         $local=[Environment]::GetFolderPath('LocalApplicationData')
-        foreach($folder in @(Get-ChildItem -LiteralPath $local -Directory -Filter '*OptimizationSuite' -ErrorAction SilentlyContinue)){
-            $root=Join-Path $folder.FullName 'process-rules'
+        $dataRoot=@(Get-ChildItem -LiteralPath $local -Directory -Filter '*OptimizationSuite' -ErrorAction SilentlyContinue|Where-Object {$_.Name -ne 'RooIndustriesOptimizationSuite'}|ForEach-Object {$_.FullName})+@(Join-Path $local 'RooIndustriesOptimizationSuite')|Select-Object -First 1
+        foreach($root in @(Join-Path $dataRoot 'process-rules')){
             if((Test-Path -LiteralPath (Join-Path $root 'rules')) -and -not @($records|Where-Object {$_.userSid -eq $me -and [string]$_.policyRoot -ieq $root}).Count){
                 Write-Log ('Found saved rules without a governor task: '+$root)
                 $records.Add([pscustomobject]@{taskName='';taskPath='\';userSid=$me;policyRoot=$root;enabled=$true;wasRunning=$false})

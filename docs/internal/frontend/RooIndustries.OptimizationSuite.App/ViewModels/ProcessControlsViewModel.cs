@@ -83,7 +83,7 @@ public static class GovernorDisplay
     {
         "running" => summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.",
         "paused" => (worker.State?.Instances.Any(instance => instance.Status == "conflict") == true
-            ? "Your rules are saved but not used. Some apps kept a setting that another app changed after the rule set it."
+            ? "Your rules are saved but not used. Some apps kept a setting the governor could not put back."
             : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
         "off" => "",
         _ => summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
@@ -104,7 +104,7 @@ public static class GovernorDisplay
             foreach (var instance in state?.Instances.Where(instance => instance.RuleId == rule.RuleId && instance.Status is "active" or "applying" or "conflict") ?? [])
             {
                 var name = Path.GetFileName(instance.Process.ExecutablePath) + " (" + instance.Process.ProcessId + ")";
-                if (instance.Status == "conflict") { lines.Add(name + ": another app changed a setting, so this rule stepped back for it"); continue; }
+                if (instance.Status == "conflict") { lines.Add(name + ": the rule stepped back for this app" + (instance.Error is { Length: > 0 } reason ? " · " + reason : "")); continue; }
                 if (!snapshot.Journals.TryGetValue(instance.JournalPath, out var journal)) { lines.Add(name + ": starting"); continue; }
                 lines.Add(name + ": " + string.Join(", ", journal.Changes.Select(change => ProcessControlsViewModel.Label(change.Name) + " " +
                     (change.Observed is { } observed ? ProcessControlsViewModel.Describe(change.Name, observed) : "unknown"))));

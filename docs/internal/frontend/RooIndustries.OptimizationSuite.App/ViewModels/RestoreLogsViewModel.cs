@@ -67,7 +67,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             rulesState switch
             {
                 "running" => "Running · " + (ruleInstances == 1 ? "1 app" : ruleInstances + " apps") + " changed · pause it in Games > Processes to put settings back",
-                "paused" => steppedBack > 0 ? "Paused · " + steppedBack + " apps kept a setting another app changed" : "Paused · settings put back",
+                "paused" => steppedBack > 0 ? "Paused · " + steppedBack + " apps kept a setting the governor could not put back" : "Paused · settings put back",
                 "off" => ruleInstances + steppedBack > 0 ? "Off · " + (ruleInstances + steppedBack) + " apps still have saved settings" : "No rules",
                 "notResponding" => "Not responding · " + (ruleInstances > 0 ? ruleInstances + " apps have saved settings · " : "") + "open Games > Processes",
                 _ => "Status unavailable",
@@ -91,7 +91,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         {
             var rule = rules!.Rules.FirstOrDefault(item => item.RuleId == instance.RuleId);
             HistoryRows.Add(new AuditRow("Now", "Governor", "neutral", Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath),
-                (rule?.Name ?? "Saved rule") + (instance.Status == "conflict" ? " · stepped back, another app changed a setting" : " · settings kept by the governor"), "Reversible", "low"));
+                (rule?.Name ?? "Saved rule") + (instance.Status == "conflict" ? " · stepped back for this app" : " · settings kept by the governor"), "Reversible", "low"));
         }
 
         foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
