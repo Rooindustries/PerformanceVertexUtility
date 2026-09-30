@@ -8,7 +8,7 @@
     [int]$ColdTweaksRuns = 2,
     [int]$Minutes = 45,
     [switch]$SkipAdvanced,
-    [ValidateSet('loadtimes', 'invalidation')][string]$Scenario = 'loadtimes',
+    [ValidateSet('loadtimes', 'invalidation', 'modes')][string]$Scenario = 'loadtimes',
     [int]$MemoryPasses = 0,
     [string]$GcDump,
     [switch]$Uninstall
@@ -53,13 +53,14 @@ $sid = (Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid).Sid
 $task = 'RooIndustries_LoadTimes'
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
 $ps = Join-Path $PSHOME 'powershell.exe'
-$arguments = if ($Scenario -eq 'invalidation') { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Test-CacheInvalidation.ps1') + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' }
+$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1' }[$Scenario]
+$arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
 $action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
 $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
 Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes ($Minutes + 5)) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) -Force | Out-Null
 Start-ScheduledTask -TaskName $task
-$done = Join-Path $out $(if ($Scenario -eq 'invalidation') { 'invalidation.done' } else { 'measure.done' })
+$done = Join-Path $out $(if ($scenarioScript) { "$Scenario.done" } else { 'measure.done' })
 $deadline = (Get-Date).AddMinutes($Minutes)
 while ((Get-Date) -lt $deadline -and -not (Test-Path $done)) { Start-Sleep 5 }
 $info = Get-ScheduledTaskInfo -TaskName $task
@@ -68,4 +69,4 @@ if (-not (Test-Path $done)) { Stop-ScheduledTask -TaskName $task -ErrorAction Si
 Unregister-ScheduledTask -TaskName $task -Confirm:$false
 if ($Uninstall) { "RESULT uninstall " + (Uninstall-App) }
 "RESULT out=$out"
-Get-Content (Join-Path $out $(if ($Scenario -eq 'invalidation') { 'invalidation.log' } else { 'LOADTIMES.md' })) -ErrorAction SilentlyContinue
+Get-Content (Join-Path $out $(if ($scenarioScript) { "$Scenario.log" } else { 'LOADTIMES.md' })) -ErrorAction SilentlyContinue

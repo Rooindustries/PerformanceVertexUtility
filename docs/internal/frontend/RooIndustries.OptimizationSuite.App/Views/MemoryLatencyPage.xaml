@@ -60,6 +60,7 @@
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="Memory by process" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                             <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0" ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled" ItemsSource="{x:Bind ViewModel.TopMemoryRows}">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:BackgroundRow">
