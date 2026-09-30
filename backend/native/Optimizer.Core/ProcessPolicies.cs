@@ -234,7 +234,7 @@ public sealed class ProcessPolicyStore
         catch (Exception error) { return Exited(state.Host) ? new(state, false, "The previous worker has exited.") : new(state, null, error.Message); }
     }
 
-    private static bool Exited(RunningProcess host)
+    internal static bool Exited(RunningProcess host)
     {
         try
         {
@@ -537,7 +537,11 @@ public sealed class ProcessPolicyHost
             instance.Status = restored.Status is "restored" or "expired" ? restored.Status : "conflict";
             instance.Error = restored.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
         }
-        catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
+        catch (Exception error)
+        {
+            if (ProcessPolicyStore.Exited(instance.Process)) { instance.Status = "expired"; instance.Error = null; }
+            else { instance.Status = "conflict"; instance.Error = error.Message; }
+        }
         if (instance.Status is "restored" or "expired") _restoreAttempts.Remove(instance.JournalPath);
     }
 
