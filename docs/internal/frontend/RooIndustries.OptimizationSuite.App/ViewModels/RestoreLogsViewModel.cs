@@ -23,17 +23,25 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var session = await App.Live.GetGameTuneSessionStatusAsync();
-        var governor = await App.Live.GetProcessGovernorSessionStatusAsync();
-        var games = await App.Operations.ReadGameSessionsAsync();
-        TweakRecovery? windows = null;
-        try { windows = await App.Operations.ReadWindowsRecoveryAsync(); } catch (Exception) { }
+        var sessionRead = App.Live.GetGameTuneSessionStatusAsync();
+        var governorRead = App.Live.GetProcessGovernorSessionStatusAsync();
+        var gamesRead = App.Operations.ReadGameSessionsAsync();
+        var windowsRead = ReadWindowsAsync();
+        var windows = await windowsRead;
+        var session = await sessionRead;
+        var governor = await governorRead;
+        var games = await gamesRead;
 
         BuildRestore(
             session?.DryRun == false || session?.Status == "notFound" ? RecoveryAvailable(session.Status, session.Restorable) : null,
             governor?.DryRun == false || governor?.Status == "notFound" ? RecoveryAvailable(governor.Status, governor.Restorable) : null, games, windows);
         BuildHistory(session, governor, games, windows);
         IsEmpty = false;
+    }
+
+    private static async Task<TweakRecovery?> ReadWindowsAsync()
+    {
+        try { return await App.Operations.ReadWindowsRecoveryAsync(); } catch (Exception) { return null; }
     }
 
     private void BuildRestore(bool? gameRecovery, bool? governorRecovery, GameSessionEntry[] games, TweakRecovery? windows)

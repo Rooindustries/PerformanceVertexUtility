@@ -23,9 +23,12 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync();
-        var classification = await App.Live.GetProcessClassificationAsync();
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var inventoryRead = App.Live.GetProcessInventoryAsync();
+        var classificationRead = App.Live.GetProcessClassificationAsync();
+        var hardwareRead = App.Live.GetDriverHardwareAsync();
+        var inventory = await inventoryRead;
+        var classification = await classificationRead;
+        var hardware = await hardwareRead;
         TelemetrySnapshot? telemetry = null;
 
         BuildMemory(inventory?.Summary, hardware?.Memory?.TotalPhysicalBytes);

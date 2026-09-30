@@ -119,7 +119,7 @@ namespace RooIndustries.OptimizationSuite.Services
         }
         public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(GovernorStatusText, GovernorStatusError ?? (GovernorStatusText is null ? LastError : null)));
-        public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default) => Task.FromResult(DriverHardware);
+        public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default, bool fresh = false) => Task.FromResult(DriverHardware);
         public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, OperationError ?? (NvidiaProbeText is null ? LastError : null)));
         public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)

@@ -5,8 +5,9 @@ using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class UninstallCleanupPage : Page
+public sealed partial class UninstallCleanupPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     private const double CompactThreshold = 1000;
     private bool _layoutApplied;
     private bool _compact;
@@ -16,9 +17,11 @@ public sealed partial class UninstallCleanupPage : Page
     public UninstallCleanupPage()
     {
         InitializeComponent();
-        LeftoversTab.Visibility = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) =>
         {
+            LeftoversTab.Visibility = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
+            if (App.Theme.SimpleMode && ReferenceEquals(CleanupTabs.SelectedItem, LeftoversTab)) CleanupTabs.SelectedIndex = 0;
             ResizeContent();
             await ViewModel.InitializeAsync();
             ResizeContent();

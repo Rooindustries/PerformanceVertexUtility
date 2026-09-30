@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using RooIndustries.Optimizer;
 
@@ -50,15 +51,16 @@ public sealed partial class OptimizerService
     public async Task<GameSessionEntry[]> ReadGameSessionsAsync()
     {
         if (!Directory.Exists(_storage)) return [];
-        var entries = new List<GameSessionEntry>();
-        foreach (var directory in Directory.EnumerateDirectories(_storage, "game-session-*").OrderByDescending(Directory.GetLastWriteTimeUtc))
+        var roots = Directory.EnumerateDirectories(_storage, "game-session-*").OrderByDescending(Directory.GetLastWriteTimeUtc)
+            .Select(directory => Path.Combine(directory, "session")).Where(Directory.Exists).ToArray();
+        using var slots = new SemaphoreSlim(4);
+        return await Task.WhenAll(roots.Select(async root =>
         {
-            var root = Path.Combine(directory, "session");
-            if (!Directory.Exists(root)) continue;
-            try { entries.Add(new(root, await ReadGameSessionAsync(root))); }
-            catch (Exception error) { entries.Add(new(root, new(null, null, error.Message))); }
-        }
-        return entries.ToArray();
+            await slots.WaitAsync().ConfigureAwait(false);
+            try { return new GameSessionEntry(root, await ReadGameSessionAsync(root).ConfigureAwait(false)); }
+            catch (Exception error) { return new GameSessionEntry(root, new(null, null, error.Message)); }
+            finally { slots.Release(); }
+        }));
     }
 
     public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot)

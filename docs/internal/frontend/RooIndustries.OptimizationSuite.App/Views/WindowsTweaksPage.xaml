@@ -106,7 +106,7 @@
                     </Grid>
                 </Grid></Grid>
                 <Grid Grid.Row="2">
-            <ListView IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" ItemsSource="{x:Bind ViewModel.Rows}" SelectionMode="None" HorizontalAlignment="Stretch" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" AutomationProperties.AutomationId="WindowsTweaksList">
+            <ListView IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" ItemsSource="{x:Bind ViewModel.Rows, Mode=OneWay}" SelectionMode="None" HorizontalAlignment="Stretch" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" AutomationProperties.AutomationId="WindowsTweaksList">
                 <ListView.ItemTemplate><DataTemplate x:DataType="vm:WindowsTweakRow">
                     <Grid Padding="10,8" ColumnSpacing="12" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="0,0,0,1" SizeChanged="SettingRowSizeChanged">
 

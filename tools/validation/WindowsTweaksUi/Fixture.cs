@@ -44,17 +44,17 @@ namespace RooIndustries.OptimizationSuite.Services
             }
             Engine = new(Catalog, Windows);
         }
-        public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync() => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
+        public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
         public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromResult(Choices.Read());
         public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string id, TweakSelection[] selections, string? revision) => Task.FromResult(Choices.Save(catalog, id, selections, revision));
-        public Task<TweakRecovery> ReadWindowsRecoveryAsync()
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false)
         {
             RecoveryReads++;
             return FailRead
                 ? Task.FromException<TweakRecovery>(new IOException("Controlled recovery read failure"))
                 : Task.FromResult(Recovery ?? new TweakRecovery(Windows.ReadState(), null, null));
         }
-        public Task<TweakInspection> ReadWindowsTweaksAsync()
+        public Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false)
         {
             var inspection = Engine.Detect();
             return Task.FromResult(Missing ? inspection with { Settings = [new("setting", "Office setting", false, [], [], "A supported Microsoft Office installation could not be identified.", [])] } : inspection);

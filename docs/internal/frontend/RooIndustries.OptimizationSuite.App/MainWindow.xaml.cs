@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window
         App.Theme.ThemeChanged += OnThemeChanged;
         App.Theme.EffectsChanged += ApplyEffects;
         App.Theme.SimpleModeChanged += ApplySimpleMode;
+        DataGeneration.Settled += OnDataSettled;
         Closed += OnWindowClosed;
         ApplyEffects();
         ApplySimpleMode();
@@ -61,7 +62,14 @@ public sealed partial class MainWindow : Window
         App.Theme.ThemeChanged -= OnThemeChanged;
         App.Theme.EffectsChanged -= ApplyEffects;
         App.Theme.SimpleModeChanged -= ApplySimpleMode;
+        DataGeneration.Settled -= OnDataSettled;
     }
+
+    private void OnDataSettled() => DispatcherQueue.TryEnqueue(async () =>
+    {
+        try { if (ContentFrame.Content is IRevalidatingPage page) await page.RevalidateAsync(); }
+        catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
+    });
 
     private void ConfigureTitleBar()
     {

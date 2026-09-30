@@ -50,9 +50,7 @@
             </Border>
             <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBool}}" VerticalAlignment="Top" AutomationProperties.AutomationId="DashboardRefresh" />
         </Grid>
-        <ProgressRing Grid.Row="1" IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" Width="32" Height="32" />
-        <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="20" Padding="0,0,12,12">
                 <StackPanel Spacing="12">
                     <TextBlock Text="Start here" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -98,6 +96,12 @@
                         </Button>
                     </views:AdaptivePanel>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="12" Visibility="{x:Bind ViewModel.ShowReading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <ProgressRing IsActive="{x:Bind ViewModel.ShowReading, Mode=OneWay}" Width="20" Height="20" />
+                    <TextBlock Text="Reading this PC" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                </StackPanel>
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                <StackPanel Spacing="20" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                 <views:AdaptivePanel MinColumnWidth="240" MaxColumns="3">
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
@@ -147,6 +151,7 @@
                         </StackPanel>
                     </Border>
                 </views:AdaptivePanel>
+                </StackPanel>
                 <StackPanel Spacing="12">
                     <TextBlock Text="Tools &amp; settings" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <views:AdaptivePanel MinColumnWidth="240" MaxColumns="4">

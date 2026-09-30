@@ -19,6 +19,7 @@ public sealed partial class GameSessionPanel : UserControl
         Loaded += async (_, _) =>
         {
             if (!_initialized) { _initialized = true; await ViewModel.InitializeAsync(); }
+            else if (ViewModel.SelectedSession is null && ViewModel.SelectedLauncher is null && !ViewModel.Busy) await ViewModel.RefreshCommand.ExecuteAsync(null);
             _timer.Start();
         };
     }
