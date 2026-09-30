@@ -30,7 +30,7 @@ function Get-VendorFromText {
 
 $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-$cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+$cpu = Get-CimInstance Win32_Processor -Property Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors -ErrorAction SilentlyContinue | Select-Object -First 1
 $memoryModules = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue)
 $gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue)
 $networkAdapters = @(Get-CimInstance Win32_NetworkAdapter -ErrorAction SilentlyContinue | Where-Object { $_.PhysicalAdapter -or $_.Name -match 'Tailscale|WireGuard|VPN|Wi-Fi|Ethernet' })
