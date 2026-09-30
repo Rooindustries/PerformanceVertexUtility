@@ -245,6 +245,10 @@ public sealed class ProcessPolicyHost
     private readonly Dictionary<string, (string Message, DateTime Retry, TimeSpan Delay)> _unavailable = new(StringComparer.Ordinal);
     private readonly List<string> _pruned = [];
     private int _enabledRules = -1;
+    private readonly Dictionary<string, (DateTime Written, long Length)> _ruleStamps = new(StringComparer.OrdinalIgnoreCase);
+    private (SavedProcessRule Rule, string Hash)[]? _ruleSnapshot;
+    private readonly Dictionary<string, DateTime> _checked = new(StringComparer.OrdinalIgnoreCase);
+    private TimeSpan _recheck = TimeSpan.Zero;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
 
@@ -276,6 +280,7 @@ public sealed class ProcessPolicyHost
         var clock = Stopwatch.StartNew();
         var swept = TimeSpan.MinValue;
         var moved = false;
+        _recheck = TimeSpan.FromSeconds(2);
         try
         {
             Save();
@@ -319,7 +324,7 @@ public sealed class ProcessPolicyHost
         _state.Errors = [];
         _state.Issues = [];
         (SavedProcessRule Rule, string Hash)[] rules;
-        try { rules = _store.ReadRules(); }
+        try { rules = ReadRules(); }
         catch (Exception error)
         {
             _state.Errors.Add("Saved rules could not be read: " + error.Message);
@@ -343,6 +348,8 @@ public sealed class ProcessPolicyHost
                 if (!processes[Path.GetFileNameWithoutExtension(owner.ExecutablePath)].Contains(instance.Process.ProcessId) || !Alive(instance.Process)) Restore(instance);
                 continue;
             }
+            if (instance.Status == "active" && _checked.TryGetValue(instance.JournalPath, out var checkedAt) && DateTime.UtcNow - checkedAt < _recheck) continue;
+            _checked[instance.JournalPath] = DateTime.UtcNow;
             try
             {
                 using var process = new ProcessTarget(instance.Process.ProcessId);
@@ -461,6 +468,19 @@ public sealed class ProcessPolicyHost
         catch (ProcessEndedException) { return false; }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
         catch (Exception) { return true; }
+    }
+
+    private (SavedProcessRule Rule, string Hash)[] ReadRules()
+    {
+        var files = Directory.Exists(_store.RulesDirectory) ? new DirectoryInfo(_store.RulesDirectory).GetFiles("*.json") : [];
+        if (_ruleSnapshot is not null && files.Length == _ruleStamps.Count &&
+            files.All(file => _ruleStamps.TryGetValue(file.FullName, out var stamp) && stamp == (file.LastWriteTimeUtc, file.Length))) return _ruleSnapshot;
+        _ruleSnapshot = null;
+        _ruleStamps.Clear();
+        var rules = _store.ReadRules();
+        foreach (var file in files) _ruleStamps[file.FullName] = (file.LastWriteTimeUtc, file.Length);
+        _ruleSnapshot = rules;
+        return rules;
     }
 
     private bool RestoreDue(PolicyInstance instance)

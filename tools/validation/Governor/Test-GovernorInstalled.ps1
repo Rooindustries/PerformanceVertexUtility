@@ -149,11 +149,9 @@ switch($Phase){
         $before=Describe-State;$out.before=$before
         $scriptPath=Join-Path $work 'limited.ps1';$result=Join-Path $work 'limited.json';Remove-Item -LiteralPath $result -ErrorAction SilentlyContinue
         [IO.File]::WriteAllText($scriptPath,("`$r=[ordered]@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}`ntry{[IO.File]::WriteAllText('"+(Join-Path $policyRoot 'rules\planted-by-user.txt')+"','x');`$r.createInRules='allowed'}catch{`$r.createInRules='denied: '+`$_.Exception.Message}`n`$r|ConvertTo-Json|Set-Content -LiteralPath '"+$result+"'"),[Text.UTF8Encoding]::new($true))
-        $name='RooIndustriesGovernorLegacyLimited'
-        Register-ScheduledTask -TaskName $name -Action (New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\conhost.exe') -Argument ('--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$scriptPath+'"')) -Principal (New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Limited) -Force|Out-Null
-        Start-ScheduledTask -TaskName $name
+        $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes([IO.File]::ReadAllText($scriptPath)))
+        Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -Wait
         Wait-Until {Test-Path -LiteralPath $result} 60|Out-Null
-        Unregister-ScheduledTask -TaskName $name -Confirm:$false
         $out.limited=Get-Content -Raw -LiteralPath $result|ConvertFrom-Json
         Remove-Item -LiteralPath (Join-Path $policyRoot 'rules\planted-by-user.txt') -Force -ErrorAction SilentlyContinue
         Check ($out.limited.elevated -eq $false -and $out.limited.createInRules -eq 'allowed') 'BEFORE: a non-elevated process of the same user can write into the rules folder of the earlier version'
