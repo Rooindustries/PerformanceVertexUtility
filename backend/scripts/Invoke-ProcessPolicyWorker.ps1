@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Status','Start','Stop','EnableLogon','DisableLogon','Remove')][string]$Action,
+    [Parameter(Mandatory=$true)][ValidateSet('Status','Sync','Pause','Resume','Remove')][string]$Action,
     [Parameter(Mandatory=$true)][string]$PolicyRoot,
     [string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$HostDirectory='',
@@ -10,7 +10,8 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
-if($Action -ne 'Status' -and -not $ConfirmApply){throw 'Confirm the saved-policy worker operation before changing it.'}
+try {
+if($Action -ne 'Status' -and -not $ConfirmApply){throw 'Confirm the governor operation before changing it.'}
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $PolicyRoot=[IO.Path]::GetFullPath($PolicyRoot)
 $owner=Get-RooIndustriesOperationOwner
@@ -52,44 +53,101 @@ function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
 
 function Stop-Worker {
     $status=Invoke-Core 'policy-status'
-    if($null -eq $status.hostRunning){throw ('Worker identity could not be verified: '+$status.error)}
+    if($null -eq $status.hostRunning){throw ('Governor identity could not be verified: '+$status.error)}
     if($status.hostRunning){
         Invoke-Core 'policy-stop'|Out-Null
         $clock=[Diagnostics.Stopwatch]::StartNew()
         do {
             Start-Sleep -Milliseconds 200
             $status=Invoke-Core 'policy-status'
-            if($null -eq $status.hostRunning){throw ('Worker shutdown could not be verified: '+$status.error)}
+            if($null -eq $status.hostRunning){throw ('Governor shutdown could not be verified: '+$status.error)}
         } while($status.hostRunning -and $clock.Elapsed.TotalSeconds -lt 30)
-        if($status.hostRunning){throw 'The policy worker did not finish restoring owned controls within 30 seconds. Its recovery state was preserved.'}
-    } elseif($status.state -and $status.state.status -notin @('stopped','stoppedWithConflicts')) {
+        if($status.hostRunning){throw 'The governor did not finish restoring its settings within 30 seconds. Its recovery state was preserved.'}
+    }
+    Restore-Interrupted $status
+}
+
+function Restore-Interrupted($Status) {
+    if($Status.state -and $Status.state.status -notin @('stopped','stoppedWithConflicts') -and (Invoke-Core 'policy-summary').secured){
         Invoke-Core 'policy-run' @{durationSeconds=0}|Out-Null
     }
 }
 
-if($Action -in @('Start','EnableLogon','DisableLogon')) {
-    [IO.Directory]::CreateDirectory($PolicyRoot)|Out-Null
+function Get-GovernorTask {return Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue}
+
+function Register-Governor {
+    $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if(-not $admin){throw 'Saved rules need administrator rights. Open the app as an administrator and try again.'}
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
-    $atLogon=($Action -eq 'EnableLogon' -or ($Action -eq 'Start' -and $task -and @($task.Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0))
     $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run',('"'+$requestPath+'"'))) -join ' '
     $execute=New-ScheduledTaskAction -Execute $DotNetPath -Argument $arguments -WorkingDirectory $HostDirectory
-    $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel $(if($admin){'Highest'}else{'Limited'})
+    $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
-    $parameters=@{TaskName=$taskName;Description=$description;Action=$execute;Principal=$principal;Settings=$settings;Force=$true}
-    if($atLogon){$parameters.Trigger=New-ScheduledTaskTrigger -AtLogOn -User $owner.userSid}
-    Register-ScheduledTask @parameters|Out-Null
-    if($Action -eq 'Start'){
-        Start-ScheduledTask -TaskName $taskName
-        $clock=[Diagnostics.Stopwatch]::StartNew()
-        do {$status=Invoke-Core 'policy-status';if($status.hostRunning -eq $true){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 20)
-        if($status.hostRunning -ne $true){
-            $info=Get-ScheduledTaskInfo -TaskName $taskName
-            throw ('Policy worker startup was not confirmed. Task result: '+$info.LastTaskResult+'. '+$status.error)
-        }
+    $clock=New-ScheduledTaskTrigger -Once -At ([DateTime]::Now) -RepetitionInterval (New-TimeSpan -Minutes 1)
+    $logon=New-ScheduledTaskTrigger -AtLogOn -User $owner.userSid
+    $logon.Repetition=$clock.Repetition
+    Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Trigger @($logon,$clock) -Force|Out-Null
+}
+
+function Start-Governor {
+    $status=Invoke-Core 'policy-status'
+    if($status.hostRunning -eq $true){return}
+    Start-ScheduledTask -TaskName $taskName
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    do {$status=Invoke-Core 'policy-status';if($status.hostRunning -eq $true){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 20)
+    if($status.hostRunning -ne $true){
+        $info=Get-ScheduledTaskInfo -TaskName $taskName
+        throw ('The governor did not start. Task result: '+$info.LastTaskResult+'. '+$status.error)
     }
 }
-if($Action -in @('Stop','Remove')){Stop-Worker}
-if($Action -eq 'Remove' -and $task){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
-$task=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-[pscustomobject]@{schemaVersion=1;status='completed';data=@{taskName=$taskName;registered=($null -ne $task);runAtLogon=($null -ne $task -and @($task.Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0);worker=(Invoke-Core 'policy-status')}}|ConvertTo-Json -Depth 30
+
+function Remove-Governor {
+    if(Get-GovernorTask){Disable-ScheduledTask -TaskName $taskName|Out-Null}
+    Stop-Worker
+    if(Get-GovernorTask){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+}
+
+function Sync-Governor {
+    if(Test-Path -LiteralPath $PolicyRoot){
+        $summary=Invoke-Core 'policy-summary'
+        if(-not $summary.secured){
+            if((Invoke-Core 'policy-status').hostRunning){Stop-Worker}
+            Invoke-Core 'policy-secure'|Out-Null
+        }
+    }
+    $summary=Invoke-Core 'policy-summary'
+    if($summary.enabledRules -eq 0 -and -not $summary.rulesError){Remove-Governor;return}
+    if($summary.paused){
+        Register-Governor
+        Disable-ScheduledTask -TaskName $taskName|Out-Null
+        Stop-Worker
+        return
+    }
+    Register-Governor
+    Start-Governor
+}
+
+switch($Action){
+    'Sync' {Sync-Governor}
+    'Resume' {Invoke-Core 'policy-pause' @{paused=$false}|Out-Null;Sync-Governor}
+    'Pause' {
+        if(Get-GovernorTask){Disable-ScheduledTask -TaskName $taskName|Out-Null}
+        Stop-Worker
+        Invoke-Core 'policy-pause' @{paused=$true}|Out-Null
+        Restore-Interrupted (Invoke-Core 'policy-status')
+    }
+    'Remove' {Remove-Governor}
+}
+$task=Get-GovernorTask
+$summary=Invoke-Core 'policy-summary'
+$triggers=@(if($task){$task.Triggers})
+[pscustomobject]@{schemaVersion=1;status='completed';data=[ordered]@{
+    taskName=$taskName;registered=($null -ne $task);enabled=($null -ne $task -and [string]$task.State -ne 'Disabled')
+    runAtLogon=(@($triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'}).Count -gt 0)
+    restartEveryMinute=(@($triggers|Where-Object {$_.Repetition -and $_.Repetition.Interval -eq 'PT1M' -and -not $_.Repetition.Duration}).Count -eq 2)
+    paused=[bool]$summary.paused;rules=[int]$summary.rules;enabledRules=[int]$summary.enabledRules;secured=[bool]$summary.secured
+    securityProblem=$summary.securityProblem;rulesError=$summary.rulesError;worker=(Invoke-Core 'policy-status')}}|ConvertTo-Json -Depth 30
+} catch {
+    [pscustomobject]@{schemaVersion=1;status='failed';data=$null;errors=@([pscustomobject]@{message=$_.Exception.Message})}|ConvertTo-Json -Depth 5
+    exit 1
+}
