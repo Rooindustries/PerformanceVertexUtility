@@ -96,7 +96,8 @@ public static class GovernorDisplay
         return snapshot.Rules.Select(rule =>
         {
             var requested = string.Join(", ", rule.Controls.Select(pair => ProcessControlsViewModel.Label(pair.Key) + " " + ProcessControlsViewModel.Describe(pair.Key, pair.Value))
-                .Concat(rule.CpuSelection is null ? Array.Empty<string>() : new[] { "Preferred CPUs " + rule.CpuSelection.Kind }));
+                .Concat(rule.CpuSelection is null ? Array.Empty<string>() : new[] { "Preferred CPUs " + (rule.CpuSelection.Processors is { Length: > 0 } chosen ? chosen.Length + " selected" : rule.CpuSelection.Kind switch
+                { "windowsDefault" => "Windows default", "all" => "all", "performance" => "performance cores", "efficiency" => "efficiency cores", "core" => "one core", "cache" => "one cache group", "numa" => "one NUMA node", var kind => kind }) }));
             var lines = new List<string>();
             foreach (var instance in state?.Instances.Where(instance => instance.RuleId == rule.RuleId && instance.Status is "active" or "applying" or "conflict") ?? [])
             {

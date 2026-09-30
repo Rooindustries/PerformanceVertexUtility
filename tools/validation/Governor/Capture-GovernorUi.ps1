@@ -46,14 +46,12 @@ try {
             WaitFor {$s=ById $win 'ProcessStatus';$s -and $s.Current.Name -match 'Governor (paused|started)|needs attention'} 120 'governor action result'|Out-Null
             Start-Sleep -Seconds $SettleSeconds
         }
-        $card=ById $win 'GovernorCard'
-        $texts=@($card.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::Text))|ForEach-Object {$_.Current.Name})
+        $texts=@($win.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::Text))|ForEach-Object {$_.Current.Name}|Where-Object {$_ -match 'Governor|Wanted:|Now:|rule'})
         Log ('GovernorStatus: '+(ById $win 'GovernorStatus').Current.Name)
         Log ('GovernorDetail: '+(ById $win 'GovernorDetail').Current.Name)
         Log ('Pause enabled: '+(ById $win 'GovernorPause').Current.IsEnabled+'; Start enabled: '+(ById $win 'GovernorStart').Current.IsEnabled)
         Log ('ProcessStatus: '+(ById $win 'ProcessStatus').Current.Name+' | '+(ById $win 'ProcessDetail').Current.Name)
         Log ('Card texts: '+($texts -join ' || '))
-        try {(ById $win 'GovernorCard').GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()} catch {}
     } else {
         Start-Sleep -Seconds ([Math]::Max($SettleSeconds,8))
         $texts=@($win.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::Text))|ForEach-Object {$_.Current.Name}|Where-Object {$_})
