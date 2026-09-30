@@ -12,7 +12,7 @@ $policyParent=Join-Path $root 'rules parent'
 $policyRoot=Join-Path $policyParent 'saved rules'
 $limitedOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.json')
 $probes=New-Object System.Collections.Generic.List[Diagnostics.Process]
-$taskName=$null;$limitedTask=$null;$moved=$null
+$taskName=$null;$moved=$null
 $legacyRoot=Join-Path $root 'legacy rules\process-rules'
 $evidence=[ordered]@{startedAtUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;checks=New-Object System.Collections.Generic.List[object];measurements=[ordered]@{}}
 function Assert([bool]$Condition,[string]$Message){
@@ -84,23 +84,15 @@ function Read-Controls([Diagnostics.Process]$Process){
 function Same($Left,$Right){return (($Left|ConvertTo-Json -Compress) -eq ($Right|ConvertTo-Json -Compress))}
 function Get-WorkerIdentity{$status=Core 'policy-status';if($status.hostRunning -eq $true){return $status.state.host};return $null}
 function Invoke-Limited([string]$Script){
-    $scriptPath=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.ps1')
-    [IO.File]::WriteAllText($scriptPath,$Script,[Text.UTF8Encoding]::new($true))
     Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue
-    $script:limitedTask='RooIndustriesGovernorLimitedProbe-'+[Guid]::NewGuid().ToString('N')
-    $action=New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\conhost.exe') -Argument ('--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$scriptPath+'"')
-    $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Limited
-    Register-ScheduledTask -TaskName $script:limitedTask -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 2))|Out-Null
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
+    $runas=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -PassThru -Wait
+    if($runas.ExitCode -ne 0){throw ('runas /trustlevel failed with exit code '+$runas.ExitCode)}
     try {
-        Start-ScheduledTask -TaskName $script:limitedTask
         if($null -eq (Wait-Until {Test-Path -LiteralPath $limitedOutput} 60)){throw 'The non-elevated probe did not report.'}
         Start-Sleep -Milliseconds 300
         return (Get-Content -LiteralPath $limitedOutput -Raw -Encoding UTF8|ConvertFrom-Json)
-    } finally {
-        Unregister-ScheduledTask -TaskName $script:limitedTask -Confirm:$false -ErrorAction SilentlyContinue
-        $script:limitedTask=$null
-        Remove-Item -LiteralPath $scriptPath,$limitedOutput -Force -ErrorAction SilentlyContinue
-    }
+    } finally {Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue}
 }
 
 try {
@@ -306,7 +298,6 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
     $sessionPriority=@($sessionSettings|ForEach-Object {$elements=$_.CommandElements;for($i=0;$i -lt $elements.Count-1;$i++){if($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'Priority'){$elements[$i+1].Extent.Text}}})
     Assert ($sessionSettings.Count -eq 1 -and $sessionPriority.Count -eq 1 -and $sessionPriority[0] -eq '6') 'The protected-session host task is registered at normal priority'
 } finally {
-    foreach($name in @($limitedTask)){if($name){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue}}
     if($moved -and (Test-Path -LiteralPath $moved)){if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force};[IO.Directory]::Move($moved,$policyRoot)}
     if(Test-Path -LiteralPath (Join-Path $hostDirectory 'Optimizer.Host.dll')){
         try {Worker 'Remove'|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}
