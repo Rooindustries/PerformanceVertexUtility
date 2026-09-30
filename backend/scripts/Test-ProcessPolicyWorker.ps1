@@ -37,7 +37,7 @@ function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Root=$policyRo
     return $result.data
 }
 function Start-Probe {
-    $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeDirectory 'RooGovernorProbe.exe'),'3600')
+    $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe'),'3600')
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
     $process=[Diagnostics.Process]::Start($info)
     $probes.Add($process)
@@ -51,7 +51,7 @@ function Wait-Until([scriptblock]$Condition,[double]$Seconds,[int]$PollMilliseco
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooGovernorOracle {
+public static class RooIndustriesGovernorOracle {
     [StructLayout(LayoutKind.Sequential)] struct Throttling { public uint Version, ControlMask, StateMask; }
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessInformation(IntPtr process, int kind, out uint value, uint size);
     [DllImport("kernel32.dll", SetLastError=true, EntryPoint="GetProcessInformation")] static extern bool GetThrottling(IntPtr process, int kind, ref Throttling value, uint size);
@@ -71,9 +71,9 @@ public static class RooGovernorOracle {
 '@
 function Read-Controls([Diagnostics.Process]$Process){
     $Process.Refresh()
-    return [ordered]@{cpuPriority=[string]$Process.PriorityClass;affinity=('0x{0:X}' -f [int64]$Process.ProcessorAffinity);cpuSets=[RooGovernorOracle]::CpuSets($Process.Handle)
-        ioPriority=[RooGovernorOracle]::Io($Process.Handle);gpuPriority=[RooGovernorOracle]::Gpu($Process.Handle);memoryPriority=[RooGovernorOracle]::Memory($Process.Handle)
-        executionQoS=[RooGovernorOracle]::Qos($Process.Handle);priorityBoostDisabled=[RooGovernorOracle]::BoostDisabled($Process.Handle)}
+    return [ordered]@{cpuPriority=[string]$Process.PriorityClass;affinity=('0x{0:X}' -f [int64]$Process.ProcessorAffinity);cpuSets=[RooIndustriesGovernorOracle]::CpuSets($Process.Handle)
+        ioPriority=[RooIndustriesGovernorOracle]::Io($Process.Handle);gpuPriority=[RooIndustriesGovernorOracle]::Gpu($Process.Handle);memoryPriority=[RooIndustriesGovernorOracle]::Memory($Process.Handle)
+        executionQoS=[RooIndustriesGovernorOracle]::Qos($Process.Handle);priorityBoostDisabled=[RooIndustriesGovernorOracle]::BoostDisabled($Process.Handle)}
 }
 function Same($Left,$Right){return (($Left|ConvertTo-Json -Compress) -eq ($Right|ConvertTo-Json -Compress))}
 function Get-WorkerIdentity{$status=Core 'policy-status';if($status.hostRunning -eq $true){return $status.state.host};return $null}
@@ -101,7 +101,7 @@ try {
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Policy host publish failed.'}
     [IO.Directory]::CreateDirectory($probeDirectory)|Out-Null
-    Add-Type -TypeDefinition 'public static class RooGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly (Join-Path $probeDirectory 'RooGovernorProbe.exe') -OutputType ConsoleApplication
+    Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly (Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe') -OutputType ConsoleApplication
     Assert (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count -eq 0) 'The desktop app is not running during governor validation'
 
     $first=Start-Probe
@@ -195,7 +195,7 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     $journal['status']='applying'
     foreach($change in $journal['changes']){if($change['name'] -eq 'memoryPriority'){$change['status']='applyIntent'}}
     [IO.File]::WriteAllText($firstInstance[0].journalPath,$serializer.Serialize($journal),[Text.UTF8Encoding]::new($false))
-    [RooGovernorOracle]::SetMemory($first.Handle,$original.memoryPriority)
+    [RooIndustriesGovernorOracle]::SetMemory($first.Handle,$original.memoryPriority)
     $restartSeconds=Wait-Until {$identity=Get-WorkerIdentity;$null -ne $identity -and $identity.processId -ne $workerIdentity.processId} 150 1000
     Note 'restartSecondsAfterKill' $restartSeconds
     Assert ($null -ne $restartSeconds -and $restartSeconds -le 125) 'The scheduled task restarts a killed governor within about two minutes without the app'
@@ -243,12 +243,12 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     Core 'process-preview' @{processId=$first.Id;controls=@{memoryPriority=4};outputPath=$previewPath}|Out-Null
     $directError=$null
     try {Core 'process-apply' @{previewPath=$previewPath;reviewHash=(Get-FileHash -LiteralPath $previewPath -Algorithm SHA256).Hash;journalPath=(Join-Path $root 'direct-journal.json')}|Out-Null} catch {$directError=$_.Exception.Message}
-    Assert ($directError -like 'Managed by the governor*' -and [RooGovernorOracle]::Memory($first.Handle) -eq 3) 'Apply once refuses a process field that the governor owns'
+    Assert ($directError -like 'Managed by the governor*' -and [RooIndustriesGovernorOracle]::Memory($first.Handle) -eq 3) 'Apply once refuses a process field that the governor owns'
 
     # bounded history: many short-lived processes leave at most 50 finished records and no orphan folders
     for($index=0;$index -lt 55;$index++){
         $short=Start-Probe
-        if($null -eq (Wait-Until {[RooGovernorOracle]::Memory($short.Handle) -eq 3} 5)){throw 'A short-lived process did not get its rule.'}
+        if($null -eq (Wait-Until {[RooIndustriesGovernorOracle]::Memory($short.Handle) -eq 3} 5)){throw 'A short-lived process did not get its rule.'}
         $short.Kill();$short.WaitForExit()
     }
     $bounded=Wait-Until {$instances=@((Core 'policy-status').state.instances);@($instances|Where-Object {$_.status -notin @('restored','expired')}).Count -le 3 -and @($instances|Where-Object {$_.status -in @('restored','expired')}).Count -eq 50} 20 500

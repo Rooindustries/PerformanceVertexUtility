@@ -18,7 +18,7 @@ function Write-Log([string]$Text){
 }
 
 function Get-GovernorTasks {
-    foreach($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like 'RooIndustriesOptimizationSuite.ProcessRules.*' -or $_.TaskName -like 'RooOptimizationSuite.ProcessRules.*'})){
+    foreach($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})){
         $parts=@([string]$task.Description -split ' \| ',3)
         if($parts.Count -ne 3 -or $parts[1] -notmatch '^S-1-'){Write-Log ('Skipping task with an unexpected description: '+$task.TaskName);continue}
         [pscustomobject]@{taskName=$task.TaskName;taskPath=$task.TaskPath;userSid=$parts[1];policyRoot=$parts[2];enabled=([string]$task.State -ne 'Disabled')}
