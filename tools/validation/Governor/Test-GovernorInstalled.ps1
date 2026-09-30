@@ -90,10 +90,13 @@ switch($Phase){
         $topologyHash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes((($topology|ForEach-Object {''+$_.group+':'+$_.index+':'+$_.core+':'+$_.cache+':'+$_.numa+':'+$_.efficiency}) -join ';'))))).Replace('-','')
         $cpu=@($topology|Where-Object {$_.available -and $_.group -eq 0})[1]
         $gpu=if($original.gpuPriority -eq 1){2}else{1}
-        $wanted=[ordered]@{cpuPriority='AboveNormal';affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS='eco';priorityBoostDisabled=$true}
+        $cpuClass=if($original.cpuPriority -eq 'AboveNormal'){'High'}else{'AboveNormal'}
+        $io=if($original.ioPriority -eq 2){1}else{2}
+        $memory=if($original.memoryPriority -eq 3){4}else{3}
+        $wanted=[ordered]@{cpuPriority=$cpuClass;affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS='eco';priorityBoostDisabled=$true}
         $rule=@{schemaVersion=1;ruleId=[Guid]::NewGuid().ToString('N');owner=@{machine=$env:COMPUTERNAME;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value};name='Installed governor validation';enabled=$true
             matchMode='path';executablePath=$probeExe;executableHash=$null;affinityTopologyHash=$topologyHash
-            controls=@{cpuPriority='AboveNormal';affinity=@{group=0;mask='0x3'};ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
+            controls=@{cpuPriority=$cpuClass;affinity=@{group=0;mask='0x3'};ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
             cpuSelection=@{kind='logical';topologyHash=$topologyHash;processors=@(@{group=0;index=[int]$cpu.index});oneThreadPerCore=$false}}
         Host-Call 'rule-save' @{rule=$rule}|Out-Null
         $legacy=([IO.File]::ReadAllText($workerScript) -notmatch "'Sync'")
