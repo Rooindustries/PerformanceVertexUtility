@@ -363,11 +363,12 @@ public sealed class FirmwareVerificationStore
             catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
         }
         var current = ReadCurrent(currentIdentity, packageFingerprint, currentExportPath);
+        var exports = new Dictionary<string, ExportMemo>(StringComparer.Ordinal);
         return trials.Select(trial =>
         {
             try
             {
-                var (status, questionId) = MatchStatus(trial, current);
+                var (status, questionId) = MatchStatus(trial, current, exports);
                 return new FirmwareVerificationMatch(trial, status, questionId);
             }
             catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
@@ -414,8 +415,17 @@ public sealed class FirmwareVerificationStore
         catch (IOException) { return (currentIdentity, packageFingerprint, null, FirmwareVerificationMatchStatuses.UnknownCurrent); }
     }
 
+    private sealed class ExportMemo(FirmwareScript script)
+    {
+        private string? _profile;
+        private bool? _same;
+        public FirmwareScript Script { get; } = script;
+        public string Profile => _profile ??= FirmwareSemanticProfile.Hash(Script);
+        public bool SameValues(FirmwareScript current) => _same ??= Script.SameValues(current);
+    }
+
     private static (string Status, string QuestionId) MatchStatus(FirmwareVerificationTrial trial,
-        (FirmwareIdentity Identity, string Package, FirmwareScript? Script, string Status) current)
+        (FirmwareIdentity Identity, string Package, FirmwareScript? Script, string Status) current, Dictionary<string, ExportMemo>? exports = null)
     {
         if (current.Status == FirmwareVerificationMatchStatuses.UnknownCurrent) return (current.Status, "");
         if (!trial.Binding.MachineId.Equals(current.Identity.MachineId, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentMachine, "");
@@ -423,9 +433,16 @@ public sealed class FirmwareVerificationStore
         if (!trial.Binding.BiosRevision.Equals(current.Identity.Bios, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentBios, "");
         if (!string.Equals(trial.Binding.PackageFingerprint, current.Package, StringComparison.Ordinal)) return (FirmwareVerificationMatchStatuses.DifferentPackage, "");
         if (current.Script is null) return (FirmwareVerificationMatchStatuses.DifferentProfile, "");
-        var original = new FirmwareScript(File.ReadAllBytes(trial.Binding.OriginalExportPath));
+        var bytes = File.ReadAllBytes(trial.Binding.OriginalExportPath);
+        var key = OperationFiles.Hash(bytes);
+        if (exports is null || !exports.TryGetValue(key, out var export))
+        {
+            export = new ExportMemo(new FirmwareScript(bytes));
+            if (exports is not null) exports[key] = export;
+        }
+        var original = export.Script;
         var reviewed = original.Questions.SingleOrDefault(item => item.Id == trial.Binding.Question.Id);
-        var question = reviewed is null || FirmwareSemanticProfile.Hash(original) != trial.Binding.BaselineProfileHash || !original.SameValues(current.Script)
+        var question = reviewed is null || export.Profile != trial.Binding.BaselineProfileHash || !export.SameValues(current.Script)
             ? null : original.Counterpart(reviewed, current.Script);
         return question is not null && FirmwareVerificationQuestion.From(question).SameTarget(trial.Binding.Question)
             ? (FirmwareVerificationMatchStatuses.Matched, question.Id)

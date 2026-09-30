@@ -33,8 +33,8 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string _stage = "setup";
     [ObservableProperty] private string _resultStatus = "";
     [ObservableProperty] private int _changedCount;
-    public ObservableCollection<FirmwareSettingRow> Settings { get; } = new();
-    public ObservableCollection<FirmwareSettingRow> ExperimentalSettings { get; } = new();
+    [ObservableProperty] private ObservableCollection<FirmwareSettingRow> _settings = new();
+    [ObservableProperty] private ObservableCollection<FirmwareSettingRow> _experimentalSettings = new();
     [ObservableProperty] private bool _allowExperimentalEdits;
     public ObservableCollection<FirmwareChange> Changes { get; } = new();
     public ObservableCollection<FirmwareHistoryRow> History { get; } = new();
@@ -94,16 +94,20 @@ public partial class FirmwareViewModel : ObservableObject
         Bios = stamp.Success && DateTime.TryParse(stamp.Groups["date"].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var released)
             ? identity.Bios[..stamp.Index] + " · " + released.ToString("d MMM yyyy", CultureInfo.CurrentCulture) : identity.Bios;
         var config = Path.Combine(Root, "workspace.json");
-        if (File.Exists(config))
+        var workspace = await Task.Run(() =>
         {
+            if (!File.Exists(config)) return ((string Directory, FirmwarePackage Package)?)null;
             var saved = OperationFiles.Read<FirmwareWorkspace>(config);
             _ = new ScewinProvider(saved.PackageDirectory).PackageFingerprint;
-            var package = OperationFiles.Read<FirmwarePackage>(Path.Combine(saved.PackageDirectory, "package.json"));
-            _packageDirectory = saved.PackageDirectory;
-            PackageText = PackageStatus(package);
+            return (saved.PackageDirectory, OperationFiles.Read<FirmwarePackage>(Path.Combine(saved.PackageDirectory, "package.json")));
+        });
+        if (workspace is { } found)
+        {
+            _packageDirectory = found.Directory;
+            PackageText = PackageStatus(found.Package);
             RefreshActions();
         }
-        LoadHistory();
+        await LoadHistoryAsync();
     });
 
     public async Task SetUpAsync(string directory, FirmwarePackage reviewed) => await RunAsync(async () =>
@@ -143,9 +147,10 @@ public partial class FirmwareViewModel : ObservableObject
         Message = "Reading BIOS settings and saving the original export…";
         var workflow = Workflow();
         _sessionDirectory = await Task.Run(workflow.Load);
-        await LoadEditorAsync(workflow.Read(_sessionDirectory));
+        var session = _sessionDirectory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(session)));
         Message = "Choose only the settings you want to change. The original export is saved.";
-        LoadHistory();
+        await LoadHistoryAsync();
     });
     public void CancelSetup() => _setupCancellation?.Cancel();
     private static string PackageStatus(FirmwarePackage package) => (package.Version == "Not specified" ? "SCEWIN" : "SCEWIN " + package.Version) + " · Ready to load settings";
@@ -184,14 +189,16 @@ public partial class FirmwareViewModel : ObservableObject
     }
     private void Filter()
     {
-        Settings.Clear();
-        ExperimentalSettings.Clear();
+        var settings = new List<FirmwareSettingRow>();
+        var experimental = new List<FirmwareSettingRow>();
         foreach (var row in _all.Where(row => MatchesFilter(row, Search, ChangedOnly)))
         {
             row.CanEdit = !row.IsReadOnly && (AllowExperimentalEdits || !IsExperimentalRow(row));
-            if (IsExperimentalRow(row)) ExperimentalSettings.Add(row);
-            else Settings.Add(row);
+            if (IsExperimentalRow(row)) experimental.Add(row);
+            else settings.Add(row);
         }
+        Settings = new(settings);
+        ExperimentalSettings = new(experimental);
         OnPropertyChanged(nameof(HasExperimentalSettings));
         OnPropertyChanged(nameof(ExperimentalSummary));
     }
@@ -264,32 +271,33 @@ public partial class FirmwareViewModel : ObservableObject
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
         Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
         var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
-        ShowResult(journal); LoadHistory();
+        ShowResult(journal); await LoadHistoryAsync();
     });
     public async Task VerifyAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
         ResultStatus = "";
         Message = "Reading the current BIOS values…";
-        ShowResult(await Task.Run(() => Workflow().Verify(_sessionDirectory))); LoadHistory();
+        ShowResult(await Task.Run(() => Workflow().Verify(_sessionDirectory))); await LoadHistoryAsync();
     });
     public async Task UndoAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
         var workflow = Workflow();
-        _sessionDirectory = await Task.Run(() => workflow.ReviewUndo(_sessionDirectory));
-        await LoadEditorAsync(workflow.Read(_sessionDirectory));
+        var directory = await Task.Run(() => workflow.ReviewUndo(_sessionDirectory));
+        _sessionDirectory = directory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(directory)));
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));
         var review = OperationFiles.Read<FirmwareReview>(Path.Combine(_sessionDirectory, "review.json"), _reviewHash);
         foreach (var change in review.Changes) _all.Single(r => r.Question.Id == change.Id).Selection = change.After;
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));
-        ShowReview(); LoadHistory();
+        ShowReview(); await LoadHistoryAsync();
     });
     public async Task OpenHistoryAsync(FirmwareHistoryRow row) => await RunAsync(async () =>
     {
         _sessionDirectory = row.Directory;
         var workflow = Workflow();
-        var script = workflow.Read(_sessionDirectory);
+        var script = await Task.Run(() => workflow.Read(row.Directory));
         var journal = Path.Combine(_sessionDirectory, "journal.json");
         if (File.Exists(journal)) ShowResult(OperationFiles.Read<FirmwareJournal>(journal));
         else { await LoadEditorAsync(script); Message = "Loaded the saved export. Current settings will be checked again before import."; }
@@ -303,7 +311,8 @@ public partial class FirmwareViewModel : ObservableObject
     public async Task OpenSettingsAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
-        await LoadEditorAsync(Workflow().Read(_sessionDirectory));
+        var workflow = Workflow(); var directory = _sessionDirectory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(directory)));
         Message = "Choose only the settings you want to change. Tested settings that did not change are retained in the collapsed menu.";
     });
     private async Task LoadVerificationAsync(FirmwareScript script, string? sessionDirectory)
@@ -381,21 +390,27 @@ public partial class FirmwareViewModel : ObservableObject
         FirmwareVerificationMatchStatuses.Unavailable => "This test's saved BIOS export is missing or unreadable, so it can't be matched.",
         _ => "The current BIOS context could not be matched to this test."
     };
-    private void LoadHistory()
+    private async Task LoadHistoryAsync()
     {
         History.Clear();
-        var sessions = Path.Combine(Root, "sessions");
-        if (!Directory.Exists(sessions)) { OnPropertyChanged(nameof(HistoryHelp)); return; }
-        foreach (var directory in Directory.GetDirectories(sessions).OrderByDescending(Directory.GetCreationTimeUtc))
+        var rows = await Task.Run(() =>
         {
-            var sessionFile = Path.Combine(directory, "session.json");
-            if (!File.Exists(sessionFile)) continue;
-            var session = OperationFiles.Read<FirmwareSession>(sessionFile);
-            var journalFile = Path.Combine(directory, "journal.json");
-            var journal = File.Exists(journalFile) ? OperationFiles.Read<FirmwareJournal>(journalFile) : null;
-            var state = journal?.Status switch { "restartRequired" => "Restart pending", "applied" => "Verified after restart", "importing" => "Import interrupted", "needsAttention" => "Needs verification", _ => "Original export" };
-            History.Add(new(directory, session.CreatedAt.ToLocalTime().ToString("g") + " · " + state));
-        }
+            var found = new List<FirmwareHistoryRow>();
+            var sessions = Path.Combine(Root, "sessions");
+            if (!Directory.Exists(sessions)) return found;
+            foreach (var directory in Directory.GetDirectories(sessions).OrderByDescending(Directory.GetCreationTimeUtc))
+            {
+                var sessionFile = Path.Combine(directory, "session.json");
+                if (!File.Exists(sessionFile)) continue;
+                var session = OperationFiles.Read<FirmwareSession>(sessionFile);
+                var journalFile = Path.Combine(directory, "journal.json");
+                var journal = File.Exists(journalFile) ? OperationFiles.Read<FirmwareJournal>(journalFile) : null;
+                var state = journal?.Status switch { "restartRequired" => "Restart pending", "applied" => "Verified after restart", "importing" => "Import interrupted", "needsAttention" => "Needs verification", _ => "Original export" };
+                found.Add(new(directory, session.CreatedAt.ToLocalTime().ToString("g") + " · " + state));
+            }
+            return found;
+        });
+        foreach (var row in rows) History.Add(row);
         OnPropertyChanged(nameof(HistoryHelp));
     }
     private async Task RunAsync(Func<Task> operation)
