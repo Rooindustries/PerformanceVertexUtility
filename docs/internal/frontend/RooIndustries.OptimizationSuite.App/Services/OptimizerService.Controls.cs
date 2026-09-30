@@ -12,7 +12,9 @@ using RooIndustries.Optimizer;
 namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
-public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
+public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
+    bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
+public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 
@@ -39,19 +41,37 @@ public sealed partial class OptimizerService
         Remember("process", review.JournalPath);
         return await RunCoreAsync<ProcessControlJournal>("process-apply", new()
         {
-            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["confirm"] = true,
+            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true,
         });
     }
 
     public async Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
     {
-        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["confirm"] = true });
+        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true });
         if (result.Status is "restored" or "expired" && FindLastJournal("process") == journalPath) Forget("process");
         return result;
     }
 
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
+    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() =>
+    {
+        var store = new ProcessPolicyStore(PolicyRoot);
+        var summary = store.Summary();
+        PolicyWorkerStatus worker;
+        try { worker = store.Status(); }
+        catch (Exception error) { worker = new(null, null, error.Message); }
+        var rules = summary.RulesError is null ? store.ReadRules().Select(pair => pair.Rule).ToArray() : [];
+        var journals = new Dictionary<string, ProcessControlJournal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var instance in worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict") ?? [])
+        {
+            try { if (File.Exists(instance.JournalPath)) journals[instance.JournalPath] = OperationFiles.Read<ProcessControlJournal>(instance.JournalPath); }
+            catch (IOException) { }
+            catch (InvalidDataException) { }
+            catch (JsonException) { }
+        }
+        return new GovernorSnapshot(summary, worker, rules, journals);
+    });
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
         => RunCoreAsync<SavedProcessRule>("rule-save", new() { ["policyRoot"] = PolicyRoot, ["rule"] = rule, ["confirm"] = true });
     public Task<JsonElement> DeleteRuleAsync(string ruleId)
@@ -59,7 +79,7 @@ public sealed partial class OptimizerService
 
     public async Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
     {
-        string[] allowed = ["Status", "Start", "Stop", "EnableLogon", "DisableLogon", "Remove"];
+        string[] allowed = ["Status", "Sync", "Pause", "Resume", "Remove"];
         if (Array.IndexOf(allowed, action) < 0) throw new ArgumentException("Unknown policy worker action.", nameof(action));
         var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
             "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), waitForRemoval: true);
