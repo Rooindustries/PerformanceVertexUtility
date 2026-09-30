@@ -111,6 +111,74 @@ switch (mode)
         Console.WriteLine("catalog read ms=" + readMs + " validate+merge ms=" + validateMs + " engine ms=" + engineMs + " detect ms=" + detectMs + " serialize indented ms=" + indentedMs + " (" + indented.Length + " chars) compact ms=" + compactMs + " (" + compact.Length + " chars)");
         break;
     }
+    case "partial":
+    {
+        for (var round = 1; round <= 3; round++)
+        {
+            var watch = Stopwatch.StartNew();
+            long partialMs = -1;
+            TweakInspection? early = null;
+            var full = new TweakEngine(catalog, new RegistryTweakStore()).Detect(inspection => { partialMs = watch.ElapsedMilliseconds; early = inspection; });
+            var fullMs = watch.ElapsedMilliseconds;
+            var pending = early?.Settings.Count(setting => setting.Error == TweakEngine.FeaturesPending) ?? -1;
+            var differ = early is null ? -1 : early.Settings.Zip(full.Settings).Count(pair => pair.First.Error != TweakEngine.FeaturesPending && JsonSerializer.Serialize(pair.First, OperationFiles.Json) != JsonSerializer.Serialize(pair.Second, OperationFiles.Json));
+            var expected = JsonSerializer.Serialize(new TweakEngine(catalog, new PerAddressStore(new RegistryTweakStore())).Detect(), OperationFiles.Json);
+            Report("round " + round + " partial at " + partialMs + " ms, full at " + fullMs + " ms; partial rows equal the full read except " + pending + " pending; full read equals the per-address read",
+                differ == 0 && pending > 0 && JsonSerializer.Serialize(full, OperationFiles.Json) == expected, "differ=" + differ);
+        }
+        break;
+    }
+    case "which":
+    {
+        for (var round = 1; round <= 4; round++)
+        {
+            var watch = Stopwatch.StartNew();
+            var registry = new RegistryTweakStore();
+            var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
+            var slowRead = registry.ReadControlsAsync(slow);
+            var kinds = addresses.Except(slow).Where(address => address.Kind is "dns-over-https" or "firewall-blocklist" or "firewall-profile" or "network-adapter" or "boot-configuration" or "defender" or "filesystem" or "memory" or "device-power" or "teredo")
+                .GroupBy(address => address.Kind).Select(group => Task.Run(() => { foreach (var address in group) { try { store.Read(address); } catch (Exception) { } } return group.Key + "=" + watch.ElapsedMilliseconds; })).ToArray();
+            Console.WriteLine("round " + round + ": " + string.Join(", ", Task.WhenAll(kinds).GetAwaiter().GetResult()) + " dism=" + (slowRead.ContinueWith(_ => watch.ElapsedMilliseconds).GetAwaiter().GetResult()));
+            Thread.Sleep(15000);
+        }
+        break;
+    }
+    case "split":
+    {
+        string[] scripted = ["dns-over-https", "firewall-blocklist", "firewall-profile", "network-adapter", "boot-configuration", "defender", "filesystem", "memory", "device-power", "teredo"];
+        for (var round = 1; round <= 8; round++)
+        {
+            var watch = Stopwatch.StartNew();
+            var registry = new RegistryTweakStore();
+            var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
+            var slowFirst = round % 2 == 1;
+            Task<long> Slow() => registry.ReadControlsAsync(slow).ContinueWith(_ => watch.ElapsedMilliseconds);
+            var slowRead = slowFirst ? Slow() : null;
+            if (slowFirst) Thread.Sleep(delay);
+            var psRead = registry.ReadControlsAsync(addresses.Except(slow).Where(address => scripted.Contains(address.Kind)).ToArray()).ContinueWith(_ => watch.ElapsedMilliseconds);
+            var nativeRead = registry.ReadControlsAsync(addresses.Except(slow).Where(address => !scripted.Contains(address.Kind)).ToArray()).ContinueWith(_ => watch.ElapsedMilliseconds);
+            if (!slowFirst) { Thread.Sleep(delay); slowRead = Slow(); }
+            Console.WriteLine("round " + round + (slowFirst ? " dism first" : " powershell first") + ": powershell done " + psRead.GetAwaiter().GetResult() + " ms, native done " + nativeRead.GetAwaiter().GetResult() + " ms, dism done " + slowRead!.GetAwaiter().GetResult() + " ms");
+            Thread.Sleep(15000);
+        }
+        break;
+    }
+    case "concurrent":
+    {
+        var watch = Stopwatch.StartNew();
+        var groups = addresses.GroupBy(address => address.Kind switch
+        {
+            "network-adapter" or "teredo" or "device-power" => "ps: adapter, teredo, device power",
+            "firewall-profile" or "firewall-blocklist" or "defender" => "ps: firewall, defender",
+            "windows-features" => "dism features",
+            "reserved-storage" => "ps: reserved storage",
+            "dns-over-https" or "boot-configuration" or "memory" or "filesystem" => "ps: dns, boot, memory, filesystem",
+            _ => "native",
+        }).ToArray();
+        var runs = groups.OrderBy(group => group.Key == "dism features" ? 0 : 1).Select(group => { if (group.Key != "dism features") Thread.Sleep(delay / 6); return Task.Run(() => { var started = watch.ElapsedMilliseconds; store.ReadMany(group.ToArray()); return group.Key + " started " + started + " done at " + watch.ElapsedMilliseconds + " ms"; }); }).ToArray();
+        foreach (var line in Task.WhenAll(runs).GetAwaiter().GetResult()) Console.WriteLine(line);
+        break;
+    }
     case "dism-parallel":
     {
         var dism = DismServicing.Native;
@@ -177,8 +245,8 @@ switch (mode)
         var run = Task.Run(Batch);
         Thread.Sleep(delay);
         var started = PowerShells().Except(before).ToArray();
-        Report("one control helper process found", started.Length == 1, string.Join(",", started));
-        foreach (var id in started)
+        Report("control helper processes found", started.Length >= 1, string.Join(",", started));
+        foreach (var id in started.Take(1))
         {
             using var target = Process.GetProcessById(id);
             if (mode == "kill") target.Kill(); else NtSuspendProcess(target.Handle);

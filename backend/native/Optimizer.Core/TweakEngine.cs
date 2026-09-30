@@ -9,27 +9,15 @@ public sealed class TweakEngine
     private readonly ITweakStore _store;
     public TweakEngine(TweakCatalog catalog, ITweakStore store) { catalog.Validate(); _catalog = catalog; _store = store; }
 
-    public TweakInspection Detect()
+    public const string FeaturesPending = "Checking Windows features\u2026";
+    public TweakInspection Detect(Action<TweakInspection>? partial = null)
     {
         var state = State();
-        var prefetch = _store.ReadControlsAsync(_catalog.Settings.SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray());
-        Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>? prefetched = null;
-        var controlCache = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
-        TweakControlRead InspectControl(ControlAddress address)
-        {
-            if (!controlCache.TryGetValue(address, out var cached))
-            {
-                try
-                {
-                    var (read, failure) = prefetched!.TryGetValue(address, out var found) ? found : (_store.ReadControl(address), (Exception?)null);
-                    if (failure is not null) throw failure;
-                    read!.Validate(); cached = (read, null);
-                }
-                catch (Exception error) { cached = (null, error); }
-                controlCache.Add(address, cached);
-            }
-            return cached.Read ?? throw new InvalidDataException(cached.Error!.Message, cached.Error);
-        }
+        var addresses = _catalog.Settings.SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
+        var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
+        var fast = addresses.Except(slow).ToArray();
+        var fastRead = _store.ReadControlsAsync(fast);
+        var slowRead = slow.Length == 0 ? null : _store.ReadControlsAsync(slow);
         var prepared = _catalog.Settings.Select(definition =>
         {
             try
@@ -42,24 +30,56 @@ public sealed class TweakEngine
             }
             catch (Exception error) { return (Definition: definition, Supported: false, Options: Array.Empty<TweakOption>(), Readings: new Dictionary<RegistryAddress, TweakRead>(), Error: error); }
         }).ToArray();
-        try { prefetched = prefetch.GetAwaiter().GetResult(); }
-        catch (Exception) { prefetched = new(); }
-        return new(_store.Context, _catalog.Version, state, prepared.Select(entry =>
+        static Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> Collect(Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>? read)
         {
-            var (definition, supported, resolvedOptions, readings, failure) = entry;
-            try
+            if (read is null) return new();
+            try { return read.GetAwaiter().GetResult(); }
+            catch (Exception) { return new(); }
+        }
+        TweakInspection Inspect(Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> prefetched)
+        {
+            var controlCache = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+            TweakControlRead InspectControl(ControlAddress address)
             {
-                if (failure is not null) throw failure;
-                var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
-                var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
-                if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
-                var matches = resolvedOptions.Where(option => option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
-                var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
-                supported &= available.Length > 0;
-                return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());
+                if (!controlCache.TryGetValue(address, out var cached))
+                {
+                    try
+                    {
+                        var (read, failure) = prefetched.TryGetValue(address, out var found) ? found : (_store.ReadControl(address), (Exception?)null);
+                        if (failure is not null) throw failure;
+                        read!.Validate(); cached = (read, null);
+                    }
+                    catch (Exception error) { cached = (null, error); }
+                    controlCache.Add(address, cached);
+                }
+                return cached.Read ?? throw new InvalidDataException(cached.Error!.Message, cached.Error);
             }
-            catch (Exception error) { return new TweakSettingStatus(definition.Id, definition.Name, false, [], [], error.Message); }
-        }).ToArray());
+            return new(_store.Context, _catalog.Version, state, prepared.Select(entry =>
+            {
+                var (definition, supported, resolvedOptions, readings, failure) = entry;
+                try
+                {
+                    if (failure is not null) throw failure;
+                    var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
+                    var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
+                    if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
+                    var matches = resolvedOptions.Where(option => option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
+                    var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
+                    supported &= available.Length > 0;
+                    return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());
+                }
+                catch (Exception error) { return new TweakSettingStatus(definition.Id, definition.Name, false, [], [], error.Message); }
+            }).ToArray());
+        }
+        var prefetched = Collect(fastRead);
+        if (partial is not null && slowRead is { IsCompleted: false } && fast.All(prefetched.ContainsKey))
+        {
+            var pending = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>(prefetched);
+            foreach (var address in slow) pending[address] = (null, new InvalidDataException(FeaturesPending));
+            partial(Inspect(pending));
+        }
+        foreach (var (address, result) in Collect(slowRead)) prefetched[address] = result;
+        return Inspect(prefetched);
     }
 
     public TweakPlan Preview(string profileId, TweakSelection[] selections)

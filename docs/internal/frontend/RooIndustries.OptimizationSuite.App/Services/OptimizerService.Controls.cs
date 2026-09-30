@@ -140,13 +140,13 @@ public sealed partial class OptimizerService
         return result.ToArray();
     }
 
-    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null)
+    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null, Action<ReadOnlyMemory<byte>>? partial = null)
     {
         var elapsed = Stopwatch.StartNew();
         var outcome = "failed";
         try
         {
-            var result = await RunHostAsync<T>(action, request, cancellationToken, timeout).ConfigureAwait(false);
+            var result = await RunHostAsync<T>(action, request, cancellationToken, timeout, partial).ConfigureAwait(false);
             outcome = "completed";
             return result;
         }
@@ -155,7 +155,7 @@ public sealed partial class OptimizerService
         finally { AppLog.Timing(action, elapsed, outcome); }
     }
 
-    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout)
+    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial)
     {
         using var change = request.TryGetValue("confirm", out var confirm) && confirm is true ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
@@ -194,7 +194,7 @@ public sealed partial class OptimizerService
             start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
             foreach (var argument in bundled ? new[] { action, path } : new[] { host, action, path }) start.ArgumentList.Add(argument);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-            var output = ReadAllAsync(process.StandardOutput.BaseStream);
+            var output = ReadAllAsync(process.StandardOutput.BaseStream, partial);
             var errors = process.StandardError.ReadToEndAsync();
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (timeout is { } duration) limit.CancelAfter(duration);
@@ -227,11 +227,31 @@ public sealed partial class OptimizerService
         finally { File.Delete(path); }
     }
 
-    private static async Task<ReadOnlyMemory<byte>> ReadAllAsync(Stream stream)
+    private static async Task<ReadOnlyMemory<byte>> ReadAllAsync(Stream stream, Action<ReadOnlyMemory<byte>>? partial)
     {
         using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer).ConfigureAwait(false);
-        var bytes = new ReadOnlyMemory<byte>(buffer.GetBuffer(), 0, checked((int)buffer.Length));
-        return bytes.Span.StartsWith("\uFEFF"u8) ? bytes[3..] : bytes;
+        var chunk = new byte[81920];
+        var start = 0;
+        var scanned = 0;
+        for (int read; (read = await stream.ReadAsync(chunk).ConfigureAwait(false)) > 0;)
+        {
+            buffer.Write(chunk, 0, read);
+            while (partial is not null)
+            {
+                var pending = new ReadOnlyMemory<byte>(buffer.GetBuffer(), start, checked((int)buffer.Length) - start);
+                var trimmed = pending.Span.StartsWith("\uFEFF"u8) ? 3 : 0;
+                if (!pending.Span[trimmed..].StartsWith(PartialPrefix)) break;
+                var end = pending.Span[scanned..].IndexOf((byte)'\n');
+                if (end < 0) { scanned = pending.Length; break; }
+                end += scanned;
+                var line = pending[(trimmed + PartialPrefix.Length)..end];
+                try { partial(line.ToArray()); } catch (Exception error) { AppLog.Write("helper", "Partial result ignored: " + error.Message); }
+                start += end + 1; scanned = 0;
+            }
+        }
+        var bytes = new ReadOnlyMemory<byte>(buffer.GetBuffer(), start, checked((int)buffer.Length) - start);
+        if (bytes.Span.StartsWith("\uFEFF"u8)) bytes = bytes[3..];
+        return partial is not null && bytes.Span.StartsWith(PartialPrefix) ? ReadOnlyMemory<byte>.Empty : bytes;
     }
+    private static ReadOnlySpan<byte> PartialPrefix => "ROO-PARTIAL "u8;
 }

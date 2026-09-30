@@ -44,7 +44,7 @@ public sealed class WindowsControlStore : IControlStore
             try { address.Validate(); scripted.Add(address); }
             catch (Exception error) { results[address] = (null, error); }
         }
-        var batch = scripted.Count == 0 ? null : Task.Run(() => PowerShellControls.ReadMany(scripted));
+        var batch = scripted.Count == 0 ? null : Task.Factory.StartNew(() => PowerShellControls.ReadMany(scripted), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         foreach (var address in all.Where(address => NativeKinds.Contains(address.Kind ?? "")))
         {
             try { results[address] = (Read(address), null); }
