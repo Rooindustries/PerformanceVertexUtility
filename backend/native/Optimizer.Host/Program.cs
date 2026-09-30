@@ -79,8 +79,12 @@ try
             break;
         case "protected-session-preview":
             if (request.Controls is not null && request.ControlsPath is not null) throw new InvalidDataException("Provide inline controls or a controls file, not both.");
-            data = new ProtectedSessions(Excluded).Preview(request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required."),
-                Require(request.GamePath, "game executable"), request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file")), request.AcceptLauncherScope == true);
+            var sessionControls = request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file"));
+            var sessionLauncher = request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required.");
+            var governor = new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot);
+            governor.RequireUnowned(Path.GetFullPath(Require(request.GamePath, "game executable")), sessionControls.Keys);
+            using (var launcherProcess = new ProcessTarget(sessionLauncher)) governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys);
+            data = new ProtectedSessions(Excluded).Preview(sessionLauncher, Require(request.GamePath, "game executable"), sessionControls, request.AcceptLauncherScope == true);
             OperationFiles.Write(Require(request.OutputPath, "output path"), (ProtectedSessionPreview)data);
             break;
         case "protected-session-check":
