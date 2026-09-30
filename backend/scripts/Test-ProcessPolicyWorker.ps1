@@ -12,6 +12,7 @@ $policyRoot=Join-Path $root 'saved rules'
 $limitedOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.json')
 $probes=New-Object System.Collections.Generic.List[Diagnostics.Process]
 $taskName=$null;$limitedTask=$null;$moved=$null
+$legacyRoot=Join-Path $root 'legacy rules\process-rules'
 $evidence=[ordered]@{startedAtUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;checks=New-Object System.Collections.Generic.List[object];measurements=[ordered]@{}}
 function Assert([bool]$Condition,[string]$Message){
     $evidence.checks.Add([pscustomobject]@{passed=$Condition;check=$Message;atUtc=[DateTime]::UtcNow.ToString('o')})
@@ -19,8 +20,8 @@ function Assert([bool]$Condition,[string]$Message){
     Write-Output ('PASS '+$Message)
 }
 function Note([string]$Name,$Value){$evidence.measurements[$Name]=$Value;Write-Output ('MEASURE '+$Name+' = '+($Value|ConvertTo-Json -Compress -Depth 6))}
-function Worker([string]$WorkerAction){
-    $text=@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action $WorkerAction -PolicyRoot $policyRoot -DotNetPath $DotNetPath -HostDirectory $hostDirectory -ConfirmApply) -join "`n"
+function Worker([string]$WorkerAction,[string]$Root=$policyRoot){
+    $text=@(& (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyWorker.ps1') -Action $WorkerAction -PolicyRoot $Root -DotNetPath $DotNetPath -HostDirectory $hostDirectory -ConfirmApply) -join "`n"
     $result=$text|ConvertFrom-Json
     if($result.status -ne 'completed'){throw ('Governor '+$WorkerAction+' failed: '+(@($result.errors|ForEach-Object {$_.message}) -join '; '))}
     return $result.data
@@ -261,6 +262,38 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     $removed=Worker 'Sync'
     Assert (-not $removed.registered -and $removed.worker.hostRunning -eq $false -and -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) 'Deleting the last rule stops the governor and removes its task and triggers'
     Assert ((Same (Read-Controls $first) $original) -and (Same (Read-Controls $third) $original)) 'Deleting the last rule restores every running process'
+    # migration of a folder written by the earlier version: user-owned files are refused, a clean folder moves byte for byte, an interrupted swap is adopted
+    [IO.Directory]::CreateDirectory((Join-Path $legacyRoot 'rules'))|Out-Null
+    $legacyRule=$rule.Clone();$legacyRule.ruleId=[Guid]::NewGuid().ToString('N');$legacyRule.revision=[Guid]::NewGuid().ToString('N')
+    $legacyFile=Join-Path $legacyRoot ('rules\'+$legacyRule.ruleId+'.json')
+    Write-RooIndustriesOperationJson $legacyRule $legacyFile
+    $legacyHash=(Get-FileHash -LiteralPath $legacyFile).Hash
+    $legacyWrite=(@'
+try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$r='denied: '+$_.Exception.Message}
+@{write=$r}|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
+'@).Replace('LEGACY',$legacyRoot).Replace('OUT',$limitedOutput)
+    $limited=Invoke-Limited $legacyWrite
+    Assert ($limited.write -eq 'allowed') 'BEFORE: the earlier unprotected rules folder lets a non-elevated process add files'
+    $legacyRefused=$null;try {Worker 'Sync' $legacyRoot|Out-Null} catch {$legacyRefused=$_.Exception.Message}
+    Note 'legacyRefusal' $legacyRefused
+    Assert ($legacyRefused -like '*did not write with administrator rights*' -and -not (Get-Acl -LiteralPath $legacyRoot).AreAccessRulesProtected) 'An earlier folder containing a file written without elevation is refused and left untouched'
+    Remove-Item -LiteralPath (Join-Path $legacyRoot 'rules\note.txt') -Force
+    $migrated=Worker 'Sync' $legacyRoot
+    $legacyAcl=Get-Acl -LiteralPath $legacyRoot
+    Note 'migratedAcl' ([ordered]@{owner=$legacyAcl.Owner;protected=$legacyAcl.AreAccessRulesProtected;access=@($legacyAcl.Access|ForEach-Object {''+$_.IdentityReference+':'+$_.FileSystemRights+':'+$_.AccessControlType})})
+    Assert ($migrated.secured -and $migrated.worker.hostRunning -eq $true -and (Get-FileHash -LiteralPath $legacyFile).Hash -eq $legacyHash -and $legacyAcl.Owner -eq 'BUILTIN\Administrators' -and $legacyAcl.AreAccessRulesProtected -and @(Get-ChildItem -LiteralPath (Split-Path $legacyRoot -Parent) -Directory -Filter 'process-rules.*').Count -eq 0) 'An earlier folder written by the elevated app is migrated byte for byte into a protected folder and the governor starts'
+    Assert ($null -ne (Wait-Until {Same (Read-Controls $first) $wanted} 10)) 'The migrated rule is enforced'
+    $limited=Invoke-Limited $legacyWrite
+    Assert ($limited.write -like 'denied*') 'AFTER: the migrated folder refuses a non-elevated write'
+    Worker 'Pause' $legacyRoot|Out-Null
+    $interrupted=$legacyRoot+'.secure-'+[Guid]::NewGuid().ToString('N')
+    [IO.Directory]::Move($legacyRoot,$interrupted)
+    [IO.File]::WriteAllBytes((Join-Path $interrupted '.migrated'),[byte[]]@())
+    Core 'policy-secure' @{} $legacyRoot|Out-Null
+    Assert ((Test-Path -LiteralPath $legacyFile) -and (Get-FileHash -LiteralPath $legacyFile).Hash -eq $legacyHash -and -not (Test-Path -LiteralPath $interrupted) -and (Core 'policy-summary' @{} $legacyRoot).secured) 'A migration interrupted between its two renames is completed from the protected copy instead of starting empty'
+    Worker 'Remove' $legacyRoot|Out-Null
+    Assert (Same (Read-Controls $first) $original) 'Removing the migrated governor restores the process'
+
     $sessionScript=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'),[ref]$null,[ref]$null)
     $sessionSettings=@($sessionScript.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'New-ScheduledTaskSettingsSet'},$true))
     $sessionPriority=@($sessionSettings|ForEach-Object {$elements=$_.CommandElements;for($i=0;$i -lt $elements.Count-1;$i++){if($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'Priority'){$elements[$i+1].Extent.Text}}})
@@ -268,7 +301,10 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
 } finally {
     foreach($name in @($limitedTask)){if($name){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue}}
     if($moved -and (Test-Path -LiteralPath $moved)){if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force};[IO.Directory]::Move($moved,$policyRoot)}
-    if(Test-Path -LiteralPath (Join-Path $hostDirectory 'Optimizer.Host.dll')){try {Worker 'Remove'|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}}
+    if(Test-Path -LiteralPath (Join-Path $hostDirectory 'Optimizer.Host.dll')){
+        try {Worker 'Remove'|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}
+        if(Test-Path -LiteralPath $legacyRoot){try {Worker 'Remove' $legacyRoot|Out-Null} catch {Write-Output ('Cleanup: '+$_.Exception.Message)}}
+    }
     if($taskName -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
     foreach($probe in $probes){if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()}
     Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue
