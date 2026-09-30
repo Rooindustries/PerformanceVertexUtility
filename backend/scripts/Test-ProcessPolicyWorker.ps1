@@ -396,7 +396,7 @@ $seen=New-Object System.Collections.Generic.List[string];$rewritten=New-Object S
 $index=0
 foreach($folder in @([IO.Path]::GetTempPath(),'PARENT')){$w=[IO.FileSystemWatcher]::new($folder,'*.json');$w.IncludeSubdirectories=$true;$w.InternalBufferSize=65536;Register-ObjectEvent $w Created -SourceIdentifier ('created'+$index)|Out-Null;Register-ObjectEvent $w Changed -SourceIdentifier ('changed'+$index)|Out-Null;$w.EnableRaisingEvents=$true;$index++}
 $clock=[Diagnostics.Stopwatch]::StartNew()
-while($clock.Elapsed.TotalSeconds -lt 45){
+while($clock.Elapsed.TotalSeconds -lt 90){
     $raised=Wait-Event -Timeout 1
     if($raised){
         $path=$raised.SourceEventArgs.FullPath;Remove-Event -EventIdentifier $raised.EventIdentifier;$seen.Add($path)
@@ -413,12 +413,16 @@ while($clock.Elapsed.TotalSeconds -lt 45){
     $raceResumed=Worker 'Resume'
     Core 'rule-delete' @{ruleId=$raceRule.ruleId}|Out-Null
     Worker 'Sync'|Out-Null
-    if($null -eq (Wait-Until {Test-Path -LiteralPath $watchOutput} 90 500)){throw 'The request watcher did not report.'}
+    $decoy=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-decoy-'+[Guid]::NewGuid().ToString('N')+'.json')
+    [IO.File]::WriteAllText($decoy,'{"policyRoot":"decoy","paused":false}',[Text.UTF8Encoding]::new($false))
+    if($null -eq (Wait-Until {Test-Path -LiteralPath $watchOutput} 150 500)){throw 'The request watcher did not report.'}
+    $decoyText=[IO.File]::ReadAllText($decoy);Remove-Item -LiteralPath $decoy -Force
     Start-Sleep -Milliseconds 300
     $watch=Get-Content -LiteralPath $watchOutput -Raw -Encoding UTF8|ConvertFrom-Json
     Remove-Item -LiteralPath $watchOutput -Force
     Note 'requestRace' ([ordered]@{elevated=$watch.elevated;seen=@($watch.seen);rewritten=@($watch.rewritten)})
-    Assert ($watch.elevated -eq $false -and @($watch.rewritten).Count -eq 0 -and $raceResumed.paused -eq $false -and $raceResumed.worker.hostRunning -eq $true) 'A non-elevated process racing governor actions finds no request it can rewrite'
+    Assert ($decoyText -match '"paused":true' -and @($watch.rewritten|Select-Object -Unique).Count -eq 1 -and @($watch.rewritten)[0] -eq $decoy) 'The racing watcher does catch and rewrite a request file when one exists (positive control)'
+    Assert ($watch.elevated -eq $false -and $raceResumed.paused -eq $false -and $raceResumed.worker.hostRunning -eq $true) 'A non-elevated process racing governor actions finds no governor request it can rewrite'
 
     # migration of a folder written by the earlier version: a file written without elevation is refused, a clean folder moves byte for byte, an interrupted swap is adopted
     [IO.Directory]::CreateDirectory((Join-Path $legacyRoot 'rules'))|Out-Null
