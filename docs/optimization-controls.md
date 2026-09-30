@@ -10,7 +10,7 @@ CPU selections can use logical processors, performance/efficiency classes, one t
 
 **Saved rules** can be edited, paused or deleted. They store semantic CPU selection and a topology fingerprint, resolving fresh opaque IDs for each process instance. Hard-affinity rules also bind the reviewed topology. Rules apply only to the current Windows user's matching processes. Exact executable-path matching is the default; filename matching and executable-file hash binding are explicit options. An external field change suspends that instance rather than repeatedly overriding it.
 
-The rule worker runs separately from the desktop. **Enable at sign-in** registers a task for the current user; **Stop and restore** verifies restoration of still-owned controls. Closing the desktop does not stop an enabled worker. Rules and recovery state live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\process-rules`.
+The **Roo Industries Governor** is the rule worker. It runs separately from the desktop whenever at least one rule is on: saving or turning on a rule starts it, and its scheduled task starts it at sign-in and checks every minute, so a crashed or killed worker comes back and reconciles its journals. Turning off or deleting the last rule stops it, restores still-owned controls and removes the task. **Pause governor** restores still-owned controls and disables the task until **Start governor**; the pause is stored with the rules, so a restart cannot undo it. Opening or closing the desktop never changes enforcement. Rules and recovery state live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\process-rules`, owned by Administrators with read-only access for the user; the elevated worker refuses a folder that anyone else can change. While a rule owns a process field, GameTune, Background limits, Background profiles, CPU Sets and Apply once skip or refuse that field with "Managed by the governor". The installer pauses the governor before replacing files and starts it again afterwards; uninstall stops it, restores its controls and removes its task, keeping the rules.
 
 In **Apps & Cleanup → Remove apps**, select applications and review their published removal commands. The queue runs sequentially. Stop queue lets the current remover finish; Resume runs only untouched entries. Unknown outcomes require reconciliation. A restart requirement is satisfied only by a Windows boot after that remover's recorded creation time; an older reboot of a resumed queue is insufficient.
 
@@ -28,11 +28,11 @@ Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizat
 |---|---|---|
 | Direct process controls | `process-status`, `process-preview`, `process-apply`, `process-restore` | PID; controls/semantic selection for preview; preview path/hash and journal for apply; journal for restore |
 | Rules | `rules-list`, `rule-save`, `rule-delete` | Policy root; complete rule or rule ID |
-| Worker | `policy-run`, `policy-stop`, `policy-status` | Policy root |
+| Worker | `policy-run`, `policy-stop`, `policy-status`, `policy-summary`, `policy-secure`, `policy-pause` | Policy root; `paused` for pause |
 | Application cleanup | `cleanup-authority`, `cleanup-scan`, `cleanup-preview`, `cleanup-apply`, `cleanup-restore` | Queue journal/app ID; selected item IDs for preview; reviewed paths/hashes for execution |
 | Cleanup batches | `cleanup-batch-preview`, `cleanup-batch-apply`, `cleanup-batch-cancel`, `cleanup-batch-restore` | Application operation references or batch review/journal; cancellation ID when resuming a stopped batch |
 
-`Invoke-ProcessPolicyWorker.ps1` exposes Start, Stop, Status, EnableLogon, DisableLogon and Remove for a policy folder. It validates the task's owner/folder binding and observes the actual worker identity. A stale `running` journal is not evidence of a live worker.
+`Invoke-ProcessPolicyWorker.ps1` exposes Status, Sync, Pause, Resume and Remove for a policy folder; `Invoke-GovernorSetup.ps1` suspends, resumes and removes every governor task for the installer. It validates the task's owner/folder binding and observes the actual worker identity. A stale `running` journal is not evidence of a live worker.
 
 ## Control and cleanup limits
 
