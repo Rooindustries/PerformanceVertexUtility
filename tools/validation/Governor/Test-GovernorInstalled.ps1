@@ -246,7 +246,7 @@ switch($Phase){
         $rerunLog=Join-Path $work 'setup-rerun.log'
         $rerun=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$rerunLog+'"') -PassThru -Wait
         $out.rerunExit=$rerun.ExitCode
-        $out.rerunLog=@(Get-Content -LiteralPath $rerunLog|Where-Object {$_ -match 'Governor|Suspend|Resume|recovery'})
+        $out.rerunLog=@(Get-Content -LiteralPath $rerunLog|Where-Object {$_ -match 'Governor|Suspend|Resume|recovery'}|ForEach-Object {[string]$_})
         $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 60
         $s=Describe-State;$out.state=[ordered]@{tasks=@($s.tasks|ForEach-Object {$_.state});hostRunning=$s.hostRunning}
         Check ($null -ne $suspended -and $afterKill.tasks[0].state -eq 'Disabled' -and $rerun.ExitCode -eq 0 -and $null -ne $back -and $s.tasks[0].state -ne 'Disabled') 'Running setup again right after a killed setup brings the governor back and enforces the rule'
