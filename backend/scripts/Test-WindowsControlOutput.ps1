@@ -31,3 +31,17 @@ $rejected=$false
 try{$null=(Run-Helper $wrong)|ConvertFrom-Json}catch{$rejected=$true}
 if(-not $rejected){throw 'Negative control accepted mixed formatter output and JSON'}
 Write-Host 'PASS the original mixed-output behavior fails the same JSON boundary'
+$providers=@'
+function Get-DnsClientDohServerAddress {[pscustomobject]@{ServerAddress='203.0.113.253';DohTemplate='https://fixture.invalid/dns-query';AllowFallbackToUdp=$false;AutoUpgrade=$true}}
+function Get-NetTeredoConfiguration {param($PolicyStore) Write-Warning 'fixture warning from the second read'; [pscustomobject]@{Type='Default'}}
+'@
+$request=@{action='read-batch';addresses=@([ordered]@{kind='dns-over-https';target='203.0.113.253';property='configuration'},[ordered]@{kind='teredo';target='system';property='type'},[ordered]@{kind='dns-over-https';target='203.0.113.254';property='configuration'})}
+$lines=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ })
+$results=@($lines | Where-Object { $_ -match '^ROO-CONTROL \d+ ' })
+if($results.Count -ne 3 -or $results[0] -notmatch '^ROO-CONTROL 0 ' -or $results[1] -notmatch '^ROO-CONTROL 1 ' -or $results[2] -notmatch '^ROO-CONTROL 2 '){throw ('Batch results are not framed in request order: '+($lines -join ' | '))}
+$first=($results[0] -replace '^ROO-CONTROL 0 ','')|ConvertFrom-Json;$third=($results[2] -replace '^ROO-CONTROL 2 ','')|ConvertFrom-Json
+if($first.value.template -cne 'https://fixture.invalid/dns-query' -or $null -ne $third.value -or $third.binding -cne 'dns-over-https:203.0.113.254'){throw ('Batch reads changed the per-address values: '+($results -join ' | '))}
+$firstIndex=[array]::IndexOf($lines,$results[0]);$secondIndex=[array]::IndexOf($lines,$results[1])
+$stray=@($lines | Where-Object { $_ -notmatch '^ROO-CONTROL \d+ ' })
+if(@($stray | Where-Object { [array]::IndexOf($lines,$_) -lt $firstIndex -or [array]::IndexOf($lines,$_) -gt $secondIndex }).Count){throw ('Output from one batch read leaked next to another address: '+($lines -join ' | '))}
+Write-Host ('PASS batched reads keep request order and keep each read''s stray output before its own result ('+$stray.Count+' stray lines before the second result)')

@@ -88,9 +88,9 @@ switch (mode)
             return Describe(single) != Describe(batched[address]);
         }).Select(Name).ToArray();
         var request = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new { action = "read-batch", addresses = many }, OperationFiles.Json)).Length;
-        var failures = sample.Where(address => batched[address].Error is not null).Select(address => Name(address) + " => " + Describe(batched[address])).ToArray();
+        var failing = sample.Where(address => batched[address].Error is not null).Select(address => Name(address) + " => " + Describe(batched[address])).ToArray();
         Report("400 PowerShell-kind addresses (request " + request + " base64 chars) are split across helper runs and match per-address reads, including failing reads",
-            batched.Count == many.Length && mismatches.Length == 0 && request > 24000 && failures.Length == 16, "batched ms=" + batchMs + ", resolved " + batched.Count + ", sample " + sample.Length + ", mismatches: " + string.Join("; ", mismatches) + "; failures: " + string.Join(" | ", failures.Take(3)));
+            batched.Count == many.Distinct().Count() && mismatches.Length == 0 && request > 24000 && failing.Length == 16, "batched ms=" + batchMs + ", resolved " + batched.Count + ", sample " + sample.Length + ", mismatches: " + string.Join("; ", mismatches) + "; failures: " + string.Join(" | ", failing.Take(3)));
         break;
     }
     case "phases":
