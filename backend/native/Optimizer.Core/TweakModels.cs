@@ -165,5 +165,16 @@ public interface ITweakStore
     TweakAssignment[] Resolve(TweakAssignment assignment);
     void CheckRequirement(string requirement);
     TweakControlRead ReadControl(ControlAddress address);
+    Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses)
+    {
+        var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+        foreach (var address in addresses.Distinct())
+        {
+            try { results[address] = (ReadControl(address), null); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        return results;
+    }
+    Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses) => Task.FromResult(ReadControls(addresses));
     TweakState Commit(TweakPlan plan, string reviewHash);
 }
