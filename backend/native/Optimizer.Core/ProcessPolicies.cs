@@ -93,15 +93,22 @@ public sealed class ProcessPolicyStore
         return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError);
     }
 
-    public string[] OwnedControls(RunningProcess identity)
+    public string[] OwnedControls(string executablePath)
     {
         if (!Directory.Exists(Root) || Paused()) return [];
         var owned = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, identity.ExecutablePath)))
+        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, executablePath)))
         {
             owned.UnionWith(rule.Controls.Keys);
             if (rule.CpuSelection is not null) owned.Add("cpuSets");
         }
+        return owned.ToArray();
+    }
+
+    public string[] OwnedControls(RunningProcess identity)
+    {
+        if (!Directory.Exists(Root) || Paused()) return [];
+        var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath), StringComparer.Ordinal);
         if (File.Exists(StatePath))
             foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
                 instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
@@ -109,9 +116,12 @@ public sealed class ProcessPolicyStore
         return owned.ToArray();
     }
 
-    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls)
+    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls) => Refuse(OwnedControls(identity).Intersect(controls).ToArray());
+
+    public void RequireUnowned(string executablePath, IEnumerable<string> controls) => Refuse(OwnedControls(executablePath).Intersect(controls).ToArray());
+
+    private static void Refuse(string[] owned)
     {
-        var owned = OwnedControls(identity).Intersect(controls).ToArray();
         if (owned.Length > 0)
             throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Pause the governor or change its rule for this app first.");
     }
