@@ -12,18 +12,25 @@ public sealed class TweakEngine
     public TweakInspection Detect()
     {
         var state = State();
+        var prefetch = _store.ReadControlsAsync(_catalog.Settings.SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray());
+        Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>? prefetched = null;
         var controlCache = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
         TweakControlRead InspectControl(ControlAddress address)
         {
             if (!controlCache.TryGetValue(address, out var cached))
             {
-                try { var read = _store.ReadControl(address); read.Validate(); cached = (read, null); }
+                try
+                {
+                    var (read, failure) = prefetched!.TryGetValue(address, out var found) ? found : (_store.ReadControl(address), (Exception?)null);
+                    if (failure is not null) throw failure;
+                    read!.Validate(); cached = (read, null);
+                }
                 catch (Exception error) { cached = (null, error); }
                 controlCache.Add(address, cached);
             }
             return cached.Read ?? throw new InvalidDataException(cached.Error!.Message, cached.Error);
         }
-        return new(_store.Context, _catalog.Version, state, _catalog.Settings.Select(definition =>
+        var prepared = _catalog.Settings.Select(definition =>
         {
             try
             {
@@ -31,6 +38,18 @@ public sealed class TweakEngine
                 foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement);
                 var resolvedOptions = definition.Options.Select(option => option with { Changes = option.Changes.SelectMany(_store.Resolve).ToArray() }).ToArray();
                 var readings = resolvedOptions.SelectMany(option => option.Changes).Select(change => change.Address).Distinct().ToDictionary(address => address, Read);
+                return (Definition: definition, Supported: supported, Options: resolvedOptions, Readings: readings, Error: (Exception?)null);
+            }
+            catch (Exception error) { return (Definition: definition, Supported: false, Options: Array.Empty<TweakOption>(), Readings: new Dictionary<RegistryAddress, TweakRead>(), Error: error); }
+        }).ToArray();
+        try { prefetched = prefetch.GetAwaiter().GetResult(); }
+        catch (Exception) { prefetched = new(); }
+        return new(_store.Context, _catalog.Version, state, prepared.Select(entry =>
+        {
+            var (definition, supported, resolvedOptions, readings, failure) = entry;
+            try
+            {
+                if (failure is not null) throw failure;
                 var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
                 var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
                 if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");

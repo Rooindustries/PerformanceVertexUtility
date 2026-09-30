@@ -30,6 +30,29 @@ public sealed class WindowsControlStore : IControlStore
             _ => PowerShellControls.Read(address),
         };
     }
+    private static readonly HashSet<string> NativeKinds = new(StringComparer.Ordinal)
+    {
+        "service", "mitigations", "windows-features", "hibernation", "file-acl", "file-ownership", "download-blocker", "hosts", "timer", "timer-startup", "power-plan", "scheduled-task",
+    };
+    public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadMany(IReadOnlyCollection<ControlAddress> addresses)
+    {
+        var all = addresses.Distinct().ToArray();
+        var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+        var scripted = new List<ControlAddress>();
+        foreach (var address in all.Where(address => !NativeKinds.Contains(address.Kind ?? "")))
+        {
+            try { address.Validate(); scripted.Add(address); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        var batch = scripted.Count == 0 ? null : Task.Run(() => PowerShellControls.ReadMany(scripted));
+        foreach (var address in all.Where(address => NativeKinds.Contains(address.Kind ?? "")))
+        {
+            try { results[address] = (Read(address), null); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        if (batch is not null) foreach (var (address, result) in batch.GetAwaiter().GetResult()) results[address] = result;
+        return results;
+    }
     public void Write(TweakControlRead before, JsonElement after)
     {
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Windows control changed before execution: " + before.Address.Target);
