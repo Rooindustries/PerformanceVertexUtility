@@ -42,8 +42,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     {
         RestoreRows.Clear();
         var rulesState = rules is null ? "unknown" : GovernorDisplay.State(rules.Summary, rules.Worker);
-        var ruleInstances = rules?.Worker.State?.Instances.Count(instance => instance.Status is "active" or "applying" or "conflict") ?? 0;
-        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || ruleInstances > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var ruleInstances = rules?.Worker.State?.Instances.Count(instance => instance.Status is "active" or "applying") ?? 0;
+        var steppedBack = rules?.Worker.State?.Instances.Count(instance => instance.Status == "conflict") ?? 0;
+        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || ruleInstances + steppedBack > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
@@ -66,12 +67,12 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             rulesState switch
             {
                 "running" => "Running · " + (ruleInstances == 1 ? "1 app" : ruleInstances + " apps") + " changed · pause it in Games > Processes to put settings back",
-                "paused" => "Paused · settings put back",
-                "off" => ruleInstances > 0 ? "Off · " + ruleInstances + " apps still need their settings put back" : "No rules",
+                "paused" => steppedBack > 0 ? "Paused · " + steppedBack + " apps kept a setting another app changed" : "Paused · settings put back",
+                "off" => ruleInstances + steppedBack > 0 ? "Off · " + (ruleInstances + steppedBack) + " apps still have saved settings" : "No rules",
                 "notResponding" => "Not responding · " + (ruleInstances > 0 ? ruleInstances + " apps have saved settings · " : "") + "open Games > Processes",
                 _ => "Status unavailable",
             },
-            rulesState switch { "running" => "safe", "paused" or "off" when ruleInstances == 0 => "neutral", _ => "medium" }));
+            rulesState switch { "running" => "safe", "paused" or "off" when ruleInstances + steppedBack == 0 => "neutral", _ => "medium" }));
 
         RestoreRows.Add(new StatusLine("Windows settings", windows is null ? "Status unavailable" : windows.Pending is not null ? restart ? "Check restart completion" : "Interrupted change · review recovery" :
             windows.State?.Profiles.Length > 0 ? windows.State.Profiles.Length + " saved profiles" : "No saved profiles", windows is null || windows.Pending is not null ? "medium" : windows.State?.Profiles.Length > 0 ? "safe" : "neutral"));

@@ -9,6 +9,7 @@ function Get-RooIndustriesGovernorOwnership {
     $cached=$script:RooIndustriesGovernorOwnership
     if($null -ne $cached -and ($now-$cached.readAtUtc).TotalMilliseconds -lt 1000 -and ($now-$cached.readAtUtc).TotalMilliseconds -ge 0){return $cached}
     $root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules'
+    for($attempt=0;$attempt -lt 3;$attempt++){
     $rules=New-Object System.Collections.Generic.List[object]
     $instances=New-Object System.Collections.Generic.List[object]
     $failure=$null
@@ -38,6 +39,9 @@ function Get-RooIndustriesGovernorOwnership {
             }
         }
     } catch {$failure=$_.Exception.Message}
+    if(-not $failure){break}
+    Start-Sleep -Milliseconds 50
+    }
     $script:RooIndustriesGovernorOwnership=[pscustomobject]@{readAtUtc=$now;rules=@($rules.ToArray());instances=@($instances.ToArray());failure=$failure}
     return $script:RooIndustriesGovernorOwnership
 }

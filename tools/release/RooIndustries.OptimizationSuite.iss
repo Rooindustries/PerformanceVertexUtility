@@ -92,7 +92,10 @@ begin
   Result := '';
   ExtractTemporaryFile('Invoke-GovernorSetup.ps1');
   if not RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Suspend') then
-    Result := 'Setup could not stop the Roo Industries Governor safely, so nothing was changed. Restart Windows and run setup again.'
+  begin
+    RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Resume');
+    Result := 'Setup could not stop the Roo Industries Governor safely, so no files were changed. Restart Windows and run setup again.';
+  end
   else
     GovernorSuspended := True;
 end;
@@ -127,5 +130,7 @@ begin
       ExpandConstant('{app}') + '" -LogPath "' + LogPath + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
     if LoadStringFromFile(LogPath, Output) then Log(String(Output));
     Log('Roo Industries Governor removal finished with exit code ' + IntToStr(Code));
+    if Code <> 0 then
+      SuppressibleMsgBox('The Roo Industries Governor could not be removed completely. Restart Windows, then check Task Scheduler for tasks named RooIndustriesOptimizationSuite.ProcessRules and delete them.', mbError, MB_OK, IDOK);
   end;
 end;

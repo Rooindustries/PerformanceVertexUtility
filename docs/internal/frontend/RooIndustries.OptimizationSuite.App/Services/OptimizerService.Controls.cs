@@ -57,7 +57,7 @@ public sealed partial class OptimizerService
     public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() =>
     {
         var store = new ProcessPolicyStore(PolicyRoot);
-        var summary = store.Summary();
+        var summary = store.Summary(deep: false);
         PolicyWorkerStatus worker;
         try { worker = store.Status(); }
         catch (Exception error) { worker = new(null, null, error.Message); }

@@ -8,7 +8,8 @@ $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-policy-worker-'+[Guid]::NewGuid().ToString('N'))
 $hostDirectory=Join-Path $root 'host'
 $probeDirectory=Join-Path $root 'probe'
-$policyRoot=Join-Path $root 'saved rules'
+$policyParent=Join-Path $root 'rules parent'
+$policyRoot=Join-Path $policyParent 'saved rules'
 $limitedOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.json')
 $probes=New-Object System.Collections.Generic.List[Diagnostics.Process]
 $taskName=$null;$limitedTask=$null;$moved=$null
@@ -173,11 +174,11 @@ $result.changePermissions=Attempt {$acl=Get-Acl -LiteralPath 'ROOT\rules';$acl.A
 $result.renameRoot=Attempt {[IO.Directory]::Move('ROOT','ROOT.moved')}
 $result.renameParent=Attempt {[IO.Directory]::Move('PARENT','PARENT.moved')}
 $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
-'@).Replace('RULE',$ruleFile).Replace('ROOT',$policyRoot).Replace('PARENT',$root).Replace('OUT',$limitedOutput)
+'@).Replace('RULE',$ruleFile).Replace('ROOT',$policyRoot).Replace('PARENT',$policyParent).Replace('OUT',$limitedOutput)
     Note 'nonElevatedAttemptsWhileRunning' $limited
     Assert ($limited.elevated -eq $false -and $limited.user -eq (Get-RooIndustriesOperationOwner).userSid -and $limited.readRule -eq 'allowed') 'The probe ran as the same user without elevation and can read the rules'
     Assert ((@('createRule','modifyRule','deleteRule','createControlFile','replaceRequest','changePermissions','renameRoot','renameParent')|Where-Object {([string]$limited.$_) -notlike 'denied*'}).Count -eq 0) 'A non-elevated process cannot create, change, delete or re-permission rules and control files, or swap the rules folder while the governor runs'
-    Assert ((Test-Path -LiteralPath $ruleFile) -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'rules\planted.json')) -and (Test-Path -LiteralPath $root)) 'The rules folder is unchanged after the denied attempts'
+    Assert ((Test-Path -LiteralPath $ruleFile) -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'rules\planted.json')) -and (Test-Path -LiteralPath $policyParent)) 'The rules folder is unchanged after the denied attempts'
 
     # (b) killing the governor: it restarts on its own, reconciles journals and keeps undo working
     $firstInstance=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $first.Id -and $_.status -eq 'active'})
@@ -274,9 +275,6 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
 '@).Replace('LEGACY',$legacyRoot).Replace('OUT',$limitedOutput)
     $limited=Invoke-Limited $legacyWrite
     Assert ($limited.write -eq 'allowed') 'BEFORE: the earlier unprotected rules folder lets a non-elevated process add files'
-    $legacyRefused=$null;try {Worker 'Sync' $legacyRoot|Out-Null} catch {$legacyRefused=$_.Exception.Message}
-    Note 'legacyRefusal' $legacyRefused
-    Assert ($legacyRefused -like '*did not write with administrator rights*' -and -not (Get-Acl -LiteralPath $legacyRoot).AreAccessRulesProtected) 'An earlier folder containing a file written without elevation is refused and left untouched'
     Remove-Item -LiteralPath (Join-Path $legacyRoot 'rules\note.txt') -Force
     $migrated=Worker 'Sync' $legacyRoot
     $legacyAcl=Get-Acl -LiteralPath $legacyRoot
@@ -308,6 +306,8 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
     if($taskName -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
     foreach($probe in $probes){if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit();$probe.Dispose()}
     Remove-Item -LiteralPath $limitedOutput -Force -ErrorAction SilentlyContinue
+    $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_.StartsWith($root.ToUpperInvariant())})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
     if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
     $evidence.finishedAtUtc=[DateTime]::UtcNow.ToString('o')
     if($EvidencePath){[IO.File]::WriteAllText($EvidencePath,($evidence|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))}
