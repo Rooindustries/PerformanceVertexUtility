@@ -323,6 +323,7 @@ public static class RooIndustriesGovernorDenied {
     Worker 'Resume'|Out-Null
     Core 'rule-delete' @{ruleId=$deniedRule.ruleId}|Out-Null
     $afterDenied=Worker 'Sync'
+    Note 'afterDenied' ([ordered]@{registered=$afterDenied.registered;running=$afterDenied.worker.hostRunning;status=$afterDenied.worker.state.status;open=@($afterDenied.worker.state.instances|Where-Object {$_.status -notin @('restored','expired')}|ForEach-Object {''+$_.process.processId+' '+$_.process.executablePath+' '+$_.status+' '+$_.error})})
     Assert (-not $afterDenied.registered -and @($afterDenied.worker.state.instances|Where-Object {$_.status -notin @('restored','expired')}).Count -eq 0) 'Records of the denied processes end once they exit'
 
     # crash between restoring two fields: restart finishes every field and leaves a consistent journal
