@@ -17,12 +17,25 @@ function Write-Log([string]$Text){
     [Console]::Out.WriteLine($line)
 }
 
+function Get-Sid([string]$Account){
+    if($Account -match '^S-1-'){return $Account}
+    try {return [Security.Principal.NTAccount]::new($Account).Translate([Security.Principal.SecurityIdentifier]).Value} catch {return ''}
+}
+
 function Get-GovernorTasks {
-    foreach($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})){
+    foreach($task in @(Get-ScheduledTask -ErrorAction Stop|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})){
         $parts=@([string]$task.Description -split ' \| ',3)
         if($parts.Count -ne 3 -or $parts[1] -notmatch '^S-1-'){Write-Log ('Skipping task with an unexpected description: '+$task.TaskName);continue}
-        [pscustomobject]@{taskName=$task.TaskName;taskPath=$task.TaskPath;userSid=$parts[1];policyRoot=$parts[2];enabled=([string]$task.State -ne 'Disabled')}
+        $profile=@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$parts[1]+"'") -ErrorAction SilentlyContinue)[0]
+        $local=if($profile){[IO.Path]::GetFullPath((Join-Path $profile.LocalPath 'AppData\Local')).TrimEnd('\')+'\'}else{$null}
+        $root=try{[IO.Path]::GetFullPath($parts[2])}catch{''}
+        $trusted=[string]$task.Principal.RunLevel -eq 'Highest' -and (Get-Sid ([string]$task.Principal.UserId)) -eq $parts[1] -and $local -and $root.StartsWith($local,[StringComparison]::OrdinalIgnoreCase)
+        [pscustomobject]@{taskName=$task.TaskName;taskPath=$task.TaskPath;userSid=$parts[1];policyRoot=$root;enabled=([string]$task.State -ne 'Disabled');trusted=[bool]$trusted}
     }
+}
+
+function Save-Records($Records){
+    if($StatePath){[IO.File]::WriteAllText($StatePath,(ConvertTo-Json -InputObject @($Records.ToArray()) -Depth 5),[Text.UTF8Encoding]::new($false))}
 }
 
 function Invoke-Host([string]$HostAction,[string]$PolicyRoot,[hashtable]$Extra=@{}){
@@ -72,16 +85,20 @@ function Stop-Governor($Task){
 switch($Action){
     'Suspend' {
         $records=New-Object System.Collections.Generic.List[object]
+        Save-Records $records
         foreach($task in @(Get-GovernorTasks)){
+            if(-not $task.trusted){Write-Log ('Ignoring a task that is not a governor registered by an administrator: '+$task.taskName);continue}
+            $record=[pscustomobject][ordered]@{taskName=$task.taskName;taskPath=$task.taskPath;userSid=$task.userSid;policyRoot=$task.policyRoot;enabled=$task.enabled;wasRunning=$false}
+            $records.Add($record)
+            Save-Records $records
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
-            $record=[ordered]@{taskName=$task.taskName;taskPath=$task.taskPath;userSid=$task.userSid;policyRoot=$task.policyRoot;enabled=$task.enabled;wasRunning=$false}
             if($task.userSid -eq $me){
                 try {
                     $legacy=$false
                     if(Test-Path -LiteralPath $hostExe){try {Invoke-Host 'policy-summary' $task.policyRoot|Out-Null} catch {$legacy=$true}}
                     $stopped=Stop-Governor $task
+                    if($stopped){$record.wasRunning=$stopped.wasRunning;Save-Records $records}
                     if($stopped -and $legacy){
-                        $record.wasRunning=$stopped.wasRunning
                         $settings=Join-Path $task.policyRoot 'governor.json'
                         if(-not (Test-Path -LiteralPath $settings) -and (Test-Path -LiteralPath (Join-Path $task.policyRoot 'rules')) -and -not $stopped.wasRunning -and $stopped.state -and [string]$stopped.state.status -in @('stopped','stoppedWithConflicts')){
                             [IO.File]::WriteAllText($settings,'{"schemaVersion":1,"paused":true}',[Text.UTF8Encoding]::new($false))
@@ -96,14 +113,21 @@ switch($Action){
                 Write-Log ('Ending the governor of another Windows user '+$task.userSid)
                 Stop-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -ErrorAction SilentlyContinue
             }
-            $records.Add([pscustomobject]$record)
         }
         Stop-Leftovers
-        if($StatePath){[IO.File]::WriteAllText($StatePath,(ConvertTo-Json -InputObject @($records.ToArray()) -Depth 5),[Text.UTF8Encoding]::new($false))}
         Write-Log ('Suspended '+$records.Count+' governor tasks')
     }
     'Resume' {
-        $records=if($StatePath -and (Test-Path -LiteralPath $StatePath)){@((Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8|ConvertFrom-Json))}else{@()}
+        $records=New-Object System.Collections.Generic.List[object]
+        if($StatePath -and (Test-Path -LiteralPath $StatePath)){foreach($item in @((Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8|ConvertFrom-Json))){if($null -ne $item){$records.Add($item)}}}
+        $local=[Environment]::GetFolderPath('LocalApplicationData')
+        foreach($folder in @(Get-ChildItem -LiteralPath $local -Directory -Filter '*OptimizationSuite' -ErrorAction SilentlyContinue)){
+            $root=Join-Path $folder.FullName 'process-rules'
+            if((Test-Path -LiteralPath (Join-Path $root 'rules')) -and -not @($records|Where-Object {$_.userSid -eq $me -and [string]$_.policyRoot -ieq $root}).Count){
+                Write-Log ('Found saved rules without a governor task: '+$root)
+                $records.Add([pscustomobject]@{taskName='';taskPath='\';userSid=$me;policyRoot=$root;enabled=$true;wasRunning=$false})
+            }
+        }
         $failures=0
         foreach($record in $records){
             if($null -eq $record){continue}
@@ -118,17 +142,17 @@ switch($Action){
                     } elseif($record.wasRunning){
                         & $workerScript -Action Start -PolicyRoot $record.policyRoot -ConfirmApply|Out-Null
                         Write-Log ('Earlier governor restarted for '+$record.policyRoot)
-                    } elseif($record.enabled -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)) {
+                    } elseif($record.enabled -and $record.taskName -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)) {
                         Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null
                     }
-                } elseif($record.enabled -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){
+                } elseif($record.enabled -and $record.taskName -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){
                     Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null
                     Write-Log ('Re-enabled the governor task of another Windows user '+$record.userSid)
                 }
             } catch {
                 $failures++
                 Write-Log ('Could not resume the governor for '+$record.policyRoot+': '+$_.Exception.Message)
-                if($record.enabled -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null}
+                if($record.enabled -and $record.taskName -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null}
             }
         }
         Write-Log ('Resumed '+$records.Count+' governor tasks with '+$failures+' failures')
@@ -137,7 +161,7 @@ switch($Action){
     'Remove' {
         foreach($task in @(Get-GovernorTasks)){
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
-            if($task.userSid -eq $me -and (Test-Path -LiteralPath $workerScript)){
+            if($task.trusted -and $task.userSid -eq $me -and (Test-Path -LiteralPath $workerScript)){
                 try {
                     $text=@(& $workerScript -Action Remove -PolicyRoot $task.policyRoot -HostDirectory (Split-Path $hostExe -Parent) -ConfirmApply) -join "`n"
                     $result=$text|ConvertFrom-Json

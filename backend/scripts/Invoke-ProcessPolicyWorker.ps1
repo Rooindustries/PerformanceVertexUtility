@@ -62,7 +62,12 @@ function Stop-Worker {
             $status=Invoke-Core 'policy-status'
             if($null -eq $status.hostRunning){throw ('Governor shutdown could not be verified: '+$status.error)}
         } while($status.hostRunning -and $clock.Elapsed.TotalSeconds -lt 30)
-        if($status.hostRunning){throw 'The governor did not finish restoring its settings within 30 seconds. Its recovery state was preserved.'}
+        if($status.hostRunning){
+            $process=Get-Process -Id $status.state.host.processId -ErrorAction SilentlyContinue
+            if($process -and $process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -eq [string]$status.state.host.creationTimeFileTimeUtc){$process.Kill();$process.WaitForExit(10000)|Out-Null}
+            $status=Invoke-Core 'policy-status'
+            if($status.hostRunning -ne $false){throw 'The governor did not stop. Its recovery state was preserved.'}
+        }
     }
     Restore-Interrupted $status
 }
@@ -75,7 +80,7 @@ function Restore-Interrupted($Status) {
 
 function Get-GovernorTask {return Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue}
 
-function Register-Governor {
+function Register-Governor([switch]$Disabled) {
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if(-not $admin){throw 'Saved rules need administrator rights. Open the app as an administrator and try again.'}
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
@@ -83,6 +88,7 @@ function Register-Governor {
     $execute=New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument $arguments -WorkingDirectory $HostDirectory
     $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
+    $settings.Enabled=-not $Disabled
     $clock=New-ScheduledTaskTrigger -Once -At ([DateTime]::Now) -RepetitionInterval (New-TimeSpan -Minutes 1)
     $logon=New-ScheduledTaskTrigger -AtLogOn -User $owner.userSid
     $logon.Repetition=$clock.Repetition
@@ -91,7 +97,8 @@ function Register-Governor {
 
 function Start-Governor {
     $status=Invoke-Core 'policy-status'
-    if($status.hostRunning -eq $true){return}
+    if($status.hostRunning -eq $true -and -not $status.error){return}
+    if($status.hostRunning -eq $true){Stop-Worker}
     Start-ScheduledTask -TaskName $taskName
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {$status=Invoke-Core 'policy-status';if($status.hostRunning -eq $true){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 20)
@@ -108,18 +115,16 @@ function Remove-Governor {
 }
 
 function Sync-Governor {
-    if(Test-Path -LiteralPath $PolicyRoot){
-        $summary=Invoke-Core 'policy-summary'
-        if(-not $summary.secured){
-            if((Invoke-Core 'policy-status').hostRunning){Stop-Worker}
-            Invoke-Core 'policy-secure'|Out-Null
-        }
-    }
+    if((Test-Path -LiteralPath $PolicyRoot) -and -not (Invoke-Core 'policy-summary').secured -and (Invoke-Core 'policy-status').hostRunning){Stop-Worker}
+    Invoke-Core 'policy-secure'|Out-Null
     $summary=Invoke-Core 'policy-summary'
-    if($summary.enabledRules -eq 0 -and -not $summary.rulesError){Remove-Governor;return}
+    if($summary.enabledRules -eq 0 -and -not $summary.rulesError){
+        Remove-Governor
+        if($summary.rules -eq 0 -and $summary.paused){Invoke-Core 'policy-pause' @{paused=$false}|Out-Null}
+        return
+    }
     if($summary.paused){
-        Register-Governor
-        Disable-ScheduledTask -TaskName $taskName|Out-Null
+        Register-Governor -Disabled
         Stop-Worker
         return
     }
@@ -131,9 +136,11 @@ switch($Action){
     'Sync' {Sync-Governor}
     'Resume' {Invoke-Core 'policy-pause' @{paused=$false}|Out-Null;Sync-Governor}
     'Pause' {
+        $secured=(Test-Path -LiteralPath $PolicyRoot) -and (Invoke-Core 'policy-summary').secured
+        if($secured){Invoke-Core 'policy-pause' @{paused=$true}|Out-Null}
         if(Get-GovernorTask){Disable-ScheduledTask -TaskName $taskName|Out-Null}
         Stop-Worker
-        Invoke-Core 'policy-pause' @{paused=$true}|Out-Null
+        if(-not $secured){Invoke-Core 'policy-pause' @{paused=$true}|Out-Null}
         Restore-Interrupted (Invoke-Core 'policy-status')
     }
     'Remove' {Remove-Governor}

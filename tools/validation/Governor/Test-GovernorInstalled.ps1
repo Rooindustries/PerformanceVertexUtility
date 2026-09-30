@@ -1,0 +1,194 @@
+param([Parameter(Mandatory=$true)][string]$Phase)
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$app='C:\Program Files\Roo Industries\Optimization Suite'
+$hostExe=Join-Path $app 'backend\bin\optimizer\Optimizer.Host.exe'
+$workerScript=Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'
+$work=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-installed'
+$statePath=Join-Path $work 'state.json'
+$local=[Environment]::GetFolderPath('LocalApplicationData')
+$dataRoot=@(Get-ChildItem -LiteralPath $local -Directory -Filter '*OptimizationSuite' -ErrorAction SilentlyContinue|Where-Object {$_.Name -ne 'RooIndustriesOptimizationSuite'}|ForEach-Object {$_.FullName})+@(Join-Path $local 'RooIndustriesOptimizationSuite')|Select-Object -First 1
+$policyRoot=Join-Path $dataRoot 'process-rules'
+[IO.Directory]::CreateDirectory($work)|Out-Null
+$out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;user=[Security.Principal.WindowsIdentity]::GetCurrent().Name;policyRoot=$policyRoot;checks=@()}
+function Check([bool]$Condition,[string]$Message){$script:out.checks+=[ordered]@{passed=$Condition;check=$Message};if($Condition){"PASS $Message"}else{"FAIL $Message"}}
+function Host-Call([string]$Action,[hashtable]$Extra=@{}){
+    $request=@{schemaVersion=1;repoRoot=$app;policyRoot=$policyRoot;confirm=$true}
+    foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
+    $path=Join-Path $work ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
+    [IO.File]::WriteAllText($path,($request|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
+    try {$result=(@(& $hostExe $Action $path) -join "`n")|ConvertFrom-Json} finally {Remove-Item -LiteralPath $path -Force}
+    if($result.status -ne 'completed'){throw ($Action+': '+$result.error.message)}
+    return $result.data
+}
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class RooIndustriesInstalledOracle {
+    [StructLayout(LayoutKind.Sequential)] struct Throttling { public uint Version, ControlMask, StateMask; }
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessInformation(IntPtr process, int kind, out uint value, uint size);
+    [DllImport("kernel32.dll", SetLastError=true, EntryPoint="GetProcessInformation")] static extern bool GetThrottling(IntPtr process, int kind, ref Throttling value, uint size);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessPriorityBoost(IntPtr process, out bool disabled);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessDefaultCpuSets(IntPtr process, uint[] ids, uint count, out uint required);
+    [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int kind, out int value, int size, IntPtr length);
+    [DllImport("gdi32.dll")] static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int value);
+    public static uint Memory(IntPtr p) { uint v; if(!GetProcessInformation(p,0,out v,4)) throw new System.ComponentModel.Win32Exception(); return v; }
+    public static string Qos(IntPtr p) { var t=new Throttling{Version=1}; if(!GetThrottling(p,4,ref t,12)) throw new System.ComponentModel.Win32Exception(); return (t.ControlMask&1)==0?"systemManaged":(t.StateMask&1)!=0?"eco":"high"; }
+    public static bool BoostDisabled(IntPtr p) { bool d; if(!GetProcessPriorityBoost(p,out d)) throw new System.ComponentModel.Win32Exception(); return d; }
+    public static string CpuSets(IntPtr p) { uint n; GetProcessDefaultCpuSets(p,null,0,out n); var ids=new uint[n]; if(n>0 && !GetProcessDefaultCpuSets(p,ids,n,out n)) throw new System.ComponentModel.Win32Exception(); return string.Join(",",ids); }
+    public static int Io(IntPtr p) { int v; int s=NtQueryInformationProcess(p,33,out v,4,IntPtr.Zero); if(s!=0) throw new InvalidOperationException("NTSTATUS "+s); return v; }
+    public static int Gpu(IntPtr p) { int v; int s=D3DKMTGetProcessSchedulingPriorityClass(p,out v); if(s!=0) throw new InvalidOperationException("NTSTATUS "+s); return v; }
+}
+'@
+function Read-Controls([Diagnostics.Process]$Process){
+    $Process.Refresh()
+    return [ordered]@{cpuPriority=[string]$Process.PriorityClass;affinity=('0x{0:X}' -f [int64]$Process.ProcessorAffinity);cpuSets=[RooIndustriesInstalledOracle]::CpuSets($Process.Handle)
+        ioPriority=[RooIndustriesInstalledOracle]::Io($Process.Handle);gpuPriority=[RooIndustriesInstalledOracle]::Gpu($Process.Handle);memoryPriority=[RooIndustriesInstalledOracle]::Memory($Process.Handle)
+        executionQoS=[RooIndustriesInstalledOracle]::Qos($Process.Handle);priorityBoostDisabled=[RooIndustriesInstalledOracle]::BoostDisabled($Process.Handle)}
+}
+function Same($Left,$Right){return (($Left|ConvertTo-Json -Compress) -eq ($Right|ConvertTo-Json -Compress))}
+function Wait-Until([scriptblock]$Condition,[double]$Seconds){$clock=[Diagnostics.Stopwatch]::StartNew();while(-not (& $Condition)){if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null};Start-Sleep -Milliseconds 50};return [Math]::Round($clock.Elapsed.TotalSeconds,3)}
+$probeExe=Join-Path $work 'probe\RooIndustriesGovernorProbe.exe'
+function Start-Probe {
+    $info=[Diagnostics.ProcessStartInfo]::new($probeExe,'7200');$info.UseShellExecute=$false;$info.CreateNoWindow=$true
+    return [Diagnostics.Process]::Start($info)
+}
+function Get-Probe([int]$Id){try{$p=Get-Process -Id $Id -ErrorAction Stop;if($p.Path -eq $probeExe){return $p}}catch{};return $null}
+function Tasks{@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})}
+function Workers{@(Get-CimInstance Win32_Process|Where-Object {$_.Name -in @('Optimizer.Host.exe','dotnet.exe') -and [string]$_.CommandLine -match 'policy-run'})}
+function Describe-State {
+    $task=@(Tasks)
+    $status=if(Test-Path -LiteralPath $hostExe){try{Host-Call 'policy-status'}catch{$_.Exception.Message}}else{'no host'}
+    $acl=if(Test-Path -LiteralPath $policyRoot){Get-Acl -LiteralPath $policyRoot}else{$null}
+    return [ordered]@{
+        tasks=@($task|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;execute=$_.Actions[0].Execute;arguments=$_.Actions[0].Arguments;runLevel=[string]$_.Principal.RunLevel;triggers=@($_.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration}})}})
+        workers=@(Workers|ForEach-Object {[ordered]@{pid=$_.ProcessId;name=$_.Name;path=$_.ExecutablePath;created=$_.CreationDate;session=$_.SessionId;commandLine=$_.CommandLine}})
+        hostRunning=$status.hostRunning;stateStatus=$status.state.status;hostPid=$status.state.host.processId;instances=@($status.state.instances|ForEach-Object {[ordered]@{pid=$_.process.processId;status=$_.status;journal=$_.journalPath}})
+        ruleFiles=@(if(Test-Path -LiteralPath (Join-Path $policyRoot 'rules')){Get-ChildItem -LiteralPath (Join-Path $policyRoot 'rules') -Filter *.json|ForEach-Object {[ordered]@{name=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}}})
+        governorJson=if(Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json')){Get-Content -Raw -LiteralPath (Join-Path $policyRoot 'governor.json')}else{$null}
+        rootOwner=if($acl){$acl.Owner}else{$null};rootProtected=if($acl){$acl.AreAccessRulesProtected}else{$null};rootAccess=if($acl){@($acl.Access|ForEach-Object {''+$_.IdentityReference+':'+$_.FileSystemRights+':'+$_.AccessControlType+':'+$_.IsInherited})}else{$null}
+        appRunning=@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count
+        hostFile=if(Test-Path -LiteralPath (Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll')){$f=Get-Item -LiteralPath (Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll');[ordered]@{lastWriteUtc=$f.LastWriteTimeUtc.ToString('o');sha256=(Get-FileHash -LiteralPath $f.FullName).Hash}}else{$null}
+        bootUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+    }
+}
+$state=if(Test-Path -LiteralPath $statePath){Get-Content -Raw -LiteralPath $statePath|ConvertFrom-Json}else{[pscustomobject]@{}}
+function Save-State{[IO.File]::WriteAllText($statePath,($state|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))}
+function Set-StateValue([string]$Name,$Value){if($state.PSObject.Properties[$Name]){$state.$Name=$Value}else{$state|Add-Member -NotePropertyName $Name -NotePropertyValue $Value}}
+
+switch($Phase){
+    'describe' {$out.state=Describe-State}
+    'create-rule' {
+        [IO.Directory]::CreateDirectory((Split-Path $probeExe -Parent))|Out-Null
+        if(-not (Test-Path -LiteralPath $probeExe)){Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication}
+        $probe=Start-Probe
+        $original=Read-Controls $probe
+        $snapshot=Host-Call 'process-status' @{processId=$probe.Id}
+        $topology=@($snapshot.topology|Sort-Object group,index)
+        $sha=[Security.Cryptography.SHA256]::Create()
+        $topologyHash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes((($topology|ForEach-Object {''+$_.group+':'+$_.index+':'+$_.core+':'+$_.cache+':'+$_.numa+':'+$_.efficiency}) -join ';'))))).Replace('-','')
+        $cpu=@($topology|Where-Object {$_.available -and $_.group -eq 0})[1]
+        $gpu=if($original.gpuPriority -eq 1){2}else{1}
+        $wanted=[ordered]@{cpuPriority='AboveNormal';affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS='eco';priorityBoostDisabled=$true}
+        $rule=@{schemaVersion=1;ruleId=[Guid]::NewGuid().ToString('N');owner=@{machine=$env:COMPUTERNAME;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value};name='Installed governor validation';enabled=$true
+            matchMode='path';executablePath=$probeExe;executableHash=$null;affinityTopologyHash=$topologyHash
+            controls=@{cpuPriority='AboveNormal';affinity=@{group=0;mask='0x3'};ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
+            cpuSelection=@{kind='logical';topologyHash=$topologyHash;processors=@(@{group=0;index=[int]$cpu.index});oneThreadPerCore=$false}}
+        Host-Call 'rule-save' @{rule=$rule}|Out-Null
+        $legacy=([IO.File]::ReadAllText($workerScript) -notmatch "'Sync'")
+        $text=if($legacy){@(& $workerScript -Action Start -PolicyRoot $policyRoot -ConfirmApply) -join "`n"}else{@(& $workerScript -Action Sync -PolicyRoot $policyRoot -ConfirmApply) -join "`n"}
+        $out.startResult=$text|ConvertFrom-Json
+        $applied=Wait-Until {Same (Read-Controls $probe) $wanted} 10
+        Set-StateValue 'probePid' $probe.Id;Set-StateValue 'original' $original;Set-StateValue 'wanted' $wanted;Set-StateValue 'ruleId' $rule.ruleId;Set-StateValue 'legacyVersion' $legacy
+        Save-State
+        $out.legacyVersion=$legacy;$out.appliedSeconds=$applied
+        Check ($null -ne $applied) ('The '+$(if($legacy){'earlier'}else{'new'})+' installed version applies all 8 controls to the probe')
+        $out.state=Describe-State
+    }
+    'verify-running' {
+        $probe=Get-Probe $state.probePid
+        $s=Describe-State;$out.state=$s
+        Check ($s.appRunning -eq 0) 'The desktop app is not running'
+        Check ($s.hostRunning -eq $true -and @($s.workers).Count -eq 1) 'Exactly one governor worker is running and its identity is live'
+        Check (@($s.tasks).Count -eq 1 -and $s.tasks[0].state -ne 'Disabled' -and $s.tasks[0].execute -like '*\conhost.exe' -and $s.tasks[0].arguments -like ('*"'+$hostExe+'" policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"') -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskLogonTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1 -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskTimeTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1) 'One enabled governor task runs the installed host headless with sign-in and one-minute triggers'
+        Check ($s.rootOwner -eq 'BUILTIN\Administrators' -and $s.rootProtected -and @($s.rootAccess|Where-Object {$_ -match 'FullControl' -and $_ -notmatch '^(NT AUTHORITY\\SYSTEM|BUILTIN\\Administrators):'}).Count -eq 0) 'The rules folder is owned by Administrators with no inherited or user write access'
+        Check (@($s.ruleFiles).Count -ge 1 -and @($s.ruleFiles|Where-Object {$_.name -eq ($state.ruleId+'.json')}).Count -eq 1) 'The saved rule is still present'
+        if($probe){Check (Same (Read-Controls $probe) $state.wanted) 'The long-running probe still has all 8 requested controls'}
+        $fresh=Start-Probe
+        $seconds=Wait-Until {Same (Read-Controls $fresh) $state.wanted} 10
+        $out.newProcessSeconds=$seconds
+        Check ($null -ne $seconds) ('A newly started probe gets all 8 controls ('+$seconds+' s)')
+        . (Join-Path $app 'backend\scripts\ProcessProfile.Common.ps1')
+        $current=Get-RooIndustriesProcessControlState $fresh.Id
+        $plan=Get-RooIndustriesApplicableProcessControlChanges @([pscustomobject]@{control='priorityClass';proposedValue='High';blocked=$false},[pscustomobject]@{control='ioPriority';proposedValue='VeryLow';blocked=$false}) $current
+        $out.powerShellPlan=$plan
+        $thrown=$null;try {Invoke-RooIndustriesProcessControlChange $fresh ([pscustomobject]@{control='priorityClass';proposedValue='High'})} catch {$thrown=$_.Exception.Message}
+        Check (@($plan.changes).Count -eq 0 -and @($plan.skippedControls|Where-Object {$_.category -eq 'managed' -and $_.reason -eq 'Managed by the governor'}).Count -eq 2 -and $thrown -eq 'Managed by the governor' -and (Same (Read-Controls $fresh) $state.wanted)) 'GameTune, Background limits and Background profile skip or refuse fields the governor owns and report Managed by the governor'
+        $fresh.Kill();$fresh.WaitForExit()
+    }
+    'app-cycle' {
+        $before=Describe-State
+        $exe=Join-Path $app 'app\RooIndustries.OptimizationSuite.App.exe'
+        $process=Start-Process $exe -PassThru
+        Start-Sleep -Seconds 20
+        $during=Describe-State
+        $process.CloseMainWindow()|Out-Null
+        if(-not $process.WaitForExit(20000)){$process.Kill()}
+        Start-Sleep -Seconds 3
+        $after=Describe-State
+        $probe=Get-Probe $state.probePid
+        $out.before=$before;$out.during=$during;$out.after=$after
+        Check ($before.hostPid -and $before.hostPid -eq $during.hostPid -and $during.hostPid -eq $after.hostPid -and $after.hostRunning -eq $true) 'Opening and closing the app leaves the same governor running'
+        if($probe){Check (Same (Read-Controls $probe) $state.wanted) 'The probe keeps its rules after the app closes'}
+    }
+    'legacy-before' {
+        $before=Describe-State;$out.before=$before
+        $scriptPath=Join-Path $work 'limited.ps1';$result=Join-Path $work 'limited.json';Remove-Item -LiteralPath $result -ErrorAction SilentlyContinue
+        [IO.File]::WriteAllText($scriptPath,("`$r=[ordered]@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}`ntry{[IO.File]::WriteAllText('"+(Join-Path $policyRoot 'rules\planted-by-user.txt')+"','x');`$r.createInRules='allowed'}catch{`$r.createInRules='denied: '+`$_.Exception.Message}`n`$r|ConvertTo-Json|Set-Content -LiteralPath '"+$result+"'"),[Text.UTF8Encoding]::new($true))
+        $name='RooIndustriesGovernorLegacyLimited'
+        Register-ScheduledTask -TaskName $name -Action (New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\conhost.exe') -Argument ('--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$scriptPath+'"')) -Principal (New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Limited) -Force|Out-Null
+        Start-ScheduledTask -TaskName $name
+        Wait-Until {Test-Path -LiteralPath $result} 60|Out-Null
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        $out.limited=Get-Content -Raw -LiteralPath $result|ConvertFrom-Json
+        Remove-Item -LiteralPath (Join-Path $policyRoot 'rules\planted-by-user.txt') -Force -ErrorAction SilentlyContinue
+        Check ($out.limited.elevated -eq $false -and $out.limited.createInRules -eq 'allowed') 'BEFORE: a non-elevated process of the same user can write into the rules folder of the earlier version'
+        $pid0=$before.hostPid
+        Stop-Process -Id $pid0 -Force
+        Start-Sleep -Seconds 95
+        $after=Describe-State;$out.afterKill=$after
+        Check ($after.hostRunning -ne $true) 'BEFORE: a killed worker of the earlier version is not restarted within 95 seconds'
+        $text=@(& $workerScript -Action Stop -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
+        $text=@(& $workerScript -Action Start -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
+        $out.restarted=Describe-State
+    }
+    'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
+    'verify-replaced' {
+        $s=Describe-State;$out.state=$s
+        Check ($s.hostRunning -eq $true -and $s.hostPid -ne $state.recordedHostPid) 'A new governor worker runs after setup'
+        Check ($s.hostFile.lastWriteUtc -ne $state.recordedHostFile.lastWriteUtc) 'Setup replaced the host files'
+        Check ((@($s.ruleFiles|ForEach-Object {$_.sha256}) -join ',') -eq (@($state.recordedRules|ForEach-Object {$_.sha256}) -join ',')) 'Setup kept the saved rules byte for byte'
+    }
+    'verify-removed' {
+        $probe=Get-Probe $state.probePid
+        $s=Describe-State;$out.state=$s
+        Check (@($s.tasks).Count -eq 0) 'Uninstall removed every governor task'
+        Check (@($s.workers).Count -eq 0) 'No governor process is left'
+        Check (-not (Test-Path -LiteralPath $app)) 'The app folder is gone'
+        Check (@($s.ruleFiles|Where-Object {$_.name -eq ($state.ruleId+'.json')}).Count -eq 1) 'Uninstall kept the saved rules'
+        if($probe){Check (Same (Read-Controls $probe) $state.original) 'Uninstall gave the running probe its original 8 controls back'}else{Check $false 'The long-running probe is still alive to verify restoration'}
+    }
+    'cleanup' {
+        Get-Process -Name 'RooIndustriesGovernorProbe' -ErrorAction SilentlyContinue|Stop-Process -Force
+        foreach($task in Tasks){Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}
+        foreach($worker in Workers){Stop-Process -Id $worker.ProcessId -Force -ErrorAction SilentlyContinue}
+        Start-Sleep -Seconds 1
+        if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force}
+        Get-ChildItem -LiteralPath $dataRoot -Directory -Filter 'process-rules.*' -ErrorAction SilentlyContinue|Remove-Item -Recurse -Force
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        $out.left=[ordered]@{tasks=@(Tasks).Count;workers=@(Workers).Count;policyRoot=(Test-Path -LiteralPath $policyRoot);app=(Test-Path -LiteralPath $app)}
+    }
+}
+$json=$out|ConvertTo-Json -Depth 12
+if(Test-Path -LiteralPath $work){[IO.File]::WriteAllText((Join-Path $work ('phase-'+$Phase+'-'+[DateTime]::UtcNow.ToString('yyyyMMddHHmmss')+'.json')),$json,[Text.UTF8Encoding]::new($false))}
+$json

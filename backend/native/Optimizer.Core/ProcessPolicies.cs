@@ -80,10 +80,10 @@ public sealed class ProcessPolicyStore
         OperationFiles.Write(SettingsPath, new GovernorSettings(1, paused));
     }
 
-    public PolicySummary Summary()
+    public PolicySummary Summary(bool deep = true)
     {
         string? problem;
-        try { problem = PolicyRootSecurity.Problem(Root); }
+        try { problem = PolicyRootSecurity.Problem(Root, deep); }
         catch (Exception error) { problem = error.Message; }
         var paused = false;
         (SavedProcessRule Rule, string Hash)[] rules = [];
@@ -112,8 +112,31 @@ public sealed class ProcessPolicyStore
         if (File.Exists(StatePath))
             foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
                 instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
-                owned.UnionWith(OperationFiles.Read<ProcessControlPreview>(instance.PreviewPath).Desired.Keys);
+                owned.UnionWith(OperationFiles.Read<ProcessControlPreview>(OperationPath(instance.PreviewPath, "preview.json")).Desired.Keys);
         return owned.ToArray();
+    }
+
+    public string OperationPath(string path, string file)
+    {
+        var full = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(full)!;
+        if (!string.Equals(Path.GetFileName(full), file, StringComparison.Ordinal) || !Guid.TryParseExact(Path.GetFileName(directory), "N", out _) ||
+            !string.Equals(Path.GetDirectoryName(directory), Path.Combine(Root, "operations"), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("A governor record points outside its protected operations folder.");
+        return full;
+    }
+
+    public void ValidateState(PolicyHostState state)
+    {
+        state.Owner.Verify();
+        if (state.SchemaVersion != 1) throw new InvalidDataException("Unsupported policy-host state version.");
+        foreach (var instance in state.Instances)
+        {
+            OperationPath(instance.PreviewPath, "preview.json");
+            OperationPath(instance.JournalPath, "journal.json");
+            if (!string.Equals(Path.GetDirectoryName(instance.PreviewPath), Path.GetDirectoryName(instance.JournalPath), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("A governor record mixes two operations.");
+        }
     }
 
     public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls) => Refuse(OwnedControls(identity).Intersect(controls).ToArray());
@@ -219,7 +242,9 @@ public sealed class ProcessPolicyHost
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
     private readonly Dictionary<string, DateTime> _restoreAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _unavailable = new(StringComparer.Ordinal);
     private readonly List<string> _pruned = [];
+    private int _enabledRules = -1;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
 
@@ -227,12 +252,17 @@ public sealed class ProcessPolicyHost
     {
         _store = store;
         _engine = new(identity => identity.ProcessId == Environment.ProcessId || excluded(identity));
-        _state = File.Exists(store.StatePath) ? OperationFiles.Read<PolicyHostState>(store.StatePath) : new()
+        _state = Load();
+    }
+
+    private PolicyHostState Load()
+    {
+        var state = File.Exists(_store.StatePath) ? OperationFiles.Read<PolicyHostState>(_store.StatePath) : new()
         {
             SchemaVersion = 1, Owner = OperationOwner.Current(), Host = null, Status = "stopped", Instances = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow,
         };
-        _state.Owner.Verify();
-        if (_state.SchemaVersion != 1) throw new InvalidDataException("Unsupported policy-host state version.");
+        _store.ValidateState(state);
+        return state;
     }
 
     public PolicyHostState Run(CancellationToken cancellationToken, TimeSpan? duration = null, Action? verifyLocked = null)
@@ -240,33 +270,40 @@ public sealed class ProcessPolicyHost
         using var rootLease = PolicyRootLease.Acquire(_store.Root);
         verifyLocked?.Invoke();
         using var lease = OperationFiles.Lock(Path.Combine(_store.Root, "worker"));
-        if (File.Exists(_store.StatePath))
-        {
-            _state = OperationFiles.Read<PolicyHostState>(_store.StatePath);
-            _state.Owner.Verify();
-            if (_state.SchemaVersion != 1) throw new InvalidDataException("Unsupported policy-host state version.");
-        }
+        _state = Load();
         using (var self = new ProcessTarget(Environment.ProcessId)) _state.Host = self.Identity();
         _state.Status = "running";
-        Save();
-        var paused = _store.Paused();
         var clock = Stopwatch.StartNew();
         var swept = TimeSpan.MinValue;
+        var moved = false;
         try
         {
-            while (!paused && !cancellationToken.IsCancellationRequested && !StopRequested() && (duration is null || clock.Elapsed < duration))
+            Save();
+            while (!cancellationToken.IsCancellationRequested && (duration is null || clock.Elapsed < duration))
             {
+                if (rootLease.Moved) { moved = true; break; }
+                if (PausedOrUnreadable() || StopRequested()) break;
                 if (swept == TimeSpan.MinValue || clock.Elapsed - swept > TimeSpan.FromMinutes(10)) { SweepOperations(); swept = clock.Elapsed; }
                 Tick();
+                if (_enabledRules == 0 && _state.Instances.All(instance => instance.Status is "restored" or "expired")) break;
                 cancellationToken.WaitHandle.WaitOne(500);
             }
         }
         finally
         {
-            Stop();
-            File.Delete(_store.StopPath);
+            if (!moved && !rootLease.Moved)
+            {
+                Stop();
+                File.Delete(_store.StopPath);
+            }
         }
         return _state;
+    }
+
+    private bool PausedOrUnreadable()
+    {
+        try { return _store.Paused(); }
+        catch (Exception error) { _state.Errors = ["Governor settings could not be read: " + error.Message]; return true; }
     }
 
     private bool StopRequested()
@@ -293,7 +330,7 @@ public sealed class ProcessPolicyHost
         }
         var enabledRules = rules.Where(pair => pair.Rule.Enabled).ToArray();
         var processes = ProcessNames.Find(enabledRules.Select(pair => Path.GetFileNameWithoutExtension(pair.Rule.ExecutablePath)));
-        foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired")))
+        foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired")).ToList())
         {
             var owner = enabledRules.FirstOrDefault(pair => pair.Rule.RuleId == instance.RuleId && pair.Hash == instance.RuleHash).Rule;
             if (owner is null)
@@ -303,7 +340,7 @@ public sealed class ProcessPolicyHost
             }
             if (instance.Status == "conflict")
             {
-                if (!processes[Path.GetFileNameWithoutExtension(owner.ExecutablePath)].Contains(instance.Process.ProcessId)) Restore(instance);
+                if (!processes[Path.GetFileNameWithoutExtension(owner.ExecutablePath)].Contains(instance.Process.ProcessId) || !Alive(instance.Process)) Restore(instance);
                 continue;
             }
             try
@@ -313,27 +350,35 @@ public sealed class ProcessPolicyHost
                 var identity = process.Identity();
                 if (identity.CreationTimeFileTimeUtc != instance.Process.CreationTimeFileTimeUtc) { instance.Status = "expired"; continue; }
                 instance.Process.Verify(identity);
+                if (instance.Status == "applying" && !File.Exists(instance.JournalPath)) { Discard(instance); continue; }
                 var result = _engine.Apply(instance.PreviewPath, instance.ReviewHash, instance.JournalPath);
                 instance.Status = result.Status == "applied" ? "active" : "conflict";
                 instance.Error = result.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
+                if (result.Changes.Any(change => change.Status is "restoreIntent" or "restored")) Restore(instance);
             }
             catch (ProcessEndedException) { instance.Status = "expired"; }
             catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { instance.Status = "expired"; }
             catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
         }
 
+        var live = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (rule, hash) in enabledRules)
         {
             foreach (var processId in processes[Path.GetFileNameWithoutExtension(rule.ExecutablePath)])
             {
                 if (processId == Environment.ProcessId) continue;
                 RunningProcess? identity = null;
+                string? key = null;
+                PolicyInstance? created = null;
                 try
                 {
                     using (var target = new ProcessTarget(processId))
                     {
                         if (target.UserSid() != rule.Owner.UserSid) continue;
                         identity = target.Identity();
+                        key = rule.RuleId + "|" + hash + "|" + identity.ProcessId + "|" + identity.CreationTimeFileTimeUtc;
+                        live.Add(key);
+                        if (_unavailable.TryGetValue(key, out var known)) { _state.Issues.Add(new(rule.RuleId, processId, identity.ExecutablePath, known)); continue; }
                         if (rule.Controls.ContainsKey("affinity") && CpuSelection.Fingerprint(target.Topology()) != rule.AffinityTopologyHash)
                             throw new InvalidDataException("CPU topology changed; review the saved hard-affinity selection.");
                     }
@@ -352,20 +397,32 @@ public sealed class ProcessPolicyHost
                         ReviewHash = OperationFiles.HashFile(previewPath), JournalPath = Path.Combine(directory, "journal.json"), Status = "applying",
                     };
                     _state.Instances.Add(instance);
+                    created = instance;
                     Save();
                     var applied = _engine.Apply(previewPath, instance.ReviewHash, instance.JournalPath);
-                    instance.Status = applied.Status == "applied" ? "active" : "conflict";
-                    instance.Error = applied.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
+                    if (applied.Status != "applied")
+                    {
+                        var reason = applied.Changes.FirstOrDefault(change => change.Error is not null) is { } failed ? failed.Name + ": " + failed.Error : "Windows did not accept the requested values.";
+                        Restore(instance);
+                        instance.Error = reason;
+                        throw new InvalidOperationException(reason);
+                    }
+                    instance.Status = "active";
+                    instance.Error = null;
                 }
-                catch (ProcessEndedException) { }
-                catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+                catch (ProcessEndedException) { if (created is not null) Discard(created); }
+                catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { if (created is not null) Discard(created); }
                 catch (Exception error)
                 {
+                    if (created is not null && created.Status == "applying") Discard(created);
                     _state.Errors.Add(rule.Name + ": " + error.Message);
                     _state.Issues.Add(new(rule.RuleId, processId, identity?.ExecutablePath, error.Message));
+                    if (key is not null) _unavailable[key] = error.Message;
                 }
             }
         }
+        foreach (var stale in _unavailable.Keys.Where(key => !live.Contains(key)).ToArray()) _unavailable.Remove(stale);
+        _enabledRules = enabledRules.Length;
         _state.Status = "running";
         Save();
         return _state;
@@ -380,6 +437,25 @@ public sealed class ProcessPolicyHost
         return _state;
     }
 
+    private void Discard(PolicyInstance instance)
+    {
+        if (File.Exists(instance.JournalPath)) { Restore(instance); return; }
+        _state.Instances.Remove(instance);
+        _pruned.Add(Path.GetDirectoryName(instance.JournalPath)!);
+    }
+
+    private static bool Alive(RunningProcess process)
+    {
+        try
+        {
+            using var target = new ProcessTarget(process.ProcessId);
+            return target.Identity().CreationTimeFileTimeUtc == process.CreationTimeFileTimeUtc;
+        }
+        catch (ProcessEndedException) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+        catch (Exception) { return true; }
+    }
+
     private bool RestoreDue(PolicyInstance instance)
     {
         var now = DateTime.UtcNow;
@@ -392,6 +468,7 @@ public sealed class ProcessPolicyHost
     {
         try
         {
+            if (!File.Exists(instance.JournalPath) && instance.Status == "applying") { instance.Status = "restored"; instance.Error = null; return; }
             if (!File.Exists(instance.JournalPath)) throw new InvalidDataException("The recovery journal is missing; restoration cannot be confirmed.");
             var restored = _engine.Restore(instance.JournalPath);
             instance.Status = restored.Status is "restored" or "expired" ? restored.Status : "conflict";

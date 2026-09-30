@@ -82,7 +82,9 @@ public static class GovernorDisplay
     public static string Detail(string state, PolicySummary summary, PolicyWorkerStatus worker) => state switch
     {
         "running" => summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.",
-        "paused" => "Your rules are saved but not used. The apps got their old settings back. Press Start governor to use your rules again.",
+        "paused" => (worker.State?.Instances.Any(instance => instance.Status == "conflict") == true
+            ? "Your rules are saved but not used. Some apps kept a setting that another app changed after the rule set it."
+            : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
         "off" => "",
         _ => summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
             : summary.RulesError ?? worker.Error ?? worker.State?.Errors.FirstOrDefault() ?? "The governor stopped. Press Start governor to try again.",
@@ -505,7 +507,12 @@ public partial class ProcessControlsViewModel : ObservableObject
         {
             if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
             if (delete) await App.Operations.DeleteRuleAsync(SelectedRule!.Rule.RuleId);
-            else await App.Operations.SaveRuleAsync(SelectedRule!.Rule with { Enabled = !SelectedRule.Rule.Enabled });
+            else
+            {
+                var fresh = (await App.Operations.ReadGovernorAsync()).Rules.FirstOrDefault(rule => rule.RuleId == SelectedRule!.Rule.RuleId)
+                    ?? throw new InvalidOperationException("This rule was deleted. Refresh the rules list.");
+                await App.Operations.SaveRuleAsync(fresh with { Enabled = !fresh.Enabled });
+            }
             await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = delete ? "Rule deleted." : "Rule updated.";
