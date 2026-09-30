@@ -17,7 +17,13 @@ public sealed partial class DashboardPage : Page, IRevalidatingPage
         {
             TimerTile.Visibility = App.Theme.SimpleMode ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
             await ViewModel.InitializeAsync();
-            if (!_prefetched) { _prefetched = true; App.Operations.PrefetchWindowsTweaks(); _ = App.Live.GetInstalledAppsAsync(); }
+            if (!_prefetched)
+            {
+                _prefetched = true;
+                App.Operations.PrefetchWindowsTweaks();
+                _ = App.Live.GetInstalledAppsAsync(background: true);
+                _ = App.Live.GetProcessClassificationResultAsync(allowStale: true, background: true);
+            }
         };
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await ViewModel.ReloadAsync();

@@ -11,7 +11,10 @@ using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null)
+{
+    public bool Stale { get; init; }
+}
 public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
 
 public sealed class LiveDataService
@@ -90,6 +93,8 @@ public sealed class LiveDataService
     private static readonly TimeSpan LiveAge = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan HardwareAge = TimeSpan.MaxValue;
     private static readonly TimeSpan AppsAge = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan StaleAge = TimeSpan.FromMinutes(5);
+    private static readonly AsyncLocal<bool> Background = new();
 
     public async Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
         => (await GetProcessInventoryResultAsync(ct)).Value;
@@ -98,16 +103,17 @@ public sealed class LiveDataService
 
     public async Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
         => (await GetProcessClassificationResultAsync(ct)).Value;
-    public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken ct = default, bool fresh = false)
-        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessClassification.ps1", ct, classification => classification.Processes is { Count: > 0 });
+    public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken ct = default, bool fresh = false, bool allowStale = false, bool background = false)
+        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : allowStale ? StaleAge : LiveAge, "Get-ProcessClassification.ps1", ct, classification => classification.Processes is { Count: > 0 }, background: background);
 
-    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, Func<T, bool> complete, string extraArgs = "") where T : class
+    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, Func<T, bool> complete, string extraArgs = "", bool background = false) where T : class
     {
         if (ct.CanBeCanceled) return await RunResultAsync<T>(scriptFile, ct, extraArgs);
-        var result = await _shared.GetAsync(key, maxAge, () => RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs), read => read.Value is not null && read.Error is null && complete(read.Value))
-            ?? new LiveDataResult<T>(null, AppLog.Failed);
+        var (value, age) = await _shared.ReadAsync(key, maxAge, () => { Background.Value = background; return RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs); },
+            read => read.Value is not null && read.Error is null && complete(read.Value));
+        var result = value ?? new LiveDataResult<T>(null, AppLog.Failed);
         if (result.Error is not null) LastError = result.Error;
-        return result;
+        return age > LiveAge && result.Value is not null ? result with { Stale = true } : result;
     }
 
     public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
@@ -444,8 +450,8 @@ public sealed class LiveDataService
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
 
-    public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false, bool fresh = false)
-        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.FromSeconds(2) : AppsAge, "Get-InstalledAppInventory.ps1", ct, apps => apps.Apps is { Count: > 0 } && apps.Complete != false, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "")).Value;
+    public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false, bool fresh = false, bool background = false)
+        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.FromSeconds(2) : AppsAge, "Get-InstalledAppInventory.ps1", ct, apps => apps.Apps is { Count: > 0 } && apps.Complete != false, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "", background)).Value;
 
     public Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken ct = default)
         => RunResultAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
@@ -1086,6 +1092,11 @@ public sealed class LiveDataService
         {
             AppLog.Write("backend", "Could not start " + Path.GetFileName(scriptPath));
             return new(null, AppLog.Failed);
+        }
+        if (Background.Value)
+        {
+            try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
+            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();

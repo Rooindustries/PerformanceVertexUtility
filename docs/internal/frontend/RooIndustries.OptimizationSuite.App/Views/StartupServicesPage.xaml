@@ -1,8 +1,23 @@
 <Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:RooIndustries.OptimizationSuite.Views" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="RooIndustries.OptimizationSuite.Views.StartupServicesPage" mc:Ignorable="d" xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels" xmlns:d="http://schemas.microsoft.com/expression/blend/2008">
     <Grid Padding="{StaticResource RooIndustriesPageMargin}">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-            <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading startup and services" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Stretch" Spacing="12" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <Border Style="{StaticResource CommandHeaderBorderStyle}">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/startup.svg" Style="{StaticResource PageHeaderIconStyle}" />
+                    <StackPanel Grid.Column="1" Spacing="7">
+                        <TextBlock Text="Startup &amp; services" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ProgressRing IsActive="True" Width="14" Height="14" />
+                            <TextBlock Text="Reading startup and services" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="Background processes and startup information." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </StackPanel>
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center" Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="10">
