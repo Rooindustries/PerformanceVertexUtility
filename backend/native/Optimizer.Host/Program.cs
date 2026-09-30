@@ -10,7 +10,8 @@ try
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
-    var request = OperationFiles.Read<HostRequest>(args[1]);
+    var requestBytes = File.ReadAllBytes(args[1]);
+    var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
@@ -122,10 +123,14 @@ try
             break;
         case "process-apply":
             RequireConfirmation(request);
+            var reviewed = OperationFiles.Read<ProcessControlPreview>(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"));
+            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(reviewed.Identity, reviewed.Desired.Keys);
             data = engine.Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
             break;
         case "process-restore":
             RequireConfirmation(request);
+            var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
+            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
             data = engine.Restore(Require(request.JournalPath, "journal path"));
             break;
         case "rules-list":
@@ -148,8 +153,13 @@ try
             using (var cancellation = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
-                data = new ProcessPolicyHost(new(Require(request.PolicyRoot, "policy root")), Excluded).Run(cancellation.Token,
-                    request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null);
+                var policyRoot = Path.GetFullPath(Require(request.PolicyRoot, "policy root"));
+                var resident = request.DurationSeconds is null;
+                if (resident && !string.Equals(Path.GetDirectoryName(Path.GetFullPath(args[1])), policyRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The governor request must be stored in its protected rules folder.");
+                data = new ProcessPolicyHost(new(policyRoot), Excluded).Run(cancellation.Token,
+                    request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null,
+                    () => { if (resident && !File.ReadAllBytes(args[1]).AsSpan().SequenceEqual(requestBytes)) throw new InvalidDataException("The governor request changed before its rules folder was locked."); });
             }
             break;
         case "policy-stop":
@@ -159,6 +169,18 @@ try
             break;
         case "policy-status":
             data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Status();
+            break;
+        case "policy-summary":
+            data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Summary();
+            break;
+        case "policy-secure":
+            RequireConfirmation(request);
+            data = new { migrated = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Secure() };
+            break;
+        case "policy-pause":
+            RequireConfirmation(request);
+            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."));
+            data = new { paused = request.Paused };
             break;
         case "cleanup-authority": data = Authority(request); break;
         case "cleanup-exclusions-status":
@@ -346,6 +368,7 @@ sealed record HostRequest
     public SavedProcessRule? Rule { get; init; }
     public string? RuleId { get; init; }
     public double? DurationSeconds { get; init; }
+    public bool? Paused { get; init; }
     public string? QueueJournalPath { get; init; }
     public string? AppId { get; init; }
     public string[]? ItemIds { get; init; }

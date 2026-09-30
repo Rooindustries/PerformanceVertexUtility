@@ -1,6 +1,7 @@
 #nullable enable
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace RooIndustries.Optimizer;
 
@@ -40,11 +41,15 @@ public sealed class PolicyHostState
     public required RunningProcess? Host { get; set; }
     public required List<PolicyInstance> Instances { get; init; }
     public required List<string> Errors { get; set; }
+    public List<PolicyIssue> Issues { get; set; } = [];
     public required DateTime UpdatedAtUtc { get; set; }
 }
 
+public sealed record PolicyIssue(string RuleId, int? ProcessId, string? ExecutablePath, string Message);
 public sealed record PolicyWorkerStatus(PolicyHostState? State, bool? HostRunning, string? Error);
 public sealed record PolicyStopRequest(OperationOwner Owner, RunningProcess Host);
+public sealed record GovernorSettings([property: JsonRequired] int SchemaVersion, [property: JsonRequired] bool Paused);
+public sealed record PolicySummary(bool Secured, string? SecurityProblem, bool Paused, int Rules, int EnabledRules, string? RulesError);
 
 public sealed class ProcessPolicyStore
 {
@@ -52,11 +57,72 @@ public sealed class ProcessPolicyStore
     public string RulesDirectory => Path.Combine(Root, "rules");
     public string StatePath => Path.Combine(Root, "host.json");
     public string StopPath => Path.Combine(Root, "stop.request");
+    public string SettingsPath => Path.Combine(Root, "governor.json");
 
     public ProcessPolicyStore(string root) => Root = Path.GetFullPath(root);
 
+    public static string DefaultRoot => Path.Combine(BrandCompatibility.LocalDataRoot, "process-rules");
+
+    public bool Secure() => PolicyRootSecurity.Secure(Root);
+
+    public bool Paused()
+    {
+        if (!File.Exists(SettingsPath)) return false;
+        var settings = OperationFiles.Read<GovernorSettings>(SettingsPath);
+        if (settings.SchemaVersion != 1) throw new InvalidDataException("Unsupported governor settings version.");
+        return settings.Paused;
+    }
+
+    public void SetPaused(bool paused)
+    {
+        PolicyRootSecurity.Secure(Root);
+        using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
+        OperationFiles.Write(SettingsPath, new GovernorSettings(1, paused));
+    }
+
+    public PolicySummary Summary()
+    {
+        string? problem;
+        try { problem = PolicyRootSecurity.Problem(Root); }
+        catch (Exception error) { problem = error.Message; }
+        var paused = false;
+        (SavedProcessRule Rule, string Hash)[] rules = [];
+        string? rulesError = null;
+        try { paused = Paused(); rules = ReadRules(); }
+        catch (Exception error) { rulesError = error.Message; }
+        return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError);
+    }
+
+    public string[] OwnedControls(RunningProcess identity)
+    {
+        if (!Directory.Exists(Root) || Paused()) return [];
+        var owned = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, identity.ExecutablePath)))
+        {
+            owned.UnionWith(rule.Controls.Keys);
+            if (rule.CpuSelection is not null) owned.Add("cpuSets");
+        }
+        if (File.Exists(StatePath))
+            foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
+                instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
+                owned.UnionWith(OperationFiles.Read<ProcessControlPreview>(instance.PreviewPath).Desired.Keys);
+        return owned.ToArray();
+    }
+
+    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls)
+    {
+        var owned = OwnedControls(identity).Intersect(controls).ToArray();
+        if (owned.Length > 0)
+            throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Pause the governor or change its rule for this app first.");
+    }
+
+    public static bool Matches(SavedProcessRule rule, string executablePath) => rule.MatchMode == "filename"
+        ? string.Equals(Path.GetFileName(rule.ExecutablePath), Path.GetFileName(executablePath), StringComparison.OrdinalIgnoreCase)
+        : string.Equals(rule.ExecutablePath, executablePath, StringComparison.OrdinalIgnoreCase);
+
     public void Save(SavedProcessRule rule)
     {
+        PolicyRootSecurity.Secure(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
@@ -72,6 +138,7 @@ public sealed class ProcessPolicyStore
 
     public void Delete(string ruleId)
     {
+        PolicyRootSecurity.Secure(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         if (!Guid.TryParseExact(ruleId, "N", out _)) throw new InvalidDataException("Invalid process rule ID.");
         var path = Path.Combine(RulesDirectory, ruleId + ".json");
@@ -138,8 +205,11 @@ public sealed class ProcessPolicyStore
 
 public sealed class ProcessPolicyHost
 {
+    public const int TerminalHistory = 50;
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
+    private readonly Dictionary<string, DateTime> _restoreAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _pruned = [];
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
 
@@ -155,9 +225,10 @@ public sealed class ProcessPolicyHost
         if (_state.SchemaVersion != 1) throw new InvalidDataException("Unsupported policy-host state version.");
     }
 
-    public PolicyHostState Run(CancellationToken cancellationToken, TimeSpan? duration = null)
+    public PolicyHostState Run(CancellationToken cancellationToken, TimeSpan? duration = null, Action? verifyLocked = null)
     {
-        Directory.CreateDirectory(_store.Root);
+        using var rootLease = PolicyRootLease.Acquire(_store.Root);
+        verifyLocked?.Invoke();
         using var lease = OperationFiles.Lock(Path.Combine(_store.Root, "worker"));
         if (File.Exists(_store.StatePath))
         {
@@ -168,11 +239,14 @@ public sealed class ProcessPolicyHost
         using (var self = new ProcessTarget(Environment.ProcessId)) _state.Host = self.Identity();
         _state.Status = "running";
         Save();
+        var paused = _store.Paused();
         var clock = Stopwatch.StartNew();
+        var swept = TimeSpan.MinValue;
         try
         {
-            while (!cancellationToken.IsCancellationRequested && !StopRequested() && (duration is null || clock.Elapsed < duration))
+            while (!paused && !cancellationToken.IsCancellationRequested && !StopRequested() && (duration is null || clock.Elapsed < duration))
             {
+                if (swept == TimeSpan.MinValue || clock.Elapsed - swept > TimeSpan.FromMinutes(10)) { SweepOperations(); swept = clock.Elapsed; }
                 Tick();
                 cancellationToken.WaitHandle.WaitOne(500);
             }
@@ -196,6 +270,7 @@ public sealed class ProcessPolicyHost
     public PolicyHostState Tick()
     {
         _state.Errors = [];
+        _state.Issues = [];
         (SavedProcessRule Rule, string Hash)[] rules;
         try { rules = _store.ReadRules(); }
         catch (Exception error)
@@ -206,11 +281,21 @@ public sealed class ProcessPolicyHost
             Save();
             return _state;
         }
+        var enabledRules = rules.Where(pair => pair.Rule.Enabled).ToArray();
+        var processes = ProcessNames.Find(enabledRules.Select(pair => Path.GetFileNameWithoutExtension(pair.Rule.ExecutablePath)));
         foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired")))
         {
-            var enabled = rules.Any(pair => pair.Rule.Enabled && pair.Rule.RuleId == instance.RuleId && pair.Hash == instance.RuleHash);
-            if (!enabled) { Restore(instance); continue; }
-            if (instance.Status == "conflict") continue;
+            var owner = enabledRules.FirstOrDefault(pair => pair.Rule.RuleId == instance.RuleId && pair.Hash == instance.RuleHash).Rule;
+            if (owner is null)
+            {
+                if (instance.Status != "conflict" || RestoreDue(instance)) Restore(instance);
+                continue;
+            }
+            if (instance.Status == "conflict")
+            {
+                if (!processes[Path.GetFileNameWithoutExtension(owner.ExecutablePath)].Contains(instance.Process.ProcessId)) Restore(instance);
+                continue;
+            }
             try
             {
                 using var process = new ProcessTarget(instance.Process.ProcessId);
@@ -227,16 +312,14 @@ public sealed class ProcessPolicyHost
             catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
         }
 
-        var enabledRules = rules.Where(pair => pair.Rule.Enabled).ToArray();
-        var processes = ProcessNames.Find(enabledRules.Select(pair => Path.GetFileNameWithoutExtension(pair.Rule.ExecutablePath)));
         foreach (var (rule, hash) in enabledRules)
         {
             foreach (var processId in processes[Path.GetFileNameWithoutExtension(rule.ExecutablePath)])
             {
                 if (processId == Environment.ProcessId) continue;
+                RunningProcess? identity = null;
                 try
                 {
-                    RunningProcess identity;
                     using (var target = new ProcessTarget(processId))
                     {
                         if (target.UserSid() != rule.Owner.UserSid) continue;
@@ -247,10 +330,7 @@ public sealed class ProcessPolicyHost
                     if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, identity.ExecutablePath, StringComparison.OrdinalIgnoreCase)) continue;
                     if (_state.Instances.Any(instance => instance.RuleId == rule.RuleId && instance.RuleHash == hash && instance.Process == identity && instance.Status is not ("restored" or "expired"))) continue;
                     if (rule.ExecutableHash is not null && !string.Equals(OperationFiles.HashFile(identity.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _state.Errors.Add(rule.Name + ": the executable changed and needs review.");
-                        continue;
-                    }
+                        throw new InvalidDataException("The executable changed and needs review.");
                     var preview = _engine.Preview(identity.ProcessId, rule.Controls, rule.CpuSelection);
                     identity.Verify(preview.Identity);
                     var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
@@ -269,7 +349,11 @@ public sealed class ProcessPolicyHost
                 }
                 catch (ProcessEndedException) { }
                 catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
-                catch (Exception error) { _state.Errors.Add(rule.Name + ": " + error.Message); }
+                catch (Exception error)
+                {
+                    _state.Errors.Add(rule.Name + ": " + error.Message);
+                    _state.Issues.Add(new(rule.RuleId, processId, identity?.ExecutablePath, error.Message));
+                }
             }
         }
         _state.Status = "running";
@@ -286,6 +370,14 @@ public sealed class ProcessPolicyHost
         return _state;
     }
 
+    private bool RestoreDue(PolicyInstance instance)
+    {
+        var now = DateTime.UtcNow;
+        if (_restoreAttempts.TryGetValue(instance.JournalPath, out var last) && now - last < TimeSpan.FromSeconds(30)) return false;
+        _restoreAttempts[instance.JournalPath] = now;
+        return true;
+    }
+
     private void Restore(PolicyInstance instance)
     {
         try
@@ -296,14 +388,47 @@ public sealed class ProcessPolicyHost
             instance.Error = restored.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
         }
         catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
+        if (instance.Status is "restored" or "expired") _restoreAttempts.Remove(instance.JournalPath);
+    }
+
+    private void Prune()
+    {
+        var terminal = _state.Instances.Where(instance => instance.Status is "restored" or "expired").ToList();
+        foreach (var old in terminal.Take(Math.Max(0, terminal.Count - TerminalHistory)))
+        {
+            _state.Instances.Remove(old);
+            _pruned.Add(Path.GetDirectoryName(old.JournalPath)!);
+        }
+    }
+
+    private void SweepOperations()
+    {
+        var operations = Path.Combine(_store.Root, "operations");
+        if (!Directory.Exists(operations)) return;
+        var referenced = _state.Instances.Select(instance => Path.GetFullPath(Path.GetDirectoryName(instance.JournalPath)!)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in Directory.GetDirectories(operations))
+            if (!referenced.Contains(Path.GetFullPath(directory)) && DateTime.UtcNow - Directory.GetLastWriteTimeUtc(directory) > TimeSpan.FromMinutes(10)) DeleteOperation(directory);
+    }
+
+    private void DeleteOperation(string directory)
+    {
+        var operations = Path.GetFullPath(Path.Combine(_store.Root, "operations")) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(directory);
+        if (!full.StartsWith(operations, StringComparison.OrdinalIgnoreCase) || full.Length <= operations.Length) return;
+        try { if (Directory.Exists(full)) Directory.Delete(full, true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private void Save()
     {
+        Prune();
         var bytes = JsonSerializer.SerializeToUtf8Bytes(_state, OperationFiles.Json);
         if (_lastSavedState is not null && bytes.AsSpan().SequenceEqual(_lastSavedState) && DateTime.UtcNow - _state.UpdatedAtUtc < TimeSpan.FromSeconds(5)) return;
         _state.UpdatedAtUtc = DateTime.UtcNow;
         OperationFiles.Write(_store.StatePath, _state);
         _lastSavedState = JsonSerializer.SerializeToUtf8Bytes(_state, OperationFiles.Json);
+        foreach (var directory in _pruned) DeleteOperation(directory);
+        _pruned.Clear();
     }
 }
