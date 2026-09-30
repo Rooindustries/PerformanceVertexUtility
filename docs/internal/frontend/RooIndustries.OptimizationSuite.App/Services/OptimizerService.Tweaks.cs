@@ -14,11 +14,21 @@ public sealed partial class OptimizerService
     private readonly TweakChoiceStore _windowsChoices = new(Path.Combine(BrandCompatibility.LocalDataRoot, "settings", "windows-choices.json"));
     public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.Run(_windowsChoices.Read);
     public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string profileId, TweakSelection[] selections, string? revision)
-        => Task.Run(() => _windowsChoices.Save(catalog, profileId, selections, revision));
-    public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync() => RunCoreAsync<TweakCatalogResult>("tweak-catalog", new());
-    public Task<TweakRecovery> ReadWindowsRecoveryAsync() => RunCoreAsync<TweakRecovery>("tweak-recovery", new());
+        => Task.Run(() => { using var change = DataGeneration.BeginChange(); return _windowsChoices.Save(catalog, profileId, selections, revision); });
+    private readonly SharedReads _tweakReads = new();
+    private static readonly TimeSpan TweakStateAge = TimeSpan.FromSeconds(60);
+    public async Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false)
+        => (await _tweakReads.GetAsync("catalog", fresh ? TimeSpan.Zero : TimeSpan.FromMinutes(30), () => RunCoreAsync<TweakCatalogResult>("tweak-catalog", new())))!;
+    public async Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false)
+        => (await _tweakReads.GetAsync("recovery", fresh ? TimeSpan.Zero : TweakStateAge, () => RunCoreAsync<TweakRecovery>("tweak-recovery", new())))!;
+    public void PrefetchWindowsTweaks()
+    {
+        foreach (var read in new Task[] { ReadWindowsTweakCatalogAsync(), ReadWindowsRecoveryAsync(), ReadWindowsTweaksAsync() })
+            _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
+    }
     public Task<System.Text.Json.JsonElement> RecoverWindowsTweaksAsync(string reviewHash) => RunCoreAsync<System.Text.Json.JsonElement>("tweak-recover", new() { ["reviewHash"] = reviewHash, ["confirm"] = true });
-    public Task<TweakInspection> ReadWindowsTweaksAsync() => RunCoreAsync<TweakInspection>("tweak-status", new());
+    public async Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false)
+        => (await _tweakReads.GetAsync("status", fresh ? TimeSpan.Zero : TweakStateAge, () => RunCoreAsync<TweakInspection>("tweak-status", new(), timeout: TimeSpan.FromMinutes(10))))!;
     public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections)
     {
         var directory = NewOperationDirectory("windows-settings");

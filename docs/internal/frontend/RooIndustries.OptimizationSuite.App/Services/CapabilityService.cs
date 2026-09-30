@@ -152,6 +152,15 @@ public sealed class CapabilityService
 
     private async Task<T?> RunAsync<T>(string scriptFile, string extraArgs, CancellationToken ct) where T : class
     {
+        var elapsed = Stopwatch.StartNew();
+        T? result = null;
+        try { return result = await RunCapabilityAsync<T>(scriptFile, extraArgs, ct).ConfigureAwait(false); }
+        finally { AppLog.Timing(scriptFile, elapsed, result is null ? "failed" : "completed"); }
+    }
+
+    private async Task<T?> RunCapabilityAsync<T>(string scriptFile, string extraArgs, CancellationToken ct) where T : class
+    {
+        using var change = extraArgs.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var dir = _locator.ScriptsDirectory;
         if (dir is null)
         {

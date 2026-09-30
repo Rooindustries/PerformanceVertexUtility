@@ -86,11 +86,29 @@ public sealed class LiveDataService
     }
     public string? RepoRoot => _locator.RepoRoot;
 
-    public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
-        => RunAsync<ProcessInventory>("Get-ProcessInventory.ps1", ct);
+    private readonly SharedReads _shared = new();
+    private static readonly TimeSpan LiveAge = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan HardwareAge = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan AppsAge = TimeSpan.FromMinutes(2);
 
-    public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
-        => RunAsync<ProcessClassification>("Get-ProcessClassification.ps1", ct);
+    public async Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
+        => (await GetProcessInventoryResultAsync(ct)).Value;
+    public Task<LiveDataResult<ProcessInventory>> GetProcessInventoryResultAsync(CancellationToken ct = default, bool fresh = false)
+        => SharedResultAsync<ProcessInventory>("inventory", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessInventory.ps1", ct);
+
+    public async Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
+        => (await GetProcessClassificationResultAsync(ct)).Value;
+    public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken ct = default, bool fresh = false)
+        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessClassification.ps1", ct);
+
+    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, string extraArgs = "") where T : class
+    {
+        if (ct.CanBeCanceled) return await RunResultAsync<T>(scriptFile, ct, extraArgs);
+        var result = await _shared.GetAsync(key, maxAge, () => RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs), read => read.Value is not null && read.Error is null)
+            ?? new LiveDataResult<T>(null, AppLog.Failed);
+        if (result.Error is not null) LastError = result.Error;
+        return result;
+    }
 
     public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
@@ -230,8 +248,10 @@ public sealed class LiveDataService
     public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<ProcessGovernorSessionStatus>("Get-ProcessGovernorSessionStatus.ps1", ct);
 
-    public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default)
-        => RunAsync<DriverHardwareSummary>("Get-DriverHardwareSummary.ps1", ct);
+    public async Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default, bool fresh = false)
+        => (await GetDriverHardwareResultAsync(ct, fresh)).Value;
+    public Task<LiveDataResult<DriverHardwareSummary>> GetDriverHardwareResultAsync(CancellationToken ct = default, bool fresh = false)
+        => SharedResultAsync<DriverHardwareSummary>("hardware", fresh ? TimeSpan.Zero : HardwareAge, "Get-DriverHardwareSummary.ps1", ct);
 
     public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
@@ -424,8 +444,8 @@ public sealed class LiveDataService
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
 
-    public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false)
-        => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "");
+    public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false, bool fresh = false)
+        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.Zero : AppsAge, "Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "")).Value;
 
     public Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken ct = default)
         => RunResultAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
@@ -1031,6 +1051,20 @@ public sealed class LiveDataService
 
     private async Task<LiveDataResult<string>> RunScriptResultAsync(string scriptPath, string extraArgs, CancellationToken ct)
     {
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
+        {
+            var result = await RunScriptCoreAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
+            outcome = result.Error is null ? "completed" : result.Error == AppLog.TimedOut ? "timed out" : "failed";
+            return result;
+        }
+        finally { AppLog.Timing(Path.GetFileName(scriptPath), elapsed, outcome); }
+    }
+
+    private async Task<LiveDataResult<string>> RunScriptCoreAsync(string scriptPath, string extraArgs, CancellationToken ct)
+    {
+        using var change = extraArgs.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var arguments =
             $"-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";

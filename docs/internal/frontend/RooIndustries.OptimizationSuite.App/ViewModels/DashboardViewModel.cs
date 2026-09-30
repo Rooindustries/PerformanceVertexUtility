@@ -23,13 +23,23 @@ public partial class DashboardViewModel : PageViewModelBase
     public ObservableCollection<UsageLine> TopMemoryUsers { get; } = new();
     public ObservableCollection<StatusLine> DriverLines { get; } = new();
 
+    public bool ShowReading => IsLoading && !IsReady;
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName is nameof(IsLoading) or nameof(IsReady)) base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(ShowReading)));
+    }
+
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync();
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var inventoryRead = App.Live.GetProcessInventoryResultAsync(fresh: Fresh);
+        var hardwareRead = App.Live.GetDriverHardwareResultAsync();
+        var inventoryResult = await inventoryRead;
+        var hardware = (await hardwareRead).Value;
+        var inventory = inventoryResult.Value;
         if (inventory?.Summary is not { } summary)
         {
-            ErrorMessage = App.Live.LastError ?? "Couldn't read running apps. Select Refresh to try again.";
+            ErrorMessage = inventoryResult.Error ?? "Couldn't read running apps. Select Refresh to try again.";
             return;
         }
 

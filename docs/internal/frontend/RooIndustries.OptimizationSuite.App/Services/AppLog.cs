@@ -33,6 +33,9 @@ public static class AppLog
         return line.Length is 0 or > 240 || line.StartsWith('#') || line.StartsWith('<') || line.Contains("Exception", StringComparison.Ordinal) || line.Contains(":\\", StringComparison.Ordinal) ? fallback : line;
     }
 
+    public static void Timing(string call, System.Diagnostics.Stopwatch elapsed, string outcome)
+        => Write("timing", call + " " + elapsed.ElapsedMilliseconds + " ms " + outcome);
+
     public static void Write(string source, string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail)) return;

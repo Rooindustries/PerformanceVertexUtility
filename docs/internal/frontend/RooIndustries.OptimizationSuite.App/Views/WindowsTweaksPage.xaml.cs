@@ -11,15 +11,23 @@ using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class WindowsTweaksPage : Page
+public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public WindowsTweaksViewModel ViewModel { get; } = new();
     private WindowsRestorePointReview? _pendingRestorePoint;
+    private bool _simpleMode;
     public WindowsTweaksPage()
     {
-        ViewModel.ShowAdvanced = !App.Theme.SimpleMode;
+        _simpleMode = App.Theme.SimpleMode;
+        ViewModel.ShowAdvanced = !_simpleMode;
         InitializeComponent();
-        Loaded += async (_, _) => await ViewModel.RefreshCommand.ExecuteAsync(null);
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
+        Loaded += async (_, _) =>
+        {
+            if (_simpleMode != App.Theme.SimpleMode) { _simpleMode = App.Theme.SimpleMode; ViewModel.ShowAdvanced = !_simpleMode; }
+            await ViewModel.ShowAsync();
+        };
     }
     private void SettingRowSizeChanged(object sender, SizeChangedEventArgs args)
     {

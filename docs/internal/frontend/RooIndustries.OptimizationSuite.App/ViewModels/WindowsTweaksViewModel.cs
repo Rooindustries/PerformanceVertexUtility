@@ -226,7 +226,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private bool _restoringChoices;
     private string _deferredDetail = "";
     private string? _focusedSetting;
-    public ObservableCollection<WindowsTweakRow> Rows { get; } = new();
+    [ObservableProperty] private ObservableCollection<WindowsTweakRow> _rows = new();
     public TweakSection[] Sections { get; } = WindowsTweakPresentation.Sections();
     public ObservableCollection<string> Categories { get; } = new();
     public ObservableCollection<string> Sources { get; } = new();
@@ -321,14 +321,32 @@ public partial class WindowsTweaksViewModel : ObservableObject
         _loading = false; Invalidate(); Notify();
         SetSelectionStatus(available.Length == 1 ? "1 preset choice added" : available.Length + " preset choices added", "Review the selected values. Choices with missing requirements can be saved without changing Windows.");
     }
+    private long _loadedGeneration = -2;
+    private bool _useSharedReads;
+    public async Task RevalidateAsync()
+    {
+        if (_loadedGeneration == -1 && !Busy) await RefreshCommand.ExecuteAsync(null);
+    }
+    public async Task ShowAsync()
+    {
+        if (_loadedGeneration != -2 && (Busy || DataGeneration.IsCurrent(_loadedGeneration))) return;
+        _useSharedReads = _loadedGeneration == -2;
+        await RefreshCommand.ExecuteAsync(null);
+    }
     [RelayCommand]
     private async Task RefreshAsync()
     {
         if (Busy) return;
         Busy = true; Invalidate();
+        var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
+        var fresh = !_useSharedReads; _useSharedReads = false;
+        var catalogRead = App.Operations.ReadWindowsTweakCatalogAsync(fresh);
+        var choicesRead = App.Operations.ReadWindowsChoicesAsync();
+        var recoveryRead = App.Operations.ReadWindowsRecoveryAsync(fresh);
+        var inspectionRead = App.Operations.ReadWindowsTweaksAsync(fresh);
         try
         {
-            var catalog = await App.Operations.ReadWindowsTweakCatalogAsync();
+            var catalog = await catalogRead;
             _catalog = catalog.Catalog;
             foreach (var row in _all) row.PropertyChanged -= RowChanged;
             _all.Clear();
@@ -345,13 +363,15 @@ public partial class WindowsTweaksViewModel : ObservableObject
             }
             Filter();
             UpdateSections();
-            _savedChoices = await App.Operations.ReadWindowsChoicesAsync();
-            _recovery = await App.Operations.ReadWindowsRecoveryAsync();
+            _savedChoices = await choicesRead;
+            _recovery = await recoveryRead;
             OnPropertyChanged(nameof(HasPendingRecovery));
-            var inspection = await App.Operations.ReadWindowsTweaksAsync();
+            var inspection = await inspectionRead;
             _loading = true;
             _inspection = inspection;
-            foreach (var row in _all) row.Observe(inspection.Settings.SingleOrDefault(item => item.Id == row.Id));
+            var statuses = new Dictionary<string, TweakSettingStatus>(StringComparer.Ordinal);
+            foreach (var item in inspection.Settings) if (!statuses.TryAdd(item.Id, item)) throw new InvalidOperationException("Sequence contains more than one matching element");
+            foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
             UpdateTopics();
             Fill(Sources, "All sources", _all.SelectMany(row => row.Definition.Sources.Select(source => source.Product)));
             if (!Categories.Contains(Category)) Category = "All groups";
@@ -371,8 +391,13 @@ public partial class WindowsTweaksViewModel : ObservableObject
             LoadProfile(); Filter();
             SetLoadedStatus(inspection);
             Summary = "Windows build " + inspection.Context.WindowsBuild + " · " + inspection.Context.Edition;
+            _loadedGeneration = generation;
         }
-        catch (Exception error) { _inspection = null; foreach (var row in _all) row.Observe(null); LoadProfile(); Filter(); Status = "Couldn't load Windows settings."; Detail = error.Message; }
+        catch (Exception error)
+        {
+            _ = Task.WhenAll(catalogRead, choicesRead, recoveryRead, inspectionRead).ContinueWith(task => task.Exception, TaskScheduler.Default);
+            _loadedGeneration = -1; _inspection = null; foreach (var row in _all) row.Observe(null); LoadProfile(); Filter(); Status = "Couldn't load Windows settings."; Detail = error.Message;
+        }
         finally { _loading = false; Busy = false; }
     }
     private static void Fill(ObservableCollection<string> target, string first, IEnumerable<string> values)
@@ -671,11 +696,10 @@ public partial class WindowsTweaksViewModel : ObservableObject
     public void FindSetting(string query) { SelectedSection = Sections[0]; Search = query; }
     private void Filter()
     {
-        Rows.Clear();
         var searching = !string.IsNullOrWhiteSpace(Search);
-        foreach (var row in _all.Where(row => (searching || SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced && !row.UnavailableHere) && (searching || Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
+        Rows = new(_all.Where(row => (searching || SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced && !row.UnavailableHere) && (searching || Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
             (!searching || (row.Name + " " + row.Description + " " + row.Sources).Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(row => row.IsNetwork ? row.Topic switch { "Connection" => 0, "Adapter" => 1, "Local network" => 2, "Wireless" => 3, "Firewall" => 4, "DNS" => 5, _ => 6 } : 0).ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)) Rows.Add(row);
+            .OrderBy(row => row.IsNetwork ? row.Topic switch { "Connection" => 0, "Adapter" => 1, "Local network" => 2, "Wireless" => 3, "Firewall" => 4, "DNS" => 5, _ => 6 } : 0).ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase));
         OnPropertyChanged(nameof(HasRows)); OnPropertyChanged(nameof(ShowEmpty)); OnPropertyChanged(nameof(VisibleCount));
     }
     public async Task ReviewOwnershipAsync(string path)
@@ -685,7 +709,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         try
         {
             var review = await App.Operations.PreviewOwnershipAsync(path);
-            _catalog = (await App.Operations.ReadWindowsTweakCatalogAsync()).Catalog;
+            _catalog = (await App.Operations.ReadWindowsTweakCatalogAsync(true)).Catalog;
             ProfileId = review.Plan.ProfileId; _review = review;
             foreach (var change in review.Plan.Controls?.Changes ?? []) AddNativeChange(change, review.Plan.Profiles);
             Status = "Review file ownership"; Detail = path + "\nChanges this item's permissions only. File contents and child items are not changed.";

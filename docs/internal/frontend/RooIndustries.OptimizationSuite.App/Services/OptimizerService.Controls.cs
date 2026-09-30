@@ -140,8 +140,24 @@ public sealed partial class OptimizerService
         return result.ToArray();
     }
 
-    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default)
+    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null)
     {
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
+        {
+            var result = await RunHostAsync<T>(action, request, cancellationToken, timeout).ConfigureAwait(false);
+            outcome = "completed";
+            return result;
+        }
+        catch (TimeoutException) { outcome = "timed out"; throw; }
+        catch (OperationCanceledException) { outcome = "cancelled"; throw; }
+        finally { AppLog.Timing(action, elapsed, outcome); }
+    }
+
+    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout)
+    {
+        using var change = request.TryGetValue("confirm", out var confirm) && confirm is true ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
         var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         if (!File.Exists(host))
@@ -167,7 +183,7 @@ public sealed partial class OptimizerService
         var path = Path.Combine(_storage, "request-" + Guid.NewGuid().ToString("N") + ".json");
         request["schemaVersion"] = 1;
         request["repoRoot"] = root;
-        OperationFiles.Write(path, request);
+        await Task.Run(() => OperationFiles.Write(path, request)).ConfigureAwait(false);
         try
         {
             var start = new ProcessStartInfo(dotnet)
@@ -180,15 +196,19 @@ public sealed partial class OptimizerService
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
             var output = process.StandardOutput.ReadToEndAsync();
             var errors = process.StandardError.ReadToEndAsync();
-            try { await process.WaitForExitAsync(cancellationToken); }
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (timeout is { } duration) limit.CancelAfter(duration);
+            try { await process.WaitForExitAsync(limit.Token).ConfigureAwait(false); }
             catch (OperationCanceledException)
             {
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync();
-                throw;
+                await process.WaitForExitAsync().ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested) throw;
+                AppLog.Write("helper", action + " timed out.");
+                throw new TimeoutException(AppLog.TimedOut);
             }
-            var text = await output;
-            var stderr = await errors;
+            var text = await output.ConfigureAwait(false);
+            var stderr = await errors.ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(text))
             {
                 AppLog.Write("helper", action + " exited with code " + process.ExitCode);

@@ -5,12 +5,14 @@ using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class ToolsDiagnosticsPage : Page
+public sealed partial class ToolsDiagnosticsPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public ToolsDiagnosticsViewModel ViewModel { get; } = new();
     public ToolsDiagnosticsPage()
     {
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) => { await ViewModel.InitializeAsync(); ResizeTools(null, null); };
     }
     private void OpenFirmware(object sender, RoutedEventArgs e) => Frame.Navigate(typeof(FirmwarePage));

@@ -209,6 +209,21 @@ public sealed partial class OptimizerService
 
     private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false)
     {
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
+        {
+            var result = await RunScriptAsync<T>(script, arguments, cancellationToken, waitForRemoval).ConfigureAwait(false);
+            outcome = "completed";
+            return result;
+        }
+        catch (TimeoutException) { outcome = "timed out"; throw; }
+        finally { AppLog.Timing(script, elapsed, outcome); }
+    }
+
+    private async Task<OptimizerResult<T>> RunScriptAsync<T>(string script, string arguments, CancellationToken cancellationToken, bool waitForRemoval)
+    {
+        using var change = arguments.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException(AppLog.MissingFiles), script);
         var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
@@ -228,16 +243,16 @@ public sealed partial class OptimizerService
         var error = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (!waitForRemoval) timeout.CancelAfter(TimeSpan.FromSeconds(45));
-        try { await process.WaitForExitAsync(timeout.Token); }
+        try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!waitForRemoval)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
             AppLog.Write("backend", script + " timed out.");
             throw new TimeoutException(AppLog.TimedOut);
         }
-        var text = await output;
-        var stderr = await error;
+        var text = await output.ConfigureAwait(false);
+        var stderr = await error.ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(text))
         {
             AppLog.Write("backend", script + " returned no response.");
