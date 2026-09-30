@@ -13,6 +13,8 @@ def load(folder):
 
 
 def median(rows, field):
+    if rows and (field not in rows[0] or (field == 'state_ms' and all(row[field] in ('', None) for row in rows))):
+        field = 'complete_ms'
     values = [float(row[field]) for row in rows if row[field] not in ('', None)]
     failed = len(rows) - len(values)
     if not values:
@@ -31,14 +33,16 @@ def memory(folder):
 def main(before, after, output):
     old, new = load(before), load(after)
     keys = list(dict.fromkeys(list(old) + list(new)))
-    lines = ['| page | visit | usable before | usable after | complete before | complete after | timeouts before/after |', '|---|---|---|---|---|---|---|']
+    lines = ['| page | visit | usable before | usable after | state before | state after | complete before | complete after | timeouts before/after |', '|---|---|---|---|---|---|---|---|---|']
     for key in keys:
         a_rows, b_rows = old.get(key, []), new.get(key, [])
         ub, fb = median(a_rows, 'usable_ms') if a_rows else ('-', 0)
         ua, _ = median(b_rows, 'usable_ms') if b_rows else ('-', 0)
+        sb, _ = median(a_rows, 'state_ms') if a_rows else ('-', 0)
+        sa, _ = median(b_rows, 'state_ms') if b_rows else ('-', 0)
         cb, fb = median(a_rows, 'complete_ms') if a_rows else ('-', 0)
         ca, fa = median(b_rows, 'complete_ms') if b_rows else ('-', 0)
-        lines.append(f'| {key[0]} | {key[1]} | {ub} | {ua} | {cb} | {ca} | {fb}/{fa} |')
+        lines.append(f'| {key[0]} | {key[1]} | {ub} | {ua} | {sb} | {sa} | {cb} | {ca} | {fb}/{fa} |')
     lines += ['', '| run | tour | when | private MB | working set MB | app CPU ms |', '|---|---|---|---|---|---|']
     for name, folder in (('before', before), ('after', after)):
         for row in memory(folder):
