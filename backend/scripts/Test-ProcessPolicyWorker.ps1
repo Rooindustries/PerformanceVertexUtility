@@ -280,6 +280,7 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
     $migrated=Worker 'Sync' $legacyRoot
     $legacyAcl=Get-Acl -LiteralPath $legacyRoot
     Note 'migratedAcl' ([ordered]@{owner=$legacyAcl.Owner;protected=$legacyAcl.AreAccessRulesProtected;access=@($legacyAcl.Access|ForEach-Object {''+$_.IdentityReference+':'+$_.FileSystemRights+':'+$_.AccessControlType})})
+    Note 'migration' ([ordered]@{secured=$migrated.secured;running=$migrated.worker.hostRunning;error=$migrated.worker.error;sameBytes=((Get-FileHash -LiteralPath $legacyFile).Hash -eq $legacyHash);leftovers=@(Get-ChildItem -LiteralPath (Split-Path $legacyRoot -Parent) -Directory|ForEach-Object {$_.Name})})
     Assert ($migrated.secured -and $migrated.worker.hostRunning -eq $true -and (Get-FileHash -LiteralPath $legacyFile).Hash -eq $legacyHash -and $legacyAcl.Owner -eq 'BUILTIN\Administrators' -and $legacyAcl.AreAccessRulesProtected -and @(Get-ChildItem -LiteralPath (Split-Path $legacyRoot -Parent) -Directory -Filter 'process-rules.*').Count -eq 0) 'An earlier folder written by the elevated app is migrated byte for byte into a protected folder and the governor starts'
     Assert ($null -ne (Wait-Until {Same (Read-Controls $first) $wanted} 10)) 'The migrated rule is enforced'
     $limited=Invoke-Limited $legacyWrite
