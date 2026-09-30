@@ -85,14 +85,15 @@ function Start-App {
     [LoadTimesU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [LoadTimesU32]::SetForegroundWindow($h) | Out-Null
     return @{ Stopwatch = $sw; WindowMs = $window }
 }
-function Measure-Until([Diagnostics.Stopwatch]$sw, [scriptblock]$usable, [scriptblock]$complete, [double]$timeout, [int]$poll = 60) {
-    $u = $null; $c = $null; $deadline = $sw.ElapsedMilliseconds + $timeout * 1000
+function Measure-Until([Diagnostics.Stopwatch]$sw, [scriptblock]$usable, [scriptblock]$complete, [double]$timeout, [int]$poll = 60, [scriptblock]$state = $null) {
+    $u = $null; $c = $null; $p = $null; $deadline = $sw.ElapsedMilliseconds + $timeout * 1000
     while ($sw.ElapsedMilliseconds -lt $deadline -and ($null -eq $u -or $null -eq $c)) {
         if ($null -eq $u) { try { if (& $usable) { $u = $sw.ElapsedMilliseconds } } catch {} }
-        if ($null -eq $c) { try { if (& $complete) { $c = $sw.ElapsedMilliseconds; if ($null -eq $u) { $u = $c } } } catch {} }
+        if ($state -and $null -eq $p) { try { if (& $state) { $p = $sw.ElapsedMilliseconds } } catch {} }
+        if ($null -eq $c) { try { if (& $complete) { $c = $sw.ElapsedMilliseconds; if ($null -eq $u) { $u = $c }; if ($state -and $null -eq $p) { $p = $c } } } catch {} }
         Start-Sleep -Milliseconds $poll
     }
-    return @($u, $c)
+    return @($u, $c, $p)
 }
 function Settle([Diagnostics.Stopwatch]$sw, [double]$quietSeconds, [double]$timeout) {
     $last = ''; $changed = $sw.ElapsedMilliseconds; $deadline = $sw.ElapsedMilliseconds + $timeout * 1000
@@ -104,8 +105,8 @@ function Settle([Diagnostics.Stopwatch]$sw, [double]$quietSeconds, [double]$time
     }
     return $null
 }
-function Add-Row([string]$tour, [string]$page, [string]$visit, $usable, $complete, [string]$note = '') {
-    $row = [pscustomobject]@{ label = $Label; tour = $tour; page = $page; visit = $visit; usable_ms = $usable; complete_ms = $complete; note = $note; utc = (Get-Date).ToUniversalTime().ToString('o') }
+function Add-Row([string]$tour, [string]$page, [string]$visit, $usable, $complete, [string]$note = '', $state = $null) {
+    $row = [pscustomobject]@{ label = $Label; tour = $tour; page = $page; visit = $visit; usable_ms = $usable; complete_ms = $complete; state_ms = $state; note = $note; utc = (Get-Date).ToUniversalTime().ToString('o') }
     $script:Rows.Add($row); Log ("ROW $tour $page $visit usable=$usable complete=$complete $note")
     $script:Rows | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir 'loadtimes.csv')
 }
@@ -140,7 +141,7 @@ $Pages = @(
     @{ Name = 'Games/Background'; Tab = 'BackgroundTab'; Usable = { HasText ' running$' }; Complete = { HasText ' running$' }; Timeout = 60; After = 'GamesTab' },
     @{ Name = 'Remove apps'; Nav = 'Remove apps'; Usable = { HasName 'Remove selected applications, then review leftover files and registry data.' }; Complete = { HasText '^[1-9]\d* apps installed' }; Timeout = 60 },
     @{ Name = 'Graphics drivers'; Nav = 'Graphics drivers'; Usable = { HasName 'Drivers & GPU' }; Complete = { HasName 'Processor' }; Timeout = 60 },
-    @{ Name = 'Windows tweaks'; Nav = 'Windows tweaks'; Usable = { $l = ById 'WindowsTweaksList'; $l -and $l.FindFirst($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) }; Complete = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings$|recovery|Restart' }; Timeout = 120 },
+    @{ Name = 'Windows tweaks'; Nav = 'Windows tweaks'; Usable = { $l = ById 'WindowsTweaksList'; $l -and $l.FindFirst($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) }; Complete = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings$|recovery|Restart' }; State = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings|recovery|Restart' }; Timeout = 120 },
     @{ Name = 'Tools'; Nav = 'Tools'; Usable = { HasName 'HWiNFO' }; Complete = { HasName 'HWiNFO' }; Timeout = 45 },
     @{ Name = 'Tools/BIOS settings'; Invoke = 'OpenFirmware'; Usable = { HasName 'Load your BIOS settings' }; Complete = 'settle'; Timeout = 45 },
     @{ Name = 'Undo changes'; Nav = 'Undo changes'; Usable = { HasName 'Saved settings' }; Complete = { (HasName 'Saved settings') -and -not (HasName 'Reading restore state') }; Timeout = 60 },
@@ -150,8 +151,8 @@ $Pages = @(
 )
 $Advanced = @(
     @{ Name = 'Remove apps/Leftovers'; Before = 'Remove apps'; Tab = 'LeftoversTab'; Usable = { HasName 'Pick an app to review' }; Complete = 'settle'; Timeout = 60; After = 'RemovalTab' },
-    @{ Name = 'Startup & services'; Nav = 'Startup & services'; Usable = { HasName 'Background processes and startup information.' }; Complete = { (HasName 'Running background apps') -and -not (HasName 'Reading startup and services') }; Timeout = 60 },
-    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Memory use by app and available diagnostics.' }; Complete = { (HasName 'Memory by process') -and -not (HasName 'Reading memory and latency') }; Timeout = 60 },
+    @{ Name = 'Startup & services'; Nav = 'Startup & services'; Usable = { HasName 'Running background apps' }; Complete = { (HasName 'Running background apps') -and -not (HasName 'Reading startup and services') }; Timeout = 60 },
+    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Memory by process' }; Complete = { (HasName 'Memory by process') -and -not (HasName 'Reading memory and latency') }; Timeout = 60 },
     @{ Name = 'Timer & cache'; Nav = 'Timer & cache'; Usable = { HasName 'Timer & shader cache' }; Complete = 'settle'; Timeout = 60 }
 )
 function Visit([hashtable]$page, [string]$tour, [string]$visit) {
@@ -166,8 +167,8 @@ function Visit([hashtable]$page, [string]$tour, [string]$visit) {
     elseif ($complete -is [string] -and $complete -eq 'settle') {
         $u = (Measure-Until $sw $page.Usable $page.Usable $page.Timeout)[0]
         $r = @($u, (Settle $sw 3 $page.Timeout))
-    } else { $r = Measure-Until $sw $page.Usable $complete $page.Timeout }
-    Add-Row $tour $page.Name $visit $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' })
+    } else { $r = Measure-Until $sw $page.Usable $complete $page.Timeout 60 $page.State }
+    Add-Row $tour $page.Name $visit $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' }) $r[2]
     Shot ("$tour-$visit-" + ($page.Name -replace '\W', ''))
     if ($page.After) { $tab = ById $page.After; if ($tab) { Activate $tab } }
     Start-Sleep -Milliseconds 1500
@@ -193,6 +194,16 @@ try {
         $r = Measure-Until $s.Stopwatch { HasName 'Start here' } { HasText ' in the background$' } 90
         Add-Row "cold$run" 'Start: window' 'cold' $s.WindowMs $s.WindowMs
         Add-Row "cold$run" 'Start: Home' 'cold' $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' })
+        if ($run -eq 1) {
+            $seen = @{}
+            for ($i = 0; $i -lt 40; $i++) {
+                foreach ($id in @(Get-Descendants $script:App.Id)) {
+                    try { $child = Get-Process -Id $id -ErrorAction Stop; $key = $child.ProcessName + ':' + $child.PriorityClass; if (-not $seen.ContainsKey($key)) { $seen[$key] = [int]$s.Stopwatch.ElapsedMilliseconds } } catch {}
+                }
+                Start-Sleep -Milliseconds 150
+            }
+            Log ('PRIORITY helper processes after Home: ' + (($seen.GetEnumerator() | Sort-Object Value | ForEach-Object { $_.Key + '@' + $_.Value + 'ms' }) -join ', '))
+        }
         Shot "cold$run-home"
         Start-Sleep 2
     }
@@ -224,8 +235,8 @@ try {
         $s = Start-App
         $null = Measure-Until $s.Stopwatch { HasName 'Start here' } { HasName 'Start here' } 90
         $sw = Nav 'Windows tweaks'
-        $r = Measure-Until $sw $tweaks.Usable $tweaks.Complete $tweaks.Timeout
-        Add-Row "coldtweaks$run" 'Start: Windows tweaks right after launch' 'cold' $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' })
+        $r = Measure-Until $sw $tweaks.Usable $tweaks.Complete $tweaks.Timeout 60 $tweaks.State
+        Add-Row "coldtweaks$run" 'Start: Windows tweaks right after launch' 'cold' $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' }) $r[2]
         Shot "coldtweaks$run"
         Start-Sleep 2
     }
@@ -259,11 +270,11 @@ finally {
     try { Stop-App } catch {}
     'x' | Set-Content (Join-Path $OutDir 'procmon.stop')
     if ($procmon) { $procmon.WaitForExit(15000) | Out-Null }
-    $md = @("# App load times: $Label", '', "Machine: $env:COMPUTERNAME. Times in ms from navigation (Start rows: from process launch).", '', '| page | visit | usable ms (median) | complete ms (median) | samples | timeouts or errors |', '|---|---|---|---|---|---|')
+    $md = @("# App load times: $Label", '', "Machine: $env:COMPUTERNAME. Times in ms from navigation (Start rows: from process launch).", '', '| page | visit | usable ms (median) | state ms (median) | complete ms (median) | samples | timeouts or errors |', '|---|---|---|---|---|---|---|')
     function Median($values) { $v = @($values | Where-Object { $null -ne $_ -and $_ -ne '' } | ForEach-Object { [double]$_ } | Sort-Object); if ($v.Count -eq 0) { return 'timeout' }; if ($v.Count % 2) { return [int]$v[[int][Math]::Floor($v.Count / 2)] }; return [int](($v[$v.Count / 2 - 1] + $v[$v.Count / 2]) / 2) }
     foreach ($group in $script:Rows | Group-Object page, visit) {
         $first = $group.Group[0]
-        $md += "| $($first.page) | $($first.visit) | $(Median $group.Group.usable_ms) | $(Median $group.Group.complete_ms) | $($group.Count) | $(@($group.Group | Where-Object { $null -eq $_.complete_ms -or $_.complete_ms -eq '' }).Count) |"
+        $md += "| $($first.page) | $($first.visit) | $(Median $group.Group.usable_ms) | $(if (@($group.Group | Where-Object { $_.state_ms }).Count) { Median $group.Group.state_ms } else { '-' }) | $(Median $group.Group.complete_ms) | $($group.Count) | $(@($group.Group | Where-Object { $null -eq $_.complete_ms -or $_.complete_ms -eq '' }).Count) |"
     }
     $md += @('', '| tour | when | private MB | working set MB | app CPU ms |', '|---|---|---|---|---|')
     foreach ($m in $script:Memory) { $md += "| $($m.tour) | $($m.when) | $($m.private_mb) | $($m.working_set_mb) | $($m.cpu_ms) |" }

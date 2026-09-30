@@ -62,12 +62,28 @@ function Find-Row {
     $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('Transparency Effects'); Start-Sleep 1
     WaitFor { ById ($Setting + '.select') } 30 'Transparency Effects row'
 }
-function Apply-Reviewed([string]$what) {
+function Combo-Items([string]$id) {
+    $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
+    $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $pattern.Expand(); Start-Sleep -Milliseconds 700
+    $names = @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | ForEach-Object { $_.Current.Name })
+    try { $pattern.Collapse() } catch {}; Start-Sleep -Milliseconds 300
+    return $names
+}
+function Wait-Listed([string]$id, [bool]$present, [double]$seconds) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do { $names = @(Combo-Items $id); $found = @($names | Where-Object { $_ -like '*RooLoadTimesProbe*' }).Count -gt 0; if ($found -eq $present) { return $true }; Start-Sleep 1 } while ((Get-Date) -lt $deadline)
+    return $false
+}
+function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
+function Apply-Reviewed([string]$what, [switch]$NoWait) {
     $texts = @(Review-Texts)
     Log ("$what review: " + ($texts -join ' | '))
     if ((($texts -join ' ') -notmatch 'Transparency') -or @($texts | Where-Object { $_ -match 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender' }).Count) { throw "$what review is not exactly the Transparency change; refusing to apply" }
     Set-Toggle (ById 'WindowsTweaksApproval') $true
-    Invoke-Element (WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button'); Start-Sleep 2
+    Invoke-Element (WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button')
+    if ($NoWait) { return }
+    Start-Sleep 2
     Tweaks-Idle | Out-Null
 }
 
@@ -101,14 +117,22 @@ try {
     $choice.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
     Invoke-Element (ById 'WindowsTweaksPreview'); Start-Sleep 2; Tweaks-Idle | Out-Null
     $script:Cleanup = "restore the $CheckProfile profile in Windows tweaks; EnableTransparency was $registryBefore"
-    Apply-Reviewed 'apply'
+    Apply-Reviewed 'apply' -NoWait
+    $registryAtNav = Transparency
+    Nav 'Undo changes'
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $openPage = WaitFor { $t = @(Texts); if (Has-Profile $t) { $t } } 90 'the new profile on the Undo page left open during the apply'
+    Check $true 'Undo page opened while the apply was running shows the new profile once the apply finishes, without navigating again' ("registry when the Undo page opened=" + $registryAtNav + " (before=" + $registryBefore + "), ms after opening=" + $sw.ElapsedMilliseconds)
+    Check ($registryAtNav -eq $registryBefore) 'the Undo page was opened before the apply reached Windows' "registry at open=$registryAtNav before=$registryBefore"
+    WaitFor { if ((Transparency) -ne $registryBefore) { $true } } 60 'registry change' | Out-Null
     $registryApplied = Transparency
     Check ($registryApplied -ne $registryBefore) 'apply changed the registry value' "before=$registryBefore after=$registryApplied"
     Shot '2-applied'
 
+    Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $after = @(Undo-Profiles)
-    Check (Has-Profile $after) 'cached Undo page reloads after the apply and lists the new profile' ("ms=" + $sw.ElapsedMilliseconds + " :: " + ($after -join ' | '))
+    Check (Has-Profile $after) 'cached Undo page still lists the new profile on revisit' ("ms=" + $sw.ElapsedMilliseconds)
     Shot '3-undo-after-apply'
 
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
@@ -122,6 +146,30 @@ try {
     $final = @(Undo-Profiles)
     Check (-not (Has-Profile $final)) 'cached Undo page reloads after the restore and drops the profile' ($final -join ' | ')
     Shot '4-undo-after-restore'
+
+    $probePath = Join-Path $env:TEMP 'RooLoadTimesProbe.exe'
+    Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $probePath -Force
+    Nav 'Games'; Start-Sleep 2; Select-Tab 'ProcessesTab'; Start-Sleep 3
+    Check (Wait-Listed 'ProcessPicker' $false 5) 'Processes list does not show the probe before it starts' ''
+    Select-Tab 'GamesTab'
+    Check (Wait-Listed 'GameSessionLauncher' $false 5) 'Games launcher list does not show the probe before it starts' ''
+    Nav 'Home'; Start-Sleep 2
+    $probe = Start-Process $probePath -ArgumentList '-n', '600', '127.0.0.1' -WindowStyle Hidden -PassThru
+    Start-Sleep 4
+    Nav 'Games'; Start-Sleep 1
+    Check (Wait-Listed 'GameSessionLauncher' $true 20) 'Games launcher list shows a process started while the page was cached' ''
+    Select-Tab 'ProcessesTab'
+    Check (Wait-Listed 'ProcessPicker' $true 20) 'Processes list shows a process started while the page was cached' ''
+    Select-Tab 'GamesTab'
+    Nav 'Home'; Start-Sleep 1
+    Stop-Process -Id $probe.Id -Force; $probe.WaitForExit(10000) | Out-Null
+    Start-Sleep 4
+    Nav 'Games'; Start-Sleep 1
+    Check (Wait-Listed 'GameSessionLauncher' $false 20) 'Games launcher list drops a process that exited while the page was cached' ''
+    Select-Tab 'ProcessesTab'
+    Check (Wait-Listed 'ProcessPicker' $false 20) 'Processes list drops a process that exited while the page was cached' ''
+    Select-Tab 'GamesTab'
+    Remove-Item $probePath -Force -ErrorAction SilentlyContinue
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
     if ($app -and -not $app.HasExited) { $app.CloseMainWindow() | Out-Null; if (-not $app.WaitForExit(20000)) { $app.Kill() } }
