@@ -186,7 +186,7 @@ switch($Phase){
         foreach($worker in Workers){Stop-Process -Id $worker.ProcessId -Force -ErrorAction SilentlyContinue}
         Start-Sleep -Seconds 1
         if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force}
-        Get-ChildItem -LiteralPath $dataRoot -Directory -Filter 'process-rules.*' -ErrorAction SilentlyContinue|Remove-Item -Recurse -Force
+        Get-ChildItem -LiteralPath $dataRoot -Directory -ErrorAction SilentlyContinue|Where-Object {$_.Name -like 'process-rules.*'}|Remove-Item -Recurse -Force
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         $out.left=[ordered]@{tasks=@(Tasks).Count;workers=@(Workers).Count;policyRoot=(Test-Path -LiteralPath $policyRoot);app=(Test-Path -LiteralPath $app)}
     }
