@@ -33,11 +33,17 @@ public static class DataGeneration
 
 public sealed class SharedReads
 {
-    private sealed record Entry(Task<object?> Read, long Generation, long StartedTicks, Func<object?, bool> Good);
+    private sealed record Entry(Task<object?> Read, long Generation, long StartedTicks, Func<object?, bool> Good)
+    {
+        public long CompletedTicks;
+    }
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
     public async Task<T?> GetAsync<T>(string key, TimeSpan maxAge, Func<Task<T>> read, Func<T, bool>? good = null) where T : class
+        => (await ReadAsync(key, maxAge, read, good).ConfigureAwait(false)).Value;
+
+    public async Task<(T? Value, TimeSpan Age)> ReadAsync<T>(string key, TimeSpan maxAge, Func<Task<T>> read, Func<T, bool>? good = null) where T : class
     {
         Func<object?, bool> keep = value => value is T typed && (good is null || good(typed));
         Entry entry;
@@ -54,7 +60,9 @@ public sealed class SharedReads
         {
             var value = await entry.Read.ConfigureAwait(false);
             if (!keep(value)) Remove(key, entry);
-            return value as T;
+            var now = Environment.TickCount64;
+            Interlocked.CompareExchange(ref entry.CompletedTicks, now, 0);
+            return (value as T, TimeSpan.FromMilliseconds(now - Interlocked.Read(ref entry.CompletedTicks)));
         }
         catch
         {

@@ -51,11 +51,19 @@ public abstract partial class PageViewModelBase : ObservableObject
         if (_loadedGeneration == -1) await ReloadAsync();
     }
 
+    private bool _revalidate;
+    protected void RevalidateAfterLoad() => _revalidate = true;
+
     private async Task RunAsync(bool quiet)
     {
         while (_load is { IsCompleted: false }) await _load;
         _load = LoadAsync(quiet);
         await _load;
+        if (!_revalidate || !IsReady) { _revalidate = false; return; }
+        _revalidate = false;
+        _load = LoadAsync(quiet: true);
+        await _load;
+        _revalidate = false;
     }
 
     private async Task LoadAsync(bool quiet)

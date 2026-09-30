@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
 
@@ -21,13 +22,18 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     public ObservableCollection<StatusLine> SensorRows { get; } = new();
     public ObservableCollection<DiagnosticRow> DiagnosticRows { get; } = new();
 
+    [RelayCommand]
+    private Task RetryAsync() => ReloadAsync();
+
     protected override async Task LoadCoreAsync()
     {
         var inventoryRead = App.Live.GetProcessInventoryAsync();
-        var classificationRead = App.Live.GetProcessClassificationAsync();
+        var classificationRead = App.Live.GetProcessClassificationResultAsync(fresh: Fresh, allowStale: !Fresh);
         var hardwareRead = App.Live.GetDriverHardwareAsync();
         var inventory = await inventoryRead;
-        var classification = await classificationRead;
+        var classificationResult = await classificationRead;
+        var classification = classificationResult.Value;
+        if (classificationResult.Stale) RevalidateAfterLoad();
         var hardware = await hardwareRead;
         TelemetrySnapshot? telemetry = null;
 

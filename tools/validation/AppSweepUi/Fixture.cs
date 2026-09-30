@@ -21,7 +21,7 @@ namespace RooIndustries.OptimizationSuite.Services
     }
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
-    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
     public static class LiveDataService
@@ -82,7 +82,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<string, Task<string?>> CleanupRestore { get; set; } = _ => Task.FromResult<string?>(null);
         public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken cancellationToken = default) => Task.FromResult(Inventory);
         public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken cancellationToken = default) => Task.FromResult(Classification);
-        public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken cancellationToken = default, bool fresh = false)
+        public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken cancellationToken = default, bool fresh = false, bool allowStale = false, bool background = false)
             => Task.FromResult(new LiveDataResult<ProcessClassification>(Classification, Classification?.Processes is null ? LastError : null));
         public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameStatusModel);
         public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
