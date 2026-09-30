@@ -57,21 +57,32 @@ function Get-Probe([int]$Id){try{$p=Get-Process -Id $Id -ErrorAction Stop;if($p.
 function Tasks{@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})}
 function Workers{@(Get-CimInstance Win32_Process|Where-Object {$_.Name -in @('Optimizer.Host.exe','dotnet.exe') -and [string]$_.CommandLine -match 'policy-run'})}
 function Describe-State {
-    $task=@(Tasks)
+    $result=[ordered]@{}
+    $result.tasks=@(Tasks|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;execute=$_.Actions[0].Execute;arguments=$_.Actions[0].Arguments;runLevel=[string]$_.Principal.RunLevel;triggers=@($_.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration}})}})
+    Mark 'tasks'
+    $result.workers=@(Workers|ForEach-Object {[ordered]@{pid=$_.ProcessId;name=$_.Name;path=$_.ExecutablePath;session=$_.SessionId;commandLine=$_.CommandLine}})
+    Mark 'workers'
     $status=if(Test-Path -LiteralPath $hostExe){try{Host-Call 'policy-status'}catch{$_.Exception.Message}}else{'no host'}
+    Mark 'status'
+    $result.hostRunning=$status.hostRunning;$result.stateStatus=$status.state.status;$result.hostPid=$status.state.host.processId
+    $result.instances=@($status.state.instances|ForEach-Object {[ordered]@{pid=$_.process.processId;status=$_.status;journal=$_.journalPath}})
+    Mark 'instances'
+    $result.ruleFiles=@(if(Test-Path -LiteralPath (Join-Path $policyRoot 'rules')){Get-ChildItem -LiteralPath (Join-Path $policyRoot 'rules') -Filter *.json|ForEach-Object {[ordered]@{name=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}}})
+    Mark 'rules'
+    $result.governorJson=if(Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json')){[IO.File]::ReadAllText((Join-Path $policyRoot 'governor.json'))}else{$null}
     $acl=if(Test-Path -LiteralPath $policyRoot){Get-Acl -LiteralPath $policyRoot}else{$null}
-    return [ordered]@{
-        tasks=@($task|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;execute=$_.Actions[0].Execute;arguments=$_.Actions[0].Arguments;runLevel=[string]$_.Principal.RunLevel;triggers=@($_.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration}})}})
-        workers=@(Workers|ForEach-Object {[ordered]@{pid=$_.ProcessId;name=$_.Name;path=$_.ExecutablePath;created=$_.CreationDate;session=$_.SessionId;commandLine=$_.CommandLine}})
-        hostRunning=$status.hostRunning;stateStatus=$status.state.status;hostPid=$status.state.host.processId;instances=@($status.state.instances|ForEach-Object {[ordered]@{pid=$_.process.processId;status=$_.status;journal=$_.journalPath}})
-        ruleFiles=@(if(Test-Path -LiteralPath (Join-Path $policyRoot 'rules')){Get-ChildItem -LiteralPath (Join-Path $policyRoot 'rules') -Filter *.json|ForEach-Object {[ordered]@{name=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}}})
-        governorJson=if(Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json')){Get-Content -Raw -LiteralPath (Join-Path $policyRoot 'governor.json')}else{$null}
-        rootOwner=if($acl){$acl.Owner}else{$null};rootProtected=if($acl){$acl.AreAccessRulesProtected}else{$null};rootAccess=if($acl){@($acl.Access|ForEach-Object {''+$_.IdentityReference+':'+$_.FileSystemRights+':'+$_.AccessControlType+':'+$_.IsInherited})}else{$null}
-        appRunning=@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count
-        hostFile=if(Test-Path -LiteralPath (Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll')){$f=Get-Item -LiteralPath (Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll');[ordered]@{lastWriteUtc=$f.LastWriteTimeUtc.ToString('o');sha256=(Get-FileHash -LiteralPath $f.FullName).Hash}}else{$null}
-        bootUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
-    }
+    $result.rootOwner=if($acl){$acl.Owner}else{$null};$result.rootProtected=if($acl){$acl.AreAccessRulesProtected}else{$null}
+    $result.rootAccess=if($acl){@($acl.Access|ForEach-Object {''+$_.IdentityReference+':'+$_.FileSystemRights+':'+$_.AccessControlType+':'+$_.IsInherited})}else{$null}
+    Mark 'acl'
+    $result.appRunning=@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count
+    $dll=Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll'
+    $result.hostFile=if(Test-Path -LiteralPath $dll){[ordered]@{lastWriteUtc=(Get-Item -LiteralPath $dll).LastWriteTimeUtc.ToString('o');sha256=(Get-FileHash -LiteralPath $dll).Hash}}else{$null}
+    Mark 'hostFile'
+    $result.bootUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+    Mark 'boot'
+    return $result
 }
+function Mark([string]$Name){if($env:ROO_INDUSTRIES_GOVERNOR_TRACE){[IO.File]::AppendAllText($env:ROO_INDUSTRIES_GOVERNOR_TRACE,$Name+' '+[DateTime]::Now.ToString('HH:mm:ss.fff')+"`r`n")}}
 $state=if(Test-Path -LiteralPath $statePath){Get-Content -Raw -LiteralPath $statePath|ConvertFrom-Json}else{[pscustomobject]@{}}
 function Save-State{[IO.File]::WriteAllText($statePath,($state|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))}
 function Set-StateValue([string]$Name,$Value){if($state.PSObject.Properties[$Name]){$state.$Name=$Value}else{$state|Add-Member -NotePropertyName $Name -NotePropertyValue $Value}}
