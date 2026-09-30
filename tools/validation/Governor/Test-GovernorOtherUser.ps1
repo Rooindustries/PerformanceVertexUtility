@@ -67,7 +67,7 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         Start-ScheduledTask -TaskName 'RooIndustriesGovernorOtherWorker'
         $applied=Wait-Until {$p=Read-Probe;$p.cpuPriority -eq 'AboveNormal' -and $p.memoryPriority -eq 3} 30
         [IO.File]::WriteAllText($statePath,(@{sid=$sid;root=$other.root;original=$original}|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
-        $task=Governor-Task $sid
+        $task=@(Governor-Task $sid)
         $out.original=$original;$out.applied=Read-Probe;$out.task=@($task|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;runLevel=[string]$_.Principal.RunLevel;user=$_.Principal.UserId}})
         Check ($null -ne $setupDone -and $other.save -eq 'completed' -and $task.Count -eq 1 -and [string]$task[0].Principal.RunLevel -eq 'Highest') 'A second administrator saved a rule and has a governor task of their own'
         Check ($original.owner -eq $sid -and $original.cpuPriority -ne 'AboveNormal' -and $null -ne $applied -and @(Worker-Of $sid).Count -eq 1) 'The second administrator governor is running and applies the rule to their own process'
@@ -103,7 +103,7 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         if($sid){
             $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
             if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$markers.GetValue($_) -eq $sid})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
-            for($attempt=0;$attempt -lt 5 -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -gt 0;$attempt++){try{Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")|Remove-CimInstance -ErrorAction Stop}catch{Start-Sleep -Seconds 3}}
+            for($attempt=0;$attempt -lt 24 -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -gt 0;$attempt++){try{Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")|Remove-CimInstance -ErrorAction Stop}catch{Start-Sleep -Seconds 3}}
         }
         & net.exe user $account /delete 2>&1|Out-Null
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
