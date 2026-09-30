@@ -164,6 +164,13 @@ switch($Phase){
         $text=@(& $workerScript -Action Start -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
         $out.restarted=Describe-State
     }
+    'new-probe' {
+        $probe=Start-Probe
+        $seconds=Wait-Until {Same (Read-Controls $probe) $state.wanted} 10
+        Set-StateValue 'probePid' $probe.Id;Save-State
+        $out.appliedSeconds=$seconds
+        Check ($null -ne $seconds) ('A new long-running probe gets all 8 controls ('+$seconds+' s)')
+    }
     'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
     'verify-replaced' {
         $s=Describe-State;$out.state=$s
