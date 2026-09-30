@@ -323,35 +323,67 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     private long _loadedGeneration = -2;
     private long _loadedTicks;
+    private int _loadVersion;
     private Task? _refresh;
+    private bool HasPicks => _all.Any(row => row.HasPendingChange);
     public async Task RevalidateAsync()
     {
         while (_refresh is { IsCompleted: false }) await _refresh;
-        if (_loadedGeneration == -1 && !Busy) await ReloadKeepingSelectionAsync();
+        if (_loadedGeneration == -1 && !Busy && !HasReview && !HasPicks) await LoadAsync(fresh: true);
     }
     public async Task ShowAsync()
     {
         if (_loadedGeneration == -2) { await LoadAsync(fresh: false); return; }
-        if (_focusedSetting is not null) { _focusedSetting = null; Filter(); }
+        if (_focusedSetting is not null) { _focusedSetting = null; Search = ""; Filter(); }
         if (Busy) return;
-        if (!DataGeneration.IsCurrent(_loadedGeneration) || Environment.TickCount64 - _loadedTicks > 60000 && !HasReview) await ReloadKeepingSelectionAsync();
+        if (!DataGeneration.IsCurrent(_loadedGeneration)) await LoadAsync(fresh: true);
+        else if (Environment.TickCount64 - _loadedTicks > 60000 && !HasReview && !HasPicks && _refresh is not { IsCompleted: false }) await (_refresh = RefreshStatusAsync());
     }
-    private async Task ReloadKeepingSelectionAsync()
+    private async Task RefreshStatusAsync()
     {
-        var picks = _all.Where(row => row.Selected.Id.Length > 0).Select(row => (row.Id, Choice: row.Selected.Id)).ToArray();
-        await LoadAsync(fresh: true);
-        if (picks.Length == 0 || _inspection is null || HasPendingRecovery) return;
+        var version = _loadVersion;
+        var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
+        TweakRecovery recovery; TweakInspection inspection;
+        try
+        {
+            var recoveryRead = App.Operations.ReadWindowsRecoveryAsync(true);
+            var inspectionRead = App.Operations.ReadWindowsTweaksAsync(true);
+            try { recovery = await recoveryRead; }
+            finally { _ = inspectionRead.ContinueWith(task => task.Exception, TaskScheduler.Default); }
+            inspection = await inspectionRead;
+        }
+        catch (Exception error) { AppLog.Write("windows-settings", "Background status refresh failed: " + error.Message); _loadedTicks = Environment.TickCount64; return; }
+        if (version != _loadVersion || generation != DataGeneration.Current || DataGeneration.Changing || Busy || HasReview || HasPicks || _catalog is null) return;
+        var statuses = new Dictionary<string, TweakSettingStatus>(StringComparer.Ordinal);
+        foreach (var item in inspection.Settings) if (!statuses.TryAdd(item.Id, item)) return;
         _loading = true;
-        foreach (var (id, choice) in picks) if (_all.FirstOrDefault(row => row.Id == id) is { } row && row.Choices.FirstOrDefault(item => item.Id == choice) is { } selected) row.Selected = selected;
-        _loading = false; Invalidate(); Notify();
-        SetSelectionStatus("Selection kept", "Current values were refreshed. Review the selection before applying.");
+        _recovery = recovery; _inspection = inspection;
+        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
+        FillProfiles(inspection);
+        LoadProfile(); Filter();
+        _loading = false;
+        SetLoadedStatus(inspection);
+        Summary = "Windows build " + inspection.Context.WindowsBuild + " · " + inspection.Context.Edition;
+        _loadedGeneration = generation; _loadedTicks = Environment.TickCount64;
+        OnPropertyChanged(nameof(HasPendingRecovery)); Notify();
+    }
+    private void FillProfiles(TweakInspection inspection)
+    {
+        Profiles.Clear(); foreach (var profile in inspection.State?.Profiles ?? [])
+        {
+            var target = profile.Controls?.FirstOrDefault(claim => claim.Target.Address.Kind == "file-ownership")?.Target.Address.Target;
+            var label = target is not null ? "File ownership: " + System.IO.Path.GetFileName(target.StartsWith("selected:", StringComparison.Ordinal) ? target[9..] : target)
+                : profile.Id.StartsWith("restore-point-", StringComparison.Ordinal) ? "Restore-point temporary policy" : null;
+            Profiles.Add(new(profile.Id, label));
+        }
+        foreach (var profile in (_savedChoices?.Profiles ?? []).Where(profile => Profiles.All(existing => existing.Id != profile.Id))) Profiles.Add(new(profile.Id, profile.Id + " · saved choices"));
     }
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync(fresh: true);
     private Task LoadAsync(bool fresh) => Busy ? Task.CompletedTask : _refresh = LoadCoreAsync(fresh);
     private async Task LoadCoreAsync(bool fresh)
     {
-        Busy = true; Invalidate();
+        Busy = true; Invalidate(); _loadVersion++;
         var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
         var catalogRead = App.Operations.ReadWindowsTweakCatalogAsync(fresh);
         var choicesRead = App.Operations.ReadWindowsChoicesAsync();
@@ -390,14 +422,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             if (!Categories.Contains(Category)) Category = "All groups";
             if (!Sources.Contains(Source)) Source = "All sources";
             OnPropertyChanged(nameof(Category)); OnPropertyChanged(nameof(Source));
-            Profiles.Clear(); foreach (var profile in inspection.State?.Profiles ?? [])
-            {
-                var target = profile.Controls?.FirstOrDefault(claim => claim.Target.Address.Kind == "file-ownership")?.Target.Address.Target;
-                var label = target is not null ? "File ownership: " + System.IO.Path.GetFileName(target.StartsWith("selected:", StringComparison.Ordinal) ? target[9..] : target)
-                    : profile.Id.StartsWith("restore-point-", StringComparison.Ordinal) ? "Restore-point temporary policy" : null;
-                Profiles.Add(new(profile.Id, label));
-            }
-            foreach (var profile in _savedChoices.Profiles.Where(profile => Profiles.All(existing => existing.Id != profile.Id))) Profiles.Add(new(profile.Id, profile.Id + " · saved choices"));
+            FillProfiles(inspection);
             _presets.Clear(); foreach (var preset in _catalog.Presets.Where(preset => !ControlPlanning.HiddenPresets.Contains(preset.Id))) _presets.Add(new(preset.Id, preset.Name));
             FilterPresets("");
             SelectedPreset = null; _loading = false;
@@ -724,6 +749,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             var review = await App.Operations.PreviewOwnershipAsync(path);
             _catalog = (await App.Operations.ReadWindowsTweakCatalogAsync(true)).Catalog;
             ProfileId = review.Plan.ProfileId; _review = review;
+            if (_loadedGeneration >= 0 && !DataGeneration.Changing) _loadedGeneration = DataGeneration.Current;
             foreach (var change in review.Plan.Controls?.Changes ?? []) AddNativeChange(change, review.Plan.Profiles);
             Status = "Review file ownership"; Detail = path + "\nChanges this item's permissions only. File contents and child items are not changed.";
         }

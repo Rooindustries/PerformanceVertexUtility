@@ -12,6 +12,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweaksViewModel.cs" Link="WindowsTweaksViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweakPresentation.cs" Link="WindowsTweakPresentation.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/icons.json" LogicalName="RooIndustries.TweakIcons.json" />
   </ItemGroup>

@@ -148,6 +148,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     protected override async Task LoadCoreAsync()
     {
         var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
+        if (Quiet && SelectedApp is not null) return;
         var apps = inventory?.Apps;
         if (apps is null || apps.Count == 0)
         {

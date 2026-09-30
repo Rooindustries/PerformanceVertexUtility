@@ -43,7 +43,7 @@ public sealed class SharedReads
         Entry entry;
         lock (_gate)
         {
-            if (maxAge <= TimeSpan.Zero || !_entries.TryGetValue(key, out entry!) || !Usable(entry, maxAge))
+            if (!_entries.TryGetValue(key, out entry!) || !Usable(entry, maxAge))
             {
                 var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
                 entry = new(Wrap(read), generation, Environment.TickCount64, keep);
@@ -69,7 +69,7 @@ public sealed class SharedReads
     }
 
     private static bool Usable(Entry entry, TimeSpan maxAge) => DataGeneration.IsCurrent(entry.Generation)
-        && (!entry.Read.IsCompleted || entry.Read.IsCompletedSuccessfully && entry.Good(entry.Read.Result) && TimeSpan.FromMilliseconds(Environment.TickCount64 - entry.StartedTicks) < maxAge);
+        && maxAge > TimeSpan.Zero && (!entry.Read.IsCompleted || entry.Read.IsCompletedSuccessfully && entry.Good(entry.Read.Result) && TimeSpan.FromMilliseconds(Environment.TickCount64 - entry.StartedTicks) < maxAge);
 
     private static async Task<object?> Wrap<T>(Func<Task<T>> read) where T : class
     {
