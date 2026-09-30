@@ -9,7 +9,7 @@ $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-policy-worker-'+[Gui
 $hostDirectory=Join-Path $root 'host'
 $probeDirectory=Join-Path $root 'probe'
 $policyParent=Join-Path $root 'rules parent'
-$policyRoot=Join-Path $policyParent 'saved rules'
+$policyRoot=Join-Path $policyParent 'process-rules'
 $limitedOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-limited-'+[Guid]::NewGuid().ToString('N')+'.json')
 $probes=New-Object System.Collections.Generic.List[Diagnostics.Process]
 $taskName=$null;$moved=$null;$sessionActive=$false;$sessionRoot=$null
@@ -99,9 +99,9 @@ function Invoke-Limited([string]$Script){
 }
 
 try {
-    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory | Out-Null
+    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -p:GovernorTestHooks=true -o $hostDirectory | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Policy host publish failed.'}
-    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $hostDirectory 'session') | Out-Null
+    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj') -c Release -r win-x64 --self-contained true -p:GovernorTestHooks=true -o (Join-Path $hostDirectory 'session') | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Session host publish failed.'}
     [IO.Directory]::CreateDirectory($probeDirectory)|Out-Null
     Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly (Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe') -OutputType ConsoleApplication
@@ -363,14 +363,33 @@ public static class RooIndustriesGovernorDenied {
     $launcher=[Diagnostics.Process]::Start([Diagnostics.ProcessStartInfo]@{FileName=$launcherExe;Arguments='600';UseShellExecute=$false;CreateNoWindow=$true});$probes.Add($launcher)
     $controlsFile=Join-Path $gameDirectory 'controls.json'
     [IO.File]::WriteAllText($controlsFile,'{"gpuPriority":3}',[Text.UTF8Encoding]::new($false))
-    $sessionRoot=Join-Path $policyParent ('operations\game-session-'+[Guid]::NewGuid().ToString('N')+'\session')
-    $previewFile=Join-Path $gameDirectory 'preview.json'
     $sessionScript=Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'
-    $sessionPreview=(@(& $sessionScript -Action Preview -LauncherProcessId $launcher.Id -GamePath $gameExe -ControlsPath $controlsFile -PreviewPath $previewFile -AcceptLauncherScope -HostDirectory $hostDirectory -DotNetPath $DotNetPath) -join "`n")|ConvertFrom-Json
-    & $sessionScript -Action Start -PreviewPath $previewFile -ReviewHash $sessionPreview.data.reviewHash -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
-    $sessionActive=$true
     $gameRule=$rule.Clone();$gameRule.ruleId=[Guid]::NewGuid().ToString('N');$gameRule.name='Game rule';$gameRule.executablePath=$gameExe;$gameRule.cpuSelection=$null
     $gameRule.controls=@{gpuPriority=1};$gameRule.affinityTopologyHash=$null
+    function New-GameSessionPreview{
+        $directory=Join-Path $policyParent ('operations\game-session-'+[Guid]::NewGuid().ToString('N'))
+        [IO.Directory]::CreateDirectory($directory)|Out-Null
+        $file=Join-Path $directory 'preview.json'
+        $result=(@(& $sessionScript -Action Preview -LauncherProcessId $launcher.Id -GamePath $gameExe -ControlsPath $controlsFile -PreviewPath $file -AcceptLauncherScope -HostDirectory $hostDirectory -DotNetPath $DotNetPath) -join "`n")|ConvertFrom-Json
+        return [pscustomobject]@{file=$file;hash=$result.data.reviewHash;root=(Join-Path $directory 'session')}
+    }
+    $early=New-GameSessionPreview
+    Core 'rule-save' @{rule=$gameRule}|Out-Null
+    $earlyStart=$null;try {& $sessionScript -Action Start -PreviewPath $early.file -ReviewHash $early.hash -SessionRoot $early.root -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null} catch {$earlyStart=$_.Exception.Message}
+    & $sessionScript -Action Stop -SessionRoot $early.root -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
+    Note 'sessionAfterRule' ([ordered]@{startError=$earlyStart;worker=(Get-Content -LiteralPath (Join-Path $early.root 'worker-error.json') -Raw -ErrorAction SilentlyContinue)})
+    Assert ($null -ne $earlyStart -and -not (Test-Path -LiteralPath (Join-Path $early.root 'session.json'))) 'A game session reviewed before a rule was saved for the same field does not start'
+    Worker 'Pause'|Out-Null
+    $pausedPreview=$null;try {New-GameSessionPreview|Out-Null} catch {$pausedPreview=$_.Exception.Message}
+    Note 'sessionWhilePaused' $pausedPreview
+    Assert ($pausedPreview -like '*Managed by the governor: gpuPriority*') 'A paused rule still keeps its fields from a new game session'
+    Worker 'Resume'|Out-Null
+    Core 'rule-delete' @{ruleId=$gameRule.ruleId}|Out-Null
+    Worker 'Sync'|Out-Null
+    $session=New-GameSessionPreview
+    $sessionRoot=$session.root
+    & $sessionScript -Action Start -PreviewPath $session.file -ReviewHash $session.hash -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
+    $sessionActive=$true
     $sessionRefusal=$null;try {Core 'rule-save' @{rule=$gameRule}|Out-Null} catch {$sessionRefusal=$_.Exception.Message}
     Note 'gameSessionRefusal' $sessionRefusal
     Assert ($sessionRefusal -like 'A game session for RooIndustriesGovernorGame.exe already controls gpuPriority*') 'Saving a rule that overlaps a running game session is refused with a clear message'

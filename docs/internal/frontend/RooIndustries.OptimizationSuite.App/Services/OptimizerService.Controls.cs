@@ -194,8 +194,16 @@ public sealed partial class OptimizerService
         start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
         foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-        await process.StandardInput.BaseStream.WriteAsync(payload, cancellationToken);
-        process.StandardInput.Close();
+        try
+        {
+            await process.StandardInput.BaseStream.WriteAsync(payload, cancellationToken);
+            process.StandardInput.Close();
+        }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw;
+        }
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
         try { await process.WaitForExitAsync(cancellationToken); }
