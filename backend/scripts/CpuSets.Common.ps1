@@ -46,6 +46,7 @@ function New-RooIndustriesCpuSetPreview {
     $target = [RooIndustries.Optimization.CpuSets.Target]::new($TargetProcessId,$false)
     try {
         $identity = $target.Identity()
+        if (@(Get-RooIndustriesGovernorOwnedControls -ProcessId $identity.processId -ExecutablePath $identity.executablePath -CreationTimeFileTimeUtc $identity.creationTimeFileTimeUtc) -contains 'cpuSets') { throw $script:RooIndustriesGovernorManaged }
         $topology = @($target.Topology())
         $compatibility = Get-RooIndustriesCpuSetProtection $identity ($target.Protection())
         if ($compatibility.protected) { throw 'The protected-process catalog or Windows protection level excludes this target.' }
