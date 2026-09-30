@@ -76,7 +76,7 @@ function Describe-State {
     Mark 'acl'
     $result.appRunning=@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count
     $dll=Join-Path $app 'backend\bin\optimizer\Optimizer.Host.dll'
-    $result.hostFile=if(Test-Path -LiteralPath $dll){[ordered]@{lastWriteUtc=(Get-Item -LiteralPath $dll).LastWriteTimeUtc.ToString('o');sha256=(Get-FileHash -LiteralPath $dll).Hash}}else{$null}
+    $result.hostFile=if(Test-Path -LiteralPath $dll){[ordered]@{lastWriteUtc=(Get-Item -LiteralPath $dll).LastWriteTimeUtc.ToString("o");createdUtc=(Get-Item -LiteralPath $dll).CreationTimeUtc.ToString("o");sha256=(Get-FileHash -LiteralPath $dll).Hash}}else{$null}
     Mark 'hostFile'
     $result.bootUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
     Mark 'boot'
@@ -186,7 +186,7 @@ switch($Phase){
     'verify-replaced' {
         $s=Describe-State;$out.state=$s
         Check ($s.hostRunning -eq $true -and $s.hostPid -ne $state.recordedHostPid) 'A new governor worker runs after setup'
-        Check ($s.hostFile.lastWriteUtc -ne $state.recordedHostFile.lastWriteUtc) 'Setup replaced the host files'
+        Check ($s.hostFile.createdUtc -ne $state.recordedHostFile.createdUtc) 'Setup deleted and replaced the host files'
         Check ((@($s.ruleFiles|ForEach-Object {$_.sha256}) -join ',') -eq (@($state.recordedRules|ForEach-Object {$_.sha256}) -join ',')) 'Setup kept the saved rules byte for byte'
     }
     'verify-removed' {
