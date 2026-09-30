@@ -120,13 +120,16 @@ try {
     finally {$sha.Dispose()}
     $cpu=@($topology|Where-Object {$_.available -and $_.group -eq 0})[1]
     $gpu=if($original.gpuPriority -eq 1){2}else{1}
-    $wanted=[ordered]@{cpuPriority='AboveNormal';affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS='eco';priorityBoostDisabled=$true}
+        $cpuClass=if($original.cpuPriority -eq 'AboveNormal'){'High'}else{'AboveNormal'}
+        $io=if($original.ioPriority -eq 2){1}else{2}
+        $memory=if($original.memoryPriority -eq 3){4}else{3}
+    $wanted=[ordered]@{cpuPriority=$cpuClass;affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS='eco';priorityBoostDisabled=$true}
     Note 'originalControls' $original
     Note 'requestedControls' $wanted
-    Assert (-not (Same $original $wanted) -and $original.cpuPriority -ne 'AboveNormal' -and $original.ioPriority -ne 1 -and $original.memoryPriority -ne 3 -and $original.executionQoS -ne 'eco' -and -not $original.priorityBoostDisabled -and $original.affinity -ne '0x3' -and $original.cpuSets -eq '') 'Every requested control differs from the fresh process default'
+    Assert (-not (Same $original $wanted) -and  $original.executionQoS -ne 'eco' -and -not $original.priorityBoostDisabled -and $original.affinity -ne '0x3' -and $original.cpuSets -eq '') 'Every requested control differs from the fresh process default'
     $rule=@{schemaVersion=1;ruleId=[Guid]::NewGuid().ToString('N');owner=(Get-RooIndustriesOperationOwner);name='Disposable governor validation';enabled=$true
         matchMode='path';executablePath=$first.MainModule.FileName;executableHash=$null;affinityTopologyHash=$topologyHash
-        controls=@{cpuPriority='AboveNormal';affinity=@{group=0;mask='0x3'};ioPriority=1;gpuPriority=$gpu;memoryPriority=3;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
+        controls=@{cpuPriority=$cpuClass;affinity=@{group=0;mask='0x3'};ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
         cpuSelection=@{kind='logical';topologyHash=$topologyHash;processors=@(@{group=0;index=[int]$cpu.index});oneThreadPerCore=$false}}
 
     # (a) saving the first rule starts the governor and a new matching process gets all 8 controls
@@ -247,15 +250,15 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
 
     # Apply once refuses a field the governor owns
     $previewPath=Join-Path $root 'direct-preview.json'
-    Core 'process-preview' @{processId=$first.Id;controls=@{memoryPriority=4};outputPath=$previewPath}|Out-Null
+    Core 'process-preview' @{processId=$first.Id;controls=@{memoryPriority=5};outputPath=$previewPath}|Out-Null
     $directError=$null
     try {Core 'process-apply' @{previewPath=$previewPath;reviewHash=(Get-FileHash -LiteralPath $previewPath -Algorithm SHA256).Hash;journalPath=(Join-Path $root 'direct-journal.json')}|Out-Null} catch {$directError=$_.Exception.Message}
-    Assert ($directError -like 'Managed by the governor*' -and [RooIndustriesGovernorOracle]::Memory($first.Handle) -eq 3) 'Apply once refuses a process field that the governor owns'
+    Assert ($directError -like 'Managed by the governor*' -and [RooIndustriesGovernorOracle]::Memory($first.Handle) -eq $memory) 'Apply once refuses a process field that the governor owns'
 
     # bounded history: many short-lived processes leave at most 50 finished records and no orphan folders
     for($index=0;$index -lt 55;$index++){
         $short=Start-Probe
-        if($null -eq (Wait-Until {[RooIndustriesGovernorOracle]::Memory($short.Handle) -eq 3} 5)){throw 'A short-lived process did not get its rule.'}
+        if($null -eq (Wait-Until {[RooIndustriesGovernorOracle]::Memory($short.Handle) -eq $memory} 5)){throw 'A short-lived process did not get its rule.'}
         $short.Kill();$short.WaitForExit()
     }
     $bounded=Wait-Until {$instances=@((Core 'policy-status').state.instances);@($instances|Where-Object {$_.status -notin @('restored','expired')}).Count -le 3 -and @($instances|Where-Object {$_.status -in @('restored','expired')}).Count -eq 50} 20 500
