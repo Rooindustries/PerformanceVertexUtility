@@ -7,7 +7,7 @@ namespace RooIndustries.Optimizer;
 
 sealed class PrivilegeScope : IDisposable
 {
-    private static readonly object Gate = new();
+    internal static readonly object Gate = new();
     private readonly SafeFileHandle _token;
     private readonly List<TokenPrivileges> _previous = [];
     private bool _disposed;

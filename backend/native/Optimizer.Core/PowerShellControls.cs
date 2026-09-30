@@ -35,16 +35,23 @@ static class PowerShellControls
                 if (batch.Count > 0 && Encoded(new { action = "read-batch", addresses = batch.Append(address) }).Length > 24000) break;
                 batch.Add(address);
             }
-            var done = ReadBatch(batch, results);
+            var (done, stray) = ReadBatch(batch, results);
             remaining = remaining.Skip(done).ToList();
+            if (!stray) continue;
+            foreach (var address in remaining)
+            {
+                try { results[address] = (Read(address), null); }
+                catch (Exception error) { results[address] = (null, error); }
+            }
+            break;
         }
         return results;
     }
-    private static int ReadBatch(List<ControlAddress> batch, Dictionary<ControlAddress, (TweakControlRead?, Exception?)> results)
+    private static (int Done, bool Stray) ReadBatch(List<ControlAddress> batch, Dictionary<ControlAddress, (TweakControlRead?, Exception?)> results)
     {
         Process process;
         try { process = Start(new { action = "read-batch", addresses = batch }); }
-        catch (Exception error) { results[batch[0]] = (null, error); return 1; }
+        catch (Exception error) { results[batch[0]] = (null, error); return (1, false); }
         using (process)
         {
             process.StandardInput.Close();
@@ -55,38 +62,42 @@ static class PowerShellControls
                 finally { lines.CompleteAdding(); }
             });
             var errors = process.StandardError.ReadToEndAsync();
-            var done = 0; var stray = new StringBuilder();
+            var done = 0; var stray = new StringBuilder(); var budget = Stopwatch.StartNew();
             while (done < batch.Count)
             {
-                if (!lines.TryTake(out var line, ReadTimeout))
+                var left = ReadTimeout - budget.Elapsed;
+                if (!lines.TryTake(out var line, left > TimeSpan.Zero ? left : TimeSpan.Zero))
                 {
                     if (lines.IsCompleted) break;
                     Stop(process, reader);
                     results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds."));
-                    return done + 1;
+                    return (done + 1, false);
                 }
                 var json = Payload(line, done);
                 if (json is null) { stray.Append(line).Append(Environment.NewLine); continue; }
                 try { results[batch[done]] = (Parse(Result(stray + json)), null); }
                 catch (Exception error) { results[batch[done]] = (null, error); }
-                stray.Clear(); done++;
+                done++; budget.Restart();
+                if (stray.Length > 0) { Stop(process, reader); return (done, true); }
             }
             if (!process.WaitForExit(ReadTimeout))
             {
                 Stop(process, reader);
-                if (done < batch.Count) { results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds.")); return done + 1; }
-                return done;
+                if (done < batch.Count) { results[batch[done]] = (null, new IOException("The Windows control helper timed out after 120 seconds.")); return (done + 1, false); }
+                return (done, false);
             }
-            reader.Wait();
-            if (done == batch.Count) return done;
+            Exception? readFailure = null;
+            try { reader.Wait(); } catch (AggregateException error) { readFailure = error.InnerException ?? error; }
+            if (done == batch.Count) return (done, false);
             try
             {
+                if (readFailure is not null) throw readFailure;
                 errors.Wait();
                 if (process.ExitCode != 0) throw new IOException("Windows control helper exited " + process.ExitCode + ": " + errors.Result.Trim() + " " + stray.ToString().Trim());
                 results[batch[done]] = (Parse(Result(stray.ToString())), null);
             }
             catch (Exception error) { results[batch[done]] = (null, error); }
-            return done + 1;
+            return (done + 1, stray.Length > 0);
         }
     }
     private static string? Payload(string line, int expected)
@@ -124,6 +135,6 @@ static class PowerShellControls
         foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes("$packed=New-Object IO.MemoryStream(,[Convert]::FromBase64String($env:ROO_INDUSTRIES_CONTROL_HELPER)); $source=(New-Object IO.StreamReader((New-Object IO.Compression.GZipStream($packed,[IO.Compression.CompressionMode]::Decompress)),[Text.Encoding]::UTF8)).ReadToEnd(); & ([ScriptBlock]::Create($source))")) }) start.ArgumentList.Add(argument);
         start.Environment["ROO_INDUSTRIES_CONTROL_HELPER"] = Convert.ToBase64String(packed.ToArray());
         start.Environment["ROO_INDUSTRIES_CONTROL_REQUEST"] = Encoded(request);
-        return Process.Start(start) ?? throw new IOException("Could not start the Windows control helper.");
+        lock (PrivilegeScope.Gate) return Process.Start(start) ?? throw new IOException("Could not start the Windows control helper.");
     }
 }
