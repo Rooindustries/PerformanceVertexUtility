@@ -242,7 +242,7 @@ public sealed class ProcessPolicyHost
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
     private readonly Dictionary<string, DateTime> _restoreAttempts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _unavailable = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Message, DateTime Retry, TimeSpan Delay)> _unavailable = new(StringComparer.Ordinal);
     private readonly List<string> _pruned = [];
     private int _enabledRules = -1;
     private PolicyHostState _state;
@@ -378,14 +378,17 @@ public sealed class ProcessPolicyHost
                         identity = target.Identity();
                         key = rule.RuleId + "|" + hash + "|" + identity.ProcessId + "|" + identity.CreationTimeFileTimeUtc;
                         live.Add(key);
-                        if (_unavailable.TryGetValue(key, out var known)) { _state.Issues.Add(new(rule.RuleId, processId, identity.ExecutablePath, known)); continue; }
+                        if (_unavailable.TryGetValue(key, out var known) && DateTime.UtcNow < known.Retry) { _state.Issues.Add(new(rule.RuleId, processId, identity.ExecutablePath, known.Message)); continue; }
                         if (rule.Controls.ContainsKey("affinity") && CpuSelection.Fingerprint(target.Topology()) != rule.AffinityTopologyHash)
                             throw new InvalidDataException("CPU topology changed; review the saved hard-affinity selection.");
                     }
                     if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, identity.ExecutablePath, StringComparison.OrdinalIgnoreCase)) continue;
                     if (_state.Instances.Any(instance => instance.RuleId == rule.RuleId && instance.RuleHash == hash && instance.Process == identity && instance.Status is not ("restored" or "expired"))) continue;
                     if (rule.ExecutableHash is not null && !string.Equals(OperationFiles.HashFile(identity.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _unavailable[key] = ("The executable changed and needs review.", DateTime.MaxValue, TimeSpan.MaxValue);
                         throw new InvalidDataException("The executable changed and needs review.");
+                    }
                     var preview = _engine.Preview(identity.ProcessId, rule.Controls, rule.CpuSelection);
                     identity.Verify(preview.Identity);
                     var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
@@ -417,7 +420,11 @@ public sealed class ProcessPolicyHost
                     if (created is not null && created.Status == "applying") Discard(created);
                     _state.Errors.Add(rule.Name + ": " + error.Message);
                     _state.Issues.Add(new(rule.RuleId, processId, identity?.ExecutablePath, error.Message));
-                    if (key is not null) _unavailable[key] = error.Message;
+                    if (key is not null && !(_unavailable.TryGetValue(key, out var previous) && previous.Retry == DateTime.MaxValue))
+                    {
+                        var delay = _unavailable.TryGetValue(key, out var earlier) ? TimeSpan.FromSeconds(Math.Min(60, earlier.Delay.TotalSeconds * 2)) : TimeSpan.FromSeconds(1);
+                        _unavailable[key] = (error.Message, DateTime.UtcNow + delay, delay);
+                    }
                 }
             }
         }
