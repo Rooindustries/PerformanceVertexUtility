@@ -124,8 +124,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         _lastBackupPath = savedRecovery?.Path;
         _lastBackupId = savedRecovery?.Id;
         _lastBackupGeneration = savedRecovery?.Generation;
+        var wasAvailable = RestoreAvailable;
         RestoreAvailable = _lastBackupPath is not null;
-        RestoreHint = RestoreAvailable ? "Restore is ready" : "Apply creates a restore point";
+        if (!Quiet || wasAvailable != RestoreAvailable) RestoreHint = RestoreAvailable ? "Restore is ready" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 
         ApplyFilter();
@@ -539,11 +540,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 r.Plan.Contains(query, StringComparison.OrdinalIgnoreCase));
         }
 
-        Rows.Clear();
-        foreach (var r in source)
-        {
-            Rows.Add(r);
-        }
+        Rows.SyncWith(source);
     }
 
     private async Task RefreshSessionStatusesAsync()

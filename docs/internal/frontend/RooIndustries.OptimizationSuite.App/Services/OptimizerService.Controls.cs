@@ -162,6 +162,8 @@ public sealed partial class OptimizerService
         return result.ToArray();
     }
 
+    private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
+
     private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null, Action<ReadOnlyMemory<byte>>? partial = null)
     {
         var elapsed = Stopwatch.StartNew();
@@ -218,32 +220,35 @@ public sealed partial class OptimizerService
         };
         start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
         foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-        try
-        {
-            await process.StandardInput.BaseStream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
-            process.StandardInput.Close();
-        }
-        catch
-        {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
-            throw;
-        }
-        var output = ReadAllAsync(process.StandardOutput.BaseStream, partial);
+        using var process = await Task.Run(() => Process.Start(start)).ConfigureAwait(false) ?? throw new InvalidOperationException("The optimizer helper did not start.");
+        HostPriority.Value?.Register(process);
+        using var stop = new CancellationTokenSource();
+        using var abandon = new CancellationTokenSource();
+        var output = HostOutput.ReadAsync(process.StandardOutput.BaseStream, partial, () => stop.IsCancellationRequested, abandon.Token);
         var errors = process.StandardError.ReadToEndAsync();
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout is { } duration) limit.CancelAfter(duration);
+        var written = HostOutput.TryWriteRequestAsync(process.StandardInput.BaseStream, payload, CancellationToken.None);
         try { await process.WaitForExitAsync(limit.Token).ConfigureAwait(false); }
         catch (OperationCanceledException)
         {
+            stop.Cancel();
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync().ConfigureAwait(false);
+            _ = output.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            _ = written.ContinueWith(task => task.Exception, TaskScheduler.Default);
             if (cancellationToken.IsCancellationRequested) throw;
             AppLog.Write("helper", action + " timed out.");
             throw new TimeoutException(AppLog.TimedOut);
         }
+        if (!await written.ConfigureAwait(false)) AppLog.Write("helper", action + " exited before reading its request.");
+        if (await Task.WhenAny(output, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false) != output)
+        {
+            AppLog.Write("helper", action + " output stayed open after the helper exited.");
+            abandon.Cancel();
+        }
         var text = await output.ConfigureAwait(false);
-        var stderr = await errors.ConfigureAwait(false);
+        var stderr = await Task.WhenAny(errors, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false) == errors ? await errors.ConfigureAwait(false) : "";
         if (text.Span.Trim(" \t\r\n"u8).IsEmpty)
         {
             AppLog.Write("helper", action + " exited with code " + process.ExitCode);
@@ -260,31 +265,4 @@ public sealed partial class OptimizerService
         return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
     }
 
-    private static async Task<ReadOnlyMemory<byte>> ReadAllAsync(Stream stream, Action<ReadOnlyMemory<byte>>? partial)
-    {
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        var start = 0;
-        var scanned = 0;
-        for (int read; (read = await stream.ReadAsync(chunk).ConfigureAwait(false)) > 0;)
-        {
-            buffer.Write(chunk, 0, read);
-            while (partial is not null)
-            {
-                var pending = new ReadOnlyMemory<byte>(buffer.GetBuffer(), start, checked((int)buffer.Length) - start);
-                var trimmed = pending.Span.StartsWith("\uFEFF"u8) ? 3 : 0;
-                if (!pending.Span[trimmed..].StartsWith(PartialPrefix)) break;
-                var end = pending.Span[scanned..].IndexOf((byte)'\n');
-                if (end < 0) { scanned = pending.Length; break; }
-                end += scanned;
-                var line = pending[(trimmed + PartialPrefix.Length)..end];
-                try { partial(line.ToArray()); } catch (Exception error) { AppLog.Write("helper", "Partial result ignored: " + error.Message); }
-                start += end + 1; scanned = 0;
-            }
-        }
-        var bytes = new ReadOnlyMemory<byte>(buffer.GetBuffer(), start, checked((int)buffer.Length) - start);
-        if (bytes.Span.StartsWith("\uFEFF"u8)) bytes = bytes[3..];
-        return partial is not null && bytes.Span.StartsWith(PartialPrefix) ? ReadOnlyMemory<byte>.Empty : bytes;
-    }
-    private static ReadOnlySpan<byte> PartialPrefix => "ROO-PARTIAL "u8;
 }

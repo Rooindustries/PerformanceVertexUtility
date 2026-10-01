@@ -29,9 +29,9 @@ public sealed partial class MainWindow : Window
 
     private string _currentTag;
     private bool _onSettings;
-    private readonly string _pendingTag;
-    private readonly bool _pendingSettings;
-    private readonly string? _ownershipPath;
+    private string _pendingTag;
+    private bool _pendingSettings;
+    private string? _ownershipPath;
 
     public MainWindow() : this("dashboard", false)
     {
@@ -133,6 +133,13 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
+    }
+
+    public void OpenOwnershipReview(string path)
+    {
+        if (!Nav.IsLoaded) { _pendingTag = "windows"; _pendingSettings = false; _ownershipPath = path; return; }
+        SelectNav("windows");
+        if (ContentFrame.Content is WindowsTweaksPage page) _ = page.ShowOwnershipAsync(path, confirm: true);
     }
 
     public void OpenAppGroup(string group)

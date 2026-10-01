@@ -954,6 +954,7 @@ Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\
 Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1") == TimeSpan.FromSeconds(45) && RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1"),
     "Other backend scripts keep the 45 second limit and stop their whole process tree");
 await BulkRemovalChecks.RunAsync(Check);
+await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

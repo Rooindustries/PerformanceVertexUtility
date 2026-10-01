@@ -49,6 +49,11 @@ public partial class CpuSetsViewModel : ObservableObject
     partial void OnHasReviewChanged(bool value) => RefreshCommands();
     partial void OnRestoreAvailableChanged(bool value) => RefreshCommands();
     partial void OnUseWindowsDefaultChanged(bool value) { InvalidateReview(); RefreshCommands(); }
+    public void NoteChanged()
+    {
+        Status = "Settings changed elsewhere";
+        Detail = "Choose the application again, or clear it, to read its current CPU selection.";
+    }
     partial void OnSelectedProcessChanged(CpuProcessChoice? value)
     {
         InvalidateReview();

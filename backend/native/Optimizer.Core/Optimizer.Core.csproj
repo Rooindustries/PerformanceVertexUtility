@@ -7,6 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <DefineConstants Condition="'$(GovernorTestHooks)' == 'true'">$(DefineConstants);GOVERNOR_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(RooTestHooks)' == 'true'">
+    <DefineConstants>$(DefineConstants);ROO_TEST_HOOKS</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="OptimizerCore" />
     <EmbeddedResource Include="WindowsControls.ps1" />

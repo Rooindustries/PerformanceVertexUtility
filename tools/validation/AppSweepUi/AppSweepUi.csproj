@@ -28,5 +28,6 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Format.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/LocalDisplayFilter.cs" Link="LocalDisplayFilter.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Naming.cs" Link="Naming.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/CollectionHelpers.cs" Link="CollectionHelpers.cs" />
   </ItemGroup>
 </Project>
