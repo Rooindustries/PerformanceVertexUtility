@@ -9,6 +9,7 @@ if($LASTEXITCODE -ne 0){throw 'Frontend build failed'}
 
 & $DotNetPath run --project (Join-Path $root 'tools/validation/AppSweepUi/AppSweepUi.csproj') --configuration Release
 if($LASTEXITCODE -ne 0){throw 'App state checks failed'}
+& (Join-Path $root 'tools/validation/AppSweepUi/Test-GovernorTask.ps1') -DotNetPath $DotNetPath
 & $DotNetPath run --project (Join-Path $root 'tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj') --configuration Release -- $root
 if($LASTEXITCODE -ne 0){throw 'Windows settings UI checks failed'}
 & $DotNetPath run --project (Join-Path $root 'tools/validation/ActionRunner/ActionRunner.csproj') --configuration Release

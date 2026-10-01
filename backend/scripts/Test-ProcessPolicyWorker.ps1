@@ -188,8 +188,9 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     Assert ((Test-Path -LiteralPath $ruleFile) -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'rules\planted.json')) -and (Test-Path -LiteralPath $policyParent)) 'The rules folder is unchanged after the denied attempts'
 
     # (b) killing the governor: it restarts on its own, reconciles journals and keeps undo working
-    $firstInstance=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $first.Id -and $_.status -eq 'active'})
-    Assert ($firstInstance.Count -eq 1) 'The running process has one active journal before the crash'
+    $firstRecords=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $first.Id -and $_.status -eq 'active'})
+    Assert ($firstRecords.Count -eq 8 -and @($firstRecords|ForEach-Object {$_.field}|Sort-Object -Unique).Count -eq 8) 'The running process has one active journal per field before the crash'
+    $firstInstance=@($firstRecords|Where-Object {$_.field -eq 'memoryPriority'})
     $killedAt=[DateTime]::UtcNow
     $workerProcess=Get-Process -Id $workerIdentity.processId
     Assert ($workerProcess.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -eq $workerIdentity.creationTimeFileTimeUtc) 'The crash test targets the exact governor instance'
@@ -209,7 +210,8 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
     Assert ($null -ne $restartSeconds -and $restartSeconds -le 125) 'The scheduled task restarts a killed governor within about two minutes without the app'
     $reconciled=Wait-Until {Same (Read-Controls $first) $wanted} 10
     $after=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $first.Id -and $_.status -notin @('restored','expired')})
-    Assert ($null -ne $reconciled -and $after.Count -eq 1 -and $after[0].journalPath -eq $firstInstance[0].journalPath -and $after[0].status -eq 'active' -and (Read-RooIndustriesOperationJson $after[0].journalPath).data.status -eq 'applied') 'The restarted governor reconciles the crashed journal, finishes the interrupted write and keeps the same recovery record'
+    $afterMemory=@($after|Where-Object {$_.field -eq 'memoryPriority'})
+    Assert ($null -ne $reconciled -and $after.Count -eq 8 -and $afterMemory.Count -eq 1 -and $afterMemory[0].journalPath -eq $firstInstance[0].journalPath -and $afterMemory[0].status -eq 'active' -and (Read-RooIndustriesOperationJson $afterMemory[0].journalPath).data.status -eq 'applied') 'The restarted governor reconciles the crashed journal, finishes the interrupted write and keeps the same recovery record'
     $third=Start-Probe
     Assert ($null -ne (Wait-Until {Same (Read-Controls $third) $wanted} 10)) 'A process started after the restart gets its rules'
 
@@ -259,7 +261,7 @@ $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
         if($null -eq (Wait-Until {[RooIndustriesGovernorOracle]::Memory($short.Handle) -eq $memory} 5)){throw 'A short-lived process did not get its rule.'}
         $short.Kill();$short.WaitForExit()
     }
-    $bounded=Wait-Until {$instances=@((Core 'policy-status').state.instances);@($instances|Where-Object {$_.status -notin @('restored','expired')}).Count -le 3 -and @($instances|Where-Object {$_.status -in @('restored','expired')}).Count -eq 50} 20 500
+    $bounded=Wait-Until {$instances=@((Core 'policy-status').state.instances);@($instances|Where-Object {$_.status -notin @('restored','expired')}).Count -le 24 -and @($instances|Where-Object {$_.status -in @('restored','expired')}).Count -eq 50} 20 500
     $instances=@((Core 'policy-status').state.instances)
     $folders=@(Get-ChildItem -LiteralPath (Join-Path $policyRoot 'operations') -Directory)
     Note 'historyAfter55ShortProcesses' ([ordered]@{instances=$instances.Count;finished=@($instances|Where-Object {$_.status -in @('restored','expired')}).Count;operationFolders=$folders.Count})
@@ -310,16 +312,16 @@ public static class RooIndustriesGovernorDenied {
     $deniedIssues=@($deniedState.issues|Where-Object {$_.processId -eq $deniedNow.Id})
     $deniedInstances=@($deniedState.instances|Where-Object {$_.process.processId -eq $deniedNow.Id})
     Note 'deniedAtStart' ([ordered]@{cpuPercentOfOneCoreWhileDenied=$deniedCpu;issues=@($deniedIssues|ForEach-Object {$_.message});instances=$deniedInstances.Count;controls=(Read-Controls $deniedNow)})
-    Assert ($deniedInstances.Count -eq 0 -and $deniedIssues.Count -eq 1 -and $deniedIssues[0].message -like '*Win32 5*' -and (Same (Read-Controls $deniedNow) $deniedBaseline)) 'A process that denies access at start is shown unavailable and never applied'
+    Assert ($deniedInstances.Count -eq 0 -and $deniedIssues.Count -eq 1 -and $deniedIssues[0].message -like '*Win32 5*' -and $deniedIssues[0].kind -eq 'denied' -and (Same (Read-Controls $deniedNow) $deniedBaseline)) 'A process that denies access at start is shown unavailable and never applied'
     Assert ($deniedCpu -lt 5) ('Denied access does not cause a retry storm ('+$deniedCpu+'% of one core over 30 s)')
     $deniedLater=[Diagnostics.Process]::Start([Diagnostics.ProcessStartInfo]@{FileName=$deniedExe;Arguments='5 120';UseShellExecute=$false;CreateNoWindow=$true});$probes.Add($deniedLater)
     Assert ($null -ne (Wait-Until {Same (Read-Controls $deniedLater) $wanted} 4)) 'A process that denies access later first gets its rules'
-    $stepped=Wait-Until {@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $deniedLater.Id -and $_.status -eq 'conflict' -and $_.error -like '*Win32 5*'}).Count -eq 1} 15 500
+    $stepped=Wait-Until {$records=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $deniedLater.Id -and $_.status -notin @('restored','expired')});$records.Count -eq 8 -and @($records|Where-Object {$_.errorKind -eq 'denied' -and $_.error -like '*Win32 5*'}).Count -eq 8} 15 500
     Assert ($null -ne $stepped) 'After the process denies access its record steps back with the access error, shown as unavailable'
     $deniedPaused=Worker 'Pause'
     $reported=@($deniedPaused.worker.state.instances|Where-Object {$_.process.processId -eq $deniedLater.Id})
     Note 'deniedAfterApplyPause' ([ordered]@{status=$reported[0].status;error=$reported[0].error;stateStatus=$deniedPaused.worker.state.status;controls=(Read-Controls $deniedLater)})
-    Assert ($reported.Count -eq 1 -and $reported[0].status -eq 'conflict' -and $reported[0].error -like '*Win32 5*' -and $deniedPaused.worker.state.status -eq 'stoppedWithConflicts' -and (Same (Read-Controls $deniedLater) $wanted)) 'Pause cannot restore a process that denies access and reports it instead of claiming success'
+    Assert ($reported.Count -eq 8 -and @($reported|Where-Object {$_.status -eq 'conflict' -and $_.errorKind -eq 'denied' -and $_.error -like '*Win32 5*'}).Count -eq 8 -and $deniedPaused.worker.state.status -eq 'stoppedWithConflicts' -and (Same (Read-Controls $deniedLater) $wanted)) 'Pause cannot restore a process that denies access and reports it instead of claiming success'
     foreach($fixture in @($deniedNow,$deniedLater)){$fixture.Kill();$fixture.WaitForExit()}
     Worker 'Resume'|Out-Null
     Core 'rule-delete' @{ruleId=$deniedRule.ruleId}|Out-Null
