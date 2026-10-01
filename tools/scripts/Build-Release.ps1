@@ -124,7 +124,7 @@ Invoke-Obfuscar $obfuscar $appOut @('Optimizer.Core.dll', 'RooIndustries.Optimiz
 
 $backend = Join-Path $repoRoot 'backend'
 $buildOnlyScripts = @('Test-*.ps1', 'Measure-Optimizer*.ps1', 'Measure-ProcessControlFootprint.ps1', 'Validation.Common.ps1', 'Get-RooIndustriesValidationTempArtifacts.ps1', 'Build-OptimizerHost.ps1')
-Copy-Tree (Join-Path $backend 'scripts') (Join-Path $stage 'backend\scripts') @('*.ps1') $buildOnlyScripts
+Copy-Tree (Join-Path $backend 'scripts') (Join-Path $stage 'backend\scripts') @('*.ps1', '*.cmd') $buildOnlyScripts
 Copy-Tree (Join-Path $backend 'catalogs') (Join-Path $stage 'backend\catalogs') @('windows-tweaks.json', 'firmware-write-tests.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')
 Copy-Tree (Join-Path $backend 'capabilities') (Join-Path $stage 'backend\capabilities') @('*.json')
 Copy-Tree (Join-Path $backend 'profiles') (Join-Path $stage 'backend\profiles') @('*.json')
