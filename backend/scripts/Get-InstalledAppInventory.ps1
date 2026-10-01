@@ -155,11 +155,16 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
 
 
 if ($IncludeWinget) {
-    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    $winget = $null
+    $installer = @(Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1)
+    if ($installer.Count -eq 1 -and $installer[0].InstallLocation) {
+        $candidate = Join-Path $installer[0].InstallLocation 'winget.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $winget = $candidate }
+    }
     if ($winget) {
         $sources.Add('winget') | Out-Null
         try {
-            $wingetPath = [string]$winget.Source
+            $wingetPath = [string]$winget
             $lines = @(& $wingetPath list --accept-source-agreements --disable-interactivity 2>$null)
             foreach ($line in $lines) {
                 if ([string]::IsNullOrWhiteSpace($line)) { continue }

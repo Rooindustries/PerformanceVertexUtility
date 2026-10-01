@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Invoke-SystemTool([string]$name,[string[]]$arguments){
-    $output=& (Join-Path $env:SystemRoot ('System32\'+$name)) @arguments 2>&1
+    $output=& (Join-Path ([Environment]::GetFolderPath('System')) $name) @arguments 2>&1
     if($LASTEXITCODE -ne 0){throw ($name+' exited '+$LASTEXITCODE+': '+($output -join ' '))}
     return ($output -join [Environment]::NewLine)
 }

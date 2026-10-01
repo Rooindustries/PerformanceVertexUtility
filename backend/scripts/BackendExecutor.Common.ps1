@@ -28,9 +28,9 @@ function Join-RooIndustriesBackendExecutorArguments {
 }
 
 function Resolve-RooIndustriesPowerShellExePath {
-    $candidate = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    if (Test-Path -LiteralPath $candidate) { return $candidate }
-    return 'powershell.exe'
+    $candidate = Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
+    if (-not (Test-Path -LiteralPath $candidate)) { throw 'Windows PowerShell was not found in the Windows system folder.' }
+    return $candidate
 }
 
 function Invoke-RooIndustriesBackendHiddenProcess {
