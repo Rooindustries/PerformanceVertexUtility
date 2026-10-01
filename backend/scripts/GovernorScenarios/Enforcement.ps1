@@ -455,6 +455,12 @@ function Test-ScenarioRuleFileUnreadable {
     Note 'damaged' ([ordered]@{unreadableRules=$summary.unreadableRules;rulesError=$summary.rulesError;rules=$summary.rules;errors=$state.errors;status=$state.status})
     Assert (@($summary.unreadableRules).Count -eq 1 -and @($summary.unreadableRules)[0] -like ('*'+$ruleB.ruleId+'.json*') -and -not $summary.rulesError -and $state.status -eq 'running') 'The damaged file is named and the governor keeps running'
     Assert ((Read-Field $b 'cpuPriority') -eq 'Normal') 'The app of the damaged rule is given its original setting back'
+    Worker 'Pause'|Out-Null
+    $resumed=$null;$resumeError=$null
+    try {$resumed=Worker 'Resume'} catch {$resumeError=$_.Exception.Message}
+    Note 'resumeWithDamagedFile' ([ordered]@{error=$resumeError;running=$(if($resumed){$resumed.worker.hostRunning})})
+    Assert ($null -eq $resumeError -and $resumed.worker.hostRunning -eq $true) 'Start governor works while one rule file is damaged'
+    Assert ($null -ne (Wait-Field $a 'cpuPriority' 'AboveNormal' 10)) 'The readable rule is applied again after the restart'
     [IO.File]::WriteAllBytes($file,$good)
     Assert ($null -ne (Wait-Field $b 'cpuPriority' 'BelowNormal' 10)) 'Once the file can be read again its rule applies again'
 }
