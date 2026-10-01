@@ -43,20 +43,21 @@ public static class RuntimeEnvironment
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var commonFiles = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles);
-        var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var profileDrive = Path.GetPathRoot(profile)!.TrimEnd('\\');
+        var systemDrive = Path.GetPathRoot(windows)!.TrimEnd('\\');
+        var programData = ProfileListFolder("ProgramData", systemDrive) ?? Path.Combine(systemDrive + "\\", "ProgramData");
         var temp = ProtectedTemp(windows);
         var child = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["SystemRoot"] = windows, ["windir"] = windows, ["SystemDrive"] = Path.GetPathRoot(windows)!.TrimEnd('\\'), ["ComSpec"] = Path.Combine(system, "cmd.exe"),
+            ["SystemRoot"] = windows, ["windir"] = windows, ["SystemDrive"] = systemDrive, ["ComSpec"] = Path.Combine(system, "cmd.exe"),
             ["PATH"] = string.Join(';', system, windows, Path.Combine(system, "Wbem"), Path.Combine(system, "WindowsPowerShell", "v1.0")),
             ["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC",
             ["TEMP"] = temp, ["TMP"] = temp, ["PSModulePath"] = ModulePath,
             ["ProgramFiles"] = programFiles, ["ProgramW6432"] = programFiles, ["ProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
             ["CommonProgramFiles"] = commonFiles, ["CommonProgramW6432"] = commonFiles, ["CommonProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
-            ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = PublicFolder() ?? Path.Combine(Path.GetDirectoryName(profile)!, "Public"),
+            ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = ProfileListFolder("Public", systemDrive) ?? Path.Combine(Path.GetDirectoryName(profile)!, "Public"),
             ["USERPROFILE"] = profile, ["HOMEDRIVE"] = profileDrive, ["HOMEPATH"] = profile[profileDrive.Length..],
-            ["LOCALAPPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ["APPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            ["LOCALAPPDATA"] = Path.Combine(profile, "AppData", "Local"), ["APPDATA"] = Path.Combine(profile, "AppData", "Roaming"),
             ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = UserDomain(), ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(system, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -103,14 +104,18 @@ public static class RuntimeEnvironment
         catch (InvalidOperationException) { return Environment.MachineName; }
     }
 
-    private static string? PublicFolder()
+    private static string? ProfileListFolder(string name, string systemDrive)
     {
-        if (SHGetKnownFolderPath(new Guid("DFDF76A2-C82A-4D63-906A-5644AC457385"), 0, IntPtr.Zero, out var path) != 0) return null;
-        try { return Marshal.PtrToStringUni(path); }
-        finally { Marshal.FreeCoTaskMem(path); }
+        try
+        {
+            using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList");
+            if (key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string { Length: > 0 } raw) return null;
+            var path = raw.Replace("%SystemDrive%", systemDrive, StringComparison.OrdinalIgnoreCase);
+            return path.Contains('%') || !Path.IsPathFullyQualified(path) ? null : path;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
     }
-
-    [DllImport("shell32.dll")] private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid folder, uint flags, IntPtr token, out IntPtr path);
 
     public static void Sanitize()
     {
