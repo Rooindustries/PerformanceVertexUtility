@@ -75,7 +75,8 @@ public abstract partial class PageViewModelBase : ObservableObject
         if (own is null) return;
         _own = null;
         DataGeneration.EndOwn();
-        if (_loadedGeneration >= 0 && _loadedGeneration == _ownBefore && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(_ownBefore, own)) _loadedGeneration = DataGeneration.Current;
+        if (_loadedGeneration >= 0 && _loadedGeneration == _ownBefore && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(_ownBefore, own)) _loadedGeneration = _ownBefore + own.Bumps;
+        else _ = RevalidateAsync();
     }
 
     protected void KeepStale() => _keepStale = true;

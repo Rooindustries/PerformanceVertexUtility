@@ -16,6 +16,12 @@ static class FreshnessChecks
             Console.WriteLine((passed ? "PASS " : "FAIL ") + name);
             if (!passed) failures.Add(name);
         }
+        static void AsForeign(Action action)
+        {
+            var thread = new Thread(() => action());
+            using (ExecutionContext.SuppressFlow()) thread.Start();
+            thread.Join();
+        }
         static async Task Until(Func<bool> condition) { for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(20); }
         async Task<(Fixture Fixture, WindowsTweaksViewModel Model)> Load(string name)
         {
@@ -224,22 +230,72 @@ static class FreshnessChecks
             var fourth = (await reads.ReadAsync("settle", TimeSpan.FromMinutes(1), Read, settle: settle)).Value;
             return first == "read-1" && second == "read-2" && third == "read-3" && fourth == "read-3";
         });
-        await Scenario("The result of an apply is not replaced when the page revalidates after its own change", async () =>
+        await Scenario("The result of a restore is not replaced when the page revalidates after its own change", async () =>
         {
-            var (fixture, model) = await Load("apply-result");
+            var fixture = new Fixture(Path.Combine(root, "restore-result")) { Missing = false };
+            var plan = fixture.Engine.Preview("my-settings", [new("setting", "off")]);
+            var file = Path.Combine(Path.GetTempPath(), "roo-restore-result-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
+            try { fixture.Engine.Apply(file, OperationFiles.HashFile(file)); } finally { File.Delete(file); }
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            Action settled = () => _ = model.RevalidateAsync();
+            DataGeneration.Settled += settled;
+            try
+            {
+                fixture.AfterStatus = () => Task.Delay(150);
+                await model.ReviewRestoreCommand.ExecuteAsync(null);
+                model.Approved = true;
+                await model.ApplyCommand.ExecuteAsync(null);
+                await Until(() => !model.Busy);
+                await Task.Delay(400);
+                return fixture.Applies == 1 && model.Status == "Windows settings saved" && model.StaleNotice.Length == 0 && !model.Busy;
+            }
+            finally { DataGeneration.Settled -= settled; fixture.AfterStatus = null; }
+        });
+        await Scenario("A foreign change that settles while the page is busy with a review is noticed when the review ends", async () =>
+        {
+            var (fixture, model) = await Load("busy-review");
             Action settled = () => _ = model.RevalidateAsync();
             DataGeneration.Settled += settled;
             try
             {
                 model.Rows[0].ToggleOn = true;
+                fixture.BeforePreview = () => { fixture.BeforePreview = null; AsForeign(() => { using (DataGeneration.BeginChange()) { } }); return Task.CompletedTask; };
                 await model.ReviewCommand.ExecuteAsync(null);
-                model.Approved = true;
-                await model.ApplyCommand.ExecuteAsync(null);
-                await Until(() => !model.Busy);
-                await Task.Delay(300);
-                return fixture.Applies == 1 && model.Status == "Windows settings saved" && model.Detail.Length > 0 && model.StaleNotice.Length == 0 && !model.Busy && model.Rows[0].Current == "On";
+                await Until(() => model.StaleNotice.Length > 0);
+                return model.StaleNotice.Length > 0 && !model.Busy;
             }
             finally { DataGeneration.Settled -= settled; }
+        });
+        await Scenario("Clearing the selection and picking one setting sends only that pick after a change elsewhere", async () =>
+        {
+            var first = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "First");
+            var second = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Second");
+            var third = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Third");
+            TweakDefinition Setting(string id, RegistryAddress address) => new(id, id, "Apps", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Fixture", "fixture", "isolated UI validation")]);
+            var fixture = new Fixture(Path.Combine(root, "clear-then-pick"), new TweakCatalog(1, "three", [Setting("first", first), Setting("second", second), Setting("third", third)], [])) { Missing = false };
+            fixture.Choices.Save(fixture.Catalog, "my-settings", [new("first", "on"), new("second", "on")], null);
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ClearSelectionCommand.Execute(null);
+            var row = model.Rows.Single(item => item.Id == "third");
+            row.Selected = row.Choices.Single(choice => choice.Id == "on");
+            using (DataGeneration.BeginChange()) { }
+            await model.RevalidateAsync();
+            await model.ReviewCommand.ExecuteAsync(null);
+            var sent = fixture.LastPreviewSelections ?? [];
+            return sent.Length == 1 && sent[0].SettingId == "third";
+        });
+        await Scenario("Picking a preset that sets a hidden advanced row keeps that row visible in simple mode", async () =>
+        {
+            var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "AdvancedPreset");
+            var advanced = new TweakDefinition("advanced", "advanced", "Apps", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, true);
+            var fixture = new Fixture(Path.Combine(root, "preset-advanced"), new TweakCatalog(1, "advanced", [advanced], [new("advanced-preset", "Advanced preset", [new("advanced", "off")])])) { Missing = false };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var hidden = model.Rows.Count == 0;
+            model.SelectedPreset = model.Presets.Single();
+            return hidden && model.Rows.Count == 1 && model.Rows[0].HasPendingChange;
         });
         await Scenario("An operation of the page's own is accepted without a reload, and a foreign change during it is not swallowed", async () =>
         {
@@ -251,7 +307,7 @@ static class FreshnessChecks
             await model.OwnAsync(async () =>
             {
                 using (DataGeneration.BeginChange()) { }
-                using (ExecutionContext.SuppressFlow()) Task.Run(() => { using (DataGeneration.BeginChange()) { } }).Wait();
+                AsForeign(() => { using (DataGeneration.BeginChange()) { } });
                 await Task.Yield();
             });
             await model.ShowAsync();

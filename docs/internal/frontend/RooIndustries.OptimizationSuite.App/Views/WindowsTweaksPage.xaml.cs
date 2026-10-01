@@ -98,7 +98,7 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
             var picker = new FileOpenPicker(App.MainWindow!.AppWindow.Id); picker.FileTypeFilter.Add(".json");
             var file = await picker.PickSingleFileAsync(); if (file is null) return;
             ViewModel.Busy = true; await App.Operations.ImportWindowsSettingsAsync(file.Path); ViewModel.Busy = false;
-            await ViewModel.RefreshCommand.ExecuteAsync(null); ViewModel.SelectedSection = ViewModel.Sections[0]; ViewModel.ShowAdvanced = true; ViewModel.Source = "Custom settings";
+            await ViewModel.RefreshCommand.ExecuteAsync(null); await ViewModel.WaitForLoadAsync(); ViewModel.SelectedSection = ViewModel.Sections[0]; ViewModel.ShowAdvanced = true; ViewModel.Source = "Custom settings";
             ViewModel.Status = "Custom switches imported"; ViewModel.Detail = "Choose an imported preset or setting, then review before applying. Importing does not change Windows settings.";
         }
         catch (Exception error) { ViewModel.Status = "Couldn't import these switches."; ViewModel.Detail = error.Message; }
