@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Preview','Start','Status','Affinity','Stop','Recover')][string]$Action,
     [string]$SessionRoot='', [string]$PreviewPath='', [string]$ReviewHash='',
     [int]$LauncherProcessId=0, [string]$GamePath='', [string]$ControlsPath='', [string]$AffinityMask='',
-    [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$ConfirmApply
+    [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$AcceptEarlierVersion, [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
@@ -76,13 +76,13 @@ if($Action -eq 'Stop'){
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $false){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 30)
     if($status.hostRunning -ne $false){throw 'Worker shutdown is not verified; recovery state was retained.'}
-    if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId}|Out-Null}
+    if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
     if($task){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
     if(-not $status.state){throw 'There is no session recovery state.'}
-    Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId}|Out-Null
+    Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null
     if($task){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 @{schemaVersion=1;status='completed';data=@{sessionRoot=$SessionRoot;taskName=$taskName;worker=(Invoke-Core 'protected-session-status')}}|ConvertTo-Json -Depth 40
