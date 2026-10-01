@@ -20,6 +20,8 @@ function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Me
 if($Scenario -eq 'RequestFiles'){
     $caseRoot=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-request-files-'+[Guid]::NewGuid().ToString('N'))
     $stdinOnly='Requests must be passed on standard input.'
+    $netNames=@(Get-ChildItem Env:|Where-Object {$_.Name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'}|ForEach-Object {[pscustomobject]@{name=$_.Name;value=$_.Value}})
+    foreach($item in $netNames){Remove-Item -LiteralPath ('Env:\'+$item.name)}
     function Invoke-HostRaw([string]$Dll,[string]$HostAction,[string]$Argument,[string]$Body){
         $text=@(if($Argument -eq '-'){$Body|& $DotNetPath $Dll $HostAction '-'}else{& $DotNetPath $Dll $HostAction $Argument}) -join "`n"
         $code=$LASTEXITCODE
@@ -68,7 +70,20 @@ if($Scenario -eq 'RequestFiles'){
         [IO.File]::WriteAllText($runFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;sessionRoot=$caseRoot}|ConvertTo-Json -Compress))
         $run=Invoke-HostRaw $dll 'protected-session-run' $runFile ''
         Assert ($run.exit -ne 0 -and $run.message -cne $stdinOnly) 'A release helper still reads a session run file but refuses it outside the protected recovery folder'
+        $statusBody=(@{schemaVersion=1;repoRoot=$repoRoot}|ConvertTo-Json -Compress)
+        foreach($set in @(@{name='DOTNET_NOLOGO';value='1'},@{name='COMPlus_ROO_INDUSTRIES_UNKNOWN_KNOB';value='1'},@{name='dotnet_gcserver';value='1'},@{name='COREHOST_TRACE';value='1'},@{name='COR_ENABLE_PROFILING';value='1'},@{name='CORECLR_ENABLE_PROFILING';value='1'})){
+            [Environment]::SetEnvironmentVariable($set.name,$set.value,'Process')
+            try {$refused=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable($set.name,$null,'Process')}
+            Assert ($refused.exit -ne 0 -and $refused.message -like ('*will not run with these .NET settings in its environment: '+$set.name+'.*')) ('A release helper refuses '+$set.name+' even though no list names it')
+        }
+        [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','0','Process')
+        try {$pinned=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
+        Assert ($pinned.message -notlike '*will not run with these*') 'A release helper accepts the diagnostics switch the launcher sets to 0'
+        [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','1','Process')
+        try {$onValue=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
+        Assert ($onValue.exit -ne 0 -and $onValue.message -like '*DOTNET_EnableDiagnostics*') 'A release helper refuses the diagnostics switch when it holds anything but 0'
     } finally {
+        foreach($item in $netNames){[Environment]::SetEnvironmentVariable($item.name,$item.value,'Process')}
         if(Test-Path -LiteralPath $caseRoot){Remove-Item -LiteralPath $caseRoot -Recurse -Force}
     }
     Assert (-not(Test-Path -LiteralPath $caseRoot)) 'The request file scenario removes its folder'

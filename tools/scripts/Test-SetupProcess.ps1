@@ -32,6 +32,11 @@ try {
     $childFile = Join-Path $work 'child.txt'
     Assert ((Test-Path -LiteralPath $childFile) -and -not (Get-Process -Id ([int](Get-Content -LiteralPath $childFile -Raw)) -ErrorAction SilentlyContinue)) 'A program the hung script started is stopped with it'
     Assert ($report -contains 'C ran=0 exit=1') 'A missing program reports failure'
+    $pinnedNames = @('DOTNET_EnableDiagnostics', 'COMPlus_EnableDiagnostics', 'DOTNET_EnableDiagnostics_IPC', 'COMPlus_EnableDiagnostics_IPC', 'DOTNET_EnableDiagnostics_Debugger', 'COMPlus_EnableDiagnostics_Debugger', 'DOTNET_EnableDiagnostics_Profiler', 'COMPlus_EnableDiagnostics_Profiler')
+    $left = @($report | Where-Object { $_ -like 'E *' } | ForEach-Object { $_.Substring(2) })
+    Assert ((($left | Sort-Object) -join ',') -ceq ((@($pinnedNames | ForEach-Object { $_ + '=0' }) | Sort-Object) -join ',')) 'Setup clears every variable that starts with DOTNET_, COMPlus_, CORECLR_, COR_ or COREHOST_, whatever its name, and leaves only the pinned diagnostics switches at 0'
+    Assert ($report -contains 'F unrelated=kept') 'Setup leaves an unrelated variable alone'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $work 'scratch'))) 'No file or folder appeared at a path named by a cleared variable'
     $plain = @($report | Where-Object { $_ -match '^D ran=1 exit=0 ms=(\d+)$' })
     Assert ($plain.Count -eq 1 -and [int]([regex]::Match($plain[0], '\d+$').Value) -ge 11000) 'Setup''s plain wait on the same kind of script has no limit'
 } finally {

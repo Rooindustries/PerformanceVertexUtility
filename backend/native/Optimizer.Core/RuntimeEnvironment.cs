@@ -1,13 +1,16 @@
 #nullable enable
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace RooIndustries.Optimizer;
 
 public static class RuntimeEnvironment
 {
-    public static readonly string[] CodeLoading =
+    public static readonly string[] ClearPrefixes = ["DOTNET_", "COMPlus_", "CORECLR_", "COR_", "COREHOST_"];
+
+    public static readonly string[] DevelopmentCodeLoading =
     [
         "DOTNET_STARTUP_HOOKS", "DOTNET_ADDITIONAL_DEPS", "DOTNET_SHARED_STORE", "CORECLR_ENABLE_PROFILING",
         "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "CORECLR_PROFILER_PATH_32", "CORECLR_PROFILER_PATH_64",
@@ -29,7 +32,7 @@ public static class RuntimeEnvironment
         "COMPlus_MODIFIABLE_ASSEMBLIES", "DOTNET_ZapBBInstrDir", "COMPlus_ZapBBInstrDir",
     ];
 
-    public static readonly string[] ClearOnly =
+    public static readonly string[] DevelopmentClearOnly =
     [
         "COREHOST_TRACE", "COREHOST_TRACEFILE", "COREHOST_TRACE_VERBOSITY", "DOTNET_ROOT",
         "DOTNET_ROOT(x86)", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64",
@@ -64,17 +67,31 @@ public static class RuntimeEnvironment
 
     public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; ";
 
-    public static Dictionary<string, string> ChildEnvironment()
+    public static string Profile
+    {
+        get
+        {
+            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!Path.IsPathFullyQualified(profile) || profile.Contains('%')) throw new InvalidOperationException("Roo Industries could not read this Windows user's profile folder.");
+            return profile;
+        }
+    }
+
+    public static string LocalAppData => Path.Combine(Profile, "AppData", "Local");
+
+    public static Dictionary<string, string> ChildEnvironment() => Build(null);
+
+    private static Dictionary<string, string> Build(string? userTemp)
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         var system = Environment.SystemDirectory;
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var profile = Profile;
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var commonFiles = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles);
         var profileDrive = Path.GetPathRoot(profile)!.TrimEnd('\\');
         var systemDrive = Path.GetPathRoot(windows)!.TrimEnd('\\');
         var programData = ProfileListFolder("ProgramData", systemDrive) ?? Path.Combine(systemDrive + "\\", "ProgramData");
-        var temp = ProtectedTemp(windows);
+        var temp = userTemp ?? ProtectedTemp(windows);
         var child = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["SystemRoot"] = windows, ["windir"] = windows, ["SystemDrive"] = systemDrive, ["ComSpec"] = Path.Combine(system, "cmd.exe"),
@@ -111,6 +128,42 @@ public static class RuntimeEnvironment
         start.Environment.Clear();
         foreach (var (name, value) in ChildEnvironment()) start.Environment[name] = value;
     }
+
+    private static readonly Lazy<Dictionary<string, string>> UserVariables = new(() => Build(Path.Combine(LocalAppData, "Temp")));
+    private static readonly Regex Percent = new("%([^%]+)%", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+    public static string ExpandUserVariables(string text)
+        => Percent.Replace(text, match => UserVariables.Value.TryGetValue(match.Groups[1].Value, out var value) ? value : match.Value);
+
+    public static void PinProfile()
+    {
+        var profile = Profile;
+        var drive = Path.GetPathRoot(profile)!.TrimEnd('\\');
+        Environment.SetEnvironmentVariable("USERPROFILE", profile);
+        Environment.SetEnvironmentVariable("HOMEDRIVE", drive);
+        Environment.SetEnvironmentVariable("HOMEPATH", profile[drive.Length..]);
+        Environment.SetEnvironmentVariable("LOCALAPPDATA", Path.Combine(profile, "AppData", "Local"));
+        Environment.SetEnvironmentVariable("APPDATA", Path.Combine(profile, "AppData", "Roaming"));
+    }
+
+    public static void Establish()
+    {
+        PinProfile();
+        var block = ChildEnvironment();
+        bool Kept(string name) => block.ContainsKey(name) || Pinned.Contains(name, StringComparer.OrdinalIgnoreCase) && Environment.GetEnvironmentVariable(name) == "0";
+        foreach (var name in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => !Kept(name)).ToArray()) Clear(name);
+        foreach (var (name, value) in block)
+            if (value.Length > 0) Environment.SetEnvironmentVariable(name, value);
+    }
+
+    private static void Clear(string name)
+    {
+        try { Environment.SetEnvironmentVariable(name, null); }
+        catch (ArgumentException) { }
+    }
+
+    private static string[] Prefixed()
+        => Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => ClearPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToArray();
 
     public static void OpenInExplorer(string target)
     {
@@ -155,14 +208,19 @@ public static class RuntimeEnvironment
 
     public static void Sanitize()
     {
-        foreach (var name in CodeLoading.Concat(ClearOnly)) Environment.SetEnvironmentVariable(name, null);
+        foreach (var name in Release ? Prefixed() : DevelopmentCodeLoading.Concat(DevelopmentClearOnly)) Clear(name);
         foreach (var name in Pinned) Environment.SetEnvironmentVariable(name, "0");
         if (Release) foreach (var name in ProductOverrides) Environment.SetEnvironmentVariable(name, null);
     }
 
     public static void RequireClean()
     {
-        var present = CodeLoading.Concat(Pinned.Where(name => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value && value != "0")).Where(name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name))).ToArray();
-        if (present.Length > 0) throw new InvalidOperationException("Roo Industries will not run with these .NET settings in its environment: " + string.Join(", ", present) + ". Remove them and sign in again.");
+        bool Set(string name) => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name));
+        bool BadPin(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value && value != "0";
+        var present = Release
+            ? Prefixed().Where(name => !(Pinned.Contains(name, StringComparer.OrdinalIgnoreCase) && Environment.GetEnvironmentVariable(name) == "0"))
+            : DevelopmentCodeLoading.Concat(DevelopmentClearOnly.Where(name => !DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase))).Concat(Pinned.Where(BadPin)).Where(Set);
+        var names = present.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (names.Length > 0) throw new InvalidOperationException("Roo Industries will not run with these .NET settings in its environment: " + string.Join(", ", names) + ". Remove them and sign in again.");
     }
 }
