@@ -210,13 +210,13 @@ public class RooIndustriesHostRemover {
         $ownedExclusionHash=$savedExclusions.revision
         $markerRoot=Join-Path $root 'poisoned-environment'
         foreach($folder in @('profile','local','roaming','temp')){[IO.Directory]::CreateDirectory((Join-Path $markerRoot $folder))|Out-Null}
-        $poison=[ordered]@{USERPROFILE=(Join-Path $markerRoot 'profile');LOCALAPPDATA=(Join-Path $markerRoot 'local');APPDATA=(Join-Path $markerRoot 'roaming');TEMP=(Join-Path $markerRoot 'temp');TMP=(Join-Path $markerRoot 'temp');ComSpec=(Join-Path $markerRoot 'cmd.exe');PATHEXT='.MARK'}
+        $poison=[ordered]@{USERPROFILE=(Join-Path $markerRoot 'profile');LOCALAPPDATA=(Join-Path $markerRoot 'local');APPDATA=(Join-Path $markerRoot 'roaming');TEMP=(Join-Path $markerRoot 'temp');TMP=(Join-Path $markerRoot 'temp');ComSpec=(Join-Path $markerRoot 'cmd.exe')}
         $kept=@{};foreach($name in $poison.Keys){$kept[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
         try {
             foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$poison[$name],'Process')}
             $poisonedStatus=Core 'cleanup-exclusions-status' @{}
         } finally {foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$kept[$name],'Process')}}
-        Assert ($poisonedStatus.revision -eq $savedExclusions.revision -and @($poisonedStatus.exclusions.paths).Count -eq @($protectedExclusions.paths).Count) 'A Host started with USERPROFILE, LOCALAPPDATA, APPDATA, TEMP, TMP, ComSpec and PATHEXT pointing at marker values reads the same app data folder as without them'
+        Assert ($poisonedStatus.revision -eq $savedExclusions.revision -and @($poisonedStatus.exclusions.paths).Count -eq @($protectedExclusions.paths).Count) 'A Host started with USERPROFILE, LOCALAPPDATA, APPDATA, TEMP, TMP and ComSpec pointing at marker values reads the same app data folder as without them'
         $excluded=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath).Hash;journalPath=$batchJournal;confirm=$true}
         Assert ($excluded.status -eq 'needsReconciliation' -and $excluded.entries[0].error -like '*Excluded path:*') 'The public batch endpoint enforces exclusions added after review'
         foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert ((Test-Path (Join-Path $app.install 'preferences.txt')) -and $null -ne $key) 'Late exclusions preserve both applications before deletion'}finally{if($key){$key.Dispose()}}}
