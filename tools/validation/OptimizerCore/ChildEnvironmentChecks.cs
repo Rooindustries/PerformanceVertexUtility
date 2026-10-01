@@ -6,7 +6,7 @@ using RooIndustries.Optimizer;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation"];
+    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root"];
 
     public static async Task Run(Action<bool, string> check, string scenario, string mode, string? directory)
     {
@@ -16,6 +16,7 @@ static class ChildEnvironmentChecks
             case "control-helper": ControlHelper(check, mode); break;
             case "restart": Restart(check, mode); break;
             case "hibernation": Hibernation(check, mode); break;
+            case "cleanup-temp-root": CleanupTempRoot(check, mode); break;
             case "registry-hook": RegistryHook(check, mode); break;
             case "firmware-provider": FirmwareProvider(check, mode, Required()); break;
             case "firmware-extractor": await FirmwareExtractor(check, mode, Required()); break;
@@ -75,6 +76,18 @@ static class ChildEnvironmentChecks
             ChildEnv.Report(check, "Windows control helper child", env, seen, failures);
             check(marked is not null && marked.Value.GetRawText() == baseline.Value.GetRawText() && marked.Binding == baseline.Binding && marked.Identity == baseline.Identity,
                 "A status read returns the same value, binding and identity with the markers set as without them (" + marked?.Value.GetRawText() + " vs " + baseline.Value.GetRawText() + ")");
+        });
+    }
+
+    static void CleanupTempRoot(Action<bool, string> check, string mode)
+    {
+        var isProtected = typeof(FileCleanupEngine).GetMethod("IsProtectedPath", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new MissingMethodException("FileCleanupEngine.IsProtectedPath");
+        var userTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
+        ChildEnv.Run(check, mode, null, env =>
+        {
+            check(!string.Equals(Path.GetTempPath().TrimEnd('\\'), userTemp, StringComparison.OrdinalIgnoreCase), "The test process temp folder points away from the user's temp folder, as the protected temp of a Host started by the app does");
+            check((bool)isProtected.Invoke(null, [userTemp])!, "The user's temp folder stays a protected cleanup root while TEMP points at another folder");
+            check((bool)isProtected.Invoke(null, [Path.GetTempPath().TrimEnd('\\')])!, "The folder TEMP points at is a protected cleanup root as well");
         });
     }
 
