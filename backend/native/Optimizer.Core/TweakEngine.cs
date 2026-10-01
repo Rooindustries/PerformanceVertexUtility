@@ -12,9 +12,9 @@ public sealed class TweakEngine
     public const string FeaturesPending = "Checking Windows features\u2026";
     public const string FeaturesTimedOut = "Windows features did not answer within 60 seconds. Select Refresh to check again.";
     public TimeSpan FeatureTimeout { get; init; } = TimeSpan.FromSeconds(60);
-    public static bool HasTransientErrors(TweakInspection inspection) => inspection.Settings.Any(setting => setting.Error is { } error
-        && (error == FeaturesTimedOut || error == FeaturesPending || error.Contains("timed out", StringComparison.OrdinalIgnoreCase)
-            || error.Contains("control helper exited", StringComparison.Ordinal) || error.Contains("changed while being read", StringComparison.Ordinal) || error.Contains("service is transitioning", StringComparison.Ordinal)));
+    public static bool IsTransient(string error) => error == FeaturesTimedOut || error == FeaturesPending || error.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+        || error.Contains("control helper exited", StringComparison.Ordinal) || error.Contains("changed while being read", StringComparison.Ordinal) || error.Contains("service is transitioning", StringComparison.Ordinal);
+    public static bool HasTransientErrors(TweakInspection inspection) => inspection.Settings.Any(setting => setting.Error is { } error && IsTransient(error));
     public TweakInspection Detect(Action<TweakInspection>? partial = null)
     {
         var state = State();
