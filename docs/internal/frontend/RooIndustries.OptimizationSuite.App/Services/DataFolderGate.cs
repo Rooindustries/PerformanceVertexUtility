@@ -13,12 +13,18 @@ public static class DataFolderGate
     {
         RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
-        string problem;
-        try { return Opened(Protected(locator)); }
-        catch (Exception error) { problem = error.Message; }
+        var problem = Attempt(() => Protected(locator), out var enabled);
+        if (problem is null) return enabled;
         MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
         Environment.Exit(1);
         return false;
+    }
+
+    internal static string? Attempt(Func<string> protect, out bool enabled)
+    {
+        enabled = false;
+        try { enabled = Opened(protect()); return null; }
+        catch (Exception error) { return error.Message; }
     }
 
     private static string Protected(BackendLocator locator)

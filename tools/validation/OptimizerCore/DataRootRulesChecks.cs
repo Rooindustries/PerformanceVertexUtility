@@ -16,6 +16,7 @@ static partial class DataFolderChecks
         scenarios.Add(("claims-carry", ClaimsCarry));
         scenarios.Add(("orphan-temp", OrphanTemp));
         scenarios.Add(("schtasks-hang", SchtasksHang));
+        scenarios.Add(("migration-time", MigrationTime));
         scenarios.Add(("timer-split", TimerSplit));
         scenarios.Add(("timer-migration", TimerMigration));
     }
@@ -361,5 +362,36 @@ static partial class DataFolderChecks
             check(H.Read(Path.Combine(root, "A.txt")) == "A", "The data folder keeps its data");
         }
         finally { File.Delete(fake); H.Forget(root); H.Delete(root); H.Sweep(id); }
+    }
+
+    private static void MigrationTime(Action<bool, string> check)
+    {
+        var id = H.Name("time");
+        var root = Path.Combine(H.Local, id);
+        try
+        {
+            var random = new Random(7);
+            var bulk = new byte[1 << 20];
+            for (var index = 0; index < 100; index++)
+            {
+                var folder = Path.Combine(root, "operations", "removal-" + index.ToString("D3"));
+                Directory.CreateDirectory(folder);
+                foreach (var (name, size) in new[] { ("journal.json", 20_000), ("preview.json", 50_000), ("review.json", 5_000) })
+                {
+                    var bytes = new byte[size]; random.NextBytes(bytes);
+                    File.WriteAllBytes(Path.Combine(folder, name), bytes);
+                }
+                random.NextBytes(bulk);
+                File.WriteAllBytes(Path.Combine(folder, "file-backup-1"), bulk);
+            }
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var run = H.Child(["--child-secure-data", root], null, 600000);
+            clock.Stop();
+            check(run.Exit == 0 && run.Output.Contains("SECURED migrated=True"), "A data folder with 100 operation folders (400 files, about 105 MB) is migrated: " + run.Output);
+            check(H.Length(Path.Combine(root, "operations", "removal-099", "file-backup-1")) == 1 << 20 && PolicyRootSecurity.Problem(root, DataFolder.Kind) is null, "Every file arrived and the protected folder passes the deep check");
+            Console.WriteLine("NOTE Migrating 400 files (about 105 MB) took " + clock.Elapsed.TotalSeconds.ToString("0.0") + " s on this PC, including starting the helper.");
+            check(clock.Elapsed < TimeSpan.FromMinutes(2), "The migration of that folder finishes well inside the helper time limit (" + (int)clock.Elapsed.TotalSeconds + " s)");
+        }
+        finally { H.Forget(root, Path.Combine(root, "operations")); H.Delete(root); H.Sweep(id); }
     }
 }
