@@ -157,7 +157,8 @@ Write-Host ('Smoke test: the obfuscated helper returned the Windows tweak catalo
 
 [IO.Directory]::CreateDirectory($OutputRoot) | Out-Null
 $setupName = "RooIndustries-OptimizationSuite-$version-setup"
-Invoke-Checked $iscc @('/Q', "/DAppVersion=$version", "/DAppNumericVersion=$numericVersion", "/DSourceDir=$stage", "/DOutputDir=$OutputRoot", "/DOutputName=$setupName", (Join-Path $releaseTools 'RooIndustries.OptimizationSuite.iss')) 'Installer build'
+$governorSetupHash = (Get-FileHash -LiteralPath (Join-Path $stage 'backend\scripts\Invoke-GovernorSetup.ps1') -Algorithm SHA256).Hash
+Invoke-Checked $iscc @('/Q', "/DAppVersion=$version", "/DGovernorSetupHash=$governorSetupHash", "/DAppNumericVersion=$numericVersion", "/DSourceDir=$stage", "/DOutputDir=$OutputRoot", "/DOutputName=$setupName", (Join-Path $releaseTools 'RooIndustries.OptimizationSuite.iss')) 'Installer build'
 $setup = Join-Path $OutputRoot ($setupName + '.exe')
 $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText($setup + '.sha256', $hash + '  ' + [IO.Path]::GetFileName($setup) + "`n", [Text.UTF8Encoding]::new($false))

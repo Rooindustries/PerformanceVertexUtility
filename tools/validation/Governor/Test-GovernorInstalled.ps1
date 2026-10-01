@@ -7,7 +7,9 @@ $workerScript=Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'
 $work=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-installed'
 $statePath=Join-Path $work 'state.json'
 $local=[Environment]::GetFolderPath('LocalApplicationData')
-$dataRoot=@(Get-ChildItem -LiteralPath $local -Directory -Filter '*OptimizationSuite' -ErrorAction SilentlyContinue|Where-Object {$_.Name -ne 'RooIndustriesOptimizationSuite'}|ForEach-Object {$_.FullName})+@(Join-Path $local 'RooIndustriesOptimizationSuite')|Select-Object -First 1
+$markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+$currentRoot=Join-Path $local 'RooIndustriesOptimizationSuite';$legacyRoot=Join-Path $local 'RooOptimizationSuite'
+$dataRoot=if((Test-Path -LiteralPath $legacyRoot -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($currentRoot.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacyRoot.ToUpperInvariant()))){$legacyRoot}else{$currentRoot}
 $policyRoot=Join-Path $dataRoot 'process-rules'
 [IO.Directory]::CreateDirectory($work)|Out-Null
 $out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;user=[Security.Principal.WindowsIdentity]::GetCurrent().Name;policyRoot=$policyRoot;checks=@()}
@@ -212,7 +214,7 @@ switch($Phase){
         Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
         $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
         $started=[DateTime]::Now.AddSeconds(-2)
-        $suspended=Wait-Until {@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp'|Where-Object {$_.CreationTime -ge $started}|ForEach-Object {Join-Path $_.FullName 'governor-setup.log'}|Where-Object {(Test-Path -LiteralPath $_) -and ([IO.File]::ReadAllText($_) -match 'Suspend Suspended')}).Count -gt 0} 120
+        $suspended=Wait-Until {$log=Join-Path $app 'setup\governor-setup.log';(Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).LastWriteTime -ge $started -and ([IO.File]::ReadAllText($log) -match 'Suspend Suspended')} 120
         $killed=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')}|Sort-Object {$_.ProcessId -eq $setup.Id})
         foreach($process in $killed){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
         [IO.File]::AppendAllText((Join-Path $work 'kill-progress.txt'),([DateTime]::UtcNow.ToString('o')+' killed '+(($killed|ForEach-Object {$_.Name+':'+$_.ProcessId}) -join ',')+"`r`n"))
@@ -239,7 +241,7 @@ switch($Phase){
         Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
         $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
         $started=[DateTime]::Now.AddSeconds(-2)
-        $suspended=Wait-Until {@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp'|Where-Object {$_.CreationTime -ge $started}|ForEach-Object {Join-Path $_.FullName 'governor-setup.log'}|Where-Object {(Test-Path -LiteralPath $_) -and ([IO.File]::ReadAllText($_) -match 'Suspend Suspended')}).Count -gt 0} 120
+        $suspended=Wait-Until {$log=Join-Path $app 'setup\governor-setup.log';(Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).LastWriteTime -ge $started -and ([IO.File]::ReadAllText($log) -match 'Suspend Suspended')} 120
         foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')})){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
         Start-Sleep -Seconds 2
         $afterKill=Describe-State;$out.afterKill=[ordered]@{tasks=@($afterKill.tasks|ForEach-Object {$_.state});workers=@($afterKill.workers).Count}

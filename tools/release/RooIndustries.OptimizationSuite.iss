@@ -1,6 +1,9 @@
 #ifndef AppVersion
   #error Build the installer with tools\scripts\Build-Release.ps1
 #endif
+#ifndef GovernorSetupHash
+  #error Build the installer with tools\scripts\Build-Release.ps1
+#endif
 
 #define AppName "Roo Industries Optimization Suite"
 #define AppExe "RooIndustries.OptimizationSuite.App.exe"
@@ -61,6 +64,7 @@ Filename: "{app}\README-BETA.txt"; Description: "Read the beta tester guide"; Fl
 Filename: "{app}\app\{#AppExe}"; Description: "Open {#AppName}"; Flags: postinstall shellexec skipifsilent nowait unchecked
 
 [UninstallDelete]
+Type: filesandordirs; Name: "{app}\setup"
 Type: files; Name: "{app}\backend\bin\RooIndustriesProcessGovernor.exe"
 Type: dirifempty; Name: "{app}\backend\bin"
 Type: dirifempty; Name: "{app}\backend"
@@ -71,17 +75,37 @@ Type: dirifempty; Name: "{autopf}\Roo Industries"
 var
   GovernorSuspended: Boolean;
   GovernorResumed: Boolean;
+  SetupFolder: String;
 
-function RunGovernorSetup(const Script, Action: String): Boolean;
+function GetCurrentProcessId: Cardinal; external 'GetCurrentProcessId@kernel32.dll stdcall';
+
+function PrepareSetupFolder: Boolean;
+var
+  Script: String;
+begin
+  SetupFolder := ExpandConstant('{app}\setup');
+  if DirExists(SetupFolder) then
+    DelTree(SetupFolder, True, True, True);
+  Result := ForceDirectories(SetupFolder);
+  if not Result then
+    exit;
+  ExtractTemporaryFile('Invoke-GovernorSetup.ps1');
+  Script := SetupFolder + '\Invoke-GovernorSetup.ps1';
+  Result := FileCopy(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), Script, False) and (CompareText(GetSHA256OfFile(Script), '{#GovernorSetupHash}') = 0);
+  if not Result then
+    Log('The copied Roo Industries Governor setup script did not match the installer.');
+end;
+
+function RunGovernorSetup(const Action: String): Boolean;
 var
   Code: Integer;
   LogPath: String;
   Output: AnsiString;
 begin
-  LogPath := ExpandConstant('{tmp}\governor-setup.log');
+  LogPath := SetupFolder + '\governor-setup.log';
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Script + '" -Action ' + Action +
-    ' -AppRoot "' + ExpandConstant('{app}') + '" -StatePath "' + ExpandConstant('{tmp}\governor-suspended.json') + '" -LogPath "' + LogPath + '"',
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + SetupFolder + '\Invoke-GovernorSetup.ps1" -Action ' + Action +
+    ' -AppRoot "' + ExpandConstant('{app}') + '" -StatePath "' + SetupFolder + '\governor-suspended.json" -LogPath "' + LogPath + '" -SetupProcessId ' + IntToStr(GetCurrentProcessId()),
     '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
   if LoadStringFromFile(LogPath, Output) then Log(String(Output));
   Log('Roo Industries Governor ' + Action + ' finished with exit code ' + IntToStr(Code));
@@ -90,10 +114,14 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
-  ExtractTemporaryFile('Invoke-GovernorSetup.ps1');
-  if not RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Suspend') then
+  if not PrepareSetupFolder then
   begin
-    RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Resume');
+    Result := 'Setup could not prepare its governor files safely, so no files were changed. Run setup again.';
+    exit;
+  end;
+  if not RunGovernorSetup('Suspend') then
+  begin
+    RunGovernorSetup('Resume');
     Result := 'Setup could not stop the Roo Industries Governor safely, so no files were changed. Restart Windows and run setup again.';
   end
   else
@@ -105,7 +133,7 @@ begin
   if (CurStep = ssPostInstall) and GovernorSuspended then
   begin
     GovernorResumed := True;
-    if not RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Resume') then
+    if not RunGovernorSetup('Resume') then
       Log('The Roo Industries Governor could not be started again. Open the app and press Start governor.');
   end;
 end;
@@ -113,22 +141,28 @@ end;
 procedure DeinitializeSetup();
 begin
   if GovernorSuspended and not GovernorResumed then
-    RunGovernorSetup(ExpandConstant('{tmp}\Invoke-GovernorSetup.ps1'), 'Resume');
+    RunGovernorSetup('Resume');
+  if (SetupFolder <> '') and DirExists(SetupFolder) then
+    DelTree(SetupFolder, True, True, True);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Code: Integer;
+  Folder: String;
   LogPath: String;
   Output: AnsiString;
 begin
   if CurUninstallStep = usUninstall then
   begin
-    LogPath := ExpandConstant('{tmp}\governor-uninstall.log');
+    Folder := ExpandConstant('{app}\setup');
+    ForceDirectories(Folder);
+    LogPath := Folder + '\governor-uninstall.log';
     Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\backend\scripts\Invoke-GovernorSetup.ps1') + '" -Action Remove -AppRoot "' +
       ExpandConstant('{app}') + '" -LogPath "' + LogPath + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
     if LoadStringFromFile(LogPath, Output) then Log(String(Output));
+    DelTree(Folder, True, True, True);
     Log('Roo Industries Governor removal finished with exit code ' + IntToStr(Code));
     if Code <> 0 then
       SuppressibleMsgBox('The Roo Industries Governor could not be removed completely. Restart Windows, then check Task Scheduler for tasks named RooIndustriesOptimizationSuite.ProcessRules and delete them.', mbError, MB_OK, IDOK);
