@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[switch]$SharedQueuePaths)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[switch]$SharedQueuePaths,[ValidateSet('','RequestFiles')][string]$Scenario='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -16,6 +16,51 @@ $exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusion
 $ownedExclusionHash=$null
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
+if($Scenario -eq 'RequestFiles'){
+    $caseRoot=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-request-files-'+[Guid]::NewGuid().ToString('N'))
+    $stdinOnly='Requests must be passed on standard input.'
+    function Invoke-HostRaw([string]$Dll,[string]$HostAction,[string]$Argument,[string]$Body){
+        $text=@(if($Argument -eq '-'){$Body|& $DotNetPath $Dll $HostAction '-'}else{& $DotNetPath $Dll $HostAction $Argument}) -join "`n"
+        $code=$LASTEXITCODE
+        $parsed=$null
+        try {$parsed=$text|ConvertFrom-Json}catch{}
+        return [pscustomobject]@{exit=$code;status=$parsed.status;message=$parsed.error.message;text=$text}
+    }
+    try {
+        [IO.Directory]::CreateDirectory($caseRoot)|Out-Null
+        $releaseHost=Join-Path $caseRoot 'release-host'
+        & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -p:RooIndustriesRelease=true -o $releaseHost|Out-Null
+        if($LASTEXITCODE -ne 0){throw 'Release optimizer host publish failed.'}
+        $dll=Join-Path $releaseHost 'Optimizer.Host.dll'
+        $applyActions=@('tweak-apply','tweak-restore','tweak-recover','process-apply','process-restore','cleanup-apply','cleanup-restore','cleanup-batch-apply','cleanup-batch-restore','cleanup-exclusions-save','rule-save','policy-stop','tweak-preview','tweak-catalog')
+        foreach($name in $applyActions){
+            $body=@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true}|ConvertTo-Json -Compress
+            $file=Join-Path $caseRoot ($name+'.json')
+            [IO.File]::WriteAllText($file,$body)
+            $viaFile=Invoke-HostRaw $dll $name $file ''
+            Assert ($viaFile.exit -ne 0 -and $viaFile.status -eq 'failed' -and $viaFile.message -ceq $stdinOnly) ('A release helper refuses a request file for '+$name)
+            $viaInput=Invoke-HostRaw $dll $name '-' $body
+            Assert ($viaInput.message -cne $stdinOnly) ('A release helper still reads the same request from standard input for '+$name)
+        }
+        $policyRoot=Join-Path $caseRoot 'policy'
+        $policyFile=Join-Path $caseRoot 'worker-request.json'
+        [IO.File]::WriteAllText($policyFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;policyRoot=$policyRoot}|ConvertTo-Json -Compress))
+        $policy=Invoke-HostRaw $dll 'policy-run' $policyFile ''
+        Assert ($policy.exit -ne 0 -and $policy.message -clike '*protected rules folder*') 'A release helper still reads the scheduled governor request but only from its protected rules folder'
+        $watchFile=Join-Path $caseRoot 'watch-request.json'
+        [IO.File]::WriteAllText($watchFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;sessionRoot=$caseRoot;operationId='fixture'}|ConvertTo-Json -Compress))
+        $watch=Invoke-HostRaw $dll 'protected-session-watch' $watchFile ''
+        Assert ($watch.exit -ne 0 -and $watch.message -cne $stdinOnly) 'A release helper still reads a session request file but refuses it outside the protected recovery folder'
+        $runFile=Join-Path $caseRoot 'run-request.json'
+        [IO.File]::WriteAllText($runFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;sessionRoot=$caseRoot}|ConvertTo-Json -Compress))
+        $run=Invoke-HostRaw $dll 'protected-session-run' $runFile ''
+        Assert ($run.exit -ne 0 -and $run.message -cne $stdinOnly) 'A release helper still reads a session run file but refuses it outside the protected recovery folder'
+    } finally {
+        if(Test-Path -LiteralPath $caseRoot){Remove-Item -LiteralPath $caseRoot -Recurse -Force}
+    }
+    Assert (-not(Test-Path -LiteralPath $caseRoot)) 'The request file scenario removes its folder'
+    return
+}
 function Core([string]$CoreAction,[object]$Fields){
     $request=@{schemaVersion=1;repoRoot=$repoRoot}
     foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
@@ -167,3 +212,4 @@ public class RooIndustriesHostRemover {
 }
 Assert (-not(Test-Path -LiteralPath $root)) 'Host validation removes its registrations, receipts, binaries, journals and leftovers'
 if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -SharedQueuePaths}
+if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -Scenario RequestFiles}

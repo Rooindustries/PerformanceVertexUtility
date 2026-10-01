@@ -12,6 +12,8 @@ try
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var fromInput = args[1] == "-";
+    if (!fromInput && RuntimeEnvironment.Release && action is not ("policy-run" or "protected-session-run" or "protected-session-watch"))
+        throw new InvalidDataException("Requests must be passed on standard input.");
     using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
     var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
