@@ -212,9 +212,9 @@ function Test-ScenarioClaimsGameBackupFirst {
     $repo=New-ClaimsRepo
     $state=Join-Path $repo 'backend\state'
     $sessions=Join-Path $state 'game-tune-sessions'
-    $env:ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS='60000'
-    try {$child=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game');stateRoot=$state}}
-    finally {Remove-Item -LiteralPath 'Env:\ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS'}
+    [IO.Directory]::CreateDirectory($sessions)|Out-Null
+    [IO.File]::WriteAllText((Join-Path $sessions 'test-pause-ms.txt'),'60000')
+    $child=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game');stateRoot=$state}
     $recorded={$file=@(Get-ChildItem -LiteralPath $sessions -Filter 'session.json' -Recurse -File)[0];$json=[IO.File]::ReadAllText($file.FullName)|ConvertFrom-Json;if($json.restorable -eq $true -and $json.backupManifestPath){$json}}
     $ready=Wait-Until {$null -ne (& $recorded)} 90 100
     Note 'secondsToRecordedSession' $ready
