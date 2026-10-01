@@ -234,7 +234,7 @@ try {
                 $state.backupManifestPath = $backupPath
                 $state.restorable = $true
                 Write-SessionState $state $sessionDirectory
-                if (($env:ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS -as [int]) -gt 0) { Start-Sleep -Milliseconds ([Math]::Min([int]$env:ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS, 60000)) }
+                $pauseFile = Join-Path $resolvedGameTuneStateRoot 'test-pause-ms.txt'; if (Test-Path -LiteralPath $pauseFile -PathType Leaf) { Start-Sleep -Milliseconds ([Math]::Min([int]((Get-Content -LiteralPath $pauseFile -Raw) -as [int]), 60000)) }
 
                 $appliedControls = New-Object System.Collections.Generic.List[object]
                 $failedControls = New-Object System.Collections.Generic.List[string]
