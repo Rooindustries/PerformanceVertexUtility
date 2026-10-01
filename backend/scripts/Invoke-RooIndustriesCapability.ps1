@@ -492,7 +492,7 @@ function Invoke-RooIndustriesRoutedScript {
 
     $processArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath) + @($Arguments)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = 'powershell'
+    $psi.FileName = Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
     $psi.Arguments = Join-RooIndustriesCommandLine $processArgs
     $psi.WorkingDirectory = $RepoRoot
     $psi.UseShellExecute = $false

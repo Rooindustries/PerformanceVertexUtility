@@ -111,16 +111,17 @@ $bios = Read-Spec {
 }
 
 $drive = Read-Spec {
-    $logical = Get-CimInstance -ClassName Win32_LogicalDisk -Property DeviceID,Size,FreeSpace -Filter "DeviceID='$env:SystemDrive'"
+    $systemDrive = [IO.Path]::GetPathRoot([Environment]::GetFolderPath('Windows')).TrimEnd('\')
+    $logical = Get-CimInstance -ClassName Win32_LogicalDisk -Property DeviceID,Size,FreeSpace -Filter "DeviceID='$systemDrive'"
     $kind = $null
     try {
-        $link = Get-CimInstance -ClassName Win32_LogicalDiskToPartition -Property Antecedent,Dependent | Where-Object { $_.Dependent.DeviceID -eq $env:SystemDrive } | Select-Object -First 1
+        $link = Get-CimInstance -ClassName Win32_LogicalDiskToPartition -Property Antecedent,Dependent | Where-Object { $_.Dependent.DeviceID -eq $systemDrive } | Select-Object -First 1
         if ($link -and [string]$link.Antecedent.DeviceID -match 'Disk #(\d+)') {
             $index = [int]$Matches[1]
             $model = (Get-CimInstance -ClassName Win32_DiskDrive -Property Index,Model -Filter "Index=$index" | Select-Object -First 1).Model
             $media = $null
             try {
-                $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+                $shell = Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
                 $media = & $shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Get-BugReportDiskKind.ps1') -Index $index 2>$null | Select-Object -Last 1
                 if ($LASTEXITCODE -ne 0) { $media = $null }
             } catch { }
