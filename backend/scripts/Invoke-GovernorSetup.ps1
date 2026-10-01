@@ -398,17 +398,8 @@ switch($Action){
             Save-Records $records
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
             try {
-                $legacy=$false
-                if($task.userSid -eq $me -and (Test-Path -LiteralPath $hostExe)){try {Invoke-Host 'policy-summary' $task.policyRoot|Out-Null} catch {$legacy=$true}}
                 $stopped=Stop-Governor $task
                 if($stopped){$record.wasRunning=$stopped.wasRunning;Save-Records $records}
-                if($stopped -and $legacy){
-                    $settings=Join-Path $task.policyRoot 'governor.json'
-                    if(-not (Test-Path -LiteralPath $settings) -and (Test-Path -LiteralPath (Join-Path $task.policyRoot 'rules')) -and -not $stopped.wasRunning -and $stopped.state -and [string]$stopped.state.status -in @('stopped','stoppedWithConflicts')){
-                        [IO.File]::WriteAllText($settings,'{"schemaVersion":1,"paused":true}',[Text.UTF8Encoding]::new($false))
-                        Write-Log ('Kept the stopped rules of the earlier version paused: '+$task.policyRoot)
-                    }
-                }
             } catch {
                 Write-Log ('Could not stop the governor cleanly: '+$_.Exception.Message+'; ending task '+$task.taskName)
                 Stop-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -ErrorAction SilentlyContinue

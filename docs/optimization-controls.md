@@ -18,7 +18,7 @@ After removal, scan one app or all completed removals. Ownership checks retain t
 
 Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
 
-Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. The whole data folder is writable only by Administrators and SYSTEM; the signed-in user can read it, and only `operations\windows-timer` stays writable for the sign-in timer task. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
+Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. The whole data folder is writable only by Administrators and SYSTEM; the signed-in user can read it. The sign-in timer task and its worker run without administrator rights, so they keep their state in `%LOCALAPPDATA%\RooIndustriesOptimizationSuite.Timer`, outside the data folder; the app only reads it. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
 
 ## Native helper
 

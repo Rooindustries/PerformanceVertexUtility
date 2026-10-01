@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -59,7 +60,15 @@ public sealed partial class OptimizerService
         }
         finally { if (mine is not null) Interlocked.CompareExchange(ref _pendingTweaks, null, mine); }
     }
-    public Task<System.Text.Json.JsonElement> RecoverWindowsTweaksAsync(string reviewHash) => RunCoreAsync<System.Text.Json.JsonElement>("tweak-recover", new() { ["reviewHash"] = reviewHash, ["confirm"] = true });
+    private async Task<bool> EarlierReceiptsConfirmedAsync()
+    {
+        var downloads = Path.Combine(_storage, "download-blockers");
+        foreach (var receipt in new[] { Path.Combine(_storage, "ultimate-plan.json") }.Concat(Directory.Exists(downloads) ? Directory.EnumerateFiles(downloads, "*.json") : []))
+            if (await EarlierVersionConsent.RequireAsync(receipt).ConfigureAwait(false)) return true;
+        return false;
+    }
+    public async Task<System.Text.Json.JsonElement> RecoverWindowsTweaksAsync(string reviewHash)
+        => await RunCoreAsync<System.Text.Json.JsonElement>("tweak-recover", new() { ["reviewHash"] = reviewHash, ["confirm"] = true, ["acceptEarlierVersion"] = await EarlierReceiptsConfirmedAsync().ConfigureAwait(false) });
     public async Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool background = false, bool streamed = true)
         => (await TweakReadAsync("status", fresh ? TimeSpan.Zero : TweakStateAge, background, () => ReadStatusAsync(streamed), inspection => !TweakEngine.HasTransientErrors(inspection)))!;
     public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections)
@@ -70,11 +79,12 @@ public sealed partial class OptimizerService
         if (plan.ProfileId != profileId) throw new InvalidDataException("The review did not match your choices. Review them again.");
         return new(plan, path, Hash(path));
     }
-    public Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool acceptDataLoss = false)
+    public async Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool acceptDataLoss = false)
     {
         if (!string.Equals(Hash(review.Path), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed settings changed. Review them again.");
-        return RunCoreAsync<TweakApplyResult>(review.Plan.Selections.Length == 0 ? "tweak-restore" : "tweak-apply",
-            new() { ["previewPath"] = review.Path, ["reviewHash"] = review.Hash, ["confirm"] = true, ["acceptDataLoss"] = acceptDataLoss });
+        var restoring = review.Plan.Selections.Length == 0;
+        return await RunCoreAsync<TweakApplyResult>(restoring ? "tweak-restore" : "tweak-apply",
+            new() { ["previewPath"] = review.Path, ["reviewHash"] = review.Hash, ["confirm"] = true, ["acceptDataLoss"] = acceptDataLoss, ["acceptEarlierVersion"] = restoring && await EarlierReceiptsConfirmedAsync().ConfigureAwait(false) }).ConfigureAwait(false);
     }
     public Task<TweakCatalogResult> ImportWindowsSettingsAsync(string path) => RunCoreAsync<TweakCatalogResult>("tweak-custom-import", new() { ["customSettingsPath"] = path, ["confirm"] = true });
     public async Task<WindowsTweakReview> PreviewOwnershipAsync(string selectedPath)

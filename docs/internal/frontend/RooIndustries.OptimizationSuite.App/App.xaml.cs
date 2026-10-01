@@ -118,7 +118,7 @@ public partial class App : Application
 
         var initialNav = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_INITIAL_NAV");
         var commandLine = System.Environment.GetCommandLineArgs();
-        var ownershipPath = commandLine.Length == 3 && commandLine[1] == "--ownership-review" ? commandLine[2] : null;
+        var ownershipPath = commandLine.Length == 3 && commandLine[1] == "--ownership-review" ? ExternalOwnershipPath(commandLine[2]) : null;
         MainWindow = ownershipPath is not null ? new MainWindow("windows", false, ownershipPath) : string.IsNullOrWhiteSpace(initialNav)
             ? new MainWindow()
             : new MainWindow(initialNav.Trim(), false);
@@ -166,7 +166,7 @@ public partial class App : Application
         {
             var arguments = Split((activation.Data as Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs)?.Arguments ?? "");
             var marker = Array.IndexOf(arguments, "--ownership-review");
-            ownershipPath = marker >= 0 && marker + 1 < arguments.Length ? arguments[marker + 1] : null;
+            ownershipPath = marker >= 0 && marker + 1 < arguments.Length ? ExternalOwnershipPath(arguments[marker + 1]) : null;
         }
         catch (Exception error) { AppLog.Write("start", "Could not read the second launch's arguments: " + error.Message); }
         lock (RedirectGate)
@@ -188,6 +188,14 @@ public partial class App : Application
         }
         catch (Exception error) { AppLog.Write("start", "Could not bring the open window forward: " + error.Message); }
     });
+
+    private static string? ExternalOwnershipPath(string path)
+    {
+        var problem = RooIndustries.Optimizer.OperationFiles.ExternalPathProblem(path);
+        if (problem is null) return path;
+        AppLog.Write("start", "Ignored a file ownership review request: " + problem + ".");
+        return null;
+    }
 
     private static string[] Split(string commandLine)
     {
