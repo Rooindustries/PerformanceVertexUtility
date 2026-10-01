@@ -12,7 +12,6 @@ $hostExe=Join-Path $AppRoot 'backend\bin\optimizer\Optimizer.Host.exe'
 $workerScript=Join-Path $AppRoot 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'
 $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
-$conhost=Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe'
 $schtasks=Join-Path ([Environment]::GetFolderPath('System')) 'schtasks.exe'
 
 function Write-Log([string]$Text){
@@ -144,7 +143,8 @@ function Register-OtherGovernor($Record){
     Move-Item -LiteralPath $temporary -Destination $request -Force
     $settingsPath=Join-Path $Record.policyRoot 'governor.json'
     $paused=(Test-Path -LiteralPath $settingsPath) -and [bool](Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8|ConvertFrom-Json).paused
-    $execute=New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "'+$hostExe+'" policy-run "'+$request+'"') -WorkingDirectory (Split-Path $hostExe -Parent)
+    . (Join-Path $AppRoot 'backend\scripts\BrandCompatibility.Common.ps1')
+    $execute=New-RooIndustriesElevatedTaskAction $hostExe ('policy-run "'+$request+'"') (Split-Path $hostExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $Record.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     $settings.Enabled=([bool]$Record.enabled -and -not $paused)

@@ -67,6 +67,7 @@ public partial class App : Application
 
     public App()
     {
+        RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
         foreach (var name in new[] { "ROO_INDUSTRIES_BACKEND_ROOT", "ROO_INDUSTRIES_DOTNET_EXE", "ROO_INDUSTRIES_PYTHON_EXE", "ROO_INDUSTRIES_UTILITIES_ROOT", "ROO_INDUSTRIES_INITIAL_NAV" })
             _ = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue(name);
         InitializeComponent();

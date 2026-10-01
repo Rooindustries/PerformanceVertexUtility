@@ -24,7 +24,7 @@ if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimize
 $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build the policy worker with Build-OptimizerHost.ps1 before starting saved rules.'}
 $hostArgs=@($hostDll)
-if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
+if(Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll')){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){
     $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     if(Test-Path -LiteralPath $candidate){$DotNetPath=$candidate}else{$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -79,8 +79,8 @@ function Register-Governor([switch]$Disabled) {
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if(-not $admin){throw 'Saved rules need administrator rights. Open the app as an administrator and try again.'}
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
-    $arguments=(@('--headless')+@(@($DotNetPath)+$hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run',('"'+$requestPath+'"'))) -join ' '
-    $execute=New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument $arguments -WorkingDirectory $HostDirectory
+    $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run',('"'+$requestPath+'"'))) -join ' '
+    $execute=New-RooIndustriesElevatedTaskAction $DotNetPath $arguments $HostDirectory
     $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     $settings.Enabled=-not $Disabled
