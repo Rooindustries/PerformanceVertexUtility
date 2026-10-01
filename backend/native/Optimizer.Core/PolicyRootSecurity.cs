@@ -406,7 +406,7 @@ public static class PolicyRootSecurity
                         if (CarryFolder(entry.FullName, relative, destination, sourceFinal, kind, run, Skip)) pending.Push((entry.FullName, relative));
                         continue;
                     }
-                    if (entry.Name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase) || entry.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) { run.Dropped++; run.Retire.Add(relative); continue; }
+                    if (entry.Name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase) || entry.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) && !OnlyCopy(entry)) { run.Dropped++; run.Retire.Add(relative); continue; }
                     CarryFile(entry.FullName, relative, destination, sourceFinal, kind, run, final, merge, Skip);
                 }
                 catch (Exception error) when (Recoverable(error) && kind.KeepUntrusted)
@@ -418,6 +418,12 @@ public static class PolicyRootSecurity
             }
         }
         run.Tick(true);
+    }
+
+    private static bool OnlyCopy(FileSystemInfo entry)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(entry.Name, @"^(?<target>.+)\.[0-9a-fA-F]{32}\.tmp$");
+        return match.Success && !Path.Exists(Path.Combine(Path.GetDirectoryName(entry.FullName)!, match.Groups["target"].Value));
     }
 
     private static bool CarryFolder(string path, string relative, string destination, string sourceFinal, ProtectedFolder kind, Run run, Action<string, string> skip)
