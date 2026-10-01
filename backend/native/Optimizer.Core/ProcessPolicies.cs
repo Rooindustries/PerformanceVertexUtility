@@ -63,7 +63,11 @@ public sealed class ProcessPolicyStore
 
     public static string DefaultRoot => Path.Combine(BrandCompatibility.LocalDataRoot, "process-rules");
 
-    public bool Secure() => PolicyRootSecurity.Secure(Root);
+    public bool Secure()
+    {
+        DataFolder.EnsureFor(Root);
+        return PolicyRootSecurity.Secure(Root);
+    }
 
     public bool Paused()
     {
@@ -75,7 +79,7 @@ public sealed class ProcessPolicyStore
 
     public void SetPaused(bool paused)
     {
-        PolicyRootSecurity.Secure(Root);
+        Secure();
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         if (!paused) foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled)) RequireNoGameSession(rule);
         OperationFiles.Write(SettingsPath, new GovernorSettings(1, paused));
@@ -164,7 +168,7 @@ public sealed class ProcessPolicyStore
 
     public void Save(SavedProcessRule rule)
     {
-        PolicyRootSecurity.Secure(Root);
+        Secure();
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
@@ -202,7 +206,7 @@ public sealed class ProcessPolicyStore
 
     public void Delete(string ruleId)
     {
-        PolicyRootSecurity.Secure(Root);
+        Secure();
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         if (!Guid.TryParseExact(ruleId, "N", out _)) throw new InvalidDataException("Invalid process rule ID.");
         var path = Path.Combine(RulesDirectory, ruleId + ".json");

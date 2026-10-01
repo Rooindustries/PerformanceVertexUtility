@@ -13,12 +13,15 @@ public static class BrandCompatibility
     public const string LegacyJobPrefix = "Global\\RooProtectedSession-";
     public const string LegacyEnvironmentPrefix = "ROO_";
 
-    public static string LocalDataRoot => DataRoot(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+    private static readonly Lazy<string> Local = new(() => DataRoot(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)));
+    public static string LocalDataRoot => Local.Value;
 
     public static string DataRoot(string localAppData)
     {
         var legacy = Path.Combine(localAppData, LegacyDataFolder);
-        return Directory.Exists(legacy) ? legacy : Path.Combine(localAppData, "RooIndustriesOptimizationSuite");
+        var current = Path.Combine(localAppData, "RooIndustriesOptimizationSuite");
+        if (!Directory.Exists(legacy)) return current;
+        return OperatingSystem.IsWindows() && PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(current)) && !PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(legacy)) ? current : legacy;
     }
 
     public static string? EnvironmentValue(string name)

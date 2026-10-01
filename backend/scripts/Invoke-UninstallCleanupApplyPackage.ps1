@@ -182,7 +182,7 @@ try {
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
-        Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('RooIndustriesOptimizationSuite\cleanup-backups\' + [guid]::NewGuid().ToString('N'))
+        Join-Path (Get-RooIndustriesLocalDataRoot -Protected) ('cleanup-backups\' + [guid]::NewGuid().ToString('N'))
     } else { [System.IO.Path]::GetFullPath($BackupRoot) }
     $resolvedRollbackManifestPath = if ([string]::IsNullOrWhiteSpace($RollbackManifestPath)) { Join-Path $resolvedBackupRoot 'rollback-manifest.json' } else { [System.IO.Path]::GetFullPath($RollbackManifestPath) }
     $replayingSavedRun = $false

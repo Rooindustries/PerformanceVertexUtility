@@ -26,6 +26,7 @@ if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Chec
 if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
+if (args is ["--data-folder"]) { DataFolderChecks.Run(Check); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
@@ -35,6 +36,7 @@ if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args is ["--batch-state"]) { CleanupBatchStateChecks.Run(Check); return; }
 if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
 BrandCompatibilityChecks.Run(Check);
+DataFolderChecks.Run(Check);
 using (var self = Process.GetCurrentProcess())
 {
     for (var index = 0; index < 64; index++) OperationOwner.Current();

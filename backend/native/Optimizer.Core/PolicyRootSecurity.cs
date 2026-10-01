@@ -93,7 +93,7 @@ public static class PolicyRootSecurity
             try
             {
                 CreateSecured(temporary, user, kind);
-                kept = Copy(root, temporary, kind);
+                kept = Copy(root, temporary, kind, user);
                 File.WriteAllBytes(Path.Combine(temporary, ".migrated"), []);
                 if (Problem(temporary, kind) is { } copied) throw new UnauthorizedAccessException("The protected copy of the " + kind.Label + " is not protected: " + copied);
                 try { Directory.Move(root, legacy); }
@@ -107,7 +107,7 @@ public static class PolicyRootSecurity
                 if (Directory.Exists(temporary) && Directory.Exists(root)) Directory.Delete(temporary, true);
                 throw;
             }
-            try { kept |= Copy(legacy, temporary, kind, mirror: true); }
+            try { kept |= Copy(legacy, temporary, kind, user, mirror: true); }
             catch
             {
                 try { Directory.Move(legacy, root); Directory.Delete(temporary, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -125,7 +125,7 @@ public static class PolicyRootSecurity
             }
             foreach (var stray in strays)
             {
-                if (Copy(stray, root, kind, merge: true)) Directory.Move(stray, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
+                if (Copy(stray, root, kind, user, merge: true)) Directory.Move(stray, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
                 else Directory.Delete(stray, true);
             }
             if (kept) Directory.Move(legacy, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
@@ -255,15 +255,29 @@ public static class PolicyRootSecurity
         security.AddAccessRule(new FileSystemAccessRule(OwnerRights, FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize, inherit, PropagationFlags.None, AccessControlType.Allow));
         security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize, inherit, PropagationFlags.None, AccessControlType.Allow));
         new DirectoryInfo(path).Create(security);
-        if (kind.UserFolder is { } folder) CreateUserFolder(Path.Combine(path, folder), user);
+        if (kind.UserFolder is { } folder && !Nested(folder)) CreateUserFolder(Path.Combine(path, folder), user);
         if (Problem(path, kind) is { } problem) throw new UnauthorizedAccessException("The " + kind.Label + " could not be protected (" + problem + ").");
     }
 
     public static void RepairUserFolder(string root, ProtectedFolder kind)
     {
-        if (kind.UserFolder is not { } folder || Directory.Exists(Path.Combine(root, folder))) return;
+        if (kind.UserFolder is not { } folder || Nested(folder) || Directory.Exists(Path.Combine(root, folder))) return;
         using var identity = WindowsIdentity.GetCurrent();
         CreateUserFolder(Path.Combine(Normalize(root), folder), identity.User ?? throw new InvalidOperationException("The current Windows user SID is unavailable."));
+    }
+
+    private static bool Nested(string folder) => folder.Contains(Path.DirectorySeparatorChar);
+
+    public static string? WriterOf(string directory) => Writers(new DirectoryInfo(Normalize(directory)).GetAccessControl());
+
+    private static void PreserveProtection(DirectorySecurity source, string target)
+    {
+        if (!source.AreAccessRulesProtected || !Trusted(source.GetOwner(typeof(SecurityIdentifier))) || Writers(source) is not null || !Limited(source, OwnerRights)) return;
+        var security = new DirectorySecurity();
+        security.SetOwner(Administrators);
+        security.SetAccessRuleProtection(true, false);
+        foreach (FileSystemAccessRule rule in source.GetAccessRules(true, false, typeof(SecurityIdentifier))) security.AddAccessRule(rule);
+        new DirectoryInfo(target).SetAccessControl(security);
     }
 
     private static void CreateUserFolder(string path, SecurityIdentifier user)
@@ -288,7 +302,7 @@ public static class PolicyRootSecurity
         }
     }
 
-    private static bool Copy(string source, string destination, ProtectedFolder kind, bool mirror = false, bool merge = false)
+    private static bool Copy(string source, string destination, ProtectedFolder kind, SecurityIdentifier user, bool mirror = false, bool merge = false)
     {
         using var sourceHandle = PolicyRootLease.OpenDirectory(source);
         var sourcePath = PolicyRootLease.FinalPath(sourceHandle) ?? throw new IOException("The " + kind.Label + " path could not be read.");
@@ -304,9 +318,13 @@ public static class PolicyRootSecurity
                 if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) { Refuse("The " + kind.Label + " changed into a link while it was copied."); continue; }
                 if (entry is DirectoryInfo child)
                 {
-                    var inUserFolder = userFolder || kind.UserFolder is { } name && string.Equals(relative, name, StringComparison.OrdinalIgnoreCase);
-                    if (!inUserFolder && !Trusted(child.GetAccessControl().GetOwner(typeof(SecurityIdentifier)))) { Refuse("The " + kind.Label + " changed while it was copied, so it is not trusted."); continue; }
+                    var isUserFolder = kind.UserFolder is { } name && string.Equals(relative, name, StringComparison.OrdinalIgnoreCase);
+                    var inUserFolder = userFolder || isUserFolder;
+                    var childSecurity = child.GetAccessControl();
+                    if (!inUserFolder && !Trusted(childSecurity.GetOwner(typeof(SecurityIdentifier)))) { Refuse("The " + kind.Label + " changed while it was copied, so it is not trusted."); continue; }
                     Directory.CreateDirectory(target);
+                    if (!inUserFolder) PreserveProtection(childSecurity, target);
+                    if (isUserFolder) CreateUserFolder(target, user);
                     copied.Add(relative);
                     Walk(child.FullName, inUserFolder);
                     continue;

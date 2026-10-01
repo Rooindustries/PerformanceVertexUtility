@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
@@ -9,6 +10,7 @@ public static class AppLog
 {
     private const long MaxBytes = 2_000_000;
     private static readonly object Gate = new();
+    private static bool _enabled;
 
     public const string MissingFiles = "Some app files are missing. Extract the full Roo Industries folder again, then reopen the app.";
     public const string Failed = "Something went wrong. Details were saved to the app log (Settings, Open logs folder).";
@@ -39,9 +41,11 @@ public static class AppLog
         Write("timing", call + " " + elapsed.ElapsedMilliseconds + " ms " + outcome);
     }
 
+    public static bool Enable() { Volatile.Write(ref _enabled, true); return true; }
+
     public static void Write(string source, string? detail)
     {
-        if (string.IsNullOrWhiteSpace(detail)) return;
+        if (string.IsNullOrWhiteSpace(detail) || !Volatile.Read(ref _enabled)) return;
         try
         {
             var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

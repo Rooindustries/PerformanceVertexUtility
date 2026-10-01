@@ -126,7 +126,7 @@ function Get-RooIndustriesBulkCommandLine {
 
 function Get-RooIndustriesBulkClaimPath {
     param($Entry,[string]$FixtureRoot='')
-    $root=if($FixtureRoot){Join-Path $FixtureRoot '.removal-claims'}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\uninstall-claims'}
+    $root=if($FixtureRoot){Join-Path $FixtureRoot '.removal-claims'}else{Join-Path (Get-RooIndustriesLocalDataRoot -Protected) 'uninstall-claims'}
     $sha=[Security.Cryptography.SHA256]::Create()
     try {$id=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$Entry.appId)))).Replace('-','').ToLowerInvariant()}
     finally {$sha.Dispose()}
