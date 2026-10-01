@@ -12,11 +12,16 @@ public static class OperationsFolder
 
     public static string DefaultRoot => Path.Combine(BrandCompatibility.LocalDataRoot, "operations");
 
-    public static bool Secure(string root) => PolicyRootSecurity.Secure(root, Kind);
+    public static bool Secure(string root)
+    {
+        DataFolder.EnsureFor(root);
+        return PolicyRootSecurity.Secure(root, Kind);
+    }
 
     public static string Ensure(string root)
     {
         root = PolicyRootSecurity.Normalize(root);
+        DataFolder.EnsureFor(root);
         if (!PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(root)) || PolicyRootSecurity.Problem(root, Kind, deep: false) is not null) Secure(root);
         if (PolicyRootSecurity.Elevated()) PolicyRootSecurity.RepairUserFolder(root, Kind);
         return root;
@@ -29,7 +34,9 @@ public static class OperationsFolder
         var full = PolicyRootSecurity.Normalize(path);
         for (var directory = Path.GetDirectoryName(full); directory is not null; directory = Path.GetDirectoryName(directory))
         {
-            if (!Directory.Exists(directory) || PolicyRootSecurity.Problem(directory, Kind, deep: false) is not null) continue;
+            if (!Directory.Exists(directory)) continue;
+            if (PolicyRootSecurity.WriterOf(directory) is not null) break;
+            if (PolicyRootSecurity.Problem(directory, Kind, deep: false) is not null) continue;
             var lease = Lease(directory);
             var timer = Path.Combine(directory, TimerFolder) + Path.DirectorySeparatorChar;
             if (!full.StartsWith(timer, StringComparison.OrdinalIgnoreCase) && !string.Equals(full + Path.DirectorySeparatorChar, timer, StringComparison.OrdinalIgnoreCase)) return lease;

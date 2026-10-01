@@ -619,9 +619,10 @@ function New-RooIndustriesLeftoverItem {
     }
 }
 function Assert-RooIndustriesCleanupExclusions {
-    param([string[]]$Targets,[string]$DataRoot=(Get-RooIndustriesLocalDataRoot))
-    $policy=Join-Path $DataRoot 'cleanup-exclusions.json'
+    param([string[]]$Targets,[string]$DataRoot='')
     if(@($Targets).Count -eq 0){return}
+    if(-not $DataRoot){$DataRoot=Get-RooIndustriesLocalDataRoot -Protected}
+    $policy=Join-Path $DataRoot 'cleanup-exclusions.json'
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}
     $saved=$null

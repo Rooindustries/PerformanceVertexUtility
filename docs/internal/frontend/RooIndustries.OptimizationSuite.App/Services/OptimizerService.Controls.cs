@@ -52,6 +52,8 @@ public sealed partial class OptimizerService
         return result;
     }
 
+    public Task<JsonElement> SecureDataFolderAsync() => RunHostAsync<JsonElement>("data-secure", new() { ["confirm"] = true }, default, TimeSpan.FromMinutes(10), null);
+
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
     public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() =>
@@ -178,7 +180,7 @@ public sealed partial class OptimizerService
     private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial)
     {
         var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
-        if (confirmed && action != "operations-secure") await EnsureStorageAsync().ConfigureAwait(false);
+        if (confirmed && action is not ("operations-secure" or "data-secure")) await EnsureStorageAsync().ConfigureAwait(false);
         using var change = confirmed ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
         var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");

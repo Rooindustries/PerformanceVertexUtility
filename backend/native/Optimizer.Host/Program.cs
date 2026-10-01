@@ -15,7 +15,7 @@ try
     using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
     var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
-    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" or "operations-secure" || action == "policy-run" && request.DurationSeconds is not null))
+    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" or "operations-secure" or "data-secure" || action == "policy-run" && request.DurationSeconds is not null))
         throw new InvalidDataException("Governor and recovery-folder requests must be passed on standard input.");
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
@@ -192,12 +192,18 @@ try
             break;
         case "policy-secure":
             RequireConfirmation(request);
-            data = new { migrated = PolicyRootSecurity.Secure(Require(request.PolicyRoot, "policy root"), request.UserSid) };
+            var securedRoot = Require(request.PolicyRoot, "policy root");
+            if (request.UserSid is null) DataFolder.EnsureFor(securedRoot);
+            data = new { migrated = PolicyRootSecurity.Secure(securedRoot, request.UserSid) };
             break;
         case "operations-secure":
             RequireConfirmation(request);
             var operationsRoot = Require(request.OperationsRoot, "recovery folder");
             data = new { migrated = OperationsFolder.Secure(operationsRoot), root = OperationsFolder.Ensure(operationsRoot) };
+            break;
+        case "data-secure":
+            RequireConfirmation(request);
+            data = new { root = DataFolder.Ensure() };
             break;
         case "policy-pause":
             RequireConfirmation(request);
