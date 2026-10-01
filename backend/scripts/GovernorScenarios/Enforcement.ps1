@@ -522,18 +522,18 @@ function Test-ScenarioDeniedLookups {
 
 function Test-ScenarioConflictHoldsField {
     $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
-    $fixture=Start-Probe $path '8 1600 30 600' -NoWait
+    $fixture=Start-Probe $path '12 1600 30 600' -NoWait
     $started=[Diagnostics.Stopwatch]::StartNew()
     $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Conflict holds'
     Use-Rule $rule|Out-Null
     Assert ($null -ne (Wait-Field $fixture 'cpuPriority' 'AboveNormal' 6)) 'The rule is applied before the app starts denying access'
-    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 10} 15 500
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 14} 18 500
     $rule.enabled=$false
     Save-Rule $rule|Out-Null
     Worker 'Pause'|Out-Null
     $stuck=@(Get-Open $fixture.Id)
     Assert ($stuck.Count -eq 1 -and $stuck[0].status -eq 'conflict') 'With the rule off and the app denying access the record is kept as a failed restore'
-    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 42} 45 500
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 46} 50 500
     $operation=Join-Path $script:policyParent ('operations\process-'+[Guid]::NewGuid().ToString('N'))
     $preview=Join-Path $operation 'preview.json'
     Core 'process-preview' @{processId=$fixture.Id;controls=@{cpuPriority='Idle'};outputPath=$preview}|Out-Null
@@ -555,19 +555,19 @@ function Set-ScenarioListDenied([string]$Path,[bool]$Denied){
 
 function Test-ScenarioConfigErrorRestoreBackoff {
     $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
-    $fixture=Start-Probe $path '8 1600 32 600' -NoWait
+    $fixture=Start-Probe $path '12 1600 32 600' -NoWait
     $started=[Diagnostics.Stopwatch]::StartNew()
     Use-Rule (New-Rule $path @{cpuPriority='AboveNormal'} 'Config error backoff')|Out-Null
     Assert ($null -ne (Wait-Field $fixture 'cpuPriority' 'AboveNormal' 6)) 'The rule is applied before the app starts denying access'
     $rules=Join-Path $script:policyRoot 'rules'
     $script:deniedRules=$rules
     $script:cleanups.Add({Set-ScenarioListDenied $script:deniedRules $false})
-    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 10} 15 500
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 14} 18 500
     Set-ScenarioListDenied $rules $true
     $configError=Wait-Until {(Get-GovernorState).status -eq 'configurationError'} 30 500
     Note 'secondsToConfigurationError' $(if($configError){[Math]::Round($configError,1)})
     Assert ($null -ne $configError) 'With the rules folder unreadable the governor reports a configuration error after its grace period'
-    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 45} 50 500
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 49} 55 500
     $stillHeld=[string](Read-Field $fixture 'cpuPriority')
     Note 'fiveSecondsAfterDenialEnded' $stillHeld
     Assert ($stillHeld -eq 'AboveNormal') 'Restores that keep failing are retried with growing delays, not every half second'
