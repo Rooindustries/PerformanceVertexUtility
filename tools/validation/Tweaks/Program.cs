@@ -89,6 +89,7 @@ try
     }
     if (args is [_, "--boot-clock-shift"]) { FeatureChecks.ClockShift(Check); Console.WriteLine($"Completed {count} boot clock checks."); return; }
     if (args is [_, "--boot-identity"]) { Console.WriteLine("BOOT " + RegistryTweakStore.CurrentBoot()); return; }
+    if (args is [_, "--detect-checks"]) { DetectChecks.Run(root, Check); Console.WriteLine($"Completed {count} detection checks."); return; }
     if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();
@@ -374,6 +375,7 @@ try
     CompositionChecks.Run(root, Check, Reject);
     ControlChecks.Run(root, Check, Reject);
     FeatureChecks.Run(root, catalog, Check);
+    DetectChecks.Run(root, Check);
     SelectionChecks.Run(root, Check, Reject);
     PowerCompositionChecks.Run(root, Check, Reject);
     HostsChecks.Run(root, Check, Reject);

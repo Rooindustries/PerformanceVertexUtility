@@ -10,20 +10,31 @@ public sealed class TweakEngine
     public TweakEngine(TweakCatalog catalog, ITweakStore store) { catalog.Validate(); _catalog = catalog; _store = store; }
 
     public const string FeaturesPending = "Checking Windows features\u2026";
+    public const string FeaturesTimedOut = "Windows features did not answer within 60 seconds. Select Refresh to check again.";
+    public TimeSpan FeatureTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public static bool HasTransientErrors(TweakInspection inspection) => inspection.Settings.Any(setting => setting.Error is { } error
+        && (error == FeaturesTimedOut || error == FeaturesPending || error.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("control helper exited", StringComparison.Ordinal) || error.Contains("changed while being read", StringComparison.Ordinal) || error.Contains("service is transitioning", StringComparison.Ordinal)));
     public TweakInspection Detect(Action<TweakInspection>? partial = null)
     {
         var state = State();
-        var addresses = _catalog.Settings.SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
+        var requirementErrors = _catalog.Settings.Select(definition =>
+        {
+            try { foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement); return null; }
+            catch (Exception error) { return error; }
+        }).ToArray();
+        var addresses = _catalog.Settings.Where((_, index) => requirementErrors[index] is null).SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
         var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
         var fast = addresses.Except(slow).ToArray();
         var fastRead = _store.ReadControlsAsync(fast);
         var slowRead = slow.Length == 0 ? null : _store.ReadControlsAsync(slow);
-        var prepared = _catalog.Settings.Select(definition =>
+        var slowDeadline = slowRead is null ? null : Task.Delay(FeatureTimeout);
+        var prepared = _catalog.Settings.Select((definition, index) =>
         {
             try
             {
                 var supported = Supported(definition);
-                foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement);
+                if (requirementErrors[index] is { } failed) throw failed;
                 var resolvedOptions = definition.Options.Select(option => option with { Changes = option.Changes.SelectMany(_store.Resolve).ToArray() }).ToArray();
                 var readings = resolvedOptions.SelectMany(option => option.Changes).Select(change => change.Address).Distinct().ToDictionary(address => address, Read);
                 return (Definition: definition, Supported: supported, Options: resolvedOptions, Readings: readings, Error: (Exception?)null);
@@ -78,7 +89,12 @@ public sealed class TweakEngine
             foreach (var address in slow) pending[address] = (null, new InvalidDataException(FeaturesPending));
             partial(Inspect(pending));
         }
-        foreach (var (address, result) in Collect(slowRead)) prefetched[address] = result;
+        if (slowRead is not null && Task.WhenAny(slowRead, slowDeadline!).GetAwaiter().GetResult() != slowRead)
+        {
+            _ = slowRead.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            foreach (var address in slow) prefetched[address] = (null, new TimeoutException(FeaturesTimedOut));
+        }
+        else foreach (var (address, result) in Collect(slowRead)) prefetched[address] = result;
         return Inspect(prefetched);
     }
 
@@ -93,6 +109,7 @@ public sealed class TweakEngine
         if (preset.AvailableOnly)
         {
             var available = Detect().Settings.ToDictionary(setting => setting.Id);
+            if (choices.Any(choice => available[choice.SettingId].Error == FeaturesTimedOut)) throw new TimeoutException(FeaturesTimedOut);
             choices = choices.Where(choice => available[choice.SettingId].Supported && available[choice.SettingId].AvailableChoices?.Contains(choice.OptionId) == true).ToArray();
             if (choices.Length == 0) throw new InvalidDataException("None of this preset's settings are available on this PC.");
         }
