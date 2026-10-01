@@ -184,16 +184,39 @@ function Test-ScenarioMigrationBusy {
     Write-RooIndustriesOperationJson $rule $ruleFile
     $before=(Get-FileHash -LiteralPath $ruleFile).Hash
     $script:roots.Add($legacy)
+    $holder=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgumentList '/d /c ping -n 40 127.0.0.1 >nul' -WorkingDirectory $legacy -WindowStyle Hidden -PassThru
+    $script:probes.Add($holder)
+    Start-Sleep -Seconds 1
+    $failure=$null
+    try {Core 'policy-secure'|Out-Null} catch {$failure=$_.Exception.Message}
+    $folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name})
+    Note 'migrationBusy' ([ordered]@{failure=$failure;folders=$folders})
+    Assert ($null -ne $failure -and $failure -like 'Stop the Roo Industries Governor before protecting its saved rules folder.*') 'A migration that cannot move the earlier folder away says so'
+    Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and @($folders|Where-Object {$_ -ne 'process-rules'}).Count -eq 0) 'The earlier folder is untouched and the unfinished protected copy is removed, not the folder it was copied from'
+    $holder.Kill();$holder.WaitForExit(10000)|Out-Null
+    Core 'policy-secure'|Out-Null
+    Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once nothing holds the folder the migration completes with the rule byte for byte as before'
+}
+
+function Test-ScenarioMigrationFileLocked {
+    $legacy=$script:policyRoot
+    [IO.Directory]::CreateDirectory((Join-Path $legacy 'rules'))|Out-Null
+    $rule=New-Rule (Copy-Probe) @{cpuPriority='AboveNormal'} 'Migration with a locked file'
+    $rule.revision=[Guid]::NewGuid().ToString('N')
+    $ruleFile=Join-Path $legacy ('rules\'+$rule.ruleId+'.json')
+    Write-RooIndustriesOperationJson $rule $ruleFile
+    $before=(Get-FileHash -LiteralPath $ruleFile).Hash
+    $script:roots.Add($legacy)
     $held=Hold-File $ruleFile 0
     $failure=$null
     try {Core 'policy-secure'|Out-Null} catch {$failure=$_.Exception.Message}
     $held.stream.Dispose()
     $folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name})
-    Note 'migrationBusy' ([ordered]@{failure=$failure;folders=$folders})
-    Assert ($null -ne $failure -and $failure -like 'Stop the Roo Industries Governor before protecting its saved rules folder.*') 'A migration that cannot move the earlier folder away says so'
-    Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and @($folders|Where-Object {$_ -ne 'process-rules'}).Count -eq 0) 'The earlier folder is untouched and the unfinished protected copy is removed'
+    Note 'migrationFileLocked' ([ordered]@{failure=$failure;folders=$folders})
+    Assert ($null -ne $failure -and $failure -like '*because it is being used by another process*') 'A rule file that another process holds stops the migration with the system message'
+    Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and @($folders|Where-Object {$_ -ne 'process-rules'}).Count -eq 0) 'Nothing is moved and no half-finished protected copy is left behind'
     Core 'policy-secure'|Out-Null
-    Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once nothing holds the folder the migration completes with the rule byte for byte as before'
+    Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once the file is free the migration completes with the rule byte for byte as before'
 }
 
 function Test-ScenarioRootLease {
