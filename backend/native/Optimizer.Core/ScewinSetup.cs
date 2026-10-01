@@ -134,6 +134,7 @@ public sealed class ScewinSetup
     private static async Task ExtractInstallerAsync(string extractor, string installer, string directory, string include, CancellationToken cancellation)
     {
         var start = new ProcessStartInfo(extractor) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(extractor)! };
+        RuntimeEnvironment.Apply(start);
         foreach (var argument in new[] { "--silent", "--extract", "--test", "--include", include.Replace('/', Path.DirectorySeparatorChar), "--output-dir", directory, installer }) start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The package extractor did not start.");
         var output = process.StandardOutput.ReadToEndAsync();

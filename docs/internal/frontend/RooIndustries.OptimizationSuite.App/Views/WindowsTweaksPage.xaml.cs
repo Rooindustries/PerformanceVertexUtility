@@ -85,7 +85,8 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
                 "folders" => new ProcessStartInfo(Path.Combine(system, "control.exe"), "folders"),
                 _ => throw new InvalidOperationException("Unknown Windows tool."),
             };
-            start.UseShellExecute = true;
+            start.UseShellExecute = false;
+            RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
             using var process = Process.Start(start);
         }
         catch (Exception error) { ViewModel.Status = "Couldn't open this Windows tool."; ViewModel.Detail = error.Message; }
