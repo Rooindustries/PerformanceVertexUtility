@@ -104,10 +104,24 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
         catch (Exception error) { ViewModel.Status = "Couldn't import these switches."; ViewModel.Detail = error.Message; }
         finally { ViewModel.Busy = false; }
     }
-    public async Task ShowOwnershipAsync(string path)
+    public async Task ShowOwnershipAsync(string path, bool confirm = false)
     {
-        while (!IsLoaded || ViewModel.Busy) await Task.Delay(50);
-        await ViewModel.ReviewOwnershipAsync(path);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (!IsLoaded || ViewModel.Busy)
+        {
+            if (waited.Elapsed > TimeSpan.FromMinutes(2)) { ViewModel.Status = "Couldn't open the file ownership review"; ViewModel.Detail = "Windows settings are still loading. Open the review again from Profiles & tools."; return; }
+            await Task.Delay(50);
+        }
+        try
+        {
+            if (confirm && (ViewModel.HasReview || ViewModel.HasPendingChanges))
+            {
+                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Review file ownership", Content = path + "\n\nThis replaces the changes you are reviewing on this page.", PrimaryButtonText = "Review", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            }
+            await ViewModel.ReviewOwnershipAsync(path);
+        }
+        catch (Exception error) { AppLog.Write("windows-settings", "File ownership review did not open: " + error.Message); ViewModel.Status = "Couldn't open the file ownership review"; ViewModel.Detail = "Close any open dialog, then open the review again."; }
     }
     private async void ReviewFileOwnership(object sender, RoutedEventArgs args)
     {
@@ -126,11 +140,14 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
         ViewModel.Busy = true; ViewModel.Status = "Creating Windows restore point…";
         try
         {
-            _pendingRestorePoint ??= await App.Operations.PreviewRestorePointAsync(fresh.IsChecked == true);
-            var result = await App.Operations.CreateRestorePointAsync(_pendingRestorePoint);
-            if (!result.Pending) _pendingRestorePoint = null;
-            ViewModel.Status = result.Created && result.AvailableNow ? "Windows restore point verified" : result.Pending ? "Windows is still preparing the restore point" : "No new restore point was confirmed";
-            ViewModel.Detail = result.Message;
+            await ViewModel.OwnAsync(async () =>
+            {
+                _pendingRestorePoint ??= await App.Operations.PreviewRestorePointAsync(fresh.IsChecked == true);
+                var result = await App.Operations.CreateRestorePointAsync(_pendingRestorePoint);
+                if (!result.Pending) _pendingRestorePoint = null;
+                ViewModel.Status = result.Created && result.AvailableNow ? "Windows restore point verified" : result.Pending ? "Windows is still preparing the restore point" : "No new restore point was confirmed";
+                ViewModel.Detail = result.Message;
+            });
         }
         catch (Exception error) { ViewModel.Status = "Couldn't confirm the restore point."; ViewModel.Detail = error.Message + " Check System Protection and saved Windows settings for recovery."; }
         finally { ViewModel.Busy = false; }

@@ -87,6 +87,7 @@
                                 <Run Text="{x:Bind BulkRemoval.ViewModel.InstalledAppCount, Mode=OneWay}" /><Run Text=" apps installed" />
                                 <Run Text="" />
                             </TextBlock>
+                            <TextBlock Text="{x:Bind ViewModel.StaleNotice, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind ViewModel.StaleNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" AutomationProperties.AutomationId="RemoveAppsStaleNotice" />
                         </StackPanel>
                     </Grid>
                 </Grid>

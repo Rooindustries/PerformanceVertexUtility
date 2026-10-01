@@ -144,11 +144,13 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public ObservableCollection<LeftoverItem> Leftovers { get; } = new();
 
     protected override bool RefreshOnRevisit => SelectedApp is null;
+    protected override bool HasUserWork => SelectedApp is not null;
+    protected override bool IsWorking => ScanBusy;
 
     protected override async Task LoadCoreAsync()
     {
         var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
-        if (Quiet && SelectedApp is not null) return;
+        if (Quiet && SelectedApp is not null) { KeepStale(); return; }
         var apps = inventory?.Apps;
         if (apps is null || apps.Count == 0)
         {
@@ -172,7 +174,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnHasSelectionChanged(bool value) => RefreshActionState();
     partial void OnSelectedProtectedChanged(bool value) => RefreshActionState();
-    partial void OnScanBusyChanged(bool value) => RefreshActionState();
+    partial void OnScanBusyChanged(bool value)
+    {
+        RefreshActionState();
+        if (value) StartOwn(); else FinishOwn();
+    }
     partial void OnRemovalPathReviewedChanged(bool value) => RefreshActionState();
     partial void OnLeftoverScanCompletedChanged(bool value) => RefreshActionState();
     partial void OnCleanupPlanReadyChanged(bool value) => RefreshActionState();
@@ -183,6 +189,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnSelectedAppChanged(InstalledApp? value)
     {
+        if (value is null) _ = RefreshIfStaleAsync();
         _selectionGeneration++;
         ScanBusy = false;
         RemovalRouteBlocked = false;
@@ -610,11 +617,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 Contains(a.PublisherDisplay, query));
         }
 
-        Apps.Clear();
-        foreach (var a in source)
-        {
-            Apps.Add(a);
-        }
+        Apps.SyncWith(source);
     }
 
     private static bool Contains(string? haystack, string needle)

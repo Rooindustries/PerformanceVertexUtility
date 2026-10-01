@@ -57,12 +57,19 @@ namespace RooIndustries.OptimizationSuite.Services
         public event Action<TweakInspection, long>? WindowsTweaksPartial;
         public (TweakInspection Inspection, long Generation)? PendingWindowsTweaks { get; private set; }
         public Func<Task>? BeforeStatus { get; set; }
+        public Func<Task>? AfterStatus { get; set; }
+        public Func<TweakInspection, TweakInspection>? TransformStatus { get; set; }
+        public int StatusReads { get; private set; }
+        public bool AllowOwnership { get; set; }
         public void RaisePartial(TweakInspection partial, long generation) { PendingWindowsTweaks = (partial, generation); WindowsTweaksPartial?.Invoke(partial, generation); }
         public async Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool streamed = true)
         {
             if (BeforeStatus is not null) await BeforeStatus();
             PendingWindowsTweaks = null;
+            StatusReads++;
             var inspection = Engine.Detect();
+            if (AfterStatus is not null) await AfterStatus();
+            if (TransformStatus is not null) inspection = TransformStatus(inspection);
             return Missing ? inspection with { Settings = [new("setting", "Office setting", false, [], [], "A supported Microsoft Office installation could not be identified.", [])] } : inspection;
         }
         public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string id, TweakSelection[] selections)
@@ -77,13 +84,18 @@ namespace RooIndustries.OptimizationSuite.Services
         {
             Applies++;
             if (FailApply) throw new IOException("Controlled native apply failure");
-            var result = Engine.Apply(review.Path, review.Hash, accepted); AfterApply?.Invoke(); return Task.FromResult(result);
+            using (DataGeneration.BeginChange()) { var result = Engine.Apply(review.Path, review.Hash, accepted); AfterApply?.Invoke(); return Task.FromResult(result); }
         }
         public Task<JsonElement> RecoverWindowsTweaksAsync(string hash) => throw new InvalidOperationException("Unexpected recovery call");
         public Task<WindowsTweakReview> PreviewOwnershipAsync(string path)
         {
             OwnershipPreviews++;
-            throw new InvalidOperationException("Unexpected ownership call");
+            if (!AllowOwnership) throw new InvalidOperationException("Unexpected ownership call");
+            using (DataGeneration.BeginChange())
+            {
+                var plan = Engine.Preview("ownership", [new("setting", "on")]); var file = Path.Combine(_root, plan.OperationId + ".json"); OperationFiles.Write(file, plan);
+                return Task.FromResult(new WindowsTweakReview(plan, file, OperationFiles.HashFile(file)));
+            }
         }
     }
 }

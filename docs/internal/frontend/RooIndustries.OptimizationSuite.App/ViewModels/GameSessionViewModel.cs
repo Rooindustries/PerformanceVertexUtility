@@ -84,6 +84,11 @@ public partial class GameSessionViewModel : ObservableObject
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
     partial void OnAffinityMaskChanged(string value) => Invalidate();
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
+    public void NoteChanged()
+    {
+        Status = "Settings changed elsewhere";
+        Detail = "Choose the launcher again, or clear it, to read its current values.";
+    }
     partial void OnSelectedLauncherChanged(CpuProcessChoice? value)
     {
         if (_sessionRoot is not null) return;
