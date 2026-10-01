@@ -95,10 +95,44 @@ public sealed class LiveDataService
     public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
 
+    private static Task<IDisposable> EnterGovernorGateAsync()
+    {
+        var entered = new TaskCompletionSource<IDisposable>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ManualResetEventSlim();
+        var owner = new Thread(() =>
+        {
+            IDisposable gate;
+            var clock = Stopwatch.StartNew();
+            while (true)
+            {
+                try { gate = RooIndustries.Optimizer.ProcessPolicyStore.Gate(); break; }
+                catch (UnauthorizedAccessException) when (clock.Elapsed < TimeSpan.FromSeconds(30)) { Thread.Sleep(100); }
+                catch (UnauthorizedAccessException) { entered.TrySetException(new TimeoutException("Another rule or game session change is still running. Try again in a moment.")); return; }
+                catch (Exception error) { entered.TrySetException(error); return; }
+            }
+            entered.TrySetResult(new GateRelease(release));
+            release.Wait();
+            gate.Dispose();
+            release.Dispose();
+        }) { IsBackground = true, Name = "Roo Industries governor gate" };
+        owner.Start();
+        return entered.Task;
+    }
+
+    private sealed class GateRelease(ManualResetEventSlim release) : IDisposable
+    {
+        private int _released;
+        public void Dispose() { if (Interlocked.Exchange(ref _released, 1) == 0) release.Set(); }
+    }
+
     public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
     {
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
+        IDisposable gate;
+        try { gate = await EnterGovernorGateAsync().ConfigureAwait(false); }
+        catch (Exception error) { return new(null, error.Message); }
+        using var governorGate = gate;
         var previousGeneration = ReadGeneration(ProcessGenerationPath);
         var generation = Guid.NewGuid().ToString("N");
         if (!TryWriteGeneration(ProcessGenerationPath, generation, "process profile", out var generationError))
