@@ -228,6 +228,14 @@ try {
                     if ($later.Count -gt 0) { $known.controlChanges = @($known.controlChanges) + $later }
                 }
 
+                $backupManifest.snapshots = @($snapshots.ToArray())
+                $backupPath = Join-Path $sessionDirectory 'backup.json'
+                Write-RooIndustriesGameTuneJsonFile $backupManifest $backupPath
+                $state.backupManifestPath = $backupPath
+                $state.restorable = $true
+                Write-SessionState $state $sessionDirectory
+                if (($env:ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS -as [int]) -gt 0) { Start-Sleep -Milliseconds ([Math]::Min([int]$env:ROO_INDUSTRIES_TEST_GAMETUNE_PAUSE_MS, 60000)) }
+
                 $appliedControls = New-Object System.Collections.Generic.List[object]
                 $failedControls = New-Object System.Collections.Generic.List[string]
                 foreach ($change in $entryControlChanges) {
@@ -271,11 +279,6 @@ try {
             $logs.Add($logEntry) | Out-Null
             if ($ConfirmApply) {
                 Add-RooIndustriesGameTuneLogFileEntry $sessionDirectory $logEntry
-                if ($snapshots.Count -gt 0) {
-                    $backupManifest.snapshots = @($snapshots.ToArray())
-                    $backupPath = Join-Path $sessionDirectory 'backup.json'
-                    Write-RooIndustriesGameTuneJsonFile $backupManifest $backupPath
-                }
                 $state.pollCount = $pollIndex
                 $state.changedItems = @($changed.ToArray())
                 $state.skippedItems = @($skipped.ToArray())
