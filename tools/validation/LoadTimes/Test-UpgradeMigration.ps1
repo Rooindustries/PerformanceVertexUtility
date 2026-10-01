@@ -23,6 +23,10 @@ $A = [Windows.Automation.AutomationElement]; $TS = [Windows.Automation.TreeScope
 $script:LogPath = Join-Path $OutDir ('migration-' + $Phase + '.log')
 $script:Failures = 0
 $Setting = 'windows.0689e69eedc05770'
+$TimerSetting = 'windows.e9d78835a38cf818'
+$script:OlderAsked = 0
+$script:OlderText = ''
+$script:SawPreparing = $false
 $Profile = 'roo-industries-migration-check'
 $RuleName = 'roo-industries-migration-rule'
 $Personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
@@ -64,7 +68,29 @@ function Nav([string]$name) {
     $item = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, $name), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) } 30 "nav $name"
     Invoke-Element $item; Log "nav $name"
 }
-function Tweaks-Idle { WaitFor { $r = ById 'WindowsTweaksRefresh'; $s = ById 'WindowsTweaksStatus'; if ($r -and $r.Current.IsEnabled -and $s -and $s.Current.Name -notmatch '^Loading') { $s.Current.Name } } 600 'Windows tweaks idle' }
+function Older-Dialog { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Saved by an older version')) }
+function Tweaks-Idle {
+    $deadline = (Get-Date).AddSeconds(600); $seen = $false
+    while ((Get-Date) -lt $deadline) {
+        $dialog = $null; try { $dialog = Older-Dialog } catch {}
+        if ($dialog) {
+            if (-not $seen) {
+                $seen = $true; $script:OlderAsked++
+                $script:OlderText = (@(Texts | Where-Object { $_ -like '*saved by an older version*' }) -join ' | ')
+                Log ('the app asked about the backup saved by an older version: ' + $script:OlderText)
+                Shot 'older-version'
+                $continue = $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Continue'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Button)))
+                if ($continue) { Invoke-Element $continue }
+            }
+        } else {
+            $seen = $false
+            $r = ById 'WindowsTweaksRefresh'; $s = ById 'WindowsTweaksStatus'
+            if ($r -and $r.Current.IsEnabled -and $s -and $s.Current.Name -notmatch '^Loading') { return $s.Current.Name }
+        }
+        Start-Sleep -Milliseconds 150
+    }
+    throw 'Timed out waiting for Windows tweaks idle'
+}
 function Review-Texts { @((ById 'WindowsTweaksReview').FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | ForEach-Object { $_.Current.Name } | Where-Object { $_ }) }
 function Transparency { $v = Get-ItemProperty $Personalize -Name EnableTransparency -ErrorAction SilentlyContinue; if ($v) { [string]$v.EnableTransparency } else { '<absent>' } }
 function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
@@ -99,11 +125,22 @@ function Set-Profile {
     $name = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profile name'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Edit))) } 20 'Profile name box'
     $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Profile); Start-Sleep 1
 }
-function Apply-Reviewed([string]$what) {
+function Clear-Profile { $box = $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profile name'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Edit))); if ($box) { $box.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue(''); Start-Sleep 1 } }
+function Choose-Setting([string]$settingId, [string]$search, [string]$choice) {
+    $box = WaitFor { ById 'WindowsTweaksSearch' } 30 'search box'
+    $box.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($search); Start-Sleep 1
+    Set-Toggle (WaitFor { ById ($settingId + '.select') } 30 ($search + ' row')) $true
+    $combo = WaitFor { ById ($settingId + '.value') } 20 'value combo'
+    $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Start-Sleep -Milliseconds 800
+    $item = WaitFor { $combo.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, $choice)) } 10 "choice $choice"
+    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+    Invoke-Element (ById 'WindowsTweaksPreview'); Start-Sleep 2; Tweaks-Idle | Out-Null
+}
+function Apply-Reviewed([string]$what, [string]$expect = 'Transparency', [string]$forbid = 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender') {
     WaitFor { $r = ById 'WindowsTweaksReview'; if ($r -and @($r.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text))).Count) { $r } } 60 "$what review" | Out-Null
     $texts = @(Review-Texts)
     Log ("$what review: " + ($texts -join ' | '))
-    if ((($texts -join ' ') -notmatch 'Transparency') -or @($texts | Where-Object { $_ -match 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender' }).Count) { throw "$what review is not exactly the Transparency change; refusing to apply" }
+    if ((($texts -join ' ') -notmatch $expect) -or @($texts | Where-Object { $_ -match $forbid }).Count) { throw "$what review is not exactly the $expect change; refusing to apply" }
     Set-Toggle (ById 'WindowsTweaksApproval') $true
     Invoke-Element (WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button')
     Start-Sleep 2
@@ -112,9 +149,20 @@ function Apply-Reviewed([string]$what) {
 function Open-App {
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     $script:App = Start-Process $Exe -PassThru
-    $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 180 'main window'
+    $script:Win = $null
+    $deadline = (Get-Date).AddSeconds(900)
+    while ((Get-Date) -lt $deadline -and -not $script:Win) {
+        $windows = @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 })
+        foreach ($window in $windows) {
+            if (-not $script:SawPreparing -and $window.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Preparing your saved settings'))) {
+                $script:SawPreparing = $true; Shot 'preparing'; Log 'the Preparing your saved settings window is showing'
+            }
+        }
+        $script:Win = @($windows | Where-Object { $_.Current.Name -like 'Roo Industries*' -and $_.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) })[0]
+        if (-not $script:Win) { Start-Sleep -Milliseconds 200 }
+    }
+    if (-not $script:Win) { throw 'Timed out waiting for the main window and Home' }
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [MigrationU32]::ShowWindow($h, 9) | Out-Null; [MigrationU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [MigrationU32]::SetForegroundWindow($h) | Out-Null
-    WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 
 $script:App = $null
@@ -163,10 +211,17 @@ try {
         $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probeId) -eq 'BelowNormal') { $true } } 240 'rule enforced' } catch {}
         Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probeId))
         Shot 'saved'
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Clear-Profile
+        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Enabled'
+        Apply-Reviewed 'timer apply' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $timerTask = $null; try { $timerTask = WaitFor { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })[0] } 90 'the sign-in timer task' } catch {}
+        Check ($null -ne $timerTask) 'the earlier version registered the sign-in timer' ($(if ($timerTask) { $timerTask.TaskName + ' state=' + $timerTask.State } else { 'no RooIndustries.Timer task' }))
+        Shot 'timer'
         $oldWorkers = @(Any-Policy-Workers | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
         $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
         Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
-        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
@@ -209,6 +264,17 @@ try {
         Check ($registryRestored -eq [string]$state.registryBefore) 'the new version restores the tweak applied by the earlier version' ("before=" + $state.registryBefore + " applied=" + $state.registryApplied + " restored=" + $registryRestored)
         $undo = @(Undo-Texts)
         Check (-not (Has-Profile $undo)) 'the restored profile leaves the Undo page' ($undo -join ' | ')
+        Check ($script:OlderAsked -eq 1 -and $script:OlderText -match 'saved by an older version') 'the app asked once whether to use the backup saved by an older version, and the undo went on after Continue' ('asked=' + $script:OlderAsked + ' text=' + $script:OlderText)
+        $timerTasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })
+        Check ($timerTasks.Count -eq 1 -and $timerTasks[0].TaskName -eq $state.timerTask) 'the sign-in timer of the earlier version is still registered after the upgrade' ('now=' + (($timerTasks | ForEach-Object { $_.TaskName + ' ' + $_.State }) -join ',') + ' before=' + $state.timerTask)
+        $timerState = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite.Timer'
+        Log ('sign-in timer state folder after the upgrade: ' + (Test-Path -LiteralPath $timerState) + ' (' + $timerState + ')')
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Clear-Profile
+        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Disabled'
+        Apply-Reviewed 'timer undo' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $timerGone = $null; try { $timerGone = WaitFor { if (@(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count -eq 0) { $true } } 90 'the sign-in timer to be removed' } catch {}
+        Check ([bool]$timerGone) 'the new version undoes the sign-in timer applied by the earlier version' ('tasks=' + @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count)
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
         Pick 'ProcessRulesList' ($RuleName + '*')

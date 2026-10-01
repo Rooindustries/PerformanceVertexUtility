@@ -8,7 +8,7 @@
     [int]$ColdTweaksRuns = 2,
     [int]$Minutes = 45,
     [switch]$SkipAdvanced,
-    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions', 'hardware', 'launchers', 'override', 'incomplete', 'incomplete-before')][string]$Scenario = 'loadtimes',
+    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions', 'hardware', 'launchers', 'launchers-session', 'override', 'incomplete', 'incomplete-before')][string]$Scenario = 'loadtimes',
     [int]$MemoryPasses = 0,
     [string]$GcDump,
     [switch]$Uninstall,
@@ -42,7 +42,7 @@ $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Obj
 $sessionTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' } | ForEach-Object { $_.TaskPath + $_.TaskName })
 if ($SetupPath -and $installedBefore -and -not $ReplaceExisting) { throw 'The app is already installed on this PC; pass -ReplaceExisting to replace it with the test build.' }
 $task = 'RooIndustries_LoadTimes'
-$standalone = 'loadtimes', 'invalidation', 'modes', 'hardware', 'launchers', 'override', 'incomplete', 'incomplete-before'
+$standalone = 'loadtimes', 'invalidation', 'modes', 'hardware', 'launchers', 'launchers-session', 'override', 'incomplete', 'incomplete-before'
 $ifeoProbe = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
 $ifeoBefore = Test-Path $ifeoProbe
 try {
@@ -66,8 +66,8 @@ if (-not $explorer) { throw 'No interactive desktop session.' }
 $sid = (Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid).Sid
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
 $ps = Join-Path $PSHOME 'powershell.exe'
-$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1'; launchers = 'Test-ElevatedLaunchers.ps1'; override = 'Test-HelperStart.ps1'; incomplete = 'Test-HelperStart.ps1'; 'incomplete-before' = 'Test-HelperStart.ps1' }[$Scenario]
-$scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
+$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1'; launchers = 'Test-ElevatedLaunchers.ps1'; 'launchers-session' = 'Test-ElevatedLaunchers.ps1'; override = 'Test-HelperStart.ps1'; incomplete = 'Test-HelperStart.ps1'; 'incomplete-before' = 'Test-HelperStart.ps1' }[$Scenario]
+$scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; 'launchers-session' = ' -Part session'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
 $arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $scenarioExtra }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
 $action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
@@ -116,12 +116,17 @@ finally {
         Step 'remove test helpers' {
             Remove-Item (Join-Path $env:TEMP 'roo-industries-feature-hang.flag') -Force -ErrorAction SilentlyContinue
             Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '-n (400|600|900) 127\.0\.0\.1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            Get-Process RooIndustriesLoadTimesProbe, RooIndustriesLauncherProbe, RooIndustriesProtectedLauncherProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process RooIndustriesLoadTimesProbe, RooIndustriesLauncherProbe, RooIndustriesProtectedLauncherProbe, RooIndustriesEnvironmentControl -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
-            Remove-Item (Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedGameProbe.exe') -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedGameProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesEnvironmentControl.exe') -Force -ErrorAction SilentlyContinue
+        }
+        Step 'remove the environment control task and the planted name' {
+            if (Get-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -Confirm:$false }
+            $planted = (Get-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'DOTNET_STARTUP_HOOKS' -ErrorAction SilentlyContinue).DOTNET_STARTUP_HOOKS
+            if ($planted -ceq 'C:\RooIndustriesNoSuchFolder\hook.dll') { Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'DOTNET_STARTUP_HOOKS'; "RESULT CLEANUP: removed the planted DOTNET_STARTUP_HOOKS from the user environment" }
         }
         Step 'remove protected-session leftovers' {
-            if ($Scenario -eq 'launchers') {
+            if ($Scenario -like 'launchers*') {
                 foreach ($sessionTask in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' -and $sessionTasksBefore -notcontains ($_.TaskPath + $_.TaskName) })) {
                     Stop-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -ErrorAction SilentlyContinue
                     Unregister-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
