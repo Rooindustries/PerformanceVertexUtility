@@ -156,9 +156,8 @@ foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\
 
 Assert-ReleaseScripts $repoRoot $stage
 
-$smokeRequest = Join-Path $work 'smoke-request.json'
-[IO.File]::WriteAllText($smokeRequest, (@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
-$smoke = (& (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' $smokeRequest) -join "`n"
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$smoke = ((@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json) | & (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' '-') -join "`n"
 if ($LASTEXITCODE -ne 0 -or $smoke -notmatch '"status"\s*:\s*"completed"' -or $smoke -notmatch '"settings"\s*:\s*\[\s*\{') { throw 'The obfuscated helper could not read the Windows tweak catalog.' }
 Write-Host ('Smoke test: the obfuscated helper returned the Windows tweak catalog (' + $smoke.Length + ' characters).')
 
