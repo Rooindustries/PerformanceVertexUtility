@@ -1,5 +1,5 @@
 ﻿param(
-    [Parameter(Mandatory)][ValidateSet('before', 'after')][string]$Phase,
+    [Parameter(Mandatory)][ValidateSet('before', 'after', 'undo-timer')][string]$Phase,
     [Parameter(Mandatory)][string]$OutDir,
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
@@ -222,6 +222,16 @@ try {
         $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
         Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
         [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    } elseif ($Phase -eq 'undo-timer') {
+        $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
+        Open-App
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Clear-Profile
+        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Disabled'
+        Apply-Reviewed 'timer undo' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $timerGone = $null; try { $timerGone = WaitFor { if (@(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count -eq 0) { $true } } 90 'the sign-in timer to be removed' } catch {}
+        Check ([bool]$timerGone) 'the new version undoes the sign-in timer applied by the earlier version' ('tasks=' + @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count)
+        Shot 'timer-undone'
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
@@ -269,12 +279,6 @@ try {
         Check ($timerTasks.Count -eq 1 -and $timerTasks[0].TaskName -eq $state.timerTask) 'the sign-in timer of the earlier version is still registered after the upgrade' ('now=' + (($timerTasks | ForEach-Object { $_.TaskName + ' ' + $_.State }) -join ',') + ' before=' + $state.timerTask)
         $timerState = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite.Timer'
         Log ('sign-in timer state folder after the upgrade: ' + (Test-Path -LiteralPath $timerState) + ' (' + $timerState + ')')
-        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
-        Clear-Profile
-        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Disabled'
-        Apply-Reviewed 'timer undo' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
-        $timerGone = $null; try { $timerGone = WaitFor { if (@(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count -eq 0) { $true } } 90 'the sign-in timer to be removed' } catch {}
-        Check ([bool]$timerGone) 'the new version undoes the sign-in timer applied by the earlier version' ('tasks=' + @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count)
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
         Pick 'ProcessRulesList' ($RuleName + '*')
