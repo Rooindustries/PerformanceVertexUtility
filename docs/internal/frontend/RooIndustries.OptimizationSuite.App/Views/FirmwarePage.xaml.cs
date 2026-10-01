@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -65,7 +64,7 @@ public sealed partial class FirmwarePage : Page
     private void OpenFiles(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SessionDirectory is not { } directory) return;
-        try { Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); }
+        try { RuntimeEnvironment.OpenInExplorer(directory); }
         catch (Exception ex) { ViewModel.Message = ex.Message; }
     }
     private bool _restarting;

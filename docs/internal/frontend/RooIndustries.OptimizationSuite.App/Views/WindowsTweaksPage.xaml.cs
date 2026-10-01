@@ -71,7 +71,7 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
             if (action == "oosu") { if (App.MainWindow is MainWindow window) window.FindTool("ShutUp"); return; }
             if (action == "recall")
             {
-                using var settings = Process.Start(new ProcessStartInfo("ms-settings:privacy") { UseShellExecute = true });
+                RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer("ms-settings:privacy");
                 ViewModel.Status = "Use Recall & snapshots in Windows settings";
                 ViewModel.Detail = "Open Recall & snapshots, expand Delete snapshots, then choose Delete all. Windows asks for Windows Hello where required. Deleted snapshots cannot be restored.";
                 return;
