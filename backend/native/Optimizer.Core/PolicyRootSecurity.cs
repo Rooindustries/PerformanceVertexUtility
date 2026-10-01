@@ -60,7 +60,7 @@ public static class PolicyRootSecurity
         RequireElevated(kind);
         using var identity = WindowsIdentity.GetCurrent();
         var user = userSid is null ? identity.User ?? throw new InvalidOperationException("The current Windows user SID is unavailable.") : new SecurityIdentifier(userSid);
-        var local = Canonical(user == identity.User ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) : Path.Combine(ProfilePath(user), "AppData", "Local"));
+        var local = Canonical(user == identity.User ? RuntimeEnvironment.LocalAppData : Path.Combine(ProfilePath(user), "AppData", "Local"));
         if (!Canonical(root).StartsWith(local + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("The " + kind.Label + " must be inside the Windows user's local app data.");
         var marker = MarkerName(root);

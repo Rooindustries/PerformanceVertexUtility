@@ -7,6 +7,7 @@ string? root = null;
 try
 {
     RuntimeEnvironment.RequireClean();
+    RuntimeEnvironment.Establish();
     if (args.Length != 2 || args[0] is not ("run" or "watch")) throw new ArgumentException("Provide run/watch and a request file.");
     using var requestLease = OperationsFolder.LeaseContaining(args[1]);
     var request = OperationFiles.Read<SessionRequest>(args[1]);

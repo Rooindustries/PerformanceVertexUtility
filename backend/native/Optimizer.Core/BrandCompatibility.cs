@@ -15,7 +15,7 @@ public static class BrandCompatibility
     public const string LegacyJobPrefix = "Global\\RooProtectedSession-";
     public const string LegacyEnvironmentPrefix = "ROO_";
 
-    private static readonly Lazy<string> Local = new(() => DataRoot(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)));
+    private static readonly Lazy<string> Local = new(() => DataRoot(RuntimeEnvironment.LocalAppData));
     public static string LocalDataRoot => Local.Value;
 
     public static string DataRoot(string localAppData)

@@ -35,7 +35,7 @@ public static class TimerControl
 #if GOVERNOR_TEST_HOOKS
             if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_STATE") is { Length: > 0 } test) return test;
 #endif
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite.Timer");
+            return Path.Combine(RuntimeEnvironment.LocalAppData, "RooIndustriesOptimizationSuite.Timer");
         }
     }
 

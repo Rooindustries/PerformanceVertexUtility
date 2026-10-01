@@ -12,6 +12,7 @@ public static class DataFolderGate
     public static bool Open(BackendLocator locator)
     {
         RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
+        RooIndustries.Optimizer.RuntimeEnvironment.PinProfile();
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
         var problem = Attempt(() => Protected(locator), out var enabled);
         if (problem is null) return enabled;

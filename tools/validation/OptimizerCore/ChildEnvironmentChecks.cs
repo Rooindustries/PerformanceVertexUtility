@@ -3,10 +3,11 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using RooIndustries.Optimizer;
+using H = DataRootHarness;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root"];
+    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root", "data-root-profile"];
 
     public static async Task Run(Action<bool, string> check, string scenario, string mode, string? directory)
     {
@@ -17,6 +18,7 @@ static class ChildEnvironmentChecks
             case "restart": Restart(check, mode); break;
             case "hibernation": Hibernation(check, mode); break;
             case "cleanup-temp-root": CleanupTempRoot(check, mode); break;
+            case "data-root-profile": DataRootProfile(check, mode); break;
             case "registry-hook": RegistryHook(check, mode); break;
             case "firmware-provider": FirmwareProvider(check, mode, Required()); break;
             case "firmware-extractor": await FirmwareExtractor(check, mode, Required()); break;
@@ -43,6 +45,12 @@ static class ChildEnvironmentChecks
         if (image is not null && ChildEnv.ImageFailure(seen, image) is { } wrong) failures.Add(wrong);
         if (seen.ProcessId == Environment.ProcessId) failures.Add("the report came from the test process itself");
         return failures;
+    }
+
+    static void ForRelease(ProcessStartInfo start)
+    {
+        if (!RuntimeEnvironment.Release) return;
+        foreach (var name in start.Environment.Keys.Where(name => RuntimeEnvironment.ClearPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToArray()) start.Environment.Remove(name);
     }
 
     static void ControlHelper(Action<bool, string> check, string mode)
@@ -89,6 +97,33 @@ static class ChildEnvironmentChecks
             check((bool)isProtected.Invoke(null, [userTemp])!, "The user's temp folder stays a protected cleanup root while TEMP points at another folder");
             check((bool)isProtected.Invoke(null, [Path.GetTempPath().TrimEnd('\\')])!, "The folder TEMP points at is a protected cleanup root as well");
         });
+    }
+
+    static void DataRootProfile(Action<bool, string> check, string mode)
+    {
+        var root = BrandCompatibility.LocalDataRoot;
+        var local = Path.Combine(RuntimeEnvironment.Profile, "AppData", "Local");
+        var marker = Temporary("profile");
+        Directory.CreateDirectory(Path.Combine(marker, "profile", "AppData", "Local"));
+        try
+        {
+            var cases = new (string Label, Dictionary<string, string> Environment)[]
+            {
+                ("USERPROFILE and LOCALAPPDATA pointing at an existing folder", new() { ["USERPROFILE"] = Path.Combine(marker, "profile"), ["LOCALAPPDATA"] = Path.Combine(marker, "profile", "AppData", "Local"), ["APPDATA"] = Path.Combine(marker, "roaming") }),
+                ("USERPROFILE and LOCALAPPDATA pointing at a folder that does not exist", new() { ["USERPROFILE"] = Path.Combine(marker, "missing"), ["LOCALAPPDATA"] = Path.Combine(marker, "missing", "local"), ["APPDATA"] = Path.Combine(marker, "missing", "roaming") }),
+                ("USERPROFILE, LOCALAPPDATA and APPDATA empty", new() { ["USERPROFILE"] = "", ["LOCALAPPDATA"] = "", ["APPDATA"] = "" }),
+            };
+            foreach (var (label, variables) in cases)
+                foreach (var order in new[] { "resolve-first", "pin-first" })
+                {
+                    var (exit, output) = H.Child(["--child-data-root", order], variables);
+                    var lines = output.Split('\n', StringSplitOptions.TrimEntries);
+                    check(exit == 0 && lines.Contains("ROOT " + root), "A process with " + label + " resolves the real data folder (" + order + "): " + output.Replace("\n", " | "));
+                    if (order == "pin-first") check(lines.Contains("LOCAL " + local), "After the app pins the profile, the known-folder lookup agrees with the real profile (" + label + ")");
+                }
+        }
+        finally { Directory.Delete(marker, true); }
+        check(!Directory.Exists(marker), "The data root scenario leaves no folder behind");
     }
 
     static void Restart(Action<bool, string> check, string mode)
@@ -244,6 +279,7 @@ static class ChildEnvironmentChecks
             {
                 var started = DateTime.UtcNow.AddSeconds(-1);
                 var start = new ProcessStartInfo(ChildEnv.DotNetMuxer()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                ForRelease(start);
                 foreach (var argument in new[] { Path.Combine(hostDirectory, "Optimizer.Host.dll"), "cleanup-authority", "-" }) start.ArgumentList.Add(argument);
                 using var host = Process.Start(start)!;
                 host.StandardInput.Write(File.ReadAllText(request));
@@ -291,6 +327,7 @@ static class ChildEnvironmentChecks
                 {
                     var expectedImage = sessionHost ? Path.Combine(binaries, "RooIndustries.SessionHost.exe") : ChildEnv.DotNetMuxer();
                     var start = new ProcessStartInfo(expectedImage) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    ForRelease(start);
                     if (!sessionHost) start.ArgumentList.Add(Path.Combine(binaries, "Optimizer.Host.dll"));
                     foreach (var argument in sessionHost ? new[] { "run", requestPath } : ["protected-session-run", requestPath]) start.ArgumentList.Add(argument);
                     runner = Process.Start(start)!;
@@ -302,6 +339,8 @@ static class ChildEnvironmentChecks
                         try { if (File.Exists(watchPath)) ready = OperationFiles.Read<ProtectedWatchReady>(watchPath); }
                         catch (Exception error) when (error is IOException or JsonException or InvalidDataException) { }
                     check(ready is not null, "The " + kind + " session started its recovery watcher" + (ready is null ? " (" + (runner.HasExited ? "the " + kind + " exited " + runner.ExitCode + ": " + output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult() : "no watch.json") + ")" : ""));
+                    var own = ProcessEnvironmentReader.Read(runner.Id);
+                    ChildEnv.Report(check, kind + " own environment", env, own, Verify(env, own, expectedImage));
                     var seen = ProcessEnvironmentReader.Read(ready!.Watcher.ProcessId);
                     var failures = VerifyFromPoisonedHost(env, seen, expectedImage);
                     if (!string.Equals(ready.Watcher.ExecutablePath, expectedImage, StringComparison.OrdinalIgnoreCase)) failures.Add("the watcher identity records '" + ready.Watcher.ExecutablePath + "' instead of '" + expectedImage + "'");
