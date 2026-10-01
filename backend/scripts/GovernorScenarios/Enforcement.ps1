@@ -460,7 +460,32 @@ function Test-ScenarioRuleFileUnreadable {
     try {$resumed=Worker 'Resume'} catch {$resumeError=$_.Exception.Message}
     Note 'resumeWithDamagedFile' ([ordered]@{error=$resumeError;running=$(if($resumed){$resumed.worker.hostRunning})})
     Assert ($null -eq $resumeError -and $resumed.worker.hostRunning -eq $true) 'Start governor works while one rule file is damaged'
-    Assert ($null -ne (Wait-Field $a 'cpuPriority' 'AboveNormal' 10)) 'The readable rule is applied again after the restart'
+    Assert ($null -ne (Wait-Field $a 'cpuPriority' 'AboveNormal' 25)) 'The readable rule is applied again after the restart'
+    $ruleA=@(Core 'rules-list'|Where-Object {$_.name -eq 'Rule A'})[0]
+    $ruleA.enabled=$false
+    $off=$null;$offError=$null
+    try {$off=Save-Rule $ruleA} catch {$offError=$_.Exception.Message}
+    Assert ($null -eq $offError) 'A rule can be turned off while another rule file is damaged'
+    $ruleA.enabled=$true
+    $on=$null;$onError=$null
+    try {$on=Save-Rule $ruleA} catch {$onError=$_.Exception.Message}
+    $pathC=Copy-Probe 'RooIndustriesGovernorProbeC.exe' 'c'
+    $added=$null;$addError=$null
+    try {$added=Save-Rule (New-Rule $pathC @{ioPriority=1} 'Rule C')} catch {$addError=$_.Exception.Message}
+    Note 'editsWhileDamaged' ([ordered]@{turnOn=$onError;addRule=$addError})
+    Assert ($null -eq $onError -and $null -eq $addError) 'Rules can be turned on and added while another rule file is damaged'
+    $c=Start-Probe $pathC
+    $operation=Join-Path $script:policyParent ('operations\process-'+[Guid]::NewGuid().ToString('N'))
+    $preview=Join-Path $operation 'preview.json'
+    $journal=Join-Path $operation 'journal.json'
+    $unrelated=$null;$unrelatedError=$null
+    try {
+        Core 'process-preview' @{processId=$c.Id;controls=@{memoryPriority=3};outputPath=$preview}|Out-Null
+        $unrelated=Core 'process-apply' @{previewPath=$preview;reviewHash=(Get-FileHash -LiteralPath $preview -Algorithm SHA256).Hash;journalPath=$journal}
+    } catch {$unrelatedError=$_.Exception.Message}
+    Note 'applyOnceWhileDamaged' ([ordered]@{error=$unrelatedError;status=$(if($unrelated){$unrelated.status})})
+    Assert ($null -eq $unrelatedError -and $unrelated.status -eq 'applied' -and (Read-Field $c 'memoryPriority') -eq 3) 'Apply once still works on a setting no readable rule owns while a rule file is damaged'
+    Core 'process-restore' @{journalPath=$journal}|Out-Null
     [IO.File]::WriteAllBytes($file,$good)
     Assert ($null -ne (Wait-Field $b 'cpuPriority' 'BelowNormal' 10)) 'Once the file can be read again its rule applies again'
 }
@@ -480,12 +505,15 @@ function Test-ScenarioPinnedUnreadable {
     Note 'pinnedUnreadable' ([ordered]@{hashAttempts=$(if($beat){$beat.diagnostics.hashAttempts});issues=$issues})
     Assert ($null -ne $beat -and $beat.diagnostics.hashAttempts -ge 1 -and $beat.diagnostics.hashAttempts -le 7) 'A pinned executable the governor cannot read is retried with growing delays, not on every check'
     Assert ($issues.Count -ge 1 -and $issues[0].kind -eq 'error' -and $issues[0].message -like '*could not be read to check it*' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'It is reported as unreadable and the app is left unchanged'
+    Set-ClaimsReadDenied $path $false
+    Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal' 80)) 'Once the file can be read again the rule applies'
 }
 
 function Test-ScenarioDeniedLookups {
     $deniedPath=Copy-Probe 'RooIndustriesGovernorProbe.exe' 'denied' 'RooIndustriesGovernorFixture.exe'
-    Use-Rule (New-Rule $deniedPath @{cpuPriority='AboveNormal'} 'Denied lookups' 'filename')|Out-Null
     $denied=Start-Probe $deniedPath '0 1600 0 900' -NoWait
+    Start-Sleep -Seconds 2
+    Use-Rule (New-Rule $deniedPath @{cpuPriority='AboveNormal'} 'Denied lookups' 'filename')|Out-Null
     Start-Sleep -Seconds 45
     $beat=Get-Heartbeat
     Note 'ownerLookups' $(if($beat){$beat.diagnostics.ownerLookups})

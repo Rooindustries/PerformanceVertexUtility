@@ -671,3 +671,37 @@ function Test-ScenarioClaimsGateOnlyForEnabling {
     Assert ($enableMs -ge 4000 -and (Test-Path -LiteralPath $holder.released)) 'Turning a rule on still waits for the gate so it cannot race another feature'
     Wait-ClaimsChild $holder.child|Out-Null
 }
+
+function Test-ScenarioClaimsDamagedRuleFile {
+    Initialize-ClaimsRedirect
+    $name='ClaimsDamaged.exe'
+    $path=Copy-Probe $name
+    $probe=Start-Probe $path
+    $repo=New-ClaimsRepo
+    Save-ClaimsRule (New-Rule (Copy-Probe 'ClaimsDamagedOther.exe' 'other') @{cpuPriority='High'}) $script:claimsRules $repo|Out-Null
+    $damaged=Join-Path $script:claimsRules ('rules\'+[Guid]::NewGuid().ToString('N')+'.json')
+    [IO.File]::WriteAllText($damaged,'{"schemaVersion":1,"ruleId":',[Text.UTF8Encoding]::new($false))
+    $background=Invoke-ClaimsFeature 'Apply-ProcessProfile.ps1' @{ProfilePath=(New-ClaimsProfile $name 'background');StateRoot=(Join-Path $repo 'backend\state');ConfirmApply=$true}
+    Note 'backgroundWhileDamaged' @{status=$background.status;managed=(($background|ConvertTo-Json -Depth 12) -like '*Managed by the governor*')}
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'BelowNormal' -and ($background|ConvertTo-Json -Depth 12) -notlike '*Managed by the governor*') 'Background priorities still change an app no readable rule owns while one rule file is damaged'
+    $applied=Invoke-ClaimsChildCpuSets $probe (Get-ClaimsCpuSetId $probe)
+    Note 'cpuSelectionWhileDamaged' $applied
+    Assert ($applied.status -eq 'applied') 'CPU selection still works for that app'
+    $log=Join-Path $script:claimsData 'process-rules\logs\governor.log'
+    $text=if(Test-Path -LiteralPath $log){[IO.File]::ReadAllText($log)}else{''}
+    Assert ($text -like '*Skipped a damaged saved rule*') 'The skipped file is logged'
+}
+
+function Test-ScenarioClaimsRepoRootRequired {
+    $path=Copy-Probe 'ClaimsRepoRoot.exe'
+    $hostDll=Join-Path $hostDirectory 'Optimizer.Host.dll'
+    Push-Location -LiteralPath $repoRoot
+    try {
+        $save=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;rule=(New-Rule $path @{cpuPriority='High'})}|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath $hostDll 'rule-save' '-') -join "`n")|ConvertFrom-Json
+        Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
+        $resume=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$false}|ConvertTo-Json -Compress)|& $DotNetPath $hostDll 'policy-pause' '-') -join "`n")|ConvertFrom-Json
+    } finally {Pop-Location}
+    Note 'emptyRepoRoot' @{save=$save.status;saveError=$save.error.message;resume=$resume.status;resumeError=$resume.error.message}
+    Assert ($save.status -eq 'failed' -and $save.error.message -like '*repository root*') 'Saving a rule with an empty repository root fails instead of skipping the game session checks'
+    Assert ($resume.status -eq 'failed' -and $resume.error.message -like '*repository root*') 'Resuming with an empty repository root fails instead of skipping the game session checks'
+}
