@@ -138,6 +138,8 @@ function Sync-Governor {
     Start-Governor
 }
 
+if($Action -ne 'Status' -and (Test-Path -LiteralPath $PolicyRoot)){try {Invoke-Core 'policy-adopt'|Out-Null} catch {}}
+
 switch($Action){
     'Sync' {Sync-Governor}
     'Resume' {Invoke-Core 'policy-pause' @{paused=$false}|Out-Null;Sync-Governor}

@@ -15,7 +15,7 @@ try
     using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
     var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
-    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" or "operations-secure" or "data-secure" || action == "policy-run" && request.DurationSeconds is not null))
+    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-adopt" or "policy-stop" or "operations-secure" or "data-secure" || action == "policy-run" && request.DurationSeconds is not null))
         throw new InvalidDataException("Governor and recovery-folder requests must be passed on standard input.");
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
@@ -176,6 +176,7 @@ try
                 var resident = request.DurationSeconds is null;
                 if (resident && !string.Equals(Path.GetDirectoryName(Path.GetFullPath(args[1])), policyRoot, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("The governor request must be stored in its protected rules folder.");
+                if (resident) ProcessPolicyAdoption.Adopt(policyRoot);
                 data = new ProcessPolicyHost(new(policyRoot), Excluded).Run(cancellation.Token,
                     request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null,
                     () => { if (resident && !File.ReadAllBytes(args[1]).AsSpan().SequenceEqual(requestBytes)) throw new InvalidDataException("The governor request changed before its rules folder was locked."); });
@@ -197,6 +198,11 @@ try
             var securedRoot = Require(request.PolicyRoot, "policy root");
             if (request.UserSid is null) DataFolder.EnsureFor(securedRoot);
             data = new { migrated = PolicyRootSecurity.Secure(securedRoot, request.UserSid) };
+            if (request.UserSid is null) ProcessPolicyAdoption.Adopt(securedRoot);
+            break;
+        case "policy-adopt":
+            RequireConfirmation(request);
+            data = new { adopted = ProcessPolicyAdoption.Adopt(Require(request.PolicyRoot, "policy root")) };
             break;
         case "operations-secure":
             RequireConfirmation(request);
