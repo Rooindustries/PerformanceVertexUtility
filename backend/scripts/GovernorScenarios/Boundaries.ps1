@@ -32,7 +32,9 @@ function New-GameContext([string]$Folder='game',[string]$Controls='{"gpuPriority
 }
 
 function New-GameSession($Context){
-    $directory=Join-Path $script:policyParent ('operations\game-session-'+[Guid]::NewGuid().ToString('N'))
+    $operations=Join-Path $script:policyParent 'operations'
+    Core 'operations-secure' @{operationsRoot=$operations}|Out-Null
+    $directory=Join-Path $operations ('game-session-'+[Guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($directory)|Out-Null
     $file=Join-Path $directory 'preview.json'
     $result=(@(& (Join-Path $scriptsRoot 'Invoke-ProtectedGameSession.ps1') -Action Preview -LauncherProcessId $Context.launcher.Id -GamePath $Context.game -ControlsPath $Context.controls -PreviewPath $file -AcceptLauncherScope -HostDirectory $hostDirectory -DotNetPath $DotNetPath) -join "`n")|ConvertFrom-Json
