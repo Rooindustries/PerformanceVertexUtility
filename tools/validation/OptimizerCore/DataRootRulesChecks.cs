@@ -14,6 +14,7 @@ static partial class DataFolderChecks
         scenarios.Add(("earlier-version", EarlierVersionGate));
         scenarios.Add(("external-path", ExternalPath));
         scenarios.Add(("claims-carry", ClaimsCarry));
+        scenarios.Add(("orphan-temp", OrphanTemp));
         scenarios.Add(("timer-split", TimerSplit));
         scenarios.Add(("timer-migration", TimerMigration));
     }
@@ -321,5 +322,25 @@ static partial class DataFolderChecks
             check(File.Exists(Path.Combine(current, "uninstall-claims", "0123.json")), "The earlier folder is left as it was");
         }
         finally { H.Forget(legacy, current); H.Delete(selection); H.Sweep(id); }
+    }
+
+    private static void OrphanTemp(Action<bool, string> check)
+    {
+        var id = H.Name("orphan");
+        var root = Path.Combine(H.Local, id);
+        var json = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, int> { ["generation"] = 7 }, OperationFiles.Json);
+        var lonely = "host.json." + Guid.NewGuid().ToString("N") + ".tmp";
+        var stale = "settings.json." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            Legacy(root, (@"operations\" + lonely, json), (@"operations\settings.json", "{}"), (@"operations\" + stale, json), (@"operations\scratch.lock", "x"));
+            File.SetLastWriteTimeUtc(Path.Combine(root, "operations", lonely), DateTime.UtcNow.AddMinutes(-5));
+            check(PolicyRootSecurity.Secure(root, DataFolder.Kind), "A data folder holding an interrupted write is migrated");
+            check(File.Exists(Path.Combine(root, "operations", lonely)), "A complete write left under its temporary name while its file is missing is carried instead of dropped");
+            check(!File.Exists(Path.Combine(root, "operations", stale)) && !File.Exists(Path.Combine(root, "operations", "scratch.lock")), "Temporary files whose file exists and lock files are still dropped");
+            var recovered = OperationFiles.Read<Dictionary<string, int>>(Path.Combine(root, "operations", "host.json"));
+            check(recovered["generation"] == 7 && File.Exists(Path.Combine(root, "operations", "host.json")), "The next read of the missing file recovers the carried write");
+        }
+        finally { H.Forget(root, Path.Combine(root, "operations")); H.Delete(root); H.Sweep(id); }
     }
 }
