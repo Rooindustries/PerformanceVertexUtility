@@ -42,6 +42,7 @@ public sealed class PreparingWindow : IDisposable
         _status = CreateWindowEx(0, "STATIC", _text, WsChild | WsVisible | SsCenter, Scaled(16), Scaled(110), width - Scaled(48), Scaled(36), window, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
         foreach (var child in new[] { heading, note, _status }) SendMessage(child, WmSetFont, font, (IntPtr)1);
         ShowWindow(window, SwShow);
+        ShowWindow(window, SwShow);
         UpdateWindow(window);
         while (!_stop.IsSet)
         {
