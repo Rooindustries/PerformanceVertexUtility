@@ -77,11 +77,7 @@ public static class OperationFiles
     }
 
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
-    public static string HashFile(string path)
-    {
-        using var file = OpenShared(path);
-        return Convert.ToHexString(SHA256.HashData(file));
-    }
+    public static string HashFile(string path) => HashFile(path, null);
 
     public static string HashFile(string path, Action? progress)
     {

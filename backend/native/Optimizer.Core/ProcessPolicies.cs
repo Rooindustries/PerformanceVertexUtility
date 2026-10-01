@@ -218,7 +218,7 @@ public sealed class ProcessPolicyStore
     private static void Refuse(string[] owned)
     {
         if (owned.Length > 0)
-            throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Turn off or change its rule for this app first.");
+            throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Turn off or change its rule for this app first, or put its settings back if the rule is already off.");
     }
 
     public static bool Matches(SavedProcessRule rule, string executablePath) => rule.MatchMode == "filename"
@@ -267,7 +267,7 @@ public sealed class ProcessPolicyStore
             RequireNoGameSession(rule);
             GovernorClaims.RequireUnclaimed(rule, Path.GetDirectoryName(Root)!, repoRoot);
         }
-        foreach (var existing in ReadRules(rule.RuleId).Select(pair => pair.Rule).Where(existing => existing.Enabled && rule.Enabled))
+        foreach (var existing in (rule.Enabled ? ReadRules(rule.RuleId) : []).Select(pair => pair.Rule).Where(existing => existing.Enabled))
         {
             var overlaps = SameFileName(existing.ExecutablePath, rule.ExecutablePath) &&
                 (existing.MatchMode == "filename" || rule.MatchMode == "filename" || string.Equals(existing.ExecutablePath, rule.ExecutablePath, StringComparison.OrdinalIgnoreCase));
@@ -343,8 +343,8 @@ public sealed class ProcessPolicyStore
             catch (Exception error)
             {
                 var named = "The saved rule " + Path.GetFileName(path) + " could not be read: " + error.Message;
-                if (unreadable is null) throw new InvalidDataException(named, error);
-                unreadable.Add(named);
+                if (unreadable is not null) unreadable.Add(named);
+                else if (error is IOException or UnauthorizedAccessException) throw new InvalidDataException(named, error);
             }
         }
         return found.ToArray();

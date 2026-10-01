@@ -4,6 +4,7 @@ $script:RooIndustriesGovernorManaged='Managed by the governor'
 $script:RooIndustriesGovernorOwnership=$null
 $script:RooIndustriesGovernorOwnershipFailedAtUtc=[DateTime]::MinValue
 $script:RooIndustriesGovernorOwnershipLoggedAtUtc=[DateTime]::MinValue
+$script:RooIndustriesGovernorDamagedLoggedAtUtc=[DateTime]::MinValue
 $script:RooIndustriesGovernorAllControls=@('cpuPriority','affinity','cpuSets','ioPriority','gpuPriority','memoryPriority','executionQoS','priorityBoost')
 
 function Write-RooIndustriesGovernorOwnershipLog([string]$Message) {
@@ -35,17 +36,25 @@ function Get-RooIndustriesGovernorOwnership {
     $readAtUtc=[DateTime]::UtcNow
     $rules=New-Object System.Collections.Generic.List[object]
     $instances=New-Object System.Collections.Generic.List[object]
+    $damaged=New-Object System.Collections.Generic.List[string]
     $failure=$null
     try {
         $rulesPath=Join-Path $root 'rules'
         if(Test-Path -LiteralPath $rulesPath){
             foreach($file in @(Get-ChildItem -LiteralPath $rulesPath -Filter '*.json' -File)){
-                $rule=(Read-RooIndustriesOperationJson $file.FullName).data
-                if($rule.enabled -isnot [bool]){throw ('The saved rule '+$file.Name+' has no enabled state.')}
-                if(-not $rule.enabled){continue}
-                $controls=@($rule.controls.PSObject.Properties|ForEach-Object {$_.Name})
-                if($null -ne $rule.cpuSelection){$controls+='cpuSets'}
-                $rules.Add([pscustomobject]@{matchMode=[string]$rule.matchMode;executablePath=[string]$rule.executablePath;controls=$controls})
+                try {
+                    $rule=(Read-RooIndustriesOperationJson $file.FullName).data
+                    if($rule.enabled -isnot [bool]){throw ('The saved rule '+$file.Name+' has no enabled state.')}
+                    if(-not $rule.enabled){continue}
+                    $controls=@($rule.controls.PSObject.Properties|ForEach-Object {$_.Name})
+                    if($null -ne $rule.cpuSelection){$controls+='cpuSets'}
+                    $rules.Add([pscustomobject]@{matchMode=[string]$rule.matchMode;executablePath=[string]$rule.executablePath;controls=$controls})
+                } catch {
+                    $cause=$_.Exception
+                    while($cause -is [Management.Automation.MethodInvocationException] -and $cause.InnerException){$cause=$cause.InnerException}
+                    if($cause -is [IO.IOException] -or $cause -is [UnauthorizedAccessException]){throw}
+                    $damaged.Add($file.Name)
+                }
             }
         }
         $statePath=Join-Path $root 'host.json'
@@ -68,6 +77,12 @@ function Get-RooIndustriesGovernorOwnership {
             $script:RooIndustriesGovernorOwnershipLoggedAtUtc=[DateTime]::UtcNow
             Write-RooIndustriesGovernorOwnershipLog ('Could not read the saved rules in '+$root+' after '+$attempts+' attempts over '+$clock.ElapsedMilliseconds+' ms, so this change treats every process setting as managed by the governor: '+$failure)}
         return $ownership
+    }
+    if($damaged.Count -gt 0){
+        $sinceDamaged=([DateTime]::UtcNow-$script:RooIndustriesGovernorDamagedLoggedAtUtc).TotalSeconds
+        if($sinceDamaged -lt 0 -or $sinceDamaged -ge 60){
+            $script:RooIndustriesGovernorDamagedLoggedAtUtc=[DateTime]::UtcNow
+            Write-RooIndustriesGovernorOwnershipLog ('Skipped a damaged saved rule while checking which process settings the governor manages: '+($damaged -join ', '))}
     }
     $script:RooIndustriesGovernorOwnership=$ownership
     return $ownership
