@@ -49,5 +49,6 @@ try {
     if($EvidencePath){[IO.File]::WriteAllText($EvidencePath,($evidence|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))}
     foreach($task in @(Get-ScheduledTask -TaskName 'Roo Industries Protected Session *' -ErrorAction SilentlyContinue|Where-Object {@($_.Actions|Where-Object {([string]$_.Execute).StartsWith($work,[StringComparison]::OrdinalIgnoreCase)}).Count -gt 0})){Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction SilentlyContinue}
     if(Test-Path -LiteralPath $work){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
+    if(Test-Path -LiteralPath $work){Remove-ScenarioTree $work}
 }
 Write-Output ('SUMMARY '+($selected.Count-$failed)+' of '+$selected.Count+' scenarios passed')
