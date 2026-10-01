@@ -6,7 +6,7 @@ static class KillApplyChecks
 {
     const string Root = @"Software\RooIndustriesTweakTests\5e1b3c7a9d2f4e60b8a1c3d5e7f90a2b";
     public const string ServiceName = "RooIndustriesBoundsProbe_5e1b3c7a9d2f4e60b8a1c3d5e7f90a2b";
-    const int StopDelay = 14000;
+    const int StartDelay = 14000;
     static readonly RegistryAddress Recovery = new("CurrentUser", "Registry64", Root + @"\Recovery", "value", "State");
     static readonly ControlAddress Startup = new("service", ServiceName, "startup");
     static readonly ControlAddress Running = Startup with { Property = "running" };
@@ -15,13 +15,13 @@ static class KillApplyChecks
     {
         TweakDefinition Setting(string id, ControlAddress address, object value) => new(id, id, "Fixture", "Disposable service", 10240, 26200, ["*"], "none",
             [new("set", "Set", [], Controls: [new(address, ControlValues.From(value))])], [new("Roo Industries", "kill fixture", "isolated Windows execution")]);
-        return new TweakCatalog(1, "kill-apply", [Setting("stop", Running, false), Setting("disable", Startup, 4)], []);
+        return new TweakCatalog(1, "kill-apply", [Setting("start", Running, true), Setting("automatic", Startup, 2)], []);
     }
 
     public static void Child(string files)
     {
         var engine = new TweakEngine(Catalog(), new RegistryTweakStore(Recovery));
-        var plan = engine.Preview("kill", [new("stop", "set"), new("disable", "set")]);
+        var plan = engine.Preview("kill", [new("start", "set"), new("automatic", "set")]);
         var path = Path.Combine(files, plan.OperationId + ".json");
         OperationFiles.Write(path, plan);
         Console.WriteLine("APPLYING"); Console.Out.Flush();
@@ -61,12 +61,11 @@ static class KillApplyChecks
         try
         {
             var executable = Path.Combine(new DirectoryInfo(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName, "dotnet.exe");
-            var binary = "\"" + executable + "\" \"" + typeof(KillApplyChecks).Assembly.Location + "\" --service-probe-slow " + ServiceName + " " + StopDelay;
+            var binary = "\"" + executable + "\" \"" + typeof(KillApplyChecks).Assembly.Location + "\" --service-probe-slow-start " + ServiceName + " " + StartDelay;
             var creation = Command("sc.exe", "create", ServiceName, "binPath=", binary, "start=", "demand", "DisplayName=", "Roo Industries temporary kill test");
             if (creation.Exit != 0) throw new IOException("Service fixture creation failed: " + creation.Output);
             created = true;
-            var started = Command("sc.exe", "start", ServiceName);
-            check(started.Exit == 0 && WaitFor(() => State().Contains("RUNNING"), 30), "The disposable service starts and is running before the apply");
+            check(State().Contains("STOPPED"), "The disposable service exists and is stopped before the apply");
             var original = new WindowsControlStore().Read(Startup).Value.GetInt32();
             check(original == 3, "The disposable service starts with startup type Manual");
 
@@ -75,13 +74,13 @@ static class KillApplyChecks
             start.ArgumentList.Add("--kill-apply-child"); start.ArgumentList.Add(files);
             child = Process.Start(start)!;
             var output = child.StandardOutput.ReadToEndAsync(); var errors = child.StandardError.ReadToEndAsync();
-            var mid = WaitFor(() => store.Recovery().Pending is { Attempted: >= 1 } && State().Contains("STOP_PENDING"), 60);
-            check(mid && !child.HasExited, "The apply child is blocked mid-write: its journal records the attempted write while the service is still stopping");
+            var mid = WaitFor(() => store.Recovery().Pending is { Attempted: 2 } && State().Contains("START_PENDING"), 60);
+            check(mid && !child.HasExited, "The apply child is blocked mid-write: its journal records the attempted start while the service is still starting" + (mid && !child.HasExited ? "" : " (journal " + store.Recovery().Pending + "; service " + State().Replace("\r", "").Replace("\n", " ") + "; child " + (child.HasExited ? "exited " + child.ExitCode + ": " + output.Result + errors.Result : "running") + ")"));
             child.Kill(entireProcessTree: true); child.WaitForExit();
             check(child.ExitCode != 0, "The apply child is killed before it finishes");
 
             var pending = store.Recovery();
-            check(pending.Pending is { Phase: "applying", Attempted: 1 } && pending.PendingHash is not null && pending.State is null, "The killed apply leaves a readable journal with its attempted write and no committed state");
+            check(pending.Pending is { Phase: "applying", Attempted: 2 } && pending.PendingHash is not null && pending.State is null, "The killed apply leaves a readable journal with both attempted writes and no committed state");
             var refused = "";
             try { new RegistryTweakStore(Recovery).ReadState(); } catch (InvalidDataException error) { refused = error.Message; }
             check(refused.Contains("interrupted", StringComparison.OrdinalIgnoreCase), "New work is refused until the interrupted apply is recovered: " + refused);
@@ -89,7 +88,7 @@ static class KillApplyChecks
             string firstAttempt;
             try { new RegistryTweakStore(Recovery).Recover(pending.PendingHash!); firstAttempt = "recovered immediately"; }
             catch (Exception error) { firstAttempt = error.Message; }
-            Console.WriteLine("First recovery attempt while the service was still stopping: " + firstAttempt);
+            Console.WriteLine("First recovery attempt while the service was still starting: " + firstAttempt);
             var recovered = false;
             var watch = Stopwatch.StartNew();
             while (!recovered && watch.Elapsed < TimeSpan.FromSeconds(90))
@@ -99,10 +98,10 @@ static class KillApplyChecks
                 try { recovered = attempt.Recover(attempt.Recovery().PendingHash!); }
                 catch (Exception error) when (error is InvalidOperationException or InvalidDataException) { Thread.Sleep(1000); }
             }
-            check(recovered && new RegistryTweakStore(Recovery).Recovery().Pending is null, "Recovery from the journal finishes once the stopping service settles and clears the journal");
+            check(recovered && new RegistryTweakStore(Recovery).Recovery().Pending is null, "Recovery from the journal finishes once the starting service settles and clears the journal");
             var qc = Command("sc.exe", "qc", ServiceName).Output;
-            check(State().Contains("RUNNING") && qc.Contains("DEMAND_START", StringComparison.Ordinal) && new RegistryTweakStore(Recovery).Recovery().State is null,
-                "Recovery returns the service to running with startup Manual and leaves no profile or journal");
+            check(State().Contains("STOPPED") && qc.Contains("DEMAND_START", StringComparison.Ordinal) && new RegistryTweakStore(Recovery).Recovery().State is null,
+                "Recovery returns the service to stopped with startup Manual and leaves no profile or journal");
         }
         finally
         {

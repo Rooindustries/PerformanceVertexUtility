@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 using RooIndustries.Optimizer;
 
 if (args is ["--service-probe"]) { ServiceProbe.Start(); return; }
-if (args is ["--service-probe-slow", var probeName, var probeDelay]) { ServiceProbe.Start(probeName, int.Parse(probeDelay)); return; }
+if (args is ["--service-probe-slow-start", var probeName, var probeDelay]) { ServiceProbe.Start(probeName, int.Parse(probeDelay)); return; }
 if (args is ["--kill-apply-child", var killFiles]) { KillApplyChecks.Child(killFiles); return; }
 if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
 if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
