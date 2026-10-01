@@ -598,3 +598,53 @@ function Test-ScenarioClaimsGameUndoOnlyRecorded {
     Assert ($stopped.restorable -eq $false -and $stopped.result.status -eq 'rolledBack') 'Game priority undo ends restored, not partial'
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 1) 'Undo restored only the CPU priority it changed and left the rule-owned I/O priority alone'
 }
+
+function Test-ScenarioClaimsRestoreAfterExit {
+    $path=Copy-Probe 'ClaimsRestoreExit.exe'
+    $probe=Start-Probe $path
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'}
+    Assert ($applied.status -eq 'applied') 'Apply once changed the probe'
+    $probe.Kill();$probe.WaitForExit(10000)|Out-Null
+    Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
+    Assert $true 'A rule for the same app saves because the changed process has exited'
+    $status=Restore-ClaimsApplyOnce $applied.journal
+    Note 'restoreAfterExit' $status
+    Assert ($status -eq 'expired') 'The earlier Apply once change can still be undone, and ends as expired instead of being refused'
+}
+
+function Test-ScenarioClaimsBackgroundUndoOnlyRecorded {
+    $name='ClaimsBackgroundIo.exe'
+    $path=Copy-Probe $name
+    $probe=Start-Probe $path
+    $repo=New-ClaimsRepo
+    $profile=New-ClaimsProfile $name 'background'
+    $applied=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Apply-ProcessProfile.ps1') -ProfilePath $profile -StateRoot (Join-Path $repo 'backend\state') -ConfirmApply)
+    Note 'backgroundApply' @{status=$applied.status;backup=$applied.backup}
+    Assert ($applied.backup.location -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal' -and (Read-Field $probe 'ioPriority') -eq 2) 'Background priorities lowered only the CPU priority of the probe'
+    Set-Field $probe 'ioPriority' 1
+    $restored=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Restore-ProcessProfileBackup.ps1') -BackupPath $applied.backup.location -ConfirmApply)
+    Note 'backgroundRestore' $restored.status
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo restored the CPU priority it changed'
+    Assert ((Read-Field $probe 'ioPriority') -eq 1) 'Undo left the I/O priority it never changed, which another program had since lowered'
+}
+
+function Test-ScenarioClaimsGameUndoLateField {
+    Initialize-ClaimsRedirect
+    $name='ClaimsGameLate.exe'
+    $path=Copy-Probe $name
+    $probe=Start-Probe $path
+    $repo=New-ClaimsRepo
+    $state=Join-Path $repo 'backend\state'
+    $rule=New-Rule $path @{ioPriority=2}
+    Save-ClaimsRule $rule $script:claimsRules $repo|Out-Null
+    $session=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 14 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game' 'Low');stateRoot=$state}
+    Assert ($null -ne (Wait-Until {(Read-Field $probe 'cpuPriority') -eq 'AboveNormal'} 20 100)) 'Game priority raised the CPU priority while a rule owned the I/O priority'
+    Assert ((Read-Field $probe 'ioPriority') -eq 2) 'The rule-owned I/O priority was left alone'
+    Remove-ClaimsRule $rule $script:claimsRules
+    Assert ($null -ne (Wait-Until {(Read-Field $probe 'ioPriority') -eq 1} 12 100)) 'After the rule is deleted a later poll sets the I/O priority too'
+    $result=Wait-ClaimsChild $session
+    Assert ($result.restorable -eq $true) 'The session is left restorable'
+    $stopped=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Stop-GameTuneSession.ps1') -SessionPath $result.sessionPath -BackupPath $result.backupManifestPath -StateRoot $state -ConfirmApply)
+    Note 'gameUndo' @{restorable=$stopped.restorable;result=$stopped.result.status}
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 2) 'Undo restored both the field set at the first poll and the one set by a later poll'
+}

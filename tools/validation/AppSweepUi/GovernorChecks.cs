@@ -53,8 +53,8 @@ static class GovernorChecks
     };
 
     private static GovernorSnapshot Snapshot(bool paused, SavedProcessRule[] rules, PolicyWorkerStatus worker, Dictionary<string, ProcessControlJournal>? journals = null,
-        GovernorTaskState? task = null, IReadOnlySet<string>? exited = null, IReadOnlySet<string>? unapplied = null, string? rulesError = null, string? securityProblem = null)
-        => new(new PolicySummary(securityProblem is null, securityProblem, paused, rules.Length, rules.Count(rule => rule.Enabled), rulesError), worker, rules, journals ?? new(), task, exited, unapplied);
+        GovernorTaskState? task = null, IReadOnlySet<string>? exited = null, IReadOnlySet<string>? unapplied = null, string? rulesError = null, string? securityProblem = null, string[]? unreadableRules = null)
+        => new(new PolicySummary(securityProblem is null, securityProblem, paused, rules.Length, rules.Count(rule => rule.Enabled), rulesError, unreadableRules), worker, rules, journals ?? new(), task, exited, unapplied);
 
     private static async Task<(string[] View, ProcessControlsViewModel Panel)> Show(GovernorSnapshot snapshot)
     {
@@ -99,6 +99,7 @@ static class GovernorChecks
             await States(check);
             await Problems(check);
             await Observe(check);
+            await FailedSync(check);
 #if !OLD_UI
             await RetryButton(check);
             await RealSnapshot(check);
@@ -207,6 +208,21 @@ static class GovernorChecks
         view = await View(Snapshot(false, [rule], new(Host("stopped", [], errors: ["Saved rules could not be read: fixture"]), false, null), task: restart));
         Expect(check, view, "Stopped detail keeps the last worker error", "Detail: Saved rules could not be read: fixture " + Restarts);
 
+        view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, 1)));
+        Expect(check, view, "Stopped with a one-minute task whose last start failed says so instead of promising a restart",
+            "State: stopped", "Headline: Stopped",
+            "Detail: The governor stopped and its last automatic start failed (error 0x00000001), so it may not start again by itself. Press Start governor to start it.",
+            "Undo: Stopped · open Games > Processes to start it (medium)");
+        view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, 0x41303)));
+        Expect(check, view, "Stopped with a one-minute task that has not run yet still promises the restart", "Detail: " + Restarts);
+
+        var failing = "A governor check failed and will be retried in 4 s: The process cannot access the file because it is being used by another process.";
+        view = await View(Snapshot(false, [rule], new(Host("running", [], errors: [failing]), true, null)));
+        Expect(check, view, "A running governor whose checks keep failing says so instead of only counting rules", "State: running", "Detail: 1 rule is on. " + failing);
+        view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), unreadableRules: ["The saved rule broken.json could not be read: The JSON is incomplete."]));
+        Expect(check, view, "A running governor with one unreadable rule file keeps running and names the file",
+            "State: running", "Detail: 1 rule is on. The saved rule broken.json could not be read: The JSON is incomplete. Those rules are not enforced.");
+
         var hung = Host("running", [Instance(chrome, "cpuPriority", "active"), Instance(chrome, "ioPriority", "active")]);
         view = await View(Snapshot(false, [rule], new(hung, true, "The worker heartbeat is stale; it may be busy or unresponsive."), journals, restart));
         Expect(check, view, "Not responding: a stale heartbeat says not answering, the row shows no stale observed values, the Undo page counts apps",
@@ -263,6 +279,21 @@ static class GovernorChecks
             "Detail: Saved rules could not be read: fixture. The governor keeps checking and uses your rules again once they can be read.");
     }
 
+    private static async Task FailedSync(Action<bool, string> check)
+    {
+        var rule = Rule(RuleId, "Chrome rule", Chrome, true);
+        App.Operations.Governor = Snapshot(false, [rule], new(Host("running", []), true, null));
+        var panel = new ProcessControlsViewModel();
+        await panel.RefreshRulesCommand.ExecuteAsync(null);
+        var before = panel.Rules.Single().Rule.Enabled;
+        App.Operations.RuleSaved = saved => App.Operations.Governor = Snapshot(false, [saved], new(Host("running", []), true, null));
+        App.Operations.PolicyWorkerError = new InvalidOperationException("Task Scheduler is unavailable.");
+        try { await panel.ToggleRuleCommand.ExecuteAsync(null); }
+        finally { App.Operations.PolicyWorkerError = null; App.Operations.RuleSaved = null; }
+        check(before && !panel.Rules.Single().Rule.Enabled && panel.Status == "Couldn't update the rule." && panel.Detail == "Task Scheduler is unavailable.",
+            "A rule that was saved before the governor sync failed shows its real state in the rules list" + (panel.Rules.Count == 1 ? " | list says enabled=" + panel.Rules.Single().Rule.Enabled : ""));
+    }
+
     private static async Task Observe(Action<bool, string> check)
     {
         ControlRead Read<T>(T value) => ControlRead.From(value);
@@ -316,6 +347,16 @@ static class GovernorChecks
         (view, panel) = await Show(Snapshot(false, [off], new(Host("running", failed.Instances.ToArray()), true, null)));
         check(!panel.RetryAvailable && !panel.GovernorDetail.Contains("Put settings back", StringComparison.Ordinal),
             "No Put settings back button while the worker is running and still retrying by itself");
+
+        (view, panel) = await Show(Snapshot(false, [off], new(failed, false, null)));
+        App.Operations.RetryRestore = () =>
+        {
+            App.Operations.Governor = Snapshot(false, [off], new(null, null, "host.json is damaged"));
+            return Task.FromResult(failed);
+        };
+        await panel.RetryRestoreCommand.ExecuteAsync(null);
+        check(panel.Status == "Couldn't confirm the old settings are back.",
+            "Put settings back never says the old settings are back when the state read afterwards fails" + (panel.Status.Length == 0 ? "" : " | got: " + panel.Status));
     }
 
     private static async Task RealSnapshot(Action<bool, string> check)
