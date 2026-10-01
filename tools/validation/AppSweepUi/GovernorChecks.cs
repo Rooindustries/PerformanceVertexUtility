@@ -100,6 +100,7 @@ static class GovernorChecks
             await Problems(check);
             await Observe(check);
             await FailedSync(check);
+            await TimedOut(check);
 #if !OLD_UI
             await RetryButton(check);
             await RealSnapshot(check);
@@ -310,6 +311,60 @@ static class GovernorChecks
         finally { App.Operations.PolicyWorkerError = null; App.Operations.RuleSaved = null; }
         check(before && !panel.Rules.Single().Rule.Enabled && panel.Status == "Couldn't update the rule." && panel.Detail == "Task Scheduler is unavailable.",
             "A rule that was saved before the governor sync failed shows its real state in the rules list" + (panel.Rules.Count == 1 ? " | list says enabled=" + panel.Rules.Single().Rule.Enabled : ""));
+    }
+
+    private static async Task TimedOut(Action<bool, string> check)
+    {
+        var timeout = new TimeoutException(AppLog.TimedOut);
+        var rule = Rule(RuleId, "Chrome rule", Chrome, true);
+        var off = Rule(RuleId, "Chrome rule", Chrome, false);
+        App.Operations.Governor = Snapshot(false, [rule], new(Host("running", []), true, null));
+        var panel = new ProcessControlsViewModel();
+        await panel.RefreshRulesCommand.ExecuteAsync(null);
+        App.Operations.PolicyWorkerError = timeout;
+        try { await panel.PauseGovernorCommand.ExecuteAsync(null); }
+        finally { App.Operations.PolicyWorkerError = null; }
+        check(!panel.Busy && panel.Status == "The governor needs attention." && panel.Detail == AppLog.TimedOut && panel.CanPauseGovernor,
+            "Pause governor that timed out shows the timed-out text, is not busy and can be pressed again");
+        await panel.PauseGovernorCommand.ExecuteAsync(null);
+        check(!panel.Busy && panel.Status == "Governor paused." && panel.Detail == "", "Pause governor pressed again after a timeout runs and reports its result");
+
+        App.Operations.Governor = Snapshot(true, [rule], new(Host("stopped", []), false, null));
+        await panel.RefreshRulesCommand.ExecuteAsync(null);
+        App.Operations.PolicyWorkerError = timeout;
+        try { await panel.StartGovernorCommand.ExecuteAsync(null); }
+        finally { App.Operations.PolicyWorkerError = null; }
+        check(!panel.Busy && panel.Status == "The governor needs attention." && panel.Detail == AppLog.TimedOut && panel.CanStartGovernor,
+            "Start governor that timed out shows the timed-out text, is not busy and can be pressed again");
+        await panel.StartGovernorCommand.ExecuteAsync(null);
+        check(!panel.Busy && panel.Status == "Governor started." && panel.Detail == "", "Start governor pressed again after a timeout runs and reports its result");
+
+        App.Operations.Governor = Snapshot(false, [rule], new(Host("running", []), true, null));
+        await panel.RefreshRulesCommand.ExecuteAsync(null);
+        App.Operations.RuleSaved = saved => App.Operations.Governor = Snapshot(false, [saved], new(Host("running", []), true, null));
+        App.Operations.PolicyWorkerError = timeout;
+        try { await panel.ToggleRuleCommand.ExecuteAsync(null); }
+        finally { App.Operations.PolicyWorkerError = null; App.Operations.RuleSaved = null; }
+        check(!panel.Busy && panel.Status == "Couldn't update the rule." && panel.Detail == AppLog.TimedOut && panel.CanManageRule && !panel.Rules.Single().Rule.Enabled,
+            "A rule change whose governor sync timed out shows the timed-out text, the saved rule state and keeps the rule buttons enabled");
+#if !OLD_UI
+        var chrome = Process(100, Chrome);
+        var failed = Host("stoppedWithConflicts", [Instance(chrome, "cpuPriority", "conflict", "denied", "Access is denied.")]);
+        var (_, retry) = await Show(Snapshot(false, [off], new(failed, false, null)));
+        var calls = App.Operations.RetryCalls;
+        App.Operations.RetryRestore = () => Task.FromException<PolicyHostState>(timeout);
+        await retry.RetryRestoreCommand.ExecuteAsync(null);
+        check(App.Operations.RetryCalls == calls + 1 && !retry.Busy && retry.Status == "Couldn't put the settings back." && retry.Detail == AppLog.TimedOut && retry.RetryAvailable && retry.CanRetryRestore,
+            "Put settings back that timed out shows the timed-out text, is not busy and Put settings back can be pressed again");
+        App.Operations.RetryRestore = () =>
+        {
+            App.Operations.Governor = Snapshot(false, [off], new(Host("stopped", []), false, null));
+            return Task.FromResult(Host("stopped", []));
+        };
+        await retry.RetryRestoreCommand.ExecuteAsync(null);
+        check(App.Operations.RetryCalls == calls + 2 && !retry.Busy && retry.Status == "The old settings are back." && !retry.RetryAvailable,
+            "Put settings back pressed again after a timeout runs and reports the fresh governor state");
+#endif
     }
 
     private static async Task Observe(Action<bool, string> check)
