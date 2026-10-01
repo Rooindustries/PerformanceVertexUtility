@@ -44,7 +44,9 @@ try {
             $info = Get-Item -LiteralPath $paths[$key] -Force
             $inside = ([IO.Path]::GetFullPath($paths[$key]).TrimEnd('\') + '\').StartsWith([IO.Path]::GetFullPath($root).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
             Check (-not $info.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint) -and $info.PSIsContainer -and -not $inside) 'the sign-in timer state folder is a plain folder outside the protected data folder' ("path=" + $paths[$key] + " attributes=" + $info.Attributes + " insideDataRoot=$inside")
-            Check ($owner -eq $user -and @($writers | Where-Object { $_ -ne $user }).Count -eq 0 -and $writers -contains $user) 'the sign-in timer state folder is owned by the signed-in user, who is the only one besides Administrators and SYSTEM that can write it' ("owner=$owner writers=" + ($writers -join ','))
+            $uacOff = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction SilentlyContinue).EnableLUA -eq 0
+            $ownedByUser = $owner -eq $user -or ($uacOff -and $owner -eq 'S-1-5-32-544')
+            Check ($ownedByUser -and @($writers | Where-Object { $_ -ne $user }).Count -eq 0 -and $writers -contains $user) ('the sign-in timer state folder is owned by the signed-in user' + $(if ($uacOff) { ' (UAC is off on this PC, so the user''s own elevated worker owns what it creates as Administrators)' } else { '' }) + ', who is the only one besides Administrators and SYSTEM that can write it') ("owner=$owner uacOff=$uacOff writers=" + ($writers -join ','))
         } else {
             Check ($trusted -contains $owner -and $writers.Count -eq 0 -and $reads) "$key is owned by Administrators or SYSTEM, only they can write, and the signed-in user can read" ("owner=$owner protected=" + $acl.AreAccessRulesProtected + " writers=" + ($writers -join ',') + " userRead=$reads")
         }
