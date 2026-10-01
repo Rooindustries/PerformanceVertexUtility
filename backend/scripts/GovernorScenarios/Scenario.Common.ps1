@@ -152,7 +152,21 @@ function Read-Controls([Diagnostics.Process]$Process){
         executionQoS=[RooIndustriesGovernorScenarioOracle]::Qos($Process.Handle);priorityBoostDisabled=[RooIndustriesGovernorScenarioOracle]::BoostDisabled($Process.Handle)}
 }
 
-function Read-Field([Diagnostics.Process]$Process,[string]$Field){return (Read-Controls $Process)[$Field]}
+function Read-Field([Diagnostics.Process]$Process,[string]$Field){
+    $Process.Refresh()
+    $handle=$Process.Handle
+    switch($Field){
+        'cpuPriority' {return [string]$Process.PriorityClass}
+        'affinity' {return ('0x{0:X}' -f [int64]$Process.ProcessorAffinity)}
+        'cpuSets' {return [RooIndustriesGovernorScenarioOracle]::CpuSets($handle)}
+        'ioPriority' {return [RooIndustriesGovernorScenarioOracle]::Io($handle)}
+        'gpuPriority' {return [RooIndustriesGovernorScenarioOracle]::Gpu($handle)}
+        'memoryPriority' {return [RooIndustriesGovernorScenarioOracle]::Memory($handle)}
+        'executionQoS' {return [RooIndustriesGovernorScenarioOracle]::Qos($handle)}
+        'priorityBoostDisabled' {return [RooIndustriesGovernorScenarioOracle]::BoostDisabled($handle)}
+        default {throw ('Read-Field does not know '+$Field)}
+    }
+}
 
 function Set-Field([Diagnostics.Process]$Process,[string]$Field,$Value){
     switch($Field){
