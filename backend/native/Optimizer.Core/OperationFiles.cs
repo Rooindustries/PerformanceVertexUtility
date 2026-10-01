@@ -43,6 +43,14 @@ public static class OperationFiles
         return Deserialize<T>(bytes);
     }
 
+    public static (T Value, string Hash) ReadHashed<T>(string path)
+    {
+        using var file = OpenShared(path);
+        var bytes = new byte[checked((int)file.Length)];
+        file.ReadExactly(bytes);
+        return (Deserialize<T>(bytes), Hash(bytes));
+    }
+
     public static T Deserialize<T>(byte[] bytes)
     {
         using var document = JsonDocument.Parse(bytes);
