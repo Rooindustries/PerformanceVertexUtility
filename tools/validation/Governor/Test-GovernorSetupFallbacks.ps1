@@ -251,6 +251,21 @@ try {
     Check ($run.exit -eq 0 -and $run.log -match 'policy-status failed \(exit 3\): helper failed on purpose' -and $run.log -notmatch 'Cannot bind argument') 'When the helper exits with an error and prints nothing, setup reports the helper''s own failure instead of a parser error' ("exit="+$run.exit+" "+$run.log)
     $resume=Invoke-Setup 'silent-helper-resume' 'Resume' '' $setup.Id
     Remove-Item -LiteralPath $hostExe -Force -ErrorAction SilentlyContinue
+    $direct=New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument ('--headless "'+$hostExe+'" policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"') -WorkingDirectory $hostDirectory
+    $earlier=@(
+        @{label='the earlier direct launch';name=(New-TaskName);description=$goodDescription},
+        @{label='the earlier legacy name and description';name=('RooOptimizationSuite.ProcessRules.'+[Guid]::NewGuid().ToString('N').Substring(0,20).ToUpperInvariant());description=('Roo process rules | '+$me+' | '+$policyRoot)}
+    )
+    foreach($task in $earlier){$decoyNames.Add($task.name);Register-Governor $task.name $task.description $direct}
+    foreach($mode in $modes){
+        Set-Fixture $false $true $false
+        $suspend=Invoke-Setup ($mode.name+'-earlier-suspend') 'Suspend' $mode.prefix $setup.Id
+        $suspended=@($earlier|ForEach-Object {[string](Get-ScheduledTask -TaskName $_.name).State})
+        $ignored=@($earlier|Where-Object {$suspend.log -match [regex]::Escape('Ignoring a task that is not a governor registered by an administrator: '+$_.name)})
+        $resume=Invoke-Setup ($mode.name+'-earlier-resume') 'Resume' $mode.prefix $setup.Id
+        $resumed=@($earlier|ForEach-Object {[string](Get-ScheduledTask -TaskName $_.name).State})
+        Check ($suspend.exit -eq 0 -and @($suspended|Where-Object {$_ -ne 'Disabled'}).Count -eq 0 -and $ignored.Count -eq 0 -and $resume.exit -eq 0 -and @($resumed|Where-Object {$_ -eq 'Disabled'}).Count -eq 0) ('Tasks registered by an earlier version, with the direct launch or the earlier name and description, are still recognised: Suspend disables them and Resume enables them again ('+$mode.name+' mode)') ("suspend="+$suspend.exit+" states="+($suspended -join ',')+" ignored="+$ignored.Count+" resume="+$resume.exit+" after="+($resumed -join ',')+" "+$suspend.log)
+    }
     foreach($name in $decoyNames){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue}
 } catch {Check $false 'The setup fallback check ran to the end' ($_|Out-String)}
 finally {
