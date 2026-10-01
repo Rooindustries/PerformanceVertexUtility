@@ -113,7 +113,7 @@ public sealed class ProcessPolicyStore
         using var gate = paused ? null : Gate();
         if (!paused)
         {
-            var enabled = ReadRules().Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
+            var enabled = ReadRules(null, []).Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
             foreach (var rule in enabled) RequireNoGameSession(rule);
             GovernorClaims.RequireUnclaimed(enabled, Path.GetDirectoryName(Root)!, repoRoot);
         }
