@@ -3,8 +3,10 @@ using System.Diagnostics;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
+if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "Optimizer.Host.dll") { FakeHost.Run(hostAction); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
 if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
+if (args is [var boundsRepo, "--bounds", .. var boundsFilter]) { await BoundChecks.Run(boundsRepo, boundsFilter.FirstOrDefault()); return; }
 
 var repo = Path.GetFullPath(args[0]);
 var fixture = Path.Combine(Path.GetTempPath(), "roo-industries-client-boundary-" + Guid.NewGuid().ToString("N"));
