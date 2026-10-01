@@ -13,6 +13,7 @@ static partial class DataFolderChecks
         scenarios.Add(("legacy-planted", LegacyPlanted));
         scenarios.Add(("earlier-version", EarlierVersionGate));
         scenarios.Add(("external-path", ExternalPath));
+        scenarios.Add(("claims-carry", ClaimsCarry));
         scenarios.Add(("timer-split", TimerSplit));
         scenarios.Add(("timer-migration", TimerMigration));
     }
@@ -123,6 +124,12 @@ static partial class DataFolderChecks
             Exception? unasked = null;
             try { H.Api(typeof(PolicyRootSecurity), "RequireConfirmedEarlierVersion", fresh, false); } catch (Exception error) { unasked = error; }
             check(unasked is null, "Undo data written after protection needs no confirmation");
+            var outside = Path.Combine(Path.GetTempPath(), "roo-df-outside-" + Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(outside, "{}");
+            Exception? unmarked = null;
+            try { H.Api(typeof(PolicyRootSecurity), "RequireConfirmedEarlierVersion", outside, false); } catch (Exception error) { unmarked = error; }
+            File.Delete(outside);
+            check(unmarked is null, "A file outside every protected folder was not carried from before protection, so it needs no confirmation");
             var missing = Path.Combine(root, "operations", "cpu-3", "journal.json");
             Exception? absent = null;
             try { H.Api(typeof(PolicyRootSecurity), "RequireConfirmedEarlierVersion", missing, false); } catch (Exception error) { absent = error; }
@@ -292,5 +299,27 @@ static partial class DataFolderChecks
             Thread.Sleep(500);
             H.Forget(root, operations); H.Delete(root, state); H.Sweep(id);
         }
+    }
+
+    private static void ClaimsCarry(Action<bool, string> check)
+    {
+        var id = H.Name("claims");
+        var selection = Path.Combine(H.Local, id);
+        var legacy = Path.Combine(selection, "RooOptimizationSuite");
+        var current = Path.Combine(selection, "RooIndustriesOptimizationSuite");
+        try
+        {
+            Legacy(legacy, ("settings.json", "{}"));
+            Legacy(current, (@"uninstall-claims\0123.json", "{\"queueId\":\"q\"}"));
+            var planted = H.Standard("plant", current, @"uninstall-claims\user.json|planted claim");
+            check(planted == "PLANTED", "A standard user adds a claim file of their own: " + planted);
+            check(BrandCompatibility.DataRoot(selection) == legacy, "The legacy-named folder is the data folder while the claims sit in the current-named folder");
+            check(PolicyRootSecurity.Secure(legacy, DataFolder.Kind), "The legacy-named data folder is migrated");
+            check(H.Read(Path.Combine(legacy, "uninstall-claims", "0123.json")) == "{\"queueId\":\"q\"}", "A removal claim the earlier version kept in the current-named folder is carried into the protected data folder");
+            check(!File.Exists(Path.Combine(legacy, "uninstall-claims", "user.json")), "A claim file that was not written with administrator rights is not carried");
+            check(PolicyRootSecurity.Problem(legacy, DataFolder.Kind) is null, "The protected data folder still passes the deep check");
+            check(File.Exists(Path.Combine(current, "uninstall-claims", "0123.json")), "The earlier folder is left as it was");
+        }
+        finally { H.Forget(legacy, current); H.Delete(selection); H.Sweep(id); }
     }
 }
