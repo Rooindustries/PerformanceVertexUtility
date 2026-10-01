@@ -219,7 +219,7 @@ function Test-ScenarioClaimsGameBackupFirst {
     $ready=Wait-Until {$null -ne (& $recorded)} 90 100
     Note 'secondsToRecordedSession' $ready
     $cpuAtRecord=Read-Field $probe 'cpuPriority'
-    & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $child.process.Id /T /F|Out-Null
+    try {& (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $child.process.Id /T /F 2>&1|Out-Null} catch {}
     $null=$child.process.WaitForExit(15000)
     $sessionFile=@(Get-ChildItem -LiteralPath $sessions -Filter 'session.json' -Recurse -File)[0].FullName
     Assert ($null -ne $ready -and $child.process.HasExited) 'The session recorded itself as restorable and the PowerShell tree was then killed during the apply pause'
@@ -289,4 +289,32 @@ $unmatched=@(Get-RooIndustriesGovernorOwnedControls -ProcessId ([int]$freeId) -E
     $text=if(Test-Path -LiteralPath $log){[IO.File]::ReadAllText($log)}else{''}
     Note 'governorLog' $text
     Assert ($text -like '*Could not read the saved rules*host.json*') 'The unreadable host.json is logged'
+}
+
+function Test-ScenarioClaimsGatePolicySession {
+    $name='ClaimsGatePolicy.exe'
+    $path=Copy-Probe $name
+    $marker='claims-gate-policy-marker'
+    $probe=Start-Probe $path ('3600 '+$marker)
+    $repo=New-ClaimsRepo
+    $state=Join-Path $repo 'backend\state'
+    $profilePath=Join-Path $script:scenarioRoot 'policy-gate.profile.json'
+    $rule=[ordered]@{ruleId='claims-gate-policy';enabled=$true;allowConfirmedApply=$true;match=[ordered]@{processNames=@($name);commandLinePatterns=@('*'+$marker+'*')};controls=[ordered]@{priorityClass='BelowNormal'};reason='Claims gate scenario.';reasonCodes=@('CLAIMS_GATE_POLICY');scenarioTags=@('validation');risk='low'}
+    $profile=[ordered]@{schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='claims-gate-policy';name='Claims gate policy';profileKind='persistent-process-policy';risk='low';targetScenario='Claims gate scenario.'
+        protectedCatalogPath=(Join-Path $repoRoot 'backend\profiles\protected-processes.json')
+        policy=[ordered]@{session=[ordered]@{pollIntervalSeconds=1;maxSessionDurationSeconds=2};safety=[ordered]@{confirmedApplyRequiresRuleAllow=$true;confirmedApplyRequiresPathRoot=$true;confirmedApplyPathRoots=@((Split-Path $path -Parent))};protectedProcesses=@();rules=@($rule)}
+        telemetryTargets=@('persistent-policy-enforcement')
+        rollbackPolicy=[ordered]@{supported=$true;scope='persistent-process-policy-controls';stateRoot='temp-validation-state';restoreOriginalPriorityClass=$true;restoreOriginalAffinityMask=$true;restoreOriginalIoPriority=$true;restoreOriginalGpuPriority=$true}
+        safety=[ordered]@{confirmedApplyChanges=@('priorityClass');continuousEnforcement=$true;runtimeService=$false;requiresExplicitApplyRoots=$true}}
+    Write-ClaimsRecord $profilePath $profile
+    $holder=Start-ClaimsGateHolder 12000
+    $session=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-ProcessPolicySession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 2 -PollIntervalSeconds 1 -ConfirmApply -IncludeCommandLine) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=$profilePath;stateRoot=$state}
+    $during=Watch-ClaimsDuringHold $holder $probe 'cpuPriority'
+    $result=Wait-ClaimsChild $session
+    Note 'policySessionGate' @{during=$during;status=$result.status;restorable=$result.restorable;changed=@($result.changedItems).Count;warnings=@($result.warnings|ForEach-Object {$_.code});error=$result.error}
+    Assert ((@($during) -join ',') -eq 'Normal') 'A persistent policy session did not change the probe while a rule change held the governor gate'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'BelowNormal' -and $result.restorable -eq $true) 'The persistent policy session changed the probe after the gate was released and left a restorable session'
+    $stopped=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Stop-ProcessPolicySession.ps1') -SessionPath $result.sessionPath -ConfirmApply)
+    Assert ($stopped.restorable -eq $false -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Stopping the persistent policy session put the probe back'
+    Wait-ClaimsChild $holder.child|Out-Null
 }
