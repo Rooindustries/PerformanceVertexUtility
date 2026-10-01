@@ -18,11 +18,11 @@ After removal, scan one app or all completed removals. Ownership checks retain t
 
 Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
 
-Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
+Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. The whole data folder is writable only by Administrators and SYSTEM; the signed-in user can read it, and only `operations\windows-timer` stays writable for the sign-in timer task. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
 
 ## Native helper
 
-`backend/scripts/Invoke-OptimizerCore.ps1` invokes the compiled .NET 8 Windows x64 helper. Requests are UTF-8 JSON with `schemaVersion: 1` and an absolute `repoRoot`. Mutating requests require `confirm: true`; reviewed paths and hashes remain separate from journals.
+The app runs the compiled .NET 8 Windows x64 helper `Optimizer.Host` and passes each request on standard input. Requests are UTF-8 JSON with `schemaVersion: 1` and an absolute `repoRoot`. Mutating requests require `confirm: true`; reviewed paths and hashes remain separate from journals.
 
 | Operation family | Actions | Additional input |
 |---|---|---|
