@@ -8,7 +8,7 @@
     [int]$ColdTweaksRuns = 2,
     [int]$Minutes = 45,
     [switch]$SkipAdvanced,
-    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions', 'hardware', 'launchers', 'launchers-session', 'override', 'incomplete', 'incomplete-before')][string]$Scenario = 'loadtimes',
+    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'migration-undo-timer', 'permissions', 'hardware', 'launchers', 'launchers-session', 'override', 'incomplete', 'incomplete-before')][string]$Scenario = 'loadtimes',
     [int]$MemoryPasses = 0,
     [string]$GcDump,
     [switch]$Uninstall,
@@ -66,8 +66,8 @@ if (-not $explorer) { throw 'No interactive desktop session.' }
 $sid = (Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid).Sid
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
 $ps = Join-Path $PSHOME 'powershell.exe'
-$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1'; launchers = 'Test-ElevatedLaunchers.ps1'; 'launchers-session' = 'Test-ElevatedLaunchers.ps1'; override = 'Test-HelperStart.ps1'; incomplete = 'Test-HelperStart.ps1'; 'incomplete-before' = 'Test-HelperStart.ps1' }[$Scenario]
-$scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; 'launchers-session' = ' -Part session'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
+$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; 'migration-undo-timer' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1'; launchers = 'Test-ElevatedLaunchers.ps1'; 'launchers-session' = 'Test-ElevatedLaunchers.ps1'; override = 'Test-HelperStart.ps1'; incomplete = 'Test-HelperStart.ps1'; 'incomplete-before' = 'Test-HelperStart.ps1' }[$Scenario]
+$scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; 'migration-undo-timer' = ' -Phase undo-timer'; 'launchers-session' = ' -Part session'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
 $arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $scenarioExtra }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
 $action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
