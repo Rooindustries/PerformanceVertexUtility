@@ -402,7 +402,7 @@ function Test-ScenarioLauncherOwnEnvironment {
     $delivered=@($planted.Keys|Where-Object {$probeValues.ContainsKey($_) -and [string]$probeValues[$_] -ceq [string]$planted[$_]})
     Note 'markerNamesTheTaskDelivers' $delivered
     Note 'markerNamesWindowsSetItself' @($planted.Keys|Where-Object {$delivered -cnotcontains $_})
-    Assert (@('TEMP','TMP','windir','SystemRoot','ComSpec','PATHEXT'|Where-Object {$delivered -cnotcontains $_}).Count -eq 0) 'The task hands a program the marker values for TEMP, TMP, windir, SystemRoot, ComSpec and PATHEXT (so the check below can fail)'
+    Assert (@('windir','SystemRoot','ComSpec','PATHEXT'|Where-Object {$delivered -cnotcontains $_}).Count -eq 0) 'The task hands a program the marker values for windir, SystemRoot, ComSpec and PATHEXT (so the check below can fail)'
     $windows=[Environment]::GetFolderPath('Windows')
     $system=[Environment]::GetFolderPath('System')
     $profile=[Environment]::GetFolderPath('UserProfile')

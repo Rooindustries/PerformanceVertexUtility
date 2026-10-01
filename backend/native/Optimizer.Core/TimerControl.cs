@@ -203,7 +203,7 @@ public static class TimerControl
         var state = Parse(NativeFiles.ReadBounded(folder, "session.json", 1 << 16, out _));
         if (state is null || !state.Acquired || state.Released) return false;
         using var worker = Running(state);
-        if (worker is null || CommandLine(worker) is not { } command || !Arguments(command).Skip(1).Any(argument => argument is "--timer-worker" or "--timer-autostart")) return false;
+        if (worker is null || CommandLine(worker) is not { } command || !SplitCommandLine(command).Skip(1).Any(argument => argument is "--timer-worker" or "--timer-autostart")) return false;
         found?.Invoke();
         try { worker.Kill(); worker.WaitForExit(10000); }
         catch (Exception error) when (error is InvalidOperationException or Win32Exception) { return false; }
@@ -215,7 +215,7 @@ public static class TimerControl
         using var guard = OperationFiles.Lock(Path.Combine(roots.Control, "control"));
         Start(roots);
     }
-    private static string[] Arguments(string command)
+    private static string[] SplitCommandLine(string command)
     {
         var list = CommandLineToArgvW(command, out var count);
         if (list == IntPtr.Zero) return [];
