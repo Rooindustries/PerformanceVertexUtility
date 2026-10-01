@@ -10,8 +10,9 @@ public sealed class TweakEngine
     public TweakEngine(TweakCatalog catalog, ITweakStore store) { catalog.Validate(); _catalog = catalog; _store = store; }
 
     public const string FeaturesPending = "Checking Windows features\u2026";
-    public const string FeaturesTimedOut = "Windows features did not answer within 60 seconds. Select Refresh to check again.";
+    public const string FeaturesTimedOut = "Windows did not answer within 60 seconds. Select Refresh to check again.";
     public TimeSpan FeatureTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(60);
     public static bool IsTransient(string error) => error == FeaturesTimedOut || error == FeaturesPending || error.Contains("timed out", StringComparison.OrdinalIgnoreCase)
         || error.Contains("control helper exited", StringComparison.Ordinal) || error.Contains("changed while being read", StringComparison.Ordinal) || error.Contains("service is transitioning", StringComparison.Ordinal);
     public static bool HasTransientErrors(TweakInspection inspection) => inspection.Settings.Any(setting => setting.Error is { } error && IsTransient(error));
@@ -41,11 +42,17 @@ public sealed class TweakEngine
             }
             catch (Exception error) { return (Definition: definition, Supported: false, Options: Array.Empty<TweakOption>(), Readings: new Dictionary<RegistryAddress, TweakRead>(), Error: error); }
         }).ToArray();
-        static Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> Collect(Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>? read)
+        static Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> Collect(Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>? read, ControlAddress[] addresses)
         {
-            if (read is null) return new();
-            try { return read.GetAwaiter().GetResult(); }
-            catch (Exception) { return new(); }
+            var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+            Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>? answered = null;
+            Exception? faulted = null;
+            if (read is not null)
+                try { answered = read.GetAwaiter().GetResult(); }
+                catch (Exception error) { faulted = error; }
+            foreach (var address in addresses)
+                results[address] = answered is not null && answered.TryGetValue(address, out var found) ? found : (null, faulted ?? new InvalidDataException("Windows returned no answer for this setting."));
+            return results;
         }
         TweakInspection Inspect(Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> prefetched)
         {
@@ -56,7 +63,7 @@ public sealed class TweakEngine
                 {
                     try
                     {
-                        var (read, failure) = prefetched.TryGetValue(address, out var found) ? found : (_store.ReadControl(address), (Exception?)null);
+                        var (read, failure) = prefetched.TryGetValue(address, out var found) ? found : (null, new InvalidDataException("Windows returned no answer for this setting."));
                         if (failure is not null) throw failure;
                         read!.Validate(); cached = (read, null);
                     }
@@ -82,7 +89,14 @@ public sealed class TweakEngine
                 catch (Exception error) { return new TweakSettingStatus(definition.Id, definition.Name, false, [], [], error.Message); }
             }).ToArray());
         }
-        var prefetched = Collect(fastRead);
+        var fastDeadline = Task.Delay(ReadTimeout);
+        Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> prefetched;
+        if (Task.WhenAny(fastRead, fastDeadline).GetAwaiter().GetResult() != fastRead)
+        {
+            _ = fastRead.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            prefetched = fast.ToDictionary(address => address, address => ((TweakControlRead?)null, (Exception?)new TimeoutException(FeaturesTimedOut)));
+        }
+        else prefetched = Collect(fastRead, fast);
         if (partial is not null && slowRead is { IsCompleted: false } && fast.All(prefetched.ContainsKey))
         {
             var pending = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>(prefetched);
@@ -94,7 +108,7 @@ public sealed class TweakEngine
             _ = slowRead.ContinueWith(task => task.Exception, TaskScheduler.Default);
             foreach (var address in slow) prefetched[address] = (null, new TimeoutException(FeaturesTimedOut));
         }
-        else foreach (var (address, result) in Collect(slowRead)) prefetched[address] = result;
+        else foreach (var (address, result) in Collect(slowRead, slow)) prefetched[address] = result;
         return Inspect(prefetched);
     }
 
@@ -163,7 +177,7 @@ public sealed class TweakEngine
                 var (definition, option) = _catalog.Resolve(selection);
                 if (!Supported(definition) || !Supported(option)) throw new InvalidDataException(definition.Name + " is not supported on this Windows build or edition.");
                 foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement);
-                foreach (var control in option.Controls ?? []) { var observed = _store.ReadControl(control.Address); observed.Validate(); if (!observed.Allows(control.Value)) throw new InvalidDataException("This Windows control does not support that value: " + control.Address.Target); controlClaims.Add(new(definition.Id, option.Id, observed, observed.Expand(control.Value), control.Patch)); }
+                foreach (var control in option.Controls ?? []) { var observed = ReadControl(control.Address); observed.Validate(); if (!observed.Allows(control.Value)) throw new InvalidDataException("This Windows control does not support that value: " + control.Address.Target); controlClaims.Add(new(definition.Id, option.Id, observed, observed.Expand(control.Value), control.Patch)); }
                 foreach (var change in option.Changes.SelectMany(_store.Resolve)) claims.Add(new(definition.Id, option.Id, Capture(change.Address), Desired(change), change.Token, change.Bits));
             }
             foreach (var claim in claims) affected.Add(claim.Target.Id);
@@ -203,7 +217,7 @@ public sealed class TweakEngine
             if (!TweakRead.SameValue(observed.Value, after.Value)) changes.Add(new(observed, after.Value));
             if (desired is not null) next.Add(new(original?.Original ?? observed, after.Applied ?? after.Value, after.RestoreValue, after.Composed));
         }
-        var controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, _store.ReadControl);
+        var controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, ReadControl);
         if (selections.Length > 0) CheckIncompatible(state, changes, next, profiles, controls, Capture);
         return new()
         {
@@ -239,7 +253,7 @@ public sealed class TweakEngine
                 states.Add(reads.Keys.ToDictionary(id => id, id => profile.Claims.Any(claim => claim.Target.Id == id) && !profiles.Any(other => other != profile && other.Claims.Any(claim => claim.Target.Id == id)) ? original[id] : planned[id], StringComparer.Ordinal));
             bool ControlsEffective((TweakDefinition Definition, TweakOption Option, TweakAssignment[] Changes) half) => (half.Option.Controls ?? []).All(control =>
             {
-                var read = _store.ReadControl(control.Address); read.Validate();
+                var read = ReadControl(control.Address); read.Validate();
                 var value = controls.Changes.FirstOrDefault(item => item.Before.Id == read.Id) is { } mutation ? mutation.After : read.Value;
                 return ControlComposition.Matches(new(half.Definition.Id, half.Option.Id, read, read.Expand(control.Value, allowPending: true), control.Patch), value);
             });
@@ -262,6 +276,16 @@ public sealed class TweakEngine
         catch (Exception error) when (error is InvalidDataException or IOException or System.ComponentModel.Win32Exception) { return false; }
     }
     private RegistryAddress Local(RegistryAddress address) => address with { KeyPath = address.KeyPath.Replace("{user-sid}", _store.Context.Owner.UserSid, StringComparison.OrdinalIgnoreCase) };
+    private TweakControlRead ReadControl(ControlAddress address)
+    {
+        var read = Task.Factory.StartNew(() => _store.ReadControl(address), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        if (!read.Wait(ReadTimeout))
+        {
+            _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            throw new TimeoutException(FeaturesTimedOut);
+        }
+        return read.GetAwaiter().GetResult();
+    }
     private TweakRead Read(RegistryAddress address) { var result = _store.Read(Local(address)); result.Validate(); return result; }
     private static RegistryValueData? Desired(TweakAssignment change) => change.Dword is { } value ? new(change.Address.ValueName!, 4, BitConverter.GetBytes(value)) : change.Value;
     private TweakState? State()
