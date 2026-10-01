@@ -61,7 +61,11 @@ function Run([string]$Name,[scriptblock]$Body){
     try {& $Body 2>&1|ForEach-Object {$output.Add([string]$_)};$code=$LASTEXITCODE}
     catch {$output.Add(($_|Out-String));$code=1}
     $output|Set-Content -LiteralPath (Join-Path $Evidence ($Phase+'-'+$Name+'.txt')) -Encoding UTF8
-    Check ($code -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s') (@($output|Where-Object {$_ -match 'FAIL|error|Exception'}|Select-Object -First 3) -join ' / ')
+    $passes=@($output|Where-Object {$_ -cmatch '^PASS '}).Count
+    $fails=@($output|Where-Object {$_ -cmatch '^FAIL '}).Count
+    $skips=@($output|Where-Object {$_ -cmatch '^SKIP'})
+    $last=@($output|Where-Object {$_.Trim()}|Select-Object -Last 1)
+    Check ($code -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
 }
 function Uninstall-App {
     $uninstaller=Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue|Select-Object -First 1
@@ -227,6 +231,12 @@ switch($Phase){
             'tool-launcher'={& (Join-Path $Source 'tools\scripts\Test-ToolLauncher.ps1') -DotNetPath $dotnet}
             'frontend'={& (Join-Path $Source 'tools\scripts\Test-Frontend.ps1') -DotNetPath $dotnet}
             'client-cleanup-boundary'={& (Join-Path $Source 'backend\scripts\Test-ClientCleanupBoundary.ps1') -DotNetPath $dotnet}
+            'optimizer-host'={& (Join-Path $Source 'backend\scripts\Test-OptimizerHost.ps1') -DotNetPath $dotnet}
+            'data-root-marker-paths'={& (Join-Path $Source 'backend\scripts\Test-DataRootMarkerPaths.ps1')}
+            'governor-setup-legacy-pause'={& (Join-Path $Source 'backend\scripts\Test-GovernorSetupLegacyPause.ps1')}
+            'earlier-version-gate'={& (Join-Path $Source 'backend\scripts\Test-EarlierVersionGate.ps1')}
+            'script-parser'={& (Join-Path $Source 'tools\scripts\Test-Baseline.ps1') -ParseOnly}
+            'governor-scenarios'={& (Join-Path $Source 'backend\scripts\Test-GovernorScenarios.ps1') -DotNetPath $dotnet}
         }
         $Only=@($Only|ForEach-Object {$_ -split ','}|Where-Object {$_})
         foreach($name in $all.Keys){if($Only.Count -eq 0 -or $Only -contains $name){Run $name $all[$name]}}
