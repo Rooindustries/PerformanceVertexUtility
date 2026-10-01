@@ -240,7 +240,8 @@ if ($Part -in 'both', 'governor') {
         $worker = $null; try { $worker = WaitFor { @(Policy-Workers $requestPath)[0] } 90 'the governor worker' } catch {}
         $taskInfo = @($tasks | ForEach-Object { $i = Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath; $_.TaskName + ' state=' + $_.State + ' lastResult=0x{0:X} lastRun=' -f $i.LastTaskResult + $i.LastRunTime }) -join '; '
         Check ($null -ne $worker) 'the governor worker is running after the rule was saved' ($(if ($worker) { 'pid=' + $worker.ProcessId } else { 'no Optimizer.Host.exe policy-run process; ' + $taskInfo }))
-        if ($worker) { Check-Chain 'governor' $worker $registeredArguments; Check-Environment 'governor' $worker }
+        Check ($null -ne $worker -and $worker.ExecutablePath -ieq $hostExe -and $hostExe.StartsWith($env:ProgramFiles + '\', [StringComparison]::OrdinalIgnoreCase)) 'the governor worker image is the installed Optimizer.Host.exe under C:\Program Files' ($(if ($worker) { $worker.ExecutablePath } else { 'no worker' }))
+    if ($worker) { Check-Chain 'governor' $worker $registeredArguments; Check-Environment 'governor' $worker }
         Unplant-Name
         if ($worker) {
             $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probeId) -eq 'BelowNormal') { $true } } 90 'rule enforced' } catch {}
@@ -345,7 +346,8 @@ if ($Part -in 'both', 'session') {
         $sessionWorker = $null
         if ($script:SessionRoot) { $sessionWorker = @(Session-Workers $script:SessionRoot | Where-Object { $_.CommandLine -match '(^|\s)"?run"?(\s|$)' })[0] }
         Check ($null -ne $sessionWorker) 'the protected-session worker of this session is actually running' ($(if ($sessionWorker) { 'pid=' + $sessionWorker.ProcessId } else { 'no RooIndustries.SessionHost.exe run process for ' + $script:SessionRoot }))
-        if ($sessionWorker) { Check-Chain 'protected session' $sessionWorker $sessionArguments; Check-Environment 'protected session' $sessionWorker }
+        Check ($null -ne $sessionWorker -and $sessionWorker.ExecutablePath -ieq $sessionExe -and $sessionExe.StartsWith($env:ProgramFiles + '\', [StringComparison]::OrdinalIgnoreCase)) 'the protected-session worker image is the installed RooIndustries.SessionHost.exe under C:\Program Files' ($(if ($sessionWorker) { $sessionWorker.ExecutablePath } else { 'no worker' }))
+    if ($sessionWorker) { Check-Chain 'protected session' $sessionWorker $sessionArguments; Check-Environment 'protected session' $sessionWorker }
         Unplant-Name
         $armedState = $null
         try { $armedState = WaitFor { $s = Launcher-State $sessionLauncher.Id; if ($s.affinity -eq $wanted.affinity -and $s.memory -eq $wanted.memory -and $s.io -eq $wanted.io) { $s } } 30 'the launcher defaults while armed' } catch {}
