@@ -116,12 +116,13 @@ public partial class WindowsTweakRow : ObservableObject
     private TweakSettingStatus? _observed;
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
-    public bool CouldNotCheck => _observed is { Error: { } error } && error != TweakEngine.FeaturesPending && TweakEngine.IsTransient(error);
+    private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with"];
+    private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
+    public bool CouldNotCheck => _observed is { Error: { } error } && error != TweakEngine.FeaturesPending && !PcLacks(error);
     public bool CanRetry => CouldNotCheck;
     public RelayCommand RetryCommand { get; }
     public string RetryAutomationId => Id + ".retry";
-    public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false
-        || status.Error is { } error && (error.Contains("Win32 1060", StringComparison.Ordinal) || error.Contains("0x80070002", StringComparison.Ordinal) || error.Contains("Windows driver", StringComparison.Ordinal)));
+    public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false || status.Error is { } error && PcLacks(error));
     public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice;
     public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id))
         ?? (ActionChoices.Length == 2 && AppliedChoice is not null ? ActionChoices.First(choice => choice != AppliedChoice) : null);
