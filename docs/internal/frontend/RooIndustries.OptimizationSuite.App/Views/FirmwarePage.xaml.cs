@@ -64,7 +64,7 @@ public sealed partial class FirmwarePage : Page
     private void OpenFiles(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SessionDirectory is not { } directory) return;
-        try { RuntimeEnvironment.OpenInExplorer(directory); }
+        try { RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(directory); }
         catch (Exception ex) { ViewModel.Message = ex.Message; }
     }
     private bool _restarting;
