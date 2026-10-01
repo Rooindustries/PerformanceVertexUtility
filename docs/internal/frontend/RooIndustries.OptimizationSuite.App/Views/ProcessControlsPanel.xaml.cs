@@ -36,7 +36,7 @@ public sealed partial class ProcessControlsPanel : UserControl
         if (!IsLoaded) return;
         var changed = _watch.Changed;
         if ((!revisit && !changed) || ViewModel.Busy || !ViewModel.CanEdit) return;
-        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(() => ViewModel.RefreshCommand.ExecuteAsync(null));
-        else if (changed) await _watch.RefreshAsync(() => ViewModel.RefreshRulesCommand.ExecuteAsync(null));
+        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
+        else if (changed) await _watch.RefreshAsync(ViewModel.TryRefreshRulesAsync);
     }
 }

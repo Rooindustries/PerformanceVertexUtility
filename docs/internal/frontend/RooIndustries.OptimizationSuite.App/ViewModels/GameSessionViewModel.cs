@@ -129,9 +129,11 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => TryRefreshAsync();
+
+    public async Task<bool> TryRefreshAsync()
     {
-        if (Busy) return;
+        if (Busy) return false;
         Busy = true;
         try
         {
@@ -147,8 +149,9 @@ public partial class GameSessionViewModel : ObservableObject
                 foreach (var process in inventory.Processes.Where(process => process.Pid > 0 && process.Pid != Environment.ProcessId && !process.Protected && !process.Blocked && process.Category != "windowsCore").OrderBy(process => process.Name, StringComparer.OrdinalIgnoreCase))
                     Launchers.Add(new(process.Pid, process.Name ?? "Application"));
             }
+            return true;
         }
-        catch (Exception error) { Status = "Couldn't refresh game sessions."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't refresh game sessions."; Detail = error.Message; return false; }
         finally { Busy = false; }
     }
 
