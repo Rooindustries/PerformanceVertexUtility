@@ -12,6 +12,9 @@ $system=Split-Path (Split-Path $PSHOME -Parent) -Parent
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
 $schtasks=Join-Path $system 'schtasks.exe'
 $powershell=Join-Path $PSHOME 'powershell.exe'
+$full=$ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
+$script:SchedulerOnly=$false
+$localAppData=if($full){[Environment]::GetFolderPath('LocalApplicationData')}else{$env:LOCALAPPDATA}
 
 function Write-Log([string]$Text){
     $line=[DateTime]::UtcNow.ToString('o')+' '+$Action+' '+$Text
@@ -28,17 +31,130 @@ function Invoke-Schtasks {
 
 function ConvertTo-XmlText([string]$Text){return $Text.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;').Replace('"','&quot;')}
 
-function Get-ListedGovernors {
-    $names=@(Invoke-Schtasks /Query /FO CSV /NH|ForEach-Object {([string]$_ -split '","')[0].Trim('"')}|Where-Object {$_ -match '^\\(RooIndustries|Roo)OptimizationSuite\.ProcessRules\.[^\\]+$'}|Select-Object -Unique)
-    foreach($name in $names){
+function ConvertFrom-XmlText([string]$Text){return $Text.Replace('&lt;','<').Replace('&gt;','>').Replace('&quot;','"').Replace('&apos;',"'").Replace('&amp;','&')}
+
+function Get-CurrentUser {
+    if($script:CurrentUser){return $script:CurrentUser}
+    $sid='';$name=''
+    if($full){
+        $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+        $sid=$identity.User.Value;$name=$identity.Name
+    } else {
+        $ErrorActionPreference='Continue'
+        $output=@(& (Join-Path $system 'whoami.exe') /user /fo csv /nh 2>$null)
+        $line=if($output.Count -gt 0){[string]$output[0]}else{''}
+        $parts=@($line -split '","')
+        if($parts.Count -eq 2){$name=$parts[0].Trim('"');$sid=$parts[1].Trim('"')}
+    }
+    $script:CurrentUser=@{sid=$sid;name=$name}
+    return $script:CurrentUser
+}
+
+function Get-Sid([string]$Account){
+    if($Account -match '^S-1-'){return $Account}
+    if($full){try {return [Security.Principal.NTAccount]::new($Account).Translate([Security.Principal.SecurityIdentifier]).Value} catch {return ''}}
+    $user=Get-CurrentUser
+    if($Account -and $user.sid -and ($Account -ieq $user.name -or $Account -ieq @($user.name -split '\\')[-1])){return $user.sid}
+    return ''
+}
+
+function Resolve-PathText([string]$Path){
+    $text=$Path.Replace('/','\')
+    if($text -notmatch '^[A-Za-z]:\\' -or $text -match '[<>"|?*\x00-\x1F]' -or $text.Substring(2) -match ':'){return ''}
+    if($full){try {return [IO.Path]::GetFullPath($text)} catch {return ''}}
+    if($text -match '(^|\\)\.{1,2}(\\|$)'){return ''}
+    return $text -replace '\\{2,}','\'
+}
+
+function Test-StartsWith([string]$Text,[string]$Prefix){return $Text.Length -ge $Prefix.Length -and $Text.Substring(0,$Prefix.Length) -ieq $Prefix}
+
+function Test-Contains([string]$Text,[string]$Needle){return $Text.ToUpperInvariant().Contains($Needle.ToUpperInvariant())}
+
+function Get-ListedGovernorNames {
+    return @(Invoke-Schtasks /Query /FO CSV /NH|ForEach-Object {([string]$_ -split '","')[0].Trim('"')}|Where-Object {$_ -match '^(\\[^\\]+)*\\[^\\]*OptimizationSuite\.ProcessRules\.[^\\]*$'}|Select-Object -Unique)
+}
+
+function Get-GovernorSources {
+    if(-not $script:SchedulerOnly){
+        foreach($task in @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)){
+            $actions=@($task.Actions)
+            @{taskName=[string]$task.TaskName;taskPath=[string]$task.TaskPath;description=[string]$task.Description;userId=[string]$task.Principal.UserId;runLevel=[string]$task.Principal.RunLevel;disabled=([string]$task.State -eq 'Disabled');actionCount=$actions.Count;execute=[string]$actions[0].Execute;arguments=[string]$actions[0].Arguments}
+        }
+        return
+    }
+    foreach($name in @(Get-ListedGovernorNames)){
         $xml=@(Invoke-Schtasks /Query /TN $name /XML) -join "`n"
+        if($script:SchtasksExit -ne 0 -or -not $xml){Write-Log ('Task Scheduler could not describe '+$name+', so setup leaves it alone');continue}
+        $info=if($xml -match '(?s)<RegistrationInfo>.*?</RegistrationInfo>'){$Matches[0]}else{''}
+        $description=if($info -match '(?s)<Description>(.*?)</Description>'){ConvertFrom-XmlText $Matches[1]}else{''}
+        $principal=if($xml -match '(?s)<Principals>.*?</Principals>'){$Matches[0]}else{''}
+        $userId=if($principal -match '(?s)<UserId>(.*?)</UserId>'){ConvertFrom-XmlText $Matches[1]}else{''}
+        $level=if($principal -match '<RunLevel>(.*?)</RunLevel>'){$Matches[1]}else{''}
         $settings=if($xml -match '(?s)<Settings>.*?</Settings>'){$Matches[0]}else{''}
-        @{taskName=$name.Substring(1);taskPath='\';enabled=($settings -notmatch '<Enabled>false</Enabled>');highest=($xml -match '<RunLevel>HighestAvailable</RunLevel>')}
+        $actionBlock=if($xml -match '(?s)<Actions[^>]*>.*?</Actions>'){$Matches[0]}else{''}
+        $execute=if($actionBlock -match '(?s)<Command>(.*?)</Command>'){ConvertFrom-XmlText $Matches[1]}else{''}
+        $arguments=if($actionBlock -match '(?s)<Arguments>(.*?)</Arguments>'){ConvertFrom-XmlText $Matches[1]}else{''}
+        $split=$name.LastIndexOf('\')+1
+        @{taskName=$name.Substring($split);taskPath=$name.Substring(0,$split);description=$description;userId=$userId;runLevel=$(if($level -eq 'HighestAvailable'){'Highest'}else{$level});disabled=[bool]($settings -match '<Enabled>false</Enabled>');actionCount=@($actionBlock -split '<(?:Exec|ComHandler|SendEmail|ShowMessage)[\s>/]').Count-1;execute=$execute;arguments=$arguments}
+    }
+}
+
+function Test-GovernorAction($Task,[string]$Root){
+    if($Task.actionCount -ne 1){return $false}
+    $execute=[string]$Task.execute
+    $arguments=[string]$Task.arguments
+    $hostDirectory=$appRootPath+'\backend\bin\optimizer'
+    $hostExe=$hostDirectory+'\Optimizer.Host.exe'
+    $hostDll=$hostDirectory+'\Optimizer.Host.dll'
+    $launcher=$appRootPath+'\backend\scripts\Start-RooIndustriesHelper.cmd'
+    foreach($directory in $systemDirectories){
+        if($execute -ine ($directory+'\conhost.exe')){continue}
+        $clean='--headless "'+$directory+'\cmd.exe" /d /v:off /c call "'+$launcher+'" "'
+        if((Test-StartsWith $arguments $clean) -and ((Test-Contains $arguments ('?'+$hostExe+'?policy-run?')) -or (Test-Contains $arguments ('?policy-run?'+$Root+'\worker-request.json')))){return $true}
+        if((Test-StartsWith $arguments '--headless "') -and ((Test-Contains $arguments ('"'+$hostExe+'" policy-run "')) -or (Test-Contains $arguments ('"'+$hostDll+'" policy-run "')))){return $true}
+    }
+    if(Test-StartsWith $arguments ('"'+$hostDll+'" policy-run "')){return $true}
+    return ($execute -ieq $hostExe -and (Test-Contains $arguments 'policy-run'))
+}
+
+function Get-GovernorProblem($Task,$Parts,[string]$Root,$Local){
+    if($Task.taskPath -ne '\'){return 'it is not in the Task Scheduler root folder'}
+    if($Task.taskName -notmatch '^(RooIndustries|Roo)OptimizationSuite\.ProcessRules\.[0-9A-F]{20}$'){return 'its name is not one this product registers'}
+    if($Parts.Count -ne 3){return 'its description does not have three parts'}
+    if($Parts[0] -ne 'Roo Industries process rules' -and $Parts[0] -ne 'Roo process rules'){return 'its description does not start with the product text'}
+    if($Parts[1] -notmatch '^S-1-[0-9]+(-[0-9]+)+$'){return 'its description does not name a Windows user'}
+    if(-not $Root){return 'its description does not name a valid rules folder'}
+    if(-not $Local -or $Root.Length -lt $Local.Length -or $Root.Substring(0,$Local.Length) -ine $Local){return 'its rules folder is outside the profile of the user its description names'}
+    if($Task.runLevel -ne 'Highest'){return 'it does not run with the highest privileges'}
+    if((Get-Sid $Task.userId) -ne $Parts[1]){return 'it does not run as the user its description names'}
+    if(-not (Test-GovernorAction $Task $Root)){return 'it does not start the governor of this installation'}
+    return $null
+}
+
+function Get-GovernorTasks {
+    foreach($task in @(Get-GovernorSources)){
+        try {
+            $parts=@([string]$task.description -split ' \| ',3)
+            $sid=if($parts.Count -eq 3 -and $parts[1] -match '^S-1-[0-9]+(-[0-9]+)+$'){$parts[1]}else{''}
+            $profilePath=if($sid){[string](Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$sid) -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath}else{''}
+            $localPath=if($profilePath){Resolve-PathText (Join-Path $profilePath 'AppData\Local')}elseif($sid -and $sid -eq $me){Resolve-PathText $localAppData}else{''}
+            $local=if($localPath){$localPath.TrimEnd('\')+'\'}else{$null}
+            $root=if($parts.Count -eq 3){Resolve-PathText $parts[2]}else{''}
+            $problem=Get-GovernorProblem $task $parts $root $local
+            $enabled=-not $task.disabled
+            if($problem){Write-Log ('Ignoring a task that is not a governor registered by an administrator: '+$task.taskName+' ('+$problem+')')}
+            else {
+                $paused=$false;try {$paused=(Test-Path -LiteralPath (Join-Path $root 'governor.json')) -and [bool](Get-Content -LiteralPath (Join-Path $root 'governor.json') -Raw -Encoding UTF8|ConvertFrom-Json).paused} catch {$paused=$true}
+                $hasRules=@(Get-ChildItem -LiteralPath (Join-Path $root 'rules') -Filter '*.json' -File -ErrorAction SilentlyContinue).Count -gt 0
+                $enabled=$enabled -or (-not $paused -and $hasRules)
+            }
+            @{taskName=$task.taskName;taskPath=$task.taskPath;description=[string]$task.description;userSid=$sid;policyRoot=$root;enabled=$enabled;disabled=[bool]$task.disabled;trusted=(-not $problem)}
+        } catch {Write-Log ('Ignoring a task that could not be read: '+$task.taskName+' ('+$_.Exception.Message+')')}
     }
 }
 
 function Register-Watchdog($Tasks){
-    if(-not $StatePath){Write-Log 'No setup folder was given, so no setup recovery task was registered';return}
+    if(-not $StatePath){Write-Log 'No setup folder was given, so no setup recovery task was registered';return $false}
     $setupId=$SetupProcessId
     if($setupId -le 0 -and $ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'){try {$setupId=[int](Get-CimInstance Win32_Process -Filter ('ProcessId='+$PID)).ParentProcessId} catch {$setupId=0}}
     $setup=$null
@@ -59,8 +175,13 @@ function Register-Watchdog($Tasks){
     Invoke-Schtasks /Create /TN ('\'+$watchdog) /XML $file /F|Out-Null
     $code=$script:SchtasksExit
     Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
-    if($code -ne 0){Write-Log ('Task Scheduler could not register setup recovery (exit '+$code+')');return}
+    if($code -ne 0){Write-Log ('Task Scheduler could not register setup recovery (exit '+$code+')');return $false}
     Write-Log ('Registered setup recovery for '+@($Tasks|Where-Object {$_.enabled}).Count+' governor tasks')
+    return $true
+}
+
+function Test-WatchdogRegistered($Tasks){
+    try {return @(Register-Watchdog $Tasks)[-1] -eq $true} catch {Write-Log ('Setup recovery could not be registered: '+$_.Exception.Message);return $false}
 }
 
 function Remove-Watchdog {
@@ -70,16 +191,24 @@ function Remove-Watchdog {
     if($script:SchtasksExit -eq 0){Write-Log 'Removed setup recovery'}else{Write-Log ('Task Scheduler could not remove setup recovery (exit '+$script:SchtasksExit+')')}
 }
 
-$listed=@(Get-ListedGovernors)
-$full=$ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
+$appRootPath=(Resolve-PathText $AppRoot).TrimEnd('\')
+if(-not $appRootPath){throw 'The app folder must be a full path on a local drive.'}
+$systemDirectories=@($system,(Join-Path $env:SystemRoot 'System32')|Select-Object -Unique)
+$me=(Get-CurrentUser).sid
+$listed=@(Get-ListedGovernorNames)
 $visible=$null
 if($full){try {$visible=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)} catch {$visible=$null}}
 if(-not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
     Write-Log ('PowerShell runs in '+$ExecutionContext.SessionState.LanguageMode+$(if($full){' but Windows could not list the governor tasks'}else{''})+', so setup uses Task Scheduler only')
-    $tasks=@($listed|Where-Object {$_['highest']})
+    $script:SchedulerOnly=$true
+    $tasks=@(Get-GovernorTasks|Where-Object {$_.trusted})
     if($Action -eq 'Suspend'){
-        if($StatePath){ConvertTo-Json -InputObject @($tasks) -Depth 3|Set-Content -LiteralPath $StatePath -Encoding UTF8}
-        if($tasks.Count -gt 0){Register-Watchdog $tasks}
+        $records=@($tasks|ForEach-Object {@{taskName=$_.taskName;taskPath=$_.taskPath;description=$_.description;userSid=$_.userSid;policyRoot=$_.policyRoot;enabled=$_.enabled;wasRunning=$false}})
+        if($StatePath){ConvertTo-Json -InputObject @($records) -Depth 3|Set-Content -LiteralPath $StatePath -Encoding UTF8}
+        if($tasks.Count -gt 0 -and -not (Test-WatchdogRegistered $tasks)){
+            Write-Log 'Setup recovery could not be registered, so the governor tasks were left running and setup must not replace files'
+            exit 4
+        }
         foreach($task in $tasks){
             Invoke-Schtasks /Change /TN ($task.taskPath+$task.taskName) /DISABLE|Out-Null
             Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null
@@ -88,15 +217,17 @@ if(-not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
         Write-Log ('Suspended '+$tasks.Count+' governor tasks')
     } elseif($Action -eq 'Resume'){
         $saved=@()
-        if($StatePath -and (Test-Path -LiteralPath $StatePath)){$saved=@((Get-Content -LiteralPath $StatePath -Raw|ConvertFrom-Json))}
-        $failures=0
-        foreach($item in $saved){
-            if($null -eq $item -or -not $item.enabled){continue}
-            if(@($tasks|Where-Object {$_.taskName -eq $item.taskName -and $_.taskPath -eq $item.taskPath}).Count -ne 1){continue}
-            Invoke-Schtasks /Change /TN ($item.taskPath+$item.taskName) /ENABLE|Out-Null
-            if($script:SchtasksExit -eq 0){Write-Log ('Enabled governor task '+$item.taskName+' again')}else{$failures++;Write-Log ('Could not enable governor task '+$item.taskName)}
+        if($StatePath -and (Test-Path -LiteralPath $StatePath)){$saved=@((Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8|ConvertFrom-Json))}
+        $failures=0;$resumed=0
+        foreach($task in $tasks){
+            $recorded=@($saved|Where-Object {$null -ne $_ -and $_.taskName -eq $task.taskName -and $_.taskPath -eq $task.taskPath -and $_.userSid -eq $task.userSid -and [string]$_.policyRoot -ieq $task.policyRoot})
+            if(-not ($task.enabled -or ($recorded.Count -eq 1 -and $recorded[0].enabled))){Write-Log ('Left governor task '+$task.taskName+' disabled because its rules are paused or missing');continue}
+            $resumed++
+            if(-not $task.disabled){continue}
+            Invoke-Schtasks /Change /TN ($task.taskPath+$task.taskName) /ENABLE|Out-Null
+            if($script:SchtasksExit -eq 0){Write-Log ('Enabled governor task '+$task.taskName+' again')}else{$failures++;Write-Log ('Could not enable governor task '+$task.taskName)}
         }
-        Write-Log ('Resumed '+$saved.Count+' governor tasks with '+$failures+' failures')
+        Write-Log ('Resumed '+$resumed+' governor tasks with '+$failures+' failures')
         if($failures -gt 0){Write-Log 'Setup recovery stays registered to turn the governor tasks back on';exit 2}
         Remove-Watchdog
     } else {
@@ -107,7 +238,7 @@ if(-not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
             Invoke-Schtasks /Delete /TN ($task.taskPath+$task.taskName) /F|Out-Null
             Write-Log ('Removed governor task '+$task.taskName)
         }
-        if(@(Get-ListedGovernors).Count -gt 0){exit 3}
+        if(@(Get-GovernorTasks|Where-Object {$_.trusted}).Count -gt 0){exit 3}
     }
     exit 0
 }
@@ -116,48 +247,40 @@ $OutputEncoding=[Text.UTF8Encoding]::new($false)
 $AppRoot=[IO.Path]::GetFullPath($AppRoot).TrimEnd('\')
 $hostExe=Join-Path $AppRoot 'backend\bin\optimizer\Optimizer.Host.exe'
 $workerScript=Join-Path $AppRoot 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'
-$me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-
-function Get-Sid([string]$Account){
-    if($Account -match '^S-1-'){return $Account}
-    try {return [Security.Principal.NTAccount]::new($Account).Translate([Security.Principal.SecurityIdentifier]).Value} catch {return ''}
-}
-
-function Get-GovernorTasks {
-    foreach($task in @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)){
-        $parts=@([string]$task.Description -split ' \| ',3)
-        if($parts.Count -ne 3 -or $parts[1] -notmatch '^S-1-'){Write-Log ('Skipping task with an unexpected description: '+$task.TaskName);continue}
-        $profile=[string](Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$parts[1]) -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath
-        $local=if($profile){[IO.Path]::GetFullPath((Join-Path $profile 'AppData\Local')).TrimEnd('\')+'\'}elseif($parts[1] -eq $me){[IO.Path]::GetFullPath([Environment]::GetFolderPath('LocalApplicationData')).TrimEnd('\')+'\'}else{$null}
-        $root=try{[IO.Path]::GetFullPath($parts[2])}catch{''}
-        $trusted=[string]$task.Principal.RunLevel -eq 'Highest' -and (Get-Sid ([string]$task.Principal.UserId)) -eq $parts[1] -and $local -and $root.StartsWith($local,[StringComparison]::OrdinalIgnoreCase)
-        $settingsPath=Join-Path $root 'governor.json'
-        $paused=$false;try {$paused=(Test-Path -LiteralPath $settingsPath) -and [bool](Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8|ConvertFrom-Json).paused} catch {$paused=$true}
-        $enabled=([string]$task.State -ne 'Disabled') -or (-not $paused -and (Test-Path -LiteralPath (Join-Path $root 'rules')))
-        [pscustomobject]@{taskName=$task.TaskName;taskPath=$task.TaskPath;description=[string]$task.Description;userSid=$parts[1];policyRoot=$root;enabled=$enabled;trusted=[bool]$trusted}
-    }
-}
 
 function Save-Records($Records){
     if($StatePath){[IO.File]::WriteAllText($StatePath,(ConvertTo-Json -InputObject @($Records.ToArray()) -Depth 5),[Text.UTF8Encoding]::new($false))}
+}
+
+function Start-HostProcess([string]$HostAction,[string]$Json,[string]$Path){
+    $ErrorActionPreference='Continue'
+    $output=if($Path){@(& $hostExe $HostAction $Path 2>&1)}else{@($Json|& $hostExe $HostAction '-' 2>&1)}
+    $code=$LASTEXITCODE
+    $errors=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_})
+    $text=(@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n").Trim()
+    $result=$null
+    if($text){try {$result=$text|ConvertFrom-Json} catch {}}
+    return [pscustomobject]@{exitCode=$code;text=$text;stderr=($errors -join ' ').Trim();result=$result}
 }
 
 function Invoke-Host([string]$HostAction,[string]$PolicyRoot,[hashtable]$Extra=@{}){
     $request=@{schemaVersion=1;repoRoot=$AppRoot;policyRoot=$PolicyRoot;confirm=$true}
     foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
     $json=$request|ConvertTo-Json -Depth 5 -Compress
-    $text=@($json|& $hostExe $HostAction '-') -join "`n"
-    $result=$text|ConvertFrom-Json
-    if($LASTEXITCODE -ne 0 -and [string]$result.error.message -match "Could not find file '.*\\-'"){
+    $run=Start-HostProcess $HostAction $json ''
+    if($run.exitCode -ne 0 -and [string]$run.result.error.message -match "Could not find file '.*\\-'"){
         $directory=New-AdminOnlyDirectory (Join-Path $AppRoot ('setup-request-'+[Guid]::NewGuid().ToString('N')))
         try {
             $path=Join-Path $directory 'request.json'
             [IO.File]::WriteAllText($path,$json,[Text.UTF8Encoding]::new($false))
-            $result=(@(& $hostExe $HostAction $path) -join "`n")|ConvertFrom-Json
+            $run=Start-HostProcess $HostAction '' $path
         } finally {Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue}
     }
-    if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw ($HostAction+' failed: '+$result.error.message)}
-    return $result.data
+    if($run.exitCode -ne 0 -or $run.result.status -ne 'completed'){
+        $reason=if($run.result -and $run.result.error.message){[string]$run.result.error.message}elseif($run.stderr){$run.stderr}elseif($run.text){$run.text}else{'the helper printed nothing'}
+        throw ($HostAction+' failed (exit '+$run.exitCode+'): '+$reason.Substring(0,[Math]::Min(400,$reason.Length)))
+    }
+    return $run.result.data
 }
 
 function New-AdminOnlyDirectory([string]$Path){
@@ -264,10 +387,11 @@ switch($Action){
     'Suspend' {
         $records=New-Object System.Collections.Generic.List[object]
         Save-Records $records
-        $tasks=@(Get-GovernorTasks)
-        foreach($task in @($tasks|Where-Object {-not $_.trusted})){Write-Log ('Ignoring a task that is not a governor registered by an administrator: '+$task.taskName)}
-        $tasks=@($tasks|Where-Object {$_.trusted})
-        if($tasks.Count -gt 0){Register-Watchdog $tasks}
+        $tasks=@(Get-GovernorTasks|Where-Object {$_.trusted})
+        if($tasks.Count -gt 0 -and -not (Test-WatchdogRegistered $tasks)){
+            Write-Log 'Setup recovery could not be registered, so the governor tasks were left running and setup must not replace files'
+            exit 4
+        }
         foreach($task in $tasks){
             $record=[pscustomobject][ordered]@{taskName=$task.taskName;taskPath=$task.taskPath;description=$task.description;userSid=$task.userSid;policyRoot=$task.policyRoot;enabled=$task.enabled;wasRunning=$false}
             $records.Add($record)
@@ -353,7 +477,7 @@ switch($Action){
     }
     'Remove' {
         Remove-Watchdog
-        foreach($task in @(Get-GovernorTasks)){
+        foreach($task in @(Get-GovernorTasks|Where-Object {$_.trusted})){
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
             if($task.trusted -and $task.userSid -eq $me -and (Test-Path -LiteralPath $workerScript)){
                 try {
@@ -368,7 +492,7 @@ switch($Action){
             if(Get-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -Confirm:$false}
         }
         Stop-Leftovers @()
-        $left=@(Get-GovernorTasks).Count
+        $left=@(Get-GovernorTasks|Where-Object {$_.trusted}).Count
         $workersLeft=@(Get-Workers).Count
         Write-Log ('Governor tasks left: '+$left+'; governor processes left: '+$(if($script:WorkersKnown){$workersLeft}else{'unknown'}))
         if($left -gt 0){exit 3}
