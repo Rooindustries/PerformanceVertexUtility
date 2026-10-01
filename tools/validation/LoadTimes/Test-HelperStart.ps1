@@ -27,6 +27,17 @@ public static class HelperStartEnv {
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
  [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr h, int cls, ref PBI info, int size, out int returned);
  static IntPtr Pointer(IntPtr h, IntPtr address) { var b = new byte[8]; IntPtr n; if (!ReadProcessMemory(h, address, b, (IntPtr)8, out n)) throw new System.ComponentModel.Win32Exception(); return (IntPtr)BitConverter.ToInt64(b, 0); }
+ [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct STARTUPINFO { public int cb; public string lpReserved, lpDesktop, lpTitle; public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags; public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError; }
+ [StructLayout(LayoutKind.Sequential)] struct PROCESS_INFORMATION { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+ [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CreateProcessW(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);
+ [DllImport("kernel32.dll")] static extern uint ResumeThread(IntPtr thread);
+ static IntPtr suspendedThread;
+ public static int StartSuspended(string exe, string directory) {
+  var si = new STARTUPINFO(); si.cb = Marshal.SizeOf(typeof(STARTUPINFO)); PROCESS_INFORMATION pi;
+  if (!CreateProcessW(exe, "\"" + exe + "\"", IntPtr.Zero, IntPtr.Zero, false, 0x00000004 | 0x00000400, IntPtr.Zero, directory, ref si, out pi)) throw new System.ComponentModel.Win32Exception();
+  suspendedThread = pi.hThread; CloseHandle(pi.hProcess); return pi.dwProcessId;
+ }
+ public static void Resume() { ResumeThread(suspendedThread); CloseHandle(suspendedThread); suspendedThread = IntPtr.Zero; }
  public static string[] Names(int pid) {
   IntPtr h = OpenProcess(0x0410, false, pid);
   if (h == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
@@ -90,6 +101,9 @@ function Nav([string]$name) {
 function Start-RooIndustriesApp {
     Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
+    Wait-RooIndustriesWindow
+}
+function Wait-RooIndustriesWindow {
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [HelperStartU32]::ShowWindow($h, 9) | Out-Null; [HelperStartU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [HelperStartU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
@@ -152,7 +166,15 @@ try {
         Check (-not (Test-Path -LiteralPath $noSuchDotNet)) 'the override target does not exist' $noSuchDotNet
         $logBefore = @(Log-Lines).Count
         $env:ROO_INDUSTRIES_DOTNET_EXE = $noSuchDotNet
-        try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
+        $initialNames = @()
+        try {
+            Stop-RooIndustriesApp
+            $suspendedId = [HelperStartEnv]::StartSuspended($Exe, (Split-Path $Exe -Parent))
+            $initialNames = @([HelperStartEnv]::Names($suspendedId))
+            [HelperStartEnv]::Resume()
+            $script:App = Get-Process -Id $suspendedId
+            Wait-RooIndustriesWindow
+        } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
         Nav 'Windows tweaks'
         $list = WaitFor { ById 'WindowsTweaksList' } 60 'Windows tweaks list'
         $rows = WaitFor { $c = @($list.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))).Count; if ($c -gt 0) { $c } } 180 'Windows tweaks rows'
@@ -163,7 +185,7 @@ try {
         $images = @($hostRows | ForEach-Object { Image-Of $_.command_line } | Select-Object -Unique)
         $inside = @($images | Where-Object { $_.StartsWith($install + '\', [StringComparison]::OrdinalIgnoreCase) })
         Check ($rows -gt 0 -and $status -match '^\d+ settings$') 'with ROO_INDUSTRIES_DOTNET_EXE pointing at a missing dotnet.exe, the release app still loads the Windows tweaks rows and finishes reading Windows' ("rows=$rows status=$status")
-        Check (@([HelperStartEnv]::Names($script:App.Id)) -contains 'ROO_INDUSTRIES_DOTNET_EXE') 'the override reached the app: ROO_INDUSTRIES_DOTNET_EXE is in the environment of the running app process' ('names in the app process environment: ' + @([HelperStartEnv]::Names($script:App.Id)).Count)
+        Check ($initialNames -contains 'ROO_INDUSTRIES_DOTNET_EXE') 'the override reached the app: ROO_INDUSTRIES_DOTNET_EXE is in the environment block the app process was created with, read before its first instruction ran' ('names in that environment block: ' + $initialNames.Count)
         Check ($hostRows.Count -gt 0 -and $inside.Count -eq $images.Count) 'the app started Optimizer.Host.exe children whose image is inside the install folder' ("children=$($hostRows.Count) images=" + ($images -join '; '))
         $new = @(Log-Since $logBefore)
         Check ($new.Count -gt 0 -and @($new | Where-Object { $_ -match 'RooIndustriesNoSuchFolder' }).Count -eq 0) 'the app wrote to the log this check reads, and the new log lines do not mention the override path' ('new log lines: ' + $new.Count)
