@@ -25,14 +25,19 @@ public static class RooIndustriesGovernorEnvOracle {
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int kind, ref Basic info, int size, out int length);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool ReadProcessMemory(IntPtr process, IntPtr address, byte[] buffer, IntPtr size, out IntPtr read);
     static byte[] Read(IntPtr process, long address, int size) { var buffer=new byte[size]; IntPtr read; if(!ReadProcessMemory(process,(IntPtr)address,buffer,(IntPtr)size,out read)) throw new System.ComponentModel.Win32Exception(); return buffer; }
-    public static string[] Names(IntPtr process) {
+    public static string[] Entries(IntPtr process) {
         var basic=new Basic(); int length;
         if(NtQueryInformationProcess(process,0,ref basic,Marshal.SizeOf(basic),out length)!=0) throw new InvalidOperationException("The process block could not be read.");
         var parameters=BitConverter.ToInt64(Read(process,(long)basic.Peb+0x20,8),0);
         var block=BitConverter.ToInt64(Read(process,parameters+0x80,8),0);
         var size=(int)BitConverter.ToInt64(Read(process,parameters+0x3F0,8),0);
+        var entries=new List<string>();
+        foreach(var entry in Encoding.Unicode.GetString(Read(process,block,size)).Split('\0')) if(entry.Length>1 && entry.IndexOf('=',1)>0) entries.Add(entry);
+        return entries.ToArray();
+    }
+    public static string[] Names(IntPtr process) {
         var names=new List<string>();
-        foreach(var entry in Encoding.Unicode.GetString(Read(process,block,size)).Split('\0')){if(entry.Length<2) continue; var at=entry.IndexOf('=',1); if(at>0) names.Add(entry.Substring(0,at));}
+        foreach(var entry in Entries(process)) names.Add(entry.Substring(0,entry.IndexOf('=',1)));
         return names.ToArray();
     }
 }
@@ -83,10 +88,12 @@ function Test-ScenarioLauncherCleansEnvironment {
     $names=@($script:RooIndustriesCodeLoadingVariables)
     $profiler=Join-Path $script:scenarioRoot 'no-such-profiler.dll'
     $saved=@{}
-    foreach($name in @('CORECLR_ENABLE_PROFILING','CORECLR_PROFILER_PATH')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'User')}
+    foreach($name in @('CORECLR_ENABLE_PROFILING','CORECLR_PROFILER_PATH','DOTNET_DiagnosticPorts')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'User')}
+    $pipe='roo-industries-no-listener-'+[Guid]::NewGuid().ToString('N').Substring(0,8)
     $script:cleanups.Add({foreach($name in $saved.Keys){[Environment]::SetEnvironmentVariable($name,$saved[$name],'User')}}.GetNewClosure())
     [Environment]::SetEnvironmentVariable('CORECLR_ENABLE_PROFILING','1','User')
     [Environment]::SetEnvironmentVariable('CORECLR_PROFILER_PATH',$profiler,'User')
+    [Environment]::SetEnvironmentVariable('DOTNET_DiagnosticPorts',($pipe+',connect,nosuspend'),'User')
     $conhost=Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe'
     $principal=New-ScheduledTaskPrincipal -UserId (Get-RooIndustriesOperationOwner).userSid -LogonType Interactive -RunLevel Highest
     function Start-ProbeTask([string]$Name,$Action,[string]$Path){
@@ -105,11 +112,14 @@ function Test-ScenarioLauncherCleansEnvironment {
     $directProcess=Start-ProbeTask 'direct' (New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "'+$direct+'" 900') -WorkingDirectory (Split-Path $direct -Parent)) $direct
     $directNames=@([RooIndustriesGovernorEnvOracle]::Names($directProcess.Handle))
     Note 'directLaunchEnvironment' @($directNames|Where-Object {$names -contains $_})
-    Assert ($directNames -contains 'CORECLR_ENABLE_PROFILING' -and $directNames -contains 'CORECLR_PROFILER_PATH') 'Without the launcher a task started for this user inherits the profiler settings'
+    Assert ($directNames -contains 'CORECLR_ENABLE_PROFILING' -and $directNames -contains 'CORECLR_PROFILER_PATH' -and $directNames -contains 'DOTNET_DiagnosticPorts') 'Without the launcher a task started for this user inherits the profiler and diagnostic port settings'
     $launcherProcess=Start-ProbeTask 'launcher' (New-RooIndustriesElevatedTaskAction $viaLauncher @('900') (Split-Path $viaLauncher -Parent)) $viaLauncher
     $launcherNames=@([RooIndustriesGovernorEnvOracle]::Names($launcherProcess.Handle))
     Note 'launcherEnvironment' @($launcherNames|Where-Object {$names -contains $_})
+    $launcherEntries=@([RooIndustriesGovernorEnvOracle]::Entries($launcherProcess.Handle))
+    Note 'launcherPinned' @($launcherEntries|Where-Object {$_ -like '*EnableDiagnostics*'})
     Assert (@($launcherNames|Where-Object {$names -contains $_}).Count -eq 0 -and $launcherNames -contains 'PATH') 'Through the launcher the same task starts the program with none of the code-loading names, and the rest of its environment is intact'
+    Assert (@($script:RooIndustriesPinnedVariables|Where-Object {$launcherEntries -notcontains ($_+'=0')}).Count -eq 0) 'Through the launcher diagnostics are switched off for the program under both name prefixes'
     $path=Copy-Probe
     $probe=Start-Probe $path
     $synced=Use-Rule (New-Rule $path @{cpuPriority='AboveNormal'} 'Environment')
@@ -117,14 +127,20 @@ function Test-ScenarioLauncherCleansEnvironment {
     $worker=Get-Process -Id $synced.worker.state.host.processId
     $workerNames=@([RooIndustriesGovernorEnvOracle]::Names($worker.Handle))
     Note 'workerEnvironment' @($workerNames|Where-Object {$names -contains $_})
+    $workerEntries=@([RooIndustriesGovernorEnvOracle]::Entries($worker.Handle))
     Assert (@($workerNames|Where-Object {$names -contains $_}).Count -eq 0 -and $workerNames -contains 'PATH') 'The running governor process has none of the code-loading names in its environment'
+    Assert (@($script:RooIndustriesPinnedVariables|Where-Object {$workerEntries -notcontains ($_+'=0')}).Count -eq 0) 'The running governor process has diagnostics switched off'
     Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal')) 'And it still enforces the rule'
     $env:CORECLR_ENABLE_PROFILING='1'
     try {$text=(@('{"schemaVersion":1,"repoRoot":"'+$repoRoot.Replace('\','\\')+'"}'|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') policy-status '-' 2>&1|ForEach-Object {[string]$_}) -join "`n");$code=$LASTEXITCODE}
     finally {Remove-Item -LiteralPath 'Env:\CORECLR_ENABLE_PROFILING' -ErrorAction SilentlyContinue}
     Note 'hostWithProfilerSetting' ([ordered]@{exit=$code;text=$text})
     Assert ($code -ne 0 -and $text -match 'will not run with these \.NET settings in its environment: CORECLR_ENABLE_PROFILING') 'A helper started with the profiler setting still in its environment refuses to run, so the clearing is what lets the governor start'
-    Assert (-not (Test-Path -LiteralPath $profiler)) 'The profiler path used for the check was never created'
+    $env:DOTNET_EnableDiagnostics='1'
+    try {$diagnostics=(@('{"schemaVersion":1,"repoRoot":"'+$repoRoot.Replace('\','\\')+'"}'|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') policy-status '-' 2>&1|ForEach-Object {[string]$_}) -join "`n");$diagnosticsCode=$LASTEXITCODE}
+    finally {Remove-Item -LiteralPath 'Env:\DOTNET_EnableDiagnostics' -ErrorAction SilentlyContinue}
+    Assert ($diagnosticsCode -ne 0 -and $diagnostics -match 'DOTNET_EnableDiagnostics') 'A helper started with diagnostics switched on refuses to run, while the value 0 the launcher sets is accepted'
+    Assert (-not (Test-Path -LiteralPath $profiler) -and -not (Test-Path -LiteralPath ('\\.\pipe\'+$pipe))) 'The profiler path and the diagnostic pipe used for the check were never created'
 }
 
 function Test-ScenarioLauncherRefusals {
