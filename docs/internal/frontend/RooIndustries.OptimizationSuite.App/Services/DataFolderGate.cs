@@ -12,7 +12,12 @@ public static class DataFolderGate
     public static bool Open(BackendLocator locator)
     {
         RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
-        RooIndustries.Optimizer.RuntimeEnvironment.PinProfile();
+        try { RooIndustries.Optimizer.RuntimeEnvironment.PinProfile(); }
+        catch (InvalidOperationException error)
+        {
+            MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + error.Message, "Roo Industries Optimization Suite", 0x10);
+            Environment.Exit(1);
+        }
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
         var problem = Attempt(() => Protected(locator), out var enabled);
         if (problem is null) return enabled;
