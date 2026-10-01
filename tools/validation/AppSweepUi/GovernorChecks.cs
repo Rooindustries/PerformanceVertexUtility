@@ -219,6 +219,9 @@ static class GovernorChecks
         var failing = "A governor check failed and will be retried in 4 s: The process cannot access the file because it is being used by another process.";
         view = await View(Snapshot(false, [rule], new(Host("running", [], errors: [failing]), true, null)));
         Expect(check, view, "A running governor whose checks keep failing says so instead of only counting rules", "State: running", "Detail: 1 rule is on. " + failing);
+        view = await View(Snapshot(false, [], new(Host("stopped", []), false, null), unreadableRules: ["The saved rule broken.json could not be read: The JSON is incomplete."]));
+        Expect(check, view, "With only a damaged rule file the governor is not called off and the file is named",
+            "State: notResponding", "Detail: The saved rule broken.json could not be read: The JSON is incomplete.");
         view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), unreadableRules: ["The saved rule broken.json could not be read: The JSON is incomplete."]));
         Expect(check, view, "A running governor with one unreadable rule file keeps running and names the file",
             "State: running", "Detail: 1 rule is on. The saved rule broken.json could not be read: The JSON is incomplete. Those rules are not enforced.");
@@ -417,8 +420,9 @@ static class GovernorChecks
             File.WriteAllText(Path.Combine(store.RulesDirectory, Guid.NewGuid().ToString("N") + ".json"), "{ not json");
             snapshot = GovernorProbe.Read(root);
             (view, _) = await Show(snapshot);
-            check(snapshot.Summary.RulesError is not null && snapshot.Rules.Length == 0 && view.Contains("State: notResponding"),
-                "Real snapshot: a damaged rule file is reported as unreadable saved rules and the governor needs attention");
+            check(snapshot.Summary.RulesError is null && snapshot.Summary.UnreadableRules is { Length: 1 } && snapshot.Rules.Length == 0 && view.Contains("State: notResponding")
+                    && view.Any(line => line.StartsWith("Detail: The saved rule ", StringComparison.Ordinal) && line.Contains(" could not be read: ", StringComparison.Ordinal)),
+                "Real snapshot: a damaged rule file is named as unreadable saved rules and, with no rule left to enforce, the governor needs attention");
         }
         finally
         {

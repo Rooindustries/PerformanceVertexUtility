@@ -516,3 +516,36 @@ function Test-ScenarioConflictHoldsField {
     Core 'policy-run' @{durationSeconds=0}|Out-Null
     Assert ((Read-Field $fixture 'cpuPriority') -eq 'Normal' -and @(Get-Open $fixture.Id).Count -eq 0) 'The pending restore then puts back the original value'
 }
+
+function Set-ScenarioListDenied([string]$Path,[bool]$Denied){
+    $directory=[IO.DirectoryInfo]::new($Path)
+    $security=$directory.GetAccessControl([Security.AccessControl.AccessControlSections]::Access)
+    $rule=[Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,[Security.AccessControl.FileSystemRights]::ListDirectory,[Security.AccessControl.InheritanceFlags]::None,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Deny)
+    if($Denied){$security.AddAccessRule($rule)}else{[void]$security.RemoveAccessRule($rule)}
+    $directory.SetAccessControl($security)
+}
+
+function Test-ScenarioConfigErrorRestoreBackoff {
+    $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
+    $fixture=Start-Probe $path '8 1600 28 600' -NoWait
+    $started=[Diagnostics.Stopwatch]::StartNew()
+    Use-Rule (New-Rule $path @{cpuPriority='AboveNormal'} 'Config error backoff')|Out-Null
+    Assert ($null -ne (Wait-Field $fixture 'cpuPriority' 'AboveNormal' 6)) 'The rule is applied before the app starts denying access'
+    $rules=Join-Path $script:policyRoot 'rules'
+    $script:deniedRules=$rules
+    $script:cleanups.Add({Set-ScenarioListDenied $script:deniedRules $false})
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 10} 15 500
+    Set-ScenarioListDenied $rules $true
+    $configError=Wait-Until {(Get-GovernorState).status -eq 'configurationError'} 30 500
+    Note 'secondsToConfigurationError' $(if($configError){[Math]::Round($configError,1)})
+    Assert ($null -ne $configError) 'With the rules folder unreadable the governor reports a configuration error after its grace period'
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 41} 45 500
+    $stillHeld=[string](Read-Field $fixture 'cpuPriority')
+    Note 'fiveSecondsAfterDenialEnded' $stillHeld
+    Assert ($stillHeld -eq 'AboveNormal') 'Restores that keep failing are retried with growing delays, not every half second'
+    $restored=Wait-Until {(Read-Field $fixture 'cpuPriority') -eq 'Normal'} 30 500
+    Note 'secondsToRestore' $(if($restored){[Math]::Round($restored,1)})
+    Assert ($null -ne $restored) 'The setting is put back once a retry succeeds'
+    Set-ScenarioListDenied $rules $false
+    Assert ($null -ne (Wait-Until {(Get-GovernorState).status -eq 'running'} 20 500)) 'The governor goes back to running once the rules can be read'
+}
