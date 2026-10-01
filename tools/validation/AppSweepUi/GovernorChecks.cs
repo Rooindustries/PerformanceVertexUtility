@@ -113,6 +113,7 @@ static class GovernorChecks
             await FailedSync(check);
 #if !OLD_UI
             await RetryButton(check);
+            await RuleValues(check);
             await RealSnapshot(check);
             await Scheduled(check);
             await Details(check);
@@ -372,6 +373,48 @@ static class GovernorChecks
     }
 
 #if !OLD_UI
+    private static async Task RuleValues(Action<bool, string> check)
+    {
+        ControlRead Read<T>(T value) => ControlRead.From(value);
+        var controls = new Dictionary<string, ControlRead>
+        {
+            ["cpuPriority"] = Read("Normal"), ["ioPriority"] = Read(2), ["gpuPriority"] = Read(2), ["memoryPriority"] = Read(5),
+            ["executionQoS"] = Read(new PowerThrottling(0, 0)), ["priorityBoost"] = Read(true), ["cpuSets"] = Read(Array.Empty<uint>()), ["affinity"] = Read(new AffinityState(0, "0x3")),
+        };
+        var identity = new RunningProcess(123, "1", @"C:\Fixture.exe");
+        App.Operations.ProcessSnapshot = new(identity, Read(0xfffffffeu), [new LogicalCpu(103, 0, 0, 0, 0, 0, 0, false, false, false)], controls);
+        App.Operations.Governor = Snapshot(false, [], new(Host("stopped", []), false, null));
+        App.Operations.Review = desired => new(new() { SchemaVersion = 1, OperationId = "op", Owner = Owner, Identity = identity, Original = desired.Keys.ToDictionary(name => name, name => controls[name]), Desired = desired, TopologyHash = "topology" }, "preview.json", "hash", "journal.json");
+        try
+        {
+            var panel = new ProcessControlsViewModel();
+            await panel.RefreshRulesCommand.ExecuteAsync(null);
+            panel.SelectedProcess = new CpuProcessChoice(123, "Fixture");
+            await (Task)typeof(ProcessControlsViewModel).GetField("_readTask", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(panel)!;
+            panel.RuleName = "Fixture rule";
+            async Task<bool> Reviewed(string name, JsonElement value)
+            {
+                foreach (var row in panel.Controls) row.Selected = row.Options[0];
+                var target = panel.Controls.Single(row => row.Name == name);
+                target.Selected = target.Options.Single(option => option.Value?.GetRawText() == value.GetRawText());
+                await panel.PreviewCommand.ExecuteAsync(null);
+                return panel.HasReview;
+            }
+            check(await Reviewed("cpuPriority", Value("Realtime")) && panel.CanApply && !panel.CanSaveRule && panel.HasRuleBlocker && panel.RuleBlocker.Contains("Realtime CPU priority", StringComparison.Ordinal),
+                "A reviewed Realtime CPU priority can still be applied once but cannot be saved as a rule, and the panel says why" + " | " + panel.RuleBlocker);
+            check(await Reviewed("gpuPriority", Value(5)) && panel.CanApply && !panel.CanSaveRule && panel.RuleBlocker.Contains("Realtime GPU priority", StringComparison.Ordinal),
+                "A reviewed Realtime GPU priority can still be applied once but cannot be saved as a rule, and the panel says why" + " | " + panel.RuleBlocker);
+            check(await Reviewed("cpuPriority", Value("High")) && panel.CanApply && panel.CanSaveRule && !panel.HasRuleBlocker,
+                "A reviewed High CPU priority can be saved as a rule" + " | " + panel.RuleBlocker);
+            check(await Reviewed("gpuPriority", Value(4)) && panel.CanSaveRule && panel.RuleBlocker.Length == 0,
+                "A reviewed High GPU priority can be saved as a rule" + " | " + panel.RuleBlocker);
+            var unsavable = panel.Controls.SelectMany(row => row.Options.Where(option => option.Value is { } value && ProcessPolicyStore.UnsavableReason(row.Name, value) is not null).Select(option => row.Name + "=" + option.Value!.Value.GetRawText())).OrderBy(text => text, StringComparer.Ordinal).ToArray();
+            check(unsavable.SequenceEqual(["cpuPriority=\"Realtime\"", "gpuPriority=5"]),
+                "The only values the panel offers that a saved rule refuses are Realtime CPU and GPU priority, and both are blocked from saving" + " | " + string.Join(", ", unsavable));
+        }
+        finally { App.Operations.Review = null; }
+    }
+
     private static async Task RetryButton(Action<bool, string> check)
     {
         var chrome = Process(100, Chrome);
