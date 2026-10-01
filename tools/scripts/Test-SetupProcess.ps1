@@ -11,7 +11,8 @@ try {
     [IO.Directory]::CreateDirectory((Join-Path $work 'setup-temp')) | Out-Null
     & $IsccPath /Q "/DOutputDir=$work" (Join-Path $repoRoot 'tools\release\SetupProcess.Test.iss')
     if ($LASTEXITCODE -ne 0) { throw 'The setup process check did not compile.' }
-    $process = Start-Process -FilePath (Join-Path $work 'SetupProcessCheck.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/work="' + $work + '"')) -PassThru -Wait
+    $process = Start-Process -FilePath (Join-Path $work 'SetupProcessCheck.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/work="' + $work + '"')) -PassThru
+    $process.WaitForExit()
     Assert ($process.ExitCode -eq 1) 'The check setup exits without installing anything'
     $report = @(Get-Content -LiteralPath (Join-Path $work 'report.txt'))
     $windows = [Environment]::GetFolderPath('Windows')
@@ -28,6 +29,8 @@ try {
     $timed = @($report | Where-Object { $_ -match '^B ran=0 exit=258 ms=(\d+)$' })
     Assert ($timed.Count -eq 1 -and [int]([regex]::Match($timed[0], '\d+$').Value) -lt 8000) 'A hung script is stopped at the limit with the timed out code'
     Assert ($report -contains 'B finished=0' -and (Test-Path -LiteralPath (Join-Path $work 'started.txt')) -and -not (Test-Path -LiteralPath (Join-Path $work 'finished.txt'))) 'The hung script was running and never finished'
+    $childFile = Join-Path $work 'child.txt'
+    Assert ((Test-Path -LiteralPath $childFile) -and -not (Get-Process -Id ([int](Get-Content -LiteralPath $childFile -Raw)) -ErrorAction SilentlyContinue)) 'A program the hung script started is stopped with it'
     Assert ($report -contains 'C ran=0 exit=1') 'A missing program reports failure'
     $plain = @($report | Where-Object { $_ -match '^D ran=1 exit=0 ms=(\d+)$' })
     Assert ($plain.Count -eq 1 -and [int]([regex]::Match($plain[0], '\d+$').Value) -ge 11000) 'Setup''s plain wait on the same kind of script has no limit'
