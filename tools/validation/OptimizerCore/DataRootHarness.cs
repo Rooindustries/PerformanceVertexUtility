@@ -111,11 +111,11 @@ static class DataRootHarness
         return text;
     }
 
-    public static void StandardBackground(Dictionary<string, string> env, params string[] args)
+    public static void StandardBackground(string log, Dictionary<string, string> env, params string[] args)
     {
         var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
         var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;
-        var script = "$env:DOTNET_ROOT=" + Quote(Path.GetDirectoryName(dotnet)!) + "; " + string.Join("", env.Select(pair => "$env:" + pair.Key + "=" + Quote(pair.Value) + "; ")) + "& " + Quote(dotnet) + " " + Quote(dll) + " " + string.Join(" ", args.Select(Quote));
+        var script = "$env:DOTNET_ROOT=" + Quote(Path.GetDirectoryName(dotnet)!) + "; " + string.Join("", env.Select(pair => "$env:" + pair.Key + "=" + Quote(pair.Value) + "; ")) + "& " + Quote(dotnet) + " " + Quote(dll) + " " + string.Join(" ", args.Select(Quote)) + " *> " + Quote(log);
         var system = Environment.SystemDirectory;
         Run(Path.Combine(system, "runas.exe"), "/trustlevel:0x20000 \"" + Path.Combine(system, "conhost.exe") + " --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) + "\"", 30000);
     }

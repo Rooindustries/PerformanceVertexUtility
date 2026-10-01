@@ -423,10 +423,11 @@ static partial class DataFolderChecks
             store.Write(before, ControlValues.From(true)); enabled = true;
             check(store.Read(startup).Value.GetBoolean() && File.Exists(Path.Combine(control, "startup.ps1")) && File.Exists(Path.Combine(control, "startup.json")), "The sign-in timer task is registered and its script and receipt are written in the administrators-only control folder");
             check(PolicyRootSecurity.WriterOf(control) is null, "A standard user cannot change the sign-in script or receipt");
-            H.StandardBackground(new() { ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state }, "--timer-autostart", control);
+            var log = Path.Combine(H.Local, id + "-autostart.log");
+            H.StandardBackground(log, new() { ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state, ["ROO_INDUSTRIES_TEST_SPLIT_TOKEN"] = "0" }, "--timer-autostart", control);
             var clock = System.Diagnostics.Stopwatch.StartNew(); var active = false;
             while (!active && clock.Elapsed < TimeSpan.FromSeconds(40)) { try { active = store.Read(timer).Value.GetBoolean(); } catch (Exception error) when (error is IOException or InvalidDataException) { } if (!active) Thread.Sleep(500); }
-            check(active, "The sign-in timer start, run with a standard token, acquires the 0.5 ms request and the app reads it as active");
+            check(active, "The sign-in timer start, run with a standard token, acquires the 0.5 ms request and the app reads it as active" + (active ? "" : ": " + (H.Read(log) ?? "no output")));
             var worker = WorkerId(state);
             check(worker > 0 && H.AdministratorsEnabled(worker) == false, "The sign-in worker runs without administrator rights, the Administrators group is deny-only in its token (pid " + worker + ", enabled=" + (H.AdministratorsEnabled(worker)?.ToString() ?? "unknown") + ")");
             check(Directory.EnumerateFileSystemEntries(state).All(entry => OwnerOf(entry) == user), "Everything the sign-in worker keeps in its own folder was created by the signed-in user");
@@ -445,7 +446,7 @@ static partial class DataFolderChecks
             if (stray > 0) { try { using var process = System.Diagnostics.Process.GetProcessById(stray); process.Kill(true); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { } }
             if (enabled) H.Run("schtasks.exe", "/Delete /TN \"" + task + "\" /F");
             Thread.Sleep(300);
-            H.Forget(root, operations); H.Delete(root, state); H.Sweep(id);
+            H.Forget(root, operations); H.Delete(root, state, Path.Combine(H.Local, id + "-autostart.log")); H.Sweep(id);
         }
     }
 
