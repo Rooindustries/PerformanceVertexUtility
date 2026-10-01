@@ -26,6 +26,7 @@ try
                 var path = Path.Combine(directory, "watch-request.json");
                 OperationFiles.Write(path, request with { OperationId = operationId });
                 var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+                RuntimeEnvironment.Apply(start);
                 start.ArgumentList.Add("watch"); start.ArgumentList.Add(path);
                 using var watcher = Process.Start(start) ?? throw new InvalidOperationException("The recovery watcher did not start.");
             }, CancellationToken.None);

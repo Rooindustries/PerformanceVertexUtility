@@ -15,7 +15,7 @@ public sealed partial class ProcessControlsPanel : UserControl
     public ProcessControlsPanel()
     {
         InitializeComponent();
-        _watch = new(DispatcherQueue, CatchUpAsync);
+        _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         _timer.Tick += async (_, _) => await ViewModel.ObserveAsync();
         ViewModel.PropertyChanged += (_, args) =>
         {
@@ -36,7 +36,7 @@ public sealed partial class ProcessControlsPanel : UserControl
         if (!IsLoaded) return;
         var changed = _watch.Changed;
         if ((!revisit && !changed) || ViewModel.Busy || !ViewModel.CanEdit) return;
-        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(() => ViewModel.RefreshCommand.ExecuteAsync(null));
-        else if (changed) await _watch.RefreshAsync(() => ViewModel.RefreshRulesCommand.ExecuteAsync(null));
+        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
+        else if (changed) await _watch.RefreshAsync(ViewModel.TryRefreshRulesAsync);
     }
 }

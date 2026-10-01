@@ -1150,6 +1150,7 @@ public sealed class LiveDataService
             StandardOutputEncoding = Encoding.UTF8,
             WorkingDirectory = _locator.RepoRoot ?? Environment.CurrentDirectory,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(psi);
 
         using var process = new Process { StartInfo = psi };
         if (!process.Start())

@@ -27,6 +27,7 @@ public static class SystemRestart
     public static void Run(RestartCommand command)
     {
         var start = new ProcessStartInfo(command.FileName) { UseShellExecute = false, CreateNoWindow = true };
+        RuntimeEnvironment.Apply(start);
         foreach (var argument in command.Arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException(Path.GetFileName(command.FileName) + " could not start.");
         if (!process.WaitForExit(15000))

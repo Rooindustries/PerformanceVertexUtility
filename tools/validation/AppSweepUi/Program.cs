@@ -13,6 +13,13 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 
+if (args is ["revisit"])
+{
+    await RevisitChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} app sweep UI checks.");
+    return;
+}
+
 ControlRead Read<T>(T value) => ControlRead.From(value);
 var error = new ApiError("fixture", "win32", 5, "read", "Controlled affinity read failure");
 Dictionary<string, ControlRead> Controls(ControlRead cpuSets, ControlRead affinity) => new()

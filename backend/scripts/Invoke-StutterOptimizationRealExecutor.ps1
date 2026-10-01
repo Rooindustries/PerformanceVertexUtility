@@ -20,8 +20,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-PowerCfg {
     param([string[]]$Arguments)
-    $powerCfg = Join-Path $env:SystemRoot 'System32\powercfg.exe'
-    if (-not (Test-Path -LiteralPath $powerCfg)) { $powerCfg = 'powercfg.exe' }
+    $powerCfg = Join-Path ([Environment]::GetFolderPath('System')) 'powercfg.exe'
     return Invoke-RooIndustriesBackendHiddenProcess -FilePath $powerCfg -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
 }
 

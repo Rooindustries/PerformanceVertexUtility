@@ -16,7 +16,7 @@ public sealed partial class GameSessionPanel : UserControl
     public GameSessionPanel()
     {
         InitializeComponent();
-        _watch = new(DispatcherQueue, CatchUpAsync);
+        _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         _timer.Tick += async (_, _) => await ViewModel.ObserveAsync();
         ViewModel.PropertyChanged += (_, args) =>
         {
@@ -37,7 +37,7 @@ public sealed partial class GameSessionPanel : UserControl
         if (!IsLoaded) return;
         var changed = _watch.Changed;
         if ((!revisit && !changed) || ViewModel.Busy) return;
-        if (ViewModel.SelectedSession is null && ViewModel.SelectedLauncher is null) await _watch.RefreshAsync(() => ViewModel.RefreshCommand.ExecuteAsync(null));
+        if (ViewModel.SelectedSession is null && ViewModel.SelectedLauncher is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
         else if (changed && ViewModel.SelectedSession is null) { _watch.MarkSeen(); ViewModel.NoteChanged(); }
     }
 

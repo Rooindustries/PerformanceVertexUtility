@@ -160,6 +160,7 @@ static class PowerShellControls
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
         };
+        RuntimeEnvironment.Apply(start);
         foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(RuntimeEnvironment.PowerShellPrelude + "$packed=New-Object IO.MemoryStream(,[Convert]::FromBase64String($env:ROO_INDUSTRIES_CONTROL_HELPER)); $source=(New-Object IO.StreamReader((New-Object IO.Compression.GZipStream($packed,[IO.Compression.CompressionMode]::Decompress)),[Text.Encoding]::UTF8)).ReadToEnd(); & ([ScriptBlock]::Create($source))")) }) start.ArgumentList.Add(argument);
         start.Environment["ROO_INDUSTRIES_CONTROL_HELPER"] = Convert.ToBase64String(packed.ToArray());
         start.Environment["ROO_INDUSTRIES_CONTROL_REQUEST"] = Encoded(request);

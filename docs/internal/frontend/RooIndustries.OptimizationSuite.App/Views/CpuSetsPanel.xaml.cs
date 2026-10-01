@@ -12,7 +12,7 @@ public sealed partial class CpuSetsPanel : UserControl
     public CpuSetsPanel()
     {
         InitializeComponent();
-        _watch = new(DispatcherQueue, CatchUpAsync);
+        _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         ViewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); }
@@ -32,7 +32,7 @@ public sealed partial class CpuSetsPanel : UserControl
         if (!IsLoaded) return;
         var changed = _watch.Changed;
         if ((!revisit && !changed) || ViewModel.Busy) return;
-        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(() => ViewModel.RefreshCommand.ExecuteAsync(null));
+        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
         else if (changed) { _watch.MarkSeen(); ViewModel.NoteChanged(); }
     }
 }

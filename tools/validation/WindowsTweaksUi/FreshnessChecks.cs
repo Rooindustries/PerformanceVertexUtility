@@ -1,6 +1,7 @@
 using RooIndustries.OptimizationSuite;
 using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
+using RooIndustries.OptimizationSuite.Views;
 using RooIndustries.Optimizer;
 
 static class FreshnessChecks
@@ -8,8 +9,10 @@ static class FreshnessChecks
     public static async Task Run(string root, Action<bool, string> check)
     {
         var failures = new List<string>();
+        var only = Environment.GetEnvironmentVariable("ROO_SCENARIO");
         async Task Scenario(string name, Func<Task<bool>> body)
         {
+            if (!string.IsNullOrEmpty(only) && !name.Contains(only, StringComparison.OrdinalIgnoreCase)) return;
             bool passed;
             try { passed = await body(); }
             catch (Exception error) { passed = false; name += " (" + error.GetType().Name + ": " + error.Message + ")"; }
@@ -21,6 +24,13 @@ static class FreshnessChecks
             var thread = new Thread(() => action());
             using (ExecutionContext.SuppressFlow()) thread.Start();
             thread.Join();
+        }
+        static IEnumerable<string[]> Merges(string[] first, string[] second)
+        {
+            if (first.Length == 0) { yield return second; yield break; }
+            if (second.Length == 0) { yield return first; yield break; }
+            foreach (var rest in Merges(first[1..], second)) yield return [first[0], .. rest];
+            foreach (var rest in Merges(first, second[1..])) yield return [second[0], .. rest];
         }
         static async Task Until(Func<bool> condition) { for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(20); }
         async Task<(Fixture Fixture, WindowsTweaksViewModel Model)> Load(string name)
@@ -334,6 +344,176 @@ static class FreshnessChecks
             var timedOut = model.Rows.Single(row => row.Id == "first"); var other = model.Rows.Single(row => row.Id == "second");
             other.Selected = other.Choices.Single(choice => choice.Id == "off");
             return timedOut.Current == "Couldn't check" && !timedOut.Available && other.Current != "Couldn't check" && other.Available && model.CanReview && !model.Busy;
+        });
+        await Scenario("A refresh that straddled a change elsewhere leaves the page changed and catches up when it ends", async () =>
+        {
+            var queued = new List<Func<Task>>();
+            var watch = new ChangeWatch(work => { queued.Add(work); return true; }, _ => Task.CompletedTask);
+            watch.MarkSeen();
+            var hold = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var refresh = watch.RefreshAsync(() => hold.Task);
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            hold.SetResult(true);
+            await refresh;
+            return watch.Changed && queued.Count == 1;
+        });
+        await Scenario("A refresh that fails after a change leaves the page changed and does not queue another catch-up", async () =>
+        {
+            var queued = new List<Func<Task>>();
+            var watch = new ChangeWatch(work => { queued.Add(work); return true; }, _ => Task.CompletedTask);
+            watch.MarkSeen();
+            var hold = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var refresh = watch.RefreshAsync(() => hold.Task);
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            hold.SetResult(false);
+            await refresh;
+            return watch.Changed && queued.Count == 0;
+        });
+        await Scenario("A refresh that throws does not mark the page seen", async () =>
+        {
+            var watch = new ChangeWatch(_ => true, _ => Task.CompletedTask);
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            watch.MarkSeen();
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            try { await watch.RefreshAsync(() => Task.FromException<bool>(new IOException("Controlled refresh failure"))); } catch (IOException) { }
+            return watch.Changed;
+        });
+        await Scenario("A refresh with no change meanwhile marks the page seen and queues nothing", async () =>
+        {
+            var queued = new List<Func<Task>>();
+            var watch = new ChangeWatch(work => { queued.Add(work); return true; }, _ => Task.CompletedTask);
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            await watch.RefreshAsync(() => Task.FromResult(true));
+            return !watch.Changed && queued.Count == 0;
+        });
+        await Scenario("No refresh entry point of a page watch treats a call that returned as a success", () =>
+        {
+            var overloads = typeof(ChangeWatch).GetMethods().Where(method => method.Name == "RefreshAsync").ToArray();
+            return Task.FromResult(overloads.Length == 1 && overloads[0].GetParameters().Single().ParameterType == typeof(Func<Task<bool>>));
+        });
+        await Scenario("A page watch is not marked changed again after its own operation, and a foreign change during it is not swallowed", () =>
+        {
+            var watch = new ChangeWatch(_ => true, _ => Task.CompletedTask);
+            watch.MarkSeen();
+            watch.OperationStarted();
+            using (DataGeneration.BeginChange()) { }
+            watch.OperationEnded();
+            var accepted = !watch.Changed;
+            watch.OperationStarted();
+            using (DataGeneration.BeginChange()) { }
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+            watch.OperationEnded();
+            return Task.FromResult(accepted && watch.Changed);
+        });
+        await Scenario("A page watch settles on the current data after every order of a refresh and a change", async () =>
+        {
+            var wrong = new List<string>();
+            var cases = new (string Name, string[] Refresh, string[] Change, bool Wrap, bool Foreign)[]
+            {
+                ("own operation", ["refreshStart", "refreshEnd"], ["ownStart", "change", "ownEnd"], false, false),
+                ("foreign change", ["refreshStart", "refreshEnd"], ["change"], false, true),
+                ("foreign change during a busy refresh", ["refreshStart", "refreshEnd"], ["change"], true, true),
+            };
+            foreach (var (name, refreshSteps, changeSteps, wrap, foreign) in cases)
+            foreach (var order in Merges(refreshSteps, changeSteps))
+            {
+                var queued = new Queue<Func<Task>>();
+                var busy = 0;
+                ChangeWatch? self = null;
+                var watch = new ChangeWatch(work => { queued.Enqueue(work); return true; }, async revisit =>
+                {
+                    if ((!revisit && !self!.Changed) || busy > 0) return;
+                    await self!.RefreshAsync(() => Task.FromResult(true));
+                });
+                self = watch;
+                watch.Start();
+                try
+                {
+                    watch.MarkSeen();
+                    var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    Task? refresh = null;
+                    foreach (var step in order)
+                    {
+                        switch (step)
+                        {
+                            case "refreshStart":
+                                busy++;
+                                refresh = watch.RefreshAsync(async () =>
+                                {
+                                    if (wrap) watch.OperationStarted();
+                                    try { return await gate.Task; }
+                                    finally { if (wrap) watch.OperationEnded(); }
+                                });
+                                break;
+                            case "refreshEnd": gate.SetResult(true); await refresh!; busy--; break;
+                            case "ownStart": busy++; watch.OperationStarted(); break;
+                            case "change":
+                                if (foreign) AsForeign(() => { using (DataGeneration.BeginChange()) { } });
+                                else using (DataGeneration.BeginChange()) { }
+                                break;
+                            case "ownEnd": busy--; watch.OperationEnded(); break;
+                        }
+                        for (var i = 0; i < 10 && queued.Count > 0; i++) await queued.Dequeue()();
+                    }
+                    if (watch.Changed) wrong.Add(name + ": " + string.Join(">", order));
+                }
+                finally { watch.Stop(); }
+            }
+            if (wrong.Count > 0) Console.WriteLine("  still changed after: " + string.Join(" | ", wrong));
+            return wrong.Count == 0;
+        });
+        await Scenario("Simple mode keeps a setting whose Windows feature read timed out with Couldn't check and a retry, and hides one this PC does not support", async () =>
+        {
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id, bool advanced) => new(id, id, "Apps", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, advanced);
+            var fixture = new Fixture(Path.Combine(root, "simple-timeout"), new TweakCatalog(1, "four", [Setting("timedout", false), Setting("fine", false), Setting("unsupported", false), Setting("slowadvanced", true)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                "timedout" or "slowadvanced" => status with { Error = TweakEngine.FeaturesTimedOut, Supported = false },
+                "unsupported" => status with { Error = "No choice applies to this Windows version, edition or installed product.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var listed = model.Rows.Select(row => row.Id).Order().ToArray();
+            var timedOut = model.Rows.SingleOrDefault(row => row.Id == "timedout");
+            var visible = listed.SequenceEqual(["fine", "timedout"]);
+            var says = timedOut is not null && timedOut.SimpleState == "Couldn't check" && timedOut.CanRetry && !model.Rows.Single(row => row.Id == "fine").CanRetry;
+            model.ShowAdvanced = true;
+            var advancedShows = model.Rows.Count == 4 && model.Rows.Single(row => row.Id == "timedout").Current == "Couldn't check";
+            model.ShowAdvanced = false;
+            var reads = fixture.StatusReads; fixture.TransformStatus = null;
+            timedOut = model.Rows.SingleOrDefault(row => row.Id == "timedout");
+            timedOut?.RetryCommand.Execute(null);
+            await Until(() => fixture.StatusReads != reads && !model.Busy);
+            var after = model.Rows.SingleOrDefault(row => row.Id == "timedout");
+            var passed = visible && says && advancedShows && fixture.StatusReads == reads + 1 && after is { CanRetry: false } && after.SimpleState != "Couldn't check";
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", listed) + "], says=" + says + ", advanced shows all=" + advancedShows + ", retry re-read=" + (fixture.StatusReads == reads + 1) + ", settled after retry=" + (after is { CanRetry: false }));
+            return passed;
+        });
+        await Scenario("Simple mode keeps a setting whose read failed for any reason other than absence with Couldn't check and a retry, and hides every kind of absence", async () =>
+        {
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Apps", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "simple-other"), new TweakCatalog(1, "six", [Setting("exited"), Setting("denied"), Setting("fine"), Setting("service"), Setting("task"), Setting("office")], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                "exited" => status with { Error = "The Windows control helper exited 1: fixture", Supported = false },
+                "denied" => status with { Error = "Access to the fixture control is denied.", Supported = false },
+                "service" => status with { Error = "OpenService(Fixture) failed (Win32 1060).", Supported = false },
+                "task" => status with { Error = "The task is missing (0x80070002).", Supported = false },
+                "office" => status with { Error = "A supported Microsoft Office installation could not be identified.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var listed = model.Rows.Select(row => row.Id).Order().ToArray();
+            var retries = model.Rows.Where(row => row.CanRetry).Select(row => row.Id).Order().ToArray();
+            var passed = listed.SequenceEqual(["denied", "exited", "fine"]) && retries.SequenceEqual(["denied", "exited"]) && model.Rows.Where(row => row.CanRetry).All(row => row.SimpleState == "Couldn't check");
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", listed) + "], retry on [" + string.Join(", ", retries) + "]");
+            return passed;
         });
         check(failures.Count == 0, "Windows tweaks freshness checks (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
     }
