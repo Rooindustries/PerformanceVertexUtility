@@ -11,20 +11,23 @@ public static class DataFolderGate
 {
     public static bool Open(BackendLocator locator)
     {
-        RuntimeEnvironment.Sanitize();
+        RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
-        try { return Opened(DataFolder.Require()); }
-        catch (UnauthorizedAccessException) { }
         string problem;
-        try
-        {
-            Task.Run(() => new OptimizerService(locator).SecureDataFolderAsync()).GetAwaiter().GetResult();
-            return Opened(DataFolder.Require());
-        }
+        try { return Opened(Protected(locator)); }
         catch (Exception error) { problem = error.Message; }
-        MessageBox(IntPtr.Zero, "Roo Industries could not protect its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
+        MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
         Environment.Exit(1);
         return false;
+    }
+
+    private static string Protected(BackendLocator locator)
+    {
+        try { return DataFolder.Require(); }
+        catch (UnauthorizedAccessException) { }
+        using var preparing = new PreparingWindow(TimeSpan.FromSeconds(1));
+        Task.Run(() => new OptimizerService(locator).SecureDataFolderAsync(preparing.Report)).GetAwaiter().GetResult();
+        return DataFolder.Require();
     }
 
     private static bool Opened(string root)

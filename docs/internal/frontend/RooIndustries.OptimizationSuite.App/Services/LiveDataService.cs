@@ -207,6 +207,8 @@ public sealed class LiveDataService
 
     public async Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken ct = default)
     {
+        try { await EarlierVersionConsent.RequireAsync(recovery.Path).ConfigureAwait(false); }
+        catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
         var current = ProcessProfileRecovery;
@@ -428,6 +430,8 @@ public sealed class LiveDataService
 
     public async Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken ct = default)
     {
+        try { await EarlierVersionConsent.RequireAsync(recovery.RollbackManifestPath).ConfigureAwait(false); }
+        catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
         var current = await ReadNvidiaProfileRecoveryAsync(recovery.ProfileId).ConfigureAwait(false);
