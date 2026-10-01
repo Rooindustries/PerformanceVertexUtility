@@ -15,6 +15,7 @@ static partial class DataFolderChecks
         scenarios.Add(("external-path", ExternalPath));
         scenarios.Add(("claims-carry", ClaimsCarry));
         scenarios.Add(("orphan-temp", OrphanTemp));
+        scenarios.Add(("schtasks-hang", SchtasksHang));
         scenarios.Add(("timer-split", TimerSplit));
         scenarios.Add(("timer-migration", TimerMigration));
     }
@@ -342,5 +343,23 @@ static partial class DataFolderChecks
             check(recovered["generation"] == 7 && File.Exists(Path.Combine(root, "operations", "host.json")), "The next read of the missing file recovers the carried write");
         }
         finally { H.Forget(root, Path.Combine(root, "operations")); H.Delete(root); H.Sweep(id); }
+    }
+
+    private static void SchtasksHang(Action<bool, string> check)
+    {
+        var id = H.Name("hang");
+        var root = Path.Combine(H.Local, id);
+        var fake = Path.Combine(Path.GetTempPath(), "roo-df-schtasks-" + Guid.NewGuid().ToString("N") + ".cmd");
+        try
+        {
+            Legacy(root, ("A.txt", "A"), (@"process-rules\rules\rule.json", "{}"));
+            File.WriteAllLines(fake, ["@echo off", "for /l %%i in (1,1,3000) do @echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 1>&2", "ping -n 40 127.0.0.1 >nul"]);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var run = H.Child(["--child-secure-data", root], new() { ["ROO_INDUSTRIES_TEST_SCHTASKS"] = fake, ["ROO_INDUSTRIES_TEST_SCHTASKS_TIMEOUT_MS"] = "3000" }, 300000);
+            check(run.Exit == 0 && run.Output.Contains("SECURED migrated=True"), "The migration completes while Task Scheduler's tool fills its error output and never answers: " + run.Output);
+            check(clock.Elapsed < TimeSpan.FromSeconds(40), "A hung Task Scheduler tool is given up on at the limit instead of holding the migration lock until it exits (" + (int)clock.Elapsed.TotalSeconds + " s)");
+            check(H.Read(Path.Combine(root, "A.txt")) == "A", "The data folder keeps its data");
+        }
+        finally { File.Delete(fake); H.Forget(root); H.Delete(root); H.Sweep(id); }
     }
 }
