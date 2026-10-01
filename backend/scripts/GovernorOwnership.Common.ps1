@@ -51,7 +51,7 @@ function Get-RooIndustriesGovernorOwnership {
         $statePath=Join-Path $root 'host.json'
         if(Test-Path -LiteralPath $statePath){
             foreach($instance in @((Read-RooIndustriesOperationJson $statePath).data.instances)){
-                if([string]$instance.status -notin @('applying','active')){continue}
+                if([string]$instance.status -notin @('applying','active','conflict')){continue}
                 $fields=if($instance.PSObject.Properties['field'] -and $instance.field){@([string]$instance.field)}else{@((Read-RooIndustriesOperationJson ([string]$instance.previewPath)).data.desired.PSObject.Properties|ForEach-Object {$_.Name})}
                 $instances.Add([pscustomobject]@{processId=[int]$instance.process.processId;creationTimeFileTimeUtc=[string]$instance.process.creationTimeFileTimeUtc;controls=$fields})
             }

@@ -51,6 +51,7 @@ try {
     $polls = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
     $snapshotKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+    $snapshotsByKey = @{}
 
     $backupManifest = [pscustomobject]@{
         schemaVersion = 1
@@ -211,6 +212,20 @@ try {
                     }
                     $snapshots.Add($snapshot) | Out-Null
                     $snapshotKeys.Add($snapshotKey) | Out-Null
+                    $snapshotsByKey[$snapshotKey] = $snapshot
+                } else {
+                    $known = $snapshotsByKey[$snapshotKey]
+                    $recordedControls = @(Get-RooIndustriesPropertyArray $known 'controlChanges' | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+                    $later = @($entryControlChanges | Where-Object { $recordedControls -notcontains [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+                    foreach ($change in $later) {
+                        switch ([string](Get-RooIndustriesPropertyValue $change 'control' '')) {
+                            'priorityClass' { $known.originalPriorityClass = $originalState.priorityClass }
+                            'affinityMask' { $known.originalAffinityMask = $originalState.affinityMask }
+                            'ioPriority' { $known.originalIoPriority = $originalState.ioPriority }
+                            'gpuPriority' { $known.originalGpuPriority = $originalState.gpuPriority }
+                        }
+                    }
+                    if ($later.Count -gt 0) { $known.controlChanges = @($known.controlChanges) + $later }
                 }
 
                 $appliedControls = New-Object System.Collections.Generic.List[object]

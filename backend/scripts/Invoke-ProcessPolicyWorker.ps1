@@ -71,10 +71,14 @@ function Stop-Worker {
 
 function Restore-Interrupted($Status) {
     if($Status.state -and $Status.state.status -notin @('stopped','stoppedWithConflicts') -and (Invoke-Core 'policy-summary').secured){
-        try {Invoke-Core 'policy-run' @{durationSeconds=0}|Out-Null}
-        catch {
-            $live=Invoke-Core 'policy-status'
-            if($live.hostRunning -ne $true){throw}
+        for($attempt=1;;$attempt++){
+            try {Invoke-Core 'policy-run' @{durationSeconds=0}|Out-Null;return}
+            catch {
+                $live=Invoke-Core 'policy-status'
+                if($live.hostRunning -eq $true){return}
+                if($attempt -ge 3){throw}
+                Start-Sleep -Milliseconds 400
+            }
         }
     }
 }
@@ -123,7 +127,7 @@ function Sync-Governor {
     if((Test-Path -LiteralPath $PolicyRoot) -and -not (Invoke-Core 'policy-summary').secured -and (Invoke-Core 'policy-status').hostRunning){Stop-Worker}
     Invoke-Core 'policy-secure'|Out-Null
     $summary=Invoke-Core 'policy-summary'
-    if($summary.enabledRules -eq 0 -and -not $summary.rulesError){
+    if($summary.enabledRules -eq 0 -and -not $summary.rulesError -and @($summary.unreadableRules|Where-Object {$_}).Count -eq 0){
         Remove-Governor
         if($summary.rules -eq 0 -and $summary.paused){Invoke-Core 'policy-pause' @{paused=$false}|Out-Null}
         return
