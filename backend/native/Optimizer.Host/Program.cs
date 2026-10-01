@@ -9,6 +9,7 @@ try
     if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
     RuntimeEnvironment.RequireClean();
+    RuntimeEnvironment.Establish();
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var fromInput = args[1] == "-";

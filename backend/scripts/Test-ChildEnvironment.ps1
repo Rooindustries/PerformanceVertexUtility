@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateSet('all','control-helper','restart','hibernation','cleanup-temp-root','registry-hook','firmware-provider','firmware-extractor','host-script','host-watcher','session-host-watcher','app-host','app-script','app-live-script','app-capability-script')][string]$Scenario='all',[switch]$Release)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateSet('all','control-helper','restart','hibernation','cleanup-temp-root','data-root-profile','registry-hook','firmware-provider','firmware-extractor','host-script','host-watcher','session-host-watcher','app-host','app-script','app-live-script','app-capability-script')][string]$Scenario='all',[switch]$Release)
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if([string]::IsNullOrWhiteSpace($DotNetPath)){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -7,7 +7,7 @@ $mode=if($Release){'release'}else{'dev'}
 $properties=@();if($Release){$properties+='-p:RooIndustriesRelease=true'}
 $core=Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj'
 $boundary=Join-Path $root 'tools\validation\ClientBoundary\ClientBoundary.csproj'
-$scenarios=if($Scenario -eq 'all'){@('control-helper','restart','hibernation','cleanup-temp-root','firmware-provider','firmware-extractor','host-script','host-watcher','session-host-watcher','app-host','app-script','app-live-script','app-capability-script','registry-hook')}else{@($Scenario)}
+$scenarios=if($Scenario -eq 'all'){@('control-helper','restart','hibernation','cleanup-temp-root','data-root-profile','firmware-provider','firmware-extractor','host-script','host-watcher','session-host-watcher','app-host','app-script','app-live-script','app-capability-script','registry-hook')}else{@($Scenario)}
 $work=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-child-env-run-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work)|Out-Null
 $failed=@()

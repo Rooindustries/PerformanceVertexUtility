@@ -209,6 +209,11 @@ static class DataRootChild
                     return;
                 case "--child-secure-operations": Console.WriteLine("SECURED migrated=" + OperationsFolder.Secure(args[1])); return;
                 case "--child-resolve": Console.WriteLine("ROOT " + BrandCompatibility.DataRoot(args[1])); return;
+                case "--child-data-root":
+                    if (args[1] == "pin-first") { RooIndustries.Optimizer.RuntimeEnvironment.Sanitize(); RooIndustries.Optimizer.RuntimeEnvironment.PinProfile(); }
+                    Console.WriteLine("ROOT " + BrandCompatibility.LocalDataRoot);
+                    Console.WriteLine("LOCAL " + Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+                    return;
                 case "--child-writer": Writer(args[1], int.Parse(args[2]), int.Parse(args[3])); return;
                 case "--child-standard": Standard(args[1..]); return;
             }

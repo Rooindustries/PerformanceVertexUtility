@@ -72,8 +72,14 @@ function Test-RooIndustriesWrittenAfterProtection([string]$Path) {
     return ($null -ne $latest) -and ((Get-Item -LiteralPath $full -Force).CreationTimeUtc.ToFileTimeUtc() -gt $latest)
 }
 
+function Get-RooIndustriesLocalAppData {
+    $profileFolder=[Environment]::GetFolderPath('UserProfile')
+    if([string]::IsNullOrWhiteSpace($profileFolder) -or -not [IO.Path]::IsPathRooted($profileFolder) -or $profileFolder.Contains('%')){throw "Roo Industries could not read this Windows user's profile folder."}
+    return Join-Path $profileFolder 'AppData\Local'
+}
+
 function Get-RooIndustriesLocalDataRoot {
-    param([string]$LocalData=[Environment]::GetFolderPath('LocalApplicationData'),[switch]$Protected)
+    param([string]$LocalData=(Get-RooIndustriesLocalAppData),[switch]$Protected)
     $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder
     $current=Join-Path $LocalData 'RooIndustriesOptimizationSuite'
     $root=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ((Test-RooIndustriesDataRootMarked $current) -and -not (Test-RooIndustriesDataRootMarked $legacy))){$legacy}else{$current}
