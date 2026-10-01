@@ -1,5 +1,5 @@
 ﻿param(
-    [Parameter(Mandatory=$true)][ValidateSet('preflight','validators','release-build','install-old','upgrade','install-other','static-checks','scenario','setup-fallbacks','summary','cleanup')][string]$Phase,
+    [Parameter(Mandatory=$true)][ValidateSet('preflight','validators','release-build','install-old','upgrade','install-other','static-checks','scenario','setup-fallbacks','uninstall','summary','cleanup')][string]$Phase,
     [ValidateSet('loadtimes','invalidation','modes','migration-before','migration-after','migration-undo-timer','permissions','hardware','launchers','launchers-session','override','incomplete','incomplete-before')][string]$Scenario='',
     [string]$Source=(Join-Path $env:TEMP 'roo-industries-integration-src'),
     [string]$Evidence=(Join-Path $env:TEMP 'roo-industries-integration-evidence'),
@@ -381,6 +381,15 @@ switch($Phase){
         }
         Check ($cleanup.Count -eq 0) ('scenario '+$Scenario+' left nothing to clean up by hand') ($cleanup -join ' / ')
         Log ('scenario '+$Scenario+' took '+[Math]::Round($clock.Elapsed.TotalMinutes,1)+' min; evidence '+$dir)
+    }
+    'uninstall' {
+        $before=@(Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue).Count
+        $result=Uninstall-App
+        Log ('uninstall: '+$result)
+        Check ($before -ge 1 -and $result -match 'exit=0 appLeft=False') 'the installed app was uninstalled by its own uninstaller' $result
+        $entries=@((Get-MachineState).uninstallEntries)
+        Check ($entries.Count -eq 0) 'the uninstall removed the product''s uninstall entry' ($entries -join ',')
+        Check (@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue).Count -eq 0) 'the uninstall removed every governor task' ''
     }
     'setup-fallbacks' {
         Run 'setup-fallbacks' {& (Join-Path $Source 'tools\validation\Governor\Test-GovernorSetupFallbacks.ps1') -Script (Join-Path $Source 'backend\scripts\Invoke-GovernorSetup.ps1') -OutDir (Join-Path $Evidence 'setup-fallbacks')}

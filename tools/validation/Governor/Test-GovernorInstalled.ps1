@@ -286,6 +286,9 @@ switch($Phase){
         Check (@($s.workers).Count -eq 0) 'No governor process is left'
         Check (-not (Test-Path -LiteralPath $app)) 'The app folder is gone'
         Check (@($s.ruleFiles|Where-Object {$_.name -eq ($state.ruleId+'.json')}).Count -eq 1) 'Uninstall kept the saved rules'
+        $keptMarkers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+        Check (Test-Path -LiteralPath (Join-Path $dataRoot 'operations') -PathType Container) 'Uninstall kept the operations folder with its journals'
+        Check ($null -ne $keptMarkers -and $null -ne $keptMarkers.GetValue($dataRoot.ToUpperInvariant())) 'Uninstall kept the data folder protection marker'
         if($probe){Check (Same (Read-Controls $probe) $state.original) 'Uninstall gave the running probe its original 8 controls back'}else{Check $false 'The long-running probe is still alive to verify restoration'}
     }
     'cleanup' {
