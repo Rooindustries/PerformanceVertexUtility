@@ -321,7 +321,8 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             Environment.SpecialFolder.CommonPrograms, Environment.SpecialFolder.CommonStartup }
             .Select(Environment.GetFolderPath).Where(root => !string.IsNullOrWhiteSpace(root)).ToList();
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), Path.Combine(local, "Temp"), Path.GetDirectoryName(local)!, Path.Combine(local, "Packages")]);
+        var user = RuntimeEnvironment.LocalAppData;
+        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), Path.Combine(local, "Temp"), Path.GetDirectoryName(local)!, Path.Combine(local, "Packages"), user, Path.Combine(user, "Temp"), Path.GetDirectoryName(user)!, Path.Combine(user, "Packages")]);
         if (protectedRoots.Contains(path, StringComparer.OrdinalIgnoreCase) || Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         return Within(path, Path.Combine(programFiles, "WindowsApps")) || Within(path, Path.Combine(Path.GetPathRoot(path)!, "WindowsApps"));
