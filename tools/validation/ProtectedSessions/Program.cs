@@ -8,6 +8,7 @@ if(args is ["--retained-launcher",var retainedRoot]) { RetainedGpuChecks.Launche
 if(args is ["--retained-game",var retainedGame,var retainedSession]) { RetainedGpuChecks.Game(retainedGame,retainedSession); return; }
 if(args is [var retainedRepo,var retainedDotnet,"--retained-gpu"]) { RetainedGpuChecks.Run(retainedRepo,retainedDotnet); return; }
 if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); return; }
+if(args is ["--hold-lock",var holdPath,var holdReady,var holdStop]) { Fixtures.Hold(holdPath,holdReady,holdStop); return; }
 if(args is ["--game",var gameRoot,var hardware]) { Fixtures.Game(gameRoot,hardware=="gpu"); return; }
 if(args.Length is < 2 or > 3)throw new ArgumentException("Provide repository, dotnet executable, and optionally --hardware-gpu.");
 var repo=Path.GetFullPath(args[0]);var dotnet=Path.GetFullPath(args[1]);bool hardwareGpu=args.Length==3&&args[2]=="--hardware-gpu";
@@ -24,6 +25,9 @@ JsonElement V<T>(T value)=>JsonSerializer.SerializeToElement(value,OperationFile
 Dictionary<string,JsonElement> Wanted()=>new(){["cpuPriority"]=V("AboveNormal"),["ioPriority"]=V(2),["memoryPriority"]=V(5),["affinity"]=V(new AffinityState(0,"0x"+firstMask.ToString("X"))),["gpuPriority"]=V(3)};
 void Reject(Action action,string text){bool rejected=false;try{action();}catch(InvalidDataException){rejected=true;}catch(InvalidOperationException){rejected=true;}Check(rejected,text);}
 Process Start(string executable,params string[] values){var info=new ProcessStartInfo(executable){UseShellExecute=false,CreateNoWindow=true};foreach(var value in values)info.ArgumentList.Add(value);info.Environment["DOTNET_ROOT_X64"]=Path.GetDirectoryName(dotnet);return Process.Start(info)??throw new Exception("Fixture start failed");}
+Process? holder=null;int holderId=0;
+Process StandardHolder(string path){var ready=Path.Combine(root,"holder-ready.json");var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,"runas.exe")){UseShellExecute=false,CreateNoWindow=true,Arguments="/trustlevel:0x20000 \"\""+dotnet+"\" \""+Path.Combine(bin,"RooIndustriesLaunchPolicyProbe.dll")+"\" --hold-lock \""+path+"\" \""+ready+"\" \""+Path.Combine(root,"holder-stop")+"\"\""};using(var starter=Process.Start(info)??throw new Exception("runas did not start")){starter.WaitForExit(30000);}Until(()=>File.Exists(ready),"The standard-token lock holder did not start",30);var data=OperationFiles.Read<JsonElement>(ready);holderId=data.GetProperty("pid").GetInt32();Check(!data.GetProperty("administrator").GetBoolean(),"The process holding the old temp launcher lock name runs without administrator rights");return Process.GetProcessById(holderId);}
+bool HeldElsewhere(string path){try{using var probe=new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.None);return false;}catch(IOException){return true;}}
 string Review(string name){var path=Path.Combine(root,name+".preview.json");OperationFiles.Write(path,session.Preview(launcher!.Id,gamePath,Wanted(),true));return path;}
 Process Run(string preview,string target){Directory.CreateDirectory(target);activeRoots.Add(target);var request=Path.Combine(target,"request.json");OperationFiles.Write(request,new{schemaVersion=1,repoRoot=repo,sessionRoot=target,previewPath=preview,reviewHash=OperationFiles.HashFile(preview),confirm=true});return Start(workerExe,"run",request);}
 ProtectedSessionState State(string target)=>session.Status(target).State??throw new Exception("Session state missing");
@@ -39,7 +43,11 @@ try{
  Reject(()=>session.Preview(launcher.Id,gamePath,Wanted(),false),"Launcher-tree scope must be explicitly accepted");
  var preview=Review("first");var originalHash=OperationFiles.HashFile(preview);File.AppendAllText(preview," ");Reject(()=>session.Check(preview,originalHash),"Changed review bytes fail before mutation");
  var plan=OperationFiles.Read<ProtectedSessionPreview>(preview);OperationFiles.Write(preview,plan with{OriginalAffinity=new(0,"0x0")});Reject(()=>session.Check(preview,OperationFiles.HashFile(preview)),"A conflicting original affinity cannot authorize apply");OperationFiles.Write(preview,plan);
+ var oldLock=Path.Combine(Path.GetTempPath(),BrandCompatibility.LauncherLeasePrefix+plan.Launcher.ProcessId+"-"+plan.Launcher.CreationTimeFileTimeUtc+".lock");
+ holder=StandardHolder(oldLock);Check(HeldElsewhere(oldLock),"The old user temp launcher lock name is held open by that process");
  var target=Path.Combine(root,"session1");worker=Run(preview,target);Until(()=>File.Exists(Path.Combine(target,"session.json"))&&State(target).Status=="armed","Session did not arm");
+ Check(!holder.HasExited&&HeldElsewhere(oldLock),"The session armed while that process still held the old temp launcher lock name");
+ Check(File.Exists(Path.Combine(root,BrandCompatibility.LauncherLeasePrefix+plan.Launcher.ProcessId+"-"+plan.Launcher.CreationTimeFileTimeUtc+".lock")),"The session keeps its launcher lock inside the protected recovery folder");
  Check(!worker.HasExited&&State(target).JobStatus=="applied"&&worker.MainWindowHandle==IntPtr.Zero,"Worker is armed without an automatic expiry or visible window");
  File.Delete(preview);Check(State(target).Status=="armed","The session retains reviewed bytes independently of the caller preview file");
  using(var game=Launch(1)){
@@ -101,12 +109,14 @@ try{
  Console.WriteLine("Protected-session assertions: "+passed);
 }finally{
  if(worker is not null&&!worker.HasExited){worker.Kill();worker.WaitForExit(10000);}worker?.Dispose();
+ if(holder is not null){File.WriteAllText(Path.Combine(root,"holder-stop"),"");if(!holder.WaitForExit(15000)){holder.Kill();holder.WaitForExit();}holder.Dispose();}else if(holderId!=0){try{Process.GetProcessById(holderId).Kill();}catch(ArgumentException){}}
  if(launcher is not null&&!launcher.HasExited){File.WriteAllText(Path.Combine(root,"stop-launcher"),"");if(!launcher.WaitForExit(15000)){launcher.Kill();launcher.WaitForExit();}}launcher?.Dispose();
  foreach(var target in activeRoots){if(File.Exists(Path.Combine(target,"session.json"))){var saved=session.Status(target).State!;session.Recover(target,saved.Preview.OperationId);}}
  File.Delete(launcherPath);Directory.Delete(root,true);
 }
 
 static class Fixtures{
+ public static void Hold(string path,string ready,string stop){using var file=new FileStream(path,FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None,4096,FileOptions.DeleteOnClose);var principal=new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());File.WriteAllText(ready,JsonSerializer.Serialize(new{pid=Environment.ProcessId,administrator=principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator)}));var until=DateTime.UtcNow.AddMinutes(10);while(!File.Exists(stop)&&DateTime.UtcNow<until)Thread.Sleep(100);}
  public static void Launcher(string root){using var self=Process.GetCurrentProcess();Oracle.SetIo(self,1);Oracle.SetMemory(self,2);File.WriteAllText(Path.Combine(root,"launcher-ready.json"),JsonSerializer.Serialize(new{pid=self.Id}));var children=new List<Process>();try{var until=DateTime.UtcNow.AddMinutes(10);while(!File.Exists(Path.Combine(root,"stop-launcher"))&&DateTime.UtcNow<until){var path=Path.Combine(root,"launch.json");if(File.Exists(path)){using var doc=JsonDocument.Parse(File.ReadAllText(path));File.Delete(path);var info=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(typeof(Fixtures).Assembly.Location)!,"RooIndustriesLaunchPolicyProbe.exe")){UseShellExecute=false,CreateNoWindow=true};info.ArgumentList.Add("--game");info.ArgumentList.Add(doc.RootElement.GetProperty("root").GetString()!);info.ArgumentList.Add(doc.RootElement.GetProperty("hardware").GetString()!);children.Add(Process.Start(info)!);}Thread.Sleep(50);}}finally{foreach(var child in children){if(!child.HasExited){child.Kill();child.WaitForExit();}child.Dispose();}}}
  public static void Game(string root,bool hardware){using var self=Process.GetCurrentProcess();using var gpu=hardware?new GpuWorkload(0x1002,0x7550,16384,256):null;File.WriteAllText(Path.Combine(root,"ready.json"),JsonSerializer.Serialize(new{pid=self.Id,adapter=gpu?.Adapter}));var until=DateTime.UtcNow.AddMinutes(8);while(!File.Exists(Path.Combine(root,"stop"))&&DateTime.UtcNow<until){gpu?.Run(1);Thread.Sleep(10);}if(gpu is not null)File.WriteAllText(Path.Combine(root,"gpu-result.json"),JsonSerializer.Serialize(new{gpu.Adapter,gpu.Dispatches,verified=gpu.VerifyOutput()}));}
 }
