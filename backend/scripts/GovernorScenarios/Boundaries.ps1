@@ -125,19 +125,75 @@ function Test-ScenarioMigrationRace {
     [IO.Directory]::CreateDirectory((Join-Path $legacy 'rules'))|Out-Null
     $rule=New-Rule (Copy-Probe) @{cpuPriority='AboveNormal'} 'Migrated during a race'
     $rule.revision=[Guid]::NewGuid().ToString('N')
-    Write-RooIndustriesOperationJson $rule (Join-Path $legacy ('rules\'+$rule.ruleId+'.json'))
+    $ruleFile=Join-Path $legacy ('rules\'+$rule.ruleId+'.json')
+    Write-RooIndustriesOperationJson $rule $ruleFile
+    $before=(Get-FileHash -LiteralPath $ruleFile).Hash
     $script:roots.Add($legacy)
     $call=Invoke-HostLater 'policy-secure' @{} @{ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS='5000'}
     $moved=Wait-Until {-not (Test-Path -LiteralPath $legacy)} 20 20
     Assert ($null -ne $moved) 'The migration moved the earlier folder away'
     [IO.Directory]::CreateDirectory($legacy)|Out-Null
     $result=Read-HostLater $call
+    $folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name})
     $kept=@(Get-ChildItem -LiteralPath $script:policyParent -Recurse -File -Filter ($rule.ruleId+'.json') -ErrorAction SilentlyContinue|Where-Object {(Get-ExposedWriters $_.Directory.Parent.FullName).Count -eq 0 -and (Get-ExposedWriters $_.Directory.FullName).Count -eq 0})
-    Note 'migrationRace' ([ordered]@{status=$result.status;error=$result.error.message;folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name});protectedCopies=@($kept|ForEach-Object {$_.FullName})})
+    $after=if(Test-Path -LiteralPath $ruleFile){(Get-FileHash -LiteralPath $ruleFile).Hash}else{$null}
+    Note 'migrationRace' ([ordered]@{status=$result.status;error=$result.error.message;folders=$folders;protectedCopies=@($kept|ForEach-Object {$_.FullName});hashBefore=$before;hashAfter=$after})
     Assert ($kept.Count -ge 1) 'The protected copy of the rules is never deleted when the folder is recreated between the two moves'
-    if(Test-Path -LiteralPath $legacy){Remove-Item -LiteralPath $legacy -Recurse -Force}
+    Assert ($result.status -eq 'completed' -and $after -eq $before -and (Core 'policy-summary').secured -and (Get-ExposedWriters $legacy).Count -eq 0) 'The protected copy is already the rules folder when the call returns, with the rule byte for byte as before'
+    Assert (@($folders|Where-Object {$_ -like 'process-rules.untrusted-*'}).Count -ge 1 -and @($folders|Where-Object {$_ -like 'process-rules.secure-*' -or $_ -like 'process-rules.legacy-*' -or $_ -like 'process-rules.stray-*'}).Count -eq 0) 'The folder recreated in between is set aside as untrusted, and no half-finished copy is left behind'
+}
+
+function Test-ScenarioMigrationRacePlanted {
+    $legacy=$script:policyRoot
+    [IO.Directory]::CreateDirectory((Join-Path $legacy 'rules'))|Out-Null
+    $rule=New-Rule (Copy-Probe) @{cpuPriority='AboveNormal'} 'Migrated during a planting race'
+    $rule.revision=[Guid]::NewGuid().ToString('N')
+    $ruleFile=Join-Path $legacy ('rules\'+$rule.ruleId+'.json')
+    Write-RooIndustriesOperationJson $rule $ruleFile
+    $before=(Get-FileHash -LiteralPath $ruleFile).Hash
+    $script:roots.Add($legacy)
+    $call=Invoke-HostLater 'policy-secure' @{} @{ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS='6000'}
+    $moved=Wait-Until {-not (Test-Path -LiteralPath $legacy)} 20 20
+    Assert ($null -ne $moved) 'The migration moved the earlier folder away'
+    [IO.Directory]::CreateDirectory($legacy)|Out-Null
+    $out=Join-Path $script:scenarioRoot 'planted.txt'
+    Start-Limited (@'
+try {[IO.Directory]::CreateDirectory('ROOT\rules')|Out-Null;[IO.File]::WriteAllText('ROOT\rules\planted.json','{}');$r='planted'} catch {$r='refused: '+$_.Exception.Message}
+[IO.File]::WriteAllText('OUT',$r)
+'@).Replace('ROOT',$legacy).Replace('OUT',$out)|Out-Null
+    $null=Wait-Until {Test-Path -LiteralPath $out} 20
+    $planted=if(Test-Path -LiteralPath $out){[IO.File]::ReadAllText($out)}else{'no report'}
+    $result=Read-HostLater $call
+    $copies=@(Get-ChildItem -LiteralPath $script:policyParent -Recurse -File -Filter 'planted.json' -ErrorAction SilentlyContinue)
+    $inProtected=@($copies|Where-Object {(Get-ExposedWriters $_.Directory.Parent.FullName).Count -eq 0 -and (Get-ExposedWriters $_.Directory.FullName).Count -eq 0})
+    $after=if(Test-Path -LiteralPath $ruleFile){(Get-FileHash -LiteralPath $ruleFile).Hash}else{$null}
+    $again=$null
+    try {$again=Core 'policy-secure'} catch {$again=$_.Exception.Message}
+    Note 'migrationRacePlanted' ([ordered]@{planted=$planted;status=$result.status;error=$result.error.message;copies=@($copies|ForEach-Object {$_.FullName});protectedCopies=@($inProtected|ForEach-Object {$_.FullName});hashBefore=$before;hashAfter=$after;again=$again})
+    Assert ($planted -eq 'planted') 'A process without elevation could write into the recreated folder'
+    Assert ($inProtected.Count -eq 0) 'A file planted without elevation never ends up inside the protected folder'
+    Assert ($after -eq $before -and (Core 'policy-summary').secured -and (Get-ExposedWriters $legacy).Count -eq 0) 'The protected rules folder holds the original rule byte for byte and stays protected'
+}
+
+function Test-ScenarioMigrationBusy {
+    $legacy=$script:policyRoot
+    [IO.Directory]::CreateDirectory((Join-Path $legacy 'rules'))|Out-Null
+    $rule=New-Rule (Copy-Probe) @{cpuPriority='AboveNormal'} 'Migration refused while busy'
+    $rule.revision=[Guid]::NewGuid().ToString('N')
+    $ruleFile=Join-Path $legacy ('rules\'+$rule.ruleId+'.json')
+    Write-RooIndustriesOperationJson $rule $ruleFile
+    $before=(Get-FileHash -LiteralPath $ruleFile).Hash
+    $script:roots.Add($legacy)
+    $held=Hold-File $ruleFile 0
+    $failure=$null
+    try {Core 'policy-secure'|Out-Null} catch {$failure=$_.Exception.Message}
+    $held.stream.Dispose()
+    $folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name})
+    Note 'migrationBusy' ([ordered]@{failure=$failure;folders=$folders})
+    Assert ($null -ne $failure -and $failure -like 'Stop the Roo Industries Governor before protecting its saved rules folder.*') 'A migration that cannot move the earlier folder away says so'
+    Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and @($folders|Where-Object {$_ -ne 'process-rules'}).Count -eq 0) 'The earlier folder is untouched and the unfinished protected copy is removed'
     Core 'policy-secure'|Out-Null
-    Assert ((Test-Path -LiteralPath (Join-Path $legacy ('rules\'+$rule.ruleId+'.json'))) -and (Core 'policy-summary').secured) 'Once the recreated folder is gone the rules are in the protected folder'
+    Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once nothing holds the folder the migration completes with the rule byte for byte as before'
 }
 
 function Test-ScenarioRootLease {
