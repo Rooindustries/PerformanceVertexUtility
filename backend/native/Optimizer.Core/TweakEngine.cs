@@ -279,7 +279,10 @@ public sealed class TweakEngine
     private TweakControlRead ReadControl(ControlAddress address)
     {
         var read = Task.Factory.StartNew(() => _store.ReadControl(address), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        if (!read.Wait(ReadTimeout))
+        bool answered;
+        try { answered = read.Wait(ReadTimeout); }
+        catch (AggregateException) { answered = true; }
+        if (!answered)
         {
             _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
             throw new TimeoutException(FeaturesTimedOut);
