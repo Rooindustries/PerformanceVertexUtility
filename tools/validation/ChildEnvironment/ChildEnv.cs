@@ -98,8 +98,8 @@ sealed class ChildEnv : IDisposable
         Mark("PATHEXT", ".MARK");
         Mark("TEMP", Path.Combine(Folder, "temp")); Mark("TMP", Path.Combine(Folder, "temp"));
         foreach (var name in Unrelated) Mark(name, "marker-" + Token + "-" + name);
-        Mark("ROO_MARKER_TEST", "marker-" + Token + "-ROO_MARKER_TEST");
-        Mark("ROOTEST_MARKER_TEST", "marker-" + Token + "-ROOTEST_MARKER_TEST");
+        Mark(BrandCompatibility.LegacyEnvironmentPrefix + "MARKER_TEST", "marker-" + Token + "-" + BrandCompatibility.LegacyEnvironmentPrefix + "MARKER_TEST");
+        Mark("ROO_INDUSTRIES_TEST_MARKER_TEST", "marker-" + Token + "-ROO_INDUSTRIES_TEST_MARKER_TEST");
         Mark("DOTNET_ROOT", Folder);
         Mark("ROO_INDUSTRIES_DOTNET_EXE", Path.Combine(Folder, "dotnet.exe"));
         foreach (var pair in overrides ?? new Dictionary<string, string>()) Mark(pair.Key, pair.Value);
@@ -132,7 +132,7 @@ sealed class ChildEnv : IDisposable
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
             if (entry.Key is string name && entry.Value is string value &&
-                (name.StartsWith("ROO_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("ROOTEST_", StringComparison.OrdinalIgnoreCase) || DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase)))
+                (name.StartsWith(BrandCompatibility.LegacyEnvironmentPrefix, StringComparison.OrdinalIgnoreCase) || DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase)))
                 result[name] = value;
         return result;
     }
@@ -154,7 +154,7 @@ sealed class ChildEnv : IDisposable
             else failures.Add(pair.Key + " is '" + Clip(value) + "' but Windows reports '" + pair.Value + "'");
         }
         var developer = Passthrough();
-        if (!developer.ContainsKey("ROO_MARKER_TEST") || !developer.ContainsKey("ROOTEST_MARKER_TEST") || !developer.ContainsKey("DOTNET_ROOT")) failures.Add("the developer markers are not set in the test process");
+        if (!developer.ContainsKey(BrandCompatibility.LegacyEnvironmentPrefix + "MARKER_TEST") || !developer.ContainsKey("ROO_INDUSTRIES_TEST_MARKER_TEST") || !developer.ContainsKey("DOTNET_ROOT")) failures.Add("the developer markers are not set in the test process");
         var allowed = new HashSet<string>(Values.Keys, StringComparer.OrdinalIgnoreCase);
         foreach (var pair in product) allowed.Add(pair.Key);
         foreach (var name in tolerated) allowed.Add(name);

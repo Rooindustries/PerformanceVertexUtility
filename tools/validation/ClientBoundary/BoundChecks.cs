@@ -17,7 +17,7 @@ static class BoundChecks
     const string WorkerScript = """
         param([string]$Action,[string]$PolicyRoot,[switch]$ConfirmApply)
         $ErrorActionPreference='Stop'
-        $state=$env:ROOTEST_BOUNDS_DIR
+        $state=$env:ROO_INDUSTRIES_TEST_BOUNDS_DIR
         [IO.File]::AppendAllText((Join-Path $state 'worker-calls.log'),"$PID $Action`n")
         if(Test-Path (Join-Path $state 'worker-hang')){
             $child=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\PING.EXE') -ArgumentList '-n','400','127.0.0.1' -WindowStyle Hidden -PassThru
@@ -32,7 +32,7 @@ static class BoundChecks
     {
         var state = Path.Combine(root, name + "-" + ++counter);
         Directory.CreateDirectory(state);
-        Environment.SetEnvironmentVariable("ROOTEST_BOUNDS_DIR", state);
+        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_BOUNDS_DIR", state);
         return state;
     }
 
@@ -117,7 +117,7 @@ static class BoundChecks
         File.WriteAllText(Path.Combine(scripts, "Invoke-ProcessPolicyWorker.ps1"), WorkerScript);
         host = Path.ChangeExtension(typeof(BoundChecks).Assembly.Location, ".exe");
         var runtime = Path.GetFullPath(Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", ".."));
-        var names = new[] { "ROO_INDUSTRIES_BACKEND_ROOT", "ROO_INDUSTRIES_DOTNET_EXE", "DOTNET_ROOT", "ROOTEST_BOUNDS_DIR" };
+        var names = new[] { "ROO_INDUSTRIES_BACKEND_ROOT", "ROO_INDUSTRIES_DOTNET_EXE", "DOTNET_ROOT", "ROO_INDUSTRIES_TEST_BOUNDS_DIR" };
         var previous = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
         Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", root);
         Environment.SetEnvironmentVariable("ROO_INDUSTRIES_DOTNET_EXE", host);

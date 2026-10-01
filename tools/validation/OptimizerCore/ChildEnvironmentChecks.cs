@@ -138,7 +138,7 @@ static class ChildEnvironmentChecks
     {
         var flag = Temporary("hang") + ".flag";
         File.WriteAllText(flag, "");
-        var overrides = new Dictionary<string, string> { ["ROOTEST_FEATURE_HANG"] = flag };
+        var overrides = new Dictionary<string, string> { ["ROO_INDUSTRIES_TEST_FEATURE_HANG"] = flag };
         try
         {
             ChildEnv.Run(check, mode, overrides, env =>
@@ -149,7 +149,7 @@ static class ChildEnvironmentChecks
                 Capture(stop.Token, "PING", observed => seen = observed);
                 try
                 {
-                    check(!read.IsCompleted, "The test hook held the feature read open (build the validation project with -p:RooTestHooks=true)");
+                    check(!read.IsCompleted, "The test hook held the feature read open (build the validation project with -p:RooIndustriesTestHooks=true)");
                     check(seen is not null, "The hook's long-lived ping child's environment could be read from outside");
                     ChildEnv.Report(check, "Registry test-hook child", env, seen!, Verify(env, seen!, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "PING.EXE")));
                 }

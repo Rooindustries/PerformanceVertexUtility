@@ -41,7 +41,7 @@ try {
                 if(-not(Test-Path $binaries)){& $DotNetPath publish (Join-Path $root 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj') -c Release -o $binaries @properties|Out-Null;if($LASTEXITCODE -ne 0){throw 'Session host publish failed.'}}
                 & $DotNetPath run --project $core --configuration Release @properties -- '--child-env' $name $mode $binaries
             }
-            'registry-hook' {& $DotNetPath run --project $core --configuration Release @properties '-p:RooTestHooks=true' -- '--child-env' $name $mode}
+            'registry-hook' {& $DotNetPath run --project $core --configuration Release @properties '-p:RooIndustriesTestHooks=true' -- '--child-env' $name $mode}
             default {& $DotNetPath run --project $core --configuration Release @properties -- '--child-env' $name $mode}
         }
         if($LASTEXITCODE -ne 0){$failed+=$name;Write-Output ('FAILED '+$name+' (exit '+$LASTEXITCODE+')')}
