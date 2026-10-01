@@ -25,7 +25,7 @@ try
         var progressOptions = new JsonSerializerOptions(OperationFiles.Json) { WriteIndented = false };
         PolicyRootSecurity.Progress += progress =>
         {
-            lock (Console.Out) { Console.Out.WriteLine("ROO-PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = progress }, progressOptions)); Console.Out.Flush(); }
+            lock (Console.Out) { Console.Out.WriteLine("ROO_INDUSTRIES_PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = progress }, progressOptions)); Console.Out.Flush(); }
         };
     }
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
@@ -81,7 +81,7 @@ try
             var partialOptions = new JsonSerializerOptions(OperationFiles.Json) { WriteIndented = false };
             data = Tweaks(request).Detect(request.PartialStatus == true ? inspection =>
             {
-                Console.Out.WriteLine("ROO-PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = inspection }, partialOptions));
+                Console.Out.WriteLine("ROO_INDUSTRIES_PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = inspection }, partialOptions));
                 Console.Out.Flush();
             } : null);
             break;

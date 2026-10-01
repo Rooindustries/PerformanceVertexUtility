@@ -56,14 +56,14 @@ function Nav([string]$name) {
     $item = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, $name), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) } 30 "nav $name"
     Invoke-Element $item; Log "nav $name"; Start-Sleep -Milliseconds 800
 }
-function Start-Roo {
-    Stop-Roo
+function Start-RooIndustriesApp {
+    Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [ModeCheckU32]::ShowWindow($h, 9) | Out-Null; [ModeCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [ModeCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { Named 'Start here' } 60 'Home' | Out-Null
 }
-function Stop-Roo {
+function Stop-RooIndustriesApp {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
@@ -92,7 +92,7 @@ function Check-Mode([bool]$simple, [string]$when) {
 }
 function App-Log {
     $root = [Environment]::GetFolderPath('LocalApplicationData')
-    $folder = if (Test-Path (Join-Path $root 'RooOptimizationSuite')) { 'RooOptimizationSuite' } else { 'RooIndustriesOptimizationSuite' }
+    $folder = if (Test-Path (Join-Path $root ('RooIndustriesOptimizationSuite' -replace 'Industries',''))) { ('RooIndustriesOptimizationSuite' -replace 'Industries','') } else { 'RooIndustriesOptimizationSuite' }
     $candidate = Join-Path $root ($folder + '\logs\app.log')
     if (Test-Path $candidate) { return $candidate }
 }
@@ -113,9 +113,9 @@ function Script-Path([string]$name) {
     if ($found.Count -ne 1) { throw "Expected one $name under the install folder, found $($found.Count)." }
     return $found[0].FullName
 }
-function Disable-Script([string]$path) { Rename-Item $path ($path + '.roo-test-off'); $script:Renamed += $path; Log ("disabled " + (Split-Path $path -Leaf)) }
+function Disable-Script([string]$path) { Rename-Item $path ($path + '.roo-industries-test-off'); $script:Renamed += $path; Log ("disabled " + (Split-Path $path -Leaf)) }
 function Restore-Script([string]$path) {
-    if (Test-Path ($path + '.roo-test-off')) { Rename-Item ($path + '.roo-test-off') $path }
+    if (Test-Path ($path + '.roo-industries-test-off')) { Rename-Item ($path + '.roo-industries-test-off') $path }
     $script:Renamed = @($script:Renamed | Where-Object { $_ -ne $path }); Log ("restored " + (Split-Path $path -Leaf))
 }
 function Memory-Error { @(Named 'Memory information is unavailable').Count -gt 0 }
@@ -124,21 +124,21 @@ function Memory-Note { @($script:Win.FindAll($TS::Descendants, [Windows.Automati
 
 $wasSimple = $null
 try {
-    Start-Roo
+    Start-RooIndustriesApp
     $wasSimple = Set-Simple $true
-    Start-Roo
+    Start-RooIndustriesApp
     Check-Mode $true 'with simple mode on at launch'
     Set-Simple $false | Out-Null
     Check-Mode $false 'after switching simple mode off'
     Set-Simple $true | Out-Null
     Check-Mode $true 'after switching simple mode back on'
     Set-Simple $false | Out-Null
-    Stop-Roo
+    Stop-RooIndustriesApp
 
     $inventory = Script-Path 'Get-ProcessInventory.ps1'
     $classification = Script-Path 'Get-ProcessClassification.ps1'
     Disable-Script $inventory; Disable-Script $classification
-    Start-Roo
+    Start-RooIndustriesApp
     Nav 'Memory'
     Check (Eventually { Memory-Error } 60) 'Memory page shows the error panel when both memory reads fail' ''
     $retry = WaitFor { $b = ById 'MemoryRetry'; if (Visible $b) { $b } } 10 'Retry button'
@@ -168,13 +168,13 @@ try {
     $featureRow = 'Hyper-V: Hypervisor Platform'; $otherRow = 'Transparency Effects'; $otherId = 'windows.0689e69eedc05770'
     $script:HangFlag = $flag
     Set-Content $flag 'x'
-    $env:ROOTEST_FEATURE_HANG = $flag
+    $env:ROO_INDUSTRIES_TEST_FEATURE_HANG = $flag
     $hookBefore = Hook-Count
     $launched = [Diagnostics.Stopwatch]::StartNew()
-    try { Start-Roo } finally { Remove-Item Env:ROOTEST_FEATURE_HANG -ErrorAction SilentlyContinue }
+    try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_TEST_FEATURE_HANG -ErrorAction SilentlyContinue }
     if (-not (Eventually { (Hook-Count) -gt $hookBefore } 30)) {
         $script:Skipped++; Log 'SKIPPED the Windows features hang check: this build has no test hooks (build the installer with Build-Release.ps1 -TestHooks)'
-        Stop-Roo
+        Stop-RooIndustriesApp
     }
     else {
         Set-Simple $false | Out-Null
@@ -211,10 +211,10 @@ try {
         $retried = Row-Current $featureRow
         Check ($retried -notin @("Couldn't check", 'Not read', $checkingText)) 'Refresh reads the Windows features again once they answer' ("$featureRow=" + $retried)
         Shot 'features-retried'
-        Stop-Roo
+        Stop-RooIndustriesApp
     }
 
-    Start-Roo
+    Start-RooIndustriesApp
     $first = $script:App; $firstWindow = [IntPtr]::new($script:Win.Current.NativeWindowHandle)
     Nav 'Settings'
     [ModeCheckU32]::ShowWindow($firstWindow, 6) | Out-Null; Start-Sleep 1
@@ -257,8 +257,8 @@ try {
 finally {
     if ($script:HangFlag) { Remove-Item $script:HangFlag -Force -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '-n 400 127\.0\.0\.1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
     foreach ($path in @($script:Renamed)) { try { Restore-Script $path } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
-    if ($null -ne $wasSimple) { try { if (-not $script:App -or $script:App.HasExited) { Start-Roo }; Set-Simple $wasSimple | Out-Null } catch { Log ('CLEANUP NEEDED: simple mode ' + $wasSimple) } }
-    Stop-Roo
+    if ($null -ne $wasSimple) { try { if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }; Set-Simple $wasSimple | Out-Null } catch { Log ('CLEANUP NEEDED: simple mode ' + $wasSimple) } }
+    Stop-RooIndustriesApp
     Log ('RESULT failures=' + $script:Failures + ' skipped=' + $script:Skipped)
     'x' | Set-Content (Join-Path $OutDir 'modes.done')
 }

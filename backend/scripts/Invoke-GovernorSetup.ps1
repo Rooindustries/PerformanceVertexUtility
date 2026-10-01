@@ -119,9 +119,9 @@ function Test-GovernorAction($Task,[string]$Root){
 
 function Get-GovernorProblem($Task,$Parts,[string]$Root,$Local){
     if($Task.taskPath -ne '\'){return 'it is not in the Task Scheduler root folder'}
-    if($Task.taskName -notmatch '^(RooIndustries|Roo)OptimizationSuite\.ProcessRules\.[0-9A-F]{20}$'){return 'its name is not one this product registers'}
+    if($Task.taskName -notmatch ('^(RooIndustriesOptimizationSuite|'+('RooIndustriesOptimizationSuite' -replace 'Industries','')+')\.ProcessRules\.[0-9A-F]{20}$')){return 'its name is not one this product registers'}
     if($Parts.Count -ne 3){return 'its description does not have three parts'}
-    if($Parts[0] -ne 'Roo Industries process rules' -and $Parts[0] -ne 'Roo process rules'){return 'its description does not start with the product text'}
+    if($Parts[0] -ne 'Roo Industries process rules' -and $Parts[0] -ne ('Roo Industries process rules' -replace ' Industries','')){return 'its description does not start with the product text'}
     if($Parts[1] -notmatch '^S-1-[0-9]+(-[0-9]+)+$'){return 'its description does not name a Windows user'}
     if(-not $Root){return 'its description does not name a valid rules folder'}
     if(-not $Local -or $Root.Length -lt $Local.Length -or $Root.Substring(0,$Local.Length) -ine $Local){return 'its rules folder is outside the profile of the user its description names'}
@@ -423,7 +423,7 @@ switch($Action){
         $local=[Environment]::GetFolderPath('LocalApplicationData')
         $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
         $current=Join-Path $local 'RooIndustriesOptimizationSuite'
-        $legacy=Join-Path $local 'RooOptimizationSuite'
+        $legacy=Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
         $currentMarked=$null -ne $markers -and $null -ne $markers.GetValue($current.ToUpperInvariant())
         $legacyMarked=$null -ne $markers -and $null -ne $markers.GetValue($legacy.ToUpperInvariant())
         $dataRoot=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($currentMarked -and -not $legacyMarked)){$legacy}else{$current}

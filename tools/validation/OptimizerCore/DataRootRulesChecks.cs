@@ -69,9 +69,9 @@ static partial class DataFolderChecks
         var selection = Path.Combine(H.Local, id);
         var junctioned = Path.Combine(H.Local, id + "-junctioned");
         var target = Path.Combine(H.Local, id + "-target");
-        var legacy = Path.Combine(selection, "RooOptimizationSuite");
+        var legacy = Path.Combine(selection, BrandCompatibility.LegacyDataFolder);
         var current = Path.Combine(selection, "RooIndustriesOptimizationSuite");
-        var linked = Path.Combine(junctioned, "RooOptimizationSuite");
+        var linked = Path.Combine(junctioned, BrandCompatibility.LegacyDataFolder);
         try
         {
             Directory.CreateDirectory(selection); Directory.CreateDirectory(junctioned); Directory.CreateDirectory(target);
@@ -129,7 +129,7 @@ static partial class DataFolderChecks
             Exception? unasked = null;
             try { H.Api(typeof(PolicyRootSecurity), "RequireConfirmedEarlierVersion", fresh, false); } catch (Exception error) { unasked = error; }
             check(unasked is null, "Undo data written after protection needs no confirmation");
-            var outside = Path.Combine(Path.GetTempPath(), "roo-df-outside-" + Guid.NewGuid().ToString("N") + ".json");
+            var outside = Path.Combine(Path.GetTempPath(), "roo-industries-df-outside-" + Guid.NewGuid().ToString("N") + ".json");
             File.WriteAllText(outside, "{}");
             Exception? unmarked = null;
             try { H.Api(typeof(PolicyRootSecurity), "RequireConfirmedEarlierVersion", outside, false); } catch (Exception error) { unmarked = error; }
@@ -148,8 +148,8 @@ static partial class DataFolderChecks
         var present = H.Has(typeof(OperationFiles), "ExternalPathProblem");
         check(present, "A check for paths handed over by another program exists");
         if (!present) return;
-        var file = Path.Combine(Path.GetTempPath(), "roo-df-external-" + Guid.NewGuid().ToString("N") + ".txt");
-        var folder = Path.Combine(Path.GetTempPath(), "roo-df-external-" + Guid.NewGuid().ToString("N"));
+        var file = Path.Combine(Path.GetTempPath(), "roo-industries-df-external-" + Guid.NewGuid().ToString("N") + ".txt");
+        var folder = Path.Combine(Path.GetTempPath(), "roo-industries-df-external-" + Guid.NewGuid().ToString("N"));
         try
         {
             File.WriteAllText(file, "x"); Directory.CreateDirectory(folder);
@@ -310,7 +310,7 @@ static partial class DataFolderChecks
     {
         var id = H.Name("claims");
         var selection = Path.Combine(H.Local, id);
-        var legacy = Path.Combine(selection, "RooOptimizationSuite");
+        var legacy = Path.Combine(selection, BrandCompatibility.LegacyDataFolder);
         var current = Path.Combine(selection, "RooIndustriesOptimizationSuite");
         try
         {
@@ -352,7 +352,7 @@ static partial class DataFolderChecks
     {
         var id = H.Name("hang");
         var root = Path.Combine(H.Local, id);
-        var fake = Path.Combine(Path.GetTempPath(), "roo-df-schtasks-" + Guid.NewGuid().ToString("N") + ".cmd");
+        var fake = Path.Combine(Path.GetTempPath(), "roo-industries-df-schtasks-" + Guid.NewGuid().ToString("N") + ".cmd");
         try
         {
             Legacy(root, ("A.txt", "A"), (@"process-rules\rules\rule.json", "{}"));

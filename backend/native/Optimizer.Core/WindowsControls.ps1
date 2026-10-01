@@ -290,7 +290,7 @@ try {
         $script:BatchDoh=$true;$index=0
         foreach($item in @($request.addresses)){
             $text=try{(Read-Control $item)|ConvertTo-Json -Compress -Depth 30}catch{@{error=$_.Exception.Message}|ConvertTo-Json -Compress}
-            [Console]::Out.WriteLine('ROO-CONTROL '+$index+' '+$text);[Console]::Out.Flush();$index++
+            [Console]::Out.WriteLine('ROO_INDUSTRIES_CONTROL '+$index+' '+$text);[Console]::Out.Flush();$index++
         }
         exit 0
     }

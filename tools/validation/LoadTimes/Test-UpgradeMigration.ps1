@@ -23,11 +23,11 @@ $A = [Windows.Automation.AutomationElement]; $TS = [Windows.Automation.TreeScope
 $script:LogPath = Join-Path $OutDir ('migration-' + $Phase + '.log')
 $script:Failures = 0
 $Setting = 'windows.0689e69eedc05770'
-$Profile = 'roo-migration-check'
-$RuleName = 'roo-migration-rule'
+$Profile = 'roo-industries-migration-check'
+$RuleName = 'roo-industries-migration-rule'
 $Personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 $StatePath = Join-Path $env:TEMP 'roo-industries-migration-state.json'
-$ProbePath = Join-Path $env:TEMP 'RooMigrationProbe.exe'
+$ProbePath = Join-Path $env:TEMP 'RooIndustriesMigrationProbe.exe'
 
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
 function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $script:Failures++ }; Log ($(if ($ok) { 'PASS ' } else { 'FAIL ' }) + $name + ' :: ' + $detail) }
@@ -142,7 +142,7 @@ try {
         Start-Sleep 3
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
-        Pick 'ProcessPicker' '*RooMigrationProbe*'
+        Pick 'ProcessPicker' '*RooIndustriesMigrationProbe*'
         Process-Status '^Controls for' 60 'probe controls' | Out-Null
         Pick 'cpuPriority' 'Below normal'
         Invoke-Element (WaitFor { $b = ById 'ProcessPreview'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'review button')
@@ -189,7 +189,7 @@ try {
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    if ($Phase -eq 'after' -or $script:Failures -gt 0) { Get-Process RooMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
+    if ($Phase -eq 'after' -or $script:Failures -gt 0) { Get-Process RooIndustriesMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
     if ($Phase -eq 'before' -and $script:Failures -gt 0) { Log ('CLEANUP NEEDED: the earlier version may have left the ' + $Profile + ' profile applied and the ' + $RuleName + ' rule saved; restore the profile and delete the rule in the app') }
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir ('migration-' + $Phase + '.done'))

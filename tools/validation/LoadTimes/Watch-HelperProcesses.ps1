@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.IO; using System.Text; using System.Threading; using System.Collections.Generic; using System.Runtime.InteropServices;
-public static class RooProcPoll {
+public static class RooIndustriesProcPoll {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct PE32 { public uint dwSize, cntUsage, th32ProcessID; public IntPtr th32DefaultHeapID; public uint th32ModuleID, cntThreads, th32ParentProcessID; public int pcPriClassBase; public uint dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile; }
   [StructLayout(LayoutKind.Sequential)] struct US { public ushort Length, MaximumLength; public IntPtr Buffer; }
   [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint f, uint p);
@@ -67,4 +67,4 @@ public static class RooProcPoll {
   }
 }
 '@
-[RooProcPoll]::Run($OutCsv, $StopFile, 20)
+[RooIndustriesProcPoll]::Run($OutCsv, $StopFile, 20)

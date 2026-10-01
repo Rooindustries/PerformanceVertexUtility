@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <DefineConstants Condition="'$(RooIndustriesRelease)' == 'true'">$(DefineConstants);ROO_RELEASE</DefineConstants>
+    <DefineConstants Condition="'$(RooIndustriesRelease)' == 'true'">$(DefineConstants);ROO_INDUSTRIES_RELEASE</DefineConstants>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <DefineConstants Condition="'$(GovernorTestHooks)' == 'true'">$(DefineConstants);GOVERNOR_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(RooTestHooks)' == 'true'">
-    <DefineConstants>$(DefineConstants);ROO_TEST_HOOKS</DefineConstants>
+  <PropertyGroup Condition="'$(RooIndustriesTestHooks)' == 'true'">
+    <DefineConstants>$(DefineConstants);ROO_INDUSTRIES_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="OptimizerCore" />

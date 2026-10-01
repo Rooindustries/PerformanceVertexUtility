@@ -27,8 +27,8 @@ public sealed class RegistryTweakStore : ITweakStore
     public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses) => new WindowsControlStore().ReadMany(addresses);
     public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses)
     {
-#if ROO_TEST_HOOKS
-        if (Environment.GetEnvironmentVariable("ROOTEST_FEATURE_HANG") is { Length: > 0 } flag && File.Exists(flag) && addresses.Any(address => address.Kind == "windows-features"))
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_FEATURE_HANG") is { Length: > 0 } flag && File.Exists(flag) && addresses.Any(address => address.Kind == "windows-features"))
         {
             using var holder = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true });
             return new TaskCompletionSource<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>().Task;

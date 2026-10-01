@@ -8,7 +8,7 @@ $work=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-installed'
 $statePath=Join-Path $work 'state.json'
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-$currentRoot=Join-Path $local 'RooIndustriesOptimizationSuite';$legacyRoot=Join-Path $local 'RooOptimizationSuite'
+$currentRoot=Join-Path $local 'RooIndustriesOptimizationSuite';$legacyRoot=Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
 $dataRoot=if((Test-Path -LiteralPath $legacyRoot -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($currentRoot.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacyRoot.ToUpperInvariant()))){$legacyRoot}else{$currentRoot}
 $policyRoot=Join-Path $dataRoot 'process-rules'
 [IO.Directory]::CreateDirectory($work)|Out-Null

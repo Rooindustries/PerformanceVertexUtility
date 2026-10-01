@@ -110,7 +110,7 @@ public partial class App : Application
             AppLog.Write("start", "The open window did not take this launch; opening another window.");
         }
         else if (primary is not null) primary.Activated += OnRedirected;
-#if ROO_TEST_HOOKS
+#if ROO_INDUSTRIES_TEST_HOOKS
         AppLog.Write("test", "test hooks enabled");
 #endif
         Theme.ApplyPersistedTheme();

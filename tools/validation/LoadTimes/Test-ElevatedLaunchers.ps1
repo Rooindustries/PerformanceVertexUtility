@@ -56,12 +56,12 @@ $hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $sessionExe = Join-Path $install 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe'
 $system = [Environment]::GetFolderPath('System')
 $clearNames = @('DOTNET_STARTUP_HOOKS', 'DOTNET_ADDITIONAL_DEPS', 'DOTNET_SHARED_STORE', 'CORECLR_ENABLE_PROFILING', 'CORECLR_PROFILER', 'CORECLR_PROFILER_PATH', 'CORECLR_PROFILER_PATH_32', 'CORECLR_PROFILER_PATH_64', 'CORECLR_PROFILER_PATH_ARM64', 'COR_ENABLE_PROFILING', 'COR_PROFILER', 'COR_PROFILER_PATH', 'COR_PROFILER_PATH_32', 'COR_PROFILER_PATH_64')
-$ruleName = 'roo-launcher-check rule'
-$probeName = 'RooLauncherProbe'
+$ruleName = 'roo-industries-launcher-check rule'
+$probeName = 'RooIndustriesLauncherProbe'
 $probePath = Join-Path $env:TEMP ($probeName + '.exe')
-$sessionLauncherPath = Join-Path $env:TEMP 'RooProtectedLauncherProbe.exe'
-$sessionGamePath = Join-Path $env:TEMP 'RooProtectedGameProbe.exe'
-$ifeo = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooProtectedGameProbe.exe'
+$sessionLauncherPath = Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'
+$sessionGamePath = Join-Path $env:TEMP 'RooIndustriesProtectedGameProbe.exe'
+$ifeo = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
 
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
 function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $script:Failures++ }; Log ($(if ($ok) { 'PASS ' } else { 'FAIL ' }) + $name + ' :: ' + $detail) }
@@ -106,14 +106,14 @@ function Pick([string]$id, [string]$like) {
     }
 }
 function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
-function Start-Roo {
-    Stop-Roo
+function Start-RooIndustriesApp {
+    Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [LauncherCheckU32]::ShowWindow($h, 9) | Out-Null; [LauncherCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [LauncherCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
-function Stop-Roo {
+function Stop-RooIndustriesApp {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
@@ -121,7 +121,7 @@ function Stop-Roo {
 function Data-Root {
     $local = [Environment]::GetFolderPath('LocalApplicationData')
     $markers = Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local 'RooOptimizationSuite'
+    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
 }
 function Quote-Literal([string]$value) { "'" + $value.Replace("'", "''") + "'" }
@@ -202,7 +202,7 @@ try {
     (Get-Process -Id $probeId).PriorityClass = 'Normal'
     Check ((Probe-Priority $probeId) -eq 'Normal') 'the probe starts at normal priority (a process started by a scheduled task inherits below normal, so it is set explicitly)' ('priority=' + (Probe-Priority $probeId))
     Start-Sleep 3
-    Start-Roo
+    Start-RooIndustriesApp
     Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
     Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
     Pick 'ProcessPicker' ('*' + $probeName + '*')
@@ -235,7 +235,7 @@ try {
         $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probeId) -eq 'BelowNormal') { $true } } 90 'rule enforced' } catch {}
         Check ([bool]$enforced) 'the governor enforces the saved rule on the probe' ('priority=' + (Probe-Priority $probeId))
 
-        Stop-Roo
+        Stop-RooIndustriesApp
         $still = @(Policy-Workers)
         Check ($worker -and $still.Count -ge 1 -and $still[0].ProcessId -eq $worker.ProcessId) 'with the app closed the same governor worker is still running' ("pid before=$(if ($worker) { $worker.ProcessId }) after=" + (($still | ForEach-Object { $_.ProcessId }) -join ','))
         $second = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
@@ -248,9 +248,9 @@ try {
     else {
         Check $false 'the governor enforces the saved rule on the probe' 'not tested: the governor worker is not running'
         Check $false 'with the app closed the governor keeps enforcing the saved rule' 'not tested: the governor worker is not running'
-        Stop-Roo
+        Stop-RooIndustriesApp
     }
-    Start-Roo
+    Start-RooIndustriesApp
     Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
     try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
     Pick 'ProcessRulesList' ($ruleName + '*')
@@ -268,7 +268,7 @@ catch { $script:Failures++; Log ('FATAL governor part ' + ($_ | Out-String)); tr
 finally {
     if ($script:RuleSaved) {
         try {
-            if (-not $script:App -or $script:App.HasExited) { Start-Roo }
+            if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
             Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
             try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
             Pick 'ProcessRulesList' ($ruleName + '*')
@@ -276,7 +276,7 @@ finally {
             if ((Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete') -match '^Rule deleted') { $script:RuleSaved = $false; Log 'cleanup: deleted the governor test rule through the app' }
         } catch { Log ('cleanup: could not delete the governor test rule: ' + $_.Exception.Message) }
     }
-    Stop-Roo
+    Stop-RooIndustriesApp
     foreach ($id in @($probeId, $secondId)) { if ($id) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }
     if ($script:RuleSaved) {
         foreach ($task in Policy-Tasks) { try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed governor task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) } }
@@ -293,7 +293,7 @@ try {
     $sessionLauncher = Start-Process $sessionLauncherPath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
     Start-Sleep 2
     $baseline = [ordered]@{ priority = Probe-Priority $sessionLauncher.Id; affinity = '0x{0:X}' -f [int64](Get-Process -Id $sessionLauncher.Id).ProcessorAffinity }
-    $script:PreviewDir = Join-Path (Data-Root) 'operations\game-session-roo-launcher-check'
+    $script:PreviewDir = Join-Path (Data-Root) 'operations\game-session-roo-industries-launcher-check'
     New-Item -ItemType Directory -Force -Path $script:PreviewDir | Out-Null
     $controls = Join-Path $script:PreviewDir 'controls.json'
     Set-Content -LiteralPath $controls -Value '{"cpuPriority":"AboveNormal"}' -Encoding ASCII
