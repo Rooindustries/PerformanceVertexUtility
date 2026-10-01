@@ -80,8 +80,9 @@ public sealed partial class OptimizerService
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
     public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot, _locator.RepoRoot));
+    public TimeSpan GovernorTimeout { get; set; } = TimeSpan.FromMinutes(3);
     public Task<PolicyHostState> RetryGovernorRestoreAsync()
-        => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true });
+        => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true }, timeout: GovernorTimeout);
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
         => RunCoreAsync<SavedProcessRule>("rule-save", new() { ["policyRoot"] = PolicyRoot, ["rule"] = rule, ["confirm"] = true });
     public Task<JsonElement> DeleteRuleAsync(string ruleId)
@@ -94,7 +95,7 @@ public sealed partial class OptimizerService
         try
         {
             var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
-                "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), waitForRemoval: true);
+                "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), limit: GovernorTimeout);
             return RequireData(result);
         }
         finally { GovernorProbe.ForgetTask(); }
@@ -232,6 +233,7 @@ public sealed partial class OptimizerService
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
         start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
         foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
         using var process = await Task.Run(() => Process.Start(start)).ConfigureAwait(false) ?? throw new InvalidOperationException("The optimizer helper did not start.");

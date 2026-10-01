@@ -75,16 +75,19 @@ public sealed partial class OptimizerService
     {
         var directory = await NewOperationDirectoryAsync("windows-settings");
         var path = System.IO.Path.Combine(directory, "preview.json");
-        var plan = await RunCoreAsync<TweakPlan>("tweak-preview", new() { ["profileId"] = profileId, ["selections"] = selections, ["outputPath"] = path });
+        var plan = await RunCoreAsync<TweakPlan>("tweak-preview", new() { ["profileId"] = profileId, ["selections"] = selections, ["outputPath"] = path }, timeout: TweakPreviewTimeout);
         if (plan.ProfileId != profileId) throw new InvalidDataException("The review did not match your choices. Review them again.");
         return new(plan, path, Hash(path));
     }
+    public TimeSpan TweakPreviewTimeout { get; set; } = TimeSpan.FromMinutes(3);
+    public TimeSpan TweakApplyTimeout { get; set; } = TimeSpan.FromMinutes(10);
+    private static bool RecoverableByJournal(TweakPlan plan) => plan.Controls is null || plan.Controls.Changes.All(change => change.Before.Address.Kind is "service" or "scheduled-task");
     public async Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool acceptDataLoss = false)
     {
         if (!string.Equals(Hash(review.Path), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed settings changed. Review them again.");
         var restoring = review.Plan.Selections.Length == 0;
         return await RunCoreAsync<TweakApplyResult>(restoring ? "tweak-restore" : "tweak-apply",
-            new() { ["previewPath"] = review.Path, ["reviewHash"] = review.Hash, ["confirm"] = true, ["acceptDataLoss"] = acceptDataLoss, ["acceptEarlierVersion"] = restoring && await EarlierReceiptsConfirmedAsync().ConfigureAwait(false) }).ConfigureAwait(false);
+            new() { ["previewPath"] = review.Path, ["reviewHash"] = review.Hash, ["confirm"] = true, ["acceptDataLoss"] = acceptDataLoss, ["acceptEarlierVersion"] = restoring && await EarlierReceiptsConfirmedAsync().ConfigureAwait(false) }, timeout: RecoverableByJournal(review.Plan) ? TweakApplyTimeout : null).ConfigureAwait(false);
     }
     public Task<TweakCatalogResult> ImportWindowsSettingsAsync(string path) => RunCoreAsync<TweakCatalogResult>("tweak-custom-import", new() { ["customSettingsPath"] = path, ["confirm"] = true });
     public async Task<WindowsTweakReview> PreviewOwnershipAsync(string selectedPath)

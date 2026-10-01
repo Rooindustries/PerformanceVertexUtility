@@ -56,6 +56,12 @@ if (args is ["--presentation", var presentationRepo])
     Console.WriteLine($"Completed {count} presentation checks.");
     return;
 }
+if (args is ["--freshness"])
+{
+    try { await FreshnessChecks.Run(root, Check); Console.WriteLine($"Completed {count} Windows settings UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 try
 {
     AppliedStateChecks.Run(Check);

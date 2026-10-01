@@ -1,6 +1,8 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
@@ -24,14 +26,19 @@ public abstract partial class PageViewModelBase : ObservableObject
     [ObservableProperty]
     private string _staleNotice = "";
 
+    [ObservableProperty]
+    private string _outOfDateNotice = "";
+
+    private readonly SeenGeneration _seen = new();
     private bool _initialized;
-    private long _loadedGeneration = -2;
+    private bool _attempted;
     private Task? _load;
 
     protected virtual bool RefreshOnRevisit => true;
     protected virtual bool HasUserWork => false;
     protected virtual bool IsWorking => false;
     private const string ChangedNotice = "Settings changed elsewhere. Your selection is kept; clear it to load the current list.";
+    private const string RefreshFailedNotice = "Couldn't refresh this page. What you see may be out of date.";
     private bool _keepStale;
     protected bool Fresh { get; private set; }
     protected bool Quiet { get; private set; }
@@ -46,7 +53,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         while (_load is { IsCompleted: false }) await _load;
         if (!IsReady) await ReloadAsync();
-        else if (!DataGeneration.IsCurrent(_loadedGeneration))
+        else if (!_seen.IsCurrent)
         {
             if (HasUserWork) StaleNotice = ChangedNotice;
             else await ReloadAsync();
@@ -60,41 +67,38 @@ public abstract partial class PageViewModelBase : ObservableObject
         await RunAsync(quiet: true);
     }
 
-    private DataGeneration.OwnChanges? _own;
-    private long _ownBefore = -1;
+    protected void StartOwn() => _seen.BeginOwn();
 
-    protected void StartOwn()
+    protected bool FinishOwn()
     {
-        _ownBefore = _loadedGeneration >= 0 ? DataGeneration.Snapshot() : -1;
-        _own = DataGeneration.BeginOwn();
-    }
-
-    protected void FinishOwn()
-    {
-        var own = _own;
-        if (own is null) return;
-        _own = null;
-        DataGeneration.EndOwn();
-        if (_loadedGeneration >= 0 && _loadedGeneration == _ownBefore && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(_ownBefore, own)) _loadedGeneration = _ownBefore + own.Bumps;
-        else _ = RevalidateAsync();
+        switch (_seen.EndOwn(StaleNotice.Length == 0 && OutOfDateNotice.Length == 0, out var bumps))
+        {
+            case OwnEnd.Accepted: return bumps > 0;
+            case OwnEnd.Stale: _ = RevalidateAsync(); return false;
+            default: return false;
+        }
     }
 
     protected void KeepStale() => _keepStale = true;
+    protected void MarkStale() => _seen.Invalidate();
 
     protected async Task RefreshIfStaleAsync()
     {
-        if (!_initialized || DataGeneration.Changing || DataGeneration.IsCurrent(_loadedGeneration)) return;
+        if (!_initialized || DataGeneration.Changing || _seen.IsCurrent) return;
         while (_load is { IsCompleted: false }) await _load;
-        if (!HasUserWork && !DataGeneration.IsCurrent(_loadedGeneration)) await RunAsync(quiet: true);
+        if (!HasUserWork && !_seen.IsCurrent) await RunAsync(quiet: true);
     }
 
     public Task ReloadAsync() => RunAsync(quiet: false);
+
+    [RelayCommand]
+    private Task RetryAsync() => ReloadAsync();
 
     public async Task RevalidateAsync()
     {
         if (!_initialized) return;
         while (_load is { IsCompleted: false }) await _load;
-        if (DataGeneration.Changing || IsWorking || DataGeneration.IsCurrent(_loadedGeneration)) return;
+        if (DataGeneration.Changing || IsWorking || _seen.IsCurrent) return;
         if (!IsReady) await ReloadAsync();
         else await RefreshChangedAsync();
     }
@@ -102,27 +106,36 @@ public abstract partial class PageViewModelBase : ObservableObject
     private bool _revalidate;
     protected void RevalidateAfterLoad() => _revalidate = true;
 
+    private readonly SemaphoreSlim _running = new(1, 1);
+
     private async Task RunAsync(bool quiet)
     {
-        while (_load is { IsCompleted: false }) await _load;
-        _load = LoadAsync(quiet);
-        await _load;
-        if (!_revalidate || !IsReady) { _revalidate = false; return; }
-        _revalidate = false;
-        _load = LoadAsync(quiet: true);
-        await _load;
-        _revalidate = false;
+        await _running.WaitAsync();
+        try
+        {
+            _load = LoadAsync(quiet);
+            await _load;
+            if (!_revalidate || !IsReady) { _revalidate = false; return; }
+            _revalidate = false;
+            _load = LoadAsync(quiet: true);
+            await _load;
+            _revalidate = false;
+        }
+        finally { _running.Release(); }
     }
 
     private async Task LoadAsync(bool quiet)
     {
-        Fresh = _loadedGeneration != -2;
+        Fresh = _attempted;
+        _attempted = true;
         Quiet = quiet;
-        _loadedGeneration = DataGeneration.Changing ? -1 : DataGeneration.Current;
-        if (!quiet) { IsLoading = true; IsReady = false; }
+        var keepShown = quiet && IsReady;
+        var started = _seen.BeginRead();
+        if (!quiet) { IsLoading = true; IsReady = false; OutOfDateNotice = ""; }
         IsEmpty = false;
         ErrorMessage = null;
         StaleNotice = "";
+        var threw = false;
 
         try
         {
@@ -130,12 +143,23 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         catch (Exception ex)
         {
+            threw = true;
             AppLog.Write(GetType().Name, ex.ToString());
             ErrorMessage = ex.Message;
         }
         finally
         {
-            if (_loadedGeneration != DataGeneration.Current || _keepStale) _loadedGeneration = -1;
+            var kept = keepShown && ErrorMessage is not null;
+            if (kept)
+            {
+                if (!threw) AppLog.Write(GetType().Name, ErrorMessage);
+                ErrorMessage = null;
+                IsEmpty = false;
+                OutOfDateNotice = RefreshFailedNotice;
+            }
+            else OutOfDateNotice = "";
+            _seen.EndRead(started, seen: !kept);
+            if (_keepStale) _seen.Invalidate();
             if (_keepStale && HasUserWork) StaleNotice = ChangedNotice;
             _keepStale = false;
             IsLoading = false;

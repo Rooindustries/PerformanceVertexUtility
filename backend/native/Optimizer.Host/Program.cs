@@ -12,6 +12,8 @@ try
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var fromInput = args[1] == "-";
+    if (!fromInput && RuntimeEnvironment.Release && action is not ("policy-run" or "protected-session-run" or "protected-session-watch"))
+        throw new InvalidDataException("Requests must be passed on standard input.");
     using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
     var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
@@ -318,6 +320,7 @@ static void StartProtectedWatch(string repoRoot, string root, string operationId
     var path = Path.Combine(root, "watch-request.json");
     OperationFiles.Write(path, new { schemaVersion = 1, repoRoot, sessionRoot = root, operationId, confirm = true });
     var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+    RuntimeEnvironment.Apply(start);
     if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
         start.ArgumentList.Add(System.Reflection.Assembly.GetEntryAssembly()!.Location);
     start.ArgumentList.Add("protected-session-watch"); start.ArgumentList.Add(path);
@@ -393,6 +396,7 @@ static JsonElement RunScript(string repoRoot, string script, string[] arguments)
         UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
         StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
     };
+    RuntimeEnvironment.Apply(start);
     foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(arg);
     using var process = Process.Start(start) ?? throw new InvalidOperationException("The Windows provider did not start.");
     var output = process.StandardOutput.ReadToEndAsync();

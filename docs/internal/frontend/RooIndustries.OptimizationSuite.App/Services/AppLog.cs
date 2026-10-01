@@ -43,8 +43,11 @@ public static class AppLog
 
     public static bool Enable() { Volatile.Write(ref _enabled, true); return true; }
 
+    public static Action<string, string?>? Observer { get; set; }
+
     public static void Write(string source, string? detail)
     {
+        Observer?.Invoke(source, detail);
         if (string.IsNullOrWhiteSpace(detail) || !Volatile.Read(ref _enabled)) return;
         try
         {

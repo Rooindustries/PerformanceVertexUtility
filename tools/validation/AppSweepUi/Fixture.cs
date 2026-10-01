@@ -149,10 +149,13 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, OperationError ?? (ShaderRestoreText is null ? LastError : null)));
         public Func<Task>? BeforeInstalledApps { get; set; }
+        public Func<Task>? AfterInstalledApps { get; set; }
         public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false, bool fresh = false)
         {
             if (BeforeInstalledApps is { } hold) await hold();
-            return InstalledApps;
+            var apps = InstalledApps;
+            if (AfterInstalledApps is { } after) await after();
+            return apps;
         }
         public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken cancellationToken = default) => OfficialPreview(appId);
         public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken cancellationToken = default)

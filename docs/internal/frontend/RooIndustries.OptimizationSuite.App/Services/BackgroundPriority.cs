@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed class BackgroundPriority
 {
+    private const uint SetInformation = 0x0200;
+    private const uint QueryLimited = 0x1000;
     private readonly object _gate = new();
-    private readonly List<Process> _roots = new();
+    private readonly List<SafeProcessHandle> _roots = new();
     private bool _raised;
 
     public void Register(Process process)
@@ -17,8 +20,11 @@ public sealed class BackgroundPriority
         lock (_gate)
         {
             if (_raised) return;
-            _roots.Add(process);
-            try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
+            try
+            {
+                _roots.Add(Duplicate(process.SafeHandle));
+                process.PriorityClass = ProcessPriorityClass.BelowNormal;
+            }
             catch (Exception error) when (error is InvalidOperationException or Win32Exception) { }
         }
     }
@@ -31,14 +37,32 @@ public sealed class BackgroundPriority
             _raised = true;
             foreach (var root in _roots)
             {
-                try { if (!root.HasExited) SetTree(root.Id, ProcessPriorityClass.Normal); }
+                try { if (WaitForSingleObject(root, 0) != 0) SetTree(root, ProcessPriorityClass.Normal); }
                 catch (Exception error) when (error is InvalidOperationException or Win32Exception) { }
+                finally { root.Dispose(); }
             }
+            _roots.Clear();
         }
     }
 
-    private static void SetTree(int root, ProcessPriorityClass priority)
+    private static SafeProcessHandle Duplicate(SafeProcessHandle source)
     {
+        var current = GetCurrentProcess();
+        if (!DuplicateHandle(current, source, current, out var copy, 0, false, 2)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return copy;
+    }
+
+    private static bool Created(SafeProcessHandle handle, out long created) => GetProcessTimes(handle, out created, out _, out _, out _);
+
+    private static bool ChildOf(SafeProcessHandle handle, int parent)
+    {
+        var information = new ProcessBasicInformation();
+        return NtQueryInformationProcess(handle, 0, ref information, Marshal.SizeOf<ProcessBasicInformation>(), out _) == 0 && information.InheritedFromUniqueProcessId.ToInt64() == parent;
+    }
+
+    private static void SetTree(SafeProcessHandle root, ProcessPriorityClass priority)
+    {
+        if (!Created(root, out var rootCreated) || !SetPriorityClass(root, (uint)priority)) return;
         var children = new Dictionary<int, List<int>>();
         var snapshot = CreateToolhelp32Snapshot(0x2, 0);
         if (snapshot != new IntPtr(-1))
@@ -54,23 +78,31 @@ public sealed class BackgroundPriority
             }
             finally { CloseHandle(snapshot); }
         }
-        var pending = new Stack<(int Id, DateTime? ParentStarted)>(); pending.Push((root, null));
+        var pending = new Stack<(int Id, long Created)>(); pending.Push((GetProcessId(root), rootCreated));
         var seen = new HashSet<int>();
         while (pending.Count > 0)
         {
-            var (id, parentStarted) = pending.Pop();
-            if (!seen.Add(id)) continue;
-            DateTime started;
-            try
+            var (id, parentCreated) = pending.Pop();
+            if (!children.TryGetValue(id, out var list)) continue;
+            foreach (var childId in list)
             {
-                using var process = Process.GetProcessById(id);
-                started = process.StartTime;
-                if (parentStarted is { } parent && started < parent) continue;
-                process.PriorityClass = priority;
+                if (!seen.Add(childId)) continue;
+                using var child = new SafeProcessHandle(OpenProcess(SetInformation | QueryLimited, false, childId), true);
+                if (child.IsInvalid || !Created(child, out var created) || created < parentCreated || !ChildOf(child, id) || !SetPriorityClass(child, (uint)priority)) continue;
+                pending.Push((childId, created));
             }
-            catch (Exception error) when (error is ArgumentException or InvalidOperationException or Win32Exception) { continue; }
-            if (children.TryGetValue(id, out var list)) foreach (var child in list) pending.Push((child, started));
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public IntPtr ExitStatus;
+        public IntPtr PebBaseAddress;
+        public IntPtr AffinityMask;
+        public IntPtr BasePriority;
+        public IntPtr UniqueProcessId;
+        public IntPtr InheritedFromUniqueProcessId;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -91,4 +123,12 @@ public sealed class BackgroundPriority
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32FirstW")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool Process32First(IntPtr snapshot, ref ProcessEntry entry);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32NextW")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry entry);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DuplicateHandle(IntPtr sourceProcess, SafeProcessHandle source, IntPtr targetProcess, out SafeProcessHandle target, uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint options);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
+    [DllImport("kernel32.dll")] private static extern uint WaitForSingleObject(SafeProcessHandle handle, uint milliseconds);
+    [DllImport("kernel32.dll")] private static extern int GetProcessId(SafeProcessHandle handle);
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetPriorityClass(SafeProcessHandle handle, uint priority);
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetProcessTimes(SafeProcessHandle handle, out long created, out long exited, out long kernel, out long user);
+    [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(SafeProcessHandle handle, int informationClass, ref ProcessBasicInformation information, int size, out int returned);
 }

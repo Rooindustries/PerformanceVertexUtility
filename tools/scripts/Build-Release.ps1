@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'Release.Checks.ps1')
 if ($TestHooks) { $env:RooIndustriesTestHooks = 'true' }
 elseif ($env:RooIndustriesTestHooks) { throw 'RooIndustriesTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
 if ($env:GovernorTestHooks) { throw 'GovernorTestHooks is set in this environment, so this build would contain governor test hooks. Remove it before building a release.' }
@@ -84,6 +85,7 @@ $project = [xml](Get-Content -LiteralPath $appProject -Raw)
 $version = @($project.Project.PropertyGroup | ForEach-Object { $_.SelectSingleNode('Version') } | Where-Object { $_ })[0].InnerText
 if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$') { throw "The app project version '$version' is not a release version." }
 $numericVersion = '{0}.{1}.{2}.0' -f $Matches[1], $Matches[2], $Matches[3]
+Assert-ReleaseVersion $repoRoot $version
 
 $dotnet = Resolve-DotNetSdk $DotNetPath
 $iscc = Resolve-Iscc $IsccPath
@@ -124,8 +126,7 @@ Invoke-Obfuscar $obfuscar $sessionOut @('Optimizer.Core.dll', 'RooIndustries.Ses
 Invoke-Obfuscar $obfuscar $appOut @('Optimizer.Core.dll', 'RooIndustries.OptimizationSuite.App.dll') $maps
 
 $backend = Join-Path $repoRoot 'backend'
-$buildOnlyScripts = @('Test-*.ps1', 'Measure-Optimizer*.ps1', 'Measure-ProcessControlFootprint.ps1', 'Validation.Common.ps1', 'Get-RooIndustriesValidationTempArtifacts.ps1', 'Build-OptimizerHost.ps1')
-Copy-Tree (Join-Path $backend 'scripts') (Join-Path $stage 'backend\scripts') @('*.ps1', '*.cmd') $buildOnlyScripts
+Copy-ReleaseScripts $repoRoot $stage
 Copy-Tree (Join-Path $backend 'catalogs') (Join-Path $stage 'backend\catalogs') @('windows-tweaks.json', 'firmware-write-tests.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')
 Copy-Tree (Join-Path $backend 'capabilities') (Join-Path $stage 'backend\capabilities') @('*.json')
 Copy-Tree (Join-Path $backend 'profiles') (Join-Path $stage 'backend\profiles') @('*.json')
@@ -153,9 +154,10 @@ foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\
     if (-not (Test-Path -LiteralPath (Join-Path $stage $required))) { throw "The release layout is missing $required." }
 }
 
-$smokeRequest = Join-Path $work 'smoke-request.json'
-[IO.File]::WriteAllText($smokeRequest, (@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
-$smoke = (& (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' $smokeRequest) -join "`n"
+Assert-ReleaseScripts $repoRoot $stage
+
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$smoke = ((@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json) | & (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' '-') -join "`n"
 if ($LASTEXITCODE -ne 0 -or $smoke -notmatch '"status"\s*:\s*"completed"' -or $smoke -notmatch '"settings"\s*:\s*\[\s*\{') { throw 'The obfuscated helper could not read the Windows tweak catalog.' }
 Write-Host ('Smoke test: the obfuscated helper returned the Windows tweak catalog (' + $smoke.Length + ' characters).')
 

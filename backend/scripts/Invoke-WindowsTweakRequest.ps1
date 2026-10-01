@@ -16,5 +16,6 @@ if(-not(Test-Path $hostPath)){throw 'Build the optimizer helper with backend/scr
 $hostArgs=@($hostPath)
 if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path (Split-Path $hostPath -Parent) 'hostpolicy.dll'))){$DotNetPath=Join-Path (Split-Path $hostPath -Parent) 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1');$DotNetPath=Get-RooIndustriesDevelopmentDotNet (Split-Path $hostPath -Parent)}
-& $DotNetPath @hostArgs ('tweak-'+$Action.ToLowerInvariant()) $RequestPath $root
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
+[IO.File]::ReadAllText($RequestPath,[Text.UTF8Encoding]::new($false))|& $DotNetPath @hostArgs ('tweak-'+$Action.ToLowerInvariant()) '-' $root
 if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}

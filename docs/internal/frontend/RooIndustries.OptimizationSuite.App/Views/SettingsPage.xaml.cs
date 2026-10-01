@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -33,7 +32,7 @@ public sealed partial class SettingsPage : Page
         try
         {
             if (folder) Directory.CreateDirectory(target);
-            using var process = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(target);
         }
         catch (Exception error)
         {
