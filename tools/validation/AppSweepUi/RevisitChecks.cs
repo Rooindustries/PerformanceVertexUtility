@@ -8,8 +8,10 @@ static class RevisitChecks
     public static async Task RunAsync(Action<bool, string> check)
     {
         var failures = new List<string>();
+        var only = Environment.GetEnvironmentVariable("ROO_SCENARIO");
         async Task Scenario(string name, Func<Task<bool>> body)
         {
+            if (!string.IsNullOrEmpty(only) && !name.Contains(only, StringComparison.OrdinalIgnoreCase)) return;
             bool passed;
             try { passed = await body(); }
             catch (Exception error) { passed = false; name += " (" + error.GetType().Name + ": " + error.Message + ")"; }
