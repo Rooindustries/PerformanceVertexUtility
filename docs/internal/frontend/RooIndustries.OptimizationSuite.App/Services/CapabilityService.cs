@@ -198,11 +198,11 @@ public sealed class CapabilityService
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var script = QuotePowerShellString(scriptPath);
         var arguments =
-            $"-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & {script}{tail}\"";
+            $"-NoProfile -ExecutionPolicy Bypass -Command \"{RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude}[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & {script}{tail}\"";
 
         var psi = new ProcessStartInfo
         {
-            FileName = "powershell.exe",
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
             Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

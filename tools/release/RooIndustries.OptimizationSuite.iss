@@ -78,6 +78,32 @@ var
   SetupFolder: String;
 
 function GetCurrentProcessId: Cardinal; external 'GetCurrentProcessId@kernel32.dll stdcall';
+function SetEnvironmentVariable(Name: String; Value: String): Boolean; external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+procedure ClearCodeLoading;
+var
+  Names: TArrayOfString;
+  Index: Integer;
+begin
+  Names := ['COR_ENABLE_PROFILING', 'COR_PROFILER', 'COR_PROFILER_PATH', 'COR_PROFILER_PATH_32', 'COR_PROFILER_PATH_64', 'CORECLR_ENABLE_PROFILING',
+    'CORECLR_PROFILER', 'CORECLR_PROFILER_PATH', 'CORECLR_PROFILER_PATH_32', 'CORECLR_PROFILER_PATH_64', 'CORECLR_PROFILER_PATH_ARM64',
+    'DOTNET_STARTUP_HOOKS', 'DOTNET_ADDITIONAL_DEPS', 'DOTNET_SHARED_STORE'];
+  for Index := 0 to GetArrayLength(Names) - 1 do
+    SetEnvironmentVariable(Names[Index], '');
+  SetEnvironmentVariable('PSModulePath', ExpandConstant('{commonpf64}\WindowsPowerShell\Modules;{sys}\WindowsPowerShell\v1.0\Modules'));
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  ClearCodeLoading;
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  ClearCodeLoading;
+  Result := True;
+end;
 
 function PrepareSetupFolder: Boolean;
 var

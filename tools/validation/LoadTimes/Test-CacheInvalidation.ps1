@@ -223,6 +223,7 @@ try {
 finally {
     if ($app -and -not $app.HasExited) { $app.CloseMainWindow() | Out-Null; if (-not $app.WaitForExit(20000)) { $app.Kill() } }
     Get-Process RooLoadTimesProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500; Remove-Item (Join-Path $env:TEMP 'RooLoadTimesProbe.exe') -Force -ErrorAction SilentlyContinue
     if ($script:Cleanup) { Log ('CLEANUP NEEDED: ' + $script:Cleanup) }
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir 'invalidation.done')

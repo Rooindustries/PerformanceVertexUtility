@@ -202,7 +202,7 @@ public partial class BugReportViewModel : ObservableObject
         if (SavedPath is not { } path) return;
         try
         {
-            using var process = Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), "/select,\"" + path + "\"") { UseShellExecute = true });
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {

@@ -30,12 +30,27 @@ function Assert-RooIndustriesProtectedFolder([string]$Path) {
         $acl=$item.GetAccessControl()
         if(-not $acl.AreAccessRulesProtected){'it inherits permissions'}
         elseif($trusted -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value){'it is not owned by Administrators'}
+        elseif(@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -eq 'S-1-3-4'}).Count -eq 0){'it does not limit owner rights'}
+        elseif(-not (Test-RooIndustriesDataRootMarked $Path)){'the app never protected it'}
         else{
             $writers=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow' -and $trusted -notcontains $_.IdentityReference.Value -and (([int64]$_.FileSystemRights -band 0x500D0156) -ne 0)})
             if($writers.Count -gt 0){$writers[0].IdentityReference.Value+' can change it'}else{''}
         }
     }
     if($problem){throw ("The app's data folder is not protected ("+$problem+"). Open the app as an administrator, then try again.")}
+}
+
+function Test-RooIndustriesWrittenAfterProtection([string]$Path) {
+    $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+    if(-not $key -or -not (Test-Path -LiteralPath $Path -PathType Leaf)){return $false}
+    $full=[IO.Path]::GetFullPath($Path)
+    for($directory=[IO.Path]::GetDirectoryName($full);$directory;$directory=[IO.Path]::GetDirectoryName($directory)){
+        $name=$directory.TrimEnd('\').ToUpperInvariant()
+        if($null -eq $key.GetValue($name)){continue}
+        $at=$key.GetValue($name+'|protected-at')
+        return ($null -ne $at) -and ((Get-Item -LiteralPath $full -Force).CreationTimeUtc.ToFileTimeUtc() -gt [int64]$at)
+    }
+    return $false
 }
 
 function Get-RooIndustriesLocalDataRoot {

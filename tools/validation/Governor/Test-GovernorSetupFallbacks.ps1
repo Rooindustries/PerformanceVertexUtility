@@ -32,7 +32,8 @@ function Register-FakeGovernor {
 function Invoke-Setup([string]$Name,[string]$Action,[string]$Prefix,[int]$SetupId){
     $state=Join-Path $work 'state.json'
     $log=Join-Path $work ($Name+'.log')
-    $command=$Prefix+"& '"+$copy+"' -Action "+$Action+" -AppRoot '"+$appRoot+"' -StatePath '"+$state+"' -LogPath '"+$log+"' -SetupProcessId "+$SetupId+'; exit $LASTEXITCODE'
+    $identity=if([IO.File]::ReadAllText($copy) -match 'SetupProcessId'){' -SetupProcessId '+$SetupId}else{''}
+    $command=$Prefix+"try { & '"+$copy+"' -Action "+$Action+" -AppRoot '"+$appRoot+"' -StatePath '"+$state+"' -LogPath '"+$log+"'"+$identity+'; exit $LASTEXITCODE } catch { $_ | Out-String | Write-Error; exit 99 }'
     $process=Start-Process -FilePath $powershell -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))) -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput (Join-Path $work ($Name+'.out')) -RedirectStandardError (Join-Path $work ($Name+'.err'))
     $text=@(if(Test-Path -LiteralPath $log){Get-Content -LiteralPath $log})+@(Get-Content -LiteralPath (Join-Path $work ($Name+'.err')) -ErrorAction SilentlyContinue)
     Copy-Item -LiteralPath $log -Destination (Join-Path $OutDir ($Name+'.log')) -ErrorAction SilentlyContinue
@@ -40,6 +41,7 @@ function Invoke-Setup([string]$Name,[string]$Action,[string]$Prefix,[int]$SetupI
 }
 $clm='$ExecutionContext.SessionState.LanguageMode=''ConstrainedLanguage''; '
 $noWmi='function Get-CimInstance { throw ''WMI is unavailable'' }; function Invoke-CimMethod { throw ''WMI is unavailable'' }; '
+$noTasks=$noWmi+'function Get-ScheduledTask { }; function Disable-ScheduledTask { throw ''WMI is unavailable'' }; function Enable-ScheduledTask { throw ''WMI is unavailable'' }; function Register-ScheduledTask { throw ''WMI is unavailable'' }; '
 $setup=$null
 try {
     $setup=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\PING.EXE') -ArgumentList '-n','900','127.0.0.1' -WindowStyle Hidden -PassThru
@@ -74,6 +76,12 @@ try {
     } else {Check $false 'The recovery wait returns at once for another process with the same ID and waits for the real setup until it exits' 'no recovery action'}
 
     Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    $run=Invoke-Setup 'nowmi-all-suspend' 'Suspend' $noTasks $setup.Id
+    $task=Get-ScheduledTask -TaskName $taskName
+    Check ($run.exit -eq 0 -and [string]$task.State -eq 'Disabled' -and $null -ne (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue) -and $run.log -match 'could not list the governor tasks') 'When Windows cannot list scheduled tasks or processes, setup finds the governor through schtasks, stops it and continues' ("exit="+$run.exit+" state="+$task.State+" "+$run.log)
+    $run=Invoke-Setup 'nowmi-all-resume' 'Resume' $noTasks $setup.Id
+    Check ($run.exit -eq 0 -and [string](Get-ScheduledTask -TaskName $taskName).State -ne 'Disabled' -and $null -eq (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)) 'Without scheduled-task listing, resume turns the governor back on through schtasks' ("exit="+$run.exit+" "+$run.log)
+    Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     $run=Invoke-Setup 'nowmi-suspend' 'Suspend' $noWmi $setup.Id
     $task=Get-ScheduledTask -TaskName $taskName
     Check ($run.exit -eq 0 -and [string]$task.State -eq 'Disabled' -and $null -ne (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)) 'When Windows cannot list processes, setup still stops the governor through Task Scheduler and continues' ("exit="+$run.exit+" state="+$task.State+" "+$run.log)
@@ -86,7 +94,11 @@ try {
     Check ($run.exit -eq 0 -and $null -eq (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)) 'A successful resume removes the recovery task' ("exit="+$run.exit+" "+$run.log)
 } catch {Check $false 'The setup fallback check ran to the end' ($_|Out-String)}
 finally {
-    foreach($name in @($taskName,$watchdog)){if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}
+    foreach($name in @($taskName,$watchdog)){
+        try {if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}} catch {}
+        $ErrorActionPreference='Continue'; & (Join-Path $env:SystemRoot 'System32\schtasks.exe') /Delete /TN ('\'+$name) /F 2>$null|Out-Null; $ErrorActionPreference='Stop'
+        Check ($null -eq (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue)) ('The check removed its task '+$name)
+    }
     if($setup -and -not $setup.HasExited){Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue}
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Split-Path $policyRoot -Parent) -Recurse -Force -ErrorAction SilentlyContinue

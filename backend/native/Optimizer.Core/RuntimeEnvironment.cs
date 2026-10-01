@@ -22,6 +22,9 @@ public static class RuntimeEnvironment
     public static readonly bool Release = false;
 #endif
 
+    public static string PowerShellPrelude => "$env:PSModulePath='" + (Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules") + ";" +
+        Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules")).Replace("'", "''") + "'; ";
+
     public static void Sanitize()
     {
         foreach (var name in CodeLoading) Environment.SetEnvironmentVariable(name, null);

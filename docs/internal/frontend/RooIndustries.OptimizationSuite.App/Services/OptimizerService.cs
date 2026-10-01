@@ -247,7 +247,7 @@ public sealed partial class OptimizerService
         if (confirmed) await EnsureStorageAsync().ConfigureAwait(false);
         using var change = confirmed ? DataGeneration.BeginChange() : null;
         var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException(AppLog.MissingFiles), script);
-        var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
+        var command = RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,

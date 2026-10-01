@@ -239,6 +239,7 @@ try
             break;
         case "cleanup-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireWrittenAfterProtection(Require(request.JournalPath, "journal path"), OperationsFolder.EarlierBackup(request.JournalPath!));
             data = Cleanup(request).Restore(Require(request.JournalPath, "journal path"));
             break;
         case "cleanup-batch-preview":
@@ -254,6 +255,7 @@ try
             break;
         case "cleanup-batch-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireWrittenAfterProtection(Require(request.JournalPath, "journal path"), OperationsFolder.EarlierBackup(request.JournalPath!));
             data = Batch(request).Restore(Require(request.JournalPath, "journal path"), request.RestoreAppIds);
             break;
         default: throw new InvalidDataException("Unknown optimizer action.");
@@ -351,7 +353,7 @@ static CleanupApplication Application(JsonElement app)
 static JsonElement RunScript(string repoRoot, string script, string[] arguments)
 {
     static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
-    var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
+    var command = RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
     if (arguments.Length % 2 != 0) throw new InvalidDataException("Provider parameters must be name/value pairs.");
     for (var index = 0; index < arguments.Length; index += 2)
     {
