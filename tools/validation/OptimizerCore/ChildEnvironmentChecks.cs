@@ -7,7 +7,7 @@ using H = DataRootHarness;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root", "data-root-profile"];
+    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root", "data-folder-schtasks", "data-root-profile"];
 
     public static async Task Run(Action<bool, string> check, string scenario, string mode, string? directory)
     {
@@ -18,6 +18,7 @@ static class ChildEnvironmentChecks
             case "restart": Restart(check, mode); break;
             case "hibernation": Hibernation(check, mode); break;
             case "cleanup-temp-root": CleanupTempRoot(check, mode); break;
+            case "data-folder-schtasks": DataFolderSchtasks(check, mode); break;
             case "data-root-profile": DataRootProfile(check, mode); break;
             case "registry-hook": RegistryHook(check, mode); break;
             case "firmware-provider": FirmwareProvider(check, mode, Required()); break;
@@ -96,6 +97,27 @@ static class ChildEnvironmentChecks
             check(!string.Equals(Path.GetTempPath().TrimEnd('\\'), userTemp, StringComparison.OrdinalIgnoreCase), "The test process temp folder points away from the user's temp folder, as the protected temp of a Host started by the app does");
             check((bool)isProtected.Invoke(null, [userTemp])!, "The user's temp folder stays a protected cleanup root while TEMP points at another folder");
             check((bool)isProtected.Invoke(null, [Path.GetTempPath().TrimEnd('\\')])!, "The folder TEMP points at is a protected cleanup root as well");
+        });
+    }
+
+    static void DataFolderSchtasks(Action<bool, string> check, string mode)
+    {
+        var run = typeof(DataFolder).GetMethod("Schtasks", BindingFlags.NonPublic | BindingFlags.Static, [typeof(string[])]) ?? throw new MissingMethodException("DataFolder.Schtasks");
+        ChildEnv.Run(check, mode, null, env =>
+        {
+            using var stop = new CancellationTokenSource();
+            ChildObservation? seen = null;
+            var watcher = Task.Run(() => Capture(stop.Token, "schtasks", observed => seen = observed));
+            var completed = 0;
+            try
+            {
+                for (; completed < 300 && seen is null; completed++)
+                    run.Invoke(null, [new[] { "/Query", "/TN", "\\RooIndustriesNoSuchTask-" + Guid.NewGuid().ToString("N") }]);
+            }
+            finally { stop.Cancel(); watcher.Wait(); }
+            check(completed > 0, "The data folder move's schtasks launch ran to completion while the markers were set (" + completed + " launches)");
+            check(seen is not null, "A live schtasks child's environment could be read from outside");
+            ChildEnv.Report(check, "Data folder schtasks child", env, seen!, Verify(env, seen!, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe")));
         });
     }
 

@@ -194,6 +194,7 @@ public static class DataFolder
         if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_SCHTASKS_TIMEOUT_MS"), out var shorter)) limit = shorter;
 #endif
         var start = new ProcessStartInfo(program) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        RuntimeEnvironment.Apply(start);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start);
         if (process is null) return null;
