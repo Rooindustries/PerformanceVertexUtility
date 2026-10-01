@@ -241,24 +241,32 @@ switch($Phase){
     }
     'validators' {
         $env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
+        $powershell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        function Invoke-Suite([string]$Relative,[string[]]$Arguments=@()){& $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Source $Relative) @Arguments 2>&1}
+        function Protect-RealDataFolder {
+            $hostExe=Join-Path $Source 'backend\bin\optimizer\Optimizer.Host.exe'
+            $reply=@((@{schemaVersion=1;repoRoot=$Source;confirm=$true}|ConvertTo-Json -Compress)|& $hostExe 'data-secure' '-') -join "`n"
+            if(($reply|ConvertFrom-Json).status -ne 'completed'){throw ('The real data folder could not be protected for the removal queue suite: '+$reply)}
+            'The suite needs the real data folder protected, as the app leaves it after its first start; it is protected inside the backup frame and restored afterwards.'
+        }
         $all=[ordered]@{
-            'optimizer-core'={& (Join-Path $Source 'backend\scripts\Test-OptimizerCore.ps1') -DotNetPath $dotnet}
-            'build-host'={& (Join-Path $Source 'backend\scripts\Build-OptimizerHost.ps1') -DotNetPath $dotnet}
-            'tweaks'={& (Join-Path $Source 'backend\scripts\Test-Tweaks.ps1') -DotNetPath $dotnet}
-            'process-policy-worker'={& (Join-Path $Source 'backend\scripts\Test-ProcessPolicyWorker.ps1') -DotNetPath $dotnet}
-            'protected-sessions'={& (Join-Path $Source 'backend\scripts\Test-ProtectedGameSessions.ps1') -DotNetPath $dotnet}
-            'tool-launcher'={& (Join-Path $Source 'tools\scripts\Test-ToolLauncher.ps1') -DotNetPath $dotnet}
-            'frontend'={& (Join-Path $Source 'tools\scripts\Test-Frontend.ps1') -DotNetPath $dotnet}
-            'client-cleanup-boundary'={& (Join-Path $Source 'backend\scripts\Test-ClientCleanupBoundary.ps1') -DotNetPath $dotnet}
-            'optimizer-host'={& (Join-Path $Source 'backend\scripts\Test-OptimizerHost.ps1') -DotNetPath $dotnet}
-            'data-root-marker-paths'={& (Join-Path $Source 'backend\scripts\Test-DataRootMarkerPaths.ps1')}
-            'governor-setup-legacy-pause'={& (Join-Path $Source 'backend\scripts\Test-GovernorSetupLegacyPause.ps1')}
-            'earlier-version-gate'={& (Join-Path $Source 'backend\scripts\Test-EarlierVersionGate.ps1')}
-            'script-parser'={& (Join-Path $Source 'tools\scripts\Test-Baseline.ps1') -ParseOnly}
-            'governor-scenarios'={& (Join-Path $Source 'backend\scripts\Test-GovernorScenarios.ps1') -DotNetPath $dotnet}
+            'optimizer-core'={Invoke-Suite 'backend\scripts\Test-OptimizerCore.ps1' @('-DotNetPath',$dotnet)}
+            'build-host'={Invoke-Suite 'backend\scripts\Build-OptimizerHost.ps1' @('-DotNetPath',$dotnet)}
+            'tweaks'={Invoke-Suite 'backend\scripts\Test-Tweaks.ps1' @('-DotNetPath',$dotnet)}
+            'process-policy-worker'={Invoke-Suite 'backend\scripts\Test-ProcessPolicyWorker.ps1' @('-DotNetPath',$dotnet)}
+            'protected-sessions'={Invoke-Suite 'backend\scripts\Test-ProtectedGameSessions.ps1' @('-DotNetPath',$dotnet)}
+            'tool-launcher'={Invoke-Suite 'tools\scripts\Test-ToolLauncher.ps1' @('-DotNetPath',$dotnet)}
+            'frontend'={Invoke-Suite 'tools\scripts\Test-Frontend.ps1' @('-DotNetPath',$dotnet)}
+            'client-cleanup-boundary'={Invoke-Suite 'backend\scripts\Test-ClientCleanupBoundary.ps1' @('-DotNetPath',$dotnet)}
+            'optimizer-host'={Protect-RealDataFolder;Invoke-Suite 'backend\scripts\Test-OptimizerHost.ps1' @('-DotNetPath',$dotnet)}
+            'data-root-marker-paths'={Invoke-Suite 'backend\scripts\Test-DataRootMarkerPaths.ps1'}
+            'governor-setup-legacy-pause'={Invoke-Suite 'backend\scripts\Test-GovernorSetupLegacyPause.ps1'}
+            'earlier-version-gate'={Invoke-Suite 'backend\scripts\Test-EarlierVersionGate.ps1' @('-DotNetPath',$dotnet)}
+            'script-parser'={Invoke-Suite 'tools\scripts\Test-Baseline.ps1' @('-ParseOnly')}
+            'governor-scenarios'={Invoke-Suite 'backend\scripts\Test-GovernorScenarios.ps1' @('-DotNetPath',$dotnet)}
         }
         $Only=@($Only|ForEach-Object {$_ -split ','}|Where-Object {$_})
-        foreach($name in $all.Keys){if($Only.Count -eq 0 -or $Only -contains $name){Run $name $all[$name] -GuardData}}
+        foreach($name in $all.Keys){if($Only.Count -eq 0 -or $Only -contains $name){Run $name $all[$name] -GuardData:($name -ne 'optimizer-host')}}
         if(Test-Path -LiteralPath $backup){Restore-AppData}
     }
     'release-build' {

@@ -12,6 +12,8 @@ $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+try {$null=Get-RooIndustriesLocalDataRoot -Protected}
+catch {throw ('This suite exercises the production removal queue, whose claims and cleanup exclusions live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
 $exclusionPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
 $exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
 $ownedExclusionHash=$null

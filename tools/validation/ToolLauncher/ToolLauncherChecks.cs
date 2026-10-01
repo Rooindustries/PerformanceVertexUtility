@@ -14,7 +14,7 @@ static class ToolLauncherChecks
         if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TOOL_LAUNCHER_SCENARIO") == "fallback") { UtilitiesFallback(check, fixture); return; }
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-tool-launcher-" + Guid.NewGuid().ToString("N"));
         var id = "fixture-" + Guid.NewGuid().ToString("N");
-        var cacheRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "roo-industries-tool-cache-" + Guid.NewGuid().ToString("N"));
         var cache = Path.Combine(cacheRoot, id);
         var oldRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT");
         var relative = "Utilities/Other/Fixture/SCEWIN64.exe";
@@ -27,7 +27,7 @@ static class ToolLauncherChecks
             Directory.CreateDirectory(Path.Combine(root, "modules"));
             File.WriteAllText(Path.Combine(root, "modules", "tool-launchers.json"), JsonSerializer.Serialize(new { tools = new[] { tool } }));
             Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", Path.Combine(root, "absent"));
-            var service = new ToolLauncherService(root);
+            var service = new ToolLauncherService(root, cacheRoot, () => RooIndustries.Optimizer.OperationsFolder.Ensure(cacheRoot));
             check(service.ReadAsync().GetAwaiter().GetResult().Single().Name == "File fixture", "Tool launcher reads the named tool from its package catalog");
             check(service.Resolve(tool).Action == "Get", "A missing tool offers its download page rather than pretending to be installed");
             var archive = Path.Combine(root, "vendor", "Utilities.zip");
@@ -64,10 +64,13 @@ static class ToolLauncherChecks
         finally
         {
             Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", oldRoot);
-            if (Directory.Exists(cache)) Directory.Delete(cache, recursive: true);
+            if (Directory.Exists(cacheRoot)) Directory.Delete(cacheRoot, recursive: true);
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            using var markers = Registry.LocalMachine.OpenSubKey(RooIndustries.Optimizer.PolicyRootSecurity.MarkerKey, true);
+            markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(cacheRoot), false);
+            markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(cacheRoot) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
         }
-        check(!Directory.Exists(cache) && !Directory.Exists(root), "Tool launcher verification removes its executable, cache and package fixture");
+        check(!Directory.Exists(cacheRoot) && !Directory.Exists(root), "Tool launcher verification removes its executable, cache and package fixture");
         UtilitiesFallback(check, fixture);
     }
 
@@ -108,7 +111,7 @@ static class ToolLauncherChecks
                 File.Copy(probe, copy);
                 Directory.CreateDirectory(Path.Combine(root, "package"));
                 Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", utilities);
-                var service = new ToolLauncherService(Path.Combine(root, "package"));
+                var service = new ToolLauncherService(Path.Combine(root, "package"), Path.Combine(root, "tool-cache"));
                 lines.Add("route: " + service.Resolve(tool).Path + " (user-writable fallback folder, no shipped archive)");
                 Exception? refused = null;
                 try { service.OpenAsync(tool).GetAwaiter().GetResult(); } catch (InvalidOperationException error) { refused = error; }

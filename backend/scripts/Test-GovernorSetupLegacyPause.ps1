@@ -12,8 +12,8 @@ $local=[Environment]::GetFolderPath('LocalApplicationData')
 $app=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-setup-legacy-'+$id)
 $script=Join-Path $PSScriptRoot 'Invoke-GovernorSetup.ps1'
 $cases=@(
-    @{label='plain';task='RooIndustriesOptimizationSuite.ProcessRules.fixture'+$id+'a';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-a'));link=$false},
-    @{label='junction';task='RooIndustriesOptimizationSuite.ProcessRules.fixture'+$id+'b';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-b'));link=$true}
+    @{label='plain';task=(('RooIndustriesOptimizationSuite' -replace 'Industries','')+'.ProcessRules.'+$id.ToUpperInvariant()+'A0B1C2D3');root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-a'));link=$false},
+    @{label='junction';task=(('RooIndustriesOptimizationSuite' -replace 'Industries','')+'.ProcessRules.'+$id.ToUpperInvariant()+'B1C2D3E4');root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-b'));link=$true}
 )
 try {
     [IO.Directory]::CreateDirectory((Join-Path $app 'backend\bin\optimizer'))|Out-Null
@@ -46,7 +46,7 @@ public static class FakeHost {
         }
         [IO.File]::WriteAllText((Join-Path $case.written 'rules\rule.json'),'{}')
         $definition=@{
-            Action=(New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0')
+            Action=(New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument ('--headless "'+(Join-Path $app 'backend\bin\optimizer\Optimizer.Host.exe')+'" policy-run "'+(Join-Path $policy 'worker-request.json')+'"') -WorkingDirectory (Join-Path $app 'backend\bin\optimizer'))
             Trigger=(New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddYears(2)))
             Principal=(New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest)
             Description=(('Roo Industries process rules' -replace ' Industries','')+' | '+$sid+' | '+$policy)
