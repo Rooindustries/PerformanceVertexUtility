@@ -441,7 +441,7 @@ $two=@(Get-RooIndustriesGovernorOwnedControls -ProcessId ([int]$processId) -Exec
     [IO.File]::WriteAllText($released,'released')
     $result=Wait-ClaimsChild $child
     Note 'ownershipCalls' $result
-    Assert (@($result.first).Count -eq 8 -and $result.firstMs -ge 2900) 'A host state that stays unreadable for the whole retry window fails closed after about three seconds'
+    Assert (@($result.first).Count -eq 8 -and $result.firstMs -ge 700 -and $result.firstMs -lt 2000) 'A host state that stays unreadable for the whole retry window fails closed for an app a saved rule matches, after under two seconds'
     $log=Join-Path $script:claimsData 'process-rules\logs\governor.log'
     $text=if(Test-Path -LiteralPath $log){[IO.File]::ReadAllText($log)}else{''}
     Note 'governorLog' $text
