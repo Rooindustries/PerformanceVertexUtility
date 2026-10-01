@@ -29,7 +29,7 @@ static class ChildEnvironmentChecks
             case "app-capability-script": await Script(mode, "Get-RooIndustriesCapabilityRegistry.ps1", "The app's capability script runner", async (backend, service) =>
             {
                 var rows = await new CapabilityService(backend).GetCapabilitiesAsync();
-                Check(rows.Count == 1 && rows[0].Id == "fixture.capability", "The app accepted the registry JSON through CapabilityService.RunScriptAsync");
+                Check(rows.Count == 1 && rows[0].CapabilityId == "fixture.capability", "The app accepted the registry JSON through CapabilityService.RunScriptAsync");
             }); break;
             default: throw new ArgumentException("Unknown child-environment scenario " + scenario);
         }

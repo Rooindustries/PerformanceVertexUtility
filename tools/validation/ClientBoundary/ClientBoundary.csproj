@@ -13,6 +13,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendLocator.cs" Link="BackendLocator.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/CapabilityService.cs" Link="CapabilityService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/SampleDataService.cs" Link="SampleDataService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.cs" Link="OptimizerService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.Controls.cs" Link="OptimizerService.Controls.cs" />
