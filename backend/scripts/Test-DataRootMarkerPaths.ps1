@@ -10,7 +10,7 @@ foreach($level in 'SOFTWARE\RooIndustries','SOFTWARE\RooIndustries\OptimizationS
     if($existing){$existing.Dispose()}elseif(-not $created){$created=$level}
 }
 $long=Join-Path (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp') ('roo-industries-marker-paths-'+[Guid]::NewGuid().ToString('N'))
-$names=@($long.ToUpperInvariant(),($long+'\ghost').ToUpperInvariant())
+$names=@($long.ToUpperInvariant(),($long+'\ghost').ToUpperInvariant(),($long+'\inner').ToUpperInvariant(),($long+'\bare').ToUpperInvariant())
 try {
     [IO.Directory]::CreateDirectory($long)|Out-Null
     $short=(New-Object -ComObject Scripting.FileSystemObject).GetFolder($long).ShortPath
@@ -39,6 +39,28 @@ try {
     Check (Test-RooIndustriesWrittenAfterProtection $shortLater) 'A file written after protection is recognized through the 8.3 path'
     Check (-not (Test-RooIndustriesWrittenAfterProtection $shortEarlier)) 'A file older than the protection is still refused through the 8.3 path'
     Check (-not (Test-RooIndustriesWrittenAfterProtection (Join-Path $short 'missing.txt'))) 'A missing file is never recognized as written after protection'
+    $key=$hklm.OpenSubKey($markerKey,$true)
+    $key.SetValue($names[2]+'|protected-at',[DateTime]::UtcNow.AddHours(-1).ToFileTimeUtc(),[Microsoft.Win32.RegistryValueKind]::QWord)
+    $key.SetValue($names[2],$user,[Microsoft.Win32.RegistryValueKind]::String)
+    $key.SetValue($names[3],$user,[Microsoft.Win32.RegistryValueKind]::String)
+    $key.Dispose()
+    $carried=Join-Path $long 'inner\carried.txt'
+    [IO.Directory]::CreateDirectory((Split-Path $carried))|Out-Null
+    [IO.File]::WriteAllText($carried,'copied in when the outer folder was protected')
+    (Get-Item -LiteralPath $carried).CreationTimeUtc=[DateTime]::UtcNow.AddMinutes(-30)
+    $bare=Join-Path $long 'bare\later.txt'
+    [IO.Directory]::CreateDirectory((Split-Path $bare))|Out-Null
+    [IO.File]::WriteAllText($bare,'inside a folder whose marker has no protection time')
+    Check (-not (Test-RooIndustriesWrittenAfterProtection $carried)) 'A file newer than a nested marker but older than the outer marker is not recognized as written after protection'
+    Check (-not (Test-RooIndustriesWrittenAfterProtection $bare)) 'A file inside a folder whose marker has no protection time is not recognized as written after protection'
+    $outside=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-marker-paths-outside-'+[Guid]::NewGuid().ToString('N')+'.txt')
+    [IO.File]::WriteAllText($outside,'outside every marked folder')
+    $workingFolder=[Environment]::CurrentDirectory
+    try {
+        [Environment]::CurrentDirectory=$long
+        Check ((Get-RooIndustriesDataRootMarkerName ([IO.Path]::GetPathRoot($long))) -eq [IO.Path]::GetPathRoot($long).TrimEnd('\').ToUpperInvariant()) 'A drive root never resolves to the current folder of the process'
+        Check (-not (Test-RooIndustriesWrittenAfterProtection $outside)) 'A file outside every marked folder is not recognized when the process runs inside a marked folder'
+    } finally {[Environment]::CurrentDirectory=$workingFolder;Remove-Item -LiteralPath $outside -Force -ErrorAction SilentlyContinue}
 } finally {
     $key=$hklm.OpenSubKey($markerKey,$true)
     if($key){
