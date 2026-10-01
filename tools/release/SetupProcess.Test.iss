@@ -51,7 +51,7 @@ begin
   Note('A ran=' + IntToStr(Ord(Ran)) + ' exit=' + IntToStr(Code) + ' ms=' + IntToStr(GetTickCount - Started));
 
   Started := GetTickCount;
-  Ran := RunBounded(Shell, '-NoProfile -NonInteractive -Command "Set-Content -LiteralPath ''' + Work + '\started.txt'' x; Start-Sleep -Seconds 60; Set-Content -LiteralPath ''' + Work + '\finished.txt'' x"', Work + '\setup-temp', 3000, Code);
+  Ran := RunBounded(Shell, '-NoProfile -NonInteractive -Command "$p=Start-Process -FilePath ''' + ExpandConstant('{sys}') + '\PING.EXE'' -ArgumentList ''-n'',''60'',''127.0.0.1'' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath ''' + Work + '\child.txt'' $p.Id; Set-Content -LiteralPath ''' + Work + '\started.txt'' x; Start-Sleep -Seconds 60; Set-Content -LiteralPath ''' + Work + '\finished.txt'' x"', Work + '\setup-temp', 3000, Code);
   Note('B ran=' + IntToStr(Ord(Ran)) + ' exit=' + IntToStr(Code) + ' ms=' + IntToStr(GetTickCount - Started));
   Sleep(2000);
   Note('B finished=' + IntToStr(Ord(FileExists(Work + '\finished.txt'))));

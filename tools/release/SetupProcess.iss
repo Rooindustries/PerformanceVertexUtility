@@ -100,7 +100,16 @@ begin
   Result := Result + #0;
 end;
 
-function RunBounded(const FileName, Parameters, TempFolder: String; const TimeoutMilliseconds: DWORD; var ExitCode: DWORD): Boolean;
+function RunProcess(const FileName, Parameters, TempFolder: String; const TimeoutMilliseconds: DWORD; const StopChildren: Boolean; var ExitCode: DWORD): Boolean; forward;
+
+procedure StopProcessTree(const ProcessId: DWORD; const TempFolder: String);
+var
+  Ignored: DWORD;
+begin
+  RunProcess(ExpandConstant('{sys}\taskkill.exe'), '/PID ' + IntToStr(ProcessId) + ' /T /F', TempFolder, 15000, False, Ignored);
+end;
+
+function RunProcess(const FileName, Parameters, TempFolder: String; const TimeoutMilliseconds: DWORD; const StopChildren: Boolean; var ExitCode: DWORD): Boolean;
 var
   Startup: TStartupInfo;
   Process: TProcessInformation;
@@ -142,6 +151,8 @@ begin
       PumpMessages;
       if GetTickCount - Started > TimeoutMilliseconds then
       begin
+        if StopChildren then
+          StopProcessTree(Process.dwProcessId, TempFolder);
         TerminateProcess(Process.hProcess, TimedOutExitCode);
         WaitForSingleObject(Process.hProcess, 5000);
         ExitCode := TimedOutExitCode;
@@ -153,4 +164,9 @@ begin
   finally
     CloseHandle(Process.hProcess);
   end;
+end;
+
+function RunBounded(const FileName, Parameters, TempFolder: String; const TimeoutMilliseconds: DWORD; var ExitCode: DWORD): Boolean;
+begin
+  Result := RunProcess(FileName, Parameters, TempFolder, TimeoutMilliseconds, True, ExitCode);
 end;
