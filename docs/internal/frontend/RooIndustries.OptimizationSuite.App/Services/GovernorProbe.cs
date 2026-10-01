@@ -14,17 +14,18 @@ using RooIndustries.Optimizer;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record GovernorTaskState(string Name, bool Registered, bool Enabled, bool RestartsEveryMinute)
+public sealed record GovernorTaskState(string Name, bool Registered, bool Enabled, bool RestartsEveryMinute, int LastResult = 0)
 {
-    public bool Restarts => Registered && Enabled && RestartsEveryMinute;
+    public bool LastStartFailed => LastResult != 0 && LastResult is < 0x41300 or > 0x4130F;
+    public bool Restarts => Registered && Enabled && RestartsEveryMinute && !LastStartFailed;
 }
 
 public static class GovernorProbe
 {
     public const string TaskPrefix = "RooIndustriesOptimizationSuite.ProcessRules.";
-    public const string LegacyTaskPrefix = "RooOptimizationSuite.ProcessRules.";
+    public const string LegacyTaskPrefix = BrandCompatibility.LegacyPolicyTaskPrefix;
     public const string TaskDescription = "Roo Industries process rules | ";
-    public const string LegacyTaskDescription = "Roo process rules | ";
+    public const string LegacyTaskDescription = BrandCompatibility.LegacyPolicyTaskDescription;
 
     public static string Key(RunningProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
 
@@ -38,7 +39,7 @@ public static class GovernorProbe
         SavedProcessRule[] rules = [];
         if (summary.RulesError is null)
         {
-            try { rules = store.ReadRules().Select(pair => pair.Rule).ToArray(); }
+            try { rules = store.ReadRules(null, []).Select(pair => pair.Rule).ToArray(); }
             catch (Exception error) { summary = summary with { RulesError = error.Message }; }
         }
         var open = worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict").ToArray() ?? [];
@@ -132,7 +133,8 @@ public static class GovernorProbe
     {
         string xml = ((dynamic)task).Xml;
         bool enabled = ((dynamic)task).Enabled;
-        return Description(xml) == description ? new GovernorTaskState(name, true, enabled, RepeatsEveryMinute(xml, DateTime.Now)) : null;
+        int lastResult = ((dynamic)task).LastTaskResult;
+        return Description(xml) == description ? new GovernorTaskState(name, true, enabled, RepeatsEveryMinute(xml, DateTime.Now), lastResult) : null;
     }
 
     public static string? Description(string xml)
