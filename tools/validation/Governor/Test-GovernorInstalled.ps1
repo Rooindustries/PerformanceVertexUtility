@@ -150,6 +150,18 @@ switch($Phase){
         Check (@($plan.changes).Count -eq 0 -and @($plan.skippedControls|Where-Object {$_.category -eq 'managed' -and $_.reason -eq 'Managed by the governor'}).Count -eq 2 -and $thrown -eq 'Managed by the governor' -and (Same (Read-Controls $fresh) $state.wanted)) 'GameTune, Background limits and Background profile skip or refuse fields the governor owns and report Managed by the governor'
         $fresh.Kill();$fresh.WaitForExit()
     }
+    'measure' {
+        $s=Describe-State;$out.state=$s
+        $worker=Get-Process -Id $s.hostPid -ErrorAction Stop
+        $seconds=60
+        $before=$worker.TotalProcessorTime;$started=Get-Date
+        Start-Sleep -Seconds $seconds
+        $worker.Refresh()
+        $elapsed=((Get-Date)-$started).TotalSeconds
+        $cpu=[Math]::Round((($worker.TotalProcessorTime-$before).TotalSeconds/$elapsed)*100,2)
+        $out.measurement=[ordered]@{seconds=[Math]::Round($elapsed,1);cpuPercentOfOneCore=$cpu;workingSetMB=[Math]::Round($worker.WorkingSet64/1MB,1);privateMB=[Math]::Round($worker.PrivateMemorySize64/1MB,1);threads=$worker.Threads.Count;handles=$worker.HandleCount}
+        Check ($cpu -lt 5 -and $worker.WorkingSet64 -lt 80MB) ('The idle governor stays light: '+$cpu+' percent of one core, '+[Math]::Round($worker.WorkingSet64/1MB,1)+' MB working set over '+[Math]::Round($elapsed)+' s')
+    }
     'app-cycle' {
         $before=Describe-State
         $exe=Join-Path $app 'app\RooIndustries.OptimizationSuite.App.exe'
