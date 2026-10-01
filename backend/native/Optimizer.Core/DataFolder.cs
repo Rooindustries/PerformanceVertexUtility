@@ -187,13 +187,19 @@ public static class DataFolder
 
     private static string? Schtasks(params string[] arguments)
     {
-        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        var program = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+        var limit = 30000;
+#if GOVERNOR_TEST_HOOKS
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_SCHTASKS") is { Length: > 0 } fake) program = fake;
+        if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_SCHTASKS_TIMEOUT_MS"), out var shorter)) limit = shorter;
+#endif
+        var start = new ProcessStartInfo(program) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start);
         if (process is null) return null;
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(30000)) { try { process.Kill(true); } catch (InvalidOperationException) { } return null; }
+        if (!process.WaitForExit(limit)) { try { process.Kill(true); } catch (InvalidOperationException) { } return null; }
         process.WaitForExit();
         errors.GetAwaiter().GetResult();
         return process.ExitCode == 0 ? output.GetAwaiter().GetResult() : null;
