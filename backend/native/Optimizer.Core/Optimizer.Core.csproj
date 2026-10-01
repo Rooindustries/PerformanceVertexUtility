@@ -5,6 +5,9 @@
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(RooTestHooks)' == 'true'">
+    <DefineConstants>$(DefineConstants);ROO_TEST_HOOKS</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="OptimizerCore" />
     <EmbeddedResource Include="WindowsControls.ps1" />
