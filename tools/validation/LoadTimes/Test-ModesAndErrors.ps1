@@ -173,7 +173,7 @@ try {
     $launched = [Diagnostics.Stopwatch]::StartNew()
     try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_TEST_FEATURE_HANG -ErrorAction SilentlyContinue }
     if (-not (Eventually { (Hook-Count) -gt $hookBefore } 30)) {
-        $script:Skipped++; Log 'SKIPPED the Windows features hang check: this build has no test hooks (build the installer with Build-Release.ps1 -TestHooks)'
+        $script:Skipped++; Log 'NOT RUN the Windows features hang check: it needs a build with test hooks (build the installer with Build-Release.ps1 -TestHooks); a production installer cannot run it'
         Stop-RooIndustriesApp
     }
     else {
@@ -242,7 +242,7 @@ try {
     $tab = WaitFor { ById 'BackgroundTab' } 30 'Background apps tab'
     Invoke-Element $tab; Start-Sleep 2
     $scroller = try { WaitFor { @($script:Win.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::IsScrollPatternAvailableProperty, $true)) | Where-Object { -not $_.Current.IsOffscreen -and $_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable -and $_.Current.BoundingRectangle.Height -gt 300 } | Select-Object -Last 1) } 30 'scrollable Background apps list' } catch { $null }
-    if (-not $scroller) { $script:Skipped++; Log 'SKIPPED the Background apps scroll check: the list is not long enough to scroll on this PC' }
+    if (-not $scroller) { $script:Skipped++; Log 'NOT RUN the Background apps scroll check: the list is not long enough to scroll on this PC' }
     else {
     $scroll = $scroller.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern)
     $scroll.SetScrollPercent(-1, 60); Start-Sleep 1
