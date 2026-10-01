@@ -84,8 +84,8 @@ static class ChildEnvironmentChecks
         Directory.CreateDirectory(hostDirectory);
         try
         {
-            foreach (var file in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")) File.Copy(file, Path.Combine(hostDirectory, Path.GetFileName(file)));
-            File.Copy(Path.Combine(hostDirectory, "ClientBoundary.dll"), Path.Combine(hostDirectory, "Optimizer.Host.dll"));
+            foreach (var file in Directory.GetFiles(AppContext.BaseDirectory, "*.dll").Where(file => Path.GetFileName(file) != "ClientBoundary.dll")) File.Copy(file, Path.Combine(hostDirectory, Path.GetFileName(file)));
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "ClientBoundary.dll"), Path.Combine(hostDirectory, "Optimizer.Host.dll"));
             File.Copy(Path.Combine(AppContext.BaseDirectory, "ClientBoundary.runtimeconfig.json"), Path.Combine(hostDirectory, "Optimizer.Host.runtimeconfig.json"));
             var muxer = ChildEnv.DotNetMuxer();
             var overrides = new Dictionary<string, string> { ["ROO_INDUSTRIES_BACKEND_ROOT"] = root, ["ROO_INDUSTRIES_DOTNET_EXE"] = muxer };

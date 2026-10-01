@@ -118,7 +118,11 @@ sealed class ChildEnv : IDisposable
     public void Dispose()
     {
         foreach (var pair in saved) Environment.SetEnvironmentVariable(pair.Key, pair.Value);
-        if (Directory.Exists(Folder)) Directory.Delete(Folder, true);
+        for (var attempt = 0; attempt < 50 && Directory.Exists(Folder); attempt++)
+        {
+            try { Directory.Delete(Folder, true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Thread.Sleep(200); }
+        }
     }
 
     public bool RestoredAndRemoved() => !Directory.Exists(Folder) && saved.All(pair => Environment.GetEnvironmentVariable(pair.Key) == pair.Value);
@@ -133,15 +137,21 @@ sealed class ChildEnv : IDisposable
         return result;
     }
 
-    public List<string> Verify(ChildObservation seen, IEnumerable<KeyValuePair<string, string?>> product, params string[] tolerated)
+    public List<string> Verify(ChildObservation seen, IEnumerable<KeyValuePair<string, string?>> product, params string[] tolerated) => Verify(seen, product, false, tolerated);
+
+    public List<string> Verify(ChildObservation seen, IEnumerable<KeyValuePair<string, string?>> product, bool parentOwnEnvironmentPoisoned, params string[] tolerated)
     {
         var failures = new List<string>();
         var actual = seen.Variables;
+        var powerShell = string.Equals(seen.Image, PowerShell, StringComparison.OrdinalIgnoreCase);
         if (actual.Count < Values.Count) failures.Add("only " + actual.Count + " variables were reported, expected at least " + Values.Count);
         foreach (var pair in Values)
         {
             if (!actual.TryGetValue(pair.Key, out var value)) failures.Add(pair.Key + " is missing (expected " + pair.Value + ")");
-            else if (!string.Equals(value, pair.Value, StringComparison.OrdinalIgnoreCase)) failures.Add(pair.Key + " is '" + Clip(value) + "' but Windows reports '" + pair.Value + "'");
+            else if (string.Equals(value, pair.Value, StringComparison.OrdinalIgnoreCase)) continue;
+            else if (powerShell && pair.Key == "PATHEXT" && string.Equals(value, pair.Value + ";.CPL", StringComparison.OrdinalIgnoreCase)) continue;
+            else if (parentOwnEnvironmentPoisoned && pair.Key is "TEMP" or "TMP" && string.Equals(value, Path.Combine(Windows, "Temp"), StringComparison.OrdinalIgnoreCase)) continue;
+            else failures.Add(pair.Key + " is '" + Clip(value) + "' but Windows reports '" + pair.Value + "'");
         }
         var developer = Passthrough();
         if (!developer.ContainsKey("ROO_MARKER_TEST") || !developer.ContainsKey("ROOTEST_MARKER_TEST") || !developer.ContainsKey("DOTNET_ROOT")) failures.Add("the developer markers are not set in the test process");
