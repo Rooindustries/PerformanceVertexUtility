@@ -46,8 +46,30 @@ def public_hygiene_text(relative: str, source: str):
     return json.dumps(catalog)
 
 
+def code_loading_failures(root: Path):
+    sources = {
+        'backend/native/Optimizer.Core/RuntimeEnvironment.cs': r'CodeLoading\s*=\s*\[(.*?)\];',
+        'backend/scripts/BrandCompatibility.Common.ps1': r'RooIndustriesCodeLoadingVariables=@\((.*?)\)',
+    }
+    lists = {}
+    for relative, pattern in sources.items():
+        match = re.search(pattern, (root / relative).read_text(encoding='utf-8-sig'), re.S)
+        lists[relative] = re.findall(r'["\']([A-Z0-9_]+)["\']', match.group(1)) if match else []
+    launcher = 'backend/scripts/Start-RooIndustriesHelper.cmd'
+    lists[launcher] = re.findall(r'(?m)^set ([A-Z0-9_]+)=\r?$', (root / launcher).read_text(encoding='utf-8'))
+    reference = set(lists['backend/native/Optimizer.Core/RuntimeEnvironment.cs'])
+    failures = []
+    for relative, names in lists.items():
+        if not reference:
+            failures.append(f'{relative}: the C# code-loading list was not found')
+        elif len(names) != len(set(names)) or set(names) != reference:
+            failures.append(f'{relative}: code-loading names differ from RuntimeEnvironment.CodeLoading (missing {sorted(reference - set(names))}, extra {sorted(set(names) - reference)})')
+    return failures
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
+    failures.extend(code_loading_failures(root))
     failures.extend(runpy.run_path(str(Path(__file__).with_name('check_windows_tweaks.py')))['check'](root))
     if not contracts_only:
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
