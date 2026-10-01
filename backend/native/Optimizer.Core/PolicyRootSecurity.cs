@@ -267,7 +267,7 @@ public static class PolicyRootSecurity
             catch (IOException) when (Directory.Exists(root) && attempt < StrayLimit)
             {
                 var stray = Path.Combine(parent, name + ".stray-" + Guid.NewGuid().ToString("N"));
-                Directory.Move(root, stray); strays.Add(stray);
+                MoveAway(root, stray); strays.Add(stray);
             }
         }
         Pause("attached");
@@ -297,13 +297,26 @@ public static class PolicyRootSecurity
         WriteLog(root, LastReport);
     }
 
+    private static void MoveAway(string from, string to)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { Directory.Move(from, to); return; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                if (attempt >= 60) throw new IOException("Another program kept " + from + " open while it was being protected. Close it and open the app again; the saved data is kept and is picked up on the next start.", error);
+                Thread.Sleep(100);
+            }
+        }
+    }
+
     private static void Fold(string complete, string root, string parent, string name, ProtectedFolder kind, SecurityIdentifier user)
     {
         var strays = new List<string>();
         for (var attempt = 0; ; attempt++)
         {
             var stray = Path.Combine(parent, name + ".stray-" + Guid.NewGuid().ToString("N"));
-            Directory.Move(root, stray); strays.Add(stray);
+            MoveAway(root, stray); strays.Add(stray);
             try { Directory.Move(complete, root); break; }
             catch (IOException) when (Directory.Exists(root) && attempt < StrayLimit) { }
         }
@@ -566,7 +579,46 @@ public static class PolicyRootSecurity
             try { Directory.Delete(candidate, true); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         }
         if (ReadManifest(root, ".migrated")?.Legacy is { } legacy && Directory.Exists(legacy) && Path.GetDirectoryName(Normalize(legacy)) is { } legacyParent && SamePath(legacyParent, parent) &&
-            Path.GetFileName(legacy).StartsWith(name + ".legacy-", StringComparison.OrdinalIgnoreCase)) Keep(legacy, parent, name);
+            Path.GetFileName(legacy).StartsWith(name + ".legacy-", StringComparison.OrdinalIgnoreCase)) RetireCopied(legacy, root, kind, parent, name);
+    }
+
+    private static void RetireCopied(string legacy, string root, ProtectedFolder kind, string parent, string name)
+    {
+        var run = new Run();
+        var pending = new Stack<(string Folder, string Relative)>();
+        pending.Push((legacy, ""));
+        try
+        {
+            while (pending.Count > 0)
+            {
+                var (folder, parentRelative) = pending.Pop();
+                foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false }).ToList())
+                {
+                    var relative = parentRelative.Length == 0 ? entry.Name : parentRelative + Path.DirectorySeparatorChar + entry.Name;
+                    if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                    if (kind.Skip?.Invoke(relative, entry is DirectoryInfo) is { } decision)
+                    {
+                        if (!decision.Keep) { run.Retire.Add(relative); if (entry is DirectoryInfo) run.DroppedFolders.Add(relative); }
+                        continue;
+                    }
+                    if (entry is DirectoryInfo)
+                    {
+                        if (Directory.Exists(Path.Combine(root, relative))) { run.Retire.Add(relative); pending.Push((entry.FullName, relative)); }
+                        continue;
+                    }
+                    if (entry.Name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase) || entry.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) && !OnlyCopy(entry)) { run.Retire.Add(relative); continue; }
+                    var target = new FileInfo(Path.Combine(root, relative));
+                    var source = (FileInfo)entry;
+                    if (target.Exists && target.Length == source.Length && target.LastWriteTimeUtc == source.LastWriteTimeUtc)
+                    {
+                        run.Retire.Add(relative);
+                        run.Copied[relative] = (source.Length, source.LastWriteTimeUtc.ToFileTimeUtc());
+                    }
+                }
+            }
+        }
+        catch (Exception error) when (Recoverable(error)) { }
+        Retire(legacy, run, parent, name);
     }
 
     public static void RequireSecured(string root) => RequireSecured(root, ProtectedFolder.Rules);
