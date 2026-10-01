@@ -47,23 +47,42 @@ def public_hygiene_text(relative: str, source: str):
 
 
 def code_loading_failures(root: Path):
-    sources = {
-        'backend/native/Optimizer.Core/RuntimeEnvironment.cs': r'CodeLoading\s*=\s*\[(.*?)\];',
-        'backend/scripts/BrandCompatibility.Common.ps1': r'RooIndustriesCodeLoadingVariables=@\((.*?)\)',
+    name = r'[A-Za-z0-9_()]+'
+    def quoted(text):
+        return re.findall(r"[\"']([A-Za-z0-9_()]+)[\"']", text)
+    csharp = (root / 'backend/native/Optimizer.Core/RuntimeEnvironment.cs').read_text(encoding='utf-8-sig')
+    def array(label):
+        match = re.search(label + r'\s*=\s*\[(.*?)\];', csharp, re.S)
+        return quoted(match.group(1)) if match else []
+    cleared = {'C# CodeLoading': array('CodeLoading'), 'C# ClearOnly': array('ClearOnly')}
+    reference = cleared['C# CodeLoading'] + cleared['C# ClearOnly']
+    pinned_reference = array('Pinned')
+    powershell = (root / 'backend/scripts/BrandCompatibility.Common.ps1').read_text(encoding='utf-8-sig')
+    def ps(label):
+        match = re.search(r'\$script:' + label + r'=@\((.*?)\)\r?\n', powershell, re.S)
+        return quoted(match.group(1)) if match else []
+    launcher = (root / 'backend/scripts/Start-RooIndustriesHelper.cmd').read_text(encoding='utf-8')
+    installer = (root / 'tools/release/RooIndustries.OptimizationSuite.iss').read_text(encoding='utf-8-sig')
+    clear_block = re.search(r'procedure ClearCodeLoading;.*?\bend;', installer, re.S)
+    arrays = re.findall(r'Names := \[(.*?)\];', clear_block.group(0), re.S) if clear_block else []
+    cleared_copies = {
+        'PowerShell RooIndustriesCodeLoadingVariables': ps('RooIndustriesCodeLoadingVariables'),
+        'Start-RooIndustriesHelper.cmd': re.findall(r'(?m)^set (' + name + r')=\r?$', launcher),
+        'RooIndustries.OptimizationSuite.iss ClearCodeLoading': quoted(arrays[0]) if arrays else [],
     }
-    lists = {}
-    for relative, pattern in sources.items():
-        match = re.search(pattern, (root / relative).read_text(encoding='utf-8-sig'), re.S)
-        lists[relative] = re.findall(r'["\']([A-Z0-9_]+)["\']', match.group(1)) if match else []
-    launcher = 'backend/scripts/Start-RooIndustriesHelper.cmd'
-    lists[launcher] = re.findall(r'(?m)^set ([A-Z0-9_]+)=\r?$', (root / launcher).read_text(encoding='utf-8'))
-    reference = set(lists['backend/native/Optimizer.Core/RuntimeEnvironment.cs'])
+    pinned_copies = {
+        'PowerShell RooIndustriesPinnedVariables': ps('RooIndustriesPinnedVariables'),
+        'Start-RooIndustriesHelper.cmd': re.findall(r'(?m)^set (' + name + r')=0\r?$', launcher),
+        'RooIndustries.OptimizationSuite.iss ClearCodeLoading': quoted(arrays[1]) if len(arrays) > 1 else [],
+    }
     failures = []
-    for relative, names in lists.items():
-        if not reference:
-            failures.append(f'{relative}: the C# code-loading list was not found')
-        elif len(names) != len(set(names)) or set(names) != reference:
-            failures.append(f'{relative}: code-loading names differ from RuntimeEnvironment.CodeLoading (missing {sorted(reference - set(names))}, extra {sorted(set(names) - reference)})')
+    if not reference or not pinned_reference:
+        return ['backend/native/Optimizer.Core/RuntimeEnvironment.cs: the code-loading lists were not found']
+    if len(reference) != len(set(reference)):
+        failures.append('RuntimeEnvironment.cs: a name is listed twice in CodeLoading and ClearOnly')
+    for label, names, wanted in [(key, names, reference) for key, names in cleared_copies.items()] + [(key + ' (pinned to 0)', names, pinned_reference) for key, names in pinned_copies.items()]:
+        if len(names) != len(set(names)) or set(names) != set(wanted):
+            failures.append(f'{label}: names differ from RuntimeEnvironment (missing {sorted(set(wanted) - set(names))}, extra {sorted(set(names) - set(wanted))})')
     return failures
 
 
