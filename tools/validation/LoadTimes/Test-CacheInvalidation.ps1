@@ -76,6 +76,19 @@ function Wait-Listed([string]$id, [bool]$present, [double]$seconds) {
     return $false
 }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
+function Governor-Row {
+    Nav 'Undo changes'
+    WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Roo Industries Governor'); if (($t -notcontains 'Reading restore state') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
+}
+function Pick([string]$id, [string]$like) {
+    $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
+    $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $pattern.Expand(); Start-Sleep -Milliseconds 700
+    $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
+    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+    try { $pattern.Collapse() } catch {}
+}
+function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
 function Apply-Reviewed([string]$what, [switch]$NoWait) {
     $texts = @(Review-Texts)
     Log ("$what review: " + ($texts -join ' | '))
@@ -169,10 +182,47 @@ try {
     Select-Tab 'ProcessesTab'
     Check (Wait-Listed 'ProcessPicker' $false 20) 'Processes list drops a process that exited while the page was cached' ''
     Select-Tab 'GamesTab'
+
+    $ruleName = 'roo-cache-check rule'
+    $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+    Start-Sleep 3
+    $rowBefore = Governor-Row
+    Log ('Governor row before the rule: ' + $rowBefore); Shot '5-undo-before-rule'
+    if ($rowBefore -ne 'No rules') { throw "The governor already has rules on this PC ($rowBefore); refusing to add a test rule." }
+    Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
+    Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
+    Pick 'ProcessPicker' '*RooLoadTimesProbe*'
+    Process-Status '^Controls for' 60 'probe controls' | Out-Null
+    Pick 'cpuPriority' 'Below normal'
+    Invoke-Element (WaitFor { $b = ById 'ProcessPreview'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'review button')
+    Process-Status '^Review the requested controls' 60 'process review' | Out-Null
+    try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+    (WaitFor { ById 'ProcessRuleName' } 10 'rule name').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($ruleName); Start-Sleep 1
+    $script:Cleanup = "delete the governor rule '$ruleName' in Games > Processes"
+    Invoke-Element (WaitFor { $b = ById 'ProcessSaveRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'save rule button')
+    $saved = Process-Status '^(Rule saved|Saved rules need attention)' 180 'rule save'
+    Check ($saved -match '^Rule saved') 'the governor rule was saved' ($saved + ' :: ' + (ById 'ProcessDetail').Current.Name)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $rowAfter = Governor-Row
+    Check ($rowAfter -match '^Running') 'cached Undo page shows the governor row for the new rule on return' ("row=" + $rowAfter + " ms=" + $sw.ElapsedMilliseconds)
+    Shot '6-undo-after-rule'
+
+    Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
+    try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+    Pick 'ProcessRulesList' ($ruleName + '*')
+    Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule button')
+    $deleted = Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete'
+    Check ($deleted -match '^Rule deleted') 'the governor rule was deleted' ($deleted + ' :: ' + (ById 'ProcessDetail').Current.Name)
+    if ($deleted -match '^Rule deleted') { $script:Cleanup = $null }
+    $rowDeleted = Governor-Row
+    Check ($rowDeleted -eq 'No rules') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
+    Shot '7-undo-after-delete'
+    Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
     Remove-Item $probePath -Force -ErrorAction SilentlyContinue
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
     if ($app -and -not $app.HasExited) { $app.CloseMainWindow() | Out-Null; if (-not $app.WaitForExit(20000)) { $app.Kill() } }
+    Get-Process RooLoadTimesProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     if ($script:Cleanup) { Log ('CLEANUP NEEDED: ' + $script:Cleanup) }
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir 'invalidation.done')
