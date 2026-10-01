@@ -148,6 +148,7 @@
                             </ToggleSwitch>
                             </Grid>
                             <TextBlock Text="{x:Bind SimpleState, Mode=OneWay}" FontSize="12" HorizontalAlignment="Right" Foreground="{StaticResource RooIndustriesAccentBrush}" Visibility="{x:Bind SimpleState, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
+                            <Button Content="Retry" Command="{x:Bind RetryCommand}" HorizontalAlignment="Right" Visibility="{x:Bind CanRetry, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="{x:Bind RetryAutomationId}"/>
                             <TextBlock Text="{x:Bind ChoiceStatus, Mode=OneWay}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ChoiceStatus, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
                         </StackPanel>
                     </Grid>
