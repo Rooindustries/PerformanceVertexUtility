@@ -15,7 +15,7 @@ namespace RooIndustries.Optimizer;
 public readonly record struct SkipDecision(string Reason, bool Keep = true);
 
 public sealed record ProtectedFolder(string Label, string Restart, string Busy, string NotAdministrator, bool KeepUntrusted, string[] ShallowNames,
-    Func<string, Action?>? Quiesce = null, Func<string, bool, SkipDecision?>? Skip = null)
+    Func<string, Action?>? Quiesce = null, Func<string, bool, SkipDecision?>? Skip = null, Func<string, (string Source, string Destination)[]>? Companions = null)
 {
     public static readonly ProtectedFolder Rules = new("saved rules folder", "save your rules again", "Stop the Roo Industries Governor before protecting its saved rules folder.",
         PolicyRootSecurity.NotAdministrator, false, ["rules", "governor.json", "worker-request.json", "host.json"]);
@@ -279,6 +279,18 @@ public static class PolicyRootSecurity
             notCarried.AddRange(folded.NotCarried);
             var leftover = Retire(stray, folded, parent, name);
             if (leftover is not null) notCarried.Add("kept: " + leftover);
+        }
+        foreach (var (source, destination) in kind.Companions?.Invoke(root) ?? [])
+        {
+            try
+            {
+                if (!Directory.Exists(source) || new DirectoryInfo(source).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                Directory.CreateDirectory(destination);
+                var companion = new Run { Phase = "merging" };
+                Sync(source, destination, kind, user, companion, final: true, merge: true);
+                notCarried.AddRange(companion.NotCarried);
+            }
+            catch (Exception error) when (Recoverable(error)) { notCarried.Add(source + " (" + error.Message + ")"); }
         }
         var kept = Retire(legacy, run, parent, name);
         LastReport = new(true, run.Files, run.Bytes, notCarried.ToArray(), run.Dropped, kept);
@@ -674,7 +686,14 @@ public static class PolicyRootSecurity
         return latest is { } protectedAt && File.Exists(full) && File.GetCreationTimeUtc(full) > protectedAt;
     }
 
-    public static bool SavedBeforeProtection(string file) => File.Exists(Normalize(file)) && !WrittenAfterProtection(file);
+    public static bool SavedBeforeProtection(string file)
+    {
+        var full = Normalize(file);
+        if (!File.Exists(full)) return false;
+        for (var directory = Path.GetDirectoryName(full); directory is not null; directory = Path.GetDirectoryName(directory))
+            if (Marked(MarkerName(directory))) return !WrittenAfterProtection(file);
+        return false;
+    }
 
     public static void RequireWrittenAfterProtection(string file, string message)
     {

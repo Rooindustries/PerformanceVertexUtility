@@ -15,7 +15,7 @@ public static class DataFolder
 
     public static readonly ProtectedFolder Kind = new("app's data folder", "open the app again (its saved settings and undo history will be lost)",
         "The app's data folder could not be protected yet because Windows would not let the app move it. Something has a file inside it open: a File Explorer window showing the folder, a game launcher or another Roo Industries task. Close those or restart Windows, then open the app again.",
-        OperationsFolder.NotAdministrator, true, [], Quiesce, Skip);
+        OperationsFolder.NotAdministrator, true, [], Quiesce, Skip, Companions);
 
     private static readonly object Gate = new();
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -60,6 +60,13 @@ public static class DataFolder
             _lease = lease;
             return root;
         }
+    }
+
+    private static (string Source, string Destination)[] Companions(string root)
+    {
+        root = PolicyRootSecurity.Normalize(root);
+        var current = Path.Combine(Path.GetDirectoryName(root)!, "RooIndustriesOptimizationSuite");
+        return string.Equals(Path.GetFileName(root), BrandCompatibility.LegacyDataFolder, StringComparison.OrdinalIgnoreCase) ? [(Path.Combine(current, "uninstall-claims"), Path.Combine(root, "uninstall-claims"))] : [];
     }
 
     private static SkipDecision? Skip(string relative, bool folder)
