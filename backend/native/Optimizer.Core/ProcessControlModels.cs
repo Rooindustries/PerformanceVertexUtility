@@ -5,6 +5,23 @@ using System.Text.Json.Serialization;
 namespace RooIndustries.Optimizer;
 
 public sealed record ApiError(string Api, string CodeKind, long Code, string Access, string Message);
+
+public sealed class ControlReadException(ApiError error) : Exception(error.Message)
+{
+    public ApiError Error { get; } = error;
+}
+
+public static class ProcessFailures
+{
+    public static bool Denied(Exception error) => error switch
+    {
+        System.ComponentModel.Win32Exception win32 => win32.NativeErrorCode == 5,
+        UnauthorizedAccessException => true,
+        InvalidDataException { InnerException: ControlReadException read } => read.Error is { CodeKind: "win32", Code: 5 } or { CodeKind: "ntstatus", Code: 0xC0000022 },
+        ProcessTarget.NtFailure native => native.Code == 0xC0000022,
+        _ => false,
+    };
+}
 public sealed class ProcessEndedException() : InvalidOperationException("The target process has exited.");
 
 public sealed record ControlRead([property: JsonRequired] bool Known, [property: JsonRequired] JsonElement? Value, ApiError? Error)
@@ -15,7 +32,7 @@ public sealed record ControlRead([property: JsonRequired] bool Known, [property:
     public JsonElement Require()
     {
         if (!Known || Value is null || Value.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined || Error is not null)
-            throw new InvalidDataException(Error?.Message ?? "The original control state is unknown.");
+            throw new InvalidDataException(Error?.Message ?? "The original control state is unknown.", Error is null ? null : new ControlReadException(Error));
         return Value.Value;
     }
 }
@@ -66,6 +83,7 @@ public sealed class ControlChange
     public required string Status { get; set; }
     public JsonElement? Observed { get; set; }
     public string? Error { get; set; }
+    public string? ErrorKind { get; set; }
 }
 
 public sealed class ProcessControlJournal

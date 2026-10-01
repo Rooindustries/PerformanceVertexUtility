@@ -55,6 +55,7 @@ public static class PolicyRootSecurity
                 throw new UnauthorizedAccessException("The saved rules folder was changed without administrator rights after it was protected, so it is not trusted. Delete " + root + " and save your rules again.");
             RequireMigratable(root);
             var temporary = Path.Combine(parent, name + ".secure-" + Guid.NewGuid().ToString("N"));
+            var movedAway = false;
             try
             {
                 CreateSecured(temporary, user);
@@ -64,11 +65,15 @@ public static class PolicyRootSecurity
                 var legacy = Path.Combine(parent, name + ".legacy-" + Guid.NewGuid().ToString("N"));
                 try { Directory.Move(root, legacy); }
                 catch (IOException error) { throw new IOException("Stop the Roo Industries Governor before protecting its saved rules folder. " + error.Message, error); }
+                movedAway = true;
+#if GOVERNOR_TEST_HOOKS
+                if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
+#endif
                 Directory.Move(temporary, root);
             }
             catch
             {
-                if (Directory.Exists(temporary) && Directory.Exists(root)) Directory.Delete(temporary, true);
+                if (!movedAway && Directory.Exists(temporary)) Directory.Delete(temporary, true);
                 throw;
             }
             Mark(marker, user);
