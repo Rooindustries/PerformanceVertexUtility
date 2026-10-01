@@ -14,7 +14,8 @@ namespace RooIndustries.OptimizationSuite.Services;
 public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
     bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
-public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals);
+public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
+    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 
@@ -54,24 +55,9 @@ public sealed partial class OptimizerService
 
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
-    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() =>
-    {
-        var store = new ProcessPolicyStore(PolicyRoot);
-        var summary = store.Summary(deep: false);
-        PolicyWorkerStatus worker;
-        try { worker = store.Status(); }
-        catch (Exception error) { worker = new(null, null, error.Message); }
-        var rules = summary.RulesError is null ? store.ReadRules().Select(pair => pair.Rule).ToArray() : [];
-        var journals = new Dictionary<string, ProcessControlJournal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var instance in worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict") ?? [])
-        {
-            try { if (File.Exists(instance.JournalPath)) journals[instance.JournalPath] = OperationFiles.Read<ProcessControlJournal>(instance.JournalPath); }
-            catch (IOException) { }
-            catch (InvalidDataException) { }
-            catch (JsonException) { }
-        }
-        return new GovernorSnapshot(summary, worker, rules, journals);
-    });
+    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot));
+    public Task<PolicyHostState> RetryGovernorRestoreAsync()
+        => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true });
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
         => RunCoreAsync<SavedProcessRule>("rule-save", new() { ["policyRoot"] = PolicyRoot, ["rule"] = rule, ["confirm"] = true });
     public Task<JsonElement> DeleteRuleAsync(string ruleId)

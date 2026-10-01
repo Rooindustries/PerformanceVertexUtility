@@ -67,56 +67,164 @@ public static class GovernorDisplay
 {
     public const string Running = "Roo Industries Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
     public const string Paused = "Paused";
+    public const string Pausing = "Pausing";
+    public const string Stopped = "Stopped";
     public const string NotResponding = "Not responding";
     public const string Off = "Roo Industries Governor is off. Save a rule to turn it on.";
+    public const string Denied = "Windows denied access to this setting for this app";
+    public const string StoppedRestarts = "The governor stopped. It starts again by itself within a minute, or press Start governor.";
+    public const string StoppedStays = "The governor stopped and won't start again by itself. Press Start governor to start it.";
+    public const string StoppedUnknown = "The governor stopped. Press Start governor to start it.";
+    public const string NotRunningApp = "The app is not running right now.";
+    public const string PausedRule = "Not applied right now because the governor is paused.";
+    public const string StoppedRule = "Not applied right now because the governor is stopped.";
+    public const string AttentionRule = "Not checked right now because the governor needs attention.";
+    public const string RetryHint = " Press Put settings back to try again.";
 
-    public static string State(PolicySummary summary, PolicyWorkerStatus worker)
+    public static string Key(RunningProcess process) => GovernorProbe.Key(process);
+
+    public static PolicyInstance[] Live(GovernorSnapshot snapshot) => snapshot.Worker.State?.Instances
+        .Where(instance => instance.Status is "active" or "applying" or "conflict" && snapshot.Exited?.Contains(Key(instance.Process)) != true).ToArray() ?? [];
+
+    public static PolicyInstance[] Holding(GovernorSnapshot snapshot) => Live(snapshot)
+        .Where(instance => !(instance.Status == "applying" && snapshot.Unapplied?.Contains(instance.JournalPath) == true)).ToArray();
+
+    public static int Apps(IEnumerable<PolicyInstance> instances) => instances.Select(instance => Key(instance.Process)).Distinct().Count();
+    public static int Changed(GovernorSnapshot snapshot) => Apps(Holding(snapshot).Where(instance => instance.Status is "active" or "applying"));
+    public static int Kept(GovernorSnapshot snapshot) => Apps(Holding(snapshot).Where(instance => instance.Status == "conflict"));
+    public static string Count(int apps) => apps == 1 ? "1 app" : apps + " apps";
+    public static string StillHave(int apps) => apps == 1 ? "1 app still has" : apps + " apps still have";
+
+    public static string State(GovernorSnapshot snapshot)
     {
-        if (summary.Paused) return "paused";
-        if (summary.EnabledRules == 0 && summary.RulesError is null && summary.SecurityProblem is null or "missing") return "off";
-        return worker.HostRunning == true && worker.Error is null && worker.State?.Status == "running" && summary.RulesError is null && summary.Secured ? "running" : "notResponding";
+        var (summary, worker) = (snapshot.Summary, snapshot.Worker);
+        var off = !summary.Paused && summary.EnabledRules == 0 && summary.RulesError is null && summary.SecurityProblem is null or "missing";
+        if (worker.HostRunning is null && !off || worker.HostRunning == true && worker.Error is not null) return "notResponding";
+        if (summary.Paused) return Changed(snapshot) > 0 ? "pausing" : "paused";
+        if (off) return "off";
+        if (summary.RulesError is not null || !summary.Secured) return "notResponding";
+        if (worker.HostRunning == false) return "stopped";
+        return worker.State?.Status == "running" ? "running" : "notResponding";
     }
 
-    public static string Headline(string state) => state switch { "running" => Running, "paused" => Paused, "off" => Off, _ => NotResponding };
+    public static bool CanRetry(GovernorSnapshot snapshot, string state) => state is "off" or "paused" && snapshot.Worker.HostRunning == false && Kept(snapshot) > 0;
 
-    public static string Detail(string state, PolicySummary summary, PolicyWorkerStatus worker) => state switch
-    {
-        "running" => summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.",
-        "paused" => (worker.State?.Instances.Any(instance => instance.Status == "conflict") == true
-            ? "Your rules are saved but not used. Some apps kept a setting the governor could not put back."
-            : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
-        "off" => "",
-        _ => summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
-            : summary.RulesError is { } rulesError ? "Your saved rules could not be read: " + rulesError
-            : worker.HostRunning == true ? "The governor is not answering. Press Start governor to restart it."
-            : worker.State?.Errors.FirstOrDefault() ?? "The governor stopped. It starts again by itself within a minute, or press Start governor.",
-    };
+    public static string Headline(string state) => state switch { "running" => Running, "paused" => Paused, "pausing" => Pausing, "stopped" => Stopped, "off" => Off, _ => NotResponding };
 
-    public static GovernorRuleRow[] Rows(GovernorSnapshot snapshot)
+    public static string Detail(string state, GovernorSnapshot snapshot)
     {
-        var state = snapshot.Worker.State;
+        var (summary, worker) = (snapshot.Summary, snapshot.Worker);
+        var retry = CanRetry(snapshot, state) ? RetryHint : "";
+        return state switch
+        {
+            "running" => summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.",
+            "pausing" => worker.HostRunning == true
+                ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
+                : StillHave(Changed(snapshot)) + " rule settings that were not put back. Press Pause governor to put them back.",
+            "paused" => (Kept(snapshot) > 0
+                ? "Your rules are saved but not used. Some apps kept a setting the governor could not put back." + retry
+                : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
+            "off" => worker.HostRunning is null ? "Roo Industries couldn't read the governor's last state, so it can't confirm every app got its old settings back" + Reason(worker.Error) + "."
+                : Kept(snapshot) > 0 ? StillHave(Kept(snapshot)) + " a setting Roo Industries could not put back." + retry
+                : Changed(snapshot) == 0 ? ""
+                : worker.HostRunning == true ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
+                : StillHave(Changed(snapshot)) + " rule settings that were not put back.",
+            "stopped" => (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } last ? last + " " : "")
+                + (snapshot.ScheduledTask is null ? StoppedUnknown : snapshot.ScheduledTask.Restarts ? StoppedRestarts : StoppedStays),
+            _ => worker.HostRunning is null && summary.Paused
+                    ? "Paused, but Roo Industries couldn't read the governor's state, so it can't confirm the old settings were put back" + Reason(worker.Error) + "."
+                : worker.HostRunning == true && worker.Error is not null && summary.Paused
+                    ? "Paused, but the governor is not answering, so the old settings may not be back yet. Press Pause governor to stop it and put them back."
+                : summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
+                : summary.RulesError is { } rulesError ? "Your saved rules could not be read: " + rulesError
+                : worker.HostRunning == true && worker.Error is not null ? "The governor is not answering. Press Start governor to restart it."
+                : worker.HostRunning == true && worker.State?.Status == "configurationError"
+                    ? (worker.State.Errors.FirstOrDefault() is { Length: > 0 } unreadable ? unreadable.TrimEnd('.') + "." : "Your saved rules could not be read.")
+                      + " The governor keeps checking and uses your rules again once they can be read."
+                : worker.HostRunning == true ? (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } failure ? failure.TrimEnd('.') + "." : "The governor reported a problem.") + " Press Start governor to restart it."
+                : "The governor's status could not be read" + Reason(worker.Error) + ". Press Start governor to restart it.",
+        };
+    }
+
+    private static string Reason(string? error) => error is { Length: > 0 } ? ": " + error.TrimEnd('.') : "";
+
+    public static string Outcome(PolicyInstance instance, bool enforced)
+        => instance.Status != "conflict" ? "kept" : instance.ErrorKind == "keepsChanging" || enforced ? "steppedBack" : "notPutBack";
+
+    public static GovernorRuleRow[] Rows(GovernorSnapshot snapshot) => Rows(snapshot, State(snapshot));
+
+    public static GovernorRuleRow[] Rows(GovernorSnapshot snapshot, string state)
+    {
+        var live = Live(snapshot);
+        var holding = Holding(snapshot);
+        var issues = snapshot.Worker.State?.Issues ?? [];
         return snapshot.Rules.Select(rule =>
         {
             var requested = string.Join(", ", rule.Controls.Select(pair => ProcessControlsViewModel.Label(pair.Key) + " " + ProcessControlsViewModel.Describe(pair.Key, pair.Value))
                 .Concat(rule.CpuSelection is null ? Array.Empty<string>() : new[] { "Preferred CPUs " + (rule.CpuSelection.Processors is { Length: > 0 } chosen ? chosen.Length + " selected" : rule.CpuSelection.Kind switch
                 { "windowsDefault" => "Windows default", "all" => "all", "performance" => "performance cores", "efficiency" => "efficiency cores", "core" => "one core", "cache" => "one cache group", "numa" => "one NUMA node", var kind => kind }) }));
-            var lines = new List<string>();
-            foreach (var instance in state?.Instances.Where(instance => instance.RuleId == rule.RuleId && instance.Status is "active" or "applying" or "conflict") ?? [])
+            var enforced = rule.Enabled && state == "running";
+            var mine = (enforced ? live : holding).Where(instance => instance.RuleId == rule.RuleId).ToArray();
+            var lines = new List<(int Process, int Order, string Text)>();
+            var held = new Dictionary<int, HashSet<string>>();
+            foreach (var instance in mine)
             {
                 var name = Path.GetFileName(instance.Process.ExecutablePath) + " (" + instance.Process.ProcessId + ")";
-                if (instance.Status == "conflict" && instance.Error is { } denied && (denied.Contains("Win32 5 ", StringComparison.Ordinal) || denied.Contains("denied", StringComparison.OrdinalIgnoreCase)))
-                { lines.Add(name + ": unavailable · Windows denied access to this app, so it may keep the rule's settings until it closes"); continue; }
-                if (instance.Status == "conflict") { lines.Add(name + ": the rule stepped back for this app" + (instance.Error is { Length: > 0 } reason ? " · " + reason : "")); continue; }
-                if (!snapshot.Journals.TryGetValue(instance.JournalPath, out var journal)) { lines.Add(name + ": starting"); continue; }
-                lines.Add(name + ": " + string.Join(", ", journal.Changes.Select(change => ProcessControlsViewModel.Label(change.Name) + " " +
-                    (change.Observed is { } observed ? ProcessControlsViewModel.Describe(change.Name, observed) : "unknown"))));
+                snapshot.Journals.TryGetValue(instance.JournalPath, out var journal);
+                string[] fields = instance.Field is { } field ? [field] : journal?.Changes.Select(change => change.Name).ToArray() ?? [];
+                if (!held.TryGetValue(instance.Process.ProcessId, out var set)) held[instance.Process.ProcessId] = set = new(StringComparer.Ordinal);
+                set.UnionWith(fields);
+                var label = fields.Length == 0 ? "Settings" : string.Join(", ", fields.Select(ProcessControlsViewModel.Label));
+                lines.Add((instance.Process.ProcessId, Order(fields.FirstOrDefault()), name + " · " + (enforced ? Enforced(instance, label, journal) : Leftover(instance, label))));
             }
-            foreach (var issue in state?.Issues.Where(issue => issue.RuleId == rule.RuleId) ?? [])
-                lines.Add((issue.ExecutablePath is null ? "Process " + issue.ProcessId : Path.GetFileName(issue.ExecutablePath) + " (" + issue.ProcessId + ")") + ": unavailable · " + issue.Message);
-            var observedText = !rule.Enabled ? "Off" : lines.Count == 0 ? "The app is not running right now." : string.Join("\n", lines);
-            return new GovernorRuleRow(rule.Name, rule.Enabled ? "On" : "Off", "Wanted: " + requested, "Now: " + observedText);
+            if (enforced)
+                foreach (var issue in issues.Where(issue => issue.RuleId == rule.RuleId))
+                {
+                    var name = Path.GetFileName(issue.ExecutablePath ?? rule.ExecutablePath) + (issue.ProcessId is { } id ? " (" + id + ")" : "");
+                    var taken = issue.ProcessId is { } pid && held.TryGetValue(pid, out var known) ? known : [];
+                    var reason = issue.Kind == "denied" ? Denied : issue.Message;
+                    if (issue.Field is { } named)
+                    {
+                        if (!taken.Contains(named)) lines.Add((issue.ProcessId ?? int.MaxValue, Order(named), name + " · " + ProcessControlsViewModel.Label(named) + " unavailable · " + reason));
+                    }
+                    else if (issue.Kind is "denied" or "error")
+                        foreach (var each in ProcessPolicyStore.Fields(rule).Where(each => !taken.Contains(each)))
+                            lines.Add((issue.ProcessId ?? int.MaxValue, Order(each), name + " · " + ProcessControlsViewModel.Label(each) + " unavailable · " + reason));
+                    else lines.Add((issue.ProcessId ?? int.MaxValue, -1, name + " · " + (issue.Kind == "otherAccount" ? ProcessPolicyHost.OtherAccount : "unavailable · " + issue.Message)));
+                }
+            var details = lines.OrderBy(line => line.Process).ThenBy(line => line.Order).Select(line => line.Text).ToList();
+            var headline = !rule.Enabled ? "Off" : state switch
+            {
+                "running" => details.Count == 0 ? NotRunningApp : null,
+                "paused" or "pausing" => PausedRule,
+                "stopped" => StoppedRule,
+                _ => AttentionRule,
+            };
+            if (headline is not null) details.Insert(0, headline);
+            return new GovernorRuleRow(rule.Name, rule.Enabled ? "On" : "Off", "Wanted: " + requested, "Now: " + string.Join("\n", details));
         }).ToArray();
     }
+
+    private static int Order(string? field) => field is null ? -1 : Array.IndexOf(ProcessTarget.ControlNames, field);
+
+    private static string Enforced(PolicyInstance instance, string label, ProcessControlJournal? journal) => (instance.Status, instance.ErrorKind) switch
+    {
+        ("conflict", "keepsChanging") => label + " · " + ProcessPolicyHost.KeepsChanging,
+        (_, "denied") => label + " unavailable · " + Denied,
+        ("conflict", _) => label + " stepped back" + (instance.Error is { Length: > 0 } reason ? " · " + reason : ""),
+        (_, "error") => label + " unavailable · " + (instance.Error is { Length: > 0 } failure ? failure : "Windows did not accept the requested value."),
+        ("active", _) when journal?.Changes.Any(change => instance.Field is null || change.Name == instance.Field) == true => string.Join(", ", journal.Changes.Where(change => instance.Field is null || change.Name == instance.Field).Select(change => ProcessControlsViewModel.Label(change.Name) + " " +
+            (change.Observed is { } observed ? ProcessControlsViewModel.Describe(change.Name, observed) : "unknown"))),
+        _ => label + " starting",
+    };
+
+    private static string Leftover(PolicyInstance instance, string label) => (instance.Status, instance.ErrorKind) switch
+    {
+        ("conflict", "keepsChanging") => label + " · " + ProcessPolicyHost.KeepsChanging,
+        ("conflict", "denied") => label + " could not be put back · " + Denied,
+        ("conflict", _) => label + " could not be put back" + (instance.Error is { Length: > 0 } reason ? " · " + reason : ""),
+        _ => label + " still set by this rule",
+    };
 }
 
 public partial class ProcessControlsViewModel : ObservableObject
@@ -151,6 +259,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     [ObservableProperty] private string _governorHeadline = "Checking the Roo Industries Governor…";
     [ObservableProperty] private string _governorDetail = "";
     [ObservableProperty] private string _governorState = "unknown";
+    [ObservableProperty] private bool _retryAvailable;
     [ObservableProperty] private string _ruleDetail = "";
     private ProcessControlSnapshot? _snapshot;
     private ProcessControlReview? _review;
@@ -177,8 +286,10 @@ public partial class ProcessControlsViewModel : ObservableObject
     public bool HasReview => _review is not null;
     public bool CanSaveRule => CanApply && !string.IsNullOrWhiteSpace(RuleName);
     public bool CanManageRule => !Busy && SelectedRule is not null;
-    public bool CanPauseGovernor => !Busy && GovernorState is "running" or "notResponding";
-    public bool CanStartGovernor => !Busy && GovernorState is "paused" or "notResponding";
+    public bool CanPauseGovernor => !Busy && GovernorState is "running" or "pausing" or "stopped" or "notResponding";
+    public bool CanStartGovernor => !Busy && GovernorState is "paused" or "pausing" or "stopped" or "notResponding";
+    public bool CanRetryRestore => !Busy && RetryAvailable;
+    partial void OnRetryAvailableChanged(bool value) => NotifyState();
 
     partial void OnBusyChanged(bool value) => NotifyState();
     partial void OnGovernorStateChanged(string value) => NotifyState();
@@ -393,7 +504,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             var registration = await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = registration.Paused ? "Rule saved. The governor is paused, so press Start governor to use it." : "Rule saved and on.";
-            Detail = "The Roo Industries Governor keeps this rule on after you close the app. If another app changes the same setting, the rule steps back for that app.";
+            Detail = "The Roo Industries Governor keeps this rule on after you close the app. If another app changes the same setting, Roo Industries puts it back up to three times and then steps back for that app.";
             Invalidate();
         }
         catch (Exception error) { Status = "Saved rules need attention."; Detail = error.Message; }
@@ -413,13 +524,23 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private void ShowGovernor(GovernorSnapshot snapshot)
     {
-        GovernorState = GovernorDisplay.State(snapshot.Summary, snapshot.Worker);
+        GovernorState = GovernorDisplay.State(snapshot);
         GovernorHeadline = GovernorDisplay.Headline(GovernorState);
-        GovernorDetail = GovernorDisplay.Detail(GovernorState, snapshot.Summary, snapshot.Worker);
-        var rows = GovernorDisplay.Rows(snapshot);
+        GovernorDetail = GovernorDisplay.Detail(GovernorState, snapshot);
+        RetryAvailable = GovernorDisplay.CanRetry(snapshot, GovernorState);
+        var rows = GovernorDisplay.Rows(snapshot, GovernorState);
         if (rows.SequenceEqual(GovernorRules)) return;
         GovernorRules.Clear();
         foreach (var row in rows) GovernorRules.Add(row);
+    }
+
+    private void ShowGovernorError(Exception error)
+    {
+        GovernorState = "notResponding";
+        GovernorHeadline = GovernorDisplay.NotResponding;
+        GovernorDetail = "The governor's status could not be read: " + error.Message.TrimEnd('.') + ".";
+        RetryAvailable = false;
+        GovernorRules.Clear();
     }
 
     public async Task ObserveAsync()
@@ -429,9 +550,13 @@ public partial class ProcessControlsViewModel : ObservableObject
         var version = _selectionVersion;
         try
         {
-            var governor = await App.Operations.ReadGovernorAsync();
+            GovernorSnapshot? governor = null;
+            Exception? unreadable = null;
+            try { governor = await App.Operations.ReadGovernorAsync(); }
+            catch (Exception error) { unreadable = error; }
             if (Busy || version != _selectionVersion) return;
-            ShowGovernor(governor);
+            if (governor is not null) ShowGovernor(governor);
+            else ShowGovernorError(unreadable!);
             if (_snapshot is null) return;
             var fresh = await App.Operations.ReadProcessControlsAsync(_snapshot.Identity.ProcessId);
             if (Busy || version != _selectionVersion) return;
@@ -528,9 +653,24 @@ public partial class ProcessControlsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task PauseGovernorAsync() => await GovernorAsync("Pause", "Governor paused. The apps got their old settings back.");
+    private async Task PauseGovernorAsync() => await GovernorAsync("Pause", "Governor paused.");
     [RelayCommand]
     private async Task StartGovernorAsync() => await GovernorAsync("Resume", "Governor started.");
+    [RelayCommand]
+    private async Task RetryRestoreAsync()
+    {
+        if (Busy || !RetryAvailable) return;
+        Busy = true;
+        try
+        {
+            await App.Operations.RetryGovernorRestoreAsync();
+            await RefreshRulesAsync();
+            Status = RetryAvailable ? "Some settings still could not be put back." : "The old settings are back.";
+            Detail = "";
+        }
+        catch (Exception error) { Status = "Couldn't put the settings back."; Detail = error.Message; }
+        finally { Busy = false; }
+    }
     private async Task GovernorAsync(string action, string done)
     {
         if (Busy) return;
@@ -549,7 +689,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()
     {
-        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore) }) OnPropertyChanged(property);
     }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));

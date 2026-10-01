@@ -41,10 +41,12 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     private void BuildRestore(bool? gameRecovery, bool? governorRecovery, GameSessionEntry[] games, TweakRecovery? windows, GovernorSnapshot? rules)
     {
         RestoreRows.Clear();
-        var rulesState = rules is null ? "unknown" : GovernorDisplay.State(rules.Summary, rules.Worker);
-        var ruleInstances = rules?.Worker.State?.Instances.Count(instance => instance.Status is "active" or "applying") ?? 0;
-        var steppedBack = rules?.Worker.State?.Instances.Count(instance => instance.Status == "conflict") ?? 0;
-        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || ruleInstances + steppedBack > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var rulesState = rules is null ? "unknown" : GovernorDisplay.State(rules);
+        var changedApps = rules is null ? 0 : GovernorDisplay.Changed(rules);
+        var keptApps = rules is null ? 0 : GovernorDisplay.Kept(rules);
+        var leftoverApps = rules is null ? 0 : GovernorDisplay.Apps(GovernorDisplay.Holding(rules));
+        var retry = rules is not null && GovernorDisplay.CanRetry(rules, rulesState) ? " · put them back in Games > Processes" : "";
+        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
@@ -66,13 +68,16 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             "Roo Industries Governor",
             rulesState switch
             {
-                "running" => "Running · " + (ruleInstances == 1 ? "1 app" : ruleInstances + " apps") + " changed · pause it in Games > Processes to put settings back",
-                "paused" => steppedBack > 0 ? "Paused · " + steppedBack + " apps kept a setting the governor could not put back" : "Paused · settings put back",
-                "off" => ruleInstances + steppedBack > 0 ? "Off · " + (ruleInstances + steppedBack) + " apps still have saved settings" : "No rules",
-                "notResponding" => "Not responding · " + (ruleInstances > 0 ? ruleInstances + " apps have saved settings · " : "") + "open Games > Processes",
+                "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · pause it in Games > Processes to put settings back",
+                "pausing" => "Pausing · " + GovernorDisplay.StillHave(changedApps) + " rule settings · open Games > Processes",
+                "paused" => keptApps > 0 ? "Paused · " + GovernorDisplay.Count(keptApps) + " kept a setting the governor could not put back" + retry : "Paused · settings put back",
+                "off" => rules!.Worker.HostRunning is null ? "Off · the governor's last state could not be read" : leftoverApps > 0 ? "Off · " + GovernorDisplay.StillHave(leftoverApps) + " saved settings" + retry : rules!.Summary.Rules > 0 ? "Off · no rules are on" : "No rules",
+                "stopped" => "Stopped · " + (leftoverApps > 0 ? GovernorDisplay.StillHave(leftoverApps) + " saved settings · " : "")
+                    + (rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute" : "open Games > Processes to start it"),
+                "notResponding" => "Not responding · " + (leftoverApps > 0 ? GovernorDisplay.Count(leftoverApps) + " with saved settings · " : "") + "open Games > Processes",
                 _ => "Status unavailable",
             },
-            rulesState switch { "running" => "safe", "paused" or "off" when ruleInstances + steppedBack == 0 => "neutral", _ => "medium" }));
+            rulesState switch { "running" => "safe", "paused" or "off" when leftoverApps == 0 && rules!.Worker.HostRunning is not null => "neutral", _ => "medium" }));
 
         RestoreRows.Add(new StatusLine("Windows settings", windows is null ? "Status unavailable" : windows.Pending is not null ? restart ? "Check restart completion" : "Interrupted change · review recovery" :
             windows.State?.Profiles.Length > 0 ? windows.State.Profiles.Length + " saved profiles" : "No saved profiles", windows is null || windows.Pending is not null ? "medium" : windows.State?.Profiles.Length > 0 ? "safe" : "neutral"));
@@ -87,11 +92,15 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     {
         HistoryRows.Clear();
 
-        foreach (var instance in rules?.Worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict") ?? [])
+        var running = rules is not null && GovernorDisplay.State(rules) == "running";
+        foreach (var group in (rules is null ? [] : GovernorDisplay.Holding(rules)).GroupBy(instance => (instance.RuleId, Key: GovernorDisplay.Key(instance.Process))))
         {
+            var instance = group.First();
             var rule = rules!.Rules.FirstOrDefault(item => item.RuleId == instance.RuleId);
+            var outcomes = group.Select(item => GovernorDisplay.Outcome(item, running && rule?.Enabled == true)).ToArray();
             HistoryRows.Add(new AuditRow("Now", "Governor", "neutral", Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath),
-                (rule?.Name ?? "Saved rule") + (instance.Status == "conflict" ? " · stepped back for this app" : " · settings kept by the governor"), "Reversible", "low"));
+                (rule?.Name ?? "Saved rule") + (outcomes.Contains("notPutBack") ? " · a setting could not be put back" : outcomes.All(item => item == "steppedBack") ? " · stepped back for this app"
+                    : outcomes.Contains("steppedBack") ? " · some settings stepped back" : " · settings kept by the governor"), "Reversible", "low"));
         }
 
         foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
