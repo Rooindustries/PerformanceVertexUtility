@@ -7,7 +7,7 @@ namespace RooIndustries.OptimizationSuite.Services;
 
 public static class HostOutput
 {
-    private static ReadOnlySpan<byte> PartialPrefix => "ROO-PARTIAL "u8;
+    private static ReadOnlySpan<byte> PartialPrefix => "ROO_INDUSTRIES_PARTIAL "u8;
     private static ReadOnlySpan<byte> Bom => "\uFEFF"u8;
 
     public static async Task<bool> TryWriteRequestAsync(Stream input, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)

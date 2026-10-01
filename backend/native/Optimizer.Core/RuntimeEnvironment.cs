@@ -41,10 +41,10 @@ public static class RuntimeEnvironment
     public static readonly string[] ProductOverrides =
     [
         "ROO_INDUSTRIES_BACKEND_ROOT", "ROO_INDUSTRIES_DOTNET_EXE", "ROO_INDUSTRIES_PYTHON_EXE", "ROO_INDUSTRIES_UTILITIES_ROOT",
-        "ROO_BACKEND_ROOT", "ROO_DOTNET_EXE", "ROO_PYTHON_EXE", "ROO_UTILITIES_ROOT",
+        .. new[] { "BACKEND_ROOT", "DOTNET_EXE", "PYTHON_EXE", "UTILITIES_ROOT" }.Select(name => BrandCompatibility.LegacyEnvironmentPrefix + name),
     ];
 
-#if ROO_RELEASE
+#if ROO_INDUSTRIES_RELEASE
     public static readonly bool Release = true;
 #else
     public static readonly bool Release = false;

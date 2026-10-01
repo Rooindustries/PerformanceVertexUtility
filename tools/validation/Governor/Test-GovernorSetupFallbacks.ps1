@@ -255,7 +255,7 @@ try {
     $direct=New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument ('--headless "'+$hostExe+'" policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"') -WorkingDirectory $hostDirectory
     $earlier=@(
         @{label='the earlier direct launch';name=(New-TaskName);description=$goodDescription},
-        @{label='the earlier legacy name and description';name=('RooOptimizationSuite.ProcessRules.'+[Guid]::NewGuid().ToString('N').Substring(0,20).ToUpperInvariant());description=('Roo process rules | '+$me+' | '+$policyRoot)}
+        @{label='the earlier legacy name and description';name=(('RooIndustriesOptimizationSuite' -replace 'Industries','')+'.ProcessRules.'+[Guid]::NewGuid().ToString('N').Substring(0,20).ToUpperInvariant());description=(('Roo Industries process rules' -replace ' Industries','')+' | '+$me+' | '+$policyRoot)}
     )
     foreach($task in $earlier){$decoyNames.Add($task.name);Register-Governor $task.name $task.description $direct}
     foreach($mode in $modes){

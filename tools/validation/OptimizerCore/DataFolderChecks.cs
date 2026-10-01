@@ -39,7 +39,7 @@ static partial class DataFolderChecks
         var rules = Path.Combine(root, "process-rules");
         var timer = Path.Combine(operations, OperationsFolder.TimerFolder);
         var current = Path.Combine(selection, "RooIndustriesOptimizationSuite");
-        var legacy = Path.Combine(selection, "RooOptimizationSuite");
+        var legacy = Path.Combine(selection, BrandCompatibility.LegacyDataFolder);
         using var identity = WindowsIdentity.GetCurrent();
         var user = identity.User!;
         try
@@ -146,7 +146,7 @@ static partial class DataFolderChecks
     {
         var id = H.Name("junction");
         var temp = Path.Combine(Path.GetTempPath(), "roo-industries-file-controls-" + Guid.NewGuid().ToString("N"));
-        var target = Path.Combine(Path.GetTempPath(), "roo-df-target-" + id);
+        var target = Path.Combine(Path.GetTempPath(), "roo-industries-df-target-" + id);
         var timerPath = Path.Combine(temp, "timer");
         var root = Path.Combine(H.Local, id);
         var operations = Path.Combine(root, "operations");

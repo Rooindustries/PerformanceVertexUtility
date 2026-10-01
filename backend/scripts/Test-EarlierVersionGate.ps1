@@ -8,7 +8,7 @@ $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $id=[Guid]::NewGuid().ToString('N').Substring(0,12)
 $local=[Environment]::GetFolderPath('LocalApplicationData')
-$data=Join-Path $local ('RooDataFix-gate-'+$id)
+$data=Join-Path $local ('RooIndustriesDataFix-gate-'+$id)
 $operations=Join-Path $data 'operations'
 $hostDirectory=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-gate-host-'+$id)
 $markerKey='SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
@@ -55,6 +55,6 @@ try {
         $key.Dispose()
     }
     foreach($path in @($data,$hostDirectory)){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force}}
-    foreach($leftover in @(Get-ChildItem -LiteralPath $local -Directory -Filter ('RooDataFix-gate-'+$id+'*') -ErrorAction SilentlyContinue)){Remove-Item -LiteralPath $leftover.FullName -Recurse -Force}
+    foreach($leftover in @(Get-ChildItem -LiteralPath $local -Directory -Filter ('RooIndustriesDataFix-gate-'+$id+'*') -ErrorAction SilentlyContinue)){Remove-Item -LiteralPath $leftover.FullName -Recurse -Force}
 }
 Check (-not(Test-Path -LiteralPath $data) -and -not(Test-Path -LiteralPath $hostDirectory)) 'The scenario removes its folders and marker values'

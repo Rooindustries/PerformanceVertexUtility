@@ -56,14 +56,14 @@ function Nav([string]$name) {
     $item = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, $name), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) } 30 "nav $name"
     Invoke-Element $item; Log "nav $name"
 }
-function Start-Roo {
-    Stop-Roo
+function Start-RooIndustriesApp {
+    Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [HelperStartU32]::ShowWindow($h, 9) | Out-Null; [HelperStartU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [HelperStartU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
-function Stop-Roo {
+function Stop-RooIndustriesApp {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
@@ -71,12 +71,12 @@ function Stop-Roo {
 function Data-Root {
     $local = [Environment]::GetFolderPath('LocalApplicationData')
     $markers = Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local 'RooOptimizationSuite'
+    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
 }
 function Log-Lines { $path = Join-Path (Data-Root) 'logs\app.log'; if (Test-Path -LiteralPath $path) { @(Get-Content -LiteralPath $path -Encoding UTF8) } else { @() } }
 function Flush-Starts {
-    foreach ($e in @(Get-Event -SourceIdentifier RooHelperStartWatch -ErrorAction SilentlyContinue)) {
+    foreach ($e in @(Get-Event -SourceIdentifier RooIndustriesHelperStartWatch -ErrorAction SilentlyContinue)) {
         $n = $e.SourceEventArgs.NewEvent
         $entry = [pscustomobject]@{ utc = [DateTime]::FromFileTimeUtc([int64]$n.TIME_CREATED).ToString('HH:mm:ss.fff'); pid = [int]$n.ProcessID; parent = [int]$n.ParentProcessID; name = [string]$n.ProcessName }
         $script:Starts.Add($entry); $script:AllStarts.Add($entry)
@@ -103,7 +103,7 @@ $watcher = $null
 $stopFile = Join-Path $OutDir 'procmon.stop'
 try {
     Log ("check=$Check before=$([bool]$Before) install=$install version=" + (Get-Item $Exe).VersionInfo.ProductVersion)
-    Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier RooHelperStartWatch | Out-Null
+    Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier RooIndustriesHelperStartWatch | Out-Null
     Remove-Item $stopFile -ErrorAction SilentlyContinue
     $watcher = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1'), '-OutCsv', (Join-Path $OutDir ($Name + '-processes.csv')), '-StopFile', $stopFile) -WindowStyle Hidden -PassThru
     WaitFor { Test-Path (Join-Path $OutDir ($Name + '-processes.csv.ready')) } 30 'the process watcher' | Out-Null
@@ -120,7 +120,7 @@ try {
         Check (-not (Test-Path -LiteralPath $noSuchDotNet)) 'the override target does not exist' $noSuchDotNet
         $logBefore = (Log-Lines).Count
         $env:ROO_INDUSTRIES_DOTNET_EXE = $noSuchDotNet
-        try { Start-Roo } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
+        try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
         Nav 'Windows tweaks'
         $list = WaitFor { ById 'WindowsTweaksList' } 60 'Windows tweaks list'
         $rows = WaitFor { $c = @($list.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))).Count; if ($c -gt 0) { $c } } 180 'Windows tweaks rows'
@@ -140,11 +140,11 @@ try {
         $dll = Join-Path $hostDirectory 'hostpolicy.dll'
         Check (Test-Path -LiteralPath $dll) 'hostpolicy.dll is installed before the check' $dll
         Check (Test-Path -LiteralPath $userDotNet) 'a genuine Microsoft dotnet.exe is installed in the user profile (so a fallback would find it)' ($userDotNet + ' ' + $(if (Test-Path -LiteralPath $userDotNet) { (Get-Item $userDotNet).VersionInfo.ProductVersion } else { '' }))
-        Rename-Item -LiteralPath $dll -NewName 'hostpolicy.dll.roo-test-off'; $script:Renamed += $dll
-        Log 'renamed hostpolicy.dll to hostpolicy.dll.roo-test-off'
+        Rename-Item -LiteralPath $dll -NewName 'hostpolicy.dll.roo-industries-test-off'; $script:Renamed += $dll
+        Log 'renamed hostpolicy.dll to hostpolicy.dll.roo-industries-test-off'
         $logBefore = (Log-Lines).Count
         Flush-Starts; $script:Starts.Clear()
-        Start-Roo
+        Start-RooIndustriesApp
         Nav 'Windows tweaks'
         $message = $null
         try { $message = WaitFor { @(Texts | Where-Object { $_ -match 'app files are missing' })[0] } 90 'the missing-files message' } catch {}
@@ -167,9 +167,9 @@ try {
             Check ($logged.Count -gt 0) 'the app log has a Missing hostpolicy.dll line' ($logged -join ' | ')
             Check ($dotnetStarts.Count -eq 0) 'no dotnet.exe was started anywhere on this PC while the app was open on the incomplete install' ("dotnet.exe starts: $($dotnetStarts.Count); starts by the app tree: $($byApp.Count); sampled command lines: " + (($csv | Select-Object -First 2) -join ' || '))
         }
-        Stop-Roo
+        Stop-RooIndustriesApp
         Flush-Starts; $script:Starts.Clear()
-        $sessionRoot = Join-Path (Data-Root) 'operations\game-session-roo-incomplete-check\session'
+        $sessionRoot = Join-Path (Data-Root) 'operations\game-session-roo-industries-incomplete-check\session'
         foreach ($case in @(
             @{ Script = 'Invoke-CleanupExclusions.ps1'; Arguments = @('-Action', 'Status') },
             @{ Script = 'Invoke-ProtectedGameSession.ps1'; Arguments = @('-Action', 'Status', '-SessionRoot', $sessionRoot) })) {
@@ -186,17 +186,17 @@ try {
                 Check ($run.exit -ne 0 -and $run.text -match 'missing or damaged' -and $caseStarts.Count -eq 0) ("the installed " + $case.Script + ' refuses with the missing-or-damaged message and starts no dotnet.exe') ("exit=$($run.exit) dotnet.exe starts=$($caseStarts.Count) output=" + $run.text.Substring(0, [Math]::Min(300, $run.text.Length)))
             }
         }
-        Rename-Item -LiteralPath ($dll + '.roo-test-off') -NewName 'hostpolicy.dll'; $script:Renamed = @()
+        Rename-Item -LiteralPath ($dll + '.roo-industries-test-off') -NewName 'hostpolicy.dll'; $script:Renamed = @()
         Check (Test-Path -LiteralPath $dll) 'hostpolicy.dll is back in place' $dll
     }
 }
 catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    foreach ($path in @($script:Renamed)) { try { if (-not (Test-Path -LiteralPath $path)) { Rename-Item -LiteralPath ($path + '.roo-test-off') -NewName (Split-Path $path -Leaf) }; Log ('restored ' + (Split-Path $path -Leaf)) } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
+    foreach ($path in @($script:Renamed)) { try { if (-not (Test-Path -LiteralPath $path)) { Rename-Item -LiteralPath ($path + '.roo-industries-test-off') -NewName (Split-Path $path -Leaf) }; Log ('restored ' + (Split-Path $path -Leaf)) } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
     Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue
-    Stop-Roo
+    Stop-RooIndustriesApp
     try { Flush-Starts; $script:AllStarts | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir ($Name + '-process-starts.csv')) } catch {}
-    Get-EventSubscriber -SourceIdentifier RooHelperStartWatch -ErrorAction SilentlyContinue | Unregister-Event
+    Get-EventSubscriber -SourceIdentifier RooIndustriesHelperStartWatch -ErrorAction SilentlyContinue | Unregister-Event
     'x' | Set-Content $stopFile
     if ($watcher) { $watcher.WaitForExit(15000) | Out-Null }
     Log ('RESULT failures=' + $script:Failures)

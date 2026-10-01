@@ -197,7 +197,7 @@ static partial class DataFolderChecks
     {
         var id = H.Name("suspend");
         var root = Path.Combine(H.Local, id);
-        var prefix = "RooDfScratch.Quiesce.";
+        var prefix = "RooIndustriesDfScratch.Quiesce.";
         using var identity = WindowsIdentity.GetCurrent();
         var rules = new ProcessPolicyStore(Path.Combine(root, "process-rules"));
         var suffix = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity.User!.Value + "|" + rules.Root.ToUpperInvariant())))[..20];
@@ -249,7 +249,7 @@ static partial class DataFolderChecks
     {
         var id = H.Name("resolve");
         var selection = Path.Combine(H.Local, id);
-        var legacy = Path.Combine(selection, "RooOptimizationSuite");
+        var legacy = Path.Combine(selection, BrandCompatibility.LegacyDataFolder);
         var current = Path.Combine(selection, "RooIndustriesOptimizationSuite");
         try
         {
@@ -265,9 +265,9 @@ static partial class DataFolderChecks
             first.WaitForExit(60000);
             check(second.Exit == 0 && second.Output.Contains("SECURED migrated=False") && !Directory.Exists(current), "A second launch waits for the first and does not create a second data folder: " + second.Output);
             var plantedSelection = Path.Combine(H.Local, id + "-planted");
-            var plantedLegacy = Path.Combine(plantedSelection, "RooOptimizationSuite");
+            var plantedLegacy = Path.Combine(plantedSelection, BrandCompatibility.LegacyDataFolder);
             Directory.CreateDirectory(plantedSelection);
-            var plant = H.Standard("plant", plantedSelection, @"RooOptimizationSuite.legacy-planted\x.txt|planted", @"RooOptimizationSuite.secure-planted\.migrating|{""id"":""x"",""source"":""" + plantedLegacy.Replace("\\", "\\\\") + @""",""started"":""2026-01-01T00:00:00Z""}");
+            var plant = H.Standard("plant", plantedSelection, BrandCompatibility.LegacyDataFolder + @".legacy-planted\x.txt|planted", BrandCompatibility.LegacyDataFolder + @".secure-planted\.migrating|{""id"":""x"",""source"":""" + plantedLegacy.Replace("\\", "\\\\") + @""",""started"":""2026-01-01T00:00:00Z""}");
             check(plant == "PLANTED", "A standard user plants folders named like migration leftovers: " + plant);
             check(BrandCompatibility.DataRoot(plantedSelection) == Path.Combine(plantedSelection, "RooIndustriesOptimizationSuite"), "Folders a standard user planted with leftover names do not move the data folder to the legacy name");
             H.Delete(plantedSelection);

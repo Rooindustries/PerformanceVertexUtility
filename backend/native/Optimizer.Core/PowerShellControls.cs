@@ -19,7 +19,7 @@ static class PowerShellControls
             catch (Exception) { }
         }
     };
-    private const string ResultPrefix = "ROO-CONTROL ";
+    private const string ResultPrefix = "ROO_INDUSTRIES_CONTROL ";
     internal static Func<object, Process> Launcher { get; set; } = Start;
     public static TweakControlRead Read(ControlAddress address) => Parse(Invoke(new { action = "read", address }));
     public static void Write(TweakControlRead before, JsonElement after) => Invoke(new { action = "write", address = before.Address, before, after });

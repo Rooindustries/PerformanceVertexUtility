@@ -8,8 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
-if ($TestHooks) { $env:RooTestHooks = 'true' }
-elseif ($env:RooTestHooks) { throw 'RooTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
+if ($TestHooks) { $env:RooIndustriesTestHooks = 'true' }
+elseif ($env:RooIndustriesTestHooks) { throw 'RooIndustriesTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
 if ($env:GovernorTestHooks) { throw 'GovernorTestHooks is set in this environment, so this build would contain governor test hooks. Remove it before building a release.' }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).ProviderPath

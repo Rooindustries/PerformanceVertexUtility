@@ -20,7 +20,7 @@ $local=[Environment]::GetFolderPath('LocalApplicationData')
 $markerKey='HKLM\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
 $stateKey='HKLM\SOFTWARE\RooIndustriesOptimizationSuite'
 $personalize='HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-$ifeoProbe='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooProtectedGameProbe.exe'
+$ifeoProbe='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
 $productKeys=@('HKLM:\SOFTWARE\RooIndustries\OptimizationSuite','HKLM:\SOFTWARE\RooIndustries')
 $backup=Join-Path $Evidence 'backup'
 $noSuch='C:\RooIndustriesNoSuchFolder'
@@ -67,9 +67,9 @@ function Get-MachineState {
         rebootPendingCbs=(Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending')
         rebootRequiredUpdate=(Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
         pendingFileRenames=(@($rename)-join '|')
-        tasks=@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -match 'Roo'}|ForEach-Object {$_.TaskPath+$_.TaskName}|Sort-Object)
+        tasks=@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -match 'OptimizationSuite|Protected Session|RooIndustries'}|ForEach-Object {$_.TaskPath+$_.TaskName}|Sort-Object)
         productKeys=@($productKeys|Where-Object {Test-Path -LiteralPath $_})
-        uninstallEntries=@(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue|Where-Object {$_.PSChildName -match 'Roo' -or $_.PSChildName -like '{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}*'}|ForEach-Object PSChildName)
+        uninstallEntries=@(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue|Where-Object {$_.PSChildName -match 'RooIndustries|OptimizationSuite' -or $_.PSChildName -like '{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}*'}|ForEach-Object PSChildName)
         appFolder=(Test-Path -LiteralPath 'C:\Program Files\Roo Industries')
         enableTransparency=$(if($null -ne $transparency){[string]$transparency}else{'<absent>'})
         ifeoProbeKey=(Test-Path -LiteralPath $ifeoProbe)
@@ -125,7 +125,7 @@ function Invoke-Helper([string]$Path,[string[]]$Arguments,[hashtable]$Environmen
 }
 
 function Restore-AppData {
-    foreach($name in 'RooIndustriesOptimizationSuite','RooOptimizationSuite'){
+    foreach($name in 'RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries','')){
         $path=Join-Path $local $name
         if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force;Log "removed $path"}
         if(Test-Path -LiteralPath (Join-Path $backup $name)){
@@ -156,7 +156,7 @@ switch($Phase){
         if($busy.Count){throw ('Other Roo Industries test tasks exist: '+(($busy|ForEach-Object TaskName) -join ', '))}
         if(Test-Path -LiteralPath $backup){throw "A backup from an earlier run is still at $backup; restore it with -Phase cleanup first."}
         New-Item -ItemType Directory -Force -Path $backup|Out-Null
-        foreach($name in 'RooIndustriesOptimizationSuite','RooOptimizationSuite'){
+        foreach($name in 'RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries','')){
             $path=Join-Path $local $name
             if(Test-Path -LiteralPath $path){$copy=Invoke-Native robocopy.exe @($path,(Join-Path $backup $name),'/E','/COPYALL','/DCOPY:DAT','/XJ','/R:0','/W:0','/NFL','/NDL','/NP');Log ("backed up $path (robocopy exit "+$copy.Exit+')');if($copy.Exit -ge 8){throw ('The backup of '+$path+' failed (robocopy exit '+$copy.Exit+'); nothing was changed.')}
                 $source=@(Get-TreeFingerprint $path);$saved=@(Get-TreeFingerprint (Join-Path $backup $name))
@@ -293,9 +293,9 @@ switch($Phase){
     }
     'cleanup' {
         Log ('uninstall: '+(Uninstall-App))
-        Get-Process RooMigrationProbe,RooLoadTimesProbe,RooLauncherProbe,RooProtectedLauncherProbe -ErrorAction SilentlyContinue|ForEach-Object {Log ('stopped leftover probe '+$_.Name);Stop-Process -Id $_.Id -Force}
+        Get-Process RooIndustriesMigrationProbe,RooIndustriesLoadTimesProbe,RooIndustriesLauncherProbe,RooIndustriesProtectedLauncherProbe -ErrorAction SilentlyContinue|ForEach-Object {Log ('stopped leftover probe '+$_.Name);Stop-Process -Id $_.Id -Force}
         Start-Sleep -Milliseconds 500
-        foreach($leftover in 'RooMigrationProbe.exe','RooLoadTimesProbe.exe','RooLauncherProbe.exe','RooProtectedLauncherProbe.exe','RooProtectedGameProbe.exe','roo-industries-migration-state.json'){$leftoverPath=Join-Path $env:TEMP $leftover;if(Test-Path -LiteralPath $leftoverPath){Remove-Item -LiteralPath $leftoverPath -Force -ErrorAction SilentlyContinue;Log ('removed '+$leftoverPath)}}
+        foreach($leftover in 'RooIndustriesMigrationProbe.exe','RooIndustriesLoadTimesProbe.exe','RooIndustriesLauncherProbe.exe','RooIndustriesProtectedLauncherProbe.exe','RooIndustriesProtectedGameProbe.exe','roo-industries-migration-state.json'){$leftoverPath=Join-Path $env:TEMP $leftover;if(Test-Path -LiteralPath $leftoverPath){Remove-Item -LiteralPath $leftoverPath -Force -ErrorAction SilentlyContinue;Log ('removed '+$leftoverPath)}}
         $tasksBefore=if(Test-Path -LiteralPath (Join-Path $backup 'machine-state.json')){@((Get-Content -LiteralPath (Join-Path $backup 'machine-state.json') -Raw|ConvertFrom-Json).tasks)}else{$null}
         foreach($task in @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*','RooIndustriesOptimizationSuite.GovernorSetupWatchdog','RooIndustries_LoadTimes','Roo Industries Protected Session*' -ErrorAction SilentlyContinue)){
             if($null -ne $tasksBefore -and $tasksBefore -contains ($task.TaskPath+$task.TaskName)){Log ('kept task '+$task.TaskName+' (it existed before this run)');continue}

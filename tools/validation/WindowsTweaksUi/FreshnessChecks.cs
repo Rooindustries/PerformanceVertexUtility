@@ -34,7 +34,7 @@ static class FreshnessChecks
             using (DataGeneration.BeginChange())
             {
                 var plan = fixture.Engine.Preview("elsewhere-" + option, [new("setting", option)]);
-                var file = Path.Combine(Path.GetTempPath(), "roo-elsewhere-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
+                var file = Path.Combine(Path.GetTempPath(), "roo-industries-elsewhere-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
                 try { fixture.Engine.Apply(file, OperationFiles.HashFile(file)); } finally { File.Delete(file); }
             }
             await Task.Yield();
@@ -167,7 +167,7 @@ static class FreshnessChecks
                 using (DataGeneration.BeginChange())
                 {
                     var plan = fixture.Engine.Preview("my-settings", choices);
-                    var file = Path.Combine(Path.GetTempPath(), "roo-stale-review-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
+                    var file = Path.Combine(Path.GetTempPath(), "roo-industries-stale-review-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
                     try { fixture.Engine.Apply(file, OperationFiles.HashFile(file)); } finally { File.Delete(file); }
                 }
             }
@@ -234,7 +234,7 @@ static class FreshnessChecks
         {
             var fixture = new Fixture(Path.Combine(root, "restore-result")) { Missing = false };
             var plan = fixture.Engine.Preview("my-settings", [new("setting", "off")]);
-            var file = Path.Combine(Path.GetTempPath(), "roo-restore-result-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
+            var file = Path.Combine(Path.GetTempPath(), "roo-industries-restore-result-" + Guid.NewGuid().ToString("N") + ".json"); OperationFiles.Write(file, plan);
             try { fixture.Engine.Apply(file, OperationFiles.HashFile(file)); } finally { File.Delete(file); }
             App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
             Action settled = () => _ = model.RevalidateAsync();

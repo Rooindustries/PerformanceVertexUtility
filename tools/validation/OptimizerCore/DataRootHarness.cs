@@ -9,7 +9,7 @@ static class DataRootHarness
 {
     public static readonly string Local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-    public static string Name(string label) => "RooDataFix-" + label + "-" + Guid.NewGuid().ToString("N")[..12];
+    public static string Name(string label) => "RooIndustriesDataFix-" + label + "-" + Guid.NewGuid().ToString("N")[..12];
 
     public static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
@@ -96,7 +96,7 @@ static class DataRootHarness
 
     public static string Standard(params string[] args)
     {
-        var result = Path.Combine(Local, "RooDataFix-std-" + Guid.NewGuid().ToString("N") + ".txt");
+        var result = Path.Combine(Local, "RooIndustriesDataFix-std-" + Guid.NewGuid().ToString("N") + ".txt");
         var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
         var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;
         var script = "$env:DOTNET_ROOT=" + Quote(Path.GetDirectoryName(dotnet)!) + "; & " + Quote(dotnet) + " " + Quote(dll) + " --child-standard " + string.Join(" ", args.Select(Quote)) + " *> " + Quote(result);

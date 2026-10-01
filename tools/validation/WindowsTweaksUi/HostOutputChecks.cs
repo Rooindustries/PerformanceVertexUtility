@@ -68,22 +68,22 @@ static class HostOutputChecks
             var final = await HostOutput.ReadAsync(stream, bytes => partials.Add(Encoding.UTF8.GetString(bytes.Span)), stopped);
             return (partials, Encoding.UTF8.GetString(final.Span));
         }
-        const string Final = "{\"status\":\"completed\",\"data\":{\"note\":\"ROO-PARTIAL inside a value\"}}";
+        const string Final = "{\"status\":\"completed\",\"data\":{\"note\":\"ROO_INDUSTRIES_PARTIAL inside a value\"}}";
 
         await Scenario("A partial line after a byte order mark is delivered and the final JSON is returned", async () =>
         {
-            var (partials, final) = await Read(new ChunkStream([.. "\uFEFF"u8, .. B("ROO-PARTIAL {\"a\":1}\n" + Final)]));
+            var (partials, final) = await Read(new ChunkStream([.. "\uFEFF"u8, .. B("ROO_INDUSTRIES_PARTIAL {\"a\":1}\n" + Final)]));
             return partials.SequenceEqual(["{\"a\":1}"]) && final == Final;
         });
         await Scenario("A prefix and a partial line split across reads are delivered whole", async () =>
         {
-            var all = B("ROO-PARTIAL {\"a\":12345}\r\nROO-PARTIAL {\"b\":2}\n" + Final);
+            var all = B("ROO_INDUSTRIES_PARTIAL {\"a\":12345}\r\nROO_INDUSTRIES_PARTIAL {\"b\":2}\n" + Final);
             var (partials, final) = await Read(new ChunkStream(Split(all, 3, 9, 17, 25, 30)));
             return partials.Count == 2 && partials[0].TrimEnd('\r') == "{\"a\":12345}" && partials[1] == "{\"b\":2}" && final == Final;
         });
         await Scenario("A partial line after stray output is still delivered and the stray text is kept with the final output", async () =>
         {
-            var (partials, final) = await Read(new ChunkStream(B("runtime notice\nROO-PARTIAL {\"a\":1}\n" + Final)));
+            var (partials, final) = await Read(new ChunkStream(B("runtime notice\nROO_INDUSTRIES_PARTIAL {\"a\":1}\n" + Final)));
             return partials.SequenceEqual(["{\"a\":1}"]) && final == "runtime notice\n" + Final;
         });
         await Scenario("Text that only contains the prefix inside the final JSON is not taken as a partial", async () =>
@@ -93,31 +93,31 @@ static class HostOutputChecks
         });
         await Scenario("A partial line cut off by the helper exiting is dropped instead of becoming the final output", async () =>
         {
-            var (partials, final) = await Read(new ChunkStream(B("ROO-PARTIAL {\"a\":1}\nROO-PARTIAL {\"b\":")));
+            var (partials, final) = await Read(new ChunkStream(B("ROO_INDUSTRIES_PARTIAL {\"a\":1}\nROO_INDUSTRIES_PARTIAL {\"b\":")));
             return partials.SequenceEqual(["{\"a\":1}"]) && final.Trim().Length == 0;
         });
         await Scenario("No partial line is delivered after the read was stopped by a timeout", async () =>
         {
             var stop = false;
-            var stream = new ChunkStream(B("ROO-PARTIAL {\"a\":1}\n"), B("ROO-PARTIAL {\"b\":2}\n"), B(Final)) { BeforeChunk = index => { if (index == 1) stop = true; } };
+            var stream = new ChunkStream(B("ROO_INDUSTRIES_PARTIAL {\"a\":1}\n"), B("ROO_INDUSTRIES_PARTIAL {\"b\":2}\n"), B(Final)) { BeforeChunk = index => { if (index == 1) stop = true; } };
             var (partials, _) = await Read(stream, () => stop);
             return partials.SequenceEqual(["{\"a\":1}"]);
         });
         await Scenario("A partial handler that throws does not stop the read", async () =>
         {
             var calls = 0;
-            var final = await HostOutput.ReadAsync(new ChunkStream(B("ROO-PARTIAL {\"a\":1}\nROO-PARTIAL {\"b\":2}\n" + Final)), _ => { calls++; throw new InvalidOperationException("handler"); });
+            var final = await HostOutput.ReadAsync(new ChunkStream(B("ROO_INDUSTRIES_PARTIAL {\"a\":1}\nROO_INDUSTRIES_PARTIAL {\"b\":2}\n" + Final)), _ => { calls++; throw new InvalidOperationException("handler"); });
             return calls == 2 && Encoding.UTF8.GetString(final.Span) == Final;
         });
         await Scenario("Output without a partial handler is returned unchanged apart from a leading byte order mark", async () =>
         {
-            var final = await HostOutput.ReadAsync(new ChunkStream([.. "\uFEFF"u8, .. B("ROO-PARTIAL x\n" + Final)]), null);
-            return Encoding.UTF8.GetString(final.Span) == "ROO-PARTIAL x\n" + Final;
+            var final = await HostOutput.ReadAsync(new ChunkStream([.. "\uFEFF"u8, .. B("ROO_INDUSTRIES_PARTIAL x\n" + Final)]), null);
+            return Encoding.UTF8.GetString(final.Span) == "ROO_INDUSTRIES_PARTIAL x\n" + Final;
         });
         await Scenario("Output that stays open after the helper exits is returned once the read is abandoned", async () =>
         {
             using var abandon = new CancellationTokenSource();
-            var read = HostOutput.ReadAsync(new ChunkStream(B("ROO-PARTIAL {\"a\":1}\n" + Final)) { HangAtEnd = true }, _ => { }, null, abandon.Token);
+            var read = HostOutput.ReadAsync(new ChunkStream(B("ROO_INDUSTRIES_PARTIAL {\"a\":1}\n" + Final)) { HangAtEnd = true }, _ => { }, null, abandon.Token);
             if (await Task.WhenAny(read, Task.Delay(500)) == read) return false;
             abandon.Cancel();
             if (await Task.WhenAny(read, Task.Delay(5000)) != read) return false;

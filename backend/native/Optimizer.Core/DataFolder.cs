@@ -121,7 +121,7 @@ public static class DataFolder
         {
             using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
             var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity.User!.Value + "|" + rules.Root.ToUpperInvariant())))[..20];
-            foreach (var name in new[] { @"\" + TaskPrefix("RooIndustriesOptimizationSuite.ProcessRules.") + suffix, @"\" + TaskPrefix("RooOptimizationSuite.ProcessRules.") + suffix }.Distinct())
+            foreach (var name in new[] { @"\" + TaskPrefix("RooIndustriesOptimizationSuite.ProcessRules.") + suffix, @"\" + TaskPrefix(BrandCompatibility.LegacyPolicyTaskPrefix) + suffix }.Distinct())
             {
                 if (Schtasks("/Query", "/TN", name, "/XML") is not { } xml || Regex.IsMatch(xml, "(?s)<Settings>.*?<Enabled>false</Enabled>.*?</Settings>") || tasks.Contains(name)) continue;
                 tasks.Add(name);

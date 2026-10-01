@@ -23,8 +23,8 @@
     <DefaultLanguage>en-US</DefaultLanguage>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(RooTestHooks)' == 'true'">
-    <DefineConstants>$(DefineConstants);ROO_TEST_HOOKS</DefineConstants>
+  <PropertyGroup Condition="'$(RooIndustriesTestHooks)' == 'true'">
+    <DefineConstants>$(DefineConstants);ROO_INDUSTRIES_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

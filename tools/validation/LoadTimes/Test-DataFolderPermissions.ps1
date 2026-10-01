@@ -16,7 +16,7 @@ try {
     $user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $local = [Environment]::GetFolderPath('LocalApplicationData')
     $markers = Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local 'RooOptimizationSuite'
+    $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     $root = if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
     Log ("data root=$root user=$user marked=" + [bool]($markers -and $null -ne $markers.GetValue($root.ToUpperInvariant())))
     $names = [ordered]@{ root = ''; operations = 'operations'; timer = 'operations\windows-timer'; firmware = 'firmware'; tools = 'tools'; settings = 'settings'; rules = 'process-rules'; logs = 'logs' }
@@ -54,7 +54,7 @@ try {
 `$out=[ordered]@{groups=@(whoami /groups | Select-String 'S-1-5-32-544' | ForEach-Object { [string]`$_ })}
 `$targets=[ordered]@{$targets}
 foreach(`$key in `$targets.Keys){
-  `$file=Join-Path `$targets[`$key] ('roo-standard-probe-'+[Guid]::NewGuid().ToString('N')+'.txt')
+  `$file=Join-Path `$targets[`$key] ('roo-industries-standard-probe-'+[Guid]::NewGuid().ToString('N')+'.txt')
   try { Set-Content -LiteralPath `$file -Value 'standard token probe' -ErrorAction Stop; `$out[`$key]='WROTE '+`$file } catch { `$out[`$key]='DENIED '+`$_.Exception.Message }
   try { `$out[`$key+'List']='LISTED '+@(Get-ChildItem -LiteralPath `$targets[`$key] -Force -ErrorAction Stop).Count } catch { `$out[`$key+'List']='LIST FAILED '+`$_.Exception.Message }
 }

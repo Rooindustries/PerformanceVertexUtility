@@ -23,7 +23,7 @@ $script:LogPath = Join-Path $OutDir 'invalidation.log'
 $script:Failures = 0
 $script:Skipped = 0
 $Setting = 'windows.0689e69eedc05770'
-$CheckProfile = 'roo-cache-check'
+$CheckProfile = 'roo-industries-cache-check'
 $Personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
@@ -73,7 +73,7 @@ function Combo-Items([string]$id) {
 }
 function Wait-Listed([string]$id, [bool]$present, [double]$seconds) {
     $deadline = (Get-Date).AddSeconds($seconds)
-    do { $names = @(Combo-Items $id); $found = @($names | Where-Object { $_ -like '*RooLoadTimesProbe*' }).Count -gt 0; if ($found -eq $present) { return $true }; Start-Sleep 1 } while ((Get-Date) -lt $deadline)
+    do { $names = @(Combo-Items $id); $found = @($names | Where-Object { $_ -like '*RooIndustriesLoadTimesProbe*' }).Count -gt 0; if ($found -eq $present) { return $true }; Start-Sleep 1 } while ((Get-Date) -lt $deadline)
     return $false
 }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
@@ -117,14 +117,14 @@ $app = $null
 $script:Cleanup = $null
 $script:App = $null
 $script:RegistryBefore = $null
-function Start-Roo {
+function Start-RooIndustriesApp {
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [CacheCheckU32]::ShowWindow($h, 9) | Out-Null; [CacheCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [CacheCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
-function Stop-Roo {
+function Stop-RooIndustriesApp {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
 }
@@ -156,14 +156,14 @@ function Host-Tree([int]$appId) {
     return $found
 }
 
-$probePath = Join-Path $env:TEMP 'RooLoadTimesProbe.exe'
+$probePath = Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'
 $probe = $null; $probe2 = $null
 $script:RuleSaved = $false
 $script:RuleTest = $false
 $script:GovernorRule = $false
-$ruleName = 'roo-cache-check rule'
+$ruleName = 'roo-industries-cache-check rule'
 try {
-    Start-Roo
+    Start-RooIndustriesApp
     $app = $script:App
 
     $before = @(Undo-Profiles)
@@ -231,7 +231,7 @@ try {
     Nav 'Home'; Start-Sleep 1; Nav 'Games'; Start-Sleep 1
     Select-Tab 'GamesTab'
     WaitFor { if (Wait-Listed 'GameSessionLauncher' $true 5) { $true } } 30 'probe in the launcher list' | Out-Null
-    Select-ComboItem 'GameSessionLauncher' '*RooLoadTimesProbe*'
+    Select-ComboItem 'GameSessionLauncher' '*RooIndustriesLoadTimesProbe*'
     Start-Sleep 3
     $statusBefore = (WaitFor { ById 'GameSessionStatus' } 20 'Games tab status').Current.Name
     Log ("Games tab status with the probe selected as launcher: " + $statusBefore)
@@ -255,7 +255,7 @@ try {
     Stop-Process -Id $probe2.Id -Force -ErrorAction SilentlyContinue
 
     $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })
-    $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Roo' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+    $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
     $governorBuild = (@(Undo-Profiles) -contains 'Roo Industries Governor')
     if ($governorBuild) {
         $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
@@ -265,7 +265,7 @@ try {
         if ($rowBefore -ne 'No rules') { throw "The governor already has rules on this PC ($rowBefore); refusing to add a test rule." }
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
-        Pick 'ProcessPicker' '*RooLoadTimesProbe*'
+        Pick 'ProcessPicker' '*RooIndustriesLoadTimesProbe*'
         Process-Status '^Controls for' 60 'probe controls' | Out-Null
         Pick 'cpuPriority' 'Below normal'
         Invoke-Element (WaitFor { $b = ById 'ProcessPreview'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'review button')
@@ -297,11 +297,11 @@ try {
         $script:Skipped++; Log ('SKIPPED the process rule check: this PC already has saved process rules or a rule task (' + $ruleTasksBefore.Count + ' tasks); the test does not touch them')
     }
     else {
-        Stop-Roo
+        Stop-RooIndustriesApp
         $probe2 = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
-        Start-Roo
+        Start-RooIndustriesApp
         Nav 'Games'; Start-Sleep 2; Select-Tab 'ProcessesTab'
-        Select-ComboItem 'ProcessPicker' '*RooLoadTimesProbe*'
+        Select-ComboItem 'ProcessPicker' '*RooIndustriesLoadTimesProbe*'
         $priority = WaitFor { $c = ById 'cpuPriority'; if ($c -and $c.Current.IsEnabled) { $c } } 30 'CPU priority control'
         $pattern = $priority.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern); $pattern.Expand(); Start-Sleep -Milliseconds 700
         $options = @($priority.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)))
@@ -312,28 +312,28 @@ try {
         try { $rules.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
         $save = WaitFor { $b = ById 'ProcessSaveRule'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'save rule button'
         $script:RuleTest = $true
-        $script:Cleanup = 'delete the RooLoadTimesProbe rule, stop the rule worker, remove the rule task and the process-rules folder'
+        $script:Cleanup = 'delete the RooIndustriesLoadTimesProbe rule, stop the rule worker, remove the rule task and the process-rules folder'
         Invoke-Element $save; $script:RuleSaved = $true
         WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match 'Rule saved and enabled|need attention') { $s.Current.Name } } 60 'rule save result' | Out-Null
         Log ('rule save status: ' + (ById 'ProcessStatus').Current.Name)
         Select-Tab 'GamesTab'; Nav 'Undo changes'; Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         $listed = @(Combo-Items 'ProcessRulesList') -join ' | '
-        Check ($listed -match 'RooLoadTimesProbe') 'a saved process rule is listed on the Processes tab after leaving and returning' $listed
+        Check ($listed -match 'RooIndustriesLoadTimesProbe') 'a saved process rule is listed on the Processes tab after leaving and returning' $listed
         $undoTexts = @(Undo-Profiles) -join ' | '
         Log ('Undo page after the rule save (this branch does not list process rules there): ' + $undoTexts.Substring(0, [Math]::Min(300, $undoTexts.Length)))
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
-        Select-ComboItem 'ProcessRulesList' '*RooLoadTimesProbe*'
+        Select-ComboItem 'ProcessRulesList' '*RooIndustriesLoadTimesProbe*'
         Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule')
         WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match 'Rule deleted|Couldn') { $true } } 60 'rule delete' | Out-Null
         $stop = ById 'ProcessStopWorker'; if ($stop -and $stop.Current.IsEnabled) { Invoke-Element $stop; Start-Sleep 5 }
         $left = @(Combo-Items 'ProcessRulesList') -join ' | '
-        if ($left -notmatch 'RooLoadTimesProbe') { $script:RuleSaved = $false }
+        if ($left -notmatch 'RooIndustriesLoadTimesProbe') { $script:RuleSaved = $false }
         Check (-not $script:RuleSaved) 'the test rule was deleted and the rule worker stopped' $left
         Stop-Process -Id $probe2.Id -Force -ErrorAction SilentlyContinue
     }
 
-    Stop-Roo
-    Start-Roo
+    Stop-RooIndustriesApp
+    Start-RooIndustriesApp
     WaitFor { if (@(Host-Tree $script:App.Id).Count) { $true } } 20 'the Windows tweaks preload helper' | Out-Null
     Log ('preload helpers before opening Windows tweaks: ' + ((@(Host-Tree $script:App.Id) | ForEach-Object { $_.Name + ':' + (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue).PriorityClass }) -join ', '))
     Nav 'Windows tweaks'
@@ -352,7 +352,7 @@ finally {
     foreach ($p in @($probe, $probe2)) { if ($p) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
     if ($script:GovernorRule) {
         try {
-            if (-not $script:App -or $script:App.HasExited) { Start-Roo }
+            if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
             Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
             try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
             Pick 'ProcessRulesList' ($ruleName + '*')
@@ -364,30 +364,30 @@ finally {
     }
     if ($script:RuleSaved) {
         try {
-            if (-not $script:App -or $script:App.HasExited) { Start-Roo }
+            if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
             Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
-            Select-ComboItem 'ProcessRulesList' '*RooLoadTimesProbe*'
+            Select-ComboItem 'ProcessRulesList' '*RooIndustriesLoadTimesProbe*'
             Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule')
             Start-Sleep 5
             $stop = ById 'ProcessStopWorker'; if ($stop -and $stop.Current.IsEnabled) { Invoke-Element $stop; Start-Sleep 5 }
-            if ((@(Combo-Items 'ProcessRulesList') -join ' ') -notmatch 'RooLoadTimesProbe') { $script:RuleSaved = $false; Log 'cleanup: deleted the test rule' }
+            if ((@(Combo-Items 'ProcessRulesList') -join ' ') -notmatch 'RooIndustriesLoadTimesProbe') { $script:RuleSaved = $false; Log 'cleanup: deleted the test rule' }
         } catch { Log ('cleanup: could not delete the test rule: ' + $_.Exception.Message) }
-        if ($script:RuleSaved) { Log 'CLEANUP NEEDED: delete the RooLoadTimesProbe rule on the Processes tab and stop the rule worker' }
+        if ($script:RuleSaved) { Log 'CLEANUP NEEDED: delete the RooIndustriesLoadTimesProbe rule on the Processes tab and stop the rule worker' }
     }
     if ($script:RuleTest) {
-        Stop-Roo
+        Stop-RooIndustriesApp
         foreach ($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })) {
             try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed rule task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) }
         }
         Get-CimInstance Win32_Process -Filter "Name like 'Optimizer.Host%'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'process-rules|policy' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Log 'cleanup: stopped a rule worker' }
-        foreach ($root in @(Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Roo' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ })) {
+        foreach ($root in @(Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ })) {
             try { Remove-Item $root -Recurse -Force; Log 'cleanup: removed the process-rules folder the test created' } catch { Log ('CLEANUP NEEDED: remove ' + $root) }
         }
         if (-not $script:RuleSaved -and $script:Cleanup -match 'rule') { $script:Cleanup = $null }
     }
     if ($null -ne $script:RegistryBefore -and (Transparency) -ne $script:RegistryBefore) {
         try {
-            if (-not $script:App -or $script:App.HasExited) { Start-Roo }
+            if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
             Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
             $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
             Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
@@ -403,7 +403,7 @@ finally {
         }
         else { Log 'cleanup: restored the test profile through the app'; $script:Cleanup = $null }
     }
-    Stop-Roo
+    Stop-RooIndustriesApp
     Remove-Item $probePath -Force -ErrorAction SilentlyContinue
     if ($script:Cleanup) { Log ('CLEANUP NEEDED: ' + $script:Cleanup) }
     Log ('RESULT failures=' + $script:Failures + ' skipped=' + $script:Skipped)

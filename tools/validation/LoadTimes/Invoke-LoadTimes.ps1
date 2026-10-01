@@ -43,7 +43,7 @@ $sessionTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-
 if ($SetupPath -and $installedBefore -and -not $ReplaceExisting) { throw 'The app is already installed on this PC; pass -ReplaceExisting to replace it with the test build.' }
 $task = 'RooIndustries_LoadTimes'
 $standalone = 'loadtimes', 'invalidation', 'modes', 'hardware', 'launchers', 'override', 'incomplete', 'incomplete-before'
-$ifeoProbe = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooProtectedGameProbe.exe'
+$ifeoProbe = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
 $ifeoBefore = Test-Path $ifeoProbe
 try {
 if ($SetupPath) {
@@ -94,8 +94,8 @@ finally {
     function Step([string]$what, [scriptblock]$body) { try { & $body } catch { "RESULT CLEANUP NEEDED: $what failed: " + $_.Exception.Message } }
     Step 'remove the scheduled task' { if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task -Confirm:$false } }
     Step 'restore renamed scripts' {
-        foreach ($renamed in @(Get-ChildItem $appDir -Recurse -File -Filter '*.roo-test-off' -ErrorAction SilentlyContinue)) {
-            $original = $renamed.FullName.Substring(0, $renamed.FullName.Length - '.roo-test-off'.Length)
+        foreach ($renamed in @(Get-ChildItem $appDir -Recurse -File -Filter '*.roo-industries-test-off' -ErrorAction SilentlyContinue)) {
+            $original = $renamed.FullName.Substring(0, $renamed.FullName.Length - '.roo-industries-test-off'.Length)
             if (-not (Test-Path $original)) { Rename-Item $renamed.FullName $original; "RESULT restored renamed script " + $renamed.Name }
         }
     }
@@ -116,9 +116,9 @@ finally {
         Step 'remove test helpers' {
             Remove-Item (Join-Path $env:TEMP 'roo-industries-feature-hang.flag') -Force -ErrorAction SilentlyContinue
             Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '-n (400|600|900) 127\.0\.0\.1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            Get-Process RooLoadTimesProbe, RooLauncherProbe, RooProtectedLauncherProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process RooIndustriesLoadTimesProbe, RooIndustriesLauncherProbe, RooIndustriesProtectedLauncherProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
-            Remove-Item (Join-Path $env:TEMP 'RooLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooLauncherProbe.exe'), (Join-Path $env:TEMP 'RooProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooProtectedGameProbe.exe') -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedGameProbe.exe') -Force -ErrorAction SilentlyContinue
         }
         Step 'remove protected-session leftovers' {
             if ($Scenario -eq 'launchers') {

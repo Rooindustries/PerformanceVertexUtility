@@ -39,21 +39,21 @@ function Nav([string]$name) {
     $item = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, $name), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) } 30 "nav $name"
     Invoke-Element $item; Log "nav $name"; Start-Sleep -Milliseconds 800
 }
-function Start-Roo {
-    Stop-Roo
+function Start-RooIndustriesApp {
+    Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [HardwareCheckU32]::ShowWindow($h, 9) | Out-Null; [HardwareCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [HardwareCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
-function Stop-Roo {
+function Stop-RooIndustriesApp {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
 }
 function App-Log {
     $root = [Environment]::GetFolderPath('LocalApplicationData')
-    $folder = if (Test-Path (Join-Path $root 'RooOptimizationSuite')) { 'RooOptimizationSuite' } else { 'RooIndustriesOptimizationSuite' }
+    $folder = if (Test-Path (Join-Path $root ('RooIndustriesOptimizationSuite' -replace 'Industries',''))) { ('RooIndustriesOptimizationSuite' -replace 'Industries','') } else { 'RooIndustriesOptimizationSuite' }
     Join-Path $root ($folder + '\logs\app.log')
 }
 function Hardware-Reads {
@@ -65,7 +65,7 @@ function Hardware-Reads {
 try {
     $script:Started = (Get-Date).AddSeconds(-2)
     $before = Hardware-Reads
-    Start-Roo
+    Start-RooIndustriesApp
     Nav 'Home'
     $first = WaitFor { $n = Hardware-Reads; if ($n -gt $before) { $n } } 60 'the first hardware summary read'
     Log "hardware summary reads after the first Home visit: $first"
@@ -81,7 +81,7 @@ try {
     Check $reread 'Home reads the hardware summary again on a visit more than 10 minutes after the last read' ("reads before=$quick after=" + (Hardware-Reads))
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)) }
 finally {
-    Stop-Roo
+    Stop-RooIndustriesApp
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir 'hardware.done')
 }

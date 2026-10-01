@@ -23,7 +23,7 @@ function Result($item,[string]$prefix){
 if($request.action -eq 'read-batch'){
     $index=0
     foreach($item in @($request.addresses)){
-        $line=Result $item ('ROO-CONTROL '+$index+' ')
+        $line=Result $item ('ROO_INDUSTRIES_CONTROL '+$index+' ')
         [Console]::Out.WriteLine($line);[Console]::Out.Flush();$index++
     }
     exit 0
