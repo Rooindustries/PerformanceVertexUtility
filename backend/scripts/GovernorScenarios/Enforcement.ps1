@@ -527,7 +527,7 @@ function Set-ScenarioListDenied([string]$Path,[bool]$Denied){
 
 function Test-ScenarioConfigErrorRestoreBackoff {
     $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
-    $fixture=Start-Probe $path '8 1600 28 600' -NoWait
+    $fixture=Start-Probe $path '8 1600 32 600' -NoWait
     $started=[Diagnostics.Stopwatch]::StartNew()
     Use-Rule (New-Rule $path @{cpuPriority='AboveNormal'} 'Config error backoff')|Out-Null
     Assert ($null -ne (Wait-Field $fixture 'cpuPriority' 'AboveNormal' 6)) 'The rule is applied before the app starts denying access'
@@ -539,7 +539,7 @@ function Test-ScenarioConfigErrorRestoreBackoff {
     $configError=Wait-Until {(Get-GovernorState).status -eq 'configurationError'} 30 500
     Note 'secondsToConfigurationError' $(if($configError){[Math]::Round($configError,1)})
     Assert ($null -ne $configError) 'With the rules folder unreadable the governor reports a configuration error after its grace period'
-    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 41} 45 500
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 45} 50 500
     $stillHeld=[string](Read-Field $fixture 'cpuPriority')
     Note 'fiveSecondsAfterDenialEnded' $stillHeld
     Assert ($stillHeld -eq 'AboveNormal') 'Restores that keep failing are retried with growing delays, not every half second'
