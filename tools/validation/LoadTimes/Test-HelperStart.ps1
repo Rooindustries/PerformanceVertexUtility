@@ -18,11 +18,42 @@ public static class HelperStartU32 {
  [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);
 }
 '@
+Add-Type @'
+using System; using System.Runtime.InteropServices;
+public static class HelperStartEnv {
+ [StructLayout(LayoutKind.Sequential)] struct PBI { public IntPtr Exit, Peb, Affinity, Priority, Pid, ParentPid; }
+ [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+ [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadProcessMemory(IntPtr h, IntPtr address, byte[] buffer, IntPtr size, out IntPtr read);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+ [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr h, int cls, ref PBI info, int size, out int returned);
+ static IntPtr Pointer(IntPtr h, IntPtr address) { var b = new byte[8]; IntPtr n; if (!ReadProcessMemory(h, address, b, (IntPtr)8, out n)) throw new System.ComponentModel.Win32Exception(); return (IntPtr)BitConverter.ToInt64(b, 0); }
+ public static string[] Names(int pid) {
+  IntPtr h = OpenProcess(0x0410, false, pid);
+  if (h == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
+  try {
+   var info = new PBI(); int returned;
+   if (NtQueryInformationProcess(h, 0, ref info, Marshal.SizeOf(typeof(PBI)), out returned) != 0) throw new InvalidOperationException("NtQueryInformationProcess failed");
+   IntPtr parameters = Pointer(h, (IntPtr)(info.Peb.ToInt64() + 0x20));
+   IntPtr environment = Pointer(h, (IntPtr)(parameters.ToInt64() + 0x80));
+   var sizeBytes = new byte[8]; IntPtr n;
+   if (!ReadProcessMemory(h, (IntPtr)(parameters.ToInt64() + 0x3F0), sizeBytes, (IntPtr)8, out n)) throw new System.ComponentModel.Win32Exception();
+   int size = (int)BitConverter.ToInt64(sizeBytes, 0);
+   if (size <= 0 || size > 4 * 1024 * 1024) throw new InvalidOperationException("Unexpected environment size " + size);
+   var data = new byte[size];
+   if (!ReadProcessMemory(h, environment, data, (IntPtr)size, out n)) throw new System.ComponentModel.Win32Exception();
+   var entries = System.Text.Encoding.Unicode.GetString(data).Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+   var names = new System.Collections.Generic.List<string>();
+   foreach (var entry in entries) { int i = entry.IndexOf('=', 1); names.Add(i > 0 ? entry.Substring(0, i) : entry); }
+   return names.ToArray();
+  } finally { CloseHandle(h); }
+ }
+}
+'@
 [HelperStartU32]::SetProcessDPIAware() | Out-Null
 [HelperStartU32]::SetThreadExecutionState([uint32]2147483651) | Out-Null
 $A = [Windows.Automation.AutomationElement]; $TS = [Windows.Automation.TreeScope]; $CT = [Windows.Automation.ControlType]
-$Name = if ($Before) { $Check + '-before' } else { $Check }
-$script:LogPath = Join-Path $OutDir ($Name + '.log')
+$Tag = if ($Before) { $Check + '-before' } else { $Check }
+$script:LogPath = Join-Path $OutDir ($Tag + '.log')
 $script:Failures = 0
 $script:Renamed = @()
 $script:App = $null
@@ -38,7 +69,7 @@ function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $scr
 function Shot([string]$name) {
     $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
     $b = New-Object Drawing.Bitmap $bounds.Width, $bounds.Height; $g = [Drawing.Graphics]::FromImage($b)
-    $g.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $b.Size); $b.Save((Join-Path $OutDir ('shot-' + $Name + '-' + $name + '.png')), [Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $b.Dispose()
+    $g.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $b.Size); $b.Save((Join-Path $OutDir ('shot-' + $Tag + '-' + $name + '.png')), [Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $b.Dispose()
 }
 function WaitFor([scriptblock]$probe, [double]$seconds, [string]$what) {
     $deadline = (Get-Date).AddSeconds($seconds)
@@ -74,6 +105,7 @@ function Data-Root {
     $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
 }
+function Log-Since($before) { $all = @(Log-Lines); if ($all.Count -lt $before) { $all } else { @($all | Select-Object -Skip $before) } }
 function Log-Lines { $path = Join-Path (Data-Root) 'logs\app.log'; if (Test-Path -LiteralPath $path) { @(Get-Content -LiteralPath $path -Encoding UTF8) } else { @() } }
 function Flush-Starts {
     foreach ($e in @(Get-Event -SourceIdentifier RooIndustriesHelperStartWatch -ErrorAction SilentlyContinue)) {
@@ -83,7 +115,7 @@ function Flush-Starts {
         Remove-Event -EventIdentifier $e.EventIdentifier
     }
 }
-function Watch-Rows { $path = Join-Path $OutDir ($Name + '-processes.csv'); if (Test-Path -LiteralPath $path) { @(Get-Content -LiteralPath $path -Encoding UTF8 | Where-Object { $_ -notmatch '^#' } | ConvertFrom-Csv) } else { @() } }
+function Watch-Rows { $path = Join-Path $OutDir ($Tag + '-processes.csv'); if (Test-Path -LiteralPath $path) { @(Get-Content -LiteralPath $path -Encoding UTF8 | Where-Object { $_ -notmatch '^#' } | ConvertFrom-Csv) } else { @() } }
 function Image-Of([string]$commandLine) { if ($commandLine -match '^"([^"]+)"') { $Matches[1] } elseif ($commandLine -match '^(\S+)') { $Matches[1] } else { '' } }
 function Descendants-Of([int[]]$roots) {
     $set = [Collections.Generic.HashSet[int]]::new(); foreach ($r in $roots) { [void]$set.Add($r) }
@@ -105,11 +137,11 @@ try {
     Log ("check=$Check before=$([bool]$Before) install=$install version=" + (Get-Item $Exe).VersionInfo.ProductVersion)
     Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier RooIndustriesHelperStartWatch | Out-Null
     Remove-Item $stopFile -ErrorAction SilentlyContinue
-    $watcher = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1'), '-OutCsv', (Join-Path $OutDir ($Name + '-processes.csv')), '-StopFile', $stopFile) -WindowStyle Hidden -PassThru
-    WaitFor { Test-Path (Join-Path $OutDir ($Name + '-processes.csv.ready')) } 30 'the process watcher' | Out-Null
+    $watcher = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1'), '-OutCsv', (Join-Path $OutDir ($Tag + '-processes.csv')), '-StopFile', $stopFile) -WindowStyle Hidden -PassThru
+    WaitFor { Test-Path (Join-Path $OutDir ($Tag + '-processes.csv.ready')) } 30 'the process watcher' | Out-Null
     Log ('dotnet.exe candidates on this PC: ' + ((Dotnet-Candidates) -join '; '))
     if (Test-Path -LiteralPath $userDotNet) {
-        $controlRun = Start-Process $userDotNet -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $OutDir ($Name + '-control-dotnet-version.txt'))
+        $controlRun = Start-Process $userDotNet -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $OutDir ($Tag + '-control-dotnet-version.txt'))
         Start-Sleep 2; Flush-Starts
         Check (@($script:Starts | Where-Object { $_.name -eq 'dotnet.exe' -and $_.pid -eq $controlRun.Id }).Count -eq 1) 'control: the process trace sees a dotnet.exe that this scenario starts on purpose' ("pid=" + $controlRun.Id + " exit=" + $controlRun.ExitCode)
         $script:Starts.Clear()
@@ -118,31 +150,36 @@ try {
 
     if ($Check -eq 'override') {
         Check (-not (Test-Path -LiteralPath $noSuchDotNet)) 'the override target does not exist' $noSuchDotNet
-        $logBefore = (Log-Lines).Count
+        $logBefore = @(Log-Lines).Count
         $env:ROO_INDUSTRIES_DOTNET_EXE = $noSuchDotNet
         try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
         Nav 'Windows tweaks'
         $list = WaitFor { ById 'WindowsTweaksList' } 60 'Windows tweaks list'
         $rows = WaitFor { $c = @($list.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))).Count; if ($c -gt 0) { $c } } 180 'Windows tweaks rows'
-        $status = WaitFor { $s = ById 'WindowsTweaksStatus'; if ($s -and $s.Current.Name -notmatch '^Loading') { $s.Current.Name } } 180 'Windows tweaks status'
+        $status = WaitFor { $s = ById 'WindowsTweaksStatus'; if ($s -and $s.Current.Name -notmatch '^Loading|checking Windows features') { $s.Current.Name } } 180 'Windows tweaks status'
         Shot 'tweaks'
         Flush-Starts
         $hostRows = @(Watch-Rows | Where-Object { $_.name -eq 'Optimizer.Host.exe' -and [int]$_.ppid -eq $script:App.Id -and $_.command_line })
         $images = @($hostRows | ForEach-Object { Image-Of $_.command_line } | Select-Object -Unique)
         $inside = @($images | Where-Object { $_.StartsWith($install + '\', [StringComparison]::OrdinalIgnoreCase) })
-        Check ($rows -gt 0 -and $status -notmatch 'missing|went wrong|couldn') 'with ROO_INDUSTRIES_DOTNET_EXE pointing at a missing dotnet.exe, the release app still loads the Windows tweaks rows' ("rows=$rows status=$status")
+        Check ($rows -gt 0 -and $status -match '^\d+ settings$') 'with ROO_INDUSTRIES_DOTNET_EXE pointing at a missing dotnet.exe, the release app still loads the Windows tweaks rows and finishes reading Windows' ("rows=$rows status=$status")
+        Check (@([HelperStartEnv]::Names($script:App.Id)) -contains 'ROO_INDUSTRIES_DOTNET_EXE') 'the override reached the app: ROO_INDUSTRIES_DOTNET_EXE is in the environment of the running app process' ('names in the app process environment: ' + @([HelperStartEnv]::Names($script:App.Id)).Count)
         Check ($hostRows.Count -gt 0 -and $inside.Count -eq $images.Count) 'the app started Optimizer.Host.exe children whose image is inside the install folder' ("children=$($hostRows.Count) images=" + ($images -join '; '))
-        $new = @(Log-Lines | Select-Object -Skip $logBefore)
-        Check (@($new | Where-Object { $_ -match 'RooIndustriesNoSuchFolder' }).Count -eq 0) 'the app log does not mention the override path' ('new log lines: ' + $new.Count)
+        $new = @(Log-Since $logBefore)
+        Check ($new.Count -gt 0 -and @($new | Where-Object { $_ -match 'RooIndustriesNoSuchFolder' }).Count -eq 0) 'the app wrote to the log this check reads, and the new log lines do not mention the override path' ('new log lines: ' + $new.Count)
         Check (@($script:Starts | Where-Object { $_.name -eq 'dotnet.exe' }).Count -eq 0) 'the app never started a dotnet.exe' ('dotnet.exe starts: ' + @($script:Starts | Where-Object { $_.name -eq 'dotnet.exe' }).Count)
     }
     else {
         $dll = Join-Path $hostDirectory 'hostpolicy.dll'
+        $dataRoot = Data-Root
+        $markers = Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+        if (-not ($markers -and $null -ne $markers.GetValue($dataRoot.ToUpperInvariant()))) { Start-RooIndustriesApp; Stop-RooIndustriesApp; $markers = Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue }
+        Check ($markers -and $null -ne $markers.GetValue($dataRoot.ToUpperInvariant())) 'the data folder is already protected before hostpolicy.dll is renamed (the app protects it through the helper on its first start, so the check starts from a used install)' $dataRoot
         Check (Test-Path -LiteralPath $dll) 'hostpolicy.dll is installed before the check' $dll
         Check (Test-Path -LiteralPath $userDotNet) 'a genuine Microsoft dotnet.exe is installed in the user profile (so a fallback would find it)' ($userDotNet + ' ' + $(if (Test-Path -LiteralPath $userDotNet) { (Get-Item $userDotNet).VersionInfo.ProductVersion } else { '' }))
         Rename-Item -LiteralPath $dll -NewName 'hostpolicy.dll.roo-industries-test-off'; $script:Renamed += $dll
         Log 'renamed hostpolicy.dll to hostpolicy.dll.roo-industries-test-off'
-        $logBefore = (Log-Lines).Count
+        $logBefore = @(Log-Lines).Count
         Flush-Starts; $script:Starts.Clear()
         Start-RooIndustriesApp
         Nav 'Windows tweaks'
@@ -154,7 +191,7 @@ try {
         $appTree = Descendants-Of @($script:App.Id)
         $dotnetStarts = @($script:Starts | Where-Object { $_.name -eq 'dotnet.exe' })
         $byApp = @($dotnetStarts | Where-Object { $appTree.Contains($_.parent) })
-        $new = @(Log-Lines | Select-Object -Skip $logBefore)
+        $new = @(Log-Since $logBefore)
         $logged = @($new | Where-Object { $_ -match 'Missing .*hostpolicy\.dll' })
         $csv = @(Watch-Rows | Where-Object { $_.name -eq 'dotnet.exe' -and $_.command_line } | ForEach-Object { $_.command_line })
         if ($Before) {
@@ -178,7 +215,7 @@ try {
             Start-Sleep 1
             Flush-Starts
             $caseStarts = @($script:Starts | Where-Object { $_.name -eq 'dotnet.exe' })
-            Set-Content -LiteralPath (Join-Path $OutDir ($Name + '-' + $case.Script + '.txt')) -Value ('exit ' + $run.exit + "`n" + $run.text) -Encoding UTF8
+            Set-Content -LiteralPath (Join-Path $OutDir ($Tag + '-' + $case.Script + '.txt')) -Value ('exit ' + $run.exit + "`n" + $run.text) -Encoding UTF8
             if ($Before) {
                 Check ($caseStarts.Count -gt 0 -and $run.text -notmatch 'missing or damaged') ("BEFORE (commit 6d86fd8): the installed " + $case.Script + ' starts dotnet.exe from the user profile') ("exit=$($run.exit) dotnet.exe starts=$($caseStarts.Count) output=" + $run.text.Substring(0, [Math]::Min(300, $run.text.Length)))
             }
@@ -195,10 +232,10 @@ finally {
     foreach ($path in @($script:Renamed)) { try { if (-not (Test-Path -LiteralPath $path)) { Rename-Item -LiteralPath ($path + '.roo-industries-test-off') -NewName (Split-Path $path -Leaf) }; Log ('restored ' + (Split-Path $path -Leaf)) } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
     Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue
     Stop-RooIndustriesApp
-    try { Flush-Starts; $script:AllStarts | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir ($Name + '-process-starts.csv')) } catch {}
+    try { Flush-Starts; $script:AllStarts | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir ($Tag + '-process-starts.csv')) } catch {}
     Get-EventSubscriber -SourceIdentifier RooIndustriesHelperStartWatch -ErrorAction SilentlyContinue | Unregister-Event
     'x' | Set-Content $stopFile
     if ($watcher) { $watcher.WaitForExit(15000) | Out-Null }
     Log ('RESULT failures=' + $script:Failures)
-    'x' | Set-Content (Join-Path $OutDir ($Name + '.done'))
+    'x' | Set-Content (Join-Path $OutDir ($Tag + '.done'))
 }
