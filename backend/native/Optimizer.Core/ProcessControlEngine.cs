@@ -158,8 +158,9 @@ public sealed class ProcessControlEngine
         return journal;
     }
 
-    public ProcessControlJournal Reassert(string journalPath)
+    public ProcessControlJournal Reassert(string journalPath, out bool wrote)
     {
+        wrote = false;
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
         ValidateJournal(journal);
@@ -177,6 +178,7 @@ public sealed class ProcessControlEngine
             change.Status = "applyIntent";
             Save(journalPath, journal);
             target.Write(change.Name, change.Desired);
+            wrote = true;
             var after = target.Read(change.Name).Require();
             change.Observed = after;
             if (!ProcessTarget.Equivalent(change.Name, after, change.Desired))

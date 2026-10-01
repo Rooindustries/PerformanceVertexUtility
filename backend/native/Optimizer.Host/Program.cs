@@ -140,7 +140,7 @@ try
         case "process-restore":
             RequireConfirmation(request);
             var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
-            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
+            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
             data = engine.Restore(Require(request.JournalPath, "journal path"));
             break;
         case "rules-list":
@@ -150,7 +150,7 @@ try
             RequireConfirmation(request);
             var store = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root"));
             var rule = request.Rule ?? throw new InvalidDataException("A rule is required.");
-            store.Save(rule, request.RepoRoot);
+            store.Save(rule, Require(request.RepoRoot, "repository root"));
             data = store.ReadRules().Single(pair => pair.Rule.RuleId == rule.RuleId).Rule;
             break;
         case "rule-delete":
@@ -189,7 +189,7 @@ try
             break;
         case "policy-pause":
             RequireConfirmation(request);
-            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."), request.RepoRoot);
+            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."), Require(request.RepoRoot, "repository root"));
             data = new { paused = request.Paused };
             break;
         case "cleanup-authority": data = Authority(request); break;
