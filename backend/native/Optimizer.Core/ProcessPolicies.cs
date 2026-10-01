@@ -54,12 +54,12 @@ public sealed record PolicyIssue(string RuleId, int? ProcessId, string? Executab
     public string? Field { get; init; }
 }
 
-public sealed record PolicyDiagnostics(int Instances, int Watched, int Retries, int Gates, int RuleChecks, int Hashes, long ProcessOpens);
+public sealed record PolicyDiagnostics(int Instances, int Watched, int Retries, int Gates, int RuleChecks, int Hashes, long ProcessOpens, long HashAttempts, long OwnerLookups);
 public sealed record PolicyHeartbeat(RunningProcess Host, long Tick, long ProgressTick, string? BootId, DateTime AtUtc, PolicyDiagnostics? Diagnostics);
 public sealed record PolicyWorkerStatus(PolicyHostState? State, bool? HostRunning, string? Error);
 public sealed record PolicyStopRequest(OperationOwner Owner, RunningProcess Host);
 public sealed record GovernorSettings([property: JsonRequired] int SchemaVersion, [property: JsonRequired] bool Paused);
-public sealed record PolicySummary(bool Secured, string? SecurityProblem, bool Paused, int Rules, int EnabledRules, string? RulesError);
+public sealed record PolicySummary(bool Secured, string? SecurityProblem, bool Paused, int Rules, int EnabledRules, string? RulesError, string[]? UnreadableRules = null);
 
 public static class GovernorLog
 {
@@ -110,7 +110,7 @@ public sealed class ProcessPolicyStore
         PolicyRootSecurity.Secure(Root);
         using var rootLease = PolicyRootLease.Acquire(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
-        using var gate = Gate();
+        using var gate = paused ? null : Gate();
         if (!paused)
         {
             var enabled = ReadRules().Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
@@ -129,9 +129,12 @@ public sealed class ProcessPolicyStore
         var paused = false;
         (SavedProcessRule Rule, string Hash)[] rules = [];
         string? rulesError = null;
-        try { paused = Paused(); rules = ReadRules(); }
+        var unreadable = new List<string>();
+        try { paused = Paused(); }
         catch (Exception error) { rulesError = error.Message; }
-        return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError);
+        try { rules = ReadRules(null, unreadable); }
+        catch (Exception error) { rulesError ??= error.Message; }
+        return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError, unreadable.ToArray());
     }
 
     public static string RootFor(string? path)
@@ -171,7 +174,7 @@ public sealed class ProcessPolicyStore
         if (!Directory.Exists(Root)) return [];
         var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath), StringComparer.Ordinal);
         if (File.Exists(StatePath))
-            foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
+            foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" or "conflict" &&
                 instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
                 owned.UnionWith(instance.Field is { } field ? new[] { field } : OperationFiles.Read<ProcessControlPreview>(OperationPath(instance.PreviewPath, "preview.json")).Desired.Keys.ToArray());
         return owned.ToArray();
@@ -204,6 +207,11 @@ public sealed class ProcessPolicyStore
     public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls) => Refuse(OwnedControls(identity).Intersect(controls).ToArray());
 
     public void RequireUnowned(string executablePath, IEnumerable<string> controls) => Refuse(OwnedControls(executablePath).Intersect(controls).ToArray());
+
+    public void RequireUnownedRestore(RunningProcess identity, IEnumerable<string> controls)
+    {
+        if (!Exited(identity)) RequireUnowned(identity, controls);
+    }
 
     public void RequireUnownedLaunch(string gamePath, IEnumerable<string> controls) => Refuse(OwnedLaunchControls(gamePath).Intersect(controls).ToArray());
 
@@ -253,7 +261,7 @@ public sealed class ProcessPolicyStore
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
-        using var gate = Gate();
+        using var gate = rule.Enabled ? Gate() : null;
         if (rule.Enabled)
         {
             RequireNoGameSession(rule);
@@ -319,16 +327,27 @@ public sealed class ProcessPolicyStore
         File.Delete(Path.Combine(RulesDirectory, ruleId + ".json"));
     }
 
-    public (SavedProcessRule Rule, string Hash)[] ReadRules(string? exceptRuleId = null)
+    public (SavedProcessRule Rule, string Hash)[] ReadRules(string? exceptRuleId = null, List<string>? unreadable = null)
     {
         if (!Directory.Exists(RulesDirectory)) return [];
-        return Directory.GetFiles(RulesDirectory, "*.json").Where(path => Path.GetFileNameWithoutExtension(path) != exceptRuleId).Order(StringComparer.OrdinalIgnoreCase).Select(path =>
+        var found = new List<(SavedProcessRule Rule, string Hash)>();
+        foreach (var path in Directory.GetFiles(RulesDirectory, "*.json").Where(path => Path.GetFileNameWithoutExtension(path) != exceptRuleId).Order(StringComparer.OrdinalIgnoreCase))
         {
-            var (rule, hash) = OperationFiles.ReadHashed<SavedProcessRule>(path);
-            Validate(rule);
-            if (Path.GetFileNameWithoutExtension(path) != rule.RuleId) throw new InvalidDataException("Process rule filename and identity disagree.");
-            return (rule, hash);
-        }).ToArray();
+            try
+            {
+                var (rule, hash) = OperationFiles.ReadHashed<SavedProcessRule>(path);
+                Validate(rule);
+                if (Path.GetFileNameWithoutExtension(path) != rule.RuleId) throw new InvalidDataException("Process rule filename and identity disagree.");
+                found.Add((rule, hash));
+            }
+            catch (Exception error)
+            {
+                var named = "The saved rule " + Path.GetFileName(path) + " could not be read: " + error.Message;
+                if (unreadable is null) throw new InvalidDataException(named, error);
+                unreadable.Add(named);
+            }
+        }
+        return found.ToArray();
     }
 
     public PolicyWorkerStatus Status()
@@ -409,6 +428,7 @@ public sealed class ProcessPolicyHost
     public const string KeepsChanging = "This app keeps changing it back, so Roo Industries stepped back.";
     public const string OtherAccount = "Running under another Windows account, so this rule doesn't control it.";
     public const string ForeignRecord = "This record points at a process of another Windows account, so Roo Industries did not change it.";
+    public const string TopologyChanged = "CPU topology changed; review the saved hard-affinity selection.";
     private const long Recheck = 2000, ReassertWindow = 600000, RuleReadGrace = 10000;
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
@@ -425,7 +445,8 @@ public sealed class ProcessPolicyHost
     private readonly Dictionary<string, string[]> _fields = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _imagePaths = new(StringComparer.Ordinal);
     private int _enabledRules = -1;
-    private long _processOpens;
+    private long _processOpens, _hashAttempts, _ownerLookups;
+    private readonly Dictionary<string, string> _owners = new(StringComparer.Ordinal);
     private long _progress = Environment.TickCount64;
     private PolicyDiagnostics? _diagnostics;
     private PolicyHostState _state;
@@ -566,11 +587,8 @@ public sealed class ProcessPolicyHost
         _state.Errors = [];
         _state.Issues = [];
         (SavedProcessRule Rule, string Hash)[] rules;
-        try
-        {
-            rules = ReadRules();
-            _rulesFailing = -1;
-        }
+        var unreadable = new List<string>();
+        try { rules = ReadRules(unreadable); }
         catch (Exception error)
         {
             if (_rulesFailing < 0) _rulesFailing = Now;
@@ -581,10 +599,22 @@ public sealed class ProcessPolicyHost
                 return _state;
             }
             var snapshot = ProcessSnapshot.Take();
-            foreach (var instance in _state.Instances.Where(instance => !Terminal(instance)).ToList()) Restore(instance, snapshot);
+            foreach (var instance in _state.Instances.Where(instance => !Terminal(instance)).ToList())
+                if (Due("restore|" + instance.JournalPath, Key(instance.Process))) Restore(instance, snapshot);
             _state.Status = "configurationError";
             Save();
             return _state;
+        }
+        if (unreadable.Count == 0) _rulesFailing = -1;
+        else
+        {
+            if (_rulesFailing < 0) _rulesFailing = Now;
+            _state.Errors.AddRange(unreadable);
+            if (Now - _rulesFailing < RuleReadGrace)
+            {
+                Save();
+                return _state;
+            }
         }
 #if GOVERNOR_TEST_HOOKS
         var tickPause = Path.Combine(_store.Root, "tick-pause.request");
@@ -601,7 +631,7 @@ public sealed class ProcessPolicyHost
         Forget(processes);
         _enabledRules = enabled.Length;
         _state.Status = "running";
-        _diagnostics = new(_state.Instances.Count, _watched.Count, _retries.Count, _gates.Count, _ruleChecks.Count, _hashes.Count, _processOpens);
+        _diagnostics = new(_state.Instances.Count, _watched.Count, _retries.Count, _gates.Count, _ruleChecks.Count, _hashes.Count, _processOpens, _hashAttempts, _ownerLookups);
         Save();
         return _state;
     }
@@ -715,11 +745,11 @@ public sealed class ProcessPolicyHost
         }
         try
         {
-            var journal = _engine.Reassert(instance.JournalPath);
+            var journal = _engine.Reassert(instance.JournalPath, out var wrote);
             if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status); return; }
             if (journal.Status == "applied")
             {
-                watch.Reasserts.Add(Now);
+                if (wrote) watch.Reasserts.Add(Now);
                 watch.Failures = 0;
                 watch.NextCheck = Now + Recheck;
                 instance.ErrorKind = null;
@@ -783,6 +813,7 @@ public sealed class ProcessPolicyHost
                 foreach (var field in ProcessPolicyStore.Fields(rule))
                 {
                     if (Held(identity, field)) continue;
+                    if (field == "affinity" && gate.Topology != rule.AffinityTopologyHash) { Issue(rule, running, identity.ExecutablePath, "topology", TopologyChanged, field); continue; }
                     var key = rule.RuleId + "|" + hash + "|" + Key(identity) + "|" + field;
                     if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { Issue(rule, running, identity.ExecutablePath, waiting.Kind, waiting.Message, field); continue; }
                     pending.Add((field, key));
@@ -892,30 +923,36 @@ public sealed class ProcessPolicyHost
     {
         var key = hash + "|" + Key(gate.Identity!);
         if (_ruleChecks.TryGetValue(key, out var known)) return known;
+        var retry = "check|" + key;
+        if (_retries.TryGetValue(retry, out var waiting) && Now < waiting.RetryAt) return (waiting.Kind, waiting.Message);
         (string Kind, string Message)? problem = null;
-        if (rule.Controls.ContainsKey("affinity") && gate.Topology != rule.AffinityTopologyHash)
-            problem = ("topology", "CPU topology changed; review the saved hard-affinity selection.");
-        else if (rule.ExecutableHash is not null)
+        if (rule.ExecutableHash is not null)
         {
             try
             {
                 if (!string.Equals(HashExecutable(gate.Identity!.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
                     problem = ("exeChanged", "The executable changed and needs review.");
             }
-            catch (Exception error) { return (ProcessFailures.Denied(error) ? "denied" : "error", error.Message); }
+            catch (Exception error)
+            {
+                Fail(retry, "error", "The program file could not be read to check it: " + error.Message, null, Key(gate.Identity!));
+                return ("error", _retries[retry].Message);
+            }
         }
+        _retries.Remove(retry);
         _ruleChecks[key] = problem;
         return problem;
     }
 
     private string HashExecutable(string path)
     {
+        _hashAttempts++;
         var info = new FileInfo(path);
         var key = (path.ToUpperInvariant(), info.Length, info.LastWriteTimeUtc);
         if (_hashes.TryGetValue(key, out var hash)) return hash;
         if (_hashes.Count >= 64) _hashes.Clear();
         Progress();
-        hash = OperationFiles.HashFile(path);
+        hash = OperationFiles.HashFile(path, Progress);
         Progress();
         return _hashes[key] = hash;
     }
@@ -925,10 +962,10 @@ public sealed class ProcessPolicyHost
         var key = Key(running);
         if (_gates.TryGetValue(key, out var known)) return known;
         if (_retries.TryGetValue("gate|" + key, out var waiting) && Now < waiting.RetryAt) return new(waiting.Kind, waiting.Message, null, null);
-        if (_excluded(new RunningProcess(running.ProcessId, running.CreationTimeFileTimeUtc, running.ImageName)))
-            return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", null, null);
         try
         {
+            if (_excluded(new RunningProcess(running.ProcessId, running.CreationTimeFileTimeUtc, running.ImageName)))
+                return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", null, null);
             _processOpens++;
             using var target = new ProcessTarget(running.ProcessId);
             var identity = target.Identity();
@@ -946,11 +983,21 @@ public sealed class ProcessPolicyHost
         catch (Exception error)
         {
             var denied = ProcessFailures.Denied(error);
-            if (denied && ProcessSnapshot.UserSid(running.ProcessId) is { } sid && sid != _state.Owner.UserSid) return _gates[key] = new("otherAccount", OtherAccount, null, null);
+            if (denied && OwnerSid(running) is { } sid && sid != _state.Owner.UserSid) return _gates[key] = new("otherAccount", OtherAccount, null, null);
             var kind = denied ? "denied" : "error";
             Fail("gate|" + key, kind, error.Message, null, key);
             return new(kind, error.Message, null, null);
         }
+    }
+
+    private string? OwnerSid(SnapshotProcess running)
+    {
+        var key = Key(running);
+        if (_owners.TryGetValue(key, out var known)) return known;
+        _ownerLookups++;
+        var sid = ProcessSnapshot.UserSid(running.ProcessId);
+        if (sid is not null) _owners[key] = sid;
+        return sid;
     }
 
     private void Issue(SavedProcessRule rule, SnapshotProcess running, string? path, string kind, string message, string? field) =>
@@ -975,6 +1022,7 @@ public sealed class ProcessPolicyHost
         var journals = _state.Instances.Where(instance => !Terminal(instance)).Select(instance => instance.JournalPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var key in _gates.Keys.Where(key => !alive.Contains(key)).ToArray()) _gates.Remove(key);
         foreach (var key in _imagePaths.Keys.Where(key => !alive.Contains(key)).ToArray()) _imagePaths.Remove(key);
+        foreach (var key in _owners.Keys.Where(key => !alive.Contains(key)).ToArray()) _owners.Remove(key);
         foreach (var pair in _retries.Where(pair => !alive.Contains(pair.Value.Identity)).ToArray()) _retries.Remove(pair.Key);
         foreach (var key in _ruleChecks.Keys.Where(key => !alive.Contains(key[(key.IndexOf('|') + 1)..])).ToArray()) _ruleChecks.Remove(key);
         foreach (var key in _watched.Keys.Where(key => !journals.Contains(key)).ToArray()) _watched.Remove(key);
@@ -1011,14 +1059,15 @@ public sealed class ProcessPolicyHost
         _pruned.Add(Path.GetDirectoryName(instance.JournalPath)!);
     }
 
-    private (SavedProcessRule Rule, string Hash)[] ReadRules()
+    private (SavedProcessRule Rule, string Hash)[] ReadRules(List<string> unreadable)
     {
         var files = Directory.Exists(_store.RulesDirectory) ? new DirectoryInfo(_store.RulesDirectory).GetFiles("*.json") : [];
         if (_ruleSnapshot is not null && files.Length == _ruleStamps.Count &&
             files.All(file => _ruleStamps.TryGetValue(file.FullName, out var stamp) && stamp == (file.LastWriteTimeUtc, file.Length))) return _ruleSnapshot;
         _ruleSnapshot = null;
         _ruleStamps.Clear();
-        var rules = _store.ReadRules();
+        var rules = _store.ReadRules(null, unreadable);
+        if (unreadable.Count > 0) return rules;
         foreach (var file in files) _ruleStamps[file.FullName] = (file.LastWriteTimeUtc, file.Length);
         _ruleSnapshot = rules;
         return rules;
@@ -1127,8 +1176,7 @@ public sealed class ProcessPolicyHost
         public void Dispose()
         {
             _stop.Set();
-            _thread.Join(5000);
-            _stop.Dispose();
+            if (_thread.Join(5000)) _stop.Dispose();
         }
     }
 }

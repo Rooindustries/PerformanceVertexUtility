@@ -83,6 +83,22 @@ public static class OperationFiles
         return Convert.ToHexString(SHA256.HashData(file));
     }
 
+    public static string HashFile(string path, Action? progress)
+    {
+        using var file = OpenShared(path);
+        using var sha = SHA256.Create();
+        var buffer = new byte[1 << 20];
+        for (var chunks = 1; ; chunks++)
+        {
+            var read = file.Read(buffer, 0, buffer.Length);
+            if (read == 0) break;
+            sha.TransformBlock(buffer, 0, read, null, 0);
+            if (chunks % 64 == 0) progress?.Invoke();
+        }
+        sha.TransformFinalBlock([], 0, 0);
+        return Convert.ToHexString(sha.Hash!);
+    }
+
     private static FileStream OpenShared(string path)
     {
         for (var attempt = 0; ; attempt++)
