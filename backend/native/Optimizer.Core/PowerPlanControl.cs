@@ -21,7 +21,7 @@ public static class PowerPlanControl
         if (address.Target != "ultimate") throw new InvalidDataException("Unknown power plan target.");
         var owner = OperationOwner.Current();
         var id = new Guid(Convert.FromHexString(OperationFiles.Hash(Encoding.UTF8.GetBytes("RooIndustries:Ultimate:v1:" + owner)))[..16]);
-        return (id, Path.Combine(BrandCompatibility.LocalDataRoot, "operations", "ultimate-plan.json"));
+        return (id, Path.Combine(OperationsFolder.DefaultRoot, "ultimate-plan.json"));
     }
     private static PowerPlanReceipt? Receipt(string path, Guid id)
     {
@@ -46,7 +46,9 @@ public static class PowerPlanControl
     }
     public static void Write(TweakControlRead before, JsonElement desired)
     {
-        var target = Target(before.Address); Directory.CreateDirectory(Path.GetDirectoryName(target.Receipt)!);
+        var target = Target(before.Address);
+        if (!before.Address.Target.StartsWith("fixture:", StringComparison.Ordinal)) OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(target.Receipt)!);
         using var guard = OperationFiles.Lock(target.Receipt);
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Power plan state changed after review.");
         var wanted = desired.GetProperty("plan").GetString(); var active = Guid.Parse(desired.GetProperty("active").GetString()!);

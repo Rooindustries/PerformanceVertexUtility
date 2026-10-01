@@ -36,9 +36,6 @@ switch($Action){
     }
     default {$command='tweak-'+$Action.ToLowerInvariant();$request.previewPath=$PreviewPath;$request.reviewHash=$ReviewHash}
 }
-$inputFile=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-tweak-request-'+[guid]::NewGuid().ToString('N')+'.json')
-try {
-    [IO.File]::WriteAllText($inputFile,($request|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
-    & $DotNetPath @hostArgs $command $inputFile
-    if($LASTEXITCODE -ne 0){throw "Tweak command failed with exit code $LASTEXITCODE."}
-}finally{Remove-Item -LiteralPath $inputFile -Force -ErrorAction SilentlyContinue}
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
+($request|ConvertTo-Json -Depth 20)|& $DotNetPath @hostArgs $command '-'
+if($LASTEXITCODE -ne 0){throw "Tweak command failed with exit code $LASTEXITCODE."}

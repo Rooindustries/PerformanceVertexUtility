@@ -141,11 +141,13 @@ try {
     Note 'task' ([ordered]@{name=$taskName;state=[string]$task.State;runLevel=[string]$task.Principal.RunLevel;logonType=[string]$task.Principal.LogonType;multipleInstances=[string]$task.Settings.MultipleInstances;executionTimeLimit=$task.Settings.ExecutionTimeLimit;triggers=@($task.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;start=$_.StartBoundary;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration;user=$_.UserId}});action=($task.Actions[0].Execute+' '+$task.Actions[0].Arguments)})
     Assert ($synced.worker.hostRunning -eq $true -and $synced.registered -and $synced.enabled -and $synced.runAtLogon -and $synced.restartEveryMinute -and $synced.secured) 'Saving the first rule registers, secures and starts the governor with sign-in and one-minute restart triggers'
     Assert ($triggerSid -eq (Get-RooIndustriesOperationOwner).userSid -and [string]$task.Principal.RunLevel -eq 'Highest' -and $task.Settings.ExecutionTimeLimit -eq 'PT0S' -and [string]$task.Settings.MultipleInstances -eq 'IgnoreNew' -and $task.Settings.Priority -eq 6) 'The governor task is bound to this user, elevated, unlimited, single-instance and normal priority'
-    Assert ($task.Actions[0].Execute -like '*\conhost.exe' -and $task.Actions[0].Arguments -like '--headless *' -and $task.Actions[0].Arguments -like ('*policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"')) 'The governor runs without a console window and receives its protected request path as one exact argument'
+    Assert ($task.Actions[0].Execute -like '*\conhost.exe' -and $task.Actions[0].Arguments -like '--headless *cmd.exe" /d /s /c *' -and $task.Actions[0].Arguments -like ('*policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'""')) 'The governor runs without a console window and receives its protected request path as one exact argument'
+    Assert (@('DOTNET_STARTUP_HOOKS','CORECLR_ENABLE_PROFILING','CORECLR_PROFILER_PATH_64','COR_ENABLE_PROFILING')|Where-Object {$task.Actions[0].Arguments -notlike ('*set '+$_+'=&*')}).Count -eq 0 'The governor task clears .NET code-loading settings before the elevated helper starts'
     $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$synced.worker.state.host.processId)
     $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$worker.ParentProcessId)
     Note 'workerProcess' ([ordered]@{name=$worker.Name;commandLine=$worker.CommandLine;parent=$parent.Name;parentCommandLine=$parent.CommandLine;session=$worker.SessionId})
-    Assert ($parent.Name -eq 'conhost.exe' -and $parent.CommandLine -like '*--headless*') 'The running governor is hosted by a headless console'
+    $console=Get-CimInstance Win32_Process -Filter ('ProcessId='+$parent.ParentProcessId)
+    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /s /c*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The running governor is started by the clean launcher inside a headless console'
     $existingSeconds=Wait-Until {Same (Read-Controls $first) $wanted} 10
     Assert ($null -ne $existingSeconds) 'The governor applies all 8 controls to an already running matching process'
     $second=Start-Probe
@@ -367,6 +369,7 @@ public static class RooIndustriesGovernorDenied {
     $sessionScript=Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'
     $gameRule=$rule.Clone();$gameRule.ruleId=[Guid]::NewGuid().ToString('N');$gameRule.name='Game rule';$gameRule.executablePath=$gameExe;$gameRule.cpuSelection=$null
     $gameRule.controls=@{gpuPriority=1};$gameRule.affinityTopologyHash=$null
+    Core 'operations-secure' @{operationsRoot=(Join-Path $policyParent 'operations')}|Out-Null
     function New-GameSessionPreview{
         $directory=Join-Path $policyParent ('operations\game-session-'+[Guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($directory)|Out-Null

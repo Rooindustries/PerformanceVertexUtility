@@ -23,7 +23,7 @@ try {
     if(Test-RooIndustriesBulkAppPresent $entry.identity ([string]$queue.plan.fixtureRoot)){throw 'The app registration is present again. Review the current installation instead.'}
     if($Action -in @('Scan','Preview')) {
         if($null -eq $entry.appSnapshot){throw 'This older queue has no saved app metadata for a post-removal scan.'}
-        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-discovery-'+[guid]::NewGuid().ToString('N'))
+        $scratch=Join-Path (Split-Path ([IO.Path]::GetFullPath($QueueJournalPath)) -Parent) ('leftover-discovery-'+[guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($scratch)|Out-Null
         $inventoryPath=Join-Path $scratch 'inventory.json';$scanPath=Join-Path $scratch 'scan.json'
         Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($entry.appSnapshot)} $inventoryPath

@@ -21,24 +21,19 @@ if(-not $DotNetPath){
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $hostDll=Join-Path $root 'backend\bin\optimizer\Optimizer.Host.dll'
 if(-not(Test-Path $hostDll)){throw 'Build the cleanup host with backend\scripts\Build-OptimizerHost.ps1 before using exclusions.'}
-$scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-cleanup-exclusions-'+[Guid]::NewGuid().ToString('N'))
-try {
-    $request=@{schemaVersion=1;repoRoot=$root}
-    $coreAction='cleanup-exclusions-'+$Action.ToLowerInvariant()
-    if($Action -eq 'Save'){
-        if(-not $InputPath){throw 'Provide a JSON file containing explicit paths and registry lists.'}
-        $request.exclusions=(Read-RooIndustriesOperationJson $InputPath).data
-        $request.expectedRevision=if($ExpectedRevision){$ExpectedRevision}else{$null}
-        $request.confirm=$true
-    }
-    if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
-    $path=Join-Path $scratch 'request.json'
-    Write-RooIndustriesOperationJson $request $path
-    $output=@(& $DotNetPath @hostArgs $coreAction $path) -join "`n"
-    $code=$LASTEXITCODE
-    $result=$output|ConvertFrom-Json
-    if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
-    $output
-} finally {
-    if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}
+$request=@{schemaVersion=1;repoRoot=$root}
+$coreAction='cleanup-exclusions-'+$Action.ToLowerInvariant()
+if($Action -eq 'Save'){
+    if(-not $InputPath){throw 'Provide a JSON file containing explicit paths and registry lists.'}
+    $request.exclusions=(Read-RooIndustriesOperationJson $InputPath).data
+    $request.expectedRevision=if($ExpectedRevision){$ExpectedRevision}else{$null}
+    $request.confirm=$true
 }
+if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
+$output=@(($request|ConvertTo-Json -Depth 32)|& $DotNetPath @hostArgs $coreAction '-') -join "`n"
+$code=$LASTEXITCODE
+$result=$output|ConvertFrom-Json
+if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
+$output
+

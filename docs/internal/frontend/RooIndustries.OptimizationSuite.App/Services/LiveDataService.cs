@@ -63,10 +63,12 @@ public sealed class LiveDataService
     }
 
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
+    private readonly Lazy<OptimizerService> _operations;
 
     public LiveDataService(BackendLocator locator, string? recoveryDirectory = null)
     {
         _locator = locator;
+        _operations = new(() => new OptimizerService(locator));
         _recoveryDirectory = recoveryDirectory ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings");
         _recoveryKey = Path.GetFullPath(_recoveryDirectory);
     }
@@ -496,7 +498,7 @@ public sealed class LiveDataService
         string? rollbackPath = null;
         try
         {
-            var prepared = await PrepareUninstallCleanupInputsAsync(appId, ct).ConfigureAwait(false);
+            var prepared = await PrepareUninstallCleanupInputsAsync(appId, realCleanupApproved, ct).ConfigureAwait(false);
             inputs = prepared.Value;
             if (inputs is null)
             {
@@ -507,7 +509,7 @@ public sealed class LiveDataService
             var officialExecutable = ReadOfficialExecutable(inputs.OfficialPreviewPath);
             var runRoot = realCleanupApproved
                 ? Path.Combine(
-                    RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot,
+                    await _operations.Value.EnsureStorageAsync().ConfigureAwait(false),
                     "cleanup-runs",
                     Path.GetFileName(inputs.DirectoryPath))
                 : Path.Combine(inputs.DirectoryPath, "preview-run");
@@ -573,11 +575,20 @@ public sealed class LiveDataService
         CancellationToken ct = default)
         => (await RequestUninstallCleanupApplyResultAsync(appId, officialUninstallCommandApproved, cleanupDeletionManifestApproved, realCleanupApproved, ct)).Value;
 
-    public Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
-        => RunBackendScriptResultAsync(
+    public async Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs") + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(rollbackManifestPath).StartsWith(runs, StringComparison.OrdinalIgnoreCase))
+        {
+            var error = "This cleanup backup is outside the app's protected recovery folder, so the app won't restore from it. Its files are kept at " + Path.GetDirectoryName(rollbackManifestPath) + ".";
+            LastError = error;
+            return new(null, error);
+        }
+        return await RunBackendScriptResultAsync(
             "Restore-UninstallCleanupExecution.ps1",
             ct,
-            "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply -AllowRealSystemExecution -UserApproved");
+            "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply -AllowRealSystemExecution -UserApproved").ConfigureAwait(false);
+    }
     public async Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
         => (await RestoreUninstallCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
@@ -1003,7 +1014,7 @@ public sealed class LiveDataService
         return null;
     }
 
-    private async Task<LiveDataResult<PreparedCleanupInputs>> PrepareUninstallCleanupInputsAsync(string appId, CancellationToken ct)
+    private async Task<LiveDataResult<PreparedCleanupInputs>> PrepareUninstallCleanupInputsAsync(string appId, bool protectedInputs, CancellationToken ct)
     {
         var official = _officialReview;
         var cleanup = _cleanupReview;
@@ -1014,7 +1025,9 @@ public sealed class LiveDataService
             LastError = error;
             return new(null, error);
         }
-        var dir = Path.Combine(Path.GetTempPath(), "RooIndustriesOptimizationSuite", "cleanup-inputs", Guid.NewGuid().ToString("N"));
+        var dir = protectedInputs
+            ? Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-inputs-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Path.GetTempPath(), "RooIndustriesOptimizationSuite", "cleanup-inputs", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var officialPath = Path.Combine(dir, "official-preview.json");
         var manifestPath = Path.Combine(dir, "cleanup-manifest.json");

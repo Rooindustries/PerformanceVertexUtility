@@ -55,7 +55,7 @@ public sealed partial class OptimizerService
         => (await _tweakReads.GetAsync("status", fresh ? TimeSpan.Zero : TweakStateAge, () => ReadStatusAsync(background, streamed)))!;
     public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections)
     {
-        var directory = NewOperationDirectory("windows-settings");
+        var directory = await NewOperationDirectoryAsync("windows-settings");
         var path = System.IO.Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<TweakPlan>("tweak-preview", new() { ["profileId"] = profileId, ["selections"] = selections, ["outputPath"] = path });
         if (plan.ProfileId != profileId) throw new InvalidDataException("The review did not match your choices. Review them again.");
@@ -71,14 +71,14 @@ public sealed partial class OptimizerService
     public async Task<WindowsTweakReview> PreviewOwnershipAsync(string selectedPath)
     {
         using var change = DataGeneration.BeginChange();
-        var directory = NewOperationDirectory("file-permissions"); var path = Path.Combine(directory, "preview.json");
+        var directory = await NewOperationDirectoryAsync("file-permissions"); var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<TweakPlan>("tweak-ownership-preview", new() { ["selectedFilePath"] = selectedPath, ["outputPath"] = path });
         return new(plan, path, Hash(path));
     }
     public Task<WindowsRestorePoint[]> ReadRestorePointsAsync() => RunCoreAsync<WindowsRestorePoint[]>("restore-point-list", new());
     public async Task<WindowsRestorePointReview> PreviewRestorePointAsync(bool allowFresh)
     {
-        var directory = NewOperationDirectory("restore-point"); var path = Path.Combine(directory, "preview.json");
+        var directory = await NewOperationDirectoryAsync("restore-point"); var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<RestorePointPreview>("restore-point-preview", new() { ["allowFreshRestorePoint"] = allowFresh, ["outputPath"] = path });
         return new(plan, path, Hash(path), Path.Combine(directory, "journal.json"));
     }

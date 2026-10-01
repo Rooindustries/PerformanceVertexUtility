@@ -27,7 +27,7 @@ public sealed partial class OptimizerService
 
     public async Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
     {
-        var directory = NewOperationDirectory("process");
+        var directory = await NewOperationDirectoryAsync("process");
         var path = Path.Combine(directory, "preview.json");
         var preview = await RunCoreAsync<ProcessControlPreview>("process-preview", new()
         {
@@ -38,7 +38,7 @@ public sealed partial class OptimizerService
 
     public async Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
     {
-        Remember("process", review.JournalPath);
+        await RememberAsync("process", review.JournalPath);
         return await RunCoreAsync<ProcessControlJournal>("process-apply", new()
         {
             ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true,
@@ -91,7 +91,7 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation)
     {
-        var directory = NewOperationDirectory("cleanup");
+        var directory = await NewOperationDirectoryAsync("cleanup");
         var path = Path.Combine(directory, "preview.json");
         await RunCoreAsync<ApplicationCleanupPreview>("cleanup-preview", new()
         {
@@ -103,7 +103,7 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupBatchReview> PreviewCleanupBatchAsync(CleanupPart[] applications)
     {
-        var directory = NewOperationDirectory("cleanup-batch");
+        var directory = await NewOperationDirectoryAsync("cleanup-batch");
         var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<CleanupBatchPreview>("cleanup-batch-preview", new() { ["cleanupOperations"] = applications, ["outputPath"] = path });
         return new(plan, path, Hash(path), Path.Combine(directory, "journal.json"));
@@ -177,7 +177,9 @@ public sealed partial class OptimizerService
 
     private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial)
     {
-        using var change = request.TryGetValue("confirm", out var confirm) && confirm is true ? DataGeneration.BeginChange() : null;
+        var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
+        if (confirmed && action != "operations-secure") await EnsureStorageAsync().ConfigureAwait(false);
+        using var change = confirmed ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
         var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
         if (!File.Exists(host))
