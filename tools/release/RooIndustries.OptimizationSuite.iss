@@ -60,7 +60,7 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\app\{#AppExe}"; WorkingDir: "{app}\app"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\README-BETA.txt"; Description: "Read the beta tester guide"; Flags: postinstall shellexec skipifsilent
+Filename: "{app}\README-BETA.txt"; Description: "Read the beta tester guide"; Flags: postinstall shellexec skipifsilent runasoriginaluser
 Filename: "{app}\app\{#AppExe}"; Description: "Open {#AppName}"; Flags: postinstall shellexec skipifsilent nowait unchecked
 
 [UninstallDelete]
@@ -72,6 +72,11 @@ Type: dirifempty; Name: "{app}"
 Type: dirifempty; Name: "{autopf}\Roo Industries"
 
 [Code]
+#include "SetupProcess.iss"
+
+const
+  GovernorSetupTimeout = 300000;
+
 var
   GovernorSuspended: Boolean;
   GovernorResumed: Boolean;
@@ -79,6 +84,65 @@ var
 
 function GetCurrentProcessId: Cardinal; external 'GetCurrentProcessId@kernel32.dll stdcall';
 function SetEnvironmentVariable(Name: String; Value: String): Boolean; external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+function CompareVersionParts(var Left, Right: String): Integer;
+var
+  LeftPart, RightPart: Integer;
+begin
+  LeftPart := 0;
+  RightPart := 0;
+  while (Length(Left) > 0) and (Left[1] >= '0') and (Left[1] <= '9') do
+  begin
+    LeftPart := LeftPart * 10 + Ord(Left[1]) - Ord('0');
+    Delete(Left, 1, 1);
+  end;
+  while (Length(Right) > 0) and (Right[1] >= '0') and (Right[1] <= '9') do
+  begin
+    RightPart := RightPart * 10 + Ord(Right[1]) - Ord('0');
+    Delete(Right, 1, 1);
+  end;
+  if (Length(Left) > 0) and (Left[1] = '.') then
+    Delete(Left, 1, 1)
+  else
+    Left := '';
+  if (Length(Right) > 0) and (Right[1] = '.') then
+    Delete(Right, 1, 1)
+  else
+    Right := '';
+  if LeftPart > RightPart then
+    Result := 1
+  else if LeftPart < RightPart then
+    Result := -1
+  else
+    Result := 0;
+end;
+
+function CompareVersions(Left, Right: String): Integer;
+var
+  Index: Integer;
+begin
+  Result := 0;
+  for Index := 1 to 3 do
+  begin
+    Result := CompareVersionParts(Left, Right);
+    if Result <> 0 then
+      exit;
+  end;
+end;
+
+procedure LogInstallKind;
+var
+  Previous: String;
+begin
+  if not RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1', 'DisplayVersion', Previous) then
+    Log('Installing {#AppName} {#AppVersion}.')
+  else if CompareVersions('{#AppVersion}', Previous) > 0 then
+    Log('Upgrading {#AppName} from ' + Previous + ' to {#AppVersion}.')
+  else if CompareVersions('{#AppVersion}', Previous) = 0 then
+    Log('Reinstalling {#AppName} {#AppVersion}.')
+  else
+    Log('Installing {#AppName} {#AppVersion} over the newer ' + Previous + '.');
+end;
 
 procedure ClearCodeLoading;
 var
@@ -96,6 +160,7 @@ end;
 function InitializeSetup(): Boolean;
 begin
   ClearCodeLoading;
+  LogInstallKind;
   Result := True;
 end;
 
@@ -124,15 +189,15 @@ end;
 
 function RunGovernorSetup(const Action: String): Boolean;
 var
-  Code: Integer;
+  Code: DWORD;
   LogPath: String;
   Output: AnsiString;
 begin
   LogPath := SetupFolder + '\governor-setup.log';
-  Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+  Result := RunBounded(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + SetupFolder + '\Invoke-GovernorSetup.ps1" -Action ' + Action +
     ' -AppRoot "' + ExpandConstant('{app}') + '" -StatePath "' + SetupFolder + '\governor-suspended.json" -LogPath "' + LogPath + '" -SetupProcessId ' + IntToStr(GetCurrentProcessId()),
-    '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+    SetupFolder, GovernorSetupTimeout, Code) and (Code = 0);
   if LoadStringFromFile(LogPath, Output) then Log(String(Output));
   Log('Roo Industries Governor ' + Action + ' finished with exit code ' + IntToStr(Code));
 end;
@@ -174,7 +239,7 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Code: Integer;
+  Code: DWORD;
   Folder: String;
   LogPath: String;
   Output: AnsiString;
@@ -184,9 +249,9 @@ begin
     Folder := ExpandConstant('{app}\setup');
     ForceDirectories(Folder);
     LogPath := Folder + '\governor-uninstall.log';
-    Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    RunBounded(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\backend\scripts\Invoke-GovernorSetup.ps1') + '" -Action Remove -AppRoot "' +
-      ExpandConstant('{app}') + '" -LogPath "' + LogPath + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+      ExpandConstant('{app}') + '" -LogPath "' + LogPath + '"', Folder, GovernorSetupTimeout, Code);
     if LoadStringFromFile(LogPath, Output) then Log(String(Output));
     DelTree(Folder, True, True, True);
     Log('Roo Industries Governor removal finished with exit code ' + IntToStr(Code));
