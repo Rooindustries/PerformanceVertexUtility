@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Reflection;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
@@ -139,6 +140,16 @@ try
 }
 finally
 {
+    if (service is not null)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var lazy = typeof(LiveDataService).GetField("_operations", flags)?.GetValue(service);
+        if (lazy?.GetType().GetProperty("IsValueCreated")?.GetValue(lazy) is true)
+        {
+            var created = lazy.GetType().GetProperty("Value")!.GetValue(lazy)!;
+            (created.GetType().GetField("_storageLease", flags)?.GetValue(created) as IDisposable)?.Dispose();
+        }
+    }
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previousRoot);
     recoveryRoot ??= savedRollback is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
