@@ -43,8 +43,11 @@ public static class DataGeneration
             if (Interlocked.Decrement(ref _changing) == 0)
             {
                 Interlocked.Exchange(ref _settledTicks, Environment.TickCount64);
-                try { Settled?.Invoke(); }
-                catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
+                foreach (var handler in Settled?.GetInvocationList() ?? [])
+                {
+                    try { ((Action)handler)(); }
+                    catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
+                }
             }
         }
     }

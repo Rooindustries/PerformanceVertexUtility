@@ -59,7 +59,9 @@ internal sealed class ChangeWatch
         if (own is null) return;
         _own = null;
         DataGeneration.EndOwn();
-        if (!_refreshing && _seen == _ownBefore && DataGeneration.OwnAccepted(_ownBefore, own)) _seen = DataGeneration.Current;
+        if (_refreshing) return;
+        if (_seen == _ownBefore && DataGeneration.OwnAccepted(_ownBefore, own)) _seen = _ownBefore + own.Bumps;
+        else Run(revisit: false);
     }
 
     public void Run(bool revisit) => _queue.TryEnqueue(async () =>

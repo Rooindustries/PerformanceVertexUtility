@@ -88,6 +88,12 @@ static class DetectChecks
             var detect = Task.Run(() => new TweakEngine(catalog, store) { FeatureTimeout = TimeSpan.FromSeconds(1) }.Detect());
             return detect.Wait(TimeSpan.FromSeconds(30)) && TweakEngine.HasTransientErrors(detect.Result) && !TweakEngine.HasTransientErrors(normal);
         });
+        Scenario("A status whose service rows are still transitioning counts as transient", () =>
+        {
+            var normal = new TweakEngine(catalog, Store("transitioning")).Detect();
+            var transitioning = normal with { Settings = normal.Settings.Select(setting => setting with { Error = "The service is transitioning. Try again after it settles: Fixture" }).ToArray() };
+            return TweakEngine.HasTransientErrors(transitioning) && !TweakEngine.HasTransientErrors(normal);
+        });
         check(failures.Count == 0, "Detection bounds and skips (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
     }
 }

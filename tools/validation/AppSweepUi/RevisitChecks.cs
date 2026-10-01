@@ -16,6 +16,12 @@ static class RevisitChecks
             Console.WriteLine((passed ? "PASS " : "FAIL ") + name);
             if (!passed) failures.Add(name);
         }
+        static void AsForeign(Action action)
+        {
+            var thread = new Thread(() => action());
+            using (ExecutionContext.SuppressFlow()) thread.Start();
+            thread.Join();
+        }
         static ProcessClassification Background(int count) => new()
         {
             Processes = Enumerable.Range(1, count).Select(index => new ProcessItem { Pid = 100 + index, Name = "fixture-background-" + index, Category = "backgroundApp", WorkingSetBytes = 1024 * index }).ToList(),
@@ -128,7 +134,7 @@ static class RevisitChecks
             cleanup.SelectedApp = cleanup.Apps.First();
             cleanup.ScanBusy = true;
             using (DataGeneration.BeginChange()) { }
-            using (ExecutionContext.SuppressFlow()) Task.Run(() => { using (DataGeneration.BeginChange()) { } }).Wait();
+            AsForeign(() => { using (DataGeneration.BeginChange()) { } });
             cleanup.ScanBusy = false;
             await cleanup.RevalidateAsync();
             return cleanup.StaleNotice.Length > 0;

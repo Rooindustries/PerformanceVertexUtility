@@ -293,7 +293,16 @@ public partial class WindowsTweaksViewModel : ObservableObject
     partial void OnSearchChanged(string value) { _focusedSetting = null; Filter(); }
     partial void OnCategoryChanged(string value) { _focusedSetting = null; Filter(); }
     partial void OnSourceChanged(string value) { _focusedSetting = null; Filter(); }
-    partial void OnBusyChanged(bool value) => Notify();
+    partial void OnBusyChanged(bool value)
+    {
+        Notify();
+        if (!value && _revalidatePending) { _revalidatePending = false; _ = RevalidateAsync(); }
+    }
+    private bool _revalidatePending;
+    public async Task WaitForLoadAsync()
+    {
+        while (_refresh is { IsCompleted: false }) await _refresh;
+    }
     partial void OnApprovedChanged(bool value) => Notify();
     partial void OnAcceptedDataLossChanged(bool value) => Notify();
     partial void OnProfileIdChanged(string value)
@@ -340,7 +349,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     {
         while (_refresh is { IsCompleted: false }) await _refresh;
         if (_loadedGeneration == -2 || DataGeneration.Changing || DataGeneration.IsCurrent(_loadedGeneration)) return;
-        if (Busy) return;
+        if (Busy) { _revalidatePending = true; return; }
         if (HasUserWork) NoteChanged();
         else await LoadAsync(fresh: true);
     }
@@ -549,7 +558,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void ClearSelection()
     {
         if (!CanEdit) return;
-        _loading = true; foreach (var row in _all) row.Selected = row.Choices[0]; SelectedPreset = null; _loading = false; _userPicked = false; _userRows.Clear(); Invalidate(); Notify();
+        _loading = true; foreach (var row in _all) { row.Selected = row.Choices[0]; _userRows.Add(row.Id); } SelectedPreset = null; _loading = false; _userPicked = false; Invalidate(); Notify();
         if (StaleNotice.Length > 0 && !DataGeneration.Changing && !DataGeneration.IsCurrent(_loadedGeneration)) { _ = LoadAsync(fresh: true); return; }
         if (!ShowProfileName && _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId) != true) ProfileId = "my-settings";
         SetSelectionStatus("Nothing selected", "Choose settings, review the changes, then apply.");
@@ -635,7 +644,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             if (_reviewingRecovery)
             {
                 await App.Operations.RecoverWindowsTweaksAsync(_recovery!.PendingHash!);
-                Invalidate(); Busy = false; await RefreshAsync(); return;
+                Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync(); return;
             }
             var choiceOnly = _review is null;
             var deferred = _deferredDetail;
@@ -648,14 +657,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
             windowsApplied = result is not null;
             if (restoring && _reviewedChoices is not null) _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
             _inspection = null; Invalidate();
-            Busy = false; await RefreshAsync();
+            Busy = false; await RefreshAsync(); await WaitForLoadAsync();
             if (_inspection is null) { Status = "Settings saved; current values could not be reloaded."; return; }
             Status = choiceOnly ? restoring ? "Saved choices removed" : "Choices saved" : result!.Changed ? "Windows settings saved" : "Profile saved";
             Detail = choiceOnly ? "No Windows settings were changed.\n" + deferred : result!.State.Notices.Length > 0 ? string.Join("\n", result.State.Notices) : deferred.Length > 0 ? "Applied the reviewed Windows changes. These saved choices still need their requirements:\n" + deferred : "Current settings have been refreshed. Follow the restart or sign-out notes shown with the settings.";
         }
         catch (Exception error)
         {
-            Invalidate(); Busy = false; await RefreshAsync();
+            Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync();
             Status = windowsApplied ? restoring ? "Windows settings restored; saved choices need attention" : "Windows settings applied; saved choices need attention"
                 : choicesSaved ? "Choices saved; Windows changes were not confirmed" : "Settings were not confirmed";
             Detail = error.Message + (HasPendingRecovery ? "\nReview the interrupted operation before applying more changes." : "");
@@ -843,14 +852,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
     }
     private void AcceptOwn(long before, DataGeneration.OwnChanges own)
     {
-        if (_loadedGeneration >= 0 && _loadedGeneration == before && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(before, own)) _loadedGeneration = DataGeneration.Current;
+        if (_loadedGeneration >= 0 && _loadedGeneration == before && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(before, own)) _loadedGeneration = before + own.Bumps;
     }
     public async Task OwnAsync(Func<Task> operation)
     {
         var before = DataGeneration.Snapshot();
         var own = DataGeneration.BeginOwn();
-        try { await operation(); }
-        finally { DataGeneration.EndOwn(); AcceptOwn(before, own); }
+        try { await operation(); AcceptOwn(before, own); }
+        finally { DataGeneration.EndOwn(); }
     }
     private void Invalidate() { _revision++; _reviewingRecovery = false; _review = null; _reviewedChoices = null; _restoringChoices = false; _deferredDetail = ""; Approved = false; AcceptedDataLoss = false; Changes.Clear(); Notify(); }
     private void Notify()
