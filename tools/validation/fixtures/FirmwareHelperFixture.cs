@@ -1,4 +1,7 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -12,6 +15,9 @@ class FirmwareHelperFixture
         var authority = Path.Combine(root, "fixture-authority.txt");
         if (!File.Exists(authority) || File.ReadAllText(authority) != "roo-industries-firmware-cli-fixture/v1") return 200;
         if (args.Length == 1 && args[0] == "--hold") { System.Threading.Thread.Sleep(10000); return 0; }
+        var report = new List<string> { "#IMAGE=" + Process.GetCurrentProcess().MainModule.FileName, "#PID=" + Process.GetCurrentProcess().Id, "#ARGS=" + string.Join("|", args) };
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables()) report.Add((string)entry.Key + "=" + (string)entry.Value);
+        File.WriteAllLines(Path.Combine(root, "env-report.txt"), report.ToArray(), new UTF8Encoding(false));
         File.AppendAllText(Path.Combine(root, "calls.log"), string.Join("|", args) + "\n");
         if (args.Length != 4 || args[1] != "/s" || (args[0] == "/o" ? args[3] != "/v" : args[0] != "/i" || args[3] != "/r")) return 201;
         Console.Error.WriteLine("AMISCE file fixture status: reading or updating a disposable file.");

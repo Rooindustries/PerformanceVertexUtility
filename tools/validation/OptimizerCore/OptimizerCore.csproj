@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
+    <Compile Include="../ChildEnvironment/ChildEnv.cs" Link="ChildEnv.cs" />
   </ItemGroup>
 </Project>
