@@ -254,7 +254,7 @@ static class RevisitChecks
                     }
                 }
                 for (var i = 0; i < 25 && !(cleanup.IsReady && cleanup.Apps.Count == 1); i++) { await cleanup.RevalidateAsync(); await Task.Delay(20); }
-                if (!(cleanup.IsReady && cleanup.Apps.Count == 1 && cleanup.StaleNotice.Length == 0)) wrong.Add(string.Join(">", order) + " shows " + cleanup.Apps.Count + (cleanup.IsReady ? "" : " (not ready)"));
+                if (!(cleanup.IsReady && cleanup.Apps.Count == 1 && cleanup.StaleNotice.Length == 0)) wrong.Add(string.Join(">", order) + " shows " + cleanup.Apps.Count + (cleanup.IsReady ? "" : " (not ready)") + " stale='" + cleanup.StaleNotice + "' outOfDate='" + cleanup.OutOfDateNotice + "' error='" + cleanup.ErrorMessage + "' changing=" + DataGeneration.Changing);
             }
             if (wrong.Count > 0) Console.WriteLine("  old list kept after: " + string.Join(" | ", wrong));
             return wrong.Count == 0;
