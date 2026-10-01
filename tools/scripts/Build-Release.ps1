@@ -102,12 +102,15 @@ $obfuscar = Join-Path $tools 'obfuscar.console.exe'
 $hostOut = Join-Path $stage 'backend\bin\optimizer'
 $sessionOut = Join-Path $hostOut 'session'
 $appOut = Join-Path $stage 'app'
-$common = @('-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:UseSharedCompilation=false', '-p:DebugType=none', '-p:ContinuousIntegrationBuild=true', '-p:GenerateDocumentationFile=false')
+$common = @('-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:UseSharedCompilation=false', '-p:DebugType=none', '-p:ContinuousIntegrationBuild=true', '-p:GenerateDocumentationFile=false', '-p:RooIndustriesRelease=true')
 Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj'), '-o', $hostOut) + $common) 'Helper publish'
 Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj'), '-o', $sessionOut) + $common) 'Session helper publish'
 Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x64', '-p:WindowsAppSDKSelfContained=true', '-p:WindowsPackageType=None', ('-p:SelfContainedIntermediateOutputPath=' + (Join-Path $work 'wasdk') + '/'),
     ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest'))) + $common) 'App publish'
 
+foreach ($config in @((Join-Path $hostOut 'Optimizer.Host.runtimeconfig.json'), (Join-Path $sessionOut 'RooIndustries.SessionHost.runtimeconfig.json'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.runtimeconfig.json'))) {
+    if ((Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).runtimeOptions.configProperties.'System.StartupHookProvider.IsSupported' -ne $false) { throw ('Startup hooks are not disabled in ' + $config) }
+}
 $productAssemblies = @((Join-Path $hostOut 'Optimizer.Core.dll'), (Join-Path $hostOut 'Optimizer.Host.dll'), (Join-Path $sessionOut 'RooIndustries.SessionHost.dll'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.dll'))
 Invoke-Checked $dotnet @('run', '--project', (Join-Path $repoRoot 'tools\validation\DynamicBinding\DynamicBinding.csproj'), '-c', 'Release', '--', '--self-test') 'Dynamic binding guard self-test'
 Invoke-Checked $dotnet (@('run', '--project', (Join-Path $repoRoot 'tools\validation\DynamicBinding\DynamicBinding.csproj'), '-c', 'Release', '--') + $productAssemblies) 'Dynamic binding check'
