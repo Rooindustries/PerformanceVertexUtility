@@ -7,6 +7,7 @@ function Check([bool]$Condition,[string]$Message,[string]$Detail=''){$results.Ad
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
 if(@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue).Count -gt 0 -or (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)){throw 'Governor or setup recovery tasks already exist on this PC; refusing to run the setup fallback check.'}
 $id=[Guid]::NewGuid().ToString('N').Substring(0,12)
+$started=Get-Date
 $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $work=Join-Path $env:SystemRoot ('Temp\roo-industries-setup-check-'+$id)
@@ -275,6 +276,8 @@ finally {
         Check ($null -eq (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue)) ('The check removed its task '+$name)
     }
     if($setup -and -not $setup.HasExited){Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue}
+    foreach($leftover in @(Get-CimInstance Win32_Process|Where-Object {[string]$_.CommandLine -like ('*'+$work+'*') -or ($_.Name -eq 'PING.exe' -and [string]$_.CommandLine -match '-n 900 127\.0\.0\.1' -and $_.CreationDate -ge $started)})){Stop-Process -Id $leftover.ProcessId -Force -ErrorAction SilentlyContinue}
+    Start-Sleep -Seconds 1
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Split-Path $policyRoot -Parent) -Recurse -Force -ErrorAction SilentlyContinue
 }
