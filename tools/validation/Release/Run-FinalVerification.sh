@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Linux-side driver for the release verification on a Windows test PC. Every step runs a named phase of
-# tools/validation/Release/Invoke-IntegrationVerification.ps1 (or another named script) and keeps its log.
-# usage: Run-FinalVerification.sh <step> [arguments]       steps: stage, phase, script, reboot, fetch, installer-old, installer-new
-#        Run-FinalVerification.sh all                      the full sequence of this branch's verification
+# tools/validation/Release/Invoke-IntegrationVerification.ps1 (or another named script), keeps its log under
+# $OUT, and the whole sequence is repeatable: Run-FinalVerification.sh all
+# usage: Run-FinalVerification.sh <step> [arguments]
+#   steps: stage | phase <name> [runner arguments] | gi <phase> | screens | reboot | fetch <remote> <local> |
+#          lifecycle | upgrade-path | ui | all
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOST="${HOST:-optimizer-9070}"
@@ -11,10 +13,13 @@ OUT="${OUT:-$ROOT/artifacts/final-run/9070}"
 PY="${PY:-python3}"
 STAGE="${STAGE:-roo-industries-final-run}"
 TASK="${TASK:-RooIndustries_VerifyRun}"
-OLD_INSTALLER="${OLD_INSTALLER:-$ROOT/../../../artifacts/RooIndustries-OptimizationSuite-0.9.0-beta-setup.exe}"
-SSH_OPTIONS=(-T -o BatchMode=yes -o ConnectTimeout=8 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ProxyCommand=none -o ProxyJump=none)
-REMOTE_TEMP_WIN='$env:TEMP'
-mkdir -p "$OUT/runner" "$OUT/suites"
+OLD_INSTALLER="${OLD_INSTALLER:-}"
+WINUSER="${WINUSER:-servi windows box}"
+WINTEMP="C:\\Users\\$WINUSER\\AppData\\Local\\Temp"
+REMOTE_STAGE="$WINTEMP\\$STAGE"
+REMOTE_INSTALLERS="$WINTEMP\\roo-industries-installers"
+REMOTE_RELEASE="$WINTEMP\\roo-industries-release"
+mkdir -p "$OUT/runner" "$OUT/suites" "$OUT/lifecycle" "$OUT/screens" "$OUT/installer"
 
 winps() { "$PY" "$ROOT/tools/validation/windows_ssh.py" --host "$HOST" --expected-machine "$MACHINE" run "$1"; }
 winps_text() { local f; f="$(mktemp /tmp/roo-industries-ps-XXXX.ps1)"; printf '%s\n' "$1" > "$f"; winps "$f" 2>&1 | grep -av '^<Objs\|^#< CLIXML'; rm -f "$f"; }
@@ -58,15 +63,22 @@ PS
 phase() {
   local name="$1"; shift
   local log="$OUT/runner/$(date -u +%H%M%S)-$name.log" minutes="${MINUTES:-60}"
-  interactive 'tools\validation\Release' 'Invoke-IntegrationVerification.ps1' "$minutes" "$log" -Phase "$name" -Source "'C:\\Users\\$WINUSER\\AppData\\Local\\Temp\\$STAGE'" "$@"
-  echo "$log"; grep -ac '^[^ ]* FAIL ' "$log" | sed 's/^/FAIL lines: /'
+  interactive 'tools\validation\Release' 'Invoke-IntegrationVerification.ps1' "$minutes" "$log" -Phase "$name" -Source "'$REMOTE_STAGE'" "$@"
+  echo "$log"; echo "FAIL lines: $(grep -ac '^[^ ]* FAIL ' "$log")"
 }
 
-script_run() {
-  local directory="$1" script="$2" minutes="$3" label="$4"; shift 4
-  local log="$OUT/suites/$label.log"
-  interactive "$directory" "$script" "$minutes" "$log" "$@"
-  echo "$log"
+gi() {
+  local label="$1"; shift
+  winps_text "& '$REMOTE_STAGE\\tools\\validation\\Governor\\Test-GovernorInstalled.ps1' -Phase $* " | tee "$OUT/lifecycle/$label.json" | grep -a '^\(PASS\|FAIL\)'
+}
+
+screen() {
+  local name="$1" page="${2:-Games}"
+  local log="$OUT/screens/$name.log"
+  interactive 'tools\validation\Governor' 'Capture-GovernorUi.ps1' 3 "$log" -Name "$name" -Page "'$page'"
+  grep -a 'GovernorStatus\|GovernorDetail\|Pause enabled\|Page texts' "$log" | head -4
+  winps_text "[Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-ui\\shot-$name.png')))" | tail -1 | base64 -d > "$OUT/screens/$name.png"
+  ls -la "$OUT/screens/$name.png" | awk '{print $5, $9}'
 }
 
 reboot_wait() {
@@ -84,18 +96,19 @@ reboot_wait() {
 
 fetch() {
   local remote="$1" local_dir="$2"; mkdir -p "$local_dir"
-  winps_text "\$p='$remote'; if(Test-Path -LiteralPath \$p){ \$z=Join-Path \$env:TEMP 'roo-industries-fetch.tar'; Remove-Item \$z -ErrorAction SilentlyContinue; Push-Location (Split-Path \$p -Parent); tar.exe -cf \$z (Split-Path \$p -Leaf); Pop-Location; \$z }" | tail -1 > /tmp/roo-industries-fetch.name
-  local name; name="$(tr -d '\r\n' < /tmp/roo-industries-fetch.name)"
-  [[ -n "$name" ]] && scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none "$HOST:${name//\\//}" "$local_dir/fetch.tar" && tar -xf "$local_dir/fetch.tar" -C "$local_dir" && rm -f "$local_dir/fetch.tar"
+  scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none -r "$HOST:${remote//\\//}" "$local_dir/"
 }
 
-WINUSER="${WINUSER:-servi windows box}"
+upload() { scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none "$1" "$HOST:${2//\\//}"; }
+
 step="${1:-}"; shift || true
 case "$step" in
   stage) stage ;;
   phase) phase "$@" ;;
-  script) script_run "$@" ;;
+  gi) gi "$@" ;;
+  screen) screen "$@" ;;
   reboot) reboot_wait ;;
   fetch) fetch "$@" ;;
-  *) echo "usage: $0 stage | phase <name> [runner arguments] | script <dir> <script> <minutes> <label> [arguments] | reboot | fetch <remote path> <local dir>"; exit 2 ;;
+  upload) upload "$@" ;;
+  *) echo "usage: $0 stage | phase <name> [runner arguments] | gi <label> <phase> | screen <name> [page] | reboot | fetch <remote> <local dir> | upload <local file> <remote path>"; exit 2 ;;
 esac
