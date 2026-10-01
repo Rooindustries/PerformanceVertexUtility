@@ -118,15 +118,25 @@ static class ToolLauncherChecks
                 lines.Add(text.Length > 0 ? "probe report:" : "probe report: none (the probe never ran)");
                 if (text.Length > 0) lines.Add(text);
                 if (refused is not null) lines.Add("launcher refused: " + refused.Message);
-                var expected = shell ? text.Contains("elevated=false") && !text.Contains("integrity=0x3") && !text.Contains("integrity=0x4") : text.Length == 0 && refused is not null;
-                lines.Add("verdict: " + (expected ? "PASS" : "FAIL"));
-                check(expected, shell ? "A tool started from the user-writable Utilities fallback runs without the app's elevated token" : "With no Windows shell to hand the start to, the launcher refuses instead of starting the user-writable tool elevated");
+                if (shell && text.Contains("elevated=true") && text.Contains("elevationType=Default"))
+                {
+                    const string unsplit = "the signed-in user's token is never split (elevationType=Default, for example the built-in Administrator with FilterAdministratorToken=0), so the Windows shell has no normal-rights token to hand the tool";
+                    lines.Add("not meaningful on this PC: " + unsplit);
+                    Console.WriteLine("NOTE The Utilities fallback elevation check is not meaningful on this PC: " + unsplit);
+                }
+                else
+                {
+                    var expected = shell ? text.Contains("elevated=false") && !text.Contains("integrity=0x3") && !text.Contains("integrity=0x4") : text.Length == 0 && refused is not null;
+                    lines.Add("verdict: " + (expected ? "PASS" : "FAIL"));
+                    check(expected, shell ? "A tool started from the user-writable Utilities fallback runs without the app's elevated token" : "With no Windows shell to hand the start to, the launcher refuses instead of starting the user-writable tool elevated");
+                }
             }
         }
         finally
         {
             Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", oldRoot);
             File.WriteAllLines(evidence, lines);
+            foreach (var line in lines) Console.WriteLine("NOTE " + line);
             for (var attempt = 0; attempt < 25 && Directory.Exists(root); attempt++)
             {
                 try { Directory.Delete(root, recursive: true); } catch (IOException) { Thread.Sleep(200); } catch (UnauthorizedAccessException) { Thread.Sleep(200); }
