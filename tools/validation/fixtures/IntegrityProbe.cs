@@ -36,6 +36,7 @@ class IntegrityProbe
             report.AppendLine("elevationType=" + (type == 1 ? "Default" : type == 2 ? "Full" : type == 3 ? "Limited" : type.ToString()));
             report.AppendLine("user=" + WindowsIdentity.GetCurrent().Name);
             report.AppendLine("session=" + System.Diagnostics.Process.GetCurrentProcess().SessionId);
+            report.AppendLine("cwd=" + Environment.CurrentDirectory);
             var directory = AppDomain.CurrentDomain.BaseDirectory;
             var temporary = Path.Combine(directory, "probe-report.tmp");
             File.WriteAllText(temporary, report.ToString(), Encoding.ASCII);
