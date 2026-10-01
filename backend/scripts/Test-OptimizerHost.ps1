@@ -42,6 +42,18 @@ if($Scenario -eq 'RequestFiles'){
             $viaInput=Invoke-HostRaw $dll $name '-' $body
             Assert ($viaInput.message -cne $stdinOnly) ('A release helper still reads the same request from standard input for '+$name)
         }
+        $echoRoot=Join-Path $caseRoot 'echo-root'
+        [IO.Directory]::CreateDirectory((Join-Path $echoRoot 'backend\scripts'))|Out-Null
+        [IO.Directory]::CreateDirectory((Join-Path $echoRoot 'backend\bin\optimizer'))|Out-Null
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Invoke-WindowsTweakRequest.ps1') -Destination (Join-Path $echoRoot 'backend\scripts\Invoke-WindowsTweakRequest.ps1')
+        [IO.File]::WriteAllText((Join-Path $echoRoot 'backend\bin\optimizer\Optimizer.Host.dll'),'fixture')
+        [IO.File]::WriteAllText((Join-Path $echoRoot 'echo.cmd'),"@echo off`r`nmore > `"%~dp0stdin.txt`"`r`nexit /b 0`r`n")
+        $echoBody='{"schemaVersion":1,"profileId":"echo","selections":[{"settingId":"a","optionId":"b"}]}'
+        $echoFile=Join-Path $caseRoot 'echo-request.json'
+        [IO.File]::WriteAllText($echoFile,$echoBody)
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $echoRoot 'backend\scripts\Invoke-WindowsTweakRequest.ps1') -Action Preview -RequestPath $echoFile -DotNetPath (Join-Path $echoRoot 'echo.cmd')|Out-Null
+        $echoed=if(Test-Path -LiteralPath (Join-Path $echoRoot 'stdin.txt')){([IO.File]::ReadAllText((Join-Path $echoRoot 'stdin.txt'))).Trim()}else{''}
+        Assert ($echoed -ceq $echoBody) 'The tweak request script hands the Host the request text on standard input, not its bytes as numbers'
         $policyRoot=Join-Path $caseRoot 'policy'
         $policyFile=Join-Path $caseRoot 'worker-request.json'
         [IO.File]::WriteAllText($policyFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;policyRoot=$policyRoot}|ConvertTo-Json -Compress))
