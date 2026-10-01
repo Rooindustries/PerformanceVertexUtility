@@ -227,13 +227,13 @@ public sealed partial class OptimizerService
         finally { File.Delete(path); }
     }
 
-    private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false)
+    private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false, TimeSpan? limit = null)
     {
         var elapsed = Stopwatch.StartNew();
         var outcome = "failed";
         try
         {
-            var result = await RunScriptAsync<T>(script, arguments, cancellationToken, waitForRemoval).ConfigureAwait(false);
+            var result = await RunScriptAsync<T>(script, arguments, cancellationToken, waitForRemoval, limit).ConfigureAwait(false);
             outcome = "completed";
             return result;
         }
@@ -241,7 +241,7 @@ public sealed partial class OptimizerService
         finally { AppLog.Timing(script, elapsed, outcome); }
     }
 
-    private async Task<OptimizerResult<T>> RunScriptAsync<T>(string script, string arguments, CancellationToken cancellationToken, bool waitForRemoval)
+    private async Task<OptimizerResult<T>> RunScriptAsync<T>(string script, string arguments, CancellationToken cancellationToken, bool waitForRemoval, TimeSpan? limit = null)
     {
         var confirmed = arguments.Contains("-ConfirmApply", StringComparison.Ordinal);
         if (confirmed) await EnsureStorageAsync().ConfigureAwait(false);
@@ -265,9 +265,10 @@ public sealed partial class OptimizerService
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (!waitForRemoval) timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        var bounded = limit is not null || !waitForRemoval;
+        if (bounded) timeout.CancelAfter(limit ?? TimeSpan.FromSeconds(45));
         try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!waitForRemoval)
+        catch (OperationCanceledException) when (bounded)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync().ConfigureAwait(false);
