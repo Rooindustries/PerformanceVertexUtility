@@ -22,9 +22,12 @@ public static class BrandCompatibility
     {
         var legacy = Path.Combine(localAppData, LegacyDataFolder);
         var current = Path.Combine(localAppData, "RooIndustriesOptimizationSuite");
-        if (!Directory.Exists(legacy)) return current;
+        if (!Directory.Exists(legacy)) return Migrating(localAppData, legacy) ? legacy : current;
         return OperatingSystem.IsWindows() && PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(current)) && !PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(legacy)) ? current : legacy;
     }
+
+    private static bool Migrating(string localAppData, string legacy)
+        => OperatingSystem.IsWindows() && PolicyRootSecurity.MigrationInFlight(localAppData, Path.GetFileName(legacy));
 
     public static string? EnvironmentValue(string name)
     {

@@ -17,9 +17,26 @@ function Find-RooIndustriesCompatibleTask {
     return $task
 }
 
+function Get-RooIndustriesDataRootMarkerName([string]$Path) {
+    if(-not ('RooIndustries.LongPathName' -as [type])){Add-Type -Namespace RooIndustries -Name LongPathName -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "GetLongPathNameW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)] public static extern uint Expand(string shortPath, System.Text.StringBuilder longPath, uint length);'}
+    $existing=[IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if($existing -match '^[A-Za-z]:$'){return $existing.ToUpperInvariant()}
+    $rest=''
+    while(-not [IO.Directory]::Exists($existing)){
+        $parent=[IO.Path]::GetDirectoryName($existing)
+        if(-not $parent){break}
+        $rest=[IO.Path]::Combine([IO.Path]::GetFileName($existing),$rest)
+        $existing=$parent
+    }
+    $buffer=New-Object System.Text.StringBuilder 1024
+    $length=[RooIndustries.LongPathName]::Expand($existing,$buffer,1024)
+    $long=if($length -eq 0 -or $length -ge 1024){$existing}else{$buffer.ToString()}
+    return [IO.Path]::GetFullPath($(if($rest.Length -eq 0){$long}else{[IO.Path]::Combine($long,$rest)})).TrimEnd('\').ToUpperInvariant()
+}
+
 function Test-RooIndustriesDataRootMarked([string]$Root) {
     $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    return $null -ne $key -and $null -ne $key.GetValue([IO.Path]::GetFullPath($Root).TrimEnd('\').ToUpperInvariant())
+    return $null -ne $key -and $null -ne $key.GetValue((Get-RooIndustriesDataRootMarkerName $Root))
 }
 
 function Assert-RooIndustriesProtectedFolder([string]$Path) {
@@ -44,13 +61,15 @@ function Test-RooIndustriesWrittenAfterProtection([string]$Path) {
     $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
     if(-not $key -or -not (Test-Path -LiteralPath $Path -PathType Leaf)){return $false}
     $full=[IO.Path]::GetFullPath($Path)
+    $latest=$null
     for($directory=[IO.Path]::GetDirectoryName($full);$directory;$directory=[IO.Path]::GetDirectoryName($directory)){
-        $name=$directory.TrimEnd('\').ToUpperInvariant()
+        $name=Get-RooIndustriesDataRootMarkerName $directory
         if($null -eq $key.GetValue($name)){continue}
         $at=$key.GetValue($name+'|protected-at')
-        return ($null -ne $at) -and ((Get-Item -LiteralPath $full -Force).CreationTimeUtc.ToFileTimeUtc() -gt [int64]$at)
+        if($null -eq $at){return $false}
+        if($null -eq $latest -or [int64]$at -gt $latest){$latest=[int64]$at}
     }
-    return $false
+    return ($null -ne $latest) -and ((Get-Item -LiteralPath $full -Force).CreationTimeUtc.ToFileTimeUtc() -gt $latest)
 }
 
 function Get-RooIndustriesLocalDataRoot {

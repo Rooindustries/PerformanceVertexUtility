@@ -63,12 +63,23 @@ function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $
 function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
 function Pick([string]$id, [string]$like) {
-    $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
-    $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
-    $pattern.Expand(); Start-Sleep -Milliseconds 700
-    $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
-    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
-    try { $pattern.Collapse() } catch {}
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
+        $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+        $pattern.Expand(); Start-Sleep -Milliseconds 700
+        $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
+        try { $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select() }
+        catch {
+            if ($_.FullyQualifiedErrorId -ne 'ElementNotEnabledException' -or $attempt -eq 4) { throw }
+            Log "the $id list was refreshed while choosing $like; trying again"
+            try { $pattern.Collapse() } catch {}
+            Start-Sleep -Seconds 2
+            continue
+        }
+        Start-Sleep -Milliseconds 500
+        try { $pattern.Collapse() } catch {}
+        return
+    }
 }
 function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
 function Probe-Priority($id) { try { [string](Get-Process -Id $id -ErrorAction Stop).PriorityClass } catch { '<gone>' } }
@@ -81,6 +92,7 @@ function Set-Profile {
     $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Profile); Start-Sleep 1
 }
 function Apply-Reviewed([string]$what) {
+    WaitFor { $r = ById 'WindowsTweaksReview'; if ($r -and @($r.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text))).Count) { $r } } 60 "$what review" | Out-Null
     $texts = @(Review-Texts)
     Log ("$what review: " + ($texts -join ' | '))
     if ((($texts -join ' ') -notmatch 'Transparency') -or @($texts | Where-Object { $_ -match 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender' }).Count) { throw "$what review is not exactly the Transparency change; refusing to apply" }
@@ -124,6 +136,9 @@ try {
 
         Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $ProbePath -Force
         $probe = Start-Process $ProbePath -ArgumentList '-n', '7200', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $probeId = $probe.Id
+        (Get-Process -Id $probeId).PriorityClass = 'Normal'
+        Check ((Probe-Priority $probeId) -eq 'Normal') 'the probe starts at normal priority (a process started by a scheduled task inherits below normal, so it is set explicitly)' ('priority=' + (Probe-Priority $probeId))
         Start-Sleep 3
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
@@ -135,10 +150,10 @@ try {
         try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
         (WaitFor { ById 'ProcessRuleName' } 10 'rule name').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($RuleName); Start-Sleep 1
         Invoke-Element (WaitFor { $b = ById 'ProcessSaveRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'save rule button')
-        $saved = Process-Status '^(Rule saved|Saved rules need attention)' 180 'rule save'
+        $saved = Process-Status '^(Rule saved and (on|enabled)\.|Rule saved\. The governor is paused|Saved rules need attention)' 180 'rule save'
         Check ($saved -match '^Rule saved') 'the earlier version saved the governor rule' ($saved + ' :: ' + (ById 'ProcessDetail').Current.Name)
-        $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probe.Id) -eq 'BelowNormal') { $true } } 90 'rule enforced' } catch {}
-        Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probe.Id))
+        $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probeId) -eq 'BelowNormal') { $true } } 240 'rule enforced' } catch {}
+        Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probeId))
         Shot 'saved'
         [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath $StatePath -Encoding UTF8
     } else {
@@ -174,7 +189,8 @@ try {
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    if ($Phase -eq 'after') { Get-Process RooMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
+    if ($Phase -eq 'after' -or $script:Failures -gt 0) { Get-Process RooMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
+    if ($Phase -eq 'before' -and $script:Failures -gt 0) { Log ('CLEANUP NEEDED: the earlier version may have left the ' + $Profile + ' profile applied and the ' + $RuleName + ' rule saved; restore the profile and delete the rule in the app') }
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir ('migration-' + $Phase + '.done'))
 }

@@ -21,7 +21,10 @@ try
     var scripts = Path.Combine(fixture, "backend", "scripts");
     Directory.CreateDirectory(scripts);
     Directory.CreateDirectory(Path.Combine(fixture, "backend", "samples"));
-    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BulkUninstall.Common.ps1", "OperationState.Common.ps1", "AppxInventory.Common.ps1", "ProcessProfile.Common.ps1" })
+    Directory.CreateDirectory(Path.Combine(fixture, "backend", "profiles"));
+    File.Copy(Path.Combine(repo, "backend", "profiles", "protected-processes.json"), Path.Combine(fixture, "backend", "profiles", "protected-processes.json"));
+    Directory.CreateSymbolicLink(Path.Combine(fixture, "backend", "bin"), Path.Combine(repo, "backend", "bin"));
+    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BulkUninstall.Common.ps1", "OperationState.Common.ps1", "AppxInventory.Common.ps1", "ProcessProfile.Common.ps1", "GovernorOwnership.Common.ps1" })
         File.Copy(Path.Combine(repo, "backend", "scripts", name), Path.Combine(scripts, name));
     File.WriteAllText(Path.Combine(scripts, "Invoke-CleanupExclusions.ps1"), "param([string]$Action,[string[]]$FileTarget)\n'{\"schemaVersion\":1,\"status\":\"completed\",\"data\":{\"allowed\":true}}'\n");
     File.WriteAllText(Path.Combine(scripts, "Preview-OfficialUninstall.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'official.json') -Raw -Encoding UTF8\n");
@@ -35,6 +38,12 @@ try
     File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(official));
     object Manifest(string target) => new { manifestId = "client-review", appId, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(original)));
+    var gateRoot = Directory.CreateDirectory(Path.Combine(fixture, "gate-root")).FullName;
+    File.WriteAllText(Path.Combine(gateRoot, "temp"), "a file where the temporary folder belongs");
+    var gateMessage = DataFolderGate.Attempt(() => gateRoot, out var gateEnabled);
+    Check(gateMessage is not null && !gateEnabled && gateMessage.Contains("temp", StringComparison.OrdinalIgnoreCase), "A file error while opening the data folder becomes a message for the user instead of an unhandled exception: " + gateMessage);
+    var gateProblem = DataFolderGate.Attempt(() => throw new IOException("The disk is full."), out _);
+    Check(gateProblem == "The disk is full.", "Every other failure of the data folder check is reported with its own message");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", fixture);
     service = new LiveDataService(new BackendLocator());
     Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null, "Client reads the reviewed removal route");
@@ -118,5 +127,7 @@ finally
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previousRoot);
     recoveryRoot ??= savedRollback is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
+    var hostLink = Path.Combine(fixture, "backend", "bin");
+    if (Directory.Exists(hostLink) && new DirectoryInfo(hostLink).LinkTarget is not null) Directory.Delete(hostLink, false);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
 }
