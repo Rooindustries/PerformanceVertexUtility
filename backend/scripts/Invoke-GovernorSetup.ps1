@@ -283,6 +283,21 @@ function Invoke-Host([string]$HostAction,[string]$PolicyRoot,[hashtable]$Extra=@
     return $run.result.data
 }
 
+function Invoke-Worker([string]$WorkerAction,[string]$PolicyRoot){
+    $ErrorActionPreference='Continue'
+    $output=@(& $workerScript -Action $WorkerAction -PolicyRoot $PolicyRoot -HostDirectory (Split-Path $hostExe -Parent) -ConfirmApply 2>&1)
+    $errors=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_})
+    $text=(@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n").Trim()
+    $result=$null
+    if($text){try {$result=$text|ConvertFrom-Json} catch {}}
+    if($null -eq $result -or $null -eq $result.status){
+        $reason=if($errors.Count){($errors -join ' ').Trim()}elseif($text){$text}else{'the helper printed nothing'}
+        throw ($WorkerAction+' failed: '+$reason.Substring(0,[Math]::Min(400,$reason.Length)))
+    }
+    if($result.status -ne 'completed'){throw ($result.errors|ForEach-Object {$_.message}) -join '; '}
+    return $result
+}
+
 function New-AdminOnlyDirectory([string]$Path){
     $security=New-Object Security.AccessControl.DirectorySecurity
     $administrators=New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'
@@ -440,9 +455,7 @@ switch($Action){
                 if($record.userSid -eq $me){
                     $supportsSync=(Test-Path -LiteralPath $workerScript) -and ([IO.File]::ReadAllText($workerScript) -match "'Sync'")
                     if($supportsSync){
-                        $text=@(& $workerScript -Action Sync -PolicyRoot $record.policyRoot -HostDirectory (Split-Path $hostExe -Parent) -ConfirmApply) -join "`n"
-                        $result=$text|ConvertFrom-Json
-                        if($result.status -ne 'completed'){throw ($result.errors|ForEach-Object {$_.message}) -join '; '}
+                        $result=Invoke-Worker 'Sync' $record.policyRoot
                         Write-Log ('Governor synced for '+$record.policyRoot+': registered='+$result.data.registered+' enabled='+$result.data.enabled+' running='+$result.data.worker.hostRunning+' paused='+$result.data.paused)
                     } elseif($record.wasRunning){
                         & $workerScript -Action Start -PolicyRoot $record.policyRoot -ConfirmApply|Out-Null
@@ -472,9 +485,7 @@ switch($Action){
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
             if($task.trusted -and $task.userSid -eq $me -and (Test-Path -LiteralPath $workerScript)){
                 try {
-                    $text=@(& $workerScript -Action Remove -PolicyRoot $task.policyRoot -HostDirectory (Split-Path $hostExe -Parent) -ConfirmApply) -join "`n"
-                    $result=$text|ConvertFrom-Json
-                    if($result.status -ne 'completed'){throw ($result.errors|ForEach-Object {$_.message}) -join '; '}
+                    $result=Invoke-Worker 'Remove' $task.policyRoot
                     Write-Log ('Governor stopped, settings restored and task removed for '+$task.policyRoot)
                 } catch {Write-Log ('Could not stop the governor cleanly for '+$task.policyRoot+': '+$_.Exception.Message)}
             } elseif($task.trusted) {
