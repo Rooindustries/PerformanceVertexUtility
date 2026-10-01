@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
 
@@ -49,9 +48,6 @@ public partial class StartupServicesViewModel : PageViewModelBase
 
         IsEmpty = false;
     }
-
-    [RelayCommand]
-    private Task RetryAsync() => ReloadAsync();
 
 }
 

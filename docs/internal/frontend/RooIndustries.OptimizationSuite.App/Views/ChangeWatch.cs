@@ -1,22 +1,20 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
 internal sealed class ChangeWatch
 {
-    private long _seen = -2;
-    private bool _refreshing;
-    private readonly DispatcherQueue _queue;
+    private readonly SeenGeneration _seen = new();
+    private readonly Func<Func<Task>, bool> _enqueue;
     private readonly Func<bool, Task> _catchUp;
     private bool _watching;
 
-    public ChangeWatch(DispatcherQueue queue, Func<bool, Task> catchUp) { _queue = queue; _catchUp = catchUp; }
+    public ChangeWatch(Func<Func<Task>, bool> enqueue, Func<bool, Task> catchUp) { _enqueue = enqueue; _catchUp = catchUp; }
 
-    public bool Changed => !DataGeneration.IsCurrent(_seen);
-    public void MarkSeen() => _seen = DataGeneration.Snapshot();
+    public bool Changed => !_seen.IsCurrent;
+    public void MarkSeen() => _seen.Mark();
 
     public void Start()
     {
@@ -31,40 +29,23 @@ internal sealed class ChangeWatch
         DataGeneration.Settled -= OnSettled;
     }
 
-    public async Task RefreshAsync(Func<Task> refresh)
-        => await RefreshAsync(async () => { await refresh(); return true; });
-
     public async Task RefreshAsync(Func<Task<bool>> refresh)
     {
-        var before = DataGeneration.Snapshot();
+        var started = _seen.BeginRead();
         var succeeded = false;
-        _refreshing = true;
         try { succeeded = await refresh(); }
-        finally { _refreshing = false; }
-        if (succeeded) _seen = before;
+        finally { _seen.EndRead(started, succeeded); }
+        if (succeeded && Changed && !DataGeneration.Changing) Run(revisit: false);
     }
 
-    private DataGeneration.OwnChanges? _own;
-    private long _ownBefore = -1;
-
-    public void OperationStarted()
-    {
-        _ownBefore = DataGeneration.Snapshot();
-        _own = DataGeneration.BeginOwn();
-    }
+    public void OperationStarted() => _seen.BeginOwn();
 
     public void OperationEnded()
     {
-        var own = _own;
-        if (own is null) return;
-        _own = null;
-        DataGeneration.EndOwn();
-        if (_refreshing) return;
-        if (_seen == _ownBefore && DataGeneration.OwnAccepted(_ownBefore, own)) _seen = _ownBefore + own.Bumps;
-        else Run(revisit: false);
+        if (_seen.EndOwn(true, out _) == OwnEnd.Stale && !_seen.Reading) Run(revisit: false);
     }
 
-    public void Run(bool revisit) => _queue.TryEnqueue(async () =>
+    public void Run(bool revisit) => _enqueue(async () =>
     {
         try { await _catchUp(revisit); }
         catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
