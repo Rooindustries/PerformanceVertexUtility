@@ -50,7 +50,7 @@ try
     var applyResult = await service.RequestUninstallCleanupApplyResultAsync(appId, true, true, true);
     savedRollback = applyResult.RecoveryPath;
     var json = applyResult.Value;
-    Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result");
+    Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result: " + applyResult.Error);
     using var applied = JsonDocument.Parse(json!);
     var status = applied.RootElement.GetProperty("status").GetString();
     if (status != "success") Console.WriteLine(json);
