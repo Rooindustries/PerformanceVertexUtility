@@ -4,6 +4,8 @@ namespace RooIndustries.Optimizer;
 public static class BrandCompatibility
 {
     public const string LegacyDataFolder = "RooOptimizationSuite";
+    public const string LegacyPolicyTaskPrefix = "RooOptimizationSuite.ProcessRules.";
+    public const string LegacyPolicyTaskDescription = "Roo process rules | ";
     public const string LegacyTheme = "roo-blue";
     public const string LegacyRestorePrefix = ".roo-restore-";
     public const string LegacyRegistryRoot = "Software\\RooOptimizationSuite";

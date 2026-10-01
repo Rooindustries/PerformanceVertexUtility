@@ -15,7 +15,7 @@ $result=[pscustomobject]@{
     schemaVersion=1; actionId='performance.cpuSets.'+$Action.ToLowerInvariant(); status='failed'; dryRun=$true
     capturedAtUtc=Get-RooIndustriesUtcStamp; data=$null; journalPath=$null; changed=$false; restoreAvailable=$false; errors=@()
 }
-$target=$null; $lease=$null; $processLease=$null; $processLocked=$false; $journal=$null
+$target=$null; $lease=$null; $gate=$null; $processLease=$null; $processLocked=$false; $journal=$null
 $outputSafe=$false
 try {
     Assert-RooIndustriesDistinctOperationPaths @($InputPath,$JournalPath,$OutputPath)
@@ -53,6 +53,8 @@ try {
             $result.status='preview'; $result.data=$preview
         } else {
             $lease=Lock-RooIndustriesOperation $JournalPath
+            $gate=Enter-RooIndustriesGovernorGate
+            if ($null -eq $gate) { throw 'Another rule change is still running. Try again in a moment.' }
             if (Test-Path -LiteralPath $JournalPath) {
                 $journal=(Read-RooIndustriesOperationJson $JournalPath).data
                 if ($journal.kind -ne 'cpu-set-journal' -or $journal.preview.operationId -cne $preview.operationId -or
@@ -112,6 +114,7 @@ try {
 } finally {
     if ($null -ne $target) { $target.Dispose() }
     if ($processLocked) { $processLease.ReleaseMutex() }
+    Exit-RooIndustriesGovernorGate $gate
     if ($null -ne $processLease) { $processLease.Dispose() }
     if ($null -ne $lease) { $lease.Dispose() }
 }

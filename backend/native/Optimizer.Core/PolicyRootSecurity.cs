@@ -101,6 +101,9 @@ public static class PolicyRootSecurity
                 catch (IOException error) { throw new IOException(kind.Busy + " " + error.Message, error); }
                 catch (UnauthorizedAccessException) when (attempt < 5 && kind.KeepUntrusted) { Directory.Delete(temporary, true); Thread.Sleep(200 * attempt); continue; }
                 catch (UnauthorizedAccessException error) { throw new IOException(kind.Busy + " " + error.Message, error); }
+#if GOVERNOR_TEST_HOOKS
+                if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
+#endif
             }
             catch
             {

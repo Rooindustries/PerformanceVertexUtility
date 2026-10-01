@@ -23,7 +23,8 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
         bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
-    public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals);
+    public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
+        GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
@@ -233,12 +234,18 @@ namespace RooIndustries.OptimizationSuite.Services
             => throw new InvalidOperationException("Unexpected restore call.");
         public Task<SavedProcessRule[]> ReadRulesAsync() => Task.FromResult(Array.Empty<SavedProcessRule>());
         public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.FromResult(new PolicyWorkerStatus(null, false, null));
-        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) => Task.FromResult(rule);
+        public Action<SavedProcessRule>? RuleSaved { get; set; }
+        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) { RuleSaved?.Invoke(rule); return Task.FromResult(rule); }
         public Task<JsonElement> DeleteRuleAsync(string ruleId) => Task.FromResult(JsonSerializer.SerializeToElement(new { }));
+        public Exception? PolicyWorkerError { get; set; }
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
-            => Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
+            => PolicyWorkerError is { } failure ? Task.FromException<PolicyWorkerRegistration>(failure) : Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
         public GovernorSnapshot Governor { get; set; } = new(new PolicySummary(false, "missing", false, 0, 0, null), new PolicyWorkerStatus(null, false, null), [], new());
-        public Task<GovernorSnapshot> ReadGovernorAsync() => Task.FromResult(Governor);
+        public Exception? GovernorError { get; set; }
+        public Task<GovernorSnapshot> ReadGovernorAsync() => GovernorError is { } error ? Task.FromException<GovernorSnapshot>(error) : Task.FromResult(Governor);
+        public Func<Task<PolicyHostState>> RetryRestore { get; set; } = () => throw new InvalidOperationException("Unexpected governor restore retry.");
+        public int RetryCalls { get; private set; }
+        public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
         public Task<TweakRecovery> ReadWindowsRecoveryAsync() => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
     }

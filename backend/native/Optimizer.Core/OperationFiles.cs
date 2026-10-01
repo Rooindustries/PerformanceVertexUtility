@@ -43,6 +43,14 @@ public static class OperationFiles
         return Deserialize<T>(bytes);
     }
 
+    public static (T Value, string Hash) ReadHashed<T>(string path)
+    {
+        using var file = OpenShared(path);
+        var bytes = new byte[checked((int)file.Length)];
+        file.ReadExactly(bytes);
+        return (Deserialize<T>(bytes), Hash(bytes));
+    }
+
     public static T Deserialize<T>(byte[] bytes)
     {
         using var document = JsonDocument.Parse(bytes);
@@ -69,10 +77,22 @@ public static class OperationFiles
     }
 
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
-    public static string HashFile(string path)
+    public static string HashFile(string path) => HashFile(path, null);
+
+    public static string HashFile(string path, Action? progress)
     {
         using var file = OpenShared(path);
-        return Convert.ToHexString(SHA256.HashData(file));
+        using var sha = SHA256.Create();
+        var buffer = new byte[1 << 20];
+        for (var chunks = 1; ; chunks++)
+        {
+            var read = file.Read(buffer, 0, buffer.Length);
+            if (read == 0) break;
+            sha.TransformBlock(buffer, 0, read, null, 0);
+            if (chunks % 64 == 0) progress?.Invoke();
+        }
+        sha.TransformFinalBlock([], 0, 0);
+        return Convert.ToHexString(sha.Hash!);
     }
 
     private static FileStream OpenShared(string path)
