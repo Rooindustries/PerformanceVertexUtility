@@ -75,6 +75,7 @@ public static class GovernorDisplay
     public const string StoppedRestarts = "The governor stopped. It starts again by itself within a minute, or press Start governor.";
     public const string StoppedStays = "The governor stopped and won't start again by itself. Press Start governor to start it.";
     public const string StoppedUnknown = "The governor stopped. Press Start governor to start it.";
+    public static string StoppedFailed(int code) => "The governor stopped and its last automatic start failed (error 0x" + code.ToString("X8") + "), so it may not start again by itself. Press Start governor to start it.";
     public const string NotRunningApp = "The app is not running right now.";
     public const string PausedRule = "Not applied right now because the governor is paused.";
     public const string StoppedRule = "Not applied right now because the governor is stopped.";
@@ -117,7 +118,8 @@ public static class GovernorDisplay
         var retry = CanRetry(snapshot, state) ? RetryHint : "";
         return state switch
         {
-            "running" => summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.",
+            "running" => (summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.")
+                + (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } problem ? " " + problem.TrimEnd('.') + "." : summary.UnreadableRules is { Length: > 0 } unread ? " " + string.Join(" ", unread).TrimEnd('.') + ". Those rules are not enforced." : ""),
             "pausing" => worker.HostRunning == true
                 ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back. Press Pause governor to put them back.",
@@ -130,7 +132,8 @@ public static class GovernorDisplay
                 : worker.HostRunning == true ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back.",
             "stopped" => (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } last ? last + " " : "")
-                + (snapshot.ScheduledTask is null ? StoppedUnknown : snapshot.ScheduledTask.Restarts ? StoppedRestarts : StoppedStays),
+                + (snapshot.ScheduledTask is null ? StoppedUnknown : snapshot.ScheduledTask.LastStartFailed && snapshot.ScheduledTask is { Registered: true, Enabled: true, RestartsEveryMinute: true } ? StoppedFailed(snapshot.ScheduledTask.LastResult)
+                    : snapshot.ScheduledTask.Restarts ? StoppedRestarts : StoppedStays),
             _ => worker.HostRunning is null && summary.Paused
                     ? "Paused, but Roo Industries couldn't read the governor's state, so it can't confirm the old settings were put back" + Reason(worker.Error) + "."
                 : worker.HostRunning == true && worker.Error is not null && summary.Paused
@@ -507,7 +510,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             Detail = "The Roo Industries Governor keeps this rule on after you close the app. If another app changes the same setting, Roo Industries puts it back up to three times and then steps back for that app.";
             Invalidate();
         }
-        catch (Exception error) { Status = "Saved rules need attention."; Detail = error.Message; }
+        catch (Exception error) { Status = "Saved rules need attention."; Detail = error.Message; await TryRefreshRulesAsync(); }
         finally { Busy = false; }
     }
 
@@ -646,10 +649,16 @@ public partial class ProcessControlsViewModel : ObservableObject
             await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = delete ? "Rule deleted." : "Rule updated.";
-            Detail = "Turning off or deleting a rule gives the app its old settings back, unless another app changed them since.";
+            Detail = "Turning off or deleting a rule gives the app its old settings back.";
         }
-        catch (Exception error) { Status = "Couldn't update the rule."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't update the rule."; Detail = error.Message; await TryRefreshRulesAsync(); }
         finally { Busy = false; }
+    }
+
+    private async Task TryRefreshRulesAsync()
+    {
+        try { await RefreshRulesAsync(); }
+        catch (Exception) { }
     }
 
     [RelayCommand]
@@ -664,8 +673,10 @@ public partial class ProcessControlsViewModel : ObservableObject
         try
         {
             await App.Operations.RetryGovernorRestoreAsync();
+            var snapshot = await App.Operations.ReadGovernorAsync();
             await RefreshRulesAsync();
-            Status = RetryAvailable ? "Some settings still could not be put back." : "The old settings are back.";
+            Status = snapshot.Worker.HostRunning is null ? "Couldn't confirm the old settings are back."
+                : RetryAvailable || GovernorDisplay.Holding(snapshot).Length > 0 ? "Some settings still could not be put back." : "The old settings are back.";
             Detail = "";
         }
         catch (Exception error) { Status = "Couldn't put the settings back."; Detail = error.Message; }
