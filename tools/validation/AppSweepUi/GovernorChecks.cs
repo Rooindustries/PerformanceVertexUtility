@@ -420,8 +420,8 @@ static class GovernorChecks
             File.WriteAllText(Path.Combine(store.RulesDirectory, Guid.NewGuid().ToString("N") + ".json"), "{ not json");
             snapshot = GovernorProbe.Read(root);
             (view, _) = await Show(snapshot);
-            check(snapshot.Summary.RulesError is null && snapshot.Summary.UnreadableRules is { Length: 1 } && snapshot.Rules.Length == 0 && view.Contains("State: notResponding")
-                    && view.Any(line => line.StartsWith("Detail: The saved rule ", StringComparison.Ordinal) && line.Contains(" could not be read: ", StringComparison.Ordinal)),
+            check(snapshot.Summary.RulesError is null && snapshot.Summary.UnreadableRules is { Length: 1 } && snapshot.Summary.UnreadableRules[0].Contains(" could not be read: ", StringComparison.Ordinal)
+                    && snapshot.Rules.Length == 0 && view.Contains("State: notResponding"),
                 "Real snapshot: a damaged rule file is named as unreadable saved rules and, with no rule left to enforce, the governor needs attention");
         }
         finally
