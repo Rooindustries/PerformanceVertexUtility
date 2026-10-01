@@ -342,9 +342,11 @@ public partial class ProcessControlsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => TryRefreshAsync();
+
+    public async Task<bool> TryRefreshAsync()
     {
-        if (!CanEdit) return;
+        if (!CanEdit) return false;
         Busy = true;
         try
         {
@@ -354,8 +356,9 @@ public partial class ProcessControlsViewModel : ObservableObject
             Processes.Clear();
             foreach (var process in inventory.Processes.Where(item => item.Pid > 0 && item.Pid != Environment.ProcessId && item.Category != "windowsCore" && !item.Protected && !item.Blocked).OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
                 Processes.Add(new(process.Pid, process.Name ?? "Process"));
+            return true;
         }
-        catch (Exception error) { Status = "Couldn't refresh applications."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't refresh applications."; Detail = error.Message; return false; }
         finally { Busy = false; }
     }
 
@@ -658,10 +661,10 @@ public partial class ProcessControlsViewModel : ObservableObject
         finally { Busy = false; }
     }
 
-    private async Task TryRefreshRulesAsync()
+    public async Task<bool> TryRefreshRulesAsync()
     {
-        try { await RefreshRulesAsync(); }
-        catch (Exception) { }
+        try { await RefreshRulesAsync(); return true; }
+        catch (Exception) { return false; }
     }
 
     [RelayCommand]

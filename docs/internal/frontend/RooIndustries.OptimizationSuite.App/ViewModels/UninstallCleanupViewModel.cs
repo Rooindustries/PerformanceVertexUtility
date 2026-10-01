@@ -140,6 +140,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     private readonly Dictionary<string, string> _cleanupRecoveryByApp = new(StringComparer.Ordinal);
     private string? _lastCleanupRollbackPath;
     private int _selectionGeneration;
+    private bool _listChanged;
     public ObservableCollection<InstalledApp> Apps { get; } = new();
     public ObservableCollection<LeftoverItem> Leftovers { get; } = new();
 
@@ -158,6 +159,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return;
         }
 
+        _listChanged = false;
         _allApps.Clear();
         _allApps.AddRange(apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
@@ -177,7 +179,16 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     partial void OnScanBusyChanged(bool value)
     {
         RefreshActionState();
-        if (value) StartOwn(); else FinishOwn();
+        if (value) { StartOwn(); return; }
+        if (!FinishOwn()) return;
+        _listChanged = true;
+        if (SelectedApp is null) ReloadChangedList();
+    }
+
+    private void ReloadChangedList()
+    {
+        if (_listChanged) { _listChanged = false; MarkStale(); }
+        _ = RefreshIfStaleAsync();
     }
     partial void OnRemovalPathReviewedChanged(bool value) => RefreshActionState();
     partial void OnLeftoverScanCompletedChanged(bool value) => RefreshActionState();
@@ -189,7 +200,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnSelectedAppChanged(InstalledApp? value)
     {
-        if (value is null) _ = RefreshIfStaleAsync();
+        if (value is null) ReloadChangedList();
         _selectionGeneration++;
         ScanBusy = false;
         RemovalRouteBlocked = false;
