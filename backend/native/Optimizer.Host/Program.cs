@@ -10,11 +10,10 @@ try
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
-    var request = OperationFiles.Read<HostRequest>(args[1]);
+    var request = args[1] == "-" ? OperationFiles.Deserialize<HostRequest>(ReadInput()) : OperationFiles.Read<HostRequest>(args[1]);
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
-    if (request.Background == true) Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
@@ -250,6 +249,15 @@ static void StartProtectedWatch(string repoRoot, string root, string operationId
     using var watcher = Process.Start(start) ?? throw new InvalidOperationException("The recovery watcher did not start.");
 }
 
+static byte[] ReadInput()
+{
+    using var input = Console.OpenStandardInput();
+    using var buffer = new MemoryStream();
+    input.CopyTo(buffer);
+    var bytes = buffer.ToArray();
+    return bytes is [0xEF, 0xBB, 0xBF, ..] ? bytes[3..] : bytes;
+}
+
 static string Require(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new InvalidDataException("Missing " + name + ".") : value;
 static void RequireConfirmation(HostRequest request) { if (request.Confirm != true) throw new InvalidDataException("This operation needs explicit confirmation."); }
 static ApplicationCleanup Cleanup(HostRequest request) => new(() => CleanupContextFor(request),
@@ -331,7 +339,6 @@ sealed record HostRequest
     public string? SelectedFilePath { get; init; }
     public bool? AllowFreshRestorePoint { get; init; }
     public bool? PartialStatus { get; init; }
-    public bool? Background { get; init; }
     public string? ProfileId { get; init; }
     public string? PresetId { get; init; }
     public TweakSelection[]? Selections { get; init; }
