@@ -8,7 +8,7 @@
     [int]$ColdTweaksRuns = 2,
     [int]$Minutes = 45,
     [switch]$SkipAdvanced,
-    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after')][string]$Scenario = 'loadtimes',
+    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions')][string]$Scenario = 'loadtimes',
     [int]$MemoryPasses = 0,
     [string]$GcDump,
     [switch]$Uninstall
@@ -53,7 +53,7 @@ $sid = (Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid).Sid
 $task = 'RooIndustries_LoadTimes'
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
 $ps = Join-Path $PSHOME 'powershell.exe'
-$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1' }[$Scenario]
+$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1' }[$Scenario]
 $arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $(if ($Scenario -like 'migration-*') { ' -Phase ' + $Scenario.Substring(10) } else { '' }) }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
 $action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
