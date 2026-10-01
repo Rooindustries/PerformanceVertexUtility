@@ -135,7 +135,8 @@ public partial class WindowsTweakRow : ObservableObject
     public string ToggleOnLabel => "On";
     public string ToggleOffLabel => "Off";
     public string ActionNote => Action.Name == "Use Windows default" ? "Clears this local override. Another Windows policy may still control the setting." : "";
-    public bool CanApplySelected => Selected.Id.Length > 0 && Available && _observed?.AvailableChoices?.Contains(Selected.Id) != false;
+    public bool CanApplySelected => CanApplyChoice(Selected.Id);
+    public bool CanApplyChoice(string id) => id.Length > 0 && Available && _observed?.AvailableChoices?.Contains(id) != false;
     public string ChoiceStatus => _cannotRevert ? "Already on. This one can't be turned off from here." : Selected.Id.Length == 0 || CanApplySelected ? "" : "Selected · save for later";
     private bool _cannotRevert;
     partial void OnToggleOnChanged(bool value)
@@ -191,7 +192,7 @@ public partial class WindowsTweakRow : ObservableObject
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
         Detail = status is null ? "Refresh to read this setting." : status.Controls?.Any(control => control.RestartPending) == true ? "Restart Windows to finish this feature change." : status.Error ?? (status.Supported == false ? "Not available on this Windows build or edition." : "");
         if (Detail.Length == 0) Detail = string.Join("\n", (status?.Controls ?? []).Where(control => control.Address.Kind is "timer" or "download-blocker" or "firewall-profile").Select(control => control.DisplayName).Where(text => !string.IsNullOrWhiteSpace(text)));
-        Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : status is null || status.Error is not null ? "Not read"
+        Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : status?.Error == TweakEngine.FeaturesTimedOut ? "Couldn't check" : status is null || status.Error is not null ? "Not read"
             : status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null) ? "No override"
             : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
         if (Current.Length == 0) Current = "Unknown value";
@@ -246,6 +247,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     [ObservableProperty] private bool _approved;
     [ObservableProperty] private bool _acceptedDataLoss;
     [ObservableProperty] private string _status = "Loading Windows settings…";
+    [ObservableProperty] private string _staleNotice = "";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private string _summary = "";
     public WindowsTweaksViewModel() { _selectedSection = Sections[0]; }
@@ -274,7 +276,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     public bool CanReviewRecovery => !Busy && HasPendingRecovery;
     public bool CanApproveReview => !Busy && (!HasPendingRecovery || _reviewingRecovery);
     public bool ShowProfileName => !ProfileId.StartsWith("file-permissions-", StringComparison.Ordinal) && !ProfileId.StartsWith("restore-point-", StringComparison.Ordinal);
-    public bool CanReview => !Busy && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && _all.Any(row => row.Selected.Id.Length > 0);
+    public bool CanReview => !Busy && !_staleLoad && !HasPendingRecovery && _catalog is not null && !string.IsNullOrWhiteSpace(ProfileId) && _all.Any(row => row.Selected.Id.Length > 0);
     public bool CanApply => !Busy && (_review is not null || _reviewedChoices is not null || _reviewingRecovery && _recovery?.Pending is not null) && Approved && (!HasDataLoss || AcceptedDataLoss);
     public bool HasDataLoss => _review?.Plan.DataLoss.Length > 0;
     public string DataLossText => string.Join("\n", _review?.Plan.DataLoss ?? []);
@@ -291,7 +293,16 @@ public partial class WindowsTweaksViewModel : ObservableObject
     partial void OnSearchChanged(string value) { _focusedSetting = null; Filter(); }
     partial void OnCategoryChanged(string value) { _focusedSetting = null; Filter(); }
     partial void OnSourceChanged(string value) { _focusedSetting = null; Filter(); }
-    partial void OnBusyChanged(bool value) => Notify();
+    partial void OnBusyChanged(bool value)
+    {
+        Notify();
+        if (!value && _revalidatePending) { _revalidatePending = false; _ = RevalidateAsync(); }
+    }
+    private bool _revalidatePending;
+    public async Task WaitForLoadAsync()
+    {
+        while (_refresh is { IsCompleted: false }) await _refresh;
+    }
     partial void OnApprovedChanged(bool value) => Notify();
     partial void OnAcceptedDataLossChanged(bool value) => Notify();
     partial void OnProfileIdChanged(string value)
@@ -303,7 +314,9 @@ public partial class WindowsTweaksViewModel : ObservableObject
     {
         if (_loading || value is null || !CanEdit) return;
         ProfileId = value.Id;
-        LoadProfile();
+        LoadProfile(); _userPicked = true;
+        foreach (var row in _all) _userRows.Add(row.Id);
+        Filter();
         SetSelectionStatus("Profile loaded", "Review this profile before applying or restoring settings.");
     }
     partial void OnSelectedPresetChanged(TweakChoice? value)
@@ -318,8 +331,9 @@ public partial class WindowsTweaksViewModel : ObservableObject
         {
             var row = _all.Single(item => item.Id == selection.SettingId);
             row.Selected = row.Choices.FirstOrDefault(choice => choice.Id == selection.OptionId) ?? row.Choices[0];
+            _userRows.Add(row.Id);
         }
-        _loading = false; Invalidate(); Notify();
+        _loading = false; _userPicked = true; Invalidate(); Notify(); Filter();
         SetSelectionStatus(available.Length == 1 ? "1 preset choice added" : available.Length + " preset choices added", "Review the selected values. Choices with missing requirements can be saved without changing Windows.");
     }
     private long _loadedGeneration = -2;
@@ -327,17 +341,29 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private int _loadVersion;
     private Task? _refresh;
     private bool HasPicks => _all.Any(row => row.HasPendingChange);
+    public bool HasPendingChanges => HasUserWork;
+    private bool _userPicked;
+    private readonly HashSet<string> _userRows = new(StringComparer.Ordinal);
+    private bool HasUserWork => _userPicked || HasReview;
     public async Task RevalidateAsync()
     {
         while (_refresh is { IsCompleted: false }) await _refresh;
-        if (_loadedGeneration == -1 && !Busy && !HasReview && !HasPicks) await LoadAsync(fresh: true);
+        if (_loadedGeneration == -2 || DataGeneration.Changing || DataGeneration.IsCurrent(_loadedGeneration)) return;
+        if (Busy) { _revalidatePending = true; return; }
+        if (HasUserWork) NoteChanged();
+        else await LoadAsync(fresh: true);
     }
+    private void NoteChanged() => StaleNotice = "Windows settings changed elsewhere. Your picks are kept and any review reads the current values; select Refresh to see them here (this clears your picks).";
     public async Task ShowAsync()
     {
         if (_loadedGeneration == -2) { await LoadAsync(fresh: false); return; }
         if (_focusedSetting is not null) { _focusedSetting = null; Search = ""; Filter(); }
         if (Busy) return;
-        if (!DataGeneration.IsCurrent(_loadedGeneration)) await LoadAsync(fresh: true);
+        if (!DataGeneration.IsCurrent(_loadedGeneration))
+        {
+            if (HasUserWork) NoteChanged();
+            else await LoadAsync(fresh: true);
+        }
         else if (Environment.TickCount64 - _loadedTicks > 60000 && !HasReview && !HasPicks && _refresh is not { IsCompleted: false }) await (_refresh = RefreshStatusAsync());
     }
     private async Task RefreshStatusAsync()
@@ -397,9 +423,32 @@ public partial class WindowsTweaksViewModel : ObservableObject
         Status = _all.Count + " settings · checking Windows features";
         Detail = "Settings that depend on Windows optional features are still being read. You can review changes once every setting is read.";
     }
+    private bool _staleLoad;
     private async Task LoadCoreAsync(bool fresh)
     {
-        Busy = true; _inspection = null; Invalidate(); _loadVersion++;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            _staleLoad = false;
+            await LoadOnceAsync(fresh || attempt > 0);
+            if (_loadedGeneration != -1 || _inspection is null) break;
+            _staleLoad = true;
+            if (DataGeneration.Changing)
+            {
+                Status = "Windows settings changed while loading";
+                Detail = "They are read again when the change finishes. Review is available after that.";
+                break;
+            }
+            if (attempt == 2)
+            {
+                Status = "Windows settings kept changing while loading";
+                Detail = "Select Refresh to read them again. Review is available after a complete read.";
+            }
+        }
+        Notify();
+    }
+    private async Task LoadOnceAsync(bool fresh)
+    {
+        Busy = true; _inspection = null; StaleNotice = ""; _userPicked = false; _userRows.Clear(); Invalidate(); _loadVersion++;
         var version = _loadVersion; _partial = null; _rowsReady = false;
         var context = SynchronizationContext.Current;
         void OnPartial(TweakInspection partial, long partialGeneration)
@@ -468,9 +517,10 @@ public partial class WindowsTweaksViewModel : ObservableObject
     {
         target.Clear(); target.Add(first); foreach (var value in values.Distinct().Order(StringComparer.OrdinalIgnoreCase)) target.Add(value);
     }
+    private string _profileLoaded = "";
     private void LoadProfile()
     {
-        _loading = true;
+        _loading = true; _profileLoaded = ProfileId.Trim();
         var selected = _savedChoices?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? _inspection?.State?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [];
         foreach (var row in _all) row.Selected = row.Choices.FirstOrDefault(choice => selected.Any(item => item.SettingId == row.Id && item.OptionId == choice.Id)) ?? row.Choices[0];
         _loading = false; Invalidate(); Notify();
@@ -478,6 +528,8 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void RowChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (_loading || HasPendingRecovery || args.PropertyName != nameof(WindowsTweakRow.Selected)) return;
+        _userPicked = true;
+        if (sender is WindowsTweakRow row) _userRows.Add(row.Id);
         Invalidate();
         SetSelectionStatus("Selection changed", "Review the current selection before applying.");
     }
@@ -506,7 +558,8 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void ClearSelection()
     {
         if (!CanEdit) return;
-        _loading = true; foreach (var row in _all) row.Selected = row.Choices[0]; SelectedPreset = null; _loading = false; Invalidate(); Notify();
+        _loading = true; foreach (var row in _all) { row.Selected = row.Choices[0]; _userRows.Add(row.Id); } SelectedPreset = null; _loading = false; _userPicked = false; Invalidate(); Notify();
+        if (StaleNotice.Length > 0 && !DataGeneration.Changing && !DataGeneration.IsCurrent(_loadedGeneration)) { _ = LoadAsync(fresh: true); return; }
         if (!ShowProfileName && _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId) != true) ProfileId = "my-settings";
         SetSelectionStatus("Nothing selected", "Choose settings, review the changes, then apply.");
     }
@@ -519,16 +572,29 @@ public partial class WindowsTweaksViewModel : ObservableObject
         var revision = _revision;
         try
         {
-            var selections = restore ? Array.Empty<TweakSelection>() : _all.Where(row => row.Selected.Id.Length > 0).Select(row => new TweakSelection(row.Id, row.Selected.Id)).ToArray();
+            var state = _inspection?.State;
+            Func<WindowsTweakRow, string> choice = row => row.Selected.Id;
+            if (!DataGeneration.IsCurrent(_loadedGeneration))
+            {
+                state = (await App.Operations.ReadWindowsRecoveryAsync(true)).State;
+                var saved = await App.Operations.ReadWindowsChoicesAsync();
+                if (revision != _revision) return;
+                _savedChoices = saved;
+                var profile = saved?.Profiles.SingleOrDefault(item => item.Id == _profileLoaded)?.Selections ?? state?.Profiles.SingleOrDefault(item => item.Id == _profileLoaded)?.Selections ?? [];
+                choice = row => _userRows.Contains(row.Id) ? row.Selected.Id : profile.FirstOrDefault(item => item.SettingId == row.Id)?.OptionId ?? "";
+            }
+            if (revision != _revision) return;
+            var chosen = _all.Select(row => (Row: row, Id: choice(row))).Where(item => item.Id.Length > 0).ToArray();
+            var selections = restore ? Array.Empty<TweakSelection>() : chosen.Select(item => new TweakSelection(item.Row.Id, item.Id)).ToArray();
             if (!restore && selections.Length == 0) return;
-            var selectedReady = restore ? selections : _all.Where(row => row.CanApplySelected).Select(row => new TweakSelection(row.Id, row.Selected.Id)).ToArray();
-            var retained = restore ? Array.Empty<TweakSelection>() : (_inspection?.State?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
+            var selectedReady = restore ? selections : chosen.Where(item => item.Row.CanApplyChoice(item.Id)).Select(item => new TweakSelection(item.Row.Id, item.Id)).ToArray();
+            var retained = restore ? Array.Empty<TweakSelection>() : (state?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
                 .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId)).ToArray();
             var ready = selectedReady.Concat(retained).ToArray();
-            var deferred = restore ? Array.Empty<WindowsTweakRow>() : _all.Where(row => row.Selected.Id.Length > 0 && !row.CanApplySelected).ToArray();
+            var deferred = restore ? Array.Empty<WindowsTweakRow>() : chosen.Where(item => !item.Row.CanApplyChoice(item.Id)).Select(item => item.Row).ToArray();
             _deferredDetail = string.Join("\n", deferred.Select(row => row.Name + ": " + (row.Detail.Length == 0 ? "This choice needs a matching Windows or app version." : row.Detail)));
             _reviewedChoices = selections; _restoringChoices = restore;
-            if (ready.Length == 0 && _inspection?.State?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) != true)
+            if (ready.Length == 0 && state?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) != true)
             {
                 Status = _restoringChoices ? "Remove this saved profile" : "Save the selected choices";
                 Detail = _restoringChoices ? "Only this profile's saved choices will be removed." : "These choices will be saved. Windows settings will stay unchanged until their requirements are met and you apply them.\n" + _deferredDetail;
@@ -547,12 +613,12 @@ public partial class WindowsTweaksViewModel : ObservableObject
             _review = review;
             foreach (var change in _review.Plan.Changes)
             {
-                var ids = (_inspection?.State?.Profiles ?? []).Concat(_review.Plan.Profiles).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == change.Before.Id).Select(claim => claim.SettingId).ToArray();
+                var ids = (state?.Profiles ?? []).Concat(_review.Plan.Profiles).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == change.Before.Id).Select(claim => claim.SettingId).ToArray();
                 var row = _all.FirstOrDefault(item => ids.Contains(item.Id));
                 Changes.Add(new(row?.Name ?? change.Before.Address.ValueName ?? "Setting", DescribeSetting(row?.Definition, change.Before.Value), DescribeSetting(row?.Definition, change.After),
                     row?.Scope ?? (change.Before.Address.Hive == "CurrentUser" ? "This user" : "Entire PC")));
             }
-            foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change, (_inspection?.State?.Profiles ?? []).Concat(_review.Plan.Profiles));
+            foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change, (state?.Profiles ?? []).Concat(_review.Plan.Profiles));
             Status = Changes.Count == 0 ? "Selected values already match" : Changes.Count == 1 ? "1 change ready to review" : Changes.Count + " changes ready to review";
             Detail = restore ? "Shared settings stay active while another profile needs them." : Changes.Count == 0 ? "Save this profile to keep track of these choices." : "Review these values and confirm before applying.";
             if (deferred.Length > 0) Detail += "\n" + deferred.Length + " choices will be saved with requirements pending:\n" + _deferredDetail;
@@ -578,7 +644,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             if (_reviewingRecovery)
             {
                 await App.Operations.RecoverWindowsTweaksAsync(_recovery!.PendingHash!);
-                Invalidate(); Busy = false; await RefreshAsync(); return;
+                Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync(); return;
             }
             var choiceOnly = _review is null;
             var deferred = _deferredDetail;
@@ -591,14 +657,14 @@ public partial class WindowsTweaksViewModel : ObservableObject
             windowsApplied = result is not null;
             if (restoring && _reviewedChoices is not null) _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
             _inspection = null; Invalidate();
-            Busy = false; await RefreshAsync();
+            Busy = false; await RefreshAsync(); await WaitForLoadAsync();
             if (_inspection is null) { Status = "Settings saved; current values could not be reloaded."; return; }
             Status = choiceOnly ? restoring ? "Saved choices removed" : "Choices saved" : result!.Changed ? "Windows settings saved" : "Profile saved";
             Detail = choiceOnly ? "No Windows settings were changed.\n" + deferred : result!.State.Notices.Length > 0 ? string.Join("\n", result.State.Notices) : deferred.Length > 0 ? "Applied the reviewed Windows changes. These saved choices still need their requirements:\n" + deferred : "Current settings have been refreshed. Follow the restart or sign-out notes shown with the settings.";
         }
         catch (Exception error)
         {
-            Invalidate(); Busy = false; await RefreshAsync();
+            Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync();
             Status = windowsApplied ? restoring ? "Windows settings restored; saved choices need attention" : "Windows settings applied; saved choices need attention"
                 : choicesSaved ? "Choices saved; Windows changes were not confirmed" : "Settings were not confirmed";
             Detail = error.Message + (HasPendingRecovery ? "\nReview the interrupted operation before applying more changes." : "");
@@ -761,7 +827,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private void Filter()
     {
         var searching = !string.IsNullOrWhiteSpace(Search);
-        Rows = new(_all.Where(row => (searching || SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || !row.Definition.Advanced && !row.UnavailableHere) && (searching || Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
+        Rows = new(_all.Where(row => (searching || SelectedSection?.Id is null or "all" || row.SectionId == SelectedSection.Id) && (_focusedSetting is null || row.Id == _focusedSetting) && (ShowAdvanced || row.HasPendingChange || !row.Definition.Advanced && !row.UnavailableHere) && (searching || Category == "All groups" || row.Topic == Category) && (Source == "All sources" || row.Definition.Sources.Any(source => source.Product == Source)) &&
             (!searching || (row.Name + " " + row.Description + " " + row.Sources).Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase)))
             .OrderBy(row => row.IsNetwork ? row.Topic switch { "Connection" => 0, "Adapter" => 1, "Local network" => 2, "Wireless" => 3, "Firewall" => 4, "DNS" => 5, _ => 6 } : 0).ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase));
         OnPropertyChanged(nameof(HasRows)); OnPropertyChanged(nameof(ShowEmpty)); OnPropertyChanged(nameof(VisibleCount));
@@ -770,17 +836,30 @@ public partial class WindowsTweaksViewModel : ObservableObject
     {
         if (!CanEdit) return;
         Busy = true; Invalidate();
+        var before = DataGeneration.Snapshot();
+        var own = DataGeneration.BeginOwn();
         try
         {
             var review = await App.Operations.PreviewOwnershipAsync(path);
             _catalog = (await App.Operations.ReadWindowsTweakCatalogAsync(true)).Catalog;
             ProfileId = review.Plan.ProfileId; _review = review;
-            if (_loadedGeneration >= 0 && !DataGeneration.Changing) _loadedGeneration = DataGeneration.Current;
+            AcceptOwn(before, own);
             foreach (var change in review.Plan.Controls?.Changes ?? []) AddNativeChange(change, review.Plan.Profiles);
             Status = "Review file ownership"; Detail = path + "\nChanges this item's permissions only. File contents and child items are not changed.";
         }
         catch (Exception error) { Status = "Couldn't review file ownership."; Detail = error.Message; }
-        finally { Busy = false; }
+        finally { DataGeneration.EndOwn(); Busy = false; }
+    }
+    private void AcceptOwn(long before, DataGeneration.OwnChanges own)
+    {
+        if (_loadedGeneration >= 0 && _loadedGeneration == before && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(before, own)) _loadedGeneration = before + own.Bumps;
+    }
+    public async Task OwnAsync(Func<Task> operation)
+    {
+        var before = DataGeneration.Snapshot();
+        var own = DataGeneration.BeginOwn();
+        try { await operation(); AcceptOwn(before, own); }
+        finally { DataGeneration.EndOwn(); }
     }
     private void Invalidate() { _revision++; _reviewingRecovery = false; _review = null; _reviewedChoices = null; _restoringChoices = false; _deferredDetail = ""; Approved = false; AcceptedDataLoss = false; Changes.Clear(); Notify(); }
     private void Notify()

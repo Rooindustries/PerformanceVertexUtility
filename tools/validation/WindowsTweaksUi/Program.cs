@@ -274,6 +274,8 @@ try
     model = await Load(fixture);
     Check(!model.HasPendingRecovery && model.CanEdit && model.CanRefresh && !model.CanReviewRecovery && model.Status == "1 settings",
         "A healthy no-pending state restores ordinary editing without exposing recovery review");
+    await HostOutputChecks.Run(Check);
+    await FreshnessChecks.Run(root, Check);
     if (args is [var repo])
     {
         await SectionChecks.Run(root, Path.GetFullPath(repo), Check);

@@ -93,26 +93,37 @@ public sealed class LiveDataService
 
     private readonly SharedReads _shared = new();
     private static readonly TimeSpan LiveAge = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan HardwareAge = TimeSpan.MaxValue;
+    private static readonly TimeSpan HardwareAge = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ProcessSettle = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan AppsAge = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleAge = TimeSpan.FromMinutes(5);
-    private static readonly AsyncLocal<bool> Background = new();
+    private static readonly AsyncLocal<BackgroundPriority?> Background = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, BackgroundPriority> _backgroundReads = new(StringComparer.Ordinal);
 
     public async Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
         => (await GetProcessInventoryResultAsync(ct)).Value;
     public Task<LiveDataResult<ProcessInventory>> GetProcessInventoryResultAsync(CancellationToken ct = default, bool fresh = false)
-        => SharedResultAsync<ProcessInventory>("inventory", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessInventory.ps1", ct, inventory => inventory.Summary is not null && inventory.Processes is not null);
+        => SharedResultAsync<ProcessInventory>("inventory", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessInventory.ps1", ct, inventory => inventory.Summary is not null && inventory.Processes is not null, settle: ProcessSettle);
 
     public async Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
         => (await GetProcessClassificationResultAsync(ct)).Value;
     public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken ct = default, bool fresh = false, bool allowStale = false, bool background = false)
-        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : allowStale ? StaleAge : LiveAge, "Get-ProcessClassification.ps1", ct, classification => classification.Processes is { Count: > 0 }, background: background);
+        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : allowStale ? StaleAge : LiveAge, "Get-ProcessClassification.ps1", ct, classification => classification.Processes is { Count: > 0 }, background: background, settle: ProcessSettle);
 
-    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, Func<T, bool> complete, string extraArgs = "", bool background = false) where T : class
+    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, Func<T, bool> complete, string extraArgs = "", bool background = false, TimeSpan settle = default) where T : class
     {
         if (ct.CanBeCanceled) return await RunResultAsync<T>(scriptFile, ct, extraArgs);
-        var (value, age) = await _shared.ReadAsync(key, maxAge, () => { Background.Value = background; return RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs); },
-            read => read.Value is not null && read.Error is null && complete(read.Value));
+        if (!background && _backgroundReads.TryGetValue(key, out var running)) running.Raise();
+        var priority = background ? new BackgroundPriority() : null;
+        if (priority is not null) _backgroundReads[key] = priority;
+        (LiveDataResult<T>? value, TimeSpan age) read;
+        try
+        {
+            read = await _shared.ReadAsync(key, maxAge, () => { Background.Value = priority; return RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs); },
+                result => result.Value is not null && result.Error is null && complete(result.Value), settle);
+        }
+        finally { if (priority is not null) _backgroundReads.TryRemove(new(key, priority)); }
+        var (value, age) = read;
         var result = value ?? new LiveDataResult<T>(null, AppLog.Failed);
         if (result.Error is not null) LastError = result.Error;
         return age > LiveAge && result.Value is not null ? result with { Stale = true } : result;
@@ -1108,11 +1119,7 @@ public sealed class LiveDataService
             AppLog.Write("backend", "Could not start " + Path.GetFileName(scriptPath));
             return new(null, AppLog.Failed);
         }
-        if (Background.Value)
-        {
-            try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
-            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
-        }
+        Background.Value?.Register(process);
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();

@@ -24,6 +24,7 @@ if (args is ["--firmware-native", var evidenceRoot]) { FirmwareScriptNativeCheck
 if (args is ["--firmware-verification"]) { FirmwareVerificationChecks.Run(Check); return; }
 if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Check); return; }
 if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
+if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--data-folder"]) { DataFolderChecks.Run(Check); return; }
@@ -219,6 +220,7 @@ ExclusionChecks.Run(Check);
 CleanupBatchChecks.Run(Check);
 FirmwareChecks.Run(Check);
 PrivilegeChecks.Run(Check);
+ControlReadFaultChecks.Run(Check);
 
 }
 catch (Exception error)

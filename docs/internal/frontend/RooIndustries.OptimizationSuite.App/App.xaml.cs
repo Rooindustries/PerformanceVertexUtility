@@ -1,5 +1,7 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.Windows.AppLifecycle;
 using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite;
@@ -97,8 +99,20 @@ public partial class App : Application
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         => AppLog.Write("crash", e.Message + System.Environment.NewLine + e.Exception);
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        AppInstance? primary = null;
+        try { primary = AppInstance.FindOrRegisterForKey("RooIndustries.OptimizationSuite.Main"); }
+        catch (Exception error) { AppLog.Write("start", "Single-window check unavailable: " + error.Message); }
+        if (primary is { IsCurrent: false })
+        {
+            if (await HandOverAsync(primary)) { await System.Threading.Tasks.Task.Delay(500); Exit(); return; }
+            AppLog.Write("start", "The open window did not take this launch; opening another window.");
+        }
+        else if (primary is not null) primary.Activated += OnRedirected;
+#if ROO_TEST_HOOKS
+        AppLog.Write("test", "test hooks enabled");
+#endif
         Theme.ApplyPersistedTheme();
         ApplyAccentResourceOverrides();
 
@@ -119,7 +133,80 @@ public partial class App : Application
             {
             }
         }
+        string?[] waiting;
+        lock (RedirectGate) { _windowReady = true; waiting = PendingRedirects.ToArray(); PendingRedirects.Clear(); }
+        foreach (var path in waiting) ShowRedirect(path);
     }
+
+    private static readonly object RedirectGate = new();
+    private static readonly System.Collections.Generic.List<string?> PendingRedirects = new();
+    private static bool _windowReady;
+
+    private static async System.Threading.Tasks.Task<bool> HandOverAsync(AppInstance primary)
+    {
+        try
+        {
+            AllowSetForegroundWindow(primary.ProcessId);
+            var redirect = primary.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs()).AsTask();
+            if (await System.Threading.Tasks.Task.WhenAny(redirect, System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(10))) != redirect) return false;
+            await redirect;
+            return true;
+        }
+        catch (Exception error)
+        {
+            AppLog.Write("start", "Could not hand this launch to the open window: " + error.Message);
+            return false;
+        }
+    }
+
+    private static void OnRedirected(object? sender, AppActivationArguments activation)
+    {
+        string? ownershipPath = null;
+        try
+        {
+            var arguments = Split((activation.Data as Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs)?.Arguments ?? "");
+            var marker = Array.IndexOf(arguments, "--ownership-review");
+            ownershipPath = marker >= 0 && marker + 1 < arguments.Length ? arguments[marker + 1] : null;
+        }
+        catch (Exception error) { AppLog.Write("start", "Could not read the second launch's arguments: " + error.Message); }
+        lock (RedirectGate)
+        {
+            if (!_windowReady) { PendingRedirects.Add(ownershipPath); return; }
+        }
+        ShowRedirect(ownershipPath);
+    }
+
+    private static void ShowRedirect(string? ownershipPath) => MainWindow?.DispatcherQueue.TryEnqueue(() =>
+    {
+        try
+        {
+            if (MainWindow is not { } window) return;
+            if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+            window.Activate();
+            SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(window));
+            if (!string.IsNullOrWhiteSpace(ownershipPath) && window is RooIndustries.OptimizationSuite.MainWindow main) main.OpenOwnershipReview(ownershipPath);
+        }
+        catch (Exception error) { AppLog.Write("start", "Could not bring the open window forward: " + error.Message); }
+    });
+
+    private static string[] Split(string commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)) return [];
+        var pointer = CommandLineToArgvW(commandLine, out var count);
+        if (pointer == IntPtr.Zero) return [];
+        try
+        {
+            var result = new string[count];
+            for (var index = 0; index < count; index++) result[index] = System.Runtime.InteropServices.Marshal.PtrToStringUni(System.Runtime.InteropServices.Marshal.ReadIntPtr(pointer, index * IntPtr.Size)) ?? "";
+            return result;
+        }
+        finally { LocalFree(pointer); }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint processId);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr CommandLineToArgvW(string commandLine, out int count);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
 
     public static void RecreateMainWindow(string navTag, bool onSettings)
     {

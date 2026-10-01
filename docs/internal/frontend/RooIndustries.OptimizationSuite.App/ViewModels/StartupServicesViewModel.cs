@@ -40,16 +40,12 @@ public partial class StartupServicesViewModel : PageViewModelBase
             ? "No background processes reported."
             : background.Count + " background processes are running.";
 
-        BackgroundRows.Clear();
-        foreach (var p in background.OrderByDescending(p => p.WorkingSetBytes).Take(8))
-        {
-            BackgroundRows.Add(new BackgroundRow(
-                string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
-                Naming.CategoryLabel(p.Category),
-                Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Excluded" : "Normal",
-                p.Protected ? "low" : "neutral"));
-        }
+        BackgroundRows.SyncWith(background.OrderByDescending(p => p.WorkingSetBytes).Take(8).Select(p => new BackgroundRow(
+            string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
+            Naming.CategoryLabel(p.Category),
+            Format.Bytes(p.WorkingSetBytes),
+            p.Protected ? "Excluded" : "Normal",
+            p.Protected ? "low" : "neutral")));
 
         IsEmpty = false;
     }

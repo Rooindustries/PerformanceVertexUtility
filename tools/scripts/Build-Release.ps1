@@ -1,12 +1,15 @@
 param(
     [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$IsccPath = '',
-    [string]$OutputRoot = ''
+    [string]$OutputRoot = '',
+    [switch]$TestHooks
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
+if ($TestHooks) { $env:RooTestHooks = 'true' }
+elseif ($env:RooTestHooks) { throw 'RooTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).ProviderPath
 $releaseTools = Join-Path $repoRoot 'tools\release'

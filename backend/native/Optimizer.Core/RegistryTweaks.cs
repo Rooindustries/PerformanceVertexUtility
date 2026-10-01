@@ -25,7 +25,17 @@ public sealed class RegistryTweakStore : ITweakStore
     public TweakAssignment[] Resolve(TweakAssignment assignment) => RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, TweakHardwareValues.InstalledMemoryKiB), RegistrySelections.Children, Read, RegistrySelections.PrimaryInterfaces);
     public TweakControlRead ReadControl(ControlAddress address) => new WindowsControlStore().Read(address);
     public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses) => new WindowsControlStore().ReadMany(addresses);
-    public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses) => Task.Factory.StartNew(() => ReadControls(addresses), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses)
+    {
+#if ROO_TEST_HOOKS
+        if (Environment.GetEnvironmentVariable("ROOTEST_FEATURE_HANG") is { Length: > 0 } flag && File.Exists(flag) && addresses.Any(address => address.Kind == "windows-features"))
+        {
+            using var holder = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true });
+            return new TaskCompletionSource<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>().Task;
+        }
+#endif
+        return Task.Factory.StartNew(() => ReadControls(addresses), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
     public void CheckRequirement(string requirement)
     {
         if (requirement != "office") { TweakProducts.Check(requirement); return; }

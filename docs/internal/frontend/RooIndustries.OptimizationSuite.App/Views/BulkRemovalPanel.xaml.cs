@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
@@ -11,15 +12,28 @@ public sealed partial class BulkRemovalPanel : UserControl
 {
     public BulkRemovalViewModel ViewModel { get; } = new();
     private bool _loaded;
+    private readonly ChangeWatch _watch;
     public BulkRemovalPanel()
     {
         InitializeComponent();
+        _watch = new(DispatcherQueue, CatchUpAsync);
+        ViewModel.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); } };
+        Unloaded += (_, _) => _watch.Stop();
         Loaded += async (_, _) =>
         {
-            if (_loaded) { await ViewModel.RefreshIfIdleAsync(); return; }
-            _loaded = true;
+            _watch.Start();
+            if (_loaded) { _watch.Run(revisit: true); return; }
+            _loaded = true; _watch.MarkSeen();
             await ViewModel.InitializeAsync();
         };
+    }
+    private async System.Threading.Tasks.Task CatchUpAsync(bool revisit)
+    {
+        if (!IsLoaded) return;
+        var changed = _watch.Changed;
+        if ((!revisit && !changed) || ViewModel.Busy) return;
+        if (ViewModel.HasUserWork) { if (changed) { _watch.MarkSeen(); ViewModel.NoteChanged(); } return; }
+        await _watch.RefreshAsync(() => ViewModel.RefreshIfIdleAsync(changed));
     }
     private async void Apply_Click(object sender, RoutedEventArgs e)
     {

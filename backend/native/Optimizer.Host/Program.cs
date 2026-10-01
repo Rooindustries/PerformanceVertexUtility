@@ -20,7 +20,6 @@ try
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
-    if (request.Background == true) Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
@@ -386,7 +385,6 @@ sealed record HostRequest
     public string? SelectedFilePath { get; init; }
     public bool? AllowFreshRestorePoint { get; init; }
     public bool? PartialStatus { get; init; }
-    public bool? Background { get; init; }
     public string? ProfileId { get; init; }
     public string? PresetId { get; init; }
     public TweakSelection[]? Selections { get; init; }
