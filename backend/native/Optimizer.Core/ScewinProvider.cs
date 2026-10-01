@@ -126,7 +126,7 @@ public sealed class ScewinProvider : IFirmwareProvider
     private static string PowerShell(string script)
     {
         var result = Command(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
-            ["-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(script))], Environment.GetFolderPath(Environment.SpecialFolder.System));
+            ["-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(RuntimeEnvironment.PowerShellPrelude + script))], Environment.GetFolderPath(Environment.SpecialFolder.System));
         if (result.ExitCode != 0) throw new InvalidOperationException("Firmware inspection exited " + result.ExitCode + ": " + result.Error.Trim());
         return result.Output;
     }

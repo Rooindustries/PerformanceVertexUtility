@@ -18,7 +18,7 @@ public sealed class ToolLauncherService
     private readonly string _root;
     public ToolLauncherService(string root) => _root = root;
     private string Archive => Path.Combine(_root, "vendor", "Utilities.zip");
-    private static string Cache => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tools");
+    private static string Cache => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
 
     public async Task<IReadOnlyList<ToolDefinition>> ReadAsync()
     {
@@ -36,10 +36,6 @@ public sealed class ToolLauncherService
                 var installed = Inside(parent, relative);
                 if (File.Exists(installed)) return new("Open", installed, false);
             }
-        var utilities = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UTILITIES_ROOT");
-        if (string.IsNullOrWhiteSpace(utilities)) utilities = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Utilities");
-        var bundled = Inside(utilities, tool.ArchivePath["Utilities/".Length..]);
-        if (File.Exists(bundled)) return new(tool.BundleAction == "install" ? "Install" : "Open", bundled, false);
         var extracted = Inside(Path.Combine(Cache, tool.Id), tool.ArchivePath);
         if (File.Exists(extracted) && File.Exists(Path.Combine(Cache, tool.Id, ".complete"))) return new(tool.BundleAction == "install" ? "Install" : "Open", extracted, false);
         if (File.Exists(Archive))
@@ -47,6 +43,10 @@ public sealed class ToolLauncherService
             using var zip = ZipFile.OpenRead(Archive);
             if (zip.GetEntry(tool.ArchivePath) is not null) return new(tool.BundleAction == "install" ? "Install" : "Open", null, true);
         }
+        var utilities = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UTILITIES_ROOT");
+        if (string.IsNullOrWhiteSpace(utilities)) utilities = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Utilities");
+        var bundled = Inside(utilities, tool.ArchivePath["Utilities/".Length..]);
+        if (File.Exists(bundled)) return new(tool.BundleAction == "install" ? "Install" : "Open", bundled, false);
         return new("Get", null, false);
     }
 

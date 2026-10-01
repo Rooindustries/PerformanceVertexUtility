@@ -578,11 +578,15 @@ public sealed class LiveDataService
     public async Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
     {
         var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs") + Path.DirectorySeparatorChar;
-        if (!Path.GetFullPath(rollbackManifestPath).StartsWith(runs, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var error = "This cleanup backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at " + Path.GetDirectoryName(rollbackManifestPath) + ".";
-            LastError = error;
-            return new(null, error);
+            if (!Path.GetFullPath(rollbackManifestPath).StartsWith(runs, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(RooIndustries.Optimizer.OperationsFolder.EarlierBackup(rollbackManifestPath));
+            RooIndustries.Optimizer.PolicyRootSecurity.RequireWrittenAfterProtection(rollbackManifestPath, RooIndustries.Optimizer.OperationsFolder.EarlierBackup(rollbackManifestPath));
+        }
+        catch (InvalidDataException error)
+        {
+            LastError = error.Message;
+            return new(null, error.Message);
         }
         return await RunBackendScriptResultAsync(
             "Restore-UninstallCleanupExecution.ps1",
@@ -1084,11 +1088,11 @@ public sealed class LiveDataService
         using var change = extraArgs.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var arguments =
-            $"-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";
+            $"-NoProfile -ExecutionPolicy Bypass -Command \"{RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude}[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";
 
         var psi = new ProcessStartInfo
         {
-            FileName = "powershell.exe",
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
             Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

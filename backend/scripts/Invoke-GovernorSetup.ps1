@@ -5,11 +5,13 @@
     [string]$LogPath='',
     [int]$SetupProcessId=0
 )
+$env:PSModulePath=$PSHOME+'\Modules'
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+$system=Split-Path (Split-Path $PSHOME -Parent) -Parent
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
-$schtasks=$env:SystemRoot+'\System32\schtasks.exe'
-$powershell=$env:SystemRoot+'\System32\WindowsPowerShell\v1.0\powershell.exe'
+$schtasks=Join-Path $system 'schtasks.exe'
+$powershell=Join-Path $PSHOME 'powershell.exe'
 
 function Write-Log([string]$Text){
     $line=[DateTime]::UtcNow.ToString('o')+' '+$Action+' '+$Text
@@ -17,60 +19,95 @@ function Write-Log([string]$Text){
     Write-Host $line
 }
 
+function Invoke-Schtasks {
+    $ErrorActionPreference='Continue'
+    $output=@(& $schtasks @args 2>$null)
+    $script:SchtasksExit=$LASTEXITCODE
+    return $output
+}
+
+function ConvertTo-XmlText([string]$Text){return $Text.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;').Replace('"','&quot;')}
+
+function Get-ListedGovernors {
+    $names=@(Invoke-Schtasks /Query /FO CSV /NH|ForEach-Object {([string]$_ -split '","')[0].Trim('"')}|Where-Object {$_ -match '^\\(RooIndustries|Roo)OptimizationSuite\.ProcessRules\.[^\\]+$'}|Select-Object -Unique)
+    foreach($name in $names){
+        $xml=@(Invoke-Schtasks /Query /TN $name /XML) -join "`n"
+        $settings=if($xml -match '(?s)<Settings>.*?</Settings>'){$Matches[0]}else{''}
+        @{taskName=$name.Substring(1);taskPath='\';enabled=($settings -notmatch '<Enabled>false</Enabled>');highest=($xml -match '<RunLevel>HighestAvailable</RunLevel>')}
+    }
+}
+
 function Register-Watchdog($Tasks){
+    if(-not $StatePath){Write-Log 'No setup folder was given, so no setup recovery task was registered';return}
     $setupId=$SetupProcessId
-    if($setupId -le 0){try {$setupId=[int](Get-CimInstance Win32_Process -Filter ('ProcessId='+$PID)).ParentProcessId} catch {$setupId=0}}
+    if($setupId -le 0 -and $ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'){try {$setupId=[int](Get-CimInstance Win32_Process -Filter ('ProcessId='+$PID)).ParentProcessId} catch {$setupId=0}}
     $setup=$null
     if($setupId -gt 0){$setup=Get-Process -Id $setupId -ErrorAction SilentlyContinue}
-    $actions=@()
-    $triggers=@(New-ScheduledTaskTrigger -AtStartup)
+    $actions=''
+    $triggers='<BootTrigger><Enabled>true</Enabled></BootTrigger>'
     if($setup){
         $created=$setup.StartTime.ToUniversalTime().ToFileTimeUtc()
         $wait='$p=Get-Process -Id '+$setupId+' -ErrorAction SilentlyContinue;if($p -and $p.StartTime.ToUniversalTime().ToFileTimeUtc() -eq '+$created+'){Wait-Process -InputObject $p -ErrorAction SilentlyContinue}'
-        $actions+=New-ScheduledTaskAction -Execute $powershell -Argument ('-NoProfile -NonInteractive -Command "'+$wait+'"')
-        $triggers+=New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddMinutes(2))
+        $actions+='<Exec><Command>'+(ConvertTo-XmlText $powershell)+'</Command><Arguments>'+(ConvertTo-XmlText ('-NoProfile -NonInteractive -Command "'+$wait+'"'))+'</Arguments></Exec>'
+        $triggers+='<TimeTrigger><StartBoundary>'+[DateTime]::Now.AddMinutes(2).ToString('s')+'</StartBoundary><Enabled>true</Enabled></TimeTrigger>'
     } else {Write-Log 'The setup process could not be identified, so setup recovery waits for the next restart'}
-    $actions+=@($Tasks|Where-Object {$_.enabled}|ForEach-Object {New-ScheduledTaskAction -Execute $schtasks -Argument ('/Change /TN "'+$_.taskPath+$_.taskName+'" /ENABLE')})
-    $actions+=New-ScheduledTaskAction -Execute $schtasks -Argument ('/Delete /TN "\'+$watchdog+'" /F')
-    $principal=New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest
-    Register-ScheduledTask -TaskName $watchdog -Description 'Roo Industries Governor setup recovery' -Action $actions -Trigger $triggers -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 3) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) -Force|Out-Null
+    foreach($task in @($Tasks|Where-Object {$_.enabled})){$actions+='<Exec><Command>'+(ConvertTo-XmlText $schtasks)+'</Command><Arguments>'+(ConvertTo-XmlText ('/Change /TN "'+$task.taskPath+$task.taskName+'" /ENABLE'))+'</Arguments></Exec>'}
+    $actions+='<Exec><Command>'+(ConvertTo-XmlText $schtasks)+'</Command><Arguments>'+(ConvertTo-XmlText ('/Delete /TN "\'+$watchdog+'" /F'))+'</Arguments></Exec>'
+    $definition='<?xml version="1.0" encoding="UTF-16"?><Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>Roo Industries Governor setup recovery</Description></RegistrationInfo><Triggers>'+$triggers+'</Triggers><Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals><Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT3H</ExecutionTimeLimit><Enabled>true</Enabled></Settings><Actions Context="Author">'+$actions+'</Actions></Task>'
+    $file=Join-Path (Split-Path $StatePath -Parent) 'governor-recovery.xml'
+    Set-Content -LiteralPath $file -Value $definition -Encoding Unicode
+    Invoke-Schtasks /Create /TN ('\'+$watchdog) /XML $file /F|Out-Null
+    $code=$script:SchtasksExit
+    Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+    if($code -ne 0){Write-Log ('Task Scheduler could not register setup recovery (exit '+$code+')');return}
     Write-Log ('Registered setup recovery for '+@($Tasks|Where-Object {$_.enabled}).Count+' governor tasks')
 }
 
 function Remove-Watchdog {
-    if(Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $watchdog -Confirm:$false;Write-Log 'Removed setup recovery'}
+    Invoke-Schtasks /Query /TN ('\'+$watchdog)|Out-Null
+    if($script:SchtasksExit -ne 0){return}
+    Invoke-Schtasks /Delete /TN ('\'+$watchdog) /F|Out-Null
+    if($script:SchtasksExit -eq 0){Write-Log 'Removed setup recovery'}else{Write-Log ('Task Scheduler could not remove setup recovery (exit '+$script:SchtasksExit+')')}
 }
 
-if($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage'){
-    Write-Log ('PowerShell runs in '+$ExecutionContext.SessionState.LanguageMode+', so setup uses Task Scheduler only')
-    $tasks=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue|Where-Object {[string]$_.Principal.RunLevel -eq 'Highest'}|ForEach-Object {
-        [pscustomobject]@{taskName=$_.TaskName;taskPath=$_.TaskPath;enabled=([string]$_.State -ne 'Disabled')}})
+$listed=@(Get-ListedGovernors)
+$full=$ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
+$visible=$null
+if($full){try {$visible=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)} catch {$visible=$null}}
+if(-not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
+    Write-Log ('PowerShell runs in '+$ExecutionContext.SessionState.LanguageMode+$(if($full){' but Windows could not list the governor tasks'}else{''})+', so setup uses Task Scheduler only')
+    $tasks=@($listed|Where-Object {$_['highest']})
     if($Action -eq 'Suspend'){
         if($StatePath){ConvertTo-Json -InputObject @($tasks) -Depth 3|Set-Content -LiteralPath $StatePath -Encoding UTF8}
         if($tasks.Count -gt 0){Register-Watchdog $tasks}
         foreach($task in $tasks){
-            Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
-            Stop-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -ErrorAction SilentlyContinue
+            Invoke-Schtasks /Change /TN ($task.taskPath+$task.taskName) /DISABLE|Out-Null
+            Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null
             Write-Log ('Disabled and ended governor task '+$task.taskName+'; its apps keep the rule settings until they close or the governor starts again')
         }
         Write-Log ('Suspended '+$tasks.Count+' governor tasks')
     } elseif($Action -eq 'Resume'){
         $saved=@()
         if($StatePath -and (Test-Path -LiteralPath $StatePath)){$saved=@((Get-Content -LiteralPath $StatePath -Raw|ConvertFrom-Json))}
+        $failures=0
         foreach($item in $saved){
             if($null -eq $item -or -not $item.enabled){continue}
-            if(@($tasks|Where-Object {$_.taskName -eq $item.taskName -and $_.taskPath -eq $item.taskPath}).Count -eq 1){Enable-ScheduledTask -TaskName $item.taskName -TaskPath $item.taskPath|Out-Null;Write-Log ('Enabled governor task '+$item.taskName+' again')}
+            if(@($tasks|Where-Object {$_.taskName -eq $item.taskName -and $_.taskPath -eq $item.taskPath}).Count -ne 1){continue}
+            Invoke-Schtasks /Change /TN ($item.taskPath+$item.taskName) /ENABLE|Out-Null
+            if($script:SchtasksExit -eq 0){Write-Log ('Enabled governor task '+$item.taskName+' again')}else{$failures++;Write-Log ('Could not enable governor task '+$item.taskName)}
         }
+        Write-Log ('Resumed '+$saved.Count+' governor tasks with '+$failures+' failures')
+        if($failures -gt 0){Write-Log 'Setup recovery stays registered to turn the governor tasks back on';exit 2}
         Remove-Watchdog
-        Write-Log ('Resumed '+$saved.Count+' governor tasks')
     } else {
         Remove-Watchdog
         foreach($task in $tasks){
-            Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
-            Stop-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath -Confirm:$false
+            Invoke-Schtasks /Change /TN ($task.taskPath+$task.taskName) /DISABLE|Out-Null
+            Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null
+            Invoke-Schtasks /Delete /TN ($task.taskPath+$task.taskName) /F|Out-Null
             Write-Log ('Removed governor task '+$task.taskName)
         }
+        if(@(Get-ListedGovernors).Count -gt 0){exit 3}
     }
     exit 0
 }
@@ -148,7 +185,7 @@ function Get-Workers {
 function Stop-Leftovers($Tasks){
     $workers=@(Get-Workers)
     if(-not $script:WorkersKnown){
-        foreach($task in @($Tasks)){& $schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null;Write-Log ('Ended governor task '+$task.taskName+' through Task Scheduler')}
+        foreach($task in @($Tasks)){Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null;Write-Log ('Ended governor task '+$task.taskName+' through Task Scheduler')}
         $running=@(Get-Process -Name 'Optimizer.Host' -ErrorAction SilentlyContinue|Where-Object {$_.Path -and $_.Path.StartsWith((Join-Path $AppRoot 'backend\bin\optimizer')+'\',[StringComparison]::OrdinalIgnoreCase)})
         Write-Log ($running.Count.ToString()+' helper processes from the app folder are still running; setup closes them before replacing files')
         return
@@ -332,7 +369,8 @@ switch($Action){
         }
         Stop-Leftovers @()
         $left=@(Get-GovernorTasks).Count
-        Write-Log ('Governor tasks left: '+$left+'; governor processes left: '+@(Get-Workers).Count)
+        $workersLeft=@(Get-Workers).Count
+        Write-Log ('Governor tasks left: '+$left+'; governor processes left: '+$(if($script:WorkersKnown){$workersLeft}else{'unknown'}))
         if($left -gt 0){exit 3}
     }
 }

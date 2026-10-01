@@ -8,7 +8,7 @@ static class ToolLauncherChecks
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-tool-launcher-" + Guid.NewGuid().ToString("N"));
         var id = "fixture-" + Guid.NewGuid().ToString("N");
-        var cacheRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tools");
+        var cacheRoot = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
         var cache = Path.Combine(cacheRoot, id);
         var oldRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT");
         var relative = "Utilities/Other/Fixture/SCEWIN64.exe";
@@ -41,6 +41,12 @@ static class ToolLauncherChecks
             Bundle(false);
             check(service.Resolve(tool with { ArchivePath = "Utilities/absent.exe" }).Action == "Get", "A missing archive entry is not advertised as an available bundled tool");
             check(service.Resolve(tool).FromArchive && service.Resolve(tool with { BundleAction = "install" }).Action == "Install", "Bundled executables distinguish opening a tool from starting an installer");
+            var userCopy = Path.Combine(root, "user-utilities", "Other", "Fixture", "SCEWIN64.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(userCopy)!);
+            File.Copy(Path.Combine(fixture, "SCEWIN64.exe"), userCopy);
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", Path.Combine(root, "user-utilities"));
+            check(service.Resolve(tool).FromArchive, "A user-writable Utilities copy is not launched when the shipped archive has the tool");
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", Path.Combine(root, "absent"));
             service.OpenAsync(tool).GetAwaiter().GetResult();
             var calls = Path.Combine(cache, "Utilities", "Other", "Fixture", "calls.log");
             var until = DateTime.UtcNow.AddSeconds(10);

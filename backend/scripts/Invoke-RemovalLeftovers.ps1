@@ -61,6 +61,7 @@ try {
                 ExecutorMode=if($ConfirmApply){'Real'}else{'Preview'}}
             $applied=(& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1') @args)|ConvertFrom-Json
         } else {
+            if($ConfirmApply -and -not (Test-RooIndustriesWrittenAfterProtection ([string]$data.rollbackPath))){throw ("This backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at "+(Split-Path ([string]$data.rollbackPath) -Parent)+'.')}
             $applied=(& (Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1') -RollbackManifestPath $data.rollbackPath -ConfirmApply:$ConfirmApply -AllowRealSystemExecution:$ConfirmApply -UserApproved:$ConfirmApply)|ConvertFrom-Json
         }
         $result.status=$applied.status;$result.dryRun=$applied.dryRun;$result.data=$applied

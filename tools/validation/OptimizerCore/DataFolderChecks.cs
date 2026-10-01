@@ -39,6 +39,10 @@ static class DataFolderChecks
             File.WriteAllText(Path.Combine(outside, "secret.txt"), "outside bytes");
             check(CreateHardLink(Path.Combine(root, "linked.txt"), Path.Combine(outside, "secret.txt"), IntPtr.Zero), "The fixture hard link to a file outside the data folder exists");
             Directory.CreateSymbolicLink(Path.Combine(root, "link"), outside);
+            var oldManifest = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "cleanup-runs", "old")).FullName, "rollback-manifest.json");
+            File.WriteAllText(oldManifest, "manifest from before protection");
+            var planted = Directory.CreateDirectory(root + ".legacy-planted").FullName;
+            File.WriteAllText(Path.Combine(planted, "keep.txt"), "planted leftover");
             check(PolicyRootSecurity.Problem(root, DataFolder.Kind) is not null && PolicyRootSecurity.Problem(operations, OperationsFolder.Kind) is null && PolicyRootSecurity.Problem(rules) is null,
                 "Before migration the data folder is open while its recovery and rules folders are already protected");
 
@@ -59,9 +63,17 @@ static class DataFolderChecks
             check(aside.Length == 1 && File.ReadAllText(Path.Combine(aside[0], "untrusted.json")) == "planted bytes" && File.Exists(Path.Combine(aside[0], "linked.txt")),
                 "Untrusted entries are kept aside, unread, instead of deleted");
             check(File.ReadAllText(Path.Combine(outside, "secret.txt")) == "outside bytes", "Migration did not follow the link into the folder outside");
-            check(Directory.GetDirectories(local, Path.GetFileName(root) + ".secure-*").Length == 0 && Directory.GetDirectories(local, Path.GetFileName(root) + ".legacy-*").Length == 0,
+            check(Directory.GetDirectories(local, Path.GetFileName(root) + ".secure-*").Length == 0 && Directory.GetDirectories(local, Path.GetFileName(root) + ".legacy-*").Single() == planted,
                 "Migration leaves no temporary copies next to the data folder");
+            check(File.ReadAllText(Path.Combine(planted, "keep.txt")) == "planted leftover", "A leftover-named folder in the user-writable parent is not deleted with administrator rights");
 
+            var earlier = false;
+            try { PolicyRootSecurity.RequireWrittenAfterProtection(oldManifest, "earlier"); } catch (InvalidDataException) { earlier = true; }
+            Thread.Sleep(50);
+            var newManifest = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "cleanup-runs", "new")).FullName, "rollback-manifest.json");
+            File.WriteAllText(newManifest, "manifest written after protection");
+            PolicyRootSecurity.RequireWrittenAfterProtection(newManifest, "new");
+            check(earlier && File.ReadAllText(oldManifest) == "manifest from before protection", "A backup written before the data folder was protected is refused and kept, and one written after is accepted");
             var refused = false;
             try { using var lease = OperationsFolder.LeaseContaining(Path.Combine(timer, "session", "nested")); }
             catch (UnauthorizedAccessException) { refused = true; }
@@ -85,7 +97,7 @@ static class DataFolderChecks
         finally
         {
             using (var markers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true))
-                foreach (var path in new[] { root, operations, rules, current, legacy }) markers?.DeleteValue(PolicyRootSecurity.MarkerName(path), false);
+                foreach (var path in new[] { root, operations, rules, current, legacy }) { markers?.DeleteValue(PolicyRootSecurity.MarkerName(path), false); markers?.DeleteValue(PolicyRootSecurity.MarkerName(path) + PolicyRootSecurity.ProtectedAtSuffix, false); }
             foreach (var path in new[] { root, selection, outside }.Concat(Directory.GetDirectories(local, Path.GetFileName(root) + ".*")))
                 if (Directory.Exists(path)) Directory.Delete(path, true);
         }

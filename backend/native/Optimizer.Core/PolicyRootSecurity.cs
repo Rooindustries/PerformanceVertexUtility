@@ -57,10 +57,10 @@ public static class PolicyRootSecurity
                 Directory.CreateDirectory(parent);
                 CreateSecured(root, user, kind);
                 Mark(marker, user);
-                RemoveLeftovers(parent, name);
+                RemoveLeftovers(parent, name, kind);
                 return false;
             }
-            if (Problem(root, kind) is null) { Mark(marker, user); RemoveLeftovers(parent, name); return false; }
+            if (Problem(root, kind) is null) { Mark(marker, user); RemoveLeftovers(parent, name, kind); return false; }
             if (Marked(marker))
                 throw new UnauthorizedAccessException("The " + kind.Label + " was changed without administrator rights after it was protected, so it is not trusted. Delete " + root + " and " + kind.Restart + ".");
             if (!kind.KeepUntrusted) RequireMigratable(root, kind);
@@ -69,7 +69,7 @@ public static class PolicyRootSecurity
             {
                 Migrate(root, parent, name, user, kind);
                 Mark(marker, user);
-                RemoveLeftovers(parent, name);
+                RemoveLeftovers(parent, name, kind);
             }
             catch (Exception error)
             {
@@ -125,10 +125,10 @@ public static class PolicyRootSecurity
             }
             foreach (var stray in strays)
             {
-                if (Copy(stray, root, kind, user, merge: true)) Directory.Move(stray, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
+                if (Copy(stray, root, kind, user, merge: true) || WriterOf(parent) is not null) Directory.Move(stray, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
                 else Directory.Delete(stray, true);
             }
-            if (kept) Directory.Move(legacy, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
+            if (kept || WriterOf(parent) is not null) Directory.Move(legacy, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
             return;
         }
     }
@@ -224,7 +224,29 @@ public static class PolicyRootSecurity
     private static void Mark(string marker, SecurityIdentifier user)
     {
         using var key = Registry.LocalMachine.CreateSubKey(MarkerKey, true);
-        if (key.GetValue(marker) is null) key.SetValue(marker, user.Value, RegistryValueKind.String);
+        if (key.GetValue(marker) is not null) return;
+        key.SetValue(marker + ProtectedAtSuffix, DateTime.UtcNow.ToFileTimeUtc(), RegistryValueKind.QWord);
+        key.SetValue(marker, user.Value, RegistryValueKind.String);
+    }
+
+    public const string ProtectedAtSuffix = "|protected-at";
+
+    public static DateTime? ProtectedAt(string root)
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(MarkerKey);
+        return key?.GetValue(MarkerName(root) + ProtectedAtSuffix) is long time ? DateTime.FromFileTimeUtc(time) : null;
+    }
+
+    public static void RequireWrittenAfterProtection(string file, string message)
+    {
+        var full = Normalize(file);
+        for (var directory = Path.GetDirectoryName(full); directory is not null; directory = Path.GetDirectoryName(directory))
+        {
+            if (!Marked(MarkerName(directory))) continue;
+            if (ProtectedAt(directory) is { } at && File.Exists(full) && File.GetCreationTimeUtc(full) > at) return;
+            break;
+        }
+        throw new InvalidDataException(message);
     }
 
     private static string ProfilePath(SecurityIdentifier user)
@@ -361,10 +383,12 @@ public static class PolicyRootSecurity
         return skipped;
     }
 
-    private static void RemoveLeftovers(string parent, string name)
+    private static void RemoveLeftovers(string parent, string name, ProtectedFolder kind)
     {
+        var open = WriterOf(parent) is not null;
         foreach (var leftover in Directory.GetDirectories(parent, name + ".secure-*").Concat(Directory.GetDirectories(parent, name + ".legacy-*")))
         {
+            if (open && (Path.GetFileName(leftover).StartsWith(name + ".legacy-", StringComparison.OrdinalIgnoreCase) || Problem(leftover, kind) is not null)) continue;
             try { Directory.Delete(leftover, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
