@@ -99,11 +99,12 @@ public static class GovernorDisplay
     public static string State(GovernorSnapshot snapshot)
     {
         var (summary, worker) = (snapshot.Summary, snapshot.Worker);
-        var off = !summary.Paused && summary.EnabledRules == 0 && summary.RulesError is null && summary.SecurityProblem is null or "missing";
+        var unreadable = summary.UnreadableRules is { Length: > 0 };
+        var off = !summary.Paused && summary.EnabledRules == 0 && summary.RulesError is null && !unreadable && summary.SecurityProblem is null or "missing";
         if (worker.HostRunning is null && !off || worker.HostRunning == true && worker.Error is not null) return "notResponding";
         if (summary.Paused) return Changed(snapshot) > 0 ? "pausing" : "paused";
         if (off) return "off";
-        if (summary.RulesError is not null || !summary.Secured) return "notResponding";
+        if (summary.RulesError is not null || unreadable && summary.EnabledRules == 0 || !summary.Secured) return "notResponding";
         if (worker.HostRunning == false) return "stopped";
         return worker.State?.Status == "running" ? "running" : "notResponding";
     }
@@ -140,6 +141,7 @@ public static class GovernorDisplay
                     ? "Paused, but the governor is not answering, so the old settings may not be back yet. Press Pause governor to stop it and put them back."
                 : summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
                 : summary.RulesError is { } rulesError ? "Your saved rules could not be read: " + rulesError
+                : summary.UnreadableRules is { Length: > 0 } damaged && summary.EnabledRules == 0 ? string.Join(" ", damaged)
                 : worker.HostRunning == true && worker.Error is not null ? "The governor is not answering. Press Start governor to restart it."
                 : worker.HostRunning == true && worker.State?.Status == "configurationError"
                     ? (worker.State.Errors.FirstOrDefault() is { Length: > 0 } unreadable ? unreadable.TrimEnd('.') + "." : "Your saved rules could not be read.")
