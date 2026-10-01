@@ -37,8 +37,9 @@ function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Folder=$policy
 }
 function Start-Limited([string]$Script){
     $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
-    $runas=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -PassThru -Wait
-    if($runas.ExitCode -ne 0){throw ('runas /trustlevel failed with exit code '+$runas.ExitCode)}
+    $runas=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 3
+    if($runas.HasExited -and $runas.ExitCode -ne 0){throw ('runas /trustlevel failed with exit code '+$runas.ExitCode)}
 }
 function Start-Probe {
     $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe'),'3600')
@@ -411,27 +412,29 @@ public static class RooIndustriesGovernorDenied {
     Assert ($fileRefusal.status -ne 'completed' -and $fileRefusal.error.message -eq 'Governor requests must be passed on standard input.' -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json.tmp'))) 'A governor request passed as a file is refused'
     $watchOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-watch-'+[Guid]::NewGuid().ToString('N')+'.json')
     Start-Limited (@'
-$seen=New-Object System.Collections.Generic.List[string];$rewritten=New-Object System.Collections.Generic.List[string]
-$known=@{}
+$seen=New-Object System.Collections.Generic.List[string];$rewritten=New-Object System.Collections.Generic.List[string];$errors=New-Object System.Collections.Generic.List[string]
+$known=@{};$passes=0;$since=[DateTime]::UtcNow.AddSeconds(-1)
 $clock=[Diagnostics.Stopwatch]::StartNew()
 while($clock.Elapsed.TotalSeconds -lt 90){
-    $temp=[IO.Path]::GetTempPath()
-    $candidates=@(Get-ChildItem -LiteralPath $temp -File -Filter '*.json' -ErrorAction SilentlyContinue)
-    $candidates+=@(Get-ChildItem -LiteralPath $temp -Directory -Filter 'roo-industries-*' -ErrorAction SilentlyContinue|ForEach-Object {Get-ChildItem -LiteralPath $_.FullName -File -Filter '*.json' -ErrorAction SilentlyContinue})
-    $candidates+=@(Get-ChildItem -LiteralPath 'PARENT' -File -Filter '*.json' -Recurse -ErrorAction SilentlyContinue)
-    foreach($file in $candidates){
-        $stamp=$file.LastWriteTimeUtc.Ticks
-        if($known[$file.FullName] -eq $stamp){continue}
-        $known[$file.FullName]=$stamp
-        if($clock.Elapsed.TotalSeconds -lt 1){continue}
-        try{$text=[IO.File]::ReadAllText($file.FullName)}catch{continue}
-        if($text -notmatch 'policyRoot'){continue}
-        $seen.Add($file.FullName)
-        try{[IO.File]::WriteAllText($file.FullName,$text.Replace('"paused":false','"paused":true').Replace('"paused": false','"paused": true'));$rewritten.Add($file.FullName);$known[$file.FullName]=(Get-Item -LiteralPath $file.FullName).LastWriteTimeUtc.Ticks}catch{}
-    }
+    try{
+        $temp=[IO.Path]::GetTempPath()
+        $candidates=@([IO.Directory]::GetFiles($temp,'*.json'))
+        foreach($folder in [IO.Directory]::GetDirectories($temp,'roo-industries-*')){try{$candidates+=@([IO.Directory]::GetFiles($folder,'*.json'))}catch{}}
+        try{$candidates+=@([IO.Directory]::GetFiles('PARENT','*.json',[IO.SearchOption]::AllDirectories))}catch{$errors.Add('parent: '+$_.Exception.Message)}
+        foreach($path in $candidates){
+            try{$written=[IO.File]::GetLastWriteTimeUtc($path)}catch{continue}
+            if($written -lt $since -or $known[$path] -eq $written.Ticks){continue}
+            $known[$path]=$written.Ticks
+            try{$text=[IO.File]::ReadAllText($path)}catch{continue}
+            if($text -notmatch 'policyRoot'){continue}
+            $seen.Add($path)
+            try{[IO.File]::WriteAllText($path,$text.Replace('"paused":false','"paused":true').Replace('"paused": false','"paused": true'));$rewritten.Add($path);$known[$path]=[IO.File]::GetLastWriteTimeUtc($path).Ticks}catch{}
+        }
+        $passes++
+    }catch{$errors.Add($_.Exception.Message)}
     Start-Sleep -Milliseconds 100
 }
-@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);seen=@($seen|Select-Object -Unique);rewritten=@($rewritten)}|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
+@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);seen=@($seen|Select-Object -Unique);rewritten=@($rewritten);passes=$passes;errors=@($errors|Select-Object -First 5)}|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
 '@).Replace('PARENT',$policyParent).Replace('OUT',$watchOutput)
     Start-Sleep -Seconds 3
     $raceRule=$rule.Clone();$raceRule.ruleId=[Guid]::NewGuid().ToString('N');$raceRule.name='Race rule'
@@ -448,7 +451,7 @@ while($clock.Elapsed.TotalSeconds -lt 90){
     Start-Sleep -Milliseconds 300
     $watch=Get-Content -LiteralPath $watchOutput -Raw -Encoding UTF8|ConvertFrom-Json
     Remove-Item -LiteralPath $watchOutput -Force
-    Note 'requestRace' ([ordered]@{elevated=$watch.elevated;seen=@($watch.seen);rewritten=@($watch.rewritten)})
+    Note 'requestRace' ([ordered]@{elevated=$watch.elevated;passes=$watch.passes;errors=@($watch.errors);seen=@($watch.seen);rewritten=@($watch.rewritten)})
     Assert ($decoyText -match '"paused":true' -and @($watch.rewritten|Where-Object {$_ -ne $decoy}).Count -eq 0 -and @($watch.rewritten) -contains $decoy) 'The racing watcher does catch and rewrite a request file when one exists (positive control)'
     Assert ($watch.elevated -eq $false -and $raceResumed.paused -eq $false -and $raceResumed.worker.hostRunning -eq $true) 'A non-elevated process racing governor actions finds no governor request it can rewrite'
 
