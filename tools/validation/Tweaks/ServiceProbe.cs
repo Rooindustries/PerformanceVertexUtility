@@ -8,26 +8,21 @@ static class ServiceProbe
     private static readonly ServiceHandler Handler = Control;
     private static IntPtr _status;
     private static string _name = Name;
-    private static int _stopDelay;
-    public static void Start(string? name = null, int stopDelayMilliseconds = 0)
+    private static int _startDelay;
+    public static void Start(string? name = null, int startDelayMilliseconds = 0)
     {
-        _name = name ?? Name; _stopDelay = stopDelayMilliseconds;
+        _name = name ?? Name; _startDelay = startDelayMilliseconds;
         var table = new[] { new ServiceTable { Name = _name, Main = Main }, new ServiceTable() };
         if (!StartServiceCtrlDispatcher(table)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
     private static void Run(uint count, IntPtr arguments)
     {
+        if (_startDelay > 0) Thread.Sleep(_startDelay);
         _status = RegisterServiceCtrlHandler(_name, Handler);
         if (_status == IntPtr.Zero) return;
         Set(4); Stop.Wait(); Set(1);
     }
-    private static void Control(uint code)
-    {
-        if (code != 1) return;
-        Set(3);
-        if (_stopDelay > 0) Task.Run(() => { Thread.Sleep(_stopDelay); Stop.Set(); });
-        else Stop.Set();
-    }
+    private static void Control(uint code) { if (code == 1) { Set(3); Stop.Set(); } }
     private static void Set(uint state)
     {
         var status = new ServiceStatus { Type = 16, State = state, Accepted = state == 4 ? 1u : 0u, WaitHint = state == 3 ? 5000u : 0u };
