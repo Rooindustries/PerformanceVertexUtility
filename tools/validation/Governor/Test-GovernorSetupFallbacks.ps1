@@ -245,6 +245,12 @@ try {
         Check ($remove.exit -eq 0 -and $null -eq (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and $removeProblems.Count -eq 0) ('Remove deletes the real governor task, exits 0 and leaves look-alike tasks untouched ('+$mode.name+' mode)') ("exit="+$remove.exit+" "+($removeProblems -join '; ')+" "+$remove.log)
         Register-FakeGovernor
     }
+    Add-Type -TypeDefinition 'public static class RooIndustriesSetupSilentHelper { public static int Main(string[] args) { System.Console.Error.WriteLine("helper failed on purpose"); return 3; } }' -OutputAssembly $hostExe -OutputType ConsoleApplication
+    Set-Fixture $false $true $false
+    $run=Invoke-Setup 'silent-helper-suspend' 'Suspend' '' $setup.Id
+    Check ($run.exit -eq 0 -and $run.log -match 'policy-status failed \(exit 3\): helper failed on purpose' -and $run.log -notmatch 'Cannot bind argument') 'When the helper exits with an error and prints nothing, setup reports the helper''s own failure instead of a parser error' ("exit="+$run.exit+" "+$run.log)
+    $resume=Invoke-Setup 'silent-helper-resume' 'Resume' '' $setup.Id
+    Remove-Item -LiteralPath $hostExe -Force -ErrorAction SilentlyContinue
     foreach($name in $decoyNames){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue}
 } catch {Check $false 'The setup fallback check ran to the end' ($_|Out-String)}
 finally {
