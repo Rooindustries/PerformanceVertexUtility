@@ -36,6 +36,14 @@ static class ChildEnvironmentChecks
         return failures;
     }
 
+    static List<string> VerifyFromPoisonedHost(ChildEnv env, ChildObservation seen, string? image, IEnumerable<KeyValuePair<string, string?>>? product = null, params string[] tolerated)
+    {
+        var failures = env.Verify(seen, product ?? [], true, tolerated);
+        if (image is not null && ChildEnv.ImageFailure(seen, image) is { } wrong) failures.Add(wrong);
+        if (seen.ProcessId == Environment.ProcessId) failures.Add("the report came from the test process itself");
+        return failures;
+    }
+
     static void ControlHelper(Action<bool, string> check, string mode)
     {
         var address = new ControlAddress("filesystem", "ntfs", "last-access");
@@ -59,12 +67,12 @@ static class ChildEnvironmentChecks
             try { marked = PowerShellControls.Read(address); }
             catch (Exception error) { readError = error.Message; }
             finally { PowerShellControls.Launcher = real; }
+            check(readError is null, "The real file-system control read still works while windir and SystemRoot point at a marker folder" + (readError is null ? "" : ": " + readError));
             check(seen is not null, "The live Windows control helper's environment could be read from outside" + (captureError is null ? "" : ": " + captureError));
             var request = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new { action = "read", address }, OperationFiles.Json));
             var failures = Verify(env, seen!, ChildEnv.PowerShell, [new("ROO_INDUSTRIES_CONTROL_REQUEST", request), new("ROO_INDUSTRIES_CONTROL_HELPER", null)]);
             if (seen!.Variables.TryGetValue("ROO_INDUSTRIES_CONTROL_HELPER", out var helper) && helper.Length < 1000) failures.Add("the control helper payload is only " + helper.Length + " characters");
             ChildEnv.Report(check, "Windows control helper child", env, seen, failures);
-            check(readError is null, "The real file-system control read still works while windir and SystemRoot point at a marker folder" + (readError is null ? "" : ": " + readError));
             check(marked is not null && marked.Value.GetRawText() == baseline.Value.GetRawText() && marked.Binding == baseline.Binding && marked.Identity == baseline.Identity,
                 "A status read returns the same value, binding and identity with the markers set as without them (" + marked?.Value.GetRawText() + " vs " + baseline.Value.GetRawText() + ")");
         });
@@ -222,16 +230,18 @@ static class ChildEnvironmentChecks
             ChildEnv.Run(check, mode, null, env =>
             {
                 var started = DateTime.UtcNow.AddSeconds(-1);
-                var start = new ProcessStartInfo(ChildEnv.DotNetMuxer()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                foreach (var argument in new[] { Path.Combine(hostDirectory, "Optimizer.Host.dll"), "cleanup-authority", request }) start.ArgumentList.Add(argument);
+                var start = new ProcessStartInfo(ChildEnv.DotNetMuxer()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                foreach (var argument in new[] { Path.Combine(hostDirectory, "Optimizer.Host.dll"), "cleanup-authority", "-" }) start.ArgumentList.Add(argument);
                 using var host = Process.Start(start)!;
+                host.StandardInput.Write(File.ReadAllText(request));
+                host.StandardInput.Close();
                 var output = host.StandardOutput.ReadToEndAsync();
                 var errors = host.StandardError.ReadToEndAsync();
                 if (!host.WaitForExit(120000)) { host.Kill(true); throw new TimeoutException("The published Host did not finish."); }
                 var text = output.GetAwaiter().GetResult();
                 check(host.ExitCode == 0 && JsonDocument.Parse(text).RootElement.GetProperty("data").GetProperty("appId").GetString() == "fixture-app", "The real Host accepted the provider script's answer through its RunScript path: " + text.Trim() + errors.GetAwaiter().GetResult().Trim());
                 var seen = ChildEnv.ReadDump(Path.Combine(fixture, "backend", "scripts", "env-Get-CleanupAuthority.txt"), started, "the provider script's own report");
-                ChildEnv.Report(check, "Host RunScript child", env, seen, Verify(env, seen, ChildEnv.PowerShell, null, ChildEnv.PowerShellAdds));
+                ChildEnv.Report(check, "Host RunScript child", env, seen, VerifyFromPoisonedHost(env, seen, ChildEnv.PowerShell, null, ChildEnv.PowerShellAdds));
             });
         }
         finally { Directory.Delete(root, true); }
@@ -264,27 +274,35 @@ static class ChildEnvironmentChecks
             OperationFiles.Write(requestPath, common);
             ChildEnv.Run(check, mode, null, env =>
             {
-                var expectedImage = sessionHost ? Path.Combine(binaries, "RooIndustries.SessionHost.exe") : ChildEnv.DotNetMuxer();
-                var start = new ProcessStartInfo(expectedImage) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                if (!sessionHost) start.ArgumentList.Add(Path.Combine(binaries, "Optimizer.Host.dll"));
-                foreach (var argument in sessionHost ? new[] { "run", requestPath } : ["protected-session-run", requestPath]) start.ArgumentList.Add(argument);
-                runner = Process.Start(start)!;
-                var output = runner.StandardOutput.ReadToEndAsync();
-                var errors = runner.StandardError.ReadToEndAsync();
-                var watchPath = Path.Combine(session, "watch.json");
-                ProtectedWatchReady? ready = null;
-                for (var waited = Stopwatch.StartNew(); ready is null && waited.Elapsed < TimeSpan.FromSeconds(90) && !runner.HasExited; Thread.Sleep(100))
-                    try { if (File.Exists(watchPath)) ready = OperationFiles.Read<ProtectedWatchReady>(watchPath); }
-                    catch (Exception error) when (error is IOException or JsonException or InvalidDataException) { }
-                check(ready is not null, "The " + kind + " session started its recovery watcher" + (ready is null ? " (" + (runner.HasExited ? "the " + kind + " exited " + runner.ExitCode + ": " + output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult() : "no watch.json") + ")" : ""));
-                var seen = ProcessEnvironmentReader.Read(ready!.Watcher.ProcessId);
-                var failures = Verify(env, seen, expectedImage);
-                if (!string.Equals(ready.Watcher.ExecutablePath, expectedImage, StringComparison.OrdinalIgnoreCase)) failures.Add("the watcher identity records '" + ready.Watcher.ExecutablePath + "' instead of '" + expectedImage + "'");
-                ChildEnv.Report(check, kind + " session watcher child", env, seen, failures);
-                using var watcher = Process.GetProcessById(ready.Watcher.ProcessId);
-                launcher!.Kill();
-                check(runner.WaitForExit(90000), "The " + kind + " session ended after its launcher exited");
-                check(watcher.WaitForExit(60000), "The recovery watcher exited after the " + kind + " session ended");
+                try
+                {
+                    var expectedImage = sessionHost ? Path.Combine(binaries, "RooIndustries.SessionHost.exe") : ChildEnv.DotNetMuxer();
+                    var start = new ProcessStartInfo(expectedImage) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    if (!sessionHost) start.ArgumentList.Add(Path.Combine(binaries, "Optimizer.Host.dll"));
+                    foreach (var argument in sessionHost ? new[] { "run", requestPath } : ["protected-session-run", requestPath]) start.ArgumentList.Add(argument);
+                    runner = Process.Start(start)!;
+                    var output = runner.StandardOutput.ReadToEndAsync();
+                    var errors = runner.StandardError.ReadToEndAsync();
+                    var watchPath = Path.Combine(session, "watch.json");
+                    ProtectedWatchReady? ready = null;
+                    for (var waited = Stopwatch.StartNew(); ready is null && waited.Elapsed < TimeSpan.FromSeconds(90) && !runner.HasExited; Thread.Sleep(100))
+                        try { if (File.Exists(watchPath)) ready = OperationFiles.Read<ProtectedWatchReady>(watchPath); }
+                        catch (Exception error) when (error is IOException or JsonException or InvalidDataException) { }
+                    check(ready is not null, "The " + kind + " session started its recovery watcher" + (ready is null ? " (" + (runner.HasExited ? "the " + kind + " exited " + runner.ExitCode + ": " + output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult() : "no watch.json") + ")" : ""));
+                    var seen = ProcessEnvironmentReader.Read(ready!.Watcher.ProcessId);
+                    var failures = VerifyFromPoisonedHost(env, seen, expectedImage);
+                    if (!string.Equals(ready.Watcher.ExecutablePath, expectedImage, StringComparison.OrdinalIgnoreCase)) failures.Add("the watcher identity records '" + ready.Watcher.ExecutablePath + "' instead of '" + expectedImage + "'");
+                    ChildEnv.Report(check, kind + " session watcher child", env, seen, failures);
+                    using var watcher = Process.GetProcessById(ready.Watcher.ProcessId);
+                    launcher!.Kill();
+                    check(runner.WaitForExit(90000), "The " + kind + " session ended after its launcher exited");
+                    check(watcher.WaitForExit(60000), "The recovery watcher exited after the " + kind + " session ended");
+                }
+                finally
+                {
+                    foreach (var process in new[] { launcher, runner })
+                        if (process is not null && !process.HasExited) process.Kill(true);
+                }
             });
         }
         finally
