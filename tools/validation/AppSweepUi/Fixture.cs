@@ -24,7 +24,7 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
         bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
     public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
-        GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null);
+        GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
@@ -236,7 +236,9 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.FromResult(new PolicyWorkerStatus(null, false, null));
         public Action<SavedProcessRule>? RuleSaved { get; set; }
         public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) { RuleSaved?.Invoke(rule); return Task.FromResult(rule); }
-        public Task<JsonElement> DeleteRuleAsync(string ruleId) => Task.FromResult(JsonSerializer.SerializeToElement(new { }));
+        public List<string> DeletedRules { get; } = new();
+        public Action<string>? RuleDeleted { get; set; }
+        public Task<JsonElement> DeleteRuleAsync(string ruleId) { DeletedRules.Add(ruleId); RuleDeleted?.Invoke(ruleId); return Task.FromResult(JsonSerializer.SerializeToElement(new { })); }
         public Exception? PolicyWorkerError { get; set; }
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
             => PolicyWorkerError is { } failure ? Task.FromException<PolicyWorkerRegistration>(failure) : Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));

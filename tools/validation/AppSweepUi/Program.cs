@@ -58,9 +58,9 @@ void ReadyCleanup(UninstallCleanupViewModel model, InstalledApp app)
     model.CleanupListApproved = true;
 }
 
-if (args is ["governor-task", var taskRoot, var taskName, var registered, var enabled, var repeats])
+if (args is ["governor-task", var taskRoot, var taskName, var registered, var enabled, var repeats, var installRoot])
 {
-    var task = RooIndustries.OptimizationSuite.Services.GovernorProbe.ReadTask(taskRoot);
+    var task = RooIndustries.OptimizationSuite.Services.GovernorProbe.ReadTask(taskRoot, installRoot);
     Console.WriteLine("Read " + JsonSerializer.Serialize(task));
     Check(registered == "Unknown" ? task is null : task is not null && task.Name == taskName && task.Registered == bool.Parse(registered) && task.Enabled == bool.Parse(enabled) && task.RestartsEveryMinute == bool.Parse(repeats),
         "Real scheduled task " + taskName + " reads registered=" + registered + " enabled=" + enabled + " oneMinuteRepeat=" + repeats);

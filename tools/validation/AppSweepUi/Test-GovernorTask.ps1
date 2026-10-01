@@ -34,13 +34,30 @@ $legacyDescription = $script:RooIndustriesLegacyIdentity.policyDescription + $ow
 $strayName = 'RooIndustriesOptimizationSuite.ProcessRules.FFFFFFFFFFFFFFFFFFFF'
 $repoRoot = $root
 $requestPath = Join-Path $PolicyRoot 'worker-request.json'
-$HostDirectory = $scratch
-$DotNetPath = Join-Path ([Environment]::GetFolderPath('System')) 'whoami.exe'
-$hostArgs = @()
+$HostDirectory = Join-Path $root 'backend\bin\optimizer'
+$DotNetPath = Join-Path $scratch 'dotnet.exe'
+Copy-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('System')) 'whoami.exe') -Destination $DotNetPath
+$hostArgs = @((Join-Path $HostDirectory 'Optimizer.Host.dll'))
+$bundledRoot = Join-Path $scratch 'install'
+$bundledHost = Join-Path $bundledRoot 'backend\bin\optimizer'
+$bundledScripts = Join-Path $bundledRoot 'backend\scripts'
+[IO.Directory]::CreateDirectory($bundledHost) | Out-Null
+[IO.Directory]::CreateDirectory($bundledScripts) | Out-Null
+Copy-Item -LiteralPath (Join-Path $scripts 'Start-RooIndustriesHelper.cmd') -Destination $bundledScripts
+Copy-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('System')) 'whoami.exe') -Destination (Join-Path $bundledHost 'Optimizer.Host.exe')
 
-function Read-Task([string]$Name, [string]$Registered, [string]$Enabled, [string]$Repeats) {
-    & $dotnet run --no-build --project $project --configuration Release -- governor-task $PolicyRoot $Name $Registered $Enabled $Repeats
-    if ($LASTEXITCODE -ne 0) { throw "Task read check failed for $Name registered=$Registered enabled=$Enabled repeats=$Repeats" }
+function Read-Task([string]$Name, [string]$Registered, [string]$Enabled, [string]$Repeats, [string]$Install = $root) {
+    & $dotnet run --no-build --project $project --configuration Release -- governor-task $PolicyRoot $Name $Registered $Enabled $Repeats $Install
+    if ($LASTEXITCODE -ne 0) {
+        Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue | ForEach-Object { 'Registered task: ' + $_.Actions[0].Execute + ' ' + $_.Actions[0].Arguments + ' | ' + $_.Actions[0].WorkingDirectory + ' | ' + $_.Principal.UserId + ' ' + $_.Principal.RunLevel + ' | ' + $_.Settings.ExecutionTimeLimit + ' ' + $_.Settings.MultipleInstances }
+        throw "Task read check failed for $Name registered=$Registered enabled=$Enabled repeats=$Repeats"
+    }
+}
+function Register-Variant([string]$Name, $TaskAction, $TaskPrincipal, $TaskSettings) {
+    $clock = New-ScheduledTaskTrigger -Once -At ([DateTime]::Now) -RepetitionInterval (New-TimeSpan -Minutes 1)
+    $logon = New-ScheduledTaskTrigger -AtLogOn -User $owner.userSid
+    $logon.Repetition = $clock.Repetition
+    Register-ScheduledTask -TaskName $Name -Description $currentDescription -Action $TaskAction -Principal $TaskPrincipal -Settings $TaskSettings -Trigger @($logon, $clock) -Force | Out-Null
 }
 function Register-As([string]$Name, [string]$Text, [switch]$Disabled) {
     $script:taskName = $Name
@@ -64,6 +81,31 @@ try {
     $logon.Repetition = (New-ScheduledTaskTrigger -Once -At ([DateTime]::Now) -RepetitionInterval (New-TimeSpan -Minutes 1)).Repetition
     Register-ScheduledTask -TaskName $currentName -Description $currentDescription -Action $action -Principal $principal -Settings $settings -Trigger @($logon) -Force | Out-Null
     Read-Task $currentName True True False
+    Register-Variant $currentName $action $principal $settings
+    Read-Task $currentName True True True
+    Register-Variant $currentName (New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'whoami.exe')) $principal $settings
+    Read-Task $currentName Unknown False False
+    Register-Variant $currentName $action (New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel Limited) $settings
+    Read-Task $currentName Unknown False False
+    Register-Variant $currentName $action (New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest) $settings
+    Read-Task $currentName Unknown False False
+    Register-Variant $currentName $action $principal (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)
+    Read-Task $currentName Unknown False False
+    Remove-Task $currentName
+
+    $development = @($HostDirectory, $DotNetPath, $hostArgs, $script:RooIndustriesScriptsRoot)
+    $HostDirectory = $bundledHost
+    $DotNetPath = Join-Path $bundledHost 'Optimizer.Host.exe'
+    $hostArgs = @()
+    $script:RooIndustriesScriptsRoot = $bundledScripts
+    try {
+        Register-As $currentName $currentDescription
+        Read-Task $currentName True True True $bundledRoot
+        Read-Task $currentName Unknown False False $root
+    }
+    finally {
+        $HostDirectory, $DotNetPath, $hostArgs, $script:RooIndustriesScriptsRoot = $development
+    }
     Remove-Task $currentName
 
     Register-As $legacyName $legacyDescription
