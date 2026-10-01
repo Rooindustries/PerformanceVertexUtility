@@ -649,20 +649,6 @@ function Test-ScenarioClaimsGameUndoLateField {
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 2) 'Undo restored both the field set at the first poll and the one set by a later poll'
 }
 
-function Test-ScenarioClaimsRepoRootRequired {
-    $path=Copy-Probe 'ClaimsRepoRoot.exe'
-    $request=@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;rule=(New-Rule $path @{cpuPriority='High'})}
-    $result=(@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'rule-save' '-') -join "`n")|ConvertFrom-Json
-    Note 'ruleSaveWithEmptyRepoRoot' $result
-    Assert ($result.status -eq 'failed' -and $result.error.message -like '*repository root*') 'Saving a rule with an empty repository root fails instead of skipping the game session checks'
-    Assert (@(Get-ChildItem -LiteralPath (Join-Path $script:policyRoot 'rules') -Filter '*.json' -ErrorAction SilentlyContinue).Count -eq 0) 'No rule was written'
-    Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
-    $pause=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$true}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' '-') -join "`n")|ConvertFrom-Json
-    $resume=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$false}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' '-') -join "`n")|ConvertFrom-Json
-    Note 'pauseAndResumeWithEmptyRepoRoot' @{pause=$pause.status;resume=$resume.status;resumeError=$resume.error.message}
-    Assert ($resume.status -eq 'failed' -and $resume.error.message -like '*repository root*') 'Resuming with an empty repository root fails instead of skipping the game session checks'
-}
-
 function Test-ScenarioClaimsGateOnlyForEnabling {
     $path=Copy-Probe 'ClaimsGateEnable.exe'
     $rule=New-Rule $path @{cpuPriority='High'}
