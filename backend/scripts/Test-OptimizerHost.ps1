@@ -7,6 +7,7 @@ $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $caseId=[Guid]::NewGuid().ToString('N')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-contract-'+$caseId)
 $hostDirectory=Join-Path $root 'host'
+$operations=Join-Path $root 'operations'
 $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
@@ -35,6 +36,8 @@ try {
     ([IO.DirectoryInfo]::new($root)).SetAccessControl($rootSecurity)
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
+    $secured=@((@{schemaVersion=1;repoRoot=$repoRoot;operationsRoot=$operations;confirm=$true}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'operations-secure' '-') -join "`n"
+    if(($secured|ConvertFrom-Json).status -ne 'completed'){throw ('The fixture recovery folder could not be protected: '+$secured)}
     $remover=Join-Path $root 'RooIndustriesHostRemover.exe'
     Add-Type @'
 using System;
@@ -128,7 +131,7 @@ public class RooIndustriesHostRemover {
         }
         $batchPath=Join-Path $root 'batch-review.json'
         Core 'cleanup-batch-preview' @{cleanupOperations=@($reviews|ForEach-Object {$_.operation});outputPath=$batchPath}|Out-Null
-        $batchJournal=Join-Path $root 'batch-journal.json'
+        $batchJournal=Join-Path $operations 'batch-journal.json'
         $originalExclusions=Core 'cleanup-exclusions-status' @{}
         $protectedExclusions=@{paths=@($originalExclusions.exclusions.paths)+@((Join-Path $apps[0].install 'preferences.txt'));registry=@($originalExclusions.exclusions.registry)}
         $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$protectedExclusions;expectedRevision=$originalExclusions.revision;confirm=$true}
@@ -159,6 +162,8 @@ public class RooIndustriesHostRemover {
             if($null -eq $exclusionBefore){Remove-Item -LiteralPath $exclusionPath}else{[IO.File]::WriteAllBytes($exclusionPath,$exclusionBefore)}
         }
     } finally {
+        $markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots',$true)
+        if($markers){$markerName=Get-RooIndustriesDataRootMarkerName $operations;$markers.DeleteValue($markerName,$false);$markers.DeleteValue($markerName+'|protected-at',$false);$markers.Dispose()}
         foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
         foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
         $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()

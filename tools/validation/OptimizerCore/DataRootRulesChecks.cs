@@ -14,6 +14,7 @@ static partial class DataFolderChecks
         scenarios.Add(("earlier-version", EarlierVersionGate));
         scenarios.Add(("external-path", ExternalPath));
         scenarios.Add(("claims-carry", ClaimsCarry));
+        scenarios.Add(("old-carveout", OldCarveOut));
         scenarios.Add(("orphan-temp", OrphanTemp));
         scenarios.Add(("schtasks-hang", SchtasksHang));
         scenarios.Add(("migration-time", MigrationTime));
@@ -446,5 +447,32 @@ static partial class DataFolderChecks
             Thread.Sleep(300);
             H.Forget(root, operations); H.Delete(root, state); H.Sweep(id);
         }
+    }
+
+    private static void OldCarveOut(Action<bool, string> check)
+    {
+        var id = H.Name("carve");
+        var root = Path.Combine(H.Local, id);
+        var operations = Path.Combine(root, "operations");
+        using var identity = WindowsIdentity.GetCurrent();
+        try
+        {
+            OperationsFolder.Ensure(operations);
+            var timer = Path.Combine(operations, OperationsFolder.TimerFolder);
+            Directory.Delete(timer);
+            var open = Directory.CreateDirectory(timer);
+            var security = open.GetAccessControl();
+            security.AddAccessRule(new FileSystemAccessRule(identity.User!, FileSystemRights.Modify, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+            open.SetAccessControl(security);
+            File.WriteAllText(Path.Combine(timer, "launch.json"), "{}");
+            check(PolicyRootSecurity.WriterOf(timer) is not null && PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(operations)), "The recovery folder of an earlier test build holds a user-writable timer folder inside its protected folder");
+            Exception? failure = null;
+            try { OperationsFolder.Secure(operations); } catch (Exception error) { failure = error; }
+            check(failure is null, "The recovery folder of an earlier test build still opens instead of asking the user to delete it: " + failure?.Message);
+            check(PolicyRootSecurity.WriterOf(timer) is null && Directory.Exists(timer) && !File.Exists(Path.Combine(timer, "launch.json")), "Its timer folder is replaced by an administrators-only one");
+            var aside = Directory.GetDirectories(H.Local, id + ".untrusted-timer-*");
+            check(aside.Length == 1 && File.Exists(Path.Combine(aside[0], "launch.json")), "The old timer folder is kept aside with its file");
+        }
+        finally { H.Forget(root, operations); H.Delete(root); H.Sweep(id); }
     }
 }

@@ -27,6 +27,7 @@ public static class OperationsFolder
     public static bool Secure(string root)
     {
         DataFolder.EnsureFor(root);
+        if (PolicyRootSecurity.Elevated() && Directory.Exists(root) && PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(root)) && PolicyRootSecurity.Problem(root, Kind, deep: false) is null) EnsureTimerFolder(root);
         return PolicyRootSecurity.Secure(root, Kind);
     }
 
