@@ -96,6 +96,11 @@ function Uninstall-App {
     for($i=0;$i -lt 60 -and (Test-Path -LiteralPath (Join-Path $app 'app'));$i++){Start-Sleep 1}
     'exit='+$p.ExitCode+' appLeft='+(Test-Path -LiteralPath (Join-Path $app 'app'))
 }
+function Stop-AfterInstall {
+    Start-Sleep -Seconds 3
+    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" -ErrorAction SilentlyContinue|Where-Object {$_.CommandLine -match 'README'}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+}
 function Get-MachineState {
     $hypervisor=@((Invoke-Native bcdedit.exe @('/enum','{current}')).Text -split "`n"|Where-Object {$_ -match 'hypervisorlaunchtype'})
     $guard=Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard -ErrorAction SilentlyContinue
@@ -290,6 +295,7 @@ switch($Phase){
     'install-old' {
         Log ('previous install removed: '+(Uninstall-App))
         Run 'install-old' {& (Join-Path $Source 'tools\validation\Governor\Measure-SetupTempAcl.ps1') -Installer $OldInstaller -OutDir (Join-Path $Evidence 'install-old')}
+        Stop-AfterInstall
         $fingerprint=Get-InstalledFingerprint
         $fingerprint|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $Evidence 'installed-old.json') -Encoding UTF8
         Log ('installed after install-old: '+($fingerprint|ConvertTo-Json -Compress)+' installer sha256='+(Get-FileHash -LiteralPath $OldInstaller -Algorithm SHA256).Hash)
@@ -299,6 +305,7 @@ switch($Phase){
     'upgrade' {
         $old=if(Test-Path -LiteralPath (Join-Path $Evidence 'installed-old.json')){Get-Content -LiteralPath (Join-Path $Evidence 'installed-old.json') -Raw|ConvertFrom-Json}
         Run 'upgrade' {& (Join-Path $Source 'tools\validation\Governor\Measure-SetupTempAcl.ps1') -Installer $NewInstaller -OutDir (Join-Path $Evidence 'upgrade')}
+        Stop-AfterInstall
         $fingerprint=Get-InstalledFingerprint
         $fingerprint|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $Evidence 'installed-new.json') -Encoding UTF8
         Log ('installed after upgrade: '+($fingerprint|ConvertTo-Json -Compress)+' installer sha256='+(Get-FileHash -LiteralPath $NewInstaller -Algorithm SHA256).Hash)
@@ -309,6 +316,7 @@ switch($Phase){
     'install-other' {
         Log ('previous install removed: '+(Uninstall-App))
         Run ('install-'+$Label) {& (Join-Path $Source 'tools\validation\Governor\Measure-SetupTempAcl.ps1') -Installer $OtherInstaller -OutDir (Join-Path $Evidence ('install-'+$Label))}
+        Stop-AfterInstall
         $fingerprint=Get-InstalledFingerprint
         $fingerprint|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $Evidence ('installed-'+$Label+'.json')) -Encoding UTF8
         Log ('installed '+$Label+': '+($fingerprint|ConvertTo-Json -Compress)+' installer sha256='+(Get-FileHash -LiteralPath $OtherInstaller -Algorithm SHA256).Hash)
