@@ -1,0 +1,180 @@
+﻿param(
+    [Parameter(Mandatory)][ValidateSet('before', 'after')][string]$Phase,
+    [Parameter(Mandatory)][string]$OutDir,
+    [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
+Add-Type @'
+using System; using System.Runtime.InteropServices;
+public static class MigrationU32 {
+ [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+ [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hgt, uint flags);
+ [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+ [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+ [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);
+}
+'@
+[MigrationU32]::SetProcessDPIAware() | Out-Null
+[MigrationU32]::SetThreadExecutionState([uint32]2147483651) | Out-Null
+$A = [Windows.Automation.AutomationElement]; $TS = [Windows.Automation.TreeScope]; $CT = [Windows.Automation.ControlType]
+$script:LogPath = Join-Path $OutDir ('migration-' + $Phase + '.log')
+$script:Failures = 0
+$Setting = 'windows.0689e69eedc05770'
+$Profile = 'roo-migration-check'
+$RuleName = 'roo-migration-rule'
+$Personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+$StatePath = Join-Path $env:TEMP 'roo-industries-migration-state.json'
+$ProbePath = Join-Path $env:TEMP 'RooMigrationProbe.exe'
+
+function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
+function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $script:Failures++ }; Log ($(if ($ok) { 'PASS ' } else { 'FAIL ' }) + $name + ' :: ' + $detail) }
+function Shot([string]$name) {
+    $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $b = New-Object Drawing.Bitmap $bounds.Width, $bounds.Height; $g = [Drawing.Graphics]::FromImage($b)
+    $g.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $b.Size); $b.Save((Join-Path $OutDir ('shot-' + $Phase + '-' + $name + '.png')), [Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $b.Dispose()
+}
+function WaitFor([scriptblock]$probe, [double]$seconds, [string]$what) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $deadline) { try { $r = & $probe } catch { $r = $null }; if ($r) { return $r }; Start-Sleep -Milliseconds 100 }
+    throw "Timed out waiting for $what"
+}
+function ById($id) { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty, $id)) }
+function Texts { @($script:Win.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | Where-Object { -not $_.Current.IsOffscreen } | ForEach-Object { $_.Current.Name } | Where-Object { $_ }) }
+function Invoke-Element($e) {
+    try { $e.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke(); return } catch {}
+    try { $e.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); return } catch {}
+    $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+}
+function Set-Toggle($e, [bool]$on) {
+    $pattern = $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
+    if (([string]$pattern.Current.ToggleState -eq 'On') -ne $on) { $pattern.Toggle(); Start-Sleep -Milliseconds 400 }
+}
+function Nav([string]$name) {
+    $item = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, $name), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) } 30 "nav $name"
+    Invoke-Element $item; Log "nav $name"
+}
+function Tweaks-Idle { WaitFor { $r = ById 'WindowsTweaksRefresh'; $s = ById 'WindowsTweaksStatus'; if ($r -and $r.Current.IsEnabled -and $s -and $s.Current.Name -notmatch '^Loading') { $s.Current.Name } } 600 'Windows tweaks idle' }
+function Review-Texts { @((ById 'WindowsTweaksReview').FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | ForEach-Object { $_.Current.Name } | Where-Object { $_ }) }
+function Transparency { $v = Get-ItemProperty $Personalize -Name EnableTransparency -ErrorAction SilentlyContinue; if ($v) { [string]$v.EnableTransparency } else { '<absent>' } }
+function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
+function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
+function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
+function Pick([string]$id, [string]$like) {
+    $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
+    $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $pattern.Expand(); Start-Sleep -Milliseconds 700
+    $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
+    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+    try { $pattern.Collapse() } catch {}
+}
+function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
+function Probe-Priority($id) { try { [string](Get-Process -Id $id -ErrorAction Stop).PriorityClass } catch { '<gone>' } }
+function Set-Profile {
+    $advanced = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Show advanced options')) } 20 'Show advanced options'
+    Set-Toggle $advanced $true; Start-Sleep 1
+    $expander = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profiles & tools')) } 20 'Profiles & tools'
+    try { $expander.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+    $name = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profile name'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Edit))) } 20 'Profile name box'
+    $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Profile); Start-Sleep 1
+}
+function Apply-Reviewed([string]$what) {
+    $texts = @(Review-Texts)
+    Log ("$what review: " + ($texts -join ' | '))
+    if ((($texts -join ' ') -notmatch 'Transparency') -or @($texts | Where-Object { $_ -match 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender' }).Count) { throw "$what review is not exactly the Transparency change; refusing to apply" }
+    Set-Toggle (ById 'WindowsTweaksApproval') $true
+    Invoke-Element (WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button')
+    Start-Sleep 2
+    Tweaks-Idle | Out-Null
+}
+function Open-App {
+    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    $script:App = Start-Process $Exe -PassThru
+    $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 180 'main window'
+    $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [MigrationU32]::ShowWindow($h, 9) | Out-Null; [MigrationU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [MigrationU32]::SetForegroundWindow($h) | Out-Null
+    WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
+}
+
+$script:App = $null
+try {
+    if ($Phase -eq 'before') {
+        Open-App
+        Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
+        $undo = @(Undo-Texts)
+        if (Has-Profile $undo) { throw "A $Profile profile already exists on this PC; refusing to change it." }
+        $registryBefore = Transparency
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Set-Profile
+        $search = WaitFor { ById 'WindowsTweaksSearch' } 30 'search box'
+        $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('Transparency Effects'); Start-Sleep 1
+        $row = WaitFor { ById ($Setting + '.select') } 30 'Transparency Effects row'
+        $target = if ($registryBefore -eq '0') { 'On (1)' } else { 'Off (0)' }
+        Set-Toggle $row $true
+        $combo = WaitFor { ById ($Setting + '.value') } 20 'value combo'
+        $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Start-Sleep -Milliseconds 800
+        $choice = WaitFor { $combo.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, $target)) } 10 "choice $target"
+        $choice.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+        Invoke-Element (ById 'WindowsTweaksPreview'); Start-Sleep 2; Tweaks-Idle | Out-Null
+        Apply-Reviewed 'apply'
+        WaitFor { if ((Transparency) -ne $registryBefore) { $true } } 60 'registry change' | Out-Null
+        $registryApplied = Transparency
+        Check ($registryApplied -ne $registryBefore) 'the earlier version applied the tweak profile' "before=$registryBefore after=$registryApplied"
+
+        Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $ProbePath -Force
+        $probe = Start-Process $ProbePath -ArgumentList '-n', '7200', '127.0.0.1' -WindowStyle Hidden -PassThru
+        Start-Sleep 3
+        Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
+        Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
+        Pick 'ProcessPicker' '*RooMigrationProbe*'
+        Process-Status '^Controls for' 60 'probe controls' | Out-Null
+        Pick 'cpuPriority' 'Below normal'
+        Invoke-Element (WaitFor { $b = ById 'ProcessPreview'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'review button')
+        Process-Status '^Review the requested controls' 60 'process review' | Out-Null
+        try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+        (WaitFor { ById 'ProcessRuleName' } 10 'rule name').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($RuleName); Start-Sleep 1
+        Invoke-Element (WaitFor { $b = ById 'ProcessSaveRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'save rule button')
+        $saved = Process-Status '^(Rule saved|Saved rules need attention)' 180 'rule save'
+        Check ($saved -match '^Rule saved') 'the earlier version saved the governor rule' ($saved + ' :: ' + (ById 'ProcessDetail').Current.Name)
+        $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probe.Id) -eq 'BelowNormal') { $true } } 90 'rule enforced' } catch {}
+        Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probe.Id))
+        Shot 'saved'
+        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    } else {
+        $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
+        Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
+        $probe = Get-Process -Id $state.probeId -ErrorAction SilentlyContinue
+        Check ($null -ne $probe -and $probe.StartTime.ToUniversalTime().ToString('o') -eq $state.probeStart) 'the probe from before the upgrade is still running' ('pid=' + $state.probeId)
+        $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $state.probeId) -eq 'BelowNormal') { $true } } 150 'rule enforced after upgrade' } catch {}
+        Check ([bool]$enforced) 'after the upgrade the governor still enforces the earlier rule' ('priority=' + (Probe-Priority $state.probeId))
+        Open-App
+        Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
+        $undo = @(Undo-Texts)
+        Check (Has-Profile $undo) 'the Undo page lists the profile applied by the earlier version' ($undo -join ' | ')
+        Shot 'undo'
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Set-Profile
+        $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
+        Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
+        Apply-Reviewed 'restore'
+        $registryRestored = Transparency
+        Check ($registryRestored -eq [string]$state.registryBefore) 'the new version restores the tweak applied by the earlier version' ("before=" + $state.registryBefore + " applied=" + $state.registryApplied + " restored=" + $registryRestored)
+        $undo = @(Undo-Texts)
+        Check (-not (Has-Profile $undo)) 'the restored profile leaves the Undo page' ($undo -join ' | ')
+        Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
+        try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+        Pick 'ProcessRulesList' ($RuleName + '*')
+        Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule button')
+        $deleted = Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete'
+        $released = $null; try { $released = WaitFor { if ((Probe-Priority $state.probeId) -eq 'Normal') { $true } } 60 'rule released' } catch {}
+        Check ($deleted -match '^Rule deleted' -and [bool]$released) 'deleting the migrated rule gives the probe its normal priority back' ($deleted + ' priority=' + (Probe-Priority $state.probeId))
+        Shot 'done'
+    }
+} catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
+finally {
+    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
+    if ($Phase -eq 'after') { Get-Process RooMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
+    Log ('RESULT failures=' + $script:Failures)
+    'x' | Set-Content (Join-Path $OutDir ('migration-' + $Phase + '.done'))
+}
