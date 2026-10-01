@@ -11,6 +11,7 @@ param(
     [string]$OfficialRunnerWorkingDirectory = '',
     [string[]]$ExactTargetAllowlist = @(),
     [string]$BackupRoot = '',
+    [string]$DataRoot = '',
     [string]$RollbackManifestPath = '',
     [string]$OutputPath = '',
     [int]$TimeoutSeconds = 30,
@@ -114,7 +115,7 @@ function Copy-ApplyPackageBackup {
 function Remove-ApplyPackageTarget {
     param([object]$Item)
     $target = [System.IO.Path]::GetFullPath([string](Get-RooIndustriesUninstallPropertyValue $Item 'target' ''))
-    Assert-RooIndustriesCleanupExclusions @($target)
+    Assert-RooIndustriesCleanupExclusions @($target) -DataRoot $DataRoot
     if (Test-Path -LiteralPath $target) {
         Remove-Item -LiteralPath $target -Recurse -Force
         return $true
@@ -158,7 +159,7 @@ try {
     $command = if ($commands.Count -eq 1) { $commands[0] } else { $null }
     $items = @(Get-RooIndustriesUninstallPropertyArray $cleanupManifest 'items')
     $fileFolderItems = @($items | Where-Object { [string](Get-RooIndustriesUninstallPropertyValue $_ 'type' '') -in @('file','folder') })
-    Assert-RooIndustriesCleanupExclusions @($fileFolderItems | ForEach-Object { [string]$_.target })
+    Assert-RooIndustriesCleanupExclusions @($fileFolderItems | ForEach-Object { [string]$_.target }) -DataRoot $DataRoot
     $unsupportedItems = @($items | Where-Object { [string](Get-RooIndustriesUninstallPropertyValue $_ 'type' '') -notin @('file','folder') })
     $reviewItems = @($items | Where-Object { [bool](Get-RooIndustriesUninstallPropertyValue $_ 'protected' $false) })
     $reviewRequired = [bool](Get-RooIndustriesUninstallPropertyValue $command 'reviewRequired' $true)
@@ -182,7 +183,7 @@ try {
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
     $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
-        Join-Path (Get-RooIndustriesLocalDataRoot -Protected) ('cleanup-backups\' + [guid]::NewGuid().ToString('N'))
+        Join-Path $(if ($DataRoot) { $DataRoot } else { Get-RooIndustriesLocalDataRoot -Protected }) ('cleanup-backups\' + [guid]::NewGuid().ToString('N'))
     } else { [System.IO.Path]::GetFullPath($BackupRoot) }
     $resolvedRollbackManifestPath = if ([string]::IsNullOrWhiteSpace($RollbackManifestPath)) { Join-Path $resolvedBackupRoot 'rollback-manifest.json' } else { [System.IO.Path]::GetFullPath($RollbackManifestPath) }
     $replayingSavedRun = $false
