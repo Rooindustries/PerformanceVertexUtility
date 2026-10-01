@@ -30,6 +30,7 @@ $plantedName='DOTNET_STARTUP_HOOKS'
 $plantedValue='C:\RooIndustriesNoSuchFolder\hook.dll'
 $rooHklm='HKLM\SOFTWARE\RooIndustries'
 $requiredChecks=@{
+    'release-build'=@('the dynamic binding guard rejected its own fixture during the release build','the dynamic binding guard passed on the four release assemblies','the release build produced a production installer')
     'static-checks'=@('exactly the three shipped runtimeconfig files are installed','startup hooks are off in app\RooIndustries.OptimizationSuite.App.runtimeconfig.json','startup hooks are off in backend\bin\optimizer\Optimizer.Host.runtimeconfig.json','startup hooks are off in backend\bin\optimizer\session\RooIndustries.SessionHost.runtimeconfig.json','control: Optimizer.Host.exe without those variables','control: RooIndustries.SessionHost.exe without those variables','Optimizer.Host.exe refuses to start with DOTNET_STARTUP_HOOKS set','Optimizer.Host.exe refuses to start with CORECLR_ENABLE_PROFILING and CORECLR_PROFILER_PATH set','RooIndustries.SessionHost.exe refuses to start with DOTNET_STARTUP_HOOKS set','RooIndustries.SessionHost.exe refuses to start with CORECLR_ENABLE_PROFILING and CORECLR_PROFILER_PATH set','the installed product has exactly one uninstall entry')
     'scenario-launchers'=@('the installed launcher clears every code-loading variable','control: the environment reader sees DOTNET_STARTUP_HOOKS','the governor rule was saved through the app','governor task * registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','protected-session task''s registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','control: a task that starts a program directly, with no launcher, inherits the planted DOTNET_STARTUP_HOOKS','governor worker''s own process environment contains none of the','protected session worker''s own process environment contains none of the','governor worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','protected session worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','the governor worker running after the rule was saved','with the app closed the governor applies the saved rule to a matching process that starts later','the protected session is armed and its worker is running','while the session is armed the launcher has the requested affinity, memory priority and I/O priority','the launcher probe has its original affinity, memory priority, I/O priority and CPU priority back after the stop')
     'scenario-launchers-session'=@('control: a task that starts a program directly, with no launcher, inherits the planted DOTNET_STARTUP_HOOKS','protected-session task''s registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','protected session worker''s own process environment contains none of the','protected session worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','the protected session is armed and its worker is running')
@@ -53,8 +54,24 @@ function Invoke-Native([string]$File,[string[]]$Arguments,[string[]]$Stdin=@()){
         return [pscustomobject]@{Exit=$LASTEXITCODE;Text=($text -join "`n")}
     } finally {$ErrorActionPreference=$previous}
 }
-function Run([string]$Name,[scriptblock]$Body){
+function Get-DataFolderState {
+    $names='RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries',''),'RooIndustriesOptimizationSuite.Timer'
+    $parts=foreach($name in $names){
+        $path=Join-Path $local $name
+        if(Test-Path -LiteralPath $path){
+            $base=(Get-Item -LiteralPath $path -Force).FullName
+            $items=@(Get-Item -LiteralPath $path -Force)+@(Get-ChildItem -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue)
+            $text=(@($items|ForEach-Object {$_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{$_.Length})+'|'+$_.LastWriteTimeUtc.Ticks})|Sort-Object) -join "`n"
+            $name+'|'+$items.Count+'|'+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-','')
+        } else {$name+'|<missing>'}
+    }
+    $key=Get-Item -LiteralPath ('Registry::'+$markerKey) -ErrorAction SilentlyContinue
+    $marks=if($key){@($key.GetValueNames()|Sort-Object|ForEach-Object {$_+'='+$key.GetValue($_)})}else{@('<no marker key>')}
+    (@($parts)+@($marks)) -join "`n"
+}
+function Run([string]$Name,[scriptblock]$Body,[switch]$GuardData){
     $clock=[Diagnostics.Stopwatch]::StartNew()
+    $dataBefore=if($GuardData){Get-DataFolderState}
     $ErrorActionPreference='Continue'
     $global:LASTEXITCODE=0
     $output=[Collections.Generic.List[string]]::new()
@@ -65,6 +82,7 @@ function Run([string]$Name,[scriptblock]$Body){
     $fails=@($output|Where-Object {$_ -cmatch '^FAIL '}).Count
     $skips=@($output|Where-Object {$_ -cmatch '^SKIP'})
     $last=@($output|Where-Object {$_.Trim()}|Select-Object -Last 1)
+    if($GuardData){$dataAfter=Get-DataFolderState;Check ($dataAfter -eq $dataBefore) ($Name+' left the real data folders and the protection markers as it found them') $(if($dataAfter -ne $dataBefore){(@(Compare-Object ($dataBefore -split "`n") ($dataAfter -split "`n")|Select-Object -First 4|ForEach-Object {$_.SideIndicator+' '+$_.InputObject}) -join ' // ')}else{'same'})}
     Check ($code -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
 }
 function Uninstall-App {
@@ -239,14 +257,21 @@ switch($Phase){
             'governor-scenarios'={& (Join-Path $Source 'backend\scripts\Test-GovernorScenarios.ps1') -DotNetPath $dotnet}
         }
         $Only=@($Only|ForEach-Object {$_ -split ','}|Where-Object {$_})
-        foreach($name in $all.Keys){if($Only.Count -eq 0 -or $Only -contains $name){Run $name $all[$name]}}
+        foreach($name in $all.Keys){if($Only.Count -eq 0 -or $Only -contains $name){Run $name $all[$name] -GuardData}}
         if(Test-Path -LiteralPath $backup){Restore-AppData}
     }
     'release-build' {
         $buildArguments=@{}
         if($TestHooks){$buildArguments.TestHooks=$true}
         if($BuildOutput){$buildArguments.OutputRoot=$BuildOutput}
-        Run ('build-release'+$(if($TestHooks){'-test-hooks'}else{''})) {& (Join-Path $Source 'tools\scripts\Build-Release.ps1') @buildArguments}
+        $buildName='build-release'+$(if($TestHooks){'-test-hooks'}else{''})
+        Run $buildName {& (Join-Path $Source 'tools\scripts\Build-Release.ps1') @buildArguments}
+        $buildText=Get-Content -LiteralPath (Join-Path $Evidence ($Phase+'-'+$buildName+'.txt')) -Raw -Encoding UTF8
+        Check ($buildText -match 'PASS the guard rejects dynamic property') 'the dynamic binding guard rejected its own fixture during the release build' ''
+        Check ($buildText -match 'PASS \d+ dynamic operations in 4 assemblies stay inside COM interop code') 'the dynamic binding guard passed on the four release assemblies (Core, Host, SessionHost, App)' ''
+        $built=[regex]::Match($buildText,'"installer"\s*:\s*"([^"]+)"').Groups[1].Value.Replace('\\','\')
+        $builtHash=[regex]::Match($buildText,'"sha256"\s*:\s*"([0-9a-f]{64})"').Groups[1].Value
+        Check ($built -and (Test-Path -LiteralPath $built) -and $builtHash -eq (Get-FileHash -LiteralPath $built -Algorithm SHA256).Hash.ToLowerInvariant() -and -not $TestHooks) 'the release build produced a production installer (no test hooks) whose SHA-256 matches the build report' ($built+' sha256='+$builtHash)
     }
     'install-old' {
         Log ('previous install removed: '+(Uninstall-App))
