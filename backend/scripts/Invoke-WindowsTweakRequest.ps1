@@ -15,6 +15,6 @@ $hostPath=Join-Path $root 'backend/bin/optimizer/Optimizer.Host.dll'
 if(-not(Test-Path $hostPath)){throw 'Build the optimizer helper with backend/scripts/Build-OptimizerHost.ps1 first.'}
 $hostArgs=@($hostPath)
 if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path (Split-Path $hostPath -Parent) 'hostpolicy.dll'))){$DotNetPath=Join-Path (Split-Path $hostPath -Parent) 'Optimizer.Host.exe';$hostArgs=@()}
-if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}
+if(-not $DotNetPath){. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1');$DotNetPath=Get-RooIndustriesDevelopmentDotNet (Split-Path $hostPath -Parent)}
 & $DotNetPath @hostArgs ('tweak-'+$Action.ToLowerInvariant()) $RequestPath $root
 if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}

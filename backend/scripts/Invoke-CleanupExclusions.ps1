@@ -14,10 +14,7 @@ if($Action -eq 'Save' -and -not $ConfirmApply){throw 'Confirm the new cleanup ex
 $hostDirectory=Join-Path $root 'backend\bin\optimizer'
 $hostArgs=@(Join-Path $hostDirectory 'Optimizer.Host.dll')
 if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $hostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $hostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
-if(-not $DotNetPath){
-    $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
-    $DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}
-}
+if(-not $DotNetPath){. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1');$DotNetPath=Get-RooIndustriesDevelopmentDotNet $hostDirectory}
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $hostDll=Join-Path $root 'backend\bin\optimizer\Optimizer.Host.dll'
 if(-not(Test-Path $hostDll)){throw 'Build the cleanup host with backend\scripts\Build-OptimizerHost.ps1 before using exclusions.'}
