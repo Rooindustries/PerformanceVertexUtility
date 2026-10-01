@@ -84,6 +84,14 @@ public static class RuntimeEnvironment
         foreach (var (name, value) in ChildEnvironment()) start.Environment[name] = value;
     }
 
+    public static void OpenInExplorer(string target)
+    {
+        var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
+        Apply(start);
+        start.ArgumentList.Add(target);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows Explorer did not start.");
+    }
+
     private static string ProtectedTemp(string windows)
     {
         var cached = _protectedTemp;
