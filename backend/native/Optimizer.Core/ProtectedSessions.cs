@@ -135,8 +135,17 @@ public sealed class ProtectedSessions
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
         var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
-        governor.RequireUnowned(plan.GamePath, plan.Controls.Keys, includePaused: true);
-        governor.RequireUnowned(plan.Launcher.ExecutablePath, plan.Controls.Keys, includePaused: true);
+        using var gate = ProcessPolicyStore.Gate();
+        governor.RequireUnownedLaunch(plan.GamePath, plan.Controls.Keys);
+        governor.RequireUnowned(plan.Launcher.ExecutablePath, plan.Controls.Keys);
+#if GOVERNOR_TEST_HOOKS
+        var gatePauseFile = Path.Combine(root, "gate-pause.request");
+        if (File.Exists(gatePauseFile) && int.TryParse(File.ReadAllText(gatePauseFile), out var gatePause) && gatePause > 0)
+        {
+            File.WriteAllText(Path.Combine(root, "gate-paused"), "");
+            Thread.Sleep(Math.Min(gatePause, 10000));
+        }
+#endif
         using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
         using var imageLease = ImageMutex(plan.GamePath);
         AcquireImage(imageLease, recovering: false);
@@ -160,6 +169,7 @@ public sealed class ProtectedSessions
                 LauncherJournal = null, Games = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow,
             };
             Save(root, state);
+            gate.Dispose();
             ProcessJob? job = null;
             LaunchGpuHandles? gpuHandles = null;
             try

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Win32;
 
 namespace RooIndustries.Optimizer;
 
@@ -31,6 +32,8 @@ public sealed class PolicyInstance
     public required string JournalPath { get; init; }
     public required string Status { get; set; }
     public string? Error { get; set; }
+    public string? Field { get; init; }
+    public string? ErrorKind { get; set; }
 }
 
 public sealed class PolicyHostState
@@ -45,17 +48,46 @@ public sealed class PolicyHostState
     public required DateTime UpdatedAtUtc { get; set; }
 }
 
-public sealed record PolicyIssue(string RuleId, int? ProcessId, string? ExecutablePath, string Message);
+public sealed record PolicyIssue(string RuleId, int? ProcessId, string? ExecutablePath, string Message)
+{
+    public string Kind { get; init; } = "error";
+    public string? Field { get; init; }
+}
+
+public sealed record PolicyDiagnostics(int Instances, int Watched, int Retries, int Gates, int RuleChecks, int Hashes, long ProcessOpens, long HashAttempts, long OwnerLookups);
+public sealed record PolicyHeartbeat(RunningProcess Host, long Tick, long ProgressTick, string? BootId, DateTime AtUtc, PolicyDiagnostics? Diagnostics);
 public sealed record PolicyWorkerStatus(PolicyHostState? State, bool? HostRunning, string? Error);
 public sealed record PolicyStopRequest(OperationOwner Owner, RunningProcess Host);
 public sealed record GovernorSettings([property: JsonRequired] int SchemaVersion, [property: JsonRequired] bool Paused);
-public sealed record PolicySummary(bool Secured, string? SecurityProblem, bool Paused, int Rules, int EnabledRules, string? RulesError);
+public sealed record PolicySummary(bool Secured, string? SecurityProblem, bool Paused, int Rules, int EnabledRules, string? RulesError, string[]? UnreadableRules = null);
+
+public static class GovernorLog
+{
+    public const long Limit = 256 * 1024;
+
+    public static void Write(string policyRoot, string message)
+    {
+        try
+        {
+            if (!Directory.Exists(policyRoot)) return;
+            var path = Path.Combine(policyRoot, "logs", "governor.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var file = new FileInfo(path);
+            if (file.Exists && file.Length > Limit) File.Move(path, path + ".1", true);
+            File.AppendAllText(path, DateTime.UtcNow.ToString("o") + " " + message + Environment.NewLine);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+}
 
 public sealed class ProcessPolicyStore
 {
+    public static readonly string[] LaunchFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     public string Root { get; }
     public string RulesDirectory => Path.Combine(Root, "rules");
     public string StatePath => Path.Combine(Root, "host.json");
+    public string HeartbeatPath => Path.Combine(Root, "heartbeat.json");
     public string StopPath => Path.Combine(Root, "stop.request");
     public string SettingsPath => Path.Combine(Root, "governor.json");
 
@@ -77,11 +109,19 @@ public sealed class ProcessPolicyStore
         return settings.Paused;
     }
 
-    public void SetPaused(bool paused)
+    public void SetPaused(bool paused, string? repoRoot = null)
     {
         Secure();
+        using var rootLease = PolicyRootLease.Acquire(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
-        if (!paused) foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled)) RequireNoGameSession(rule);
+        using var gate = paused ? null : Gate();
+        if (!paused)
+        {
+            var enabled = ReadRules(null, []).Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
+            foreach (var rule in enabled) RequireNoGameSession(rule);
+            GovernorClaims.RequireUnclaimed(enabled, Path.GetDirectoryName(Root)!, repoRoot);
+        }
+        if (rootLease.Moved) throw new UnauthorizedAccessException("The saved rules folder moved while it was changed.");
         OperationFiles.Write(SettingsPath, new GovernorSettings(1, paused));
     }
 
@@ -93,9 +133,12 @@ public sealed class ProcessPolicyStore
         var paused = false;
         (SavedProcessRule Rule, string Hash)[] rules = [];
         string? rulesError = null;
-        try { paused = Paused(); rules = ReadRules(); }
+        var unreadable = new List<string>();
+        try { paused = Paused(); }
         catch (Exception error) { rulesError = error.Message; }
-        return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError);
+        try { rules = ReadRules(null, unreadable); }
+        catch (Exception error) { rulesError ??= error.Message; }
+        return new(problem is null, problem, paused, rules.Length, rules.Count(pair => pair.Rule.Enabled), rulesError, unreadable.ToArray());
     }
 
     public static string RootFor(string? path)
@@ -106,26 +149,38 @@ public sealed class ProcessPolicyStore
         return DefaultRoot;
     }
 
-    public string[] OwnedControls(string executablePath, bool includePaused = false)
+    public static IEnumerable<string> Fields(SavedProcessRule rule)
     {
-        if (!Directory.Exists(Root) || !includePaused && Paused()) return [];
+        var fields = rule.Controls.Keys.Concat(rule.CpuSelection is null ? [] : new[] { "cpuSets" }).ToHashSet(StringComparer.Ordinal);
+        return ProcessTarget.ControlNames.Where(fields.Contains);
+    }
+
+    public string[] OwnedControls(string executablePath)
+    {
+        if (!Directory.Exists(Root)) return [];
         var owned = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, executablePath)))
-        {
-            owned.UnionWith(rule.Controls.Keys);
-            if (rule.CpuSelection is not null) owned.Add("cpuSets");
-        }
+        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled && Matches(pair.Rule, executablePath))) owned.UnionWith(Fields(rule));
         return owned.ToArray();
     }
 
-    public string[] OwnedControls(RunningProcess identity, bool includePaused = false)
+    public string[] OwnedLaunchControls(string gamePath)
     {
-        if (!Directory.Exists(Root) || !includePaused && Paused()) return [];
-        var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath, includePaused), StringComparer.Ordinal);
+        if (!Directory.Exists(Root)) return [];
+        var owned = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (rule, _) in ReadRules().Where(pair => pair.Rule.Enabled))
+            foreach (var field in Fields(rule))
+                if (LaunchFields.Contains(field) ? SameFileName(rule.ExecutablePath, gamePath) : Matches(rule, gamePath)) owned.Add(field);
+        return owned.ToArray();
+    }
+
+    public string[] OwnedControls(RunningProcess identity)
+    {
+        if (!Directory.Exists(Root)) return [];
+        var owned = new SortedSet<string>(OwnedControls(identity.ExecutablePath), StringComparer.Ordinal);
         if (File.Exists(StatePath))
-            foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" &&
+            foreach (var instance in OperationFiles.Read<PolicyHostState>(StatePath).Instances.Where(instance => instance.Status is "applying" or "active" or "conflict" &&
                 instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc))
-                owned.UnionWith(OperationFiles.Read<ProcessControlPreview>(OperationPath(instance.PreviewPath, "preview.json")).Desired.Keys);
+                owned.UnionWith(instance.Field is { } field ? new[] { field } : OperationFiles.Read<ProcessControlPreview>(OperationPath(instance.PreviewPath, "preview.json")).Desired.Keys.ToArray());
         return owned.ToArray();
     }
 
@@ -149,37 +204,81 @@ public sealed class ProcessPolicyStore
             OperationPath(instance.JournalPath, "journal.json");
             if (!string.Equals(Path.GetDirectoryName(instance.PreviewPath), Path.GetDirectoryName(instance.JournalPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("A governor record mixes two operations.");
+            if (instance.Field is { } field && !ProcessTarget.ControlNames.Contains(field)) throw new InvalidDataException("A governor record names an unknown process control.");
         }
     }
 
-    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls, bool includePaused = false) => Refuse(OwnedControls(identity, includePaused).Intersect(controls).ToArray());
+    public void RequireUnowned(RunningProcess identity, IEnumerable<string> controls) => Refuse(OwnedControls(identity).Intersect(controls).ToArray());
 
-    public void RequireUnowned(string executablePath, IEnumerable<string> controls, bool includePaused = false) => Refuse(OwnedControls(executablePath, includePaused).Intersect(controls).ToArray());
+    public void RequireUnowned(string executablePath, IEnumerable<string> controls) => Refuse(OwnedControls(executablePath).Intersect(controls).ToArray());
+
+    public void RequireUnownedRestore(RunningProcess identity, IEnumerable<string> controls)
+    {
+        if (!Exited(identity)) RequireUnowned(identity, controls);
+    }
+
+    public void RequireUnownedLaunch(string gamePath, IEnumerable<string> controls) => Refuse(OwnedLaunchControls(gamePath).Intersect(controls).ToArray());
 
     private static void Refuse(string[] owned)
     {
         if (owned.Length > 0)
-            throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Pause the governor or change its rule for this app first.");
+            throw new InvalidOperationException("Managed by the governor: " + string.Join(", ", owned) + ". Turn off or change its rule for this app first, or put its settings back if the rule is already off.");
     }
 
     public static bool Matches(SavedProcessRule rule, string executablePath) => rule.MatchMode == "filename"
-        ? string.Equals(Path.GetFileName(rule.ExecutablePath), Path.GetFileName(executablePath), StringComparison.OrdinalIgnoreCase)
+        ? SameFileName(rule.ExecutablePath, executablePath)
         : string.Equals(rule.ExecutablePath, executablePath, StringComparison.OrdinalIgnoreCase);
 
-    public void Save(SavedProcessRule rule)
+    private static bool SameFileName(string left, string right) => string.Equals(Path.GetFileName(left), Path.GetFileName(right), StringComparison.OrdinalIgnoreCase);
+
+    public static IDisposable Gate()
+    {
+        var mutex = new Mutex(false, @"Global\RooIndustriesGovernorGate-" + OperationOwner.Current().UserSid);
+        try
+        {
+            try { if (!mutex.WaitOne(TimeSpan.FromSeconds(30))) throw new TimeoutException("Another rule or game session change is still running. Try again in a moment."); }
+            catch (AbandonedMutexException) { }
+        }
+        catch { mutex.Dispose(); throw; }
+        return new GateLease(mutex);
+    }
+
+    private sealed class GateLease(Mutex mutex) : IDisposable
+    {
+        private bool _released;
+        public void Dispose()
+        {
+            if (_released) return;
+            _released = true;
+            mutex.ReleaseMutex();
+            mutex.Dispose();
+        }
+    }
+
+    public void Save(SavedProcessRule rule, string? repoRoot = null)
     {
         Secure();
+        using var rootLease = PolicyRootLease.Acquire(Root);
+#if GOVERNOR_TEST_HOOKS
+        if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_SAVE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
+#endif
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
-        if (rule.Enabled) RequireNoGameSession(rule);
-        foreach (var existing in ReadRules(rule.RuleId).Select(pair => pair.Rule).Where(existing => existing.Enabled && rule.Enabled))
+        using var gate = rule.Enabled ? Gate() : null;
+        if (rule.Enabled)
         {
-            var overlaps = string.Equals(Path.GetFileName(existing.ExecutablePath), Path.GetFileName(rule.ExecutablePath), StringComparison.OrdinalIgnoreCase) &&
+            RequireNoGameSession(rule);
+            GovernorClaims.RequireUnclaimed(rule, Path.GetDirectoryName(Root)!, repoRoot);
+        }
+        foreach (var existing in (rule.Enabled ? ReadRules(rule.RuleId) : []).Select(pair => pair.Rule).Where(existing => existing.Enabled))
+        {
+            var overlaps = SameFileName(existing.ExecutablePath, rule.ExecutablePath) &&
                 (existing.MatchMode == "filename" || rule.MatchMode == "filename" || string.Equals(existing.ExecutablePath, rule.ExecutablePath, StringComparison.OrdinalIgnoreCase));
             if (overlaps && (existing.Controls.Keys.Intersect(rule.Controls.Keys).Any() || (existing.CpuSelection is not null && rule.CpuSelection is not null)))
                 throw new InvalidDataException("Another enabled rule already owns a matching process control. Edit that rule or disable it first.");
         }
+        if (rootLease.Moved) throw new UnauthorizedAccessException("The saved rules folder moved while it was changed.");
         OperationFiles.Write(Path.Combine(RulesDirectory, rule.RuleId + ".json"), rule);
     }
 
@@ -187,43 +286,72 @@ public sealed class ProcessPolicyStore
     {
         var operations = Path.Combine(Path.GetDirectoryName(Root)!, "operations");
         if (!Directory.Exists(operations)) return;
-        var fields = rule.Controls.Keys.Concat(rule.CpuSelection is null ? [] : new[] { "cpuSets" }).ToHashSet(StringComparer.Ordinal);
+        var fields = Fields(rule).ToHashSet(StringComparer.Ordinal);
         foreach (var directory in Directory.EnumerateDirectories(operations, "game-session-*"))
         {
             var session = Path.Combine(directory, "session");
             if (!File.Exists(Path.Combine(session, "session.json"))) continue;
-            ProtectedSessionStatus status;
-            try { status = new ProtectedSessions(_ => false).Status(session); }
-            catch (Exception error) { throw new InvalidOperationException("A game session could not be read (" + error.Message + "). Open Games and stop or recover it before saving this rule.", error); }
-            if (status.State is not { } state || status.HostRunning == false && state.Status is "stopped" or "stoppedWithErrors") continue;
-            if (!Matches(rule, state.Preview.GamePath) && !Matches(rule, state.Preview.Launcher.ExecutablePath)) continue;
-            var shared = state.Preview.Controls.Keys.Where(fields.Contains).Order(StringComparer.Ordinal).ToArray();
+            ProtectedSessionPreview preview;
+            try
+            {
+                var status = new ProtectedSessions(_ => false).Status(session);
+                if (status.State is not { } state || status.HostRunning == false && state.Status is "stopped" or "stoppedWithErrors") continue;
+                preview = state.Preview;
+            }
+            catch (Exception error)
+            {
+                ProtectedSessionPreview? reviewed = null;
+                try { reviewed = OperationFiles.Read<ProtectedSessionPreview>(Path.Combine(session, "reviewed-preview.json")); }
+                catch (Exception) { }
+                if (reviewed is null || Shared(rule, fields, reviewed).Length == 0)
+                {
+                    GovernorLog.Write(Root, "Skipped a game session that could not be read while checking the rule " + rule.Name + ": " + directory + " (" + error.Message + ")");
+                    continue;
+                }
+                throw new InvalidOperationException("A game session for " + Path.GetFileName(reviewed.GamePath) + " could not be read (" + error.Message + "). Open Games and stop or recover it before saving this rule.", error);
+            }
+            var shared = Shared(rule, fields, preview);
             if (shared.Length > 0)
-                throw new InvalidOperationException("A game session for " + Path.GetFileName(state.Preview.GamePath) + " already controls " + string.Join(", ", shared) +
+                throw new InvalidOperationException("A game session for " + Path.GetFileName(preview.GamePath) + " already controls " + string.Join(", ", shared) +
                     ". Stop that game session first, or save this rule without those settings.");
         }
     }
 
+    private static string[] Shared(SavedProcessRule rule, HashSet<string> fields, ProtectedSessionPreview preview) => preview.Controls.Keys.Where(fields.Contains).Where(field =>
+        Matches(rule, preview.Launcher.ExecutablePath) || (LaunchFields.Contains(field) ? SameFileName(rule.ExecutablePath, preview.GamePath) : Matches(rule, preview.GamePath)))
+        .Order(StringComparer.Ordinal).ToArray();
+
     public void Delete(string ruleId)
     {
         Secure();
+        using var rootLease = PolicyRootLease.Acquire(Root);
         using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
         if (!Guid.TryParseExact(ruleId, "N", out _)) throw new InvalidDataException("Invalid process rule ID.");
-        var path = Path.Combine(RulesDirectory, ruleId + ".json");
-        File.Delete(path);
+        if (rootLease.Moved) throw new UnauthorizedAccessException("The saved rules folder moved while it was changed.");
+        File.Delete(Path.Combine(RulesDirectory, ruleId + ".json"));
     }
 
-    public (SavedProcessRule Rule, string Hash)[] ReadRules(string? exceptRuleId = null)
+    public (SavedProcessRule Rule, string Hash)[] ReadRules(string? exceptRuleId = null, List<string>? unreadable = null)
     {
         if (!Directory.Exists(RulesDirectory)) return [];
-        return Directory.GetFiles(RulesDirectory, "*.json").Where(path => Path.GetFileNameWithoutExtension(path) != exceptRuleId).Order(StringComparer.OrdinalIgnoreCase).Select(path =>
+        var found = new List<(SavedProcessRule Rule, string Hash)>();
+        foreach (var path in Directory.GetFiles(RulesDirectory, "*.json").Where(path => Path.GetFileNameWithoutExtension(path) != exceptRuleId).Order(StringComparer.OrdinalIgnoreCase))
         {
-            var hash = OperationFiles.HashFile(path);
-            var rule = OperationFiles.Read<SavedProcessRule>(path, hash);
-            Validate(rule);
-            if (Path.GetFileNameWithoutExtension(path) != rule.RuleId) throw new InvalidDataException("Process rule filename and identity disagree.");
-            return (rule, hash);
-        }).ToArray();
+            try
+            {
+                var (rule, hash) = OperationFiles.ReadHashed<SavedProcessRule>(path);
+                Validate(rule);
+                if (Path.GetFileNameWithoutExtension(path) != rule.RuleId) throw new InvalidDataException("Process rule filename and identity disagree.");
+                found.Add((rule, hash));
+            }
+            catch (Exception error)
+            {
+                var named = "The saved rule " + Path.GetFileName(path) + " could not be read: " + error.Message;
+                if (unreadable is not null) unreadable.Add(named);
+                else if (error is IOException or UnauthorizedAccessException) throw new InvalidDataException(named, error);
+            }
+        }
+        return found.ToArray();
     }
 
     public PolicyWorkerStatus Status()
@@ -240,11 +368,26 @@ public sealed class ProcessPolicyStore
             if (identity.CreationTimeFileTimeUtc != state.Host.CreationTimeFileTimeUtc) return new(state, false, "The previous worker has exited.");
             state.Host.Verify(identity);
             if (host.UserSid() != state.Owner.UserSid) throw new InvalidDataException("The worker belongs to another Windows user.");
-            return new(state, true, DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale; it may be busy or unresponsive." : null);
+            return new(state, true, Stale(state));
         }
         catch (ProcessEndedException) { return new(state, false, "The previous worker has exited."); }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return new(state, false, "The previous worker has exited."); }
         catch (Exception error) { return Exited(state.Host) ? new(state, false, "The previous worker has exited.") : new(state, null, error.Message); }
+    }
+
+    private string? Stale(PolicyHostState state)
+    {
+        PolicyHeartbeat? beat = null;
+        try { if (File.Exists(HeartbeatPath)) beat = OperationFiles.Read<PolicyHeartbeat>(HeartbeatPath); }
+        catch (Exception) { }
+        if (beat is not null && beat.Host == state.Host && beat.BootId == ProcessPolicyHost.BootId())
+        {
+            var now = Environment.TickCount64;
+            if (now - beat.Tick > 15000) return "The worker heartbeat is stale; it may be busy or unresponsive.";
+            if (now - beat.ProgressTick > 120000) return "The governor has not finished a check for two minutes; it may be stuck.";
+            return null;
+        }
+        return DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale; it may be busy or unresponsive." : null;
     }
 
     internal static bool Exited(RunningProcess host)
@@ -286,24 +429,66 @@ public sealed class ProcessPolicyStore
 public sealed class ProcessPolicyHost
 {
     public const int TerminalHistory = 50;
+    public const string KeepsChanging = "This app keeps changing it back, so Roo Industries stepped back.";
+    public const string OtherAccount = "Running under another Windows account, so this rule doesn't control it.";
+    public const string ForeignRecord = "This record points at a process of another Windows account, so Roo Industries did not change it.";
+    public const string TopologyChanged = "CPU topology changed; review the saved hard-affinity selection.";
+    private const long Recheck = 2000, ReassertWindow = 600000, RuleReadGrace = 10000;
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
-    private readonly Dictionary<string, DateTime> _restoreAttempts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, (string Message, DateTime Retry, TimeSpan Delay)> _unavailable = new(StringComparer.Ordinal);
+    private readonly Func<RunningProcess, bool> _excluded;
     private readonly List<string> _pruned = [];
-    private int _enabledRules = -1;
     private readonly Dictionary<string, (DateTime Written, long Length)> _ruleStamps = new(StringComparer.OrdinalIgnoreCase);
     private (SavedProcessRule Rule, string Hash)[]? _ruleSnapshot;
-    private readonly Dictionary<string, DateTime> _checked = new(StringComparer.OrdinalIgnoreCase);
-    private TimeSpan _recheck = TimeSpan.Zero;
+    private long _rulesFailing = -1;
+    private readonly Dictionary<string, Watch> _watched = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Retry> _retries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Gate> _gates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Kind, string Message)?> _ruleChecks = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Path, long Length, DateTime Written), string> _hashes = new();
+    private readonly Dictionary<string, string[]> _fields = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> _imagePaths = new(StringComparer.Ordinal);
+    private int _enabledRules = -1;
+    private long _processOpens, _hashAttempts, _ownerLookups;
+    private readonly Dictionary<string, string> _owners = new(StringComparer.Ordinal);
+    private long _progress = Environment.TickCount64;
+    private PolicyDiagnostics? _diagnostics;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
+
+    private sealed class Watch
+    {
+        public required Dictionary<string, JsonElement> Desired { get; init; }
+        public long NextCheck { get; set; }
+        public int Failures { get; set; }
+        public List<long> Reasserts { get; } = [];
+    }
+
+    private sealed record Retry(string Kind, string Message, string? Field, long RetryAt, int Attempt, string Identity);
+    private sealed record Gate(string? Kind, string? Message, RunningProcess? Identity, string? Topology);
+
+    private static long Now => Environment.TickCount64;
+    private static long Delay(int attempt) => attempt < 7 ? 1000L << attempt : 300000;
+    private static bool Terminal(PolicyInstance instance) => instance.Status is "restored" or "expired";
+    private static string Key(RunningProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
+    private static string Key(SnapshotProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
 
     public ProcessPolicyHost(ProcessPolicyStore store, Func<RunningProcess, bool> excluded)
     {
         _store = store;
+        _excluded = excluded;
         _engine = new(identity => identity.ProcessId == Environment.ProcessId || excluded(identity));
         _state = Load();
+    }
+
+    public static string? BootId()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters");
+            return key?.GetValue("BootId")?.ToString();
+        }
+        catch (Exception) { return null; }
     }
 
     private PolicyHostState Load()
@@ -316,10 +501,24 @@ public sealed class ProcessPolicyHost
         return state;
     }
 
+    private bool Idle()
+    {
+        try
+        {
+            if (_state.Instances.Any(instance => !Terminal(instance))) return false;
+            return _store.Paused() || !_store.ReadRules().Any(pair => pair.Rule.Enabled);
+        }
+        catch (Exception) { return false; }
+    }
+
     public PolicyHostState Run(CancellationToken cancellationToken, TimeSpan? duration = null, Action? verifyLocked = null)
     {
+        if (duration is null && Idle()) return _state;
         using var rootLease = PolicyRootLease.Acquire(_store.Root);
         verifyLocked?.Invoke();
+#if GOVERNOR_TEST_HOOKS
+        if (duration is not null && int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_RUN_DELAY_MS"), out var delay) && delay > 0) Thread.Sleep(Math.Min(delay, 10000));
+#endif
         using var lease = OperationFiles.Lock(Path.Combine(_store.Root, "worker"));
         _state = Load();
         using (var self = new ProcessTarget(Environment.ProcessId)) _state.Host = self.Identity();
@@ -327,18 +526,36 @@ public sealed class ProcessPolicyHost
         var clock = Stopwatch.StartNew();
         var swept = TimeSpan.MinValue;
         var moved = false;
-        _recheck = TimeSpan.FromSeconds(2);
+        var failures = 0;
+        var host = _state.Host;
+        var bootId = BootId();
+        using var heartbeat = duration is null ? new Heartbeat(() => OperationFiles.Write(_store.HeartbeatPath,
+            new PolicyHeartbeat(host, Now, Interlocked.Read(ref _progress), bootId, DateTime.UtcNow, _diagnostics))) : null;
         try
         {
-            Save();
+            try { Save(); } catch (IOException) { }
             while (!cancellationToken.IsCancellationRequested && (duration is null || clock.Elapsed < duration))
             {
+                Progress();
                 if (rootLease.Moved) { moved = true; break; }
                 if (PausedOrUnreadable() || StopRequested()) break;
-                if (swept == TimeSpan.MinValue || clock.Elapsed - swept > TimeSpan.FromMinutes(10)) { SweepOperations(); swept = clock.Elapsed; }
-                Tick();
-                if (_enabledRules == 0 && _state.Instances.All(instance => instance.Status is "restored" or "expired")) break;
-                cancellationToken.WaitHandle.WaitOne(500);
+                var wait = 500;
+                try
+                {
+                    if (swept == TimeSpan.MinValue || clock.Elapsed - swept > TimeSpan.FromMinutes(10)) { SweepOperations(); swept = clock.Elapsed; }
+                    Tick();
+                    failures = 0;
+                }
+                catch (Exception error)
+                {
+                    failures++;
+                    wait = (int)Math.Min(16000, 1000L << Math.Min(failures - 1, 4));
+                    _state.Errors = ["A governor check failed and will be retried in " + wait / 1000 + " s: " + error.Message];
+                    GovernorLog.Write(_store.Root, _state.Errors[0]);
+                    try { Save(); } catch (Exception) { }
+                }
+                if (_enabledRules == 0 && _state.Instances.All(Terminal)) break;
+                cancellationToken.WaitHandle.WaitOne(wait);
             }
         }
         finally
@@ -351,6 +568,8 @@ public sealed class ProcessPolicyHost
         }
         return _state;
     }
+
+    private void Progress() => Interlocked.Exchange(ref _progress, Now);
 
     private bool PausedOrUnreadable()
     {
@@ -368,199 +587,539 @@ public sealed class ProcessPolicyHost
 
     public PolicyHostState Tick()
     {
+        Progress();
         _state.Errors = [];
         _state.Issues = [];
         (SavedProcessRule Rule, string Hash)[] rules;
-        try { rules = ReadRules(); }
+        var unreadable = new List<string>();
+        try { rules = ReadRules(unreadable); }
         catch (Exception error)
         {
+            if (_rulesFailing < 0) _rulesFailing = Now;
             _state.Errors.Add("Saved rules could not be read: " + error.Message);
-            foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired"))) Restore(instance);
+            if (Now - _rulesFailing < RuleReadGrace)
+            {
+                Save();
+                return _state;
+            }
+            var snapshot = ProcessSnapshot.Take();
+            foreach (var instance in _state.Instances.Where(instance => !Terminal(instance)).ToList())
+                if (Due("restore|" + instance.JournalPath, Key(instance.Process))) Restore(instance, snapshot);
             _state.Status = "configurationError";
             Save();
             return _state;
         }
-        var enabledRules = rules.Where(pair => pair.Rule.Enabled).ToArray();
-        var processes = ProcessNames.Find(enabledRules.Select(pair => Path.GetFileNameWithoutExtension(pair.Rule.ExecutablePath)));
-        foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired")).ToList())
+        if (unreadable.Count == 0) _rulesFailing = -1;
+        else
         {
-            var owner = enabledRules.FirstOrDefault(pair => pair.Rule.RuleId == instance.RuleId && pair.Hash == instance.RuleHash).Rule;
-            if (owner is null)
+            if (_rulesFailing < 0) _rulesFailing = Now;
+            _state.Errors.AddRange(unreadable);
+            if (Now - _rulesFailing < RuleReadGrace)
             {
-                if (instance.Status != "conflict" || RestoreDue(instance)) Restore(instance);
-                continue;
-            }
-            if (instance.Status == "conflict")
-            {
-                if (!processes[Path.GetFileNameWithoutExtension(owner.ExecutablePath)].Contains(instance.Process.ProcessId) || !Alive(instance.Process)) Restore(instance);
-                continue;
-            }
-            if (instance.Status == "active" && _checked.TryGetValue(instance.JournalPath, out var checkedAt) && DateTime.UtcNow - checkedAt < _recheck) continue;
-            _checked[instance.JournalPath] = DateTime.UtcNow;
-            try
-            {
-                using var process = new ProcessTarget(instance.Process.ProcessId);
-                if (process.UserSid() != _state.Owner.UserSid) throw new InvalidOperationException("The process belongs to another Windows user.");
-                var identity = process.Identity();
-                if (identity.CreationTimeFileTimeUtc != instance.Process.CreationTimeFileTimeUtc) { instance.Status = "expired"; continue; }
-                instance.Process.Verify(identity);
-                if (instance.Status == "applying" && !File.Exists(instance.JournalPath)) { Discard(instance); continue; }
-                var result = _engine.Apply(instance.PreviewPath, instance.ReviewHash, instance.JournalPath);
-                instance.Status = result.Status == "applied" ? "active" : "conflict";
-                instance.Error = result.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
-                if (result.Changes.Any(change => change.Status is "restoreIntent" or "restored")) Restore(instance);
-            }
-            catch (ProcessEndedException) { instance.Status = "expired"; }
-            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { instance.Status = "expired"; }
-            catch (Exception error) { instance.Status = "conflict"; instance.Error = error.Message; }
-        }
-
-        var live = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (rule, hash) in enabledRules)
-        {
-            foreach (var processId in processes[Path.GetFileNameWithoutExtension(rule.ExecutablePath)])
-            {
-                if (processId == Environment.ProcessId) continue;
-                RunningProcess? identity = null;
-                var key = rule.RuleId + "|" + hash + "|" + processId;
-                live.Add(key);
-                if (_unavailable.TryGetValue(key, out var opening) && DateTime.UtcNow < opening.Retry) { _state.Issues.Add(new(rule.RuleId, processId, null, opening.Message)); continue; }
-                PolicyInstance? created = null;
-                try
-                {
-                    using (var target = new ProcessTarget(processId))
-                    {
-                        if (target.UserSid() != rule.Owner.UserSid) continue;
-                        identity = target.Identity();
-                        key += "|" + identity.CreationTimeFileTimeUtc;
-                        live.Add(key);
-                        if (_unavailable.TryGetValue(key, out var known) && DateTime.UtcNow < known.Retry) { _state.Issues.Add(new(rule.RuleId, processId, identity.ExecutablePath, known.Message)); continue; }
-                        if (rule.Controls.ContainsKey("affinity") && CpuSelection.Fingerprint(target.Topology()) != rule.AffinityTopologyHash)
-                            throw new InvalidDataException("CPU topology changed; review the saved hard-affinity selection.");
-                    }
-                    if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, identity.ExecutablePath, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (_state.Instances.Any(instance => instance.RuleId == rule.RuleId && instance.RuleHash == hash && instance.Process == identity && instance.Status is not ("restored" or "expired"))) continue;
-                    if (rule.ExecutableHash is not null && !string.Equals(OperationFiles.HashFile(identity.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _unavailable[key] = ("The executable changed and needs review.", DateTime.MaxValue, TimeSpan.MaxValue);
-                        throw new InvalidDataException("The executable changed and needs review.");
-                    }
-                    var preview = _engine.Preview(identity.ProcessId, rule.Controls, rule.CpuSelection);
-                    identity.Verify(preview.Identity);
-                    var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
-                    var previewPath = Path.Combine(directory, "preview.json");
-                    OperationFiles.Write(previewPath, preview);
-                    var instance = new PolicyInstance
-                    {
-                        RuleId = rule.RuleId, RuleHash = hash, Process = identity, PreviewPath = previewPath,
-                        ReviewHash = OperationFiles.HashFile(previewPath), JournalPath = Path.Combine(directory, "journal.json"), Status = "applying",
-                    };
-                    _state.Instances.Add(instance);
-                    created = instance;
-                    Save();
-                    var applied = _engine.Apply(previewPath, instance.ReviewHash, instance.JournalPath);
-                    if (applied.Status != "applied")
-                    {
-                        var reason = applied.Changes.FirstOrDefault(change => change.Error is not null) is { } failed ? failed.Name + ": " + failed.Error : "Windows did not accept the requested values.";
-                        Restore(instance);
-                        instance.Error = reason;
-                        throw new InvalidOperationException(reason);
-                    }
-                    instance.Status = "active";
-                    instance.Error = null;
-                }
-                catch (ProcessEndedException) { if (created is not null) Discard(created); }
-                catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { if (created is not null) Discard(created); }
-                catch (Exception error)
-                {
-                    if (created is not null && created.Status == "applying") Discard(created);
-                    _state.Errors.Add(rule.Name + ": " + error.Message);
-                    _state.Issues.Add(new(rule.RuleId, processId, identity?.ExecutablePath, error.Message));
-                    if (!(_unavailable.TryGetValue(key, out var previous) && previous.Retry == DateTime.MaxValue))
-                    {
-                        var delay = _unavailable.TryGetValue(key, out var earlier) ? TimeSpan.FromSeconds(earlier.Delay.TotalSeconds * 2) : TimeSpan.FromSeconds(1);
-                        _unavailable[key] = (error.Message, delay > TimeSpan.FromSeconds(64) ? DateTime.MaxValue : DateTime.UtcNow + delay, delay);
-                    }
-                }
+                Save();
+                return _state;
             }
         }
-        foreach (var stale in _unavailable.Keys.Where(key => !live.Contains(key)).ToArray()) _unavailable.Remove(stale);
-        _enabledRules = enabledRules.Length;
+#if GOVERNOR_TEST_HOOKS
+        var tickPause = Path.Combine(_store.Root, "tick-pause.request");
+        if (File.Exists(tickPause) && int.TryParse(File.ReadAllText(tickPause), out var pause) && pause > 0)
+        {
+            File.Delete(tickPause);
+            Thread.Sleep(Math.Min(pause, 60000));
+        }
+#endif
+        var enabled = rules.Where(pair => pair.Rule.Enabled).ToArray();
+        var processes = ProcessSnapshot.Take();
+        Maintain(enabled, processes);
+        Create(enabled, processes);
+        Forget(processes);
+        _enabledRules = enabled.Length;
         _state.Status = "running";
+        _diagnostics = new(_state.Instances.Count, _watched.Count, _retries.Count, _gates.Count, _ruleChecks.Count, _hashes.Count, _processOpens, _hashAttempts, _ownerLookups);
         Save();
         return _state;
     }
 
+    private void Maintain((SavedProcessRule Rule, string Hash)[] enabled, Dictionary<int, SnapshotProcess> processes)
+    {
+        var watched = new List<(PolicyInstance Instance, SnapshotProcess Process)>();
+        foreach (var instance in _state.Instances.Where(instance => !Terminal(instance)).ToList())
+        {
+            Progress();
+            if (!processes.TryGetValue(instance.Process.ProcessId, out var running) || running.CreationTimeFileTimeUtc != instance.Process.CreationTimeFileTimeUtc)
+            {
+                if (instance.Status == "applying" && !File.Exists(instance.JournalPath)) Discard(instance);
+                else Finish(instance, "expired");
+                continue;
+            }
+            var owner = enabled.FirstOrDefault(pair => pair.Rule.RuleId == instance.RuleId && pair.Hash == instance.RuleHash).Rule;
+            if (owner is not null && instance.Status == "conflict" && instance.ErrorKind == "keepsChanging") continue;
+            if (owner is null || instance.Status == "conflict")
+            {
+                if (Due("restore|" + instance.JournalPath, Key(running))) Restore(instance, processes);
+                continue;
+            }
+            watched.Add((instance, running));
+        }
+        foreach (var group in watched.GroupBy(pair => Key(pair.Process)))
+            Enforce(group.Select(pair => pair.Instance).ToList(), group.First().Process);
+    }
+
+    private void Enforce(List<PolicyInstance> instances, SnapshotProcess running)
+    {
+        var gate = GetGate(running);
+        if (gate.Kind == "ended") return;
+        if (gate.Kind is "otherAccount" or "excluded" or "protected")
+        {
+            foreach (var instance in instances) { instance.Status = "conflict"; instance.ErrorKind = "error"; instance.Error = gate.Kind == "otherAccount" ? ForeignRecord : gate.Message; }
+            return;
+        }
+        if (gate.Kind is not null)
+        {
+            foreach (var instance in instances) { instance.ErrorKind = gate.Kind; instance.Error = gate.Message; }
+            return;
+        }
+        if (!string.Equals(gate.Identity!.ExecutablePath, instances[0].Process.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var instance in instances) { instance.Status = "conflict"; instance.ErrorKind = "error"; instance.Error = "The process no longer matches its saved record."; }
+            return;
+        }
+        foreach (var instance in instances.Where(instance => instance.Status == "applying" || !_watched.ContainsKey(instance.JournalPath)).ToList())
+            if (Due("reconcile|" + instance.JournalPath, Key(running))) Reconcile(instance);
+        var due = instances.Where(instance => instance.Status == "active" && _watched.TryGetValue(instance.JournalPath, out var watch) && Now >= watch.NextCheck).ToList();
+        foreach (var part in due.GroupBy(instance => _watched[instance.JournalPath].Desired.ContainsKey("gpuPriority")))
+            Observe(part.ToList(), running);
+    }
+
+    private void Observe(List<PolicyInstance> instances, SnapshotProcess running)
+    {
+        var fields = instances.SelectMany(instance => _watched[instance.JournalPath].Desired.Keys).Distinct().ToArray();
+        var changed = new List<PolicyInstance>();
+        try
+        {
+            _processOpens++;
+            using var target = new ProcessTarget(running.ProcessId, readControls: fields);
+            if (target.Identity().CreationTimeFileTimeUtc != running.CreationTimeFileTimeUtc)
+            {
+                foreach (var instance in instances) Finish(instance, "expired");
+                return;
+            }
+            foreach (var instance in instances)
+            {
+                var watch = _watched[instance.JournalPath];
+                try
+                {
+                    if (watch.Desired.Any(pair => !ProcessTarget.Equivalent(pair.Key, target.Read(pair.Key).Require(), pair.Value))) changed.Add(instance);
+                    else
+                    {
+                        watch.Failures = 0;
+                        instance.ErrorKind = null;
+                        instance.Error = null;
+                        watch.NextCheck = Now + Recheck;
+                    }
+                }
+                catch (Exception error) when (error is not ProcessEndedException) { Failed(instance, watch, error); }
+            }
+        }
+        catch (ProcessEndedException) { foreach (var instance in instances) Finish(instance, "expired"); return; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { foreach (var instance in instances) Finish(instance, "expired"); return; }
+        catch (Exception error) { foreach (var instance in instances) Failed(instance, _watched[instance.JournalPath], error); return; }
+        foreach (var instance in changed) Reassert(instance, running);
+    }
+
+    private static void Failed(PolicyInstance instance, Watch watch, Exception error)
+    {
+        instance.ErrorKind = ProcessFailures.Denied(error) ? "denied" : "error";
+        instance.Error = error.Message;
+        watch.NextCheck = Now + Delay(watch.Failures);
+        watch.Failures++;
+    }
+
+    private void Reassert(PolicyInstance instance, SnapshotProcess running)
+    {
+        var watch = _watched[instance.JournalPath];
+        watch.Reasserts.RemoveAll(at => Now - at > ReassertWindow);
+        if (watch.Reasserts.Count >= 3)
+        {
+            instance.Status = "conflict";
+            instance.ErrorKind = "keepsChanging";
+            instance.Error = KeepsChanging;
+            _watched.Remove(instance.JournalPath);
+            return;
+        }
+        try
+        {
+            var journal = _engine.Reassert(instance.JournalPath, out var wrote);
+            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status); return; }
+            if (journal.Status == "applied")
+            {
+                if (wrote) watch.Reasserts.Add(Now);
+                watch.Failures = 0;
+                watch.NextCheck = Now + Recheck;
+                instance.ErrorKind = null;
+                instance.Error = null;
+                return;
+            }
+            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored")) { Restore(instance); return; }
+            var failed = journal.Changes.FirstOrDefault(change => change.Error is not null);
+            instance.ErrorKind = failed?.ErrorKind ?? "error";
+            instance.Error = failed?.Error ?? "Windows did not accept the requested value.";
+            watch.NextCheck = Now + Delay(watch.Failures);
+            watch.Failures++;
+        }
+        catch (InstanceBusyException) { watch.NextCheck = Now; }
+        catch (ProcessEndedException) { Finish(instance, "expired"); }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { Finish(instance, "expired"); }
+        catch (Exception error) { Failed(instance, watch, error); }
+    }
+
+    private void Reconcile(PolicyInstance instance)
+    {
+        try
+        {
+            if (instance.Status == "applying" && !File.Exists(instance.JournalPath)) { Discard(instance); return; }
+            var journal = _engine.Apply(instance.PreviewPath, instance.ReviewHash, instance.JournalPath);
+            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status); return; }
+            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored")) { Restore(instance); return; }
+            _watched[instance.JournalPath] = new Watch { Desired = journal.Changes.ToDictionary(change => change.Name, change => change.Desired, StringComparer.Ordinal), NextCheck = Now };
+            instance.Status = "active";
+            instance.ErrorKind = null;
+            instance.Error = null;
+            _retries.Remove("reconcile|" + instance.JournalPath);
+        }
+        catch (InstanceBusyException) { _retries.Remove("reconcile|" + instance.JournalPath); }
+        catch (ProcessEndedException) { Finish(instance, "expired"); }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { Finish(instance, "expired"); }
+        catch (Exception error)
+        {
+            instance.ErrorKind = ProcessFailures.Denied(error) ? "denied" : "error";
+            instance.Error = error.Message;
+        }
+    }
+
+    private void Create((SavedProcessRule Rule, string Hash)[] enabled, Dictionary<int, SnapshotProcess> processes)
+    {
+        var self = Environment.ProcessId;
+        foreach (var (rule, hash) in enabled)
+        {
+            var image = Path.GetFileName(rule.ExecutablePath);
+            foreach (var running in processes.Values.Where(process => process.ProcessId != self && string.Equals(process.ImageName, image, StringComparison.OrdinalIgnoreCase)))
+            {
+                Progress();
+                var gate = GetGate(running);
+                if (gate.Kind == "ended") continue;
+                var path = gate.Identity?.ExecutablePath ?? ImagePath(running);
+                if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, path, StringComparison.OrdinalIgnoreCase)) continue;
+                if (gate.Kind is not null) { Issue(rule, running, path, gate.Kind, gate.Message!, null); continue; }
+                var identity = gate.Identity!;
+                if (RuleProblem(rule, hash, gate) is { } problem) { Issue(rule, running, identity.ExecutablePath, problem.Kind, problem.Message, null); continue; }
+                var pending = new List<(string Field, string Key)>();
+                foreach (var field in ProcessPolicyStore.Fields(rule))
+                {
+                    if (Held(identity, field)) continue;
+                    if (field == "affinity" && gate.Topology != rule.AffinityTopologyHash) { Issue(rule, running, identity.ExecutablePath, "topology", TopologyChanged, field); continue; }
+                    var key = rule.RuleId + "|" + hash + "|" + Key(identity) + "|" + field;
+                    if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { Issue(rule, running, identity.ExecutablePath, waiting.Kind, waiting.Message, field); continue; }
+                    pending.Add((field, key));
+                }
+                if (pending.Count > 0) Apply(rule, hash, identity, pending);
+            }
+        }
+    }
+
+    private string? ImagePath(SnapshotProcess running)
+    {
+        var key = Key(running);
+        if (!_imagePaths.TryGetValue(key, out var path)) _imagePaths[key] = path = ProcessSnapshot.ImagePath(running.ProcessId);
+        return path;
+    }
+
+    private bool Held(RunningProcess identity, string field) => _state.Instances.Any(instance => !Terminal(instance) &&
+        instance.Process.ProcessId == identity.ProcessId && instance.Process.CreationTimeFileTimeUtc == identity.CreationTimeFileTimeUtc && FieldsOf(instance).Contains(field));
+
+    private string[] FieldsOf(PolicyInstance instance)
+    {
+        if (instance.Field is { } field) return [field];
+        if (_fields.TryGetValue(instance.JournalPath, out var known)) return known;
+        try { return _fields[instance.JournalPath] = OperationFiles.Read<ProcessControlPreview>(instance.PreviewPath, instance.ReviewHash).Desired.Keys.ToArray(); }
+        catch (Exception) { return ProcessTarget.ControlNames; }
+    }
+
+    private void Apply(SavedProcessRule rule, string hash, RunningProcess identity, List<(string Field, string Key)> fields)
+    {
+        var created = new List<(PolicyInstance Instance, string Key)>();
+        foreach (var (field, key) in fields)
+        {
+            try
+            {
+                var desired = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                if (field != "cpuSets") desired[field] = rule.Controls[field];
+                _processOpens++;
+                var preview = _engine.Preview(identity.ProcessId, desired, field == "cpuSets" ? rule.CpuSelection : null);
+                identity.Verify(preview.Identity);
+                var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
+                var previewPath = Path.Combine(directory, "preview.json");
+                OperationFiles.Write(previewPath, preview);
+                var instance = new PolicyInstance
+                {
+                    RuleId = rule.RuleId, RuleHash = hash, Process = identity, PreviewPath = previewPath, Field = field,
+                    ReviewHash = OperationFiles.HashFile(previewPath), JournalPath = Path.Combine(directory, "journal.json"), Status = "applying",
+                };
+                _state.Instances.Add(instance);
+                created.Add((instance, key));
+            }
+            catch (ProcessEndedException) { break; }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { break; }
+            catch (Exception error) { Rejected(rule, identity, field, key, error); }
+        }
+        if (created.Count == 0) return;
+        try { Save(); }
+        catch (Exception error)
+        {
+            foreach (var (instance, key) in created)
+            {
+                _state.Instances.Remove(instance);
+                _pruned.Add(Path.GetDirectoryName(instance.JournalPath)!);
+                Rejected(rule, identity, instance.Field!, key, error);
+            }
+            return;
+        }
+        foreach (var (instance, key) in created)
+        {
+            try
+            {
+                _processOpens++;
+                var applied = _engine.Apply(instance.PreviewPath, instance.ReviewHash, instance.JournalPath);
+                if (applied.Status != "applied")
+                {
+                    var failed = applied.Changes.FirstOrDefault(change => change.Error is not null);
+                    Restore(instance);
+                    throw new FieldFailure(failed?.Error ?? "Windows did not accept the requested value.", failed?.ErrorKind == "denied");
+                }
+                instance.Status = "active";
+                _watched[instance.JournalPath] = new Watch { Desired = applied.Changes.ToDictionary(change => change.Name, change => change.Desired, StringComparer.Ordinal), NextCheck = Now + Recheck };
+                _retries.Remove(key);
+            }
+            catch (InstanceBusyException) { Discard(instance); }
+            catch (ProcessEndedException) { Discard(instance); }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { Discard(instance); }
+            catch (Exception error)
+            {
+                if (instance.Status == "applying") Discard(instance);
+                Rejected(rule, identity, instance.Field!, key, error);
+            }
+        }
+    }
+
+    private void Rejected(SavedProcessRule rule, RunningProcess identity, string field, string key, Exception error)
+    {
+        var kind = error is FieldFailure failure ? (failure.Denied ? "denied" : "error") : ProcessFailures.Denied(error) ? "denied" : "error";
+        Fail(key, kind, error.Message, field, Key(identity));
+        _state.Issues.Add(new(rule.RuleId, identity.ProcessId, identity.ExecutablePath, error.Message) { Kind = kind, Field = field });
+    }
+
+    private sealed class FieldFailure(string message, bool denied) : Exception(message)
+    {
+        public bool Denied { get; } = denied;
+    }
+
+    private (string Kind, string Message)? RuleProblem(SavedProcessRule rule, string hash, Gate gate)
+    {
+        var key = hash + "|" + Key(gate.Identity!);
+        if (_ruleChecks.TryGetValue(key, out var known)) return known;
+        var retry = "check|" + key;
+        if (_retries.TryGetValue(retry, out var waiting) && Now < waiting.RetryAt) return (waiting.Kind, waiting.Message);
+        (string Kind, string Message)? problem = null;
+        if (rule.ExecutableHash is not null)
+        {
+            try
+            {
+                if (!string.Equals(HashExecutable(gate.Identity!.ExecutablePath), rule.ExecutableHash, StringComparison.OrdinalIgnoreCase))
+                    problem = ("exeChanged", "The executable changed and needs review.");
+            }
+            catch (Exception error)
+            {
+                Fail(retry, "error", "The program file could not be read to check it: " + error.Message, null, Key(gate.Identity!));
+                return ("error", _retries[retry].Message);
+            }
+        }
+        _retries.Remove(retry);
+        _ruleChecks[key] = problem;
+        return problem;
+    }
+
+    private string HashExecutable(string path)
+    {
+        _hashAttempts++;
+        var info = new FileInfo(path);
+        var key = (path.ToUpperInvariant(), info.Length, info.LastWriteTimeUtc);
+        if (_hashes.TryGetValue(key, out var hash)) return hash;
+        if (_hashes.Count >= 64) _hashes.Clear();
+        Progress();
+        hash = OperationFiles.HashFile(path, Progress);
+        Progress();
+        return _hashes[key] = hash;
+    }
+
+    private Gate GetGate(SnapshotProcess running)
+    {
+        var key = Key(running);
+        if (_gates.TryGetValue(key, out var known)) return known;
+        if (_retries.TryGetValue("gate|" + key, out var waiting) && Now < waiting.RetryAt) return new(waiting.Kind, waiting.Message, null, null);
+        try
+        {
+            if (_excluded(new RunningProcess(running.ProcessId, running.CreationTimeFileTimeUtc, running.ImageName)))
+                return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", null, null);
+            _processOpens++;
+            using var target = new ProcessTarget(running.ProcessId);
+            var identity = target.Identity();
+            if (identity.CreationTimeFileTimeUtc != running.CreationTimeFileTimeUtc) return new("ended", null, null, null);
+            if (target.UserSid() != _state.Owner.UserSid) return _gates[key] = new("otherAccount", OtherAccount, identity, null);
+            if (_excluded(identity)) return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", identity, null);
+            try { target.RequireUnprotected(); }
+            catch (InvalidOperationException error) { return _gates[key] = new("protected", error.Message, identity, null); }
+            var topology = CpuSelection.Fingerprint(target.Topology());
+            _retries.Remove("gate|" + key);
+            return _gates[key] = new(null, null, identity, topology);
+        }
+        catch (ProcessEndedException) { return new("ended", null, null, null); }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return new("ended", null, null, null); }
+        catch (Exception error)
+        {
+            var denied = ProcessFailures.Denied(error);
+            if (denied && OwnerSid(running) is { } sid && sid != _state.Owner.UserSid) return _gates[key] = new("otherAccount", OtherAccount, null, null);
+            var kind = denied ? "denied" : "error";
+            Fail("gate|" + key, kind, error.Message, null, key);
+            return new(kind, error.Message, null, null);
+        }
+    }
+
+    private string? OwnerSid(SnapshotProcess running)
+    {
+        var key = Key(running);
+        if (_owners.TryGetValue(key, out var known)) return known;
+        _ownerLookups++;
+        var sid = ProcessSnapshot.UserSid(running.ProcessId);
+        if (sid is not null) _owners[key] = sid;
+        return sid;
+    }
+
+    private void Issue(SavedProcessRule rule, SnapshotProcess running, string? path, string kind, string message, string? field) =>
+        _state.Issues.Add(new(rule.RuleId, running.ProcessId, path, message) { Kind = kind, Field = field });
+
+    private void Fail(string key, string kind, string message, string? field, string identity)
+    {
+        var attempt = _retries.TryGetValue(key, out var earlier) ? earlier.Attempt + 1 : 0;
+        _retries[key] = new(kind, message, field, Now + Delay(attempt), attempt, identity);
+    }
+
+    private bool Due(string key, string identity)
+    {
+        if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) return false;
+        Fail(key, "retry", "", null, identity);
+        return true;
+    }
+
+    private void Forget(Dictionary<int, SnapshotProcess> processes)
+    {
+        var alive = processes.Values.Select(Key).ToHashSet(StringComparer.Ordinal);
+        var journals = _state.Instances.Where(instance => !Terminal(instance)).Select(instance => instance.JournalPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in _gates.Keys.Where(key => !alive.Contains(key)).ToArray()) _gates.Remove(key);
+        foreach (var key in _imagePaths.Keys.Where(key => !alive.Contains(key)).ToArray()) _imagePaths.Remove(key);
+        foreach (var key in _owners.Keys.Where(key => !alive.Contains(key)).ToArray()) _owners.Remove(key);
+        foreach (var pair in _retries.Where(pair => !alive.Contains(pair.Value.Identity)).ToArray()) _retries.Remove(pair.Key);
+        foreach (var key in _ruleChecks.Keys.Where(key => !alive.Contains(key[(key.IndexOf('|') + 1)..])).ToArray()) _ruleChecks.Remove(key);
+        foreach (var key in _watched.Keys.Where(key => !journals.Contains(key)).ToArray()) _watched.Remove(key);
+        foreach (var key in _fields.Keys.Where(key => !journals.Contains(key)).ToArray()) _fields.Remove(key);
+    }
+
     public PolicyHostState Stop()
     {
-        foreach (var instance in _state.Instances.Where(instance => instance.Status is not ("restored" or "expired"))) Restore(instance);
+        Dictionary<int, SnapshotProcess>? processes = null;
+        try { processes = ProcessSnapshot.Take(); }
+        catch (Exception) { }
+        foreach (var instance in _state.Instances.Where(instance => !Terminal(instance)).ToList()) Restore(instance, processes);
         _state.Status = _state.Instances.Any(instance => instance.Status == "conflict") ? "stoppedWithConflicts" : "stopped";
         _state.Host = null;
         Save();
         return _state;
     }
 
+    private void Finish(PolicyInstance instance, string status)
+    {
+        instance.Status = status;
+        instance.Error = null;
+        instance.ErrorKind = null;
+        _watched.Remove(instance.JournalPath);
+        _retries.Remove("restore|" + instance.JournalPath);
+        _retries.Remove("reconcile|" + instance.JournalPath);
+    }
+
     private void Discard(PolicyInstance instance)
     {
         if (File.Exists(instance.JournalPath)) { Restore(instance); return; }
         _state.Instances.Remove(instance);
+        _watched.Remove(instance.JournalPath);
         _pruned.Add(Path.GetDirectoryName(instance.JournalPath)!);
     }
 
-    private static bool Alive(RunningProcess process)
-    {
-        try
-        {
-            using var target = new ProcessTarget(process.ProcessId);
-            return target.Identity().CreationTimeFileTimeUtc == process.CreationTimeFileTimeUtc;
-        }
-        catch (ProcessEndedException) { return false; }
-        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
-        catch (Exception) { return true; }
-    }
-
-    private (SavedProcessRule Rule, string Hash)[] ReadRules()
+    private (SavedProcessRule Rule, string Hash)[] ReadRules(List<string> unreadable)
     {
         var files = Directory.Exists(_store.RulesDirectory) ? new DirectoryInfo(_store.RulesDirectory).GetFiles("*.json") : [];
         if (_ruleSnapshot is not null && files.Length == _ruleStamps.Count &&
             files.All(file => _ruleStamps.TryGetValue(file.FullName, out var stamp) && stamp == (file.LastWriteTimeUtc, file.Length))) return _ruleSnapshot;
         _ruleSnapshot = null;
         _ruleStamps.Clear();
-        var rules = _store.ReadRules();
+        var rules = _store.ReadRules(null, unreadable);
+        if (unreadable.Count > 0) return rules;
         foreach (var file in files) _ruleStamps[file.FullName] = (file.LastWriteTimeUtc, file.Length);
         _ruleSnapshot = rules;
         return rules;
     }
 
-    private bool RestoreDue(PolicyInstance instance)
-    {
-        var now = DateTime.UtcNow;
-        if (_restoreAttempts.TryGetValue(instance.JournalPath, out var last) && now - last < TimeSpan.FromSeconds(30)) return false;
-        _restoreAttempts[instance.JournalPath] = now;
-        return true;
-    }
-
-    private void Restore(PolicyInstance instance)
+    private void Restore(PolicyInstance instance, Dictionary<int, SnapshotProcess>? processes = null)
     {
         try
         {
-            if (!File.Exists(instance.JournalPath) && instance.Status == "applying") { instance.Status = "restored"; instance.Error = null; return; }
+            if (!File.Exists(instance.JournalPath) && instance.Status == "applying") { Finish(instance, "restored"); return; }
             if (!File.Exists(instance.JournalPath)) throw new InvalidDataException("The recovery journal is missing; restoration cannot be confirmed.");
-            var restored = _engine.Restore(instance.JournalPath);
-            instance.Status = restored.Status is "restored" or "expired" ? restored.Status : "conflict";
-            instance.Error = restored.Changes.FirstOrDefault(change => change.Error is not null)?.Error;
+            processes ??= ProcessSnapshot.Take();
+            if (!processes.TryGetValue(instance.Process.ProcessId, out var running) || running.CreationTimeFileTimeUtc != instance.Process.CreationTimeFileTimeUtc)
+            {
+                Finish(instance, "expired");
+                return;
+            }
+            if (GetGate(running).Kind == "otherAccount")
+            {
+                instance.Status = "conflict";
+                instance.ErrorKind = "error";
+                instance.Error = ForeignRecord;
+                return;
+            }
+            ProcessControlJournal restored;
+            for (var attempt = 0; ; attempt++)
+            {
+                try { restored = _engine.Restore(instance.JournalPath, overwrite: true); break; }
+                catch (InstanceBusyException) when (attempt < 10) { Thread.Sleep(200); }
+            }
+            if (restored.Status is "restored" or "expired") { Finish(instance, restored.Status); return; }
+            var failed = restored.Changes.FirstOrDefault(change => change.Error is not null);
+            instance.Status = "conflict";
+            instance.ErrorKind = failed?.ErrorKind ?? "error";
+            instance.Error = failed?.Error;
         }
         catch (Exception error)
         {
-            if (ProcessPolicyStore.Exited(instance.Process)) { instance.Status = "expired"; instance.Error = null; }
-            else { instance.Status = "conflict"; instance.Error = error.Message; }
+            if (ProcessPolicyStore.Exited(instance.Process)) { Finish(instance, "expired"); return; }
+            instance.Status = "conflict";
+            instance.ErrorKind = ProcessFailures.Denied(error) ? "denied" : "error";
+            instance.Error = error.Message;
         }
-        if (instance.Status is "restored" or "expired") _restoreAttempts.Remove(instance.JournalPath);
     }
 
     private void Prune()
     {
-        var terminal = _state.Instances.Where(instance => instance.Status is "restored" or "expired").ToList();
+        var terminal = _state.Instances.Where(Terminal).ToList();
         foreach (var old in terminal.Take(Math.Max(0, terminal.Count - TerminalHistory)))
         {
             _state.Instances.Remove(old);
@@ -591,11 +1150,37 @@ public sealed class ProcessPolicyHost
     {
         Prune();
         var bytes = JsonSerializer.SerializeToUtf8Bytes(_state, OperationFiles.Json);
-        if (_lastSavedState is not null && bytes.AsSpan().SequenceEqual(_lastSavedState) && DateTime.UtcNow - _state.UpdatedAtUtc < TimeSpan.FromSeconds(5)) return;
+        if (_lastSavedState is not null && bytes.AsSpan().SequenceEqual(_lastSavedState)) return;
         _state.UpdatedAtUtc = DateTime.UtcNow;
         OperationFiles.Write(_store.StatePath, _state);
         _lastSavedState = JsonSerializer.SerializeToUtf8Bytes(_state, OperationFiles.Json);
         foreach (var directory in _pruned) DeleteOperation(directory);
         _pruned.Clear();
+    }
+
+    private sealed class Heartbeat : IDisposable
+    {
+        private readonly ManualResetEventSlim _stop = new();
+        private readonly Thread _thread;
+
+        public Heartbeat(Action beat)
+        {
+            _thread = new Thread(() =>
+            {
+                do
+                {
+                    try { beat(); }
+                    catch (Exception) { }
+                }
+                while (!_stop.Wait(3000));
+            }) { IsBackground = true, Name = "Roo Industries Governor heartbeat" };
+            _thread.Start();
+        }
+
+        public void Dispose()
+        {
+            _stop.Set();
+            if (_thread.Join(5000)) _stop.Dispose();
+        }
     }
 }

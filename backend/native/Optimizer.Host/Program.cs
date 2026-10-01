@@ -92,8 +92,8 @@ try
             var sessionControls = request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file"));
             var sessionLauncher = request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required.");
             var governor = new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.RootFor(request.OutputPath));
-            governor.RequireUnowned(Path.GetFullPath(Require(request.GamePath, "game executable")), sessionControls.Keys, includePaused: true);
-            using (var launcherProcess = new ProcessTarget(sessionLauncher)) governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys, includePaused: true);
+            governor.RequireUnownedLaunch(Path.GetFullPath(Require(request.GamePath, "game executable")), sessionControls.Keys);
+            using (var launcherProcess = new ProcessTarget(sessionLauncher)) governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys);
             data = new ProtectedSessions(Excluded).Preview(sessionLauncher, Require(request.GamePath, "game executable"), sessionControls, request.AcceptLauncherScope == true);
             OperationFiles.Write(Require(request.OutputPath, "output path"), (ProtectedSessionPreview)data);
             break;
@@ -140,13 +140,16 @@ try
         case "process-apply":
             RequireConfirmation(request);
             var reviewed = OperationFiles.Read<ProcessControlPreview>(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"));
-            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(reviewed.Identity, reviewed.Desired.Keys);
-            data = engine.Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
+            using (ProcessPolicyStore.Gate())
+            {
+                new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(reviewed.Identity, reviewed.Desired.Keys);
+                data = engine.Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
+            }
             break;
         case "process-restore":
             RequireConfirmation(request);
             var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
-            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
+            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
             data = engine.Restore(Require(request.JournalPath, "journal path"));
             break;
         case "rules-list":
@@ -156,7 +159,7 @@ try
             RequireConfirmation(request);
             var store = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root"));
             var rule = request.Rule ?? throw new InvalidDataException("A rule is required.");
-            store.Save(rule);
+            store.Save(rule, Require(request.RepoRoot, "repository root"));
             data = store.ReadRules().Single(pair => pair.Rule.RuleId == rule.RuleId).Rule;
             break;
         case "rule-delete":
@@ -206,7 +209,7 @@ try
             break;
         case "policy-pause":
             RequireConfirmation(request);
-            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."));
+            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."), Require(request.RepoRoot, "repository root"));
             data = new { paused = request.Paused };
             break;
         case "cleanup-authority": data = Authority(request); break;

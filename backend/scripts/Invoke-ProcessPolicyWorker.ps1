@@ -47,18 +47,20 @@ function Stop-Worker {
     $status=Invoke-Core 'policy-status'
     if($null -eq $status.hostRunning){throw ('Governor identity could not be verified: '+$status.error)}
     if($status.hostRunning){
+        $target=$status.state.host
+        $same={param($Live) $Live.hostRunning -eq $true -and $Live.state.host.processId -eq $target.processId -and [string]$Live.state.host.creationTimeFileTimeUtc -eq [string]$target.creationTimeFileTimeUtc}
         Invoke-Core 'policy-stop'|Out-Null
         $clock=[Diagnostics.Stopwatch]::StartNew()
         do {
             Start-Sleep -Milliseconds 200
             $status=Invoke-Core 'policy-status'
             if($null -eq $status.hostRunning){throw ('Governor shutdown could not be verified: '+$status.error)}
-        } while($status.hostRunning -and $clock.Elapsed.TotalSeconds -lt 30)
-        if($status.hostRunning){
-            $process=Get-Process -Id $status.state.host.processId -ErrorAction SilentlyContinue
-            if($process -and $process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -eq [string]$status.state.host.creationTimeFileTimeUtc){$process.Kill();$process.WaitForExit(10000)|Out-Null}
+        } while((& $same $status) -and $clock.Elapsed.TotalSeconds -lt 30)
+        if(& $same $status){
+            $process=Get-Process -Id $target.processId -ErrorAction SilentlyContinue
+            if($process -and $process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -eq [string]$target.creationTimeFileTimeUtc){$process.Kill();$process.WaitForExit(10000)|Out-Null}
             $status=Invoke-Core 'policy-status'
-            if($status.hostRunning -ne $false){throw 'The governor did not stop. Its recovery state was preserved.'}
+            if($null -eq $status.hostRunning -or (& $same $status)){throw 'The governor did not stop. Its recovery state was preserved.'}
         }
     }
     Restore-Interrupted $status
@@ -66,7 +68,15 @@ function Stop-Worker {
 
 function Restore-Interrupted($Status) {
     if($Status.state -and $Status.state.status -notin @('stopped','stoppedWithConflicts') -and (Invoke-Core 'policy-summary').secured){
-        Invoke-Core 'policy-run' @{durationSeconds=0}|Out-Null
+        for($attempt=1;;$attempt++){
+            try {Invoke-Core 'policy-run' @{durationSeconds=0}|Out-Null;return}
+            catch {
+                $live=Invoke-Core 'policy-status'
+                if($live.hostRunning -eq $true){return}
+                if($attempt -ge 3){throw}
+                Start-Sleep -Milliseconds 400
+            }
+        }
     }
 }
 
@@ -89,6 +99,10 @@ function Register-Governor([switch]$Disabled) {
 
 function Start-Governor {
     $status=Invoke-Core 'policy-status'
+    if($status.hostRunning -eq $true -and $status.error){
+        $clock=[Diagnostics.Stopwatch]::StartNew()
+        do {Start-Sleep -Milliseconds 500;$status=Invoke-Core 'policy-status'}while($status.hostRunning -eq $true -and $status.error -and $clock.Elapsed.TotalSeconds -lt 8)
+    }
     if($status.hostRunning -eq $true -and -not $status.error){return}
     if($status.hostRunning -eq $true){Stop-Worker}
     Start-ScheduledTask -TaskName $taskName
@@ -110,7 +124,7 @@ function Sync-Governor {
     if((Test-Path -LiteralPath $PolicyRoot) -and -not (Invoke-Core 'policy-summary').secured -and (Invoke-Core 'policy-status').hostRunning){Stop-Worker}
     Invoke-Core 'policy-secure'|Out-Null
     $summary=Invoke-Core 'policy-summary'
-    if($summary.enabledRules -eq 0 -and -not $summary.rulesError){
+    if($summary.enabledRules -eq 0 -and -not $summary.rulesError -and @($summary.unreadableRules|Where-Object {$_}).Count -eq 0){
         Remove-Governor
         if($summary.rules -eq 0 -and $summary.paused){Invoke-Core 'policy-pause' @{paused=$false}|Out-Null}
         return
