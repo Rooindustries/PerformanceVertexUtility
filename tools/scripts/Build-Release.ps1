@@ -149,7 +149,7 @@ Copy-Tree (Join-Path $repoRoot 'assets\brand\roo-industries') (Join-Path $stage 
 [IO.File]::WriteAllText((Join-Path $stage 'README-BETA.txt'), [IO.File]::ReadAllText((Join-Path $releaseTools 'README-BETA.txt')).Replace('{Version}', $version), [Text.UTF8Encoding]::new($false))
 
 Get-ChildItem -LiteralPath $stage -Recurse -File -Filter '*.pdb' | Remove-Item -Force
-foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\hostpolicy.dll', 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\samples', 'backend\catalogs\windows-tweaks.json', 'app\Microsoft.WindowsAppRuntime.dll', 'app\RooIndustries.OptimizationSuite.App.pri')) {
+foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\hostpolicy.dll', 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\scripts\Start-RooIndustriesHelper.cmd', 'backend\samples', 'backend\catalogs\windows-tweaks.json', 'app\Microsoft.WindowsAppRuntime.dll', 'app\RooIndustries.OptimizationSuite.App.pri')) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $required))) { throw "The release layout is missing $required." }
 }
 
