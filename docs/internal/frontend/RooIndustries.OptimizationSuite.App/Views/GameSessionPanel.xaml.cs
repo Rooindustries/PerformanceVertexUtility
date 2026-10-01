@@ -16,7 +16,7 @@ public sealed partial class GameSessionPanel : UserControl
     public GameSessionPanel()
     {
         InitializeComponent();
-        _watch = new(DispatcherQueue, CatchUpAsync);
+        _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         _timer.Tick += async (_, _) => await ViewModel.ObserveAsync();
         ViewModel.PropertyChanged += (_, args) =>
         {

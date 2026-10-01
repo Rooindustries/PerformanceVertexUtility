@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.Views;
@@ -9,11 +8,11 @@ internal sealed class ChangeWatch
 {
     private long _seen = -2;
     private bool _refreshing;
-    private readonly DispatcherQueue _queue;
+    private readonly Func<Func<Task>, bool> _enqueue;
     private readonly Func<bool, Task> _catchUp;
     private bool _watching;
 
-    public ChangeWatch(DispatcherQueue queue, Func<bool, Task> catchUp) { _queue = queue; _catchUp = catchUp; }
+    public ChangeWatch(Func<Func<Task>, bool> enqueue, Func<bool, Task> catchUp) { _enqueue = enqueue; _catchUp = catchUp; }
 
     public bool Changed => !DataGeneration.IsCurrent(_seen);
     public void MarkSeen() => _seen = DataGeneration.Snapshot();
@@ -64,7 +63,7 @@ internal sealed class ChangeWatch
         else Run(revisit: false);
     }
 
-    public void Run(bool revisit) => _queue.TryEnqueue(async () =>
+    public void Run(bool revisit) => _enqueue(async () =>
     {
         try { await _catchUp(revisit); }
         catch (Exception error) { AppLog.Write("refresh", error.ToString()); }

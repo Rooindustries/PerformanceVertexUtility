@@ -16,7 +16,7 @@ public sealed partial class BulkRemovalPanel : UserControl
     public BulkRemovalPanel()
     {
         InitializeComponent();
-        _watch = new(DispatcherQueue, CatchUpAsync);
+        _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         ViewModel.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); } };
         Unloaded += (_, _) => _watch.Stop();
         Loaded += async (_, _) =>
