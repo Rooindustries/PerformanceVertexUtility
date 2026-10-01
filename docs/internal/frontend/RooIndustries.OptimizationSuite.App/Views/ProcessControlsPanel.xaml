@@ -10,6 +10,10 @@
                 <Button Content="Start governor" Command="{x:Bind ViewModel.StartGovernorCommand}" IsEnabled="{x:Bind ViewModel.CanStartGovernor, Mode=OneWay}" AutomationProperties.AutomationId="GovernorStart" />
                 <Button Content="Put settings back" Command="{x:Bind ViewModel.RetryRestoreCommand}" IsEnabled="{x:Bind ViewModel.CanRetryRestore, Mode=OneWay}" Visibility="{x:Bind ViewModel.RetryAvailable, Mode=OneWay}" AutomationProperties.AutomationId="GovernorRetryRestore" />
             </views:AdaptivePanel>
+            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasDamagedRules, Mode=OneWay}">
+                <ComboBox Header="Damaged rule files" ItemsSource="{x:Bind ViewModel.DamagedRules}" SelectedItem="{x:Bind ViewModel.SelectedDamagedRule, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="GovernorDamagedRules" />
+                <Button Content="Remove damaged rule" Command="{x:Bind ViewModel.RemoveDamagedRuleCommand}" IsEnabled="{x:Bind ViewModel.CanRemoveDamagedRule, Mode=OneWay}" AutomationProperties.AutomationId="GovernorRemoveDamagedRule" />
+            </StackPanel>
             <ItemsControl ItemsSource="{x:Bind ViewModel.GovernorRules}" AutomationProperties.AutomationId="GovernorRules">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GovernorRuleRow">

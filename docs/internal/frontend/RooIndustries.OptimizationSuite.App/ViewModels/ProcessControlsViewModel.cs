@@ -62,6 +62,10 @@ public sealed record SavedRuleChoice(SavedProcessRule Rule)
     public override string ToString() => Rule.Name + (Rule.Enabled ? " · on" : " · off");
 }
 public sealed record GovernorRuleRow(string Name, string State, string Requested, string Observed);
+public sealed record DamagedRuleChoice(string RuleId, string Reason)
+{
+    public override string ToString() => RuleId + ".json";
+}
 
 public static class GovernorDisplay
 {
@@ -76,7 +80,11 @@ public static class GovernorDisplay
     public const string StoppedStays = "The governor stopped and won't start again by itself. Press Start governor to start it.";
     public const string StoppedUnknown = "The governor stopped. Press Start governor to start it.";
     public static string StoppedFailed(int code) => "The governor stopped and its last automatic start failed (error 0x" + code.ToString("X8") + "), so it may not start again by itself. Press Start governor to start it.";
+    public const string RunningNoSignIn = "Roo Industries Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
+    public const string RunningUnconfirmed = "Roo Industries Governor is running and keeps your rules active when this app is closed. Roo Industries couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
     public const string NotRunningApp = "The app is not running right now.";
+    public const string NotYetApplied = "The app is running, but this rule hasn't been applied to it.";
+    public const string AppUnknown = "Roo Industries can't tell whether the app is running right now.";
     public const string PausedRule = "Not applied right now because the governor is paused.";
     public const string StoppedRule = "Not applied right now because the governor is stopped.";
     public const string AttentionRule = "Not checked right now because the governor needs attention.";
@@ -111,7 +119,22 @@ public static class GovernorDisplay
 
     public static bool CanRetry(GovernorSnapshot snapshot, string state) => state is "off" or "paused" && snapshot.Worker.HostRunning == false && Kept(snapshot) > 0;
 
-    public static string Headline(string state) => state switch { "running" => Running, "paused" => Paused, "pausing" => Pausing, "stopped" => Stopped, "off" => Off, _ => NotResponding };
+    public static string SignIn(GovernorSnapshot snapshot) => snapshot.ScheduledTask switch
+    {
+        null => "unknown",
+        { Restarts: true } => "yes",
+        { Registered: true, Enabled: true, RestartsEveryMinute: true } => "unknown",
+        _ => "no",
+    };
+
+    public static string Headline(string state, GovernorSnapshot snapshot) => state switch
+    {
+        "running" => SignIn(snapshot) switch { "yes" => Running, "no" => RunningNoSignIn, _ => RunningUnconfirmed },
+        "paused" => Paused, "pausing" => Pausing, "stopped" => Stopped, "off" => Off, _ => NotResponding,
+    };
+
+    private static string Absent(GovernorSnapshot snapshot, SavedProcessRule rule)
+        => snapshot.RunningImages is not { } images ? AppUnknown : images.Contains(Path.GetFileName(rule.ExecutablePath)) ? NotYetApplied : NotRunningApp;
 
     public static string Detail(string state, GovernorSnapshot snapshot)
     {
@@ -201,7 +224,7 @@ public static class GovernorDisplay
             var details = lines.OrderBy(line => line.Process).ThenBy(line => line.Order).Select(line => line.Text).ToList();
             var headline = !rule.Enabled ? "Off" : state switch
             {
-                "running" => details.Count == 0 ? NotRunningApp : null,
+                "running" => details.Count == 0 ? Absent(snapshot, rule) : null,
                 "paused" or "pausing" => PausedRule,
                 "stopped" => StoppedRule,
                 _ => AttentionRule,
@@ -221,7 +244,8 @@ public static class GovernorDisplay
         (_, "error") => label + " unavailable · " + (instance.Error is { Length: > 0 } failure ? failure : "Windows did not accept the requested value."),
         ("active", _) when journal?.Changes.Any(change => instance.Field is null || change.Name == instance.Field) == true => string.Join(", ", journal.Changes.Where(change => instance.Field is null || change.Name == instance.Field).Select(change => ProcessControlsViewModel.Label(change.Name) + " " +
             (change.Observed is { } observed ? ProcessControlsViewModel.Describe(change.Name, observed) : "unknown"))),
-        _ => label + " starting",
+        ("applying", _) => label + " starting",
+        _ => label + " couldn't be confirmed",
     };
 
     private static string Leftover(PolicyInstance instance, string label) => (instance.Status, instance.ErrorKind) switch
@@ -241,12 +265,14 @@ public partial class ProcessControlsViewModel : ObservableObject
     public ObservableCollection<TopologyChoice> TopologyChoices { get; } = new();
     public ObservableCollection<SavedRuleChoice> Rules { get; } = new();
     public ObservableCollection<GovernorRuleRow> GovernorRules { get; } = new();
+    public ObservableCollection<DamagedRuleChoice> DamagedRules { get; } = new();
     public CpuMode[] CpuModes { get; } = [new("unchanged", "Keep current"), new("windowsDefault", "Windows default"), new("logical", "Choose logical CPUs"),
         new("all", "All logical CPUs"), new("performance", "Performance cores"), new("efficiency", "Efficiency cores"), new("core", "One physical core"), new("cache", "Shared cache group"), new("numa", "NUMA node")];
     [ObservableProperty] private CpuProcessChoice? _selectedProcess;
     [ObservableProperty] private CpuMode _selectedCpuMode;
     [ObservableProperty] private TopologyChoice? _selectedTopology;
     [ObservableProperty] private SavedRuleChoice? _selectedRule;
+    [ObservableProperty] private DamagedRuleChoice? _selectedDamagedRule;
     [ObservableProperty] private bool _oneThreadPerCore;
     [ObservableProperty] private bool _setHardAffinity;
     [ObservableProperty] private string _affinityMask = "";
@@ -275,6 +301,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private ushort _affinityGroup;
     private Task _readTask = Task.CompletedTask;
     private bool _observing;
+    private bool _signInAtRisk;
 
     public ProcessControlsViewModel() => _selectedCpuMode = CpuModes[0];
     public bool CanEdit => !Busy && !RestoreAvailable;
@@ -293,9 +320,12 @@ public partial class ProcessControlsViewModel : ObservableObject
     public bool CanSaveRule => CanApply && !string.IsNullOrWhiteSpace(RuleName);
     public bool CanManageRule => !Busy && SelectedRule is not null;
     public bool CanPauseGovernor => !Busy && GovernorState is "running" or "pausing" or "stopped" or "notResponding";
-    public bool CanStartGovernor => !Busy && GovernorState is "paused" or "pausing" or "stopped" or "notResponding";
+    public bool CanStartGovernor => !Busy && (GovernorState is "paused" or "pausing" or "stopped" or "notResponding" || GovernorState == "running" && _signInAtRisk);
+    public bool CanRemoveDamagedRule => !Busy && SelectedDamagedRule is not null;
+    public bool HasDamagedRules => DamagedRules.Count > 0;
     public bool CanRetryRestore => !Busy && RetryAvailable;
     partial void OnRetryAvailableChanged(bool value) => NotifyState();
+    partial void OnSelectedDamagedRuleChanged(DamagedRuleChoice? value) => NotifyState();
 
     partial void OnBusyChanged(bool value) => NotifyState();
     partial void OnGovernorStateChanged(string value) => NotifyState();
@@ -531,17 +561,42 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void ShowGovernor(GovernorSnapshot snapshot)
     {
         GovernorState = GovernorDisplay.State(snapshot);
-        GovernorHeadline = GovernorDisplay.Headline(GovernorState);
+        GovernorHeadline = GovernorDisplay.Headline(GovernorState, snapshot);
         GovernorDetail = GovernorDisplay.Detail(GovernorState, snapshot);
         RetryAvailable = GovernorDisplay.CanRetry(snapshot, GovernorState);
+        ShowSignIn(GovernorState == "running" && GovernorDisplay.SignIn(snapshot) != "yes");
+        var damaged = (snapshot.Summary.UnreadableRules ?? []).Select(Damaged).OfType<DamagedRuleChoice>().ToArray();
+        if (!damaged.SequenceEqual(DamagedRules))
+        {
+            var chosen = SelectedDamagedRule?.RuleId;
+            DamagedRules.Clear();
+            foreach (var item in damaged) DamagedRules.Add(item);
+            SelectedDamagedRule = DamagedRules.FirstOrDefault(item => item.RuleId == chosen) ?? DamagedRules.FirstOrDefault();
+            OnPropertyChanged(nameof(HasDamagedRules));
+        }
         var rows = GovernorDisplay.Rows(snapshot, GovernorState);
         if (rows.SequenceEqual(GovernorRules)) return;
         GovernorRules.Clear();
         foreach (var row in rows) GovernorRules.Add(row);
     }
 
+    private void ShowSignIn(bool atRisk)
+    {
+        if (atRisk == _signInAtRisk) return;
+        _signInAtRisk = atRisk;
+        OnPropertyChanged(nameof(CanStartGovernor));
+    }
+
+    private static DamagedRuleChoice? Damaged(string text)
+    {
+        const string head = "The saved rule ", tail = ".json could not be read: ";
+        var end = text.IndexOf(tail, StringComparison.Ordinal);
+        return text.StartsWith(head, StringComparison.Ordinal) && end > head.Length && Guid.TryParseExact(text[head.Length..end], "N", out _) ? new(text[head.Length..end], text[(end + tail.Length)..]) : null;
+    }
+
     private void ShowGovernorError(Exception error)
     {
+        ShowSignIn(false);
         GovernorState = "notResponding";
         GovernorHeadline = GovernorDisplay.NotResponding;
         GovernorDetail = "The governor's status could not be read: " + error.Message.TrimEnd('.') + ".";
@@ -665,6 +720,24 @@ public partial class ProcessControlsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task RemoveDamagedRuleAsync()
+    {
+        if (!CanRemoveDamagedRule) return;
+        Busy = true;
+        try
+        {
+            if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
+            await App.Operations.DeleteRuleAsync(SelectedDamagedRule!.RuleId);
+            await App.Operations.PolicyWorkerAsync("Sync");
+            await RefreshRulesAsync();
+            Status = "Damaged rule removed.";
+            Detail = "Roo Industries deleted the damaged rule file. Your other rules are unchanged.";
+        }
+        catch (Exception error) { Status = "Couldn't remove the damaged rule."; Detail = error.Message; await TryRefreshRulesAsync(); }
+        finally { Busy = false; }
+    }
+
+    [RelayCommand]
     private async Task PauseGovernorAsync() => await GovernorAsync("Pause", "Governor paused.");
     [RelayCommand]
     private async Task StartGovernorAsync() => await GovernorAsync("Resume", "Governor started.");
@@ -703,7 +776,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()
     {
-        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore), nameof(CanRemoveDamagedRule) }) OnPropertyChanged(property);
     }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));

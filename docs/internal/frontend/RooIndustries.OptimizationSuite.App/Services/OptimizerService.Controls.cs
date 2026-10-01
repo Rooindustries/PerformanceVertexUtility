@@ -15,7 +15,7 @@ public sealed record ProcessControlReview(ProcessControlPreview Plan, string Pre
 public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
     bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
 public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
-    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null);
+    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 
@@ -57,7 +57,7 @@ public sealed partial class OptimizerService
 
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
-    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot));
+    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot, _locator.RepoRoot));
     public Task<PolicyHostState> RetryGovernorRestoreAsync()
         => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true });
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
@@ -69,9 +69,13 @@ public sealed partial class OptimizerService
     {
         string[] allowed = ["Status", "Sync", "Pause", "Resume", "Remove"];
         if (Array.IndexOf(allowed, action) < 0) throw new ArgumentException("Unknown policy worker action.", nameof(action));
-        var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
-            "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), waitForRemoval: true);
-        return RequireData(result);
+        try
+        {
+            var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
+                "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), waitForRemoval: true);
+            return RequireData(result);
+        }
+        finally { GovernorProbe.ForgetTask(); }
     }
 
     public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken)
