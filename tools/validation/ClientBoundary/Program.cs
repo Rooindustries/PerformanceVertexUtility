@@ -21,7 +21,10 @@ try
     var scripts = Path.Combine(fixture, "backend", "scripts");
     Directory.CreateDirectory(scripts);
     Directory.CreateDirectory(Path.Combine(fixture, "backend", "samples"));
-    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BulkUninstall.Common.ps1", "OperationState.Common.ps1", "AppxInventory.Common.ps1", "ProcessProfile.Common.ps1" })
+    Directory.CreateDirectory(Path.Combine(fixture, "backend", "profiles"));
+    File.Copy(Path.Combine(repo, "backend", "profiles", "protected-processes.json"), Path.Combine(fixture, "backend", "profiles", "protected-processes.json"));
+    Directory.CreateSymbolicLink(Path.Combine(fixture, "backend", "bin"), Path.Combine(repo, "backend", "bin"));
+    foreach (var name in new[] { "Invoke-UninstallCleanupApplyPackage.ps1", "Restore-UninstallCleanupExecution.ps1", "UninstallCleanup.Common.ps1", "BrandCompatibility.Common.ps1", "UninstallOutcome.Common.ps1", "BulkUninstall.Common.ps1", "OperationState.Common.ps1", "AppxInventory.Common.ps1", "ProcessProfile.Common.ps1", "GovernorOwnership.Common.ps1" })
         File.Copy(Path.Combine(repo, "backend", "scripts", name), Path.Combine(scripts, name));
     File.WriteAllText(Path.Combine(scripts, "Invoke-CleanupExclusions.ps1"), "param([string]$Action,[string[]]$FileTarget)\n'{\"schemaVersion\":1,\"status\":\"completed\",\"data\":{\"allowed\":true}}'\n");
     File.WriteAllText(Path.Combine(scripts, "Preview-OfficialUninstall.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'official.json') -Raw -Encoding UTF8\n");
@@ -118,5 +121,7 @@ finally
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previousRoot);
     recoveryRoot ??= savedRollback is { } savedPath ? Path.GetDirectoryName(savedPath) : null;
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
+    var hostLink = Path.Combine(fixture, "backend", "bin");
+    if (Directory.Exists(hostLink) && new DirectoryInfo(hostLink).LinkTarget is not null) Directory.Delete(hostLink, false);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
 }
