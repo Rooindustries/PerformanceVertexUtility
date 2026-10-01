@@ -17,7 +17,8 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed class SampleDataService
     {
         public Task<DriverRecommendationCatalog> GetDriverRecommendationsAsync() => Task.FromResult(new DriverRecommendationCatalog());
-        public Task<NvidiaProfileCatalog> GetNvidiaProfilesAsync() => Task.FromResult(new NvidiaProfileCatalog());
+        public NvidiaProfileCatalog NvidiaProfiles { get; set; } = new();
+        public Task<NvidiaProfileCatalog> GetNvidiaProfilesAsync() => Task.FromResult(NvidiaProfiles);
     }
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
     public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
@@ -144,7 +145,12 @@ namespace RooIndustries.OptimizationSuite.Services
             => Task.FromResult(new LiveDataResult<string>(ShaderText, OperationError ?? (ShaderText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, OperationError ?? (ShaderRestoreText is null ? LastError : null)));
-        public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false, bool fresh = false) => Task.FromResult(InstalledApps);
+        public Func<Task>? BeforeInstalledApps { get; set; }
+        public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false, bool fresh = false)
+        {
+            if (BeforeInstalledApps is { } hold) await hold();
+            return InstalledApps;
+        }
         public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken cancellationToken = default) => OfficialPreview(appId);
         public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken cancellationToken = default)
         {

@@ -21,11 +21,18 @@ public abstract partial class PageViewModelBase : ObservableObject
     [ObservableProperty]
     private string? _errorMessage;
 
+    [ObservableProperty]
+    private string _staleNotice = "";
+
     private bool _initialized;
     private long _loadedGeneration = -2;
     private Task? _load;
 
     protected virtual bool RefreshOnRevisit => true;
+    protected virtual bool HasUserWork => false;
+    protected virtual bool IsWorking => false;
+    private const string ChangedNotice = "Settings changed elsewhere. Your selection is kept; clear it to load the current list.";
+    private bool _keepStale;
     protected bool Fresh { get; private set; }
     protected bool Quiet { get; private set; }
 
@@ -38,8 +45,46 @@ public abstract partial class PageViewModelBase : ObservableObject
             return;
         }
         while (_load is { IsCompleted: false }) await _load;
-        if (!DataGeneration.IsCurrent(_loadedGeneration) || !IsReady) await ReloadAsync();
+        if (!IsReady) await ReloadAsync();
+        else if (!DataGeneration.IsCurrent(_loadedGeneration))
+        {
+            if (HasUserWork) StaleNotice = ChangedNotice;
+            else await ReloadAsync();
+        }
         else if (RefreshOnRevisit) await RunAsync(quiet: true);
+    }
+
+    private async Task RefreshChangedAsync()
+    {
+        if (HasUserWork) { StaleNotice = ChangedNotice; return; }
+        await RunAsync(quiet: true);
+    }
+
+    private DataGeneration.OwnChanges? _own;
+    private long _ownBefore = -1;
+
+    protected void StartOwn()
+    {
+        _ownBefore = _loadedGeneration >= 0 ? DataGeneration.Snapshot() : -1;
+        _own = DataGeneration.BeginOwn();
+    }
+
+    protected void FinishOwn()
+    {
+        var own = _own;
+        if (own is null) return;
+        _own = null;
+        DataGeneration.EndOwn();
+        if (_loadedGeneration >= 0 && _loadedGeneration == _ownBefore && StaleNotice.Length == 0 && DataGeneration.OwnAccepted(_ownBefore, own)) _loadedGeneration = DataGeneration.Current;
+    }
+
+    protected void KeepStale() => _keepStale = true;
+
+    protected async Task RefreshIfStaleAsync()
+    {
+        if (!_initialized || DataGeneration.Changing || DataGeneration.IsCurrent(_loadedGeneration)) return;
+        while (_load is { IsCompleted: false }) await _load;
+        if (!HasUserWork && !DataGeneration.IsCurrent(_loadedGeneration)) await RunAsync(quiet: true);
     }
 
     public Task ReloadAsync() => RunAsync(quiet: false);
@@ -48,7 +93,9 @@ public abstract partial class PageViewModelBase : ObservableObject
     {
         if (!_initialized) return;
         while (_load is { IsCompleted: false }) await _load;
-        if (_loadedGeneration == -1) await ReloadAsync();
+        if (DataGeneration.Changing || IsWorking || DataGeneration.IsCurrent(_loadedGeneration)) return;
+        if (!IsReady) await ReloadAsync();
+        else await RefreshChangedAsync();
     }
 
     private bool _revalidate;
@@ -74,6 +121,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         if (!quiet) { IsLoading = true; IsReady = false; }
         IsEmpty = false;
         ErrorMessage = null;
+        StaleNotice = "";
 
         try
         {
@@ -86,7 +134,9 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         finally
         {
-            if (_loadedGeneration != DataGeneration.Current) _loadedGeneration = -1;
+            if (_loadedGeneration != DataGeneration.Current || _keepStale) _loadedGeneration = -1;
+            if (_keepStale && HasUserWork) StaleNotice = ChangedNotice;
+            _keepStale = false;
             IsLoading = false;
             IsReady = ErrorMessage is null && !IsEmpty;
         }

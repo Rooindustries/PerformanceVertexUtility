@@ -163,12 +163,18 @@ public partial class BulkRemovalViewModel : ObservableObject
         catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
         finally { Busy = false; }
     }
-    public async Task RefreshIfIdleAsync()
+    public bool HasUserWork => _selected.Count > 0 || _review is not null;
+    public void NoteChanged()
     {
-        if (Busy || _selected.Count > 0 || _review is not null || !CanSelect || Environment.TickCount64 - _appsLoadedTicks < 30000) return;
+        Status = "Settings changed elsewhere";
+        Detail = "Your picks are kept. Start over or finish this removal to see the current app list.";
+    }
+    public async Task<bool> RefreshIfIdleAsync(bool changed = false)
+    {
+        if (Busy || _selected.Count > 0 || _review is not null || !CanSelect || !changed && Environment.TickCount64 - _appsLoadedTicks < 30000) return false;
         Busy = true;
-        try { await LoadAppsAsync(); }
-        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
+        try { await LoadAppsAsync(); return true; }
+        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; return false; }
         finally { Busy = false; }
     }
     private bool _appsLoaded;
