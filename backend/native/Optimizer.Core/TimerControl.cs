@@ -195,6 +195,7 @@ public static class TimerControl
             Retire(roots, state.Launch.SessionId);
         }
         foreach (var name in new[] { "launch.json", "stop.json" }) File.Delete(Path.Combine(roots.Control, name));
+        if (!Split(roots)) File.Delete(StatePath(roots));
     }
     internal static bool EndLegacyWorker(string operations, Action? found)
     {
