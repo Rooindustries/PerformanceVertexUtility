@@ -15,7 +15,7 @@ public static class DownloadBlocker
         if (address.Property != "blocked" || address.Target is not ("razer-downloads" or "logitech-downloads") && !address.Target.StartsWith("fixture:", StringComparison.Ordinal)) throw new InvalidDataException("Unknown download-folder blocker.");
         var policy = new ControlAddress("file-acl", address.Target, "permissions"); var path = FileAccessControl.Target(policy);
         var receipt = address.Target.StartsWith("fixture:", StringComparison.Ordinal) ? Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".blocker.json")
-            : Path.Combine(BrandCompatibility.LocalDataRoot, "operations", "download-blockers", address.Target + ".json");
+            : Path.Combine(OperationsFolder.DefaultRoot, "download-blockers", address.Target + ".json");
         return (path, receipt, policy);
     }
     private static DownloadBlockerReceipt? Receipt(string file, string path)
@@ -61,7 +61,9 @@ public static class DownloadBlocker
     }
     public static void Write(TweakControlRead before, JsonElement desired)
     {
-        var target = Target(before.Address); Directory.CreateDirectory(Path.GetDirectoryName(target.Receipt)!);
+        var target = Target(before.Address);
+        if (!before.Address.Target.StartsWith("fixture:", StringComparison.Ordinal)) OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(target.Receipt)!);
         using var guard = OperationFiles.Lock(target.Receipt); using var privileges = PrivilegeScope.FilePolicy();
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("The download folder changed after review.");
         var receipt = Receipt(target.Receipt, target.Path); var current = Policy(target.Policy, target.Path);

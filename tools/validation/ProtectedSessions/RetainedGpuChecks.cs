@@ -29,7 +29,7 @@ static class RetainedGpuChecks
         Environment.SetEnvironmentVariable("DOTNET_ROOT_X64", Path.GetDirectoryName(dotnet));
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-retained-gpu-check-" + Guid.NewGuid().ToString("N"));
         var launcherPath = Path.Combine(Bin, "RooIndustriesRetainedLauncher.exe");
-        Directory.CreateDirectory(root); File.Copy(GamePath, launcherPath, false);
+        OperationsFolder.Secure(root); File.Copy(GamePath, launcherPath, false);
         var engine = new ProtectedSessions(_ => false);
         var states = new List<string>(); var workers = new List<Process>();
         var proof = new List<object>(); var passed = 0;

@@ -8,13 +8,15 @@ try
 {
     if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
+    RuntimeEnvironment.RequireClean();
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
     var fromInput = args[1] == "-";
+    using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
     var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
     var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
-    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" || action == "policy-run" && request.DurationSeconds is not null))
-        throw new InvalidDataException("Governor requests must be passed on standard input.");
+    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-stop" or "operations-secure" || action == "policy-run" && request.DurationSeconds is not null))
+        throw new InvalidDataException("Governor and recovery-folder requests must be passed on standard input.");
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
@@ -101,6 +103,7 @@ try
             break;
         case "protected-session-run":
             RequireConfirmation(request);
+            using (OperationsFolder.LeaseContaining(Require(request.SessionRoot, "session directory")))
             using (var cancellation = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
@@ -124,7 +127,8 @@ try
             break;
         case "protected-session-watch":
             RequireConfirmation(request);
-            new ProtectedSessions(Excluded).Watch(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
+            using (OperationsFolder.LeaseContaining(Require(request.SessionRoot, "session directory")))
+                new ProtectedSessions(Excluded).Watch(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
             data = new { recovered = true };
             break;
         case "process-status":
@@ -189,6 +193,11 @@ try
         case "policy-secure":
             RequireConfirmation(request);
             data = new { migrated = PolicyRootSecurity.Secure(Require(request.PolicyRoot, "policy root"), request.UserSid) };
+            break;
+        case "operations-secure":
+            RequireConfirmation(request);
+            var operationsRoot = Require(request.OperationsRoot, "recovery folder");
+            data = new { migrated = OperationsFolder.Secure(operationsRoot), root = OperationsFolder.Ensure(operationsRoot) };
             break;
         case "policy-pause":
             RequireConfirmation(request);
@@ -389,6 +398,7 @@ sealed record HostRequest
     public bool? Confirm { get; init; }
     public bool? AcceptDataLoss { get; init; }
     public string? PolicyRoot { get; init; }
+    public string? OperationsRoot { get; init; }
     public SavedProcessRule? Rule { get; init; }
     public string? RuleId { get; init; }
     public double? DurationSeconds { get; init; }

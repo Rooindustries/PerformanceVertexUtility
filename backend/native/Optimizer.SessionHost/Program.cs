@@ -6,10 +6,13 @@ using RooIndustries.Optimizer;
 string? root = null;
 try
 {
+    RuntimeEnvironment.RequireClean();
     if (args.Length != 2 || args[0] is not ("run" or "watch")) throw new ArgumentException("Provide run/watch and a request file.");
+    using var requestLease = OperationsFolder.LeaseContaining(args[1]);
     var request = OperationFiles.Read<SessionRequest>(args[1]);
     if (request.SchemaVersion != 1 || !request.Confirm || !Path.IsPathFullyQualified(request.SessionRoot)) throw new InvalidDataException("Incomplete confirmed session request.");
     root = Path.GetFullPath(request.SessionRoot);
+    using var protectedRoot = OperationsFolder.LeaseContaining(root);
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var excluded = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using RooIndustries.Optimizer;
 using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
@@ -15,6 +16,8 @@ public sealed partial class OptimizerService
 {
     private readonly BackendLocator _locator;
     private readonly string _storage;
+    private readonly SemaphoreSlim _storageGate = new(1, 1);
+    private PolicyRootLease? _storageLease;
     private static readonly JsonSerializerOptions Json = JsonTolerance.CreateOptions();
 
     public OptimizerService(BackendLocator locator, string? storageDirectory = null)
@@ -28,7 +31,7 @@ public sealed partial class OptimizerService
 
     public async Task<CpuSetReview> PreviewCpuSetsAsync(int processId, uint[] ids, bool resetDefault)
     {
-        var directory = NewOperationDirectory("cpu");
+        var directory = await NewOperationDirectoryAsync("cpu");
         var preview = Path.Combine(directory, "preview.json");
         var request = new { schemaVersion = 1, targetProcessId = processId, cpuSetIds = ids, resetDefault, outputPath = preview };
         var result = await RequestAsync<CpuSetPlan>("CpuSets", "Preview", request, directory);
@@ -37,7 +40,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<CpuSetJournal>> ApplyCpuSetsAsync(CpuSetReview review)
     {
-        Remember("cpu", review.JournalPath);
+        await RememberAsync("cpu", review.JournalPath);
         return await RequestAsync<CpuSetJournal>("CpuSets", "Apply", new
         {
             schemaVersion = 1, inputPath = review.PreviewPath, reviewSha256 = review.Hash, journalPath = review.JournalPath,
@@ -70,7 +73,7 @@ public sealed partial class OptimizerService
 
     public async Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false)
     {
-        var directory = NewOperationDirectory("removal");
+        var directory = await NewOperationDirectoryAsync("removal");
         var preview = Path.Combine(directory, "preview.json");
         var result = await RequestAsync<BulkRemovalPlan>("BulkUninstall", "Preview", new { schemaVersion = 1, appIds, includeAllAppxUsers, outputPath = preview }, directory);
         return new BulkRemovalReview(RequireData(result), preview, Hash(preview), Path.Combine(directory, "journal.json"));
@@ -78,7 +81,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress)
     {
-        Remember("removal", review.JournalPath);
+        await RememberAsync("removal", review.JournalPath);
         var operation = RequestAsync<BulkRemovalJournal>("BulkUninstall", "Apply", new
         {
             schemaVersion = 1, inputPath = review.PreviewPath, reviewSha256 = review.Hash,
@@ -126,7 +129,7 @@ public sealed partial class OptimizerService
 
     public async Task<RemovalCleanupReview> PreviewRemovedFilesAsync(string journal, string appId, string[] itemIds)
     {
-        var path = Path.Combine(NewOperationDirectory("files"), "review.json");
+        var path = Path.Combine(await NewOperationDirectoryAsync("files"), "review.json");
         var args = "-Action Preview -QueueJournalPath " + Quote(journal) + " -AppId " + Quote(appId)
             + " -ItemId @(" + string.Join(",", itemIds.Select(Quote)) + ") -OutputPath " + Quote(path);
         var result = await RunAsync<RemovalCleanupPlan>("Invoke-RemovalLeftovers.ps1", args);
@@ -135,7 +138,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<FileCleanupResult>> ApplyRemovedFilesAsync(RemovalCleanupReview review, bool reviewed)
     {
-        WritePointer(Path.Combine(_storage, "files-active.json"), JsonSerializer.Serialize(review));
+        WritePointer(Path.Combine(await EnsureStorageAsync(), "files-active.json"), JsonSerializer.Serialize(review));
         return await RunAsync<FileCleanupResult>("Invoke-RemovalLeftovers.ps1", CleanupArguments("Apply", review) + (reviewed ? " -ManualReviewApproved" : ""), waitForRemoval: true);
     }
 
@@ -172,14 +175,31 @@ public sealed partial class OptimizerService
         return await JsonSerializer.DeserializeAsync<T>(stream, Json);
     }
 
-    private string NewOperationDirectory(string kind)
+    private async Task<string> NewOperationDirectoryAsync(string kind)
     {
-        var path = Path.Combine(_storage, kind + "-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(await EnsureStorageAsync().ConfigureAwait(false), kind + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
 
-    private void Remember(string kind, string journal) => WritePointer(Path.Combine(_storage, kind + "-active.txt"), journal);
+    public async Task<string> EnsureStorageAsync()
+    {
+        if (Volatile.Read(ref _storageLease) is { Moved: false }) return _storage;
+        await _storageGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_storageLease is { Moved: false }) return _storage;
+            if (!PolicyRootSecurity.Elevated()) throw new UnauthorizedAccessException(OperationsFolder.NotAdministrator);
+            await RunHostAsync<JsonElement>("operations-secure", new() { ["operationsRoot"] = _storage, ["confirm"] = true }, default, TimeSpan.FromMinutes(5), null).ConfigureAwait(false);
+            var lease = OperationsFolder.Lease(_storage);
+            _storageLease?.Dispose();
+            Volatile.Write(ref _storageLease, lease);
+            return _storage;
+        }
+        finally { _storageGate.Release(); }
+    }
+
+    private async Task RememberAsync(string kind, string journal) => WritePointer(Path.Combine(await EnsureStorageAsync().ConfigureAwait(false), kind + "-active.txt"), journal);
     private static void WritePointer(string path, string value)
     {
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -223,7 +243,9 @@ public sealed partial class OptimizerService
 
     private async Task<OptimizerResult<T>> RunScriptAsync<T>(string script, string arguments, CancellationToken cancellationToken, bool waitForRemoval)
     {
-        using var change = arguments.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
+        var confirmed = arguments.Contains("-ConfirmApply", StringComparison.Ordinal);
+        if (confirmed) await EnsureStorageAsync().ConfigureAwait(false);
+        using var change = confirmed ? DataGeneration.BeginChange() : null;
         var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException(AppLog.MissingFiles), script);
         var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))

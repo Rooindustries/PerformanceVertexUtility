@@ -17,7 +17,7 @@ public static class TimerControl
     internal static string Root(ControlAddress address)
     {
         if (address.Property != "half-millisecond") throw new InvalidDataException("Unknown timer request.");
-        return address.Target == "system" ? Path.Combine(BrandCompatibility.LocalDataRoot, "operations", "windows-timer")
+        return address.Target == "system" ? Path.Combine(OperationsFolder.DefaultRoot, OperationsFolder.TimerFolder)
             : address.Target.StartsWith("fixture:", StringComparison.Ordinal) ? FileAccessControl.FixturePath(address.Target[8..])
             : throw new InvalidDataException("Unknown timer owner.");
     }
@@ -59,8 +59,11 @@ public static class TimerControl
     }
     public static void Write(TweakControlRead before, JsonElement desired)
     {
-        var root = Root(before.Address); Directory.CreateDirectory(root);
+        var root = Root(before.Address);
+        if (before.Address.Target == "system") OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
+        Directory.CreateDirectory(root);
         using var guard = OperationFiles.Lock(Path.Combine(root, "control"));
+        RequireFolder(root);
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer ownership changed after review.");
         if (desired.GetBoolean()) Start(root);
         else Stop(root);
@@ -118,6 +121,26 @@ public static class TimerControl
         }
         foreach (var name in new[] { "launch.json", "stop.json", "session.json" }) File.Delete(Path.Combine(root, name));
     }
+    internal static Action? SuspendForMove(string operations)
+    {
+        var root = Path.Combine(PolicyRootSecurity.Normalize(operations), OperationsFolder.TimerFolder);
+        if (!Directory.Exists(root)) return null;
+        using (OperationFiles.Lock(Path.Combine(root, "control")))
+        {
+            RequireFolder(root);
+            TimerWorkerState? state;
+            try { state = State(root); }
+            catch (Exception error) when (error is InvalidDataException or JsonException) { return null; }
+            using var worker = state is null ? null : Running(state);
+            if (worker is null || !state!.Acquired || state.Released) return null;
+            Stop(root);
+        }
+        return () => { using var guard = OperationFiles.Lock(Path.Combine(root, "control")); RequireFolder(root); Start(root); };
+    }
+    internal static void RequireFolder(string root)
+    {
+        if (new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new UnauthorizedAccessException("The timer folder was replaced with a link, so it is not trusted.");
+    }
     public static void RunWorker(string launchPath)
         => RunWorker(launchPath, null);
     private static void RunWorker(string launchPath, Action? ready)
@@ -126,6 +149,7 @@ public static class TimerControl
         if (Path.GetFullPath(launchPath) != Path.Combine(launch.Root, "launch.json") || launch.AssemblyPath != Assembly.GetEntryAssembly()?.Location || OperationFiles.HashFile(launch.AssemblyPath) != launch.AssemblyHash)
             throw new InvalidDataException("The timer worker launch identity changed.");
         using var lease = OperationFiles.Lock(Path.Combine(launch.Root, "worker"));
+        RequireFolder(launch.Root);
         using var process = Process.GetCurrentProcess();
         var state = new TimerWorkerState(launch, process.Id, process.StartTime.ToUniversalTime().ToFileTimeUtc(), Environment.ProcessPath!, false, false, 0, null, 0, null);
         OperationFiles.Write(StatePath(launch.Root), state);
@@ -169,6 +193,7 @@ public static class TimerControl
     {
         root = Path.GetFullPath(root); TimerStartupControl.RequireOwned(root);
         using var guard = OperationFiles.Lock(Path.Combine(root, "control"));
+        RequireFolder(root);
         var state = State(root); using var running = state is null ? null : Running(state);
         if (running is not null) return;
         var assembly = Assembly.GetEntryAssembly()!.Location;

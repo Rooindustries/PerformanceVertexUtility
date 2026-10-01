@@ -22,7 +22,7 @@ public sealed partial class OptimizerService
 {
     public async Task<GameSessionReview> PreviewGameSessionAsync(int launcherId, string gamePath, Dictionary<string, JsonElement> controls, bool acceptLauncherScope)
     {
-        var directory = NewOperationDirectory("game-session");
+        var directory = await NewOperationDirectoryAsync("game-session");
         var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<ProtectedSessionPreview>("protected-session-preview", new()
         {

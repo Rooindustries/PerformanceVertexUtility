@@ -74,8 +74,11 @@ public static class TimerStartupControl
     }
     public static void Write(TweakControlRead before, JsonElement desired)
     {
-        var target = Target(before.Address); Directory.CreateDirectory(target.Root);
+        var target = Target(before.Address);
+        if (before.Address.Target == "system") OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
+        Directory.CreateDirectory(target.Root);
         using var guard = OperationFiles.Lock(Path.Combine(target.Root, "startup"));
+        TimerControl.RequireFolder(target.Root);
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer startup state changed after review.");
         var scheduler = ConnectScheduler(); dynamic service = scheduler; object? found = null;
         try
@@ -101,7 +104,7 @@ public static class TimerStartupControl
             if (File.Exists(scriptPath)) throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
             OperationFiles.Write(ReceiptPath(target.Root), receipt);
-            File.WriteAllText(scriptPath, script, new UTF8Encoding(false));
+            using (var output = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) output.Write(new UTF8Encoding(false).GetBytes(script));
             dynamic definition = service.NewTask(0);
             try
             {

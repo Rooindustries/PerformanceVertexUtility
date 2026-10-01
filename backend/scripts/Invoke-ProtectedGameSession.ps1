@@ -16,17 +16,13 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe';
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
-    $directory=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-session-request-'+[guid]::NewGuid().ToString('N'))
-    [IO.Directory]::CreateDirectory($directory)|Out-Null
-    try {
-        $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
-        if($SessionRoot){$request.sessionRoot=$SessionRoot}
-        foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
-        $path=Join-Path $directory 'request.json';[IO.File]::WriteAllText($path,($request|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
-        $text=@(& $DotNetPath @hostArgs $Operation $path) -join "`n";$exit=$LASTEXITCODE;$result=$text|ConvertFrom-Json
-        if($exit -ne 0 -or $result.status -ne 'completed'){throw ($Operation+' failed (exit '+$exit+'): '+$result.error.message)}
-        return $result.data
-    }finally{Remove-Item -LiteralPath $directory -Recurse -Force}
+    $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
+    if($SessionRoot){$request.sessionRoot=$SessionRoot}
+    foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
+    $OutputEncoding=[Text.UTF8Encoding]::new($false)
+    $text=@(($request|ConvertTo-Json -Depth 20)|& $DotNetPath @hostArgs $Operation '-') -join "`n";$exit=$LASTEXITCODE;$result=$text|ConvertFrom-Json
+    if($exit -ne 0 -or $result.status -ne 'completed'){throw ($Operation+' failed (exit '+$exit+'): '+$result.error.message)}
+    return $result.data
 }
 if($Action -eq 'Preview'){
     if(-not $PreviewPath -or -not $ControlsPath -or -not $GamePath -or $LauncherProcessId -le 0){throw 'Provide the launcher PID, game executable, controls JSON and preview output path.'}
@@ -37,7 +33,11 @@ if($Action -eq 'Preview'){
 if($Action -eq 'Start'){
     if(-not $PreviewPath -or -not $ReviewHash){throw 'Provide the reviewed preview file and its hash.'}
     $plan=Invoke-Core 'protected-session-check' @{previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash}
-    if(-not $SessionRoot){$SessionRoot=Join-Path $env:LOCALAPPDATA ('RooIndustries\ProtectedSessions\'+$plan.operationId)}
+    if(-not $SessionRoot){
+        $operations=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
+        Invoke-Core 'operations-secure' @{operationsRoot=$operations;confirm=$true}|Out-Null
+        $SessionRoot=Join-Path $operations ('game-session-'+$plan.operationId+'\session')
+    }
 }
 if(-not $SessionRoot){throw 'Provide the session directory returned by Start.'}
 $SessionRoot=[IO.Path]::GetFullPath($SessionRoot)
@@ -55,7 +55,7 @@ if($Action -eq 'Start'){
     [IO.File]::WriteAllText($requestPath,(@{schemaVersion=1;repoRoot=$repoRoot;sessionRoot=$SessionRoot;previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash;confirm=$true}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'Build-OptimizerHost.ps1 must package the background session executable.'}
-    $execute=New-ScheduledTaskAction -Execute $workerExe -Argument ('run "'+$requestPath+'"') -WorkingDirectory (Split-Path $workerExe -Parent)
+    $execute=New-RooIndustriesElevatedTaskAction $workerExe ('run "'+$requestPath+'"') (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Force|Out-Null
