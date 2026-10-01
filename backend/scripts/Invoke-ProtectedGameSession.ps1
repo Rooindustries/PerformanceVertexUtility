@@ -12,7 +12,7 @@ $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build-OptimizerHost.ps1 must build the native session helper first.'}
 $hostArgs=@($hostDll)
 if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
-if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}
+if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {

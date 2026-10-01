@@ -25,10 +25,7 @@ $hostDll=Join-Path $HostDirectory 'Optimizer.Host.dll'
 if(-not(Test-Path -LiteralPath $hostDll)){throw 'Build the policy worker with Build-OptimizerHost.ps1 before starting saved rules.'}
 $hostArgs=@($hostDll)
 if(Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll')){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
-if(-not $DotNetPath){
-    $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
-    if(Test-Path -LiteralPath $candidate){$DotNetPath=$candidate}else{$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
-}
+if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $requestPath=Join-Path $PolicyRoot 'worker-request.json'

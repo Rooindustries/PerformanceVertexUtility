@@ -195,6 +195,11 @@ public sealed partial class OptimizerService
         if (bundled) dotnet = Path.Combine(hostDirectory, "Optimizer.Host.exe");
         else if (string.IsNullOrWhiteSpace(dotnet))
         {
+            if (RooIndustries.Optimizer.RuntimeEnvironment.Release)
+            {
+                AppLog.Write("helper", "Missing " + Path.Combine(hostDirectory, "hostpolicy.dll"));
+                throw new FileNotFoundException(AppLog.MissingFiles, host);
+            }
             var userRuntime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet.exe");
             dotnet = File.Exists(userRuntime) ? userRuntime : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
         }

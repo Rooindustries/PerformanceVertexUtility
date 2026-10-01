@@ -71,3 +71,13 @@ function New-RooIndustriesElevatedTaskAction {
     $command='"'+$clear+'&"'+$Executable+'" '+$Arguments+'"'
     return New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "'+(Join-Path $system 'cmd.exe')+'" /d /s /c '+$command) -WorkingDirectory $WorkingDirectory
 }
+
+function Get-RooIndustriesDevelopmentDotNet {
+    param([Parameter(Mandatory=$true)][string]$HostDirectory)
+    $options=$null
+    try {$options=(Get-Content -LiteralPath (Join-Path $HostDirectory 'Optimizer.Host.runtimeconfig.json') -Raw -ErrorAction Stop|ConvertFrom-Json).runtimeOptions} catch {}
+    if(-not $options -or (-not $options.framework -and -not $options.frameworks)){throw 'Roo Industries files are missing or damaged. Install the app again.'}
+    $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
+    if(Test-Path -LiteralPath $candidate){return $candidate}
+    return (Get-Command dotnet.exe -ErrorAction Stop).Source
+}
