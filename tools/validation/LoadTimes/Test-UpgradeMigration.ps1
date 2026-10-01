@@ -31,6 +31,14 @@ $ProbePath = Join-Path $env:TEMP 'RooIndustriesMigrationProbe.exe'
 
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
 function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $script:Failures++ }; Log ($(if ($ok) { 'PASS ' } else { 'FAIL ' }) + $name + ' :: ' + $detail) }
+$install = Split-Path (Split-Path $Exe -Parent) -Parent
+$scripts = Join-Path $install 'backend\scripts'
+$hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
+$system = [Environment]::GetFolderPath('System')
+. (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
+function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
+function Policy-Workers([string]$requestPath) { if (-not $requestPath) { return @() }; @(Get-CimInstance Win32_Process -Filter "Name='Optimizer.Host.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'policy-run' -and $_.CommandLine.IndexOf($requestPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) }
+function Any-Policy-Workers { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in 'Optimizer.Host.exe', 'dotnet.exe' -and [string]$_.CommandLine -match 'policy-run' }) }
 function Shot([string]$name) {
     $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
     $b = New-Object Drawing.Bitmap $bounds.Width, $bounds.Height; $g = [Drawing.Graphics]::FromImage($b)
@@ -155,7 +163,10 @@ try {
         $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $probeId) -eq 'BelowNormal') { $true } } 240 'rule enforced' } catch {}
         Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probeId))
         Shot 'saved'
-        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath $StatePath -Encoding UTF8
+        $oldWorkers = @(Any-Policy-Workers | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
+        $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
+        Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
+        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
@@ -163,6 +174,27 @@ try {
         Check ($null -ne $probe -and $probe.StartTime.ToUniversalTime().ToString('o') -eq $state.probeStart) 'the probe from before the upgrade is still running' ('pid=' + $state.probeId)
         $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $state.probeId) -eq 'BelowNormal') { $true } } 150 'rule enforced after upgrade' } catch {}
         Check ([bool]$enforced) 'after the upgrade the governor still enforces the earlier rule' ('priority=' + (Probe-Priority $state.probeId))
+        $tasks = @(Policy-Tasks)
+        Check ($tasks.Count -ge 1) 'the upgraded install has a governor task' ('tasks=' + $tasks.Count + ' before=' + @($state.oldTasks).Count)
+        $upgradedRequest = $null
+        foreach ($task in $tasks) {
+            $xmlText = Task-Xml $task.TaskName $task.TaskPath
+            Set-Content -LiteralPath (Join-Path $OutDir ('task-' + $task.TaskName + '.xml')) -Value $xmlText -Encoding UTF8
+            $policyRoot = ([string]$task.Description -split ' \| ')[-1]
+            $upgradedRequest = Join-Path $policyRoot 'worker-request.json'
+            Check-TaskLauncher ('upgraded governor task ' + $task.TaskName) $xmlText $hostExe @('policy-run', $upgradedRequest) (Split-Path $hostExe -Parent)
+        }
+        $worker = $null; try { $worker = WaitFor { @(Policy-Workers $upgradedRequest | Where-Object { $_.ExecutablePath -ieq $hostExe })[0] } 150 'the upgraded governor worker' } catch {}
+        $old = @($state.oldWorkers | ForEach-Object { [string]$_.pid + '|' + [string]$_.created })
+        Check ($null -ne $worker -and $old -notcontains ([string]$worker.ProcessId + '|' + $worker.CreationDate.ToUniversalTime().ToString('o'))) 'the governor worker running after the upgrade is the installed new one, not the worker of the earlier version' ($(if ($worker) { 'pid=' + $worker.ProcessId + ' image=' + $worker.ExecutablePath + ' earlier=' + ($old -join ',') } else { 'no governor worker from ' + $hostExe + ' for ' + $upgradedRequest }))
+        if ($worker) { Check-Chain 'upgraded governor' $worker ([xml](Task-Xml $tasks[0].TaskName $tasks[0].TaskPath)).Task.Actions.Exec.Arguments }
+        $fresh = Start-Process $ProbePath -ArgumentList '-n', '7200', '127.0.0.1' -WindowStyle Hidden -PassThru
+        try {
+            (Get-Process -Id $fresh.Id).PriorityClass = 'Normal'
+            $freshStart = Probe-Priority $fresh.Id
+            $freshEnforced = $null; try { $freshEnforced = WaitFor { if ((Probe-Priority $fresh.Id) -eq 'BelowNormal') { $true } } 150 'rule applied to a new process after the upgrade' } catch {}
+            Check ($freshStart -eq 'Normal' -and [bool]$freshEnforced) 'a process started after the upgrade gets the migrated rule from the new governor (starts Normal, reaches BelowNormal)' ("started at $freshStart, now " + (Probe-Priority $fresh.Id))
+        } finally { try { if (-not $fresh.HasExited) { $fresh.Kill() } } catch {} }
         Open-App
         Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
         $undo = @(Undo-Texts)
