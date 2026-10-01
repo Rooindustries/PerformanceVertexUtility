@@ -101,6 +101,55 @@ fetch() {
 
 upload() { scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none "$1" "$HOST:${2//\\//}"; }
 
+giui() {
+  local label="$1" phase_name="$2"
+  interactive 'tools\validation\Governor' 'Test-GovernorInstalled.ps1' 5 "$OUT/lifecycle/$label.json" -Phase "$phase_name"
+}
+
+governor_task_state() {
+  winps_text "Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' | ForEach-Object { \$_.$1 }" | head -1
+}
+
+worker_action() {
+  winps_text ". 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\BrandCompatibility.Common.ps1'; \$root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules'; & 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\Invoke-ProcessPolicyWorker.ps1' -Action $1 -PolicyRoot \$root -ConfirmApply" | tail -3 | cut -c1-300
+}
+
+lifecycle() {
+  local new="$1"
+  phase uninstall
+  phase install-other -OtherInstaller "'$new'" -Label fresh
+  gi create-rule create-rule
+  gi verify-running-1 verify-running
+  gi measure measure
+  screen governor-running Games
+  winps_text "Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' | Disable-ScheduledTask | Out-Null; 'disabled'"
+  screen governor-task-disabled Games
+  winps_text "Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' | Enable-ScheduledTask | Out-Null; 'enabled'"
+  winps_text ". 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\BrandCompatibility.Common.ps1'; \$r=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules\\rules'; [IO.File]::WriteAllText((Join-Path \$r 'roo-industries-damaged-check.json'),'{ this is not a rule'); 'damaged rule written'"
+  screen governor-damaged-rule Games
+  winps_text ". 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\BrandCompatibility.Common.ps1'; Remove-Item (Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules\\rules\\roo-industries-damaged-check.json') -Force; 'damaged rule removed'"
+  screen governor-undo-row 'Undo changes'
+  giui app-cycle app-cycle
+  reboot_wait
+  gi verify-running-after-reboot verify-running
+  MINUTES=30 phase scenario -Scenario launchers-session
+  gi new-probe-after-reboot new-probe
+  gi pause pause
+  reboot_wait
+  gi verify-paused-after-reboot verify-paused
+  worker_action Resume
+  gi verify-running-resumed verify-running
+  gi record record
+  phase install-other -OtherInstaller "'$new'" -Label reinstall
+  gi verify-replaced verify-replaced
+  gi new-probe-before-uninstall new-probe
+  phase uninstall
+  gi verify-removed verify-removed
+  phase install-other -OtherInstaller "'$new'" -Label reinstall-resumes
+  gi verify-running-after-reinstall verify-running
+  gi cleanup cleanup
+}
+
 step="${1:-}"; shift || true
 case "$step" in
   stage) stage ;;
@@ -110,5 +159,7 @@ case "$step" in
   reboot) reboot_wait ;;
   fetch) fetch "$@" ;;
   upload) upload "$@" ;;
+  giui) giui "$@" ;;
+  lifecycle) lifecycle "$@" ;;
   *) echo "usage: $0 stage | phase <name> [runner arguments] | gi <label> <phase> | screen <name> [page] | reboot | fetch <remote> <local dir> | upload <local file> <remote path>"; exit 2 ;;
 esac
