@@ -418,7 +418,7 @@ public static class RooIndustriesGovernorDenied {
     $requestFile=Join-Path $root 'file-request.json'
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$policyRoot;confirm=$true;paused=$true} $requestFile
     $fileRefusal=(@(& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' $requestFile) -join "`n")|ConvertFrom-Json
-    Assert ($fileRefusal.status -ne 'completed' -and $fileRefusal.error.message -eq 'Governor requests must be passed on standard input.' -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json.tmp'))) 'A governor request passed as a file is refused'
+    Assert ($fileRefusal.status -ne 'completed' -and $fileRefusal.error.message -eq 'Governor and recovery-folder requests must be passed on standard input.' -and -not (Test-Path -LiteralPath (Join-Path $policyRoot 'governor.json.tmp'))) 'A governor request passed as a file is refused'
     Remove-Item -LiteralPath $requestFile -Force
     $watchOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-watch-'+[Guid]::NewGuid().ToString('N')+'.json')
     Start-Limited (@'
