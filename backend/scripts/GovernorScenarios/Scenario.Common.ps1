@@ -96,6 +96,11 @@ public static class RooIndustriesGovernorScenarioOracle {
     }
 }
 
+function Remove-ScenarioTree([string]$Path){
+    if(-not (Test-Path -LiteralPath $Path)){return}
+    & cmd.exe /d /c ('rd /s /q "\\?\'+$Path+'"') 2>&1|Out-Null
+}
+
 function Enter-Scenario([string]$Name){
     $script:scenarioRoot=Join-Path $work ($Name+'-'+[Guid]::NewGuid().ToString('N').Substring(0,8))
     $script:policyParent=Join-Path $script:scenarioRoot 'data'
@@ -122,7 +127,7 @@ function Exit-Scenario {
     $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
     if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_ -like ('*\'+$leaf+'\*')})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
     for($attempt=0;$attempt -lt 20 -and (Test-Path -LiteralPath $script:scenarioRoot);$attempt++){
-        try {Remove-Item -LiteralPath $script:scenarioRoot -Recurse -Force -ErrorAction Stop} catch {Start-Sleep -Milliseconds 500}
+        try {Remove-Item -LiteralPath $script:scenarioRoot -Recurse -Force -ErrorAction Stop} catch {Remove-ScenarioTree $script:scenarioRoot;Start-Sleep -Milliseconds 500}
     }
     if(Test-Path -LiteralPath $script:scenarioRoot){$problems.Add('The scenario folder could not be removed: '+$script:scenarioRoot)}
     if($problems.Count -gt 0){throw ($problems -join '; ')}
