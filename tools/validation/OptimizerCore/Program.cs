@@ -6,6 +6,7 @@ using RooIndustries.Optimizer;
 try
 {
 if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
+if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
 if (args is ["--probe"] or ["--probe-ready"]) { if (args[0] == "--probe-ready") Console.WriteLine("ready"); Thread.Sleep(TimeSpan.FromMinutes(3)); return; }
 var continueOnFailure = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_SCENARIO_CONTINUE") == "1";
 var failures = 0;

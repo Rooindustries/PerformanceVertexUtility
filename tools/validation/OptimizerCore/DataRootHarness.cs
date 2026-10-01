@@ -32,6 +32,38 @@ static class DataRootHarness
     [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
     [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
 
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool GetTokenInformation(IntPtr token, int kind, IntPtr value, int size, out int returned);
+
+    public static bool? AdministratorsEnabled(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            if (!OpenProcessToken(process.Handle, 0x8, out var token)) return null;
+            try
+            {
+                GetTokenInformation(token, 2, IntPtr.Zero, 0, out var needed);
+                var buffer = Marshal.AllocHGlobal(needed);
+                try
+                {
+                    if (!GetTokenInformation(token, 2, buffer, needed, out _)) return null;
+                    var count = Marshal.ReadInt32(buffer);
+                    var offset = IntPtr.Size;
+                    for (var index = 0; index < count; index++)
+                    {
+                        var sid = new System.Security.Principal.SecurityIdentifier(Marshal.ReadIntPtr(buffer, offset + index * 2 * IntPtr.Size));
+                        var attributes = Marshal.ReadInt32(buffer, offset + index * 2 * IntPtr.Size + IntPtr.Size);
+                        if (sid.Value == "S-1-5-32-544") return (attributes & 0x4) != 0 && (attributes & 0x10) == 0;
+                    }
+                    return false;
+                }
+                finally { Marshal.FreeHGlobal(buffer); }
+            }
+            finally { CloseHandle(token); }
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
+    }
+
     public static bool? Elevated(int processId)
     {
         try
@@ -77,6 +109,15 @@ static class DataRootHarness
         var text = File.ReadAllText(result).Trim();
         File.Delete(result);
         return text;
+    }
+
+    public static void StandardBackground(Dictionary<string, string> env, params string[] args)
+    {
+        var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
+        var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;
+        var script = "$env:DOTNET_ROOT=" + Quote(Path.GetDirectoryName(dotnet)!) + "; " + string.Join("", env.Select(pair => "$env:" + pair.Key + "=" + Quote(pair.Value) + "; ")) + "& " + Quote(dotnet) + " " + Quote(dll) + " " + string.Join(" ", args.Select(Quote));
+        var system = Environment.SystemDirectory;
+        Run(Path.Combine(system, "runas.exe"), "/trustlevel:0x20000 \"" + Path.Combine(system, "conhost.exe") + " --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) + "\"", 30000);
     }
 
     public static void Forget(params string[] paths)
