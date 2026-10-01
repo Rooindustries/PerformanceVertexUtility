@@ -19,10 +19,20 @@ public sealed partial class OptimizerService
         => Task.Run(() => { using var change = DataGeneration.BeginChange(); return _windowsChoices.Save(catalog, profileId, selections, revision); });
     private readonly SharedReads _tweakReads = new();
     private static readonly TimeSpan TweakStateAge = TimeSpan.FromSeconds(60);
+    private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, BackgroundPriority> _backgroundTweakReads = new(StringComparer.Ordinal);
+    private async Task<T?> TweakReadAsync<T>(string key, TimeSpan maxAge, bool background, Func<Task<T>> read, Func<T, bool>? good = null) where T : class
+    {
+        if (!background && _backgroundTweakReads.TryGetValue(key, out var running)) running.Raise();
+        var priority = background ? new BackgroundPriority() : null;
+        if (priority is not null) _backgroundTweakReads[key] = priority;
+        try { return await _tweakReads.GetAsync(key, maxAge, () => { HostPriority.Value = priority; return read(); }, good).ConfigureAwait(false); }
+        finally { if (priority is not null) _backgroundTweakReads.TryRemove(new(key, priority)); }
+    }
     public async Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false, bool background = false)
-        => (await _tweakReads.GetAsync("catalog", fresh ? TimeSpan.Zero : TimeSpan.FromMinutes(30), () => RunCoreAsync<TweakCatalogResult>("tweak-catalog", new() { ["background"] = background })))!;
+        => (await TweakReadAsync("catalog", fresh ? TimeSpan.Zero : TimeSpan.FromMinutes(30), background, () => RunCoreAsync<TweakCatalogResult>("tweak-catalog", new(), timeout: TimeSpan.FromMinutes(2))))!;
     public async Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false, bool background = false)
-        => (await _tweakReads.GetAsync("recovery", fresh ? TimeSpan.Zero : TweakStateAge, () => RunCoreAsync<TweakRecovery>("tweak-recovery", new() { ["background"] = background })))!;
+        => (await TweakReadAsync("recovery", fresh ? TimeSpan.Zero : TweakStateAge, background, () => RunCoreAsync<TweakRecovery>("tweak-recovery", new(), timeout: TimeSpan.FromMinutes(2))))!;
     public event Action<TweakInspection, long>? WindowsTweaksPartial;
     private sealed record PartialTweaks(TweakInspection Inspection, long Generation);
     private PartialTweaks? _pendingTweaks;
@@ -32,13 +42,13 @@ public sealed partial class OptimizerService
         foreach (var read in new Task[] { ReadWindowsTweakCatalogAsync(background: true), ReadWindowsRecoveryAsync(background: true), ReadWindowsTweaksAsync(background: true) })
             _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
     }
-    private async Task<TweakInspection> ReadStatusAsync(bool background, bool streamed)
+    private async Task<TweakInspection> ReadStatusAsync(bool streamed)
     {
-        var generation = DataGeneration.Changing ? -1 : DataGeneration.Current;
+        var generation = DataGeneration.Snapshot();
         PartialTweaks? mine = null;
         try
         {
-            return await RunCoreAsync<TweakInspection>("tweak-status", new() { ["partialStatus"] = streamed, ["background"] = background }, timeout: TimeSpan.FromMinutes(10), partial: !streamed ? null : bytes =>
+            return await RunCoreAsync<TweakInspection>("tweak-status", new() { ["partialStatus"] = streamed }, timeout: TimeSpan.FromMinutes(10), partial: !streamed ? null : bytes =>
             {
                 if (!DataGeneration.IsCurrent(generation)) return;
                 using var document = JsonDocument.Parse(bytes);
@@ -52,7 +62,7 @@ public sealed partial class OptimizerService
     }
     public Task<System.Text.Json.JsonElement> RecoverWindowsTweaksAsync(string reviewHash) => RunCoreAsync<System.Text.Json.JsonElement>("tweak-recover", new() { ["reviewHash"] = reviewHash, ["confirm"] = true });
     public async Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool background = false, bool streamed = true)
-        => (await _tweakReads.GetAsync("status", fresh ? TimeSpan.Zero : TweakStateAge, () => ReadStatusAsync(background, streamed)))!;
+        => (await TweakReadAsync("status", fresh ? TimeSpan.Zero : TweakStateAge, background, () => ReadStatusAsync(streamed), inspection => !TweakEngine.HasTransientErrors(inspection)))!;
     public async Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections)
     {
         var directory = NewOperationDirectory("windows-settings");
