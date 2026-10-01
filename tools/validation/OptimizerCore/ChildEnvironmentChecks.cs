@@ -167,10 +167,6 @@ static class ChildEnvironmentChecks
             ChildEnv.Run(check, mode, null, env =>
             {
                 var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                var expected = string.Join("|", Path.Combine(profile, "AppData", "Roaming"), Path.Combine(profile, "AppData", "Local"), profile, env.Values["ProgramData"], realTemp, realTemp, env.Windows, env.Windows, "%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
-                var expanded = RuntimeEnvironment.ExpandUserVariables("%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%ProgramData%|%TEMP%|%TMP%|%SystemRoot%|%windir%|%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
-                check(expanded == expected, "Uninstall data expands user-profile variables against the real user's folders, not the process block: " + expanded);
-                check(!string.Equals(Path.GetTempPath().TrimEnd('\\'), realTemp, StringComparison.OrdinalIgnoreCase), "The process TEMP points away from the user's real temp folder, as in a Host the app started");
                 var scope = new RegistryAddress("CurrentUser", "Registry64", keyPath, "key", null);
                 foreach (var (label, install, wanted) in new[] { ("an absolute install location and a registry value that names %TEMP%", folder, "Referencing"), ("an install location that names %TEMP% and an absolute registry value", "%TEMP%\\" + name, "Absolute") })
                 {
@@ -178,6 +174,21 @@ static class ChildEnvironmentChecks
                     var result = new LeftoverDiscovery(app, []).Scan(CancellationToken.None, [], [scope]);
                     var values = result.Candidates.Where(candidate => candidate.Kind == "registryValue").Select(candidate => candidate.Registry!.ValueName).ToArray();
                     check(values.Contains(wanted), "A leftover under the user's real temp folder is discovered for " + label + " (found: " + string.Join(", ", values) + ")");
+                }
+                var expected = string.Join("|", Path.Combine(profile, "AppData", "Roaming"), Path.Combine(profile, "AppData", "Local"), profile, env.Values["ProgramData"], realTemp, realTemp, env.Windows, env.Windows, "%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
+                var expanded = RuntimeEnvironment.ExpandUserVariables("%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%ProgramData%|%TEMP%|%TMP%|%SystemRoot%|%windir%|%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
+                check(expanded == expected, "Uninstall data expands user-profile variables against the real user's folders, not the process block: " + expanded);
+                check(!string.Equals(Path.GetTempPath().TrimEnd('\\'), realTemp, StringComparison.OrdinalIgnoreCase), "The process TEMP points away from the user's real temp folder, as in a Host the app started");
+                var script = Path.Combine(ChildEnv.RepoRoot(), "backend", "scripts", "BrandCompatibility.Common.ps1");
+                var shell = new ProcessStartInfo(ChildEnv.PowerShell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                RuntimeEnvironment.Apply(shell);
+                foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ". '" + script + "'; Expand-RooIndustriesUserVariables '%TEMP%\\x|%tmp%\\y|%LOCALAPPDATA%\\z'" }) shell.ArgumentList.Add(argument);
+                using (var child = Process.Start(shell)!)
+                {
+                    var answer = child.StandardOutput.ReadToEnd().Trim();
+                    var problem = child.StandardError.ReadToEnd().Trim();
+                    child.WaitForExit();
+                    check(answer == string.Join("|", Path.Combine(realTemp, "x"), Path.Combine(realTemp, "y"), Path.Combine(profile, "AppData", "Local", "z")), "A script the Host starts expands %TEMP% and %TMP% in uninstall data to the user's real temp folder, not its own protected temp: " + answer + " " + problem);
                 }
             });
         }

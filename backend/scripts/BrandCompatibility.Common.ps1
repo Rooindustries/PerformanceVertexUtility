@@ -78,6 +78,12 @@ function Get-RooIndustriesLocalAppData {
     return Join-Path $profileFolder 'AppData\Local'
 }
 
+function Expand-RooIndustriesUserVariables([string]$Text) {
+    $userTemp=Join-Path (Get-RooIndustriesLocalAppData) 'Temp'
+    $expanded=[regex]::Replace($Text,'%(?:TEMP|TMP)%',[Text.RegularExpressions.MatchEvaluator]{param($match) $userTemp},[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    return [Environment]::ExpandEnvironmentVariables($expanded)
+}
+
 function Get-RooIndustriesLocalDataRoot {
     param([string]$LocalData=(Get-RooIndustriesLocalAppData),[switch]$Protected)
     $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder

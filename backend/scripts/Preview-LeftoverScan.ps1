@@ -39,7 +39,7 @@ function Test-MicrosoftOwnedRegistryPath {
 
 function Test-MicrosoftOwnedFilePath {
     param([string]$Command)
-    $text = [Environment]::ExpandEnvironmentVariables(([string]$Command).Trim())
+    $text = Expand-RooIndustriesUserVariables (([string]$Command).Trim())
     if ($text.StartsWith('"')) { $text = $text.Substring(1).Split('"')[0] }
     elseif ($text -match '^(.+?\.(exe|dll|cmd|bat|ps1))(\s|$)') { $text = $Matches[1] }
     $text = $text.TrimEnd('\')
