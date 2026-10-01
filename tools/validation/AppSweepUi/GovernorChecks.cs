@@ -215,6 +215,14 @@ static class GovernorChecks
             "Undo: Stopped · open Games > Processes to start it (medium)");
         view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, 0x41303)));
         Expect(check, view, "Stopped with a one-minute task that has not run yet still promises the restart", "Detail: " + Restarts);
+        foreach (var (code, label) in new[] { (unchecked((int)0xC0000005), "crashed"), (unchecked((int)0x800710E0), "had a launch ignored while it was running"), (unchecked((int)0x00041301), "was running") })
+        {
+            view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, code)));
+            Expect(check, view, "Stopped with a one-minute task whose last run " + label + " still promises the restart", "Detail: " + Restarts);
+        }
+        view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, unchecked((int)0x80070002))));
+        Expect(check, view, "Stopped with a one-minute task whose host file was not found says the last start failed",
+            "Detail: The governor stopped and its last automatic start failed (error 0x80070002), so it may not start again by itself. Press Start governor to start it.");
 
         var failing = "A governor check failed and will be retried in 4 s: The process cannot access the file because it is being used by another process.";
         view = await View(Snapshot(false, [rule], new(Host("running", [], errors: [failing]), true, null)));
@@ -222,7 +230,14 @@ static class GovernorChecks
         view = await View(Snapshot(false, [], new(Host("stopped", []), false, null), unreadableRules: ["The saved rule broken.json could not be read: The JSON is incomplete."]));
         Expect(check, view, "With only a damaged rule file the governor is not called off and the file is named",
             "State: notResponding", "Detail: The saved rule broken.json could not be read: The JSON is incomplete.");
-        view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), unreadableRules: ["The saved rule broken.json could not be read: The JSON is incomplete."]));
+        var damagedRule = "The saved rule broken.json could not be read: The JSON is incomplete.";
+        view = await View(Snapshot(false, [rule], new(Host("running", [], errors: [damagedRule]), true, null), unreadableRules: [damagedRule]));
+        Expect(check, view, "The error the worker records for a damaged rule file is shown once, followed by the fact that the rule is not enforced",
+            "State: running", "Detail: 1 rule is on. " + damagedRule + " Those rules are not enforced.");
+        view = await View(Snapshot(false, [rule], new(Host("running", [], errors: [damagedRule, failing]), true, null), unreadableRules: [damagedRule]));
+        Expect(check, view, "A damaged rule file and a failing check are both shown",
+            "State: running", "Detail: 1 rule is on. " + failing + " " + damagedRule + " Those rules are not enforced.");
+        view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), unreadableRules: [damagedRule]));
         Expect(check, view, "A running governor with one unreadable rule file keeps running and names the file",
             "State: running", "Detail: 1 rule is on. The saved rule broken.json could not be read: The JSON is incomplete. Those rules are not enforced.");
 
