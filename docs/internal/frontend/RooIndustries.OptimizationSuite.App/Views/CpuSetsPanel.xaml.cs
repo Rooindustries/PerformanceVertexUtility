@@ -32,7 +32,7 @@ public sealed partial class CpuSetsPanel : UserControl
         if (!IsLoaded) return;
         var changed = _watch.Changed;
         if ((!revisit && !changed) || ViewModel.Busy) return;
-        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(() => ViewModel.RefreshCommand.ExecuteAsync(null));
+        if (ViewModel.SelectedProcess is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
         else if (changed) { _watch.MarkSeen(); ViewModel.NoteChanged(); }
     }
 }

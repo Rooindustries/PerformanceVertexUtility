@@ -53,6 +53,53 @@ public static class DataGeneration
     }
 }
 
+public enum OwnEnd { None, Accepted, Stale }
+
+public sealed class SeenGeneration
+{
+    private long _value = -2;
+    private int _reads;
+    private long _ownBefore = -1;
+    private DataGeneration.OwnChanges? _own;
+
+    public long Value => Interlocked.Read(ref _value);
+    public bool IsCurrent => DataGeneration.IsCurrent(Value);
+    public bool Reading => Volatile.Read(ref _reads) > 0;
+    public void Mark() => Interlocked.Exchange(ref _value, DataGeneration.Snapshot());
+    public void Invalidate() => Interlocked.Exchange(ref _value, -1);
+
+    public long BeginRead()
+    {
+        Interlocked.Increment(ref _reads);
+        return DataGeneration.Snapshot();
+    }
+
+    public void EndRead(long started, bool seen)
+    {
+        if (seen) Interlocked.Exchange(ref _value, started == DataGeneration.Current ? started : -1);
+        Interlocked.Decrement(ref _reads);
+    }
+
+    public void BeginOwn()
+    {
+        _ownBefore = Value >= 0 ? DataGeneration.Snapshot() : -1;
+        _own = DataGeneration.BeginOwn();
+    }
+
+    public OwnEnd EndOwn(bool mayAccept, out long bumps)
+    {
+        var own = _own;
+        bumps = 0;
+        if (own is null) return OwnEnd.None;
+        _own = null;
+        DataGeneration.EndOwn();
+        bumps = own.Bumps;
+        if (!mayAccept || Reading || Value < 0 || Value != _ownBefore || !DataGeneration.OwnAccepted(_ownBefore, own)) return OwnEnd.Stale;
+        Interlocked.Exchange(ref _value, _ownBefore + bumps);
+        return OwnEnd.Accepted;
+    }
+}
+
 public sealed class SharedReads
 {
     private sealed record Entry(Task<object?> Read, long Generation, long StartedTicks, Func<object?, bool> Good, bool Provisional = false)
