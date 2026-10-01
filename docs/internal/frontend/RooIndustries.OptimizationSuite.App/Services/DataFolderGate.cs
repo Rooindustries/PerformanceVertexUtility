@@ -11,7 +11,7 @@ public static class DataFolderGate
 {
     public static bool Open(BackendLocator locator)
     {
-        RuntimeEnvironment.Sanitize();
+        RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
         try { return Opened(DataFolder.Require()); }
         catch (UnauthorizedAccessException) { }
