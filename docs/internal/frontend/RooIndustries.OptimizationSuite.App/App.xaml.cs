@@ -176,11 +176,15 @@ public partial class App : Application
 
     private static void ShowRedirect(string? ownershipPath) => MainWindow?.DispatcherQueue.TryEnqueue(() =>
     {
-        if (MainWindow is not { } window) return;
-        if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter) presenter.Restore();
-        window.Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(window));
-        if (!string.IsNullOrWhiteSpace(ownershipPath) && window is RooIndustries.OptimizationSuite.MainWindow main) main.OpenOwnershipReview(ownershipPath);
+        try
+        {
+            if (MainWindow is not { } window) return;
+            if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+            window.Activate();
+            SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(window));
+            if (!string.IsNullOrWhiteSpace(ownershipPath) && window is RooIndustries.OptimizationSuite.MainWindow main) main.OpenOwnershipReview(ownershipPath);
+        }
+        catch (Exception error) { AppLog.Write("start", "Could not bring the open window forward: " + error.Message); }
     });
 
     private static string[] Split(string commandLine)
