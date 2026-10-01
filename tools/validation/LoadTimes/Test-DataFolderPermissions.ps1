@@ -56,6 +56,7 @@ try {
 foreach(`$key in `$targets.Keys){
   `$file=Join-Path `$targets[`$key] ('roo-standard-probe-'+[Guid]::NewGuid().ToString('N')+'.txt')
   try { Set-Content -LiteralPath `$file -Value 'standard token probe' -ErrorAction Stop; `$out[`$key]='WROTE '+`$file } catch { `$out[`$key]='DENIED '+`$_.Exception.Message }
+  try { `$out[`$key+'List']='LISTED '+@(Get-ChildItem -LiteralPath `$targets[`$key] -Force -ErrorAction Stop).Count } catch { `$out[`$key+'List']='LIST FAILED '+`$_.Exception.Message }
 }
 try { `$out['logRead']='READ '+@(Get-Content -LiteralPath '$log' -TotalCount 1 -ErrorAction Stop).Count } catch { `$out['logRead']='FAILED '+`$_.Exception.Message }
 `$out | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$results' -Encoding UTF8
@@ -76,6 +77,8 @@ try { `$out['logRead']='READ '+@(Get-Content -LiteralPath '$log' -TotalCount 1 -
             Check ($value -like 'DENIED *' -and $value -match 'denied') "a standard token is denied writing into $key" $value
             if ($value -like 'WROTE *') { Remove-Item -LiteralPath $value.Substring(6) -Force }
         }
+        $listed = [string]$standard.($key + 'List')
+        Check ($listed -like 'LISTED *') "a standard token can read (list) $key" $listed
     }
     Check ([string]$standard.logRead -like 'READ *') 'a standard token can read the app log' ([string]$standard.logRead)
     Remove-Item -LiteralPath $results, $inner -Force -ErrorAction SilentlyContinue
