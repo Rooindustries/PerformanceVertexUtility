@@ -32,6 +32,13 @@ try
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
     bool Excluded(RunningProcess process) => names.Any(pattern => pattern.IsMatch(Path.GetFileName(process.ExecutablePath)));
+    void RequireEarlierReceipts()
+    {
+        if (request.FixturePath is not null) return;
+        var downloads = Path.Combine(OperationsFolder.DefaultRoot, "download-blockers");
+        foreach (var receipt in new[] { Path.Combine(OperationsFolder.DefaultRoot, "ultimate-plan.json") }.Concat(Directory.Exists(downloads) ? Directory.EnumerateFiles(downloads, "*.json") : []))
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(receipt, request.AcceptEarlierVersion == true);
+    }
     var engine = new ProcessControlEngine(Excluded);
     object data;
     switch (action)
@@ -67,6 +74,7 @@ try
             break;
         case "tweak-recover":
             RequireConfirmation(request);
+            RequireEarlierReceipts();
             data = new { recovered = new RegistryTweakStore().Recover(Require(request.ReviewHash, "recovery review hash")) };
             break;
         case "tweak-status":
@@ -91,6 +99,7 @@ try
             var tweakHash = Require(request.ReviewHash, "review hash");
             if (action == "tweak-restore" && OperationFiles.Read<TweakPlan>(tweakPreview, tweakHash).Selections.Length != 0)
                 throw new InvalidDataException("Restore requires a reviewed empty selection for the profile.");
+            if (action == "tweak-restore") RequireEarlierReceipts();
             var tweakApplied = Tweaks(request).Apply(tweakPreview, tweakHash, request.AcceptDataLoss == true);
             if (action == "tweak-restore" && request.FixturePath is null) CustomTweaks.PruneOwnership(tweakApplied.State);
             data = tweakApplied;
