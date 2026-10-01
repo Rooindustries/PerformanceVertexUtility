@@ -14,21 +14,85 @@ public sealed record TimerWorkerState(TimerLaunch Launch, int ProcessId, long Cr
 
 public static class TimerControl
 {
-    internal static string Root(ControlAddress address)
+    internal sealed record Roots(string Control, string State);
+
+    internal static bool AllowElevatedWorker
+    {
+        get
+        {
+#if GOVERNOR_TEST_HOOKS
+            return Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_ALLOW_ELEVATED_TIMER_WORKER") == "1";
+#else
+            return false;
+#endif
+        }
+    }
+
+    public static string StateFolder
+    {
+        get
+        {
+#if GOVERNOR_TEST_HOOKS
+            if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_STATE") is { Length: > 0 } test) return test;
+#endif
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite.Timer");
+        }
+    }
+
+    internal static string SystemControl
+    {
+        get
+        {
+#if GOVERNOR_TEST_HOOKS
+            if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_CONTROL") is { Length: > 0 } test) return Path.GetFullPath(test).TrimEnd(Path.DirectorySeparatorChar);
+#endif
+            return Path.Combine(OperationsFolder.DefaultRoot, OperationsFolder.TimerFolder);
+        }
+    }
+
+    internal static bool IsSystemControl(string control) => string.Equals(Path.GetFullPath(control).TrimEnd(Path.DirectorySeparatorChar), SystemControl, StringComparison.OrdinalIgnoreCase);
+
+    internal static Roots RootsFor(ControlAddress address)
     {
         if (address.Property != "half-millisecond") throw new InvalidDataException("Unknown timer request.");
-        return address.Target == "system" ? Path.Combine(OperationsFolder.DefaultRoot, OperationsFolder.TimerFolder)
-            : address.Target.StartsWith("fixture:", StringComparison.Ordinal) ? FileAccessControl.FixturePath(address.Target[8..])
-            : throw new InvalidDataException("Unknown timer owner.");
+        if (address.Target == "system") return new(SystemControl, StateFolder);
+        if (address.Target.StartsWith("fixture:", StringComparison.Ordinal)) { var path = FileAccessControl.FixturePath(address.Target[8..]); return new(path, path); }
+        throw new InvalidDataException("Unknown timer owner.");
     }
-    private static string StatePath(string root) => Path.Combine(root, "session.json");
-    private static TimerWorkerState? State(string root)
+    internal static string Root(ControlAddress address) => RootsFor(address).Control;
+    internal static Roots RootsOf(string control)
     {
-        if (!File.Exists(StatePath(root))) return null;
-        var state = ReadJson<TimerWorkerState>(StatePath(root)); state.Launch.Owner.Verify();
-        if (state.Launch.Root != root) throw new InvalidDataException("Timer state belongs to a different directory.");
-        return state;
+        control = Path.GetFullPath(control).TrimEnd(Path.DirectorySeparatorChar);
+        return IsSystemControl(control) ? new(control, StateFolder) : new(control, control);
     }
+    private static bool Split(Roots roots) => !string.Equals(Path.GetFullPath(roots.State), Path.GetFullPath(roots.Control), StringComparison.OrdinalIgnoreCase);
+    private static string StatePath(Roots roots) => Path.Combine(roots.State, "session.json");
+    private static string RetiredPath(Roots roots) => Path.Combine(roots.Control, "retired.json");
+    private sealed record Retired(string[] Sessions);
+    private static TimerWorkerState? Parse(byte[]? bytes)
+    {
+        if (bytes is null) return null;
+        try
+        {
+            var state = OperationFiles.Deserialize<TimerWorkerState>(bytes);
+            state.Launch.Owner.Verify();
+            return string.IsNullOrEmpty(state.Launch.SessionId) || string.IsNullOrEmpty(state.Executable) || state.ProcessId <= 0 ? null : state;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException) { return null; }
+    }
+    private static TimerWorkerState? State(Roots roots)
+    {
+        var state = Parse(NativeFiles.ReadBounded(roots.State, "session.json", 1 << 16, out _));
+        if (state is null || !string.Equals(state.Launch.Root, roots.Control, StringComparison.OrdinalIgnoreCase)) return null;
+        return Retirements(roots).Contains(state.Launch.SessionId) ? null : state;
+    }
+    private static string[] Retirements(Roots roots)
+    {
+        try { return NativeFiles.ReadBounded(roots.Control, "retired.json", 1 << 16, out _) is { } bytes ? OperationFiles.Deserialize<Retired>(bytes).Sessions ?? [] : []; }
+        catch (Exception error) when (error is not OutOfMemoryException) { return []; }
+    }
+    private static void Retire(Roots roots, string session)
+        => OperationFiles.Write(RetiredPath(roots), new Retired(Retirements(roots).Append(session).TakeLast(8).ToArray()));
     private static T ReadJson<T>(string path)
     {
         for (var attempt = 0; ; attempt++)
@@ -39,48 +103,55 @@ public static class TimerControl
     }
     private static Process? Running(TimerWorkerState state)
     {
+        Process process;
+        try { process = Process.GetProcessById(state.ProcessId); }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { return null; }
         try
         {
-            var process = Process.GetProcessById(state.ProcessId);
             if (!process.HasExited && process.StartTime.ToUniversalTime().ToFileTimeUtc() == state.CreationTime && string.Equals(process.MainModule?.FileName, state.Executable, StringComparison.OrdinalIgnoreCase)) return process;
-            process.Dispose(); return null;
         }
-        catch (ArgumentException) { return null; }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or NotSupportedException or ArgumentException) { }
+        process.Dispose();
+        return null;
     }
     public static TweakControlRead Read(ControlAddress address)
     {
-        var root = Root(address); var state = State(root);
+        var roots = RootsFor(address); var state = State(roots);
         Check(NtQueryTimerResolution(out var coarsest, out var finest, out _), "NtQueryTimerResolution");
         if (finest > 5000 || coarsest < 5000) throw new InvalidDataException("This PC does not expose a 0.5 ms native timer interval.");
         using var process = state is null ? null : Running(state);
         var active = process is not null && state!.Acquired && !state.Released;
-        return new(address, "timer:" + root.ToUpperInvariant(), "native-timer:" + finest + ":" + coarsest, ControlValues.From(active),
+        return new(address, "timer:" + roots.Control.ToUpperInvariant(), "native-timer:" + finest + ":" + coarsest, ControlValues.From(active),
             active ? "0.5 ms timer request is active" : state?.Error is not null ? "Timer stopped: " + state.Error : "0.5 ms timer request is stopped", LostLease: state is { Acquired: true, Released: false } && process is null);
     }
     public static void Write(TweakControlRead before, JsonElement desired)
     {
-        var root = Root(before.Address);
-        if (before.Address.Target == "system") OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
-        Directory.CreateDirectory(root);
-        using var guard = OperationFiles.Lock(Path.Combine(root, "control"));
-        RequireFolder(root);
+        var roots = RootsFor(before.Address);
+        var system = before.Address.Target == "system";
+        if (system) OperationsFolder.Ensure(Path.GetDirectoryName(roots.Control)!);
+        Directory.CreateDirectory(roots.Control);
+        if (system) OperationsFolder.RequireControlFolder(roots.Control);
+        using var guard = OperationFiles.Lock(Path.Combine(roots.Control, "control"));
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer ownership changed after review.");
-        if (desired.GetBoolean()) Start(root);
-        else Stop(root);
+        if (desired.GetBoolean()) Start(roots); else Stop(roots);
     }
-    private static void Start(string root)
+    private static void Start(Roots roots)
     {
-        var existing = State(root);
+        var existing = State(roots);
         using var prior = existing is null ? null : Running(existing);
         if (prior is not null) throw new InvalidOperationException("An existing timer worker has not stopped.");
         var assembly = Assembly.GetEntryAssembly()?.Location ?? throw new InvalidDataException("Timer worker packaging is unavailable.");
-        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), root, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(root, "launch.json"); OperationFiles.Write(path, launch);
+        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
+        var path = Path.Combine(roots.Control, "launch.json");
         var executable = Environment.ProcessPath ?? throw new InvalidDataException("Timer host executable is unavailable.");
         var command = new StringBuilder().Append('"').Append(executable).Append('"');
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) command.Append(" \"").Append(assembly).Append('"');
         command.Append(" --timer-worker \"").Append(path).Append('"');
-        var created = LaunchWorker(executable, command);
+        var userToken = Split(roots) && PolicyRootSecurity.SplitToken() && !AllowElevatedWorker;
+        OperationFiles.Write(path, launch);
+        ProcessInfo created;
+        try { created = LaunchWorker(executable, command, userToken); }
+        catch { File.Delete(path); throw; }
         Process worker;
         try { worker = Process.GetProcessById(created.ProcessId); }
         finally { CloseHandle(created.Thread); CloseHandle(created.Process); }
@@ -90,7 +161,7 @@ public static class TimerControl
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromSeconds(15))
             {
-                var state = State(root);
+                var state = State(roots);
                 if (state?.Launch.SessionId == launch.SessionId)
                 {
                     if (state.Error is not null) throw new IOException(state.Error);
@@ -103,63 +174,86 @@ public static class TimerControl
         }
         catch
         {
-            OperationFiles.Write(Path.Combine(root, "stop.json"), launch);
+            OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
             if (!worker.WaitForExit(5000)) { worker.Kill(); worker.WaitForExit(); }
             throw;
         }
     }
-    private static void Stop(string root)
+    private static void Stop(Roots roots)
     {
-        var state = State(root); if (state is null) return;
+        var state = State(roots);
+        if (state is not null)
+        {
+            using var worker = Running(state);
+            if (worker is not null)
+            {
+                OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), state.Launch);
+                if (!worker.WaitForExit(10000)) throw new TimeoutException("The identified timer worker has not stopped; its recovery state was retained.");
+                var stopped = State(roots);
+                if (stopped?.Launch.SessionId != state.Launch.SessionId || !stopped.Released || stopped.ReleaseStatus is null or < 0) throw new IOException(stopped?.Error ?? "The timer worker did not confirm release.");
+            }
+            Retire(roots, state.Launch.SessionId);
+        }
+        foreach (var name in new[] { "launch.json", "stop.json" }) File.Delete(Path.Combine(roots.Control, name));
+    }
+    internal static bool EndLegacyWorker(string operations, Action? found)
+    {
+        var folder = Path.Combine(PolicyRootSecurity.Normalize(operations), OperationsFolder.TimerFolder);
+        var state = Parse(NativeFiles.ReadBounded(folder, "session.json", 1 << 16, out _));
+        if (state is null || !state.Acquired || state.Released) return false;
         using var worker = Running(state);
-        if (worker is not null)
-        {
-            OperationFiles.Write(Path.Combine(root, "stop.json"), state.Launch);
-            if (!worker.WaitForExit(10000)) throw new TimeoutException("The identified timer worker has not stopped; its recovery state was retained.");
-            var stopped = State(root);
-            if (stopped?.Launch.SessionId != state.Launch.SessionId || !stopped.Released || stopped.ReleaseStatus is null or < 0) throw new IOException(stopped?.Error ?? "The timer worker did not confirm release.");
-        }
-        foreach (var name in new[] { "launch.json", "stop.json", "session.json" }) File.Delete(Path.Combine(root, name));
+        if (worker is null || CommandLine(worker) is not { } command || !command.Contains("--timer-worker", StringComparison.Ordinal) && !command.Contains("--timer-autostart", StringComparison.Ordinal)) return false;
+        found?.Invoke();
+        try { worker.Kill(); worker.WaitForExit(10000); }
+        catch (Exception error) when (error is InvalidOperationException or Win32Exception) { return false; }
+        return true;
     }
-    internal static Action? SuspendForMove(string operations)
+    internal static void StartAfterMove(string operations)
     {
-        var root = Path.Combine(PolicyRootSecurity.Normalize(operations), OperationsFolder.TimerFolder);
-        if (!Directory.Exists(root)) return null;
-        using (OperationFiles.Lock(Path.Combine(root, "control")))
-        {
-            RequireFolder(root);
-            TimerWorkerState? state;
-            try { state = State(root); }
-            catch (Exception error) when (error is InvalidDataException or JsonException) { return null; }
-            using var worker = state is null ? null : Running(state);
-            if (worker is null || !state!.Acquired || state.Released) return null;
-            Stop(root);
-        }
-        return () => { using var guard = OperationFiles.Lock(Path.Combine(root, "control")); RequireFolder(root); Start(root); };
+        var roots = new Roots(OperationsFolder.EnsureTimerFolder(operations), StateFolder);
+        using var guard = OperationFiles.Lock(Path.Combine(roots.Control, "control"));
+        Start(roots);
     }
-    internal static void RequireFolder(string root)
+    private static string? CommandLine(Process process)
     {
-        if (new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new UnauthorizedAccessException("The timer folder was replaced with a link, so it is not trusted.");
+        try
+        {
+            NtQueryInformationProcess(process.Handle, 60, IntPtr.Zero, 0, out var size);
+            if (size == 0 || size > 1 << 20) return null;
+            var buffer = Marshal.AllocHGlobal((int)size + 2);
+            try
+            {
+                if (NtQueryInformationProcess(process.Handle, 60, buffer, size, out _) < 0) return null;
+                var length = (ushort)Marshal.ReadInt16(buffer);
+                return Marshal.PtrToStringUni(Marshal.ReadIntPtr(buffer, IntPtr.Size), length / 2);
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or NotSupportedException) { return null; }
     }
     public static void RunWorker(string launchPath)
         => RunWorker(launchPath, null);
     private static void RunWorker(string launchPath, Action? ready)
     {
         var launch = OperationFiles.Read<TimerLaunch>(launchPath); launch.Owner.Verify();
-        if (Path.GetFullPath(launchPath) != Path.Combine(launch.Root, "launch.json") || launch.AssemblyPath != Assembly.GetEntryAssembly()?.Location || OperationFiles.HashFile(launch.AssemblyPath) != launch.AssemblyHash)
+        var roots = RootsOf(launch.Root);
+        var full = Path.GetFullPath(launchPath);
+        if (!string.Equals(full, Path.Combine(roots.Control, "launch.json"), StringComparison.OrdinalIgnoreCase) && !string.Equals(full, Path.Combine(roots.State, "launch.json"), StringComparison.OrdinalIgnoreCase) ||
+            launch.AssemblyPath != Assembly.GetEntryAssembly()?.Location || OperationFiles.HashFile(launch.AssemblyPath) != launch.AssemblyHash)
             throw new InvalidDataException("The timer worker launch identity changed.");
-        using var lease = OperationFiles.Lock(Path.Combine(launch.Root, "worker"));
-        RequireFolder(launch.Root);
+        if (Split(roots) && PolicyRootSecurity.SplitToken() && !AllowElevatedWorker) throw new UnauthorizedAccessException("The timer worker keeps its state where ordinary programs can write, so it only runs with your normal Windows rights, not as administrator.");
+        Directory.CreateDirectory(roots.State);
+        using var lease = OperationFiles.Lock(Path.Combine(roots.State, "worker"));
         using var process = Process.GetCurrentProcess();
         var state = new TimerWorkerState(launch, process.Id, process.StartTime.ToUniversalTime().ToFileTimeUtc(), Environment.ProcessPath!, false, false, 0, null, 0, null);
-        OperationFiles.Write(StatePath(launch.Root), state);
+        OperationFiles.Write(StatePath(roots), state);
         try
         {
             var power = new TimerPower { Version = 1, ControlMask = 4, StateMask = 0 };
             SetProcessInformation(CurrentProcess(), 4, ref power, (uint)Marshal.SizeOf<TimerPower>());
             var result = NtSetTimerResolution(5000, true, out var interval);
             state = state with { AcquireStatus = result, ReturnedInterval = interval, Acquired = result >= 0 };
-            OperationFiles.Write(StatePath(launch.Root), state); Check(result, "NtSetTimerResolution(acquire)");
+            OperationFiles.Write(StatePath(roots), state); Check(result, "NtSetTimerResolution(acquire)");
             var applied = Stopwatch.StartNew(); uint current;
             while (NtQueryTimerResolution(out _, out _, out current) < 0 || current > 5000)
             {
@@ -169,7 +263,7 @@ public static class TimerControl
             ready?.Invoke();
             while (true)
             {
-                var path = Path.Combine(launch.Root, "stop.json");
+                var path = Path.Combine(roots.Control, "stop.json");
                 if (File.Exists(path))
                 {
                     var stop = ReadJson<TimerLaunch>(path);
@@ -186,23 +280,25 @@ public static class TimerControl
                 var result = NtSetTimerResolution(5000, false, out var interval);
                 state = state with { ReleaseStatus = result, ReturnedInterval = interval, Released = result >= 0, Error = result < 0 ? "NtSetTimerResolution(release) failed with NTSTATUS 0x" + result.ToString("X8") : state.Error };
             }
-            OperationFiles.Write(StatePath(launch.Root), state);
+            OperationFiles.Write(StatePath(roots), state);
         }
     }
     public static void RunAutostart(string root)
     {
-        root = Path.GetFullPath(root); TimerStartupControl.RequireOwned(root);
-        using var guard = OperationFiles.Lock(Path.Combine(root, "control"));
-        RequireFolder(root);
-        var state = State(root); using var running = state is null ? null : Running(state);
+        var roots = RootsOf(root); TimerStartupControl.RequireOwned(roots.Control);
+        if (Split(roots) && PolicyRootSecurity.SplitToken() && !AllowElevatedWorker) throw new UnauthorizedAccessException("The timer's sign-in task must run with your normal Windows rights, not as administrator.");
+        Directory.CreateDirectory(roots.State);
+        using var guard = OperationFiles.Lock(Path.Combine(roots.State, "control"));
+        var state = State(roots); using var running = state is null ? null : Running(state);
         if (running is not null) return;
         var assembly = Assembly.GetEntryAssembly()!.Location;
-        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), root, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(root, "launch.json"); OperationFiles.Write(path, launch);
+        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
+        var path = Path.Combine(roots.State, "launch.json"); OperationFiles.Write(path, launch);
         RunWorker(path, guard.Dispose);
     }
-    private static ProcessInfo LaunchWorker(string executable, StringBuilder command)
+    private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken)
     {
+        if (userToken) return LaunchFromShell(executable, command) ?? throw new InvalidOperationException("The timer needs Windows to start it with your normal rights, but no desktop shell of your Windows user is running. Sign in to Windows normally, then try again.");
         var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
         if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x09000000, IntPtr.Zero, null, ref startup, out var created)) return created;
         var error = Marshal.GetLastWin32Error();
@@ -289,6 +385,7 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(IntPtr process, int kind, IntPtr information, uint length, out uint returned);
     [StructLayout(LayoutKind.Sequential)] private struct TimerPower { public uint Version, ControlMask, StateMask; }
     [DllImport("kernel32.dll", EntryPoint = "GetCurrentProcess")] private static extern IntPtr CurrentProcess();
     [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetProcessInformation(IntPtr process, int informationClass, ref TimerPower value, uint size);

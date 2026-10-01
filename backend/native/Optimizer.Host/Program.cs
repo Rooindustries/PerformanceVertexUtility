@@ -20,6 +20,14 @@ try
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
+    if (request.Progress == true && action is "data-secure" or "operations-secure" or "policy-secure")
+    {
+        var progressOptions = new JsonSerializerOptions(OperationFiles.Json) { WriteIndented = false };
+        PolicyRootSecurity.Progress += progress =>
+        {
+            lock (Console.Out) { Console.Out.WriteLine("ROO-PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = progress }, progressOptions)); Console.Out.Flush(); }
+        };
+    }
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
@@ -122,6 +130,7 @@ try
             break;
         case "protected-session-recover":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Path.Combine(Require(request.SessionRoot, "session directory"), "session.json"), request.AcceptEarlierVersion == true);
             data = new ProtectedSessions(Excluded).Recover(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
             break;
         case "protected-session-watch":
@@ -148,6 +157,7 @@ try
             break;
         case "process-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Require(request.JournalPath, "journal path"), request.AcceptEarlierVersion == true);
             var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
             new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
             data = engine.Restore(Require(request.JournalPath, "journal path"));
@@ -196,16 +206,16 @@ try
             RequireConfirmation(request);
             var securedRoot = Require(request.PolicyRoot, "policy root");
             if (request.UserSid is null) DataFolder.EnsureFor(securedRoot);
-            data = new { migrated = PolicyRootSecurity.Secure(securedRoot, request.UserSid) };
+            data = new { migrated = PolicyRootSecurity.Secure(securedRoot, request.UserSid), report = PolicyRootSecurity.LastReport };
             break;
         case "operations-secure":
             RequireConfirmation(request);
             var operationsRoot = Require(request.OperationsRoot, "recovery folder");
-            data = new { migrated = OperationsFolder.Secure(operationsRoot), root = OperationsFolder.Ensure(operationsRoot) };
+            data = new { migrated = OperationsFolder.Secure(operationsRoot), root = OperationsFolder.Ensure(operationsRoot), report = PolicyRootSecurity.LastReport };
             break;
         case "data-secure":
             RequireConfirmation(request);
-            data = new { root = DataFolder.Ensure() };
+            data = new { root = DataFolder.Ensure(), report = PolicyRootSecurity.LastReport };
             break;
         case "policy-pause":
             RequireConfirmation(request);
@@ -249,6 +259,7 @@ try
             break;
         case "cleanup-batch-apply":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Require(request.JournalPath, "journal path"), request.AcceptEarlierVersion == true);
             data = Batch(request).Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"), request.CancellationId);
             break;
         case "cleanup-batch-cancel":
@@ -406,6 +417,8 @@ sealed record HostRequest
     public string? JournalPath { get; init; }
     public bool? Confirm { get; init; }
     public bool? AcceptDataLoss { get; init; }
+    public bool? AcceptEarlierVersion { get; init; }
+    public bool? Progress { get; init; }
     public string? PolicyRoot { get; init; }
     public string? OperationsRoot { get; init; }
     public SavedProcessRule? Rule { get; init; }
