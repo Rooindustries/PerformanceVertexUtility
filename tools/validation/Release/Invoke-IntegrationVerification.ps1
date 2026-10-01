@@ -244,10 +244,12 @@ switch($Phase){
         $powershell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
         function Invoke-Suite([string]$Relative,[string[]]$Arguments=@()){& $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Source $Relative) @Arguments 2>&1}
         function Protect-RealDataFolder {
-            $hostExe=Join-Path $Source 'backend\bin\optimizer\Optimizer.Host.exe'
-            if(-not (Test-Path -LiteralPath $hostExe)){Invoke-Suite 'backend\scripts\Build-OptimizerHost.ps1' @('-DotNetPath',$dotnet)|Out-Null}
-            $reply=@((@{schemaVersion=1;repoRoot=$Source;confirm=$true}|ConvertTo-Json -Compress)|& $hostExe 'data-secure' '-') -join "`n"
-            if(($reply|ConvertFrom-Json).status -ne 'completed'){throw ('The real data folder could not be protected for the removal queue suite: '+$reply)}
+            $hostDll=Join-Path $Source 'backend\bin\optimizer\Optimizer.Host.dll'
+            if(-not (Test-Path -LiteralPath $hostDll)){Invoke-Suite 'backend\scripts\Build-OptimizerHost.ps1' @('-DotNetPath',$dotnet)|Out-Null}
+            $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
+            try {$reply=(@((@{schemaVersion=1;repoRoot=$Source;confirm=$true}|ConvertTo-Json -Compress)|& $dotnet $hostDll 'data-secure' '-' 2>&1)|ForEach-Object {[string]$_}) -join "`n"} finally {$ErrorActionPreference=$previous}
+            $status=try {($reply|ConvertFrom-Json).status} catch {''}
+            if($status -ne 'completed'){throw ('The real data folder could not be protected for the removal queue suite: '+$reply)}
             'The suite needs the real data folder protected, as the app leaves it after its first start; it is protected inside the backup frame and restored afterwards.'
         }
         $all=[ordered]@{
