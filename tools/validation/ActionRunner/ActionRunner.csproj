@@ -15,6 +15,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackgroundPriority.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/*.cs" />
   </ItemGroup>

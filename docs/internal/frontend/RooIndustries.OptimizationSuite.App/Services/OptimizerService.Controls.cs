@@ -140,6 +140,8 @@ public sealed partial class OptimizerService
         return result.ToArray();
     }
 
+    private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
+
     private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null, Action<ReadOnlyMemory<byte>>? partial = null)
     {
         var elapsed = Stopwatch.StartNew();

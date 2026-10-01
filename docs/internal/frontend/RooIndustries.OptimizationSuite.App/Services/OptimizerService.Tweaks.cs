@@ -19,7 +19,6 @@ public sealed partial class OptimizerService
         => Task.Run(() => { using var change = DataGeneration.BeginChange(); return _windowsChoices.Save(catalog, profileId, selections, revision); });
     private readonly SharedReads _tweakReads = new();
     private static readonly TimeSpan TweakStateAge = TimeSpan.FromSeconds(60);
-    private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, BackgroundPriority> _backgroundTweakReads = new(StringComparer.Ordinal);
     private async Task<T?> TweakReadAsync<T>(string key, TimeSpan maxAge, bool background, Func<Task<T>> read, Func<T, bool>? good = null) where T : class
     {
