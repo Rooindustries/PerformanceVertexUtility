@@ -561,7 +561,7 @@ function Resolve-RooIndustriesUninstallCommandLine {
         }
     }
     foreach ($candidate in $candidates) {
-        $path = [Environment]::ExpandEnvironmentVariables($candidate.path)
+        $path = Expand-RooIndustriesUserVariables $candidate.path
         try {
             if ([IO.Path]::GetExtension($path) -eq '') { $path += '.exe' }
             if ([IO.Path]::IsPathRooted($path) -and [IO.File]::Exists($path)) {
@@ -575,7 +575,7 @@ function Resolve-RooIndustriesUninstallCommandLine {
 function Resolve-RooIndustriesEnvironmentPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-    return [Environment]::ExpandEnvironmentVariables($Path)
+    return Expand-RooIndustriesUserVariables $Path
 }
 
 function Test-RooIndustriesProtectedPath {
