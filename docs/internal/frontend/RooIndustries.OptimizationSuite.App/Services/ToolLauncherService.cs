@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -61,13 +62,54 @@ public sealed class ToolLauncherService
             return "Opened the " + tool.Name + " download page.";
         }
         var path = target.FromArchive ? await Task.Run(() => Extract(tool)) : target.Path!;
-        using var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! });
+        using var process = Start(path);
         return target.Action == "Install" ? "Opened the " + tool.Name + " installer. Complete its setup, then refresh this list."
             : "Opened " + tool.Name + ".";
     }
 
+    private static Process? Start(string path)
+    {
+        if (!RooIndustries.Optimizer.PolicyRootSecurity.Elevated() || AdministratorsOnly(path))
+            return Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! });
+        if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException("Windows Explorer is not running, so " + Path.GetFileName(path) + " cannot be started with your normal Windows rights.");
+        var explorer = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
+        explorer.ArgumentList.Add(path);
+        return Process.Start(explorer);
+    }
+
+    private static bool AdministratorsOnly(string path)
+    {
+        var full = Path.GetFullPath(path);
+        foreach (var parent in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
+            if (!string.IsNullOrEmpty(parent) && Contained(parent, full)) return true;
+        if (!Contained(Cache, full)) return false;
+        try { RooIndustries.Optimizer.DataFolder.Require(); return true; }
+        catch (Exception error) when (error is UnauthorizedAccessException or IOException) { return false; }
+    }
+
+    private static bool Contained(string parent, string full)
+    {
+        var root = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+        try
+        {
+            FileSystemInfo item = new FileInfo(full);
+            while (!string.Equals(item.FullName + Path.DirectorySeparatorChar, root, StringComparison.OrdinalIgnoreCase))
+            {
+                if (item.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
+                item = item is FileInfo file ? file.Directory! : ((DirectoryInfo)item).Parent!;
+            }
+            return true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetShellWindow();
+
     private string Extract(ToolDefinition tool)
     {
+        RooIndustries.Optimizer.DataFolder.Require();
         var directory = Path.Combine(Cache, tool.Id);
         var target = Inside(directory, tool.ArchivePath);
         using var zip = ZipFile.OpenRead(Archive);

@@ -72,6 +72,8 @@ function New-RollbackPreviewEntry {
     $originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
+    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+    $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $currentState = Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null
     $currentPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'priorityClass' $Candidate.currentPriorityClass } else { $Candidate.currentPriorityClass }
     $currentAffinityMask = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null } else { $null }
@@ -89,16 +91,16 @@ function New-RollbackPreviewEntry {
     }
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (-not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority) -and [string]$currentPriority -ne [string]$originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority) -and [string]$currentPriority -ne [string]$originalPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if ($null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
+        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
+        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
             if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority.')) | Out-Null
             } else {

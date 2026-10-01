@@ -49,6 +49,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<CpuSetJournal>> RestoreCpuSetsAsync(string journal)
     {
+        await EarlierVersionConsent.RequireAsync(journal);
         var result = await RunAsync<CpuSetJournal>("Invoke-ProcessCpuSets.ps1", "-Action Restore -JournalPath " + Quote(journal) + " -ConfirmApply");
         if (result.Status == "restored") Forget("cpu");
         return result;
@@ -81,6 +82,8 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress)
     {
+        if (PolicyRootSecurity.SavedBeforeProtection(review.JournalPath))
+            throw new EarlierVersionException("This removal list was saved by an older version of the app, before its data folder was protected, so it cannot be resumed. Choose the apps again to start a new removal.");
         await RememberAsync("removal", review.JournalPath);
         var operation = RequestAsync<BulkRemovalJournal>("BulkUninstall", "Apply", new
         {
@@ -101,14 +104,21 @@ public sealed partial class OptimizerService
         return result;
     }
 
-    public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal)
-        => RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Cancel -JournalPath " + Quote(journal) + " -ConfirmApply");
+    public async Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal)
+    {
+        await EarlierVersionConsent.RequireAsync(journal);
+        return await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Cancel -JournalPath " + Quote(journal) + " -ConfirmApply");
+    }
 
-    public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal)
-        => RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Reconcile -JournalPath " + Quote(journal) + " -ConfirmApply");
+    public async Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal)
+    {
+        await EarlierVersionConsent.RequireAsync(journal);
+        return await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Reconcile -JournalPath " + Quote(journal) + " -ConfirmApply");
+    }
 
     public async Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal)
     {
+        await EarlierVersionConsent.RequireAsync(journal);
         var result = await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Dismiss -JournalPath " + Quote(journal) + " -ConfirmApply");
         if (string.Equals(FindLastJournal("removal"), journal, StringComparison.OrdinalIgnoreCase)) Forget("removal");
         return result;
@@ -129,6 +139,7 @@ public sealed partial class OptimizerService
 
     public async Task<RemovalCleanupReview> PreviewRemovedFilesAsync(string journal, string appId, string[] itemIds)
     {
+        await EarlierVersionConsent.RequireAsync(journal);
         var path = Path.Combine(await NewOperationDirectoryAsync("files"), "review.json");
         var args = "-Action Preview -QueueJournalPath " + Quote(journal) + " -AppId " + Quote(appId)
             + " -ItemId @(" + string.Join(",", itemIds.Select(Quote)) + ") -OutputPath " + Quote(path);
@@ -190,7 +201,7 @@ public sealed partial class OptimizerService
         {
             if (_storageLease is { Moved: false }) return _storage;
             if (!PolicyRootSecurity.Elevated()) throw new UnauthorizedAccessException(OperationsFolder.NotAdministrator);
-            await RunHostAsync<JsonElement>("operations-secure", new() { ["operationsRoot"] = _storage, ["confirm"] = true }, default, TimeSpan.FromMinutes(5), null).ConfigureAwait(false);
+            await RunHostAsync<JsonElement>("operations-secure", new() { ["operationsRoot"] = _storage, ["confirm"] = true, ["progress"] = true }, default, TimeSpan.FromMinutes(5), _ => { }, idle: true).ConfigureAwait(false);
             var lease = OperationsFolder.Lease(_storage);
             _storageLease?.Dispose();
             Volatile.Write(ref _storageLease, lease);

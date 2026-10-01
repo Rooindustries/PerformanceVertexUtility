@@ -8,6 +8,7 @@
             <views:AdaptivePanel MinColumnWidth="170" MaxColumns="4" Compact="True">
                 <Button Content="Pause governor" Command="{x:Bind ViewModel.PauseGovernorCommand}" IsEnabled="{x:Bind ViewModel.CanPauseGovernor, Mode=OneWay}" AutomationProperties.AutomationId="GovernorPause" />
                 <Button Content="Start governor" Command="{x:Bind ViewModel.StartGovernorCommand}" IsEnabled="{x:Bind ViewModel.CanStartGovernor, Mode=OneWay}" AutomationProperties.AutomationId="GovernorStart" />
+                <Button Content="Put settings back" Command="{x:Bind ViewModel.RetryRestoreCommand}" IsEnabled="{x:Bind ViewModel.CanRetryRestore, Mode=OneWay}" Visibility="{x:Bind ViewModel.RetryAvailable, Mode=OneWay}" AutomationProperties.AutomationId="GovernorRetryRestore" />
             </views:AdaptivePanel>
             <ItemsControl ItemsSource="{x:Bind ViewModel.GovernorRules}" AutomationProperties.AutomationId="GovernorRules">
                 <ItemsControl.ItemTemplate>

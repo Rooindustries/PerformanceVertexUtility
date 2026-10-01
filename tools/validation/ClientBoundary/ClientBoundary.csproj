@@ -13,7 +13,11 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.cs" Link="OptimizerService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/EarlierVersionConsent.cs" Link="EarlierVersionConsent.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataFolderGate.cs" Link="DataFolderGate.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/PreparingWindow.cs" Link="PreparingWindow.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.Controls.cs" Link="OptimizerService.Controls.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/GovernorProbe.cs" Link="GovernorProbe.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.GameSessions.cs" Link="OptimizerService.GameSessions.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
