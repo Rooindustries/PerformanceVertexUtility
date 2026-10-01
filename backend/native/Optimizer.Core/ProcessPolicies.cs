@@ -1,5 +1,7 @@
 #nullable enable
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Win32;
@@ -84,6 +86,9 @@ public static class GovernorLog
 public sealed class ProcessPolicyStore
 {
     public static readonly string[] LaunchFields = ["cpuPriority", "ioPriority", "memoryPriority"];
+    private static readonly TimeSpan RulesLockWait = TimeSpan.FromSeconds(45);
+    private const long ClockSkew = 1000;
+    private const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
     public string Root { get; }
     public string RulesDirectory => Path.Combine(Root, "rules");
     public string StatePath => Path.Combine(Root, "host.json");
@@ -91,7 +96,13 @@ public sealed class ProcessPolicyStore
     public string StopPath => Path.Combine(Root, "stop.request");
     public string SettingsPath => Path.Combine(Root, "governor.json");
 
-    public ProcessPolicyStore(string root) => Root = Path.GetFullPath(root);
+    public ProcessPolicyStore(string root)
+    {
+        Root = Path.GetFullPath(root);
+#if GOVERNOR_TEST_HOOKS
+        ProcessPolicyHost.ClockRoot = Root;
+#endif
+    }
 
     public static string DefaultRoot => Path.Combine(BrandCompatibility.LocalDataRoot, "process-rules");
 
@@ -113,11 +124,11 @@ public sealed class ProcessPolicyStore
     {
         Secure();
         using var rootLease = PolicyRootLease.Acquire(Root);
-        using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
+        using var lease = LockRules();
         using var gate = paused ? null : Gate();
         if (!paused)
         {
-            var enabled = ReadRules(null, []).Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
+            var enabled = ReadRules().Where(pair => pair.Rule.Enabled).Select(pair => pair.Rule).ToArray();
             foreach (var rule in enabled) RequireNoGameSession(rule);
             GovernorClaims.RequireUnclaimed(enabled, Path.GetDirectoryName(Root)!, repoRoot);
         }
@@ -205,6 +216,7 @@ public sealed class ProcessPolicyStore
             if (!string.Equals(Path.GetDirectoryName(instance.PreviewPath), Path.GetDirectoryName(instance.JournalPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("A governor record mixes two operations.");
             if (instance.Field is { } field && !ProcessTarget.ControlNames.Contains(field)) throw new InvalidDataException("A governor record names an unknown process control.");
+            if (instance.Status is not ("applying" or "active" or "conflict" or "restored" or "expired")) throw new InvalidDataException("A governor record has an unknown status.");
         }
     }
 
@@ -262,7 +274,10 @@ public sealed class ProcessPolicyStore
 #if GOVERNOR_TEST_HOOKS
         if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_SAVE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
 #endif
-        using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
+        using var lease = LockRules();
+#if GOVERNOR_TEST_HOOKS
+        if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_LOCKED_PAUSE_MS"), out var held) && held > 0) Thread.Sleep(Math.Min(held, 10000));
+#endif
         rule = rule with { Revision = Guid.NewGuid().ToString("N") };
         Validate(rule);
         using var gate = rule.Enabled ? Gate() : null;
@@ -280,6 +295,21 @@ public sealed class ProcessPolicyStore
         }
         if (rootLease.Moved) throw new UnauthorizedAccessException("The saved rules folder moved while it was changed.");
         OperationFiles.Write(Path.Combine(RulesDirectory, rule.RuleId + ".json"), rule);
+    }
+
+    private FileStream LockRules()
+    {
+        var clock = Stopwatch.StartNew();
+        for (var denied = 0; ; Thread.Sleep(100))
+        {
+            try { return OperationFiles.Lock(Path.Combine(Root, "rules-write")); }
+            catch (IOException error) when (error.HResult is SharingViolation or LockViolation)
+            {
+                if (clock.Elapsed > RulesLockWait) throw new IOException("Another rule change is still running. Try again in a moment.", error);
+                denied = 0;
+            }
+            catch (UnauthorizedAccessException) when (++denied < 5) { }
+        }
     }
 
     private void RequireNoGameSession(SavedProcessRule rule)
@@ -325,7 +355,7 @@ public sealed class ProcessPolicyStore
     {
         Secure();
         using var rootLease = PolicyRootLease.Acquire(Root);
-        using var lease = OperationFiles.Lock(Path.Combine(Root, "rules-write"));
+        using var lease = LockRules();
         if (!Guid.TryParseExact(ruleId, "N", out _)) throw new InvalidDataException("Invalid process rule ID.");
         if (rootLease.Moved) throw new UnauthorizedAccessException("The saved rules folder moved while it was changed.");
         File.Delete(Path.Combine(RulesDirectory, ruleId + ".json"));
@@ -349,6 +379,7 @@ public sealed class ProcessPolicyStore
                 var named = "The saved rule " + Path.GetFileName(path) + " could not be read: " + error.Message;
                 if (unreadable is not null) unreadable.Add(named);
                 else if (error is IOException or UnauthorizedAccessException) throw new InvalidDataException(named, error);
+                else GovernorLog.Write(Root, "Skipped a damaged saved rule while reading the saved rules. " + named);
             }
         }
         return found.ToArray();
@@ -382,10 +413,15 @@ public sealed class ProcessPolicyStore
         catch (Exception) { }
         if (beat is not null && beat.Host == state.Host && beat.BootId == ProcessPolicyHost.BootId())
         {
-            var now = Environment.TickCount64;
-            if (now - beat.Tick > 15000) return "The worker heartbeat is stale; it may be busy or unresponsive.";
-            if (now - beat.ProgressTick > 120000) return "The governor has not finished a check for two minutes; it may be stuck.";
-            return null;
+            var now = ProcessPolicyHost.Monotonic();
+            var age = now - beat.Tick;
+            var progress = now - beat.ProgressTick;
+            if (age >= -ClockSkew && progress >= -ClockSkew)
+            {
+                if (age > 15000) return "The worker heartbeat is stale; it may be busy or unresponsive.";
+                if (progress > 120000) return "The governor has not finished a check for two minutes; it may be stuck.";
+                return null;
+            }
         }
         return DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale; it may be busy or unresponsive." : null;
     }
@@ -422,7 +458,50 @@ public sealed class ProcessPolicyStore
         if (rule.Controls.ContainsKey("cpuSets")) throw new InvalidDataException("Persistent CPU rules must store a semantic selection, not opaque CPU Set IDs.");
         if (rule.Controls.ContainsKey("affinity") && rule.AffinityTopologyHash is not { Length: 64 })
             throw new InvalidDataException("A persistent hard-affinity rule requires a reviewed topology fingerprint.");
-        foreach (var pair in rule.Controls) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
+        foreach (var pair in rule.Controls)
+        {
+            ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
+            RequireSavable(pair.Key, pair.Value);
+        }
+        if (rule.CpuSelection is { } selection) ValidateSelection(selection);
+    }
+
+    private static void RequireSavable(string name, JsonElement value)
+    {
+        switch (name)
+        {
+            case "cpuPriority" when value.GetString() == "Realtime":
+                throw new InvalidDataException("Realtime CPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.");
+            case "gpuPriority" when value.GetInt32() == 5:
+                throw new InvalidDataException("Realtime GPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.");
+            case "executionQoS":
+                var power = value.Deserialize<PowerThrottling>(OperationFiles.Json) ?? throw new InvalidDataException("Missing QoS state.");
+                if (((power.ControlMask | power.StateMask) & ~5u) != 0)
+                    throw new InvalidDataException("Power mode can only use the documented execution speed and timer resolution bits.");
+                break;
+        }
+    }
+
+    private static void ValidateSelection(CpuSelection selection)
+    {
+        var processors = selection.Processors ?? [];
+        if (selection.Kind == "windowsDefault")
+        {
+            if (processors.Length > 0 || selection.Group is not null || selection.Index is not null || selection.OneThreadPerCore)
+                throw new InvalidDataException("Windows default cannot be combined with a CPU selector.");
+            return;
+        }
+        if (selection.Kind is not ("all" or "logical" or "performance" or "efficiency" or "core" or "cache" or "numa"))
+            throw new InvalidDataException("The saved CPU selection is unknown: " + selection.Kind);
+        if (selection.TopologyHash is not { Length: 64 }) throw new InvalidDataException("A saved CPU selection needs a reviewed topology fingerprint.");
+        if (selection.Kind == "logical")
+        {
+            if (processors.Length == 0) throw new InvalidDataException("The saved CPU selection chooses no processors.");
+            if (processors.Distinct().Count() != processors.Length) throw new InvalidDataException("The saved CPU selection repeats a processor.");
+        }
+        else if (processors.Length > 0) throw new InvalidDataException("Explicit processors can only be saved with a logical CPU selection.");
+        if ((selection.Kind is "core" or "cache" or "numa") ? selection.Group is null || selection.Index is null : selection.Group is not null || selection.Index is not null)
+            throw new InvalidDataException("A core, cache or NUMA selection needs a group and an index, and other selections must not set them.");
     }
 }
 
@@ -433,6 +512,7 @@ public sealed class ProcessPolicyHost
     public const string OtherAccount = "Running under another Windows account, so this rule doesn't control it.";
     public const string ForeignRecord = "This record points at a process of another Windows account, so Roo Industries did not change it.";
     public const string TopologyChanged = "CPU topology changed; review the saved hard-affinity selection.";
+    public const string PathUnreadable = "Its program path could not be read, so this rule cannot be applied to it.";
     private const long Recheck = 2000, ReassertWindow = 600000, RuleReadGrace = 10000;
     private readonly ProcessPolicyStore _store;
     private readonly ProcessControlEngine _engine;
@@ -448,10 +528,10 @@ public sealed class ProcessPolicyHost
     private readonly Dictionary<(string Path, long Length, DateTime Written), string> _hashes = new();
     private readonly Dictionary<string, string[]> _fields = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _imagePaths = new(StringComparer.Ordinal);
-    private int _enabledRules = -1;
+    private int _enabledRules = -1, _unreadableRules;
     private long _processOpens, _hashAttempts, _ownerLookups;
     private readonly Dictionary<string, string> _owners = new(StringComparer.Ordinal);
-    private long _progress = Environment.TickCount64;
+    private long _progress = Monotonic();
     private PolicyDiagnostics? _diagnostics;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
@@ -467,7 +547,7 @@ public sealed class ProcessPolicyHost
     private sealed record Retry(string Kind, string Message, string? Field, long RetryAt, int Attempt, string Identity);
     private sealed record Gate(string? Kind, string? Message, RunningProcess? Identity, string? Topology);
 
-    private static long Now => Environment.TickCount64;
+    private static long Now => Monotonic();
     private static long Delay(int attempt) => attempt < 7 ? 1000L << attempt : 300000;
     private static bool Terminal(PolicyInstance instance) => instance.Status is "restored" or "expired";
     private static string Key(RunningProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
@@ -478,8 +558,48 @@ public sealed class ProcessPolicyHost
         _store = store;
         _excluded = excluded;
         _engine = new(identity => identity.ProcessId == Environment.ProcessId || excluded(identity));
-        _state = Load();
+        try { _state = Load(); }
+        catch (Exception error)
+        {
+            GovernorLog.Write(store.Root, "The governor did not start because its saved state could not be used: " + error.Message);
+            throw;
+        }
     }
+
+    internal static long Monotonic()
+    {
+        if (!QueryUnbiasedInterruptTime(out var ticks)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        var milliseconds = checked((long)(ticks / 10000));
+#if GOVERNOR_TEST_HOOKS
+        milliseconds -= ClockDiscount(milliseconds);
+#endif
+        return milliseconds;
+    }
+
+#if GOVERNOR_TEST_HOOKS
+    private static readonly object DiscountLock = new();
+    private static long _discount, _discountRead = -1;
+    internal static string? ClockRoot { get; set; }
+
+    private static long ClockDiscount(long raw)
+    {
+        lock (DiscountLock)
+        {
+            if (ClockRoot is not { } root) return 0;
+            if (_discountRead >= 0 && raw >= _discountRead && raw - _discountRead < 200) return _discount;
+            _discountRead = raw;
+            try { _discount = long.TryParse(File.ReadAllText(Path.Combine(root, "clock-discount.request")).Trim(), out var value) && value > 0 ? value : 0; }
+            catch (FileNotFoundException) { _discount = 0; }
+            catch (DirectoryNotFoundException) { _discount = 0; }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return _discount;
+        }
+    }
+#endif
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);
 
     public static string? BootId()
     {
@@ -506,7 +626,9 @@ public sealed class ProcessPolicyHost
         try
         {
             if (_state.Instances.Any(instance => !Terminal(instance))) return false;
-            return _store.Paused() || !_store.ReadRules().Any(pair => pair.Rule.Enabled);
+            if (_store.Paused()) return true;
+            var unreadable = new List<string>();
+            return !_store.ReadRules(null, unreadable).Any(pair => pair.Rule.Enabled) && unreadable.Count == 0;
         }
         catch (Exception) { return false; }
     }
@@ -520,6 +642,7 @@ public sealed class ProcessPolicyHost
         if (duration is not null && int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_RUN_DELAY_MS"), out var delay) && delay > 0) Thread.Sleep(Math.Min(delay, 10000));
 #endif
         using var lease = OperationFiles.Lock(Path.Combine(_store.Root, "worker"));
+        if (duration is null) SweepHeartbeatTemporaries();
         _state = Load();
         using (var self = new ProcessTarget(Environment.ProcessId)) _state.Host = self.Identity();
         _state.Status = "running";
@@ -529,7 +652,7 @@ public sealed class ProcessPolicyHost
         var failures = 0;
         var host = _state.Host;
         var bootId = BootId();
-        using var heartbeat = duration is null ? new Heartbeat(() => OperationFiles.Write(_store.HeartbeatPath,
+        using var heartbeat = duration is null ? new Heartbeat(() => WriteHeartbeat(
             new PolicyHeartbeat(host, Now, Interlocked.Read(ref _progress), bootId, DateTime.UtcNow, _diagnostics))) : null;
         try
         {
@@ -554,7 +677,7 @@ public sealed class ProcessPolicyHost
                     GovernorLog.Write(_store.Root, _state.Errors[0]);
                     try { Save(); } catch (Exception) { }
                 }
-                if (_enabledRules == 0 && _state.Instances.All(Terminal)) break;
+                if (_enabledRules == 0 && _unreadableRules == 0 && _state.Instances.All(Terminal)) break;
                 cancellationToken.WaitHandle.WaitOne(wait);
             }
         }
@@ -570,6 +693,40 @@ public sealed class ProcessPolicyHost
     }
 
     private void Progress() => Interlocked.Exchange(ref _progress, Now);
+
+    private void WriteHeartbeat(PolicyHeartbeat beat)
+    {
+        var json = JsonSerializer.SerializeToUtf8Bytes(beat, OperationFiles.Json);
+        using var file = new FileStream(_store.HeartbeatPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 0);
+        var length = (int)Math.Max(json.Length, Math.Min(file.Length, 4096));
+        var bytes = new byte[length];
+        Array.Fill(bytes, (byte)' ');
+        json.CopyTo(bytes, 0);
+        file.Write(bytes);
+        if (file.Length > length) file.SetLength(length);
+    }
+
+    private void SweepHeartbeatTemporaries()
+    {
+        const string prefix = "heartbeat.json.", suffix = ".tmp";
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(_store.Root, prefix + "*" + suffix).ToArray())
+            {
+                var name = Path.GetFileName(path);
+                if (name.Length <= prefix.Length + suffix.Length || !Guid.TryParseExact(name[prefix.Length..^suffix.Length], "N", out _)) continue;
+                try
+                {
+                    var file = new FileInfo(path);
+                    if (!file.Attributes.HasFlag(FileAttributes.ReparsePoint) && DateTime.UtcNow - file.LastWriteTimeUtc > TimeSpan.FromMinutes(1)) file.Delete();
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 
     private bool PausedOrUnreadable()
     {
@@ -609,6 +766,7 @@ public sealed class ProcessPolicyHost
             Save();
             return _state;
         }
+        _unreadableRules = unreadable.Count;
         if (unreadable.Count == 0) _rulesFailing = -1;
         else
         {
@@ -631,7 +789,7 @@ public sealed class ProcessPolicyHost
         var enabled = rules.Where(pair => pair.Rule.Enabled).ToArray();
         var processes = ProcessSnapshot.Take();
         Maintain(enabled, processes);
-        Create(enabled, processes);
+        CaptureRecords(enabled, processes);
         Forget(processes);
         _enabledRules = enabled.Length;
         _state.Status = "running";
@@ -797,7 +955,7 @@ public sealed class ProcessPolicyHost
         }
     }
 
-    private void Create((SavedProcessRule Rule, string Hash)[] enabled, Dictionary<int, SnapshotProcess> processes)
+    private void CaptureRecords((SavedProcessRule Rule, string Hash)[] enabled, Dictionary<int, SnapshotProcess> processes)
     {
         var self = Environment.ProcessId;
         foreach (var (rule, hash) in enabled)
@@ -809,7 +967,11 @@ public sealed class ProcessPolicyHost
                 var gate = GetGate(running);
                 if (gate.Kind == "ended") continue;
                 var path = gate.Identity?.ExecutablePath ?? ImagePath(running);
-                if (rule.MatchMode == "path" && !string.Equals(rule.ExecutablePath, path, StringComparison.OrdinalIgnoreCase)) continue;
+                if (rule.MatchMode == "path")
+                {
+                    if (path is null) { Issue(rule, running, null, "unavailable", PathUnreadable, null); continue; }
+                    if (!string.Equals(rule.ExecutablePath, path, StringComparison.OrdinalIgnoreCase)) continue;
+                }
                 if (gate.Kind is not null) { Issue(rule, running, path, gate.Kind, gate.Message!, null); continue; }
                 var identity = gate.Identity!;
                 if (RuleProblem(rule, hash, gate) is { } problem) { Issue(rule, running, identity.ExecutablePath, problem.Kind, problem.Message, null); continue; }
@@ -830,7 +992,16 @@ public sealed class ProcessPolicyHost
     private string? ImagePath(SnapshotProcess running)
     {
         var key = Key(running);
-        if (!_imagePaths.TryGetValue(key, out var path)) _imagePaths[key] = path = ProcessSnapshot.ImagePath(running.ProcessId);
+        if (_imagePaths.TryGetValue(key, out var known)) return known;
+        var retry = "path|" + key;
+        if (_retries.TryGetValue(retry, out var waiting) && Now < waiting.RetryAt) return null;
+        var path = ProcessSnapshot.ImagePath(running.ProcessId);
+        if (path is null) Fail(retry, "unavailable", PathUnreadable, null, key);
+        else
+        {
+            _imagePaths[key] = path;
+            _retries.Remove(retry);
+        }
         return path;
     }
 
