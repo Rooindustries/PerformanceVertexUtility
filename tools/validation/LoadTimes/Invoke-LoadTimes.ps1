@@ -8,7 +8,7 @@
     [int]$ColdTweaksRuns = 2,
     [int]$Minutes = 45,
     [switch]$SkipAdvanced,
-    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions', 'hardware')][string]$Scenario = 'loadtimes',
+    [ValidateSet('loadtimes', 'invalidation', 'modes', 'migration-before', 'migration-after', 'permissions', 'hardware', 'launchers', 'override', 'incomplete', 'incomplete-before')][string]$Scenario = 'loadtimes',
     [int]$MemoryPasses = 0,
     [string]$GcDump,
     [switch]$Uninstall,
@@ -39,8 +39,12 @@ $installedBefore = Test-Path $exe
 $personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 $transparencyBefore = (Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency
 $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' } | ForEach-Object { $_.TaskPath + $_.TaskName })
+$sessionTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' } | ForEach-Object { $_.TaskPath + $_.TaskName })
 if ($SetupPath -and $installedBefore -and -not $ReplaceExisting) { throw 'The app is already installed on this PC; pass -ReplaceExisting to replace it with the test build.' }
 $task = 'RooIndustries_LoadTimes'
+$standalone = 'loadtimes', 'invalidation', 'modes', 'hardware', 'launchers', 'override', 'incomplete', 'incomplete-before'
+$ifeoProbe = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooProtectedGameProbe.exe'
+$ifeoBefore = Test-Path $ifeoProbe
 try {
 if ($SetupPath) {
     $hash = (Get-FileHash -LiteralPath $SetupPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -62,8 +66,9 @@ if (-not $explorer) { throw 'No interactive desktop session.' }
 $sid = (Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid).Sid
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
 $ps = Join-Path $PSHOME 'powershell.exe'
-$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1' }[$Scenario]
-$arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $(if ($Scenario -like 'migration-*') { ' -Phase ' + $Scenario.Substring(10) } else { '' }) }
+$scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-ModesAndErrors.ps1'; 'migration-before' = 'Test-UpgradeMigration.ps1'; 'migration-after' = 'Test-UpgradeMigration.ps1'; permissions = 'Test-DataFolderPermissions.ps1'; hardware = 'Test-HardwareAge.ps1'; launchers = 'Test-ElevatedLaunchers.ps1'; override = 'Test-HelperStart.ps1'; incomplete = 'Test-HelperStart.ps1'; 'incomplete-before' = 'Test-HelperStart.ps1' }[$Scenario]
+$scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
+$arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $scenarioExtra }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
 $action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
 $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
@@ -94,7 +99,7 @@ finally {
             if (-not (Test-Path $original)) { Rename-Item $renamed.FullName $original; "RESULT restored renamed script " + $renamed.Name }
         }
     }
-    if ($Scenario -in 'loadtimes', 'invalidation', 'modes', 'hardware') {
+    if ($Scenario -in $standalone) {
         Step 'restore EnableTransparency' {
             $transparencyAfter = (Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency
             if ("$transparencyAfter" -ne "$transparencyBefore") {
@@ -111,9 +116,19 @@ finally {
         Step 'remove test helpers' {
             Remove-Item (Join-Path $env:TEMP 'roo-industries-feature-hang.flag') -Force -ErrorAction SilentlyContinue
             Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '-n (400|600|900) 127\.0\.0\.1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            Get-Process RooLoadTimesProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process RooLoadTimesProbe, RooLauncherProbe, RooProtectedLauncherProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
-            Remove-Item (Join-Path $env:TEMP 'RooLoadTimesProbe.exe') -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $env:TEMP 'RooLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooLauncherProbe.exe'), (Join-Path $env:TEMP 'RooProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooProtectedGameProbe.exe') -Force -ErrorAction SilentlyContinue
+        }
+        Step 'remove protected-session leftovers' {
+            if ($Scenario -eq 'launchers') {
+                foreach ($sessionTask in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' -and $sessionTasksBefore -notcontains ($_.TaskPath + $_.TaskName) })) {
+                    Stop-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -ErrorAction SilentlyContinue
+                    Unregister-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
+                    "RESULT CLEANUP: removed protected-session task " + $sessionTask.TaskName + " left by the run"
+                }
+                if (-not $ifeoBefore -and (Test-Path $ifeoProbe)) { Remove-Item $ifeoProbe -Recurse -Force; "RESULT CLEANUP: removed " + $ifeoProbe }
+            }
         }
     }
     Step 'read the scenario log' {
@@ -124,7 +139,7 @@ finally {
         Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Get-Process Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
     }
-    if ($Uninstall -or ($Scenario -in 'loadtimes', 'invalidation', 'modes', 'hardware' -and $SetupPath -and -not $installedBefore -and -not $KeepInstalled)) { Step 'uninstall the test build' { "RESULT uninstall " + (Uninstall-App) } }
+    if ($Uninstall -or ($Scenario -in $standalone -and $SetupPath -and -not $installedBefore -and -not $KeepInstalled)) { Step 'uninstall the test build' { "RESULT uninstall " + (Uninstall-App) } }
 }
 "RESULT out=$out"
 Get-Content (Join-Path $out $(if ($scenarioScript) { "$Scenario.log" } else { 'LOADTIMES.md' })) -ErrorAction SilentlyContinue
