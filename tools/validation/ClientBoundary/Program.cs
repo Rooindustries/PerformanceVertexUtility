@@ -10,12 +10,24 @@ var fixture = Path.Combine(Path.GetTempPath(), "roo-industries-client-boundary-"
 var previousRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT");
 string? recoveryRoot = null;
 string? savedRollback = null;
+string? fixtureOperations = null;
 LiveDataService? service = null;
 void Check(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine("PASS " + message);
 }
+string RealDataFolderState()
+{
+    var real = RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot;
+    var entries = Directory.Exists(real)
+        ? Directory.EnumerateFileSystemEntries(real, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => path + "|" + (Directory.Exists(path) ? "directory" : new FileInfo(path).Length + "|" + File.GetLastWriteTimeUtc(path).Ticks))
+        : ["<missing>"];
+    using var markers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(RooIndustries.Optimizer.PolicyRootSecurity.MarkerKey);
+    var values = markers is null ? ["<no marker key>"] : markers.GetValueNames().Where(name => !name.StartsWith(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(fixture), StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).Select(name => name + "=" + markers.GetValue(name));
+    return string.Join("\n", entries.Concat(values));
+}
+var realBefore = RealDataFolderState();
 try
 {
     var scripts = Path.Combine(fixture, "backend", "scripts");
@@ -45,7 +57,9 @@ try
     var gateProblem = DataFolderGate.Attempt(() => throw new IOException("The disk is full."), out _);
     Check(gateProblem == "The disk is full.", "Every other failure of the data folder check is reported with its own message");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", fixture);
-    service = new LiveDataService(new BackendLocator());
+    var fixtureData = Directory.CreateDirectory(Path.Combine(fixture, "data")).FullName;
+    fixtureOperations = Directory.CreateDirectory(Path.Combine(fixtureData, "operations")).FullName;
+    service = new LiveDataService(new BackendLocator(), Path.Combine(fixtureData, "settings"), fixtureOperations);
     Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null, "Client reads the reviewed removal route");
     Check(await service.GetCleanupManifestAsync(appId) is not null, "Client reads the reviewed cleanup list");
     // Change the discovery response after review; execution must still use the approved snapshot.
@@ -121,6 +135,7 @@ try
         Check(await operations.ReleaseEndedCpuSessionAsync(cpuJournal) && !File.Exists(cpuPointer), "Verified process shutdown releases its CPU recovery ticket");
     }
     finally { if (!sleeper.HasExited) { sleeper.Kill(); await sleeper.WaitForExitAsync(); } }
+    Check(RealDataFolderState() == realBefore, "The run left the real data folder and its protection markers exactly as it found them");
 }
 finally
 {
@@ -130,4 +145,10 @@ finally
     var hostLink = Path.Combine(fixture, "backend", "bin");
     if (Directory.Exists(hostLink) && new DirectoryInfo(hostLink).LinkTarget is not null) Directory.Delete(hostLink, false);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
+    if (fixtureOperations is not null)
+    {
+        using var markers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(RooIndustries.Optimizer.PolicyRootSecurity.MarkerKey, true);
+        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(fixtureOperations), false);
+        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(fixtureOperations) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
+    }
 }
