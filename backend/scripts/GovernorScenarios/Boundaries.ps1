@@ -221,6 +221,50 @@ function Test-ScenarioMigrationFileLocked {
     Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once the file is free the migration completes with the rule byte for byte as before'
 }
 
+function Test-ScenarioRenamedMachine {
+    $path=Copy-Probe
+    $probe=Start-Probe $path
+    $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Kept across a PC rename'
+    Use-Rule $rule|Out-Null
+    Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal')) 'The rule is applied before the PC name changes'
+    Worker 'Pause'|Out-Null
+    $current=(Get-RooIndustriesOperationOwner).machine
+    $renamed='RENAMED-'+$current.Substring(0,[Math]::Min(6,$current.Length))
+    $ruleFile=Join-Path $script:policyRoot ('rules\'+$rule.ruleId+'.json')
+    $other=New-Rule $path @{ioPriority=1} 'Rule of another Windows user'
+    $other.owner=@{machine=$current;userSid='S-1-5-21-1-2-3-4001'}
+    $otherFile=Join-Path $script:policyRoot ('rules\'+$other.ruleId+'.json')
+    Write-RooIndustriesOperationJson $other $otherFile
+    $otherHash=(Get-FileHash -LiteralPath $otherFile).Hash
+    foreach($file in @($ruleFile,(Join-Path $script:policyRoot 'host.json'))){
+        $document=(Read-RooIndustriesOperationJson $file).data
+        $document.owner.machine=$renamed
+        Write-RooIndustriesOperationJson $document $file
+    }
+    $stuck=$null
+    try {Core 'policy-status'|Out-Null} catch {$stuck=$_.Exception.Message}
+    Note 'statusAfterRename' $stuck
+    Assert ($stuck -like '*belongs to another PC or Windows user*') 'After a rename the saved state is refused until it is adopted'
+    $resumed=Worker 'Resume'
+    $adopted=(Read-RooIndustriesOperationJson $ruleFile).data
+    Note 'afterResume' ([ordered]@{running=$resumed.worker.hostRunning;ruleOwner=$adopted.owner;summaryRules=$resumed.rules;enabled=$resumed.enabledRules;rulesError=$resumed.rulesError})
+    Assert ($adopted.owner.machine -eq $current -and $adopted.owner.userSid -eq $rule.owner.userSid -and $adopted.name -eq 'Kept across a PC rename') 'The saved rule of this Windows user is kept and now carries the current PC name'
+    Assert ($resumed.worker.hostRunning -eq $true) 'The governor starts again after the rename'
+    $fresh=Start-Probe $path
+    Assert ($null -ne (Wait-Field $fresh 'cpuPriority' 'AboveNormal')) 'A new matching process gets the rule after the rename'
+    $log=Join-Path $script:policyRoot 'logs\governor.log'
+    Assert ((Test-Path -LiteralPath $log) -and (Get-Content -LiteralPath $log -Raw) -like '*The PC name changed: kept 1 saved rules*') 'The adoption is logged'
+    Assert ((Get-FileHash -LiteralPath $otherFile).Hash -eq $otherHash -and @((Core 'policy-summary').unreadableRules).Count -eq 1) 'A rule of another Windows user is neither adopted nor changed and is still reported'
+    $document=(Read-RooIndustriesOperationJson $ruleFile).data
+    $document.owner.machine=$renamed
+    Write-RooIndustriesOperationJson $document $ruleFile
+    $state=(Read-RooIndustriesOperationJson (Join-Path $script:policyRoot 'host.json')).data
+    $state.owner.machine=$renamed
+    Write-RooIndustriesOperationJson $state (Join-Path $script:policyRoot 'host.json')
+    $paused=Worker 'Pause'
+    Assert ($paused.paused -eq $true -and $paused.worker.hostRunning -eq $false) 'Pause works on state that still carries the old PC name'
+}
+
 function Test-ScenarioRootLease {
     $path=Copy-Probe
     Save-Rule (New-Rule $path @{cpuPriority='AboveNormal'} 'First rule')|Out-Null
