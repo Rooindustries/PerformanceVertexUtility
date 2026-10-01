@@ -380,6 +380,7 @@ switch($Phase){
         $result=@($lines|Where-Object {$_ -match 'RESULT failures=(\d+)'})|Select-Object -Last 1
         foreach($line in $lines){
             if($line -cmatch '^\S+ (PASS|FAIL|SKIPPED) (.*)$'){$text=$Matches[2];$length=[Math]::Min(700,$text.Length);Log ($Matches[1]+' '+$text.Substring(0,$length))}
+            elseif($line -cmatch '^\S+ NOT RUN (.*)$'){Log ('NOTE not run: '+$Matches[1])}
         }
         if($Scenario -eq 'loadtimes'){
             $rows=@(if(Test-Path -LiteralPath (Join-Path $dir 'loadtimes.csv')){Import-Csv -LiteralPath (Join-Path $dir 'loadtimes.csv')})
