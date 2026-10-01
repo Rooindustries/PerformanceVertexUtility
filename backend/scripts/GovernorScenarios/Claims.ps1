@@ -696,12 +696,14 @@ function Test-ScenarioClaimsRepoRootRequired {
     $path=Copy-Probe 'ClaimsRepoRoot.exe'
     $hostDll=Join-Path $hostDirectory 'Optimizer.Host.dll'
     Push-Location -LiteralPath $repoRoot
-    try {
-        $save=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;rule=(New-Rule $path @{cpuPriority='High'})}|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath $hostDll 'rule-save' '-') -join "`n")|ConvertFrom-Json
-        Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
-        $resume=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$false}|ConvertTo-Json -Compress)|& $DotNetPath $hostDll 'policy-pause' '-') -join "`n")|ConvertFrom-Json
-    } finally {Pop-Location}
-    Note 'emptyRepoRoot' @{save=$save.status;saveError=$save.error.message;resume=$resume.status;resumeError=$resume.error.message}
+    try {$save=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;rule=(New-Rule $path @{cpuPriority='High'})}|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath $hostDll 'rule-save' '-') -join "`n")|ConvertFrom-Json}
+    finally {Pop-Location}
+    Note 'saveWithEmptyRepoRoot' @{status=$save.status;error=$save.error.message}
     Assert ($save.status -eq 'failed' -and $save.error.message -like '*repository root*') 'Saving a rule with an empty repository root fails instead of skipping the game session checks'
+    Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
+    Push-Location -LiteralPath $repoRoot
+    try {$resume=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$false}|ConvertTo-Json -Compress)|& $DotNetPath $hostDll 'policy-pause' '-') -join "`n")|ConvertFrom-Json}
+    finally {Pop-Location}
+    Note 'resumeWithEmptyRepoRoot' @{status=$resume.status;error=$resume.error.message}
     Assert ($resume.status -eq 'failed' -and $resume.error.message -like '*repository root*') 'Resuming with an empty repository root fails instead of skipping the game session checks'
 }
