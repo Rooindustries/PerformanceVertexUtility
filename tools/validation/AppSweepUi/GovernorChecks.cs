@@ -421,8 +421,8 @@ static class GovernorChecks
             snapshot = GovernorProbe.Read(root);
             (view, _) = await Show(snapshot);
             check(snapshot.Summary.RulesError is null && snapshot.Summary.UnreadableRules is { Length: 1 } && snapshot.Summary.UnreadableRules[0].Contains(" could not be read: ", StringComparison.Ordinal)
-                    && snapshot.Rules.Length == 0 && view.Contains("State: notResponding"),
-                "Real snapshot: a damaged rule file is named as unreadable saved rules and, with no rule left to enforce, the governor needs attention");
+                    && snapshot.Rules.Length == 1 && view.Contains("State: notResponding"),
+                "Real snapshot: a damaged rule file is named as unreadable while the readable rule is still listed, and the unprotected folder still needs attention");
         }
         finally
         {
