@@ -38,7 +38,8 @@ function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
     foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
     $text=@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath @hostArgs $CoreAction '-') -join "`n"
     $exitCode=$LASTEXITCODE
-    $result=$text|ConvertFrom-Json
+    if([string]::IsNullOrWhiteSpace($text)){throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned no output.')}
+    try {$result=$text|ConvertFrom-Json} catch {throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned '+$text.Substring(0,[Math]::Min(300,$text.Length)))}
     if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}
     return $result.data
 }
