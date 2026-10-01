@@ -1,5 +1,6 @@
-param([string[]]$Scenario=@('all'),[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[string]$EvidencePath='',[string]$HostDirectory='',[switch]$List)
+param([string[]]$Scenario=@('all'),[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[string]$EvidencePath='',[string]$HostDirectory='',[switch]$List,[switch]$ContinueAfterFailure)
 $ErrorActionPreference='Stop'
+$script:continueAfterFailure=[bool]$ContinueAfterFailure
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 . (Join-Path $PSScriptRoot 'GovernorScenarios\Scenario.Common.ps1')

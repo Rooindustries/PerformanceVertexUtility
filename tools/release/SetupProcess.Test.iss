@@ -16,8 +16,6 @@ OutputBaseFilename=SetupProcessCheck
 [Code]
 #include "SetupProcess.iss"
 
-function SetEnvironmentVariable(Name: String; Value: String): Boolean; external 'SetEnvironmentVariableW@kernel32.dll stdcall';
-
 var
   Report: TArrayOfString;
 
@@ -34,6 +32,8 @@ var
   Started: DWORD;
   Ran: Boolean;
   ExecCode: Integer;
+  Names: TArrayOfString;
+  Index: Integer;
 begin
   Work := ExpandConstant('{param:work}');
   Shell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
@@ -64,6 +64,21 @@ begin
   Started := GetTickCount;
   Ran := Exec(Shell, '-NoProfile -NonInteractive -Command "Start-Sleep -Seconds 12"', '', SW_HIDE, ewWaitUntilTerminated, ExecCode);
   Note('D ran=' + IntToStr(Ord(Ran)) + ' exit=' + IntToStr(ExecCode) + ' ms=' + IntToStr(GetTickCount - Started));
+
+  SetEnvironmentVariable('DOTNET_GCConfigLogEnabled', '1');
+  SetEnvironmentVariable('DOTNET_GCConfigLogFile', Work + '\scratch\gc.log');
+  SetEnvironmentVariable('COMPlus_JitTimeLogFile', Work + '\scratch\jit.log');
+  SetEnvironmentVariable('complus_x', '1');
+  SetEnvironmentVariable('DOTNET_ROO_INDUSTRIES_UNKNOWN_KNOB', '1');
+  SetEnvironmentVariable('CORECLR_ENABLE_PROFILING', '1');
+  SetEnvironmentVariable('COR_PROFILER', 'a b & c ^ d % e');
+  SetEnvironmentVariable('COREHOST_TRACE', '1');
+  SetEnvironmentVariable('ROO_INDUSTRIES_UNRELATED_MARKER', 'kept');
+  ClearCodeLoading;
+  Names := PrefixedNames;
+  for Index := 0 to GetArrayLength(Names) - 1 do
+    Note('E ' + Names[Index] + '=' + GetEnv(Names[Index]));
+  Note('F unrelated=' + GetEnv('ROO_INDUSTRIES_UNRELATED_MARKER'));
 
   SaveStringsToFile(Work + '\report.txt', Report, False);
   Result := False;

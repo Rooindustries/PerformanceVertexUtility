@@ -1,88 +1,9 @@
 @echo off
 setlocal DisableDelayedExpansion
-set DOTNET_STARTUP_HOOKS=
-set DOTNET_ADDITIONAL_DEPS=
-set DOTNET_SHARED_STORE=
-set CORECLR_ENABLE_PROFILING=
-set CORECLR_PROFILER=
-set CORECLR_PROFILER_PATH=
-set CORECLR_PROFILER_PATH_32=
-set CORECLR_PROFILER_PATH_64=
-set CORECLR_PROFILER_PATH_ARM64=
-set COR_ENABLE_PROFILING=
-set COR_PROFILER=
-set COR_PROFILER_PATH=
-set COR_PROFILER_PATH_32=
-set COR_PROFILER_PATH_64=
-set CORECLR_PROFILER_PATH_ARM32=
-set CORECLR_ENABLE_NOTIFICATION_PROFILERS=
-set CORECLR_NOTIFICATION_PROFILERS=
-set CORECLR_NOTIFICATION_PROFILERS_32=
-set CORECLR_NOTIFICATION_PROFILERS_64=
-set CORECLR_NOTIFICATION_PROFILERS_ARM32=
-set CORECLR_NOTIFICATION_PROFILERS_ARM64=
-set DOTNET_DiagnosticPorts=
-set COMPlus_DiagnosticPorts=
-set DOTNET_DefaultDiagnosticPortSuspend=
-set COMPlus_DefaultDiagnosticPortSuspend=
-set DOTNET_GCName=
-set COMPlus_GCName=
-set DOTNET_GCPath=
-set COMPlus_GCPath=
-set DOTNET_JitName=
-set COMPlus_JitName=
-set DOTNET_JitPath=
-set COMPlus_JitPath=
-set DOTNET_AltJit=
-set COMPlus_AltJit=
-set DOTNET_AltJitName=
-set COMPlus_AltJitName=
-set DOTNET_AltJitNgen=
-set COMPlus_AltJitNgen=
-set DOTNET_AltJitExcludeAssemblies=
-set COMPlus_AltJitExcludeAssemblies=
-set DOTNET_EnableEventPipe=
-set COMPlus_EnableEventPipe=
-set DOTNET_EventPipeOutputPath=
-set COMPlus_EventPipeOutputPath=
-set DOTNET_EventPipeConfig=
-set COMPlus_EventPipeConfig=
-set DOTNET_DbgEnableMiniDump=
-set COMPlus_DbgEnableMiniDump=
-set DOTNET_DbgMiniDumpName=
-set COMPlus_DbgMiniDumpName=
-set DOTNET_DbgMiniDumpType=
-set COMPlus_DbgMiniDumpType=
-set DOTNET_DbgTransportProxyAddress=
-set COMPlus_DbgTransportProxyAddress=
-set DOTNET_StressLog=
-set COMPlus_StressLog=
-set DOTNET_StressLogFilename=
-set COMPlus_StressLogFilename=
-set DOTNET_ReadyToRunLogFile=
-set COMPlus_ReadyToRunLogFile=
-set DOTNET_JitStdOutFile=
-set COMPlus_JitStdOutFile=
-set DOTNET_PerfMapEnabled=
-set COMPlus_PerfMapEnabled=
-set DOTNET_PerfMapJitDumpPath=
-set COMPlus_PerfMapJitDumpPath=
-set DOTNET_MODIFIABLE_ASSEMBLIES=
-set COMPlus_MODIFIABLE_ASSEMBLIES=
-set DOTNET_ZapBBInstrDir=
-set COMPlus_ZapBBInstrDir=
-set COREHOST_TRACE=
-set COREHOST_TRACEFILE=
-set COREHOST_TRACE_VERBOSITY=
-set DOTNET_ROOT=
-set DOTNET_ROOT(x86)=
-set DOTNET_ROOT_X64=
-set DOTNET_ROOT_X86=
-set DOTNET_ROOT_ARM64=
-set DOTNET_ROOT_ARM=
-set DOTNET_BUNDLE_EXTRACT_BASE_DIR=
-set COMPLUS_INSTALLROOT=
-set COMPLUS_VERSION=
+set RANDOM=
+call :clear
+call :clear
+for %%p in (DOTNET_ COMPlus_ CORECLR_ COR_ COREHOST_) do set %%p>nul 2>&1 & if not errorlevel 1 exit /b 91
 set DOTNET_EnableDiagnostics=0
 set COMPlus_EnableDiagnostics=0
 set DOTNET_EnableDiagnostics_IPC=0
@@ -95,4 +16,12 @@ set "P1="&set "P2="&set "P3="&set "P4="
 for /f "tokens=2-5 delims=?" %%a in ("%~1") do set "P1=%%a"&set "P2=%%b"&set "P3=%%c"&set "P4=%%d"
 if not defined P1 exit /b 87
 if defined P4 ("%P1%" "%P2%" "%P3%" "%P4%") else if defined P3 ("%P1%" "%P2%" "%P3%") else if defined P2 ("%P1%" "%P2%") else ("%P1%")
-exit /b %ERRORLEVEL%
+exit /b
+:clear
+for %%p in (DOTNET_ COMPlus_ CORECLR_ COR_ COREHOST_) do set %%p>nul 2>&1 & if not errorlevel 1 goto list
+exit /b
+:list
+set "RooIndustriesHelperList=%~dp0RooIndustriesHelperEnvironment-%RANDOM%%RANDOM%.txt"
+(for %%p in (DOTNET_ COMPlus_ CORECLR_ COR_ COREHOST_) do set %%p) 2>nul >"%RooIndustriesHelperList%"
+(for /f "usebackq delims==" %%v in ("%RooIndustriesHelperList%") do set "%%v=") 2>nul & del "%RooIndustriesHelperList%" >nul 2>&1
+exit /b

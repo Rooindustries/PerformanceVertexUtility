@@ -2,7 +2,10 @@ $OutputEncoding=[Text.UTF8Encoding]::new($false)
 
 function Assert([bool]$Condition,[string]$Message){
     $script:current.checks.Add([pscustomobject]@{passed=$Condition;check=$Message;atUtc=[DateTime]::UtcNow.ToString('o')})
-    if(-not $Condition){throw ('FAIL '+$Message)}
+    if(-not $Condition){
+        if($script:continueAfterFailure){$script:current.passed=$false;Write-Output ('FAIL '+$Message);return}
+        throw ('FAIL '+$Message)
+    }
     Write-Output ('PASS '+$Message)
 }
 

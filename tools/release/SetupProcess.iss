@@ -170,3 +170,74 @@ function RunBounded(const FileName, Parameters, TempFolder: String; const Timeou
 begin
   Result := RunProcess(FileName, Parameters, TempFolder, TimeoutMilliseconds, True, ExitCode);
 end;
+
+function SetEnvironmentVariable(Name: String; Value: String): Boolean; external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+function RemoveEnvironmentVariable(Name: String; Value: Cardinal): Boolean; external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+function GetEnvironmentStringsW: Cardinal; external 'GetEnvironmentStringsW@kernel32.dll stdcall';
+function FreeEnvironmentStringsW(Block: Cardinal): Boolean; external 'FreeEnvironmentStringsW@kernel32.dll stdcall';
+function lstrlenW(Text: Cardinal): Integer; external 'lstrlenW@kernel32.dll stdcall';
+function lstrcpynW(Target: String; Text: Cardinal; Count: Integer): Cardinal; external 'lstrcpynW@kernel32.dll stdcall';
+
+function HasClearedPrefix(const Name: String): Boolean;
+var
+  Prefixes: TArrayOfString;
+  Index: Integer;
+begin
+  Prefixes := ['DOTNET_', 'COMPlus_', 'CORECLR_', 'COR_', 'COREHOST_'];
+  Result := False;
+  for Index := 0 to GetArrayLength(Prefixes) - 1 do
+    if CompareText(Copy(Name, 1, Length(Prefixes[Index])), Prefixes[Index]) = 0 then
+      Result := True;
+end;
+
+function PrefixedNames: TArrayOfString;
+var
+  Block, Cursor: Cardinal;
+  Size, Split, Count: Integer;
+  Entry, Name: String;
+begin
+  SetArrayLength(Result, 0);
+  Block := GetEnvironmentStringsW;
+  if Block = 0 then
+    exit;
+  try
+    Cursor := Block;
+    Size := lstrlenW(Cursor);
+    while Size > 0 do
+    begin
+      SetLength(Entry, Size + 1);
+      lstrcpynW(Entry, Cursor, Size + 1);
+      SetLength(Entry, Size);
+      Split := Pos('=', Copy(Entry, 2, Size)) + 1;
+      if Split > 1 then
+      begin
+        Name := Copy(Entry, 1, Split - 1);
+        if HasClearedPrefix(Name) then
+        begin
+          Count := GetArrayLength(Result);
+          SetArrayLength(Result, Count + 1);
+          Result[Count] := Name;
+        end;
+      end;
+      Cursor := Cursor + Cardinal((Size + 1) * 2);
+      Size := lstrlenW(Cursor);
+    end;
+  finally
+    FreeEnvironmentStringsW(Block);
+  end;
+end;
+
+procedure ClearCodeLoading;
+var
+  Names: TArrayOfString;
+  Index: Integer;
+begin
+  Names := PrefixedNames;
+  for Index := 0 to GetArrayLength(Names) - 1 do
+    RemoveEnvironmentVariable(Names[Index], 0);
+  Names := ['DOTNET_EnableDiagnostics', 'COMPlus_EnableDiagnostics', 'DOTNET_EnableDiagnostics_IPC', 'COMPlus_EnableDiagnostics_IPC',
+    'DOTNET_EnableDiagnostics_Debugger', 'COMPlus_EnableDiagnostics_Debugger', 'DOTNET_EnableDiagnostics_Profiler', 'COMPlus_EnableDiagnostics_Profiler'];
+  for Index := 0 to GetArrayLength(Names) - 1 do
+    SetEnvironmentVariable(Names[Index], '0');
+  SetEnvironmentVariable('PSModulePath', ExpandConstant('{commonpf64}\WindowsPowerShell\Modules;{sys}\WindowsPowerShell\v1.0\Modules'));
+end;

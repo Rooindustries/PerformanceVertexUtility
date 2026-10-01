@@ -145,7 +145,10 @@ try {
     $expected=New-RooIndustriesElevatedTaskAction $DotNetPath @((Join-Path $hostDirectory 'Optimizer.Host.dll'),'policy-run',(Join-Path $policyRoot 'worker-request.json')) $hostDirectory
     Assert ($task.Actions[0].Execute -eq $expected.Execute -and $task.Actions[0].Arguments -ceq $expected.Arguments -and $task.Actions[0].WorkingDirectory -eq $expected.WorkingDirectory) 'The governor runs without a console window and receives its host, command and protected request path through the clean launcher'
     $launcher=Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Start-RooIndustriesHelper.cmd')
-    Assert (((@([regex]::Matches($launcher,'(?m)^set ([A-Za-z0-9_()]+)=\r?$')|ForEach-Object {$_.Groups[1].Value})|Sort-Object) -join ',') -eq ((@($script:RooIndustriesCodeLoadingVariables)|Sort-Object) -join ',')) 'The clean launcher clears exactly the .NET code-loading settings the helpers refuse or ignore'
+    Assert (@([regex]::Matches($launcher,'(?m)^set ([A-Za-z0-9_()]+)=\r?$')|ForEach-Object {$_.Groups[1].Value}|Where-Object {$_ -cne 'RANDOM'}).Count -eq 0) 'The clean launcher keeps no list of variable names to clear'
+    $loops=@([regex]::Matches($launcher,'for %%p in \(([^)]*)\) do')|ForEach-Object {$_.Groups[1].Value})
+    $wantedPrefixes=((@($script:RooIndustriesClearedPrefixes)|Sort-Object) -join ',')
+    Assert ($loops.Count -ge 3 -and @($loops|Where-Object {((@($_ -split ' ')|Sort-Object) -join ',') -cne $wantedPrefixes}).Count -eq 0) 'The clean launcher lists, clears and checks every variable that starts with the .NET prefixes the helpers refuse'
     Assert (((@([regex]::Matches($launcher,'(?m)^set ([A-Za-z0-9_()]+)=0\r?$')|ForEach-Object {$_.Groups[1].Value})|Sort-Object) -join ',') -eq ((@($script:RooIndustriesPinnedVariables)|Sort-Object) -join ',')) 'The clean launcher switches .NET diagnostics off under both name prefixes'
     $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$synced.worker.state.host.processId)
     $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$worker.ParentProcessId)
