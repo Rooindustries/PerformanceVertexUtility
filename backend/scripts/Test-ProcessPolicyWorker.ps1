@@ -377,7 +377,7 @@ public static class RooIndustriesGovernorDenied {
     Core 'rule-save' @{rule=$gameRule}|Out-Null
     $earlyStart=$null;try {& $sessionScript -Action Start -PreviewPath $early.file -ReviewHash $early.hash -SessionRoot $early.root -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null} catch {$earlyStart=$_.Exception.Message}
     & $sessionScript -Action Stop -SessionRoot $early.root -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
-    Note 'sessionAfterRule' ([ordered]@{startError=$earlyStart;worker=(Get-Content -LiteralPath (Join-Path $early.root 'worker-error.json') -Raw -ErrorAction SilentlyContinue)})
+    Note 'sessionAfterRule' ([ordered]@{startError=$earlyStart;worker=$(if(Test-Path -LiteralPath (Join-Path $early.root 'worker-error.json')){[IO.File]::ReadAllText((Join-Path $early.root 'worker-error.json'))}else{$null})})
     Assert ($null -ne $earlyStart -and -not (Test-Path -LiteralPath (Join-Path $early.root 'session.json'))) 'A game session reviewed before a rule was saved for the same field does not start'
     Worker 'Pause'|Out-Null
     $pausedPreview=$null;try {New-GameSessionPreview|Out-Null} catch {$pausedPreview=$_.Exception.Message}
@@ -412,15 +412,24 @@ public static class RooIndustriesGovernorDenied {
     $watchOutput=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-watch-'+[Guid]::NewGuid().ToString('N')+'.json')
     Start-Limited (@'
 $seen=New-Object System.Collections.Generic.List[string];$rewritten=New-Object System.Collections.Generic.List[string]
-$index=0
-foreach($folder in @([IO.Path]::GetTempPath(),'PARENT')){$w=[IO.FileSystemWatcher]::new($folder,'*.json');$w.IncludeSubdirectories=$true;$w.InternalBufferSize=65536;Register-ObjectEvent $w Created -SourceIdentifier ('created'+$index)|Out-Null;Register-ObjectEvent $w Changed -SourceIdentifier ('changed'+$index)|Out-Null;$w.EnableRaisingEvents=$true;$index++}
+$known=@{}
 $clock=[Diagnostics.Stopwatch]::StartNew()
 while($clock.Elapsed.TotalSeconds -lt 90){
-    $raised=Wait-Event -Timeout 1
-    if($raised){
-        $path=$raised.SourceEventArgs.FullPath;Remove-Event -EventIdentifier $raised.EventIdentifier;$seen.Add($path)
-        try{$text=[IO.File]::ReadAllText($path);if($text -match 'policyRoot'){[IO.File]::WriteAllText($path,$text.Replace('"paused":false','"paused":true').Replace('"paused": false','"paused": true'));$rewritten.Add($path)}}catch{}
+    $temp=[IO.Path]::GetTempPath()
+    $candidates=@(Get-ChildItem -LiteralPath $temp -File -Filter '*.json' -ErrorAction SilentlyContinue)
+    $candidates+=@(Get-ChildItem -LiteralPath $temp -Directory -Filter 'roo-industries-*' -ErrorAction SilentlyContinue|ForEach-Object {Get-ChildItem -LiteralPath $_.FullName -File -Filter '*.json' -ErrorAction SilentlyContinue})
+    $candidates+=@(Get-ChildItem -LiteralPath 'PARENT' -File -Filter '*.json' -Recurse -ErrorAction SilentlyContinue)
+    foreach($file in $candidates){
+        $stamp=$file.LastWriteTimeUtc.Ticks
+        if($known[$file.FullName] -eq $stamp){continue}
+        $known[$file.FullName]=$stamp
+        if($clock.Elapsed.TotalSeconds -lt 1){continue}
+        try{$text=[IO.File]::ReadAllText($file.FullName)}catch{continue}
+        if($text -notmatch 'policyRoot'){continue}
+        $seen.Add($file.FullName)
+        try{[IO.File]::WriteAllText($file.FullName,$text.Replace('"paused":false','"paused":true').Replace('"paused": false','"paused": true'));$rewritten.Add($file.FullName);$known[$file.FullName]=(Get-Item -LiteralPath $file.FullName).LastWriteTimeUtc.Ticks}catch{}
     }
+    Start-Sleep -Milliseconds 100
 }
 @{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);seen=@($seen|Select-Object -Unique);rewritten=@($rewritten)}|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8
 '@).Replace('PARENT',$policyParent).Replace('OUT',$watchOutput)
@@ -440,7 +449,7 @@ while($clock.Elapsed.TotalSeconds -lt 90){
     $watch=Get-Content -LiteralPath $watchOutput -Raw -Encoding UTF8|ConvertFrom-Json
     Remove-Item -LiteralPath $watchOutput -Force
     Note 'requestRace' ([ordered]@{elevated=$watch.elevated;seen=@($watch.seen);rewritten=@($watch.rewritten)})
-    Assert ($decoyText -match '"paused":true' -and @($watch.rewritten|Select-Object -Unique).Count -eq 1 -and @($watch.rewritten)[0] -eq $decoy) 'The racing watcher does catch and rewrite a request file when one exists (positive control)'
+    Assert ($decoyText -match '"paused":true' -and @($watch.rewritten|Where-Object {$_ -ne $decoy}).Count -eq 0 -and @($watch.rewritten) -contains $decoy) 'The racing watcher does catch and rewrite a request file when one exists (positive control)'
     Assert ($watch.elevated -eq $false -and $raceResumed.paused -eq $false -and $raceResumed.worker.hostRunning -eq $true) 'A non-elevated process racing governor actions finds no governor request it can rewrite'
 
     # migration of a folder written by the earlier version: a file written without elevation is refused, a clean folder moves byte for byte, an interrupted swap is adopted
