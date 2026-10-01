@@ -6,7 +6,7 @@ static class FakeHost
 {
     public static void Run(string action)
     {
-        var state = Environment.GetEnvironmentVariable("ROOTEST_BOUNDS_DIR") ?? throw new InvalidOperationException("The bounds fixture folder is missing.");
+        var state = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_BOUNDS_DIR") ?? throw new InvalidOperationException("The bounds fixture folder is missing.");
         var request = Console.In.ReadToEnd();
         File.AppendAllText(Path.Combine(state, "host-calls.log"), Environment.ProcessId + " " + action + "\n");
         if (File.Exists(Path.Combine(state, "host-hang")))

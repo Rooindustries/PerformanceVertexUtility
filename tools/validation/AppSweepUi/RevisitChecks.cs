@@ -9,7 +9,7 @@ static class RevisitChecks
     public static async Task RunAsync(Action<bool, string> check)
     {
         var failures = new List<string>();
-        var only = Environment.GetEnvironmentVariable("ROO_SCENARIO");
+        var only = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_SCENARIO");
         async Task Scenario(string name, Func<Task<bool>> body)
         {
             if (!string.IsNullOrEmpty(only) && !name.Contains(only, StringComparison.OrdinalIgnoreCase)) return;

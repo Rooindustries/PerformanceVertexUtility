@@ -55,7 +55,7 @@ public static class RuntimeEnvironment
 #endif
 
     private static readonly string[] MachineNames = ["OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION"];
-    private static readonly string[] DeveloperPrefixes = ["ROO_", "ROOTEST_"];
+    private static readonly string[] DeveloperPrefixes = [BrandCompatibility.LegacyEnvironmentPrefix];
     private static readonly string[] DeveloperNames = ["DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64", "DOTNET_ROOT(x86)"];
     private static string? _protectedTemp;
 
