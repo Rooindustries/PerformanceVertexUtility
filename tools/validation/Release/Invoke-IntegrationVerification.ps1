@@ -86,7 +86,7 @@ function Run([string]$Name,[scriptblock]$Body,[switch]$GuardData){
     $skips=@($output|Where-Object {$_ -cmatch '^SKIP'})
     $last=@($output|Where-Object {$_.Trim()}|Select-Object -Last 1)
     if($GuardData){$dataAfter=Get-DataFolderState;Check ($dataAfter -eq $dataBefore) ($Name+' left the real data folders and the protection markers as it found them') $(if($dataAfter -ne $dataBefore){(@(Compare-Object ($dataBefore -split "`n") ($dataAfter -split "`n")|Select-Object -First 4|ForEach-Object {$_.SideIndicator+' '+$_.InputObject}) -join ' // ')}else{'same'})}
-    Check ($code -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
+    Check ($code -eq 0 -and $fails -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
 }
 function Uninstall-App {
     $uninstaller=Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue|Select-Object -First 1

@@ -67,6 +67,12 @@ phase() {
   echo "$log"; echo "FAIL lines: $(grep -ac '^[^ ]* FAIL ' "$log")"
 }
 
+script() {
+  local directory="$1" name="$2" minutes="$3" log="$OUT/suites/$2-$(date -u +%H%M%S).log"; shift 3
+  interactive "$directory" "$name" "$minutes" "$log" "$@"
+  echo "$log"; echo "FAIL lines: $(grep -ac '^FAIL ' "$log")"
+}
+
 gi() {
   local label="$1"; shift
   winps_text "& '$REMOTE_STAGE\\tools\\validation\\Governor\\Test-GovernorInstalled.ps1' -Phase $* " | tee "$OUT/lifecycle/$label.json" | grep -a '^\(PASS\|FAIL\)'
@@ -155,6 +161,7 @@ case "$step" in
   stage) stage ;;
   phase) phase "$@" ;;
   gi) gi "$@" ;;
+  script) script "$@" ;;
   screen) screen "$@" ;;
   reboot) reboot_wait ;;
   fetch) fetch "$@" ;;
