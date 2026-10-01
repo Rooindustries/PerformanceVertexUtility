@@ -168,6 +168,26 @@ static class ChildEnvironmentChecks
             {
                 var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 var scope = new RegistryAddress("CurrentUser", "Registry64", keyPath, "key", null);
+                var inventoryName = "Roo Industries Leftover Temp Fixture " + Guid.NewGuid().ToString("N");
+                var uninstallKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RooIndustriesLeftoverTemp-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    using (var registration = Registry.CurrentUser.CreateSubKey(uninstallKey))
+                    {
+                        registration.SetValue("DisplayName", inventoryName);
+                        registration.SetValue("InstallLocation", "%TEMP%\\" + name, RegistryValueKind.ExpandString);
+                    }
+                    var inventory = new ProcessStartInfo(ChildEnv.PowerShell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    RuntimeEnvironment.Apply(inventory);
+                    foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(ChildEnv.RepoRoot(), "backend", "scripts", "Get-InstalledAppInventory.ps1") }) inventory.ArgumentList.Add(argument);
+                    using var listing = Process.Start(inventory)!;
+                    var json = listing.StandardOutput.ReadToEndAsync();
+                    var text = listing.StandardError.ReadToEndAsync();
+                    if (!listing.WaitForExit(300000)) { listing.Kill(true); throw new TimeoutException("The installed app inventory did not finish."); }
+                    var found = JsonDocument.Parse(json.GetAwaiter().GetResult()).RootElement.GetProperty("apps").EnumerateArray().FirstOrDefault(app => app.GetProperty("displayName").GetString() == inventoryName);
+                    check(found.ValueKind == JsonValueKind.Object && string.Equals(found.GetProperty("installLocation").GetString(), folder, StringComparison.OrdinalIgnoreCase), "The installed app inventory reports an install location of %TEMP%\\name as the user's real temp folder, not the protected temp of the script (" + (found.ValueKind == JsonValueKind.Object ? found.GetProperty("installLocation").GetString() : "app not found: " + text.GetAwaiter().GetResult()) + ")");
+                }
+                finally { Registry.CurrentUser.DeleteSubKeyTree(uninstallKey, false); }
                 foreach (var (label, install, wanted) in new[] { ("an absolute install location and a registry value that names %TEMP%", folder, "Referencing"), ("an install location that names %TEMP% and an absolute registry value", "%TEMP%\\" + name, "Absolute") })
                 {
                     var app = new CleanupApplication { AppId = "leftover-temp", DisplayName = "Roo Industries Leftover Temp Fixture", Publisher = null, InstallLocation = install, PackageFamilyName = null };

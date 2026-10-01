@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 . (Join-Path $PSScriptRoot 'InstalledAppIdentity.Common.ps1')
 . (Join-Path $PSScriptRoot 'AppxInventory.Common.ps1')
 $currentUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -99,7 +100,11 @@ foreach ($hive in @('LocalMachine','CurrentUser')) {
                 if ($null -eq $key) { continue }
                 try {
                     $record = @{PSChildName=$keyName}
-                    foreach ($valueName in $key.GetValueNames()) { $record[$valueName]=$key.GetValue($valueName) }
+                    foreach ($valueName in $key.GetValueNames()) {
+                        $value = $key.GetValue($valueName, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                        if ($value -is [string] -and $key.GetValueKind($valueName) -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) { $value = Expand-RooIndustriesUserVariables $value }
+                        $record[$valueName] = $value
+                    }
                     if ([string]::IsNullOrWhiteSpace([string]$record.DisplayName)) { continue }
                     $identity = New-RooIndustriesRegistryAppIdentity $hive $view $keyName $currentUserSid
                     $apps.Add((New-AppRecord ([pscustomobject]$record) 'registry' $identity)) | Out-Null
