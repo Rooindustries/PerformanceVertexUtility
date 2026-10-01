@@ -17,9 +17,12 @@ public sealed record ToolTarget(string Action, string? Path, bool FromArchive);
 public sealed class ToolLauncherService
 {
     private readonly string _root;
-    public ToolLauncherService(string root) => _root = root;
+    private readonly string? _cacheRoot;
+    private readonly Func<string>? _requireProtected;
+    public ToolLauncherService(string root, string? cacheRoot = null, Func<string>? requireProtected = null) { _root = root; _cacheRoot = cacheRoot; _requireProtected = requireProtected; }
     private string Archive => Path.Combine(_root, "vendor", "Utilities.zip");
-    private static string Cache => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
+    private string Cache => _cacheRoot ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
+    private string RequireProtected() => _requireProtected is { } fixture ? fixture() : RooIndustries.Optimizer.DataFolder.Require();
 
     public async Task<IReadOnlyList<ToolDefinition>> ReadAsync()
     {
@@ -67,7 +70,7 @@ public sealed class ToolLauncherService
             : "Opened " + tool.Name + ".";
     }
 
-    private static Process? Start(string path)
+    private Process? Start(string path)
     {
         if (!RooIndustries.Optimizer.PolicyRootSecurity.Elevated() || AdministratorsOnly(path))
             return Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! });
@@ -77,13 +80,13 @@ public sealed class ToolLauncherService
         return Process.Start(explorer);
     }
 
-    private static bool AdministratorsOnly(string path)
+    private bool AdministratorsOnly(string path)
     {
         var full = Path.GetFullPath(path);
         foreach (var parent in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
             if (!string.IsNullOrEmpty(parent) && Contained(parent, full)) return true;
         if (!Contained(Cache, full)) return false;
-        try { RooIndustries.Optimizer.DataFolder.Require(); return true; }
+        try { RequireProtected(); return true; }
         catch (Exception error) when (error is UnauthorizedAccessException or IOException) { return false; }
     }
 
@@ -109,7 +112,7 @@ public sealed class ToolLauncherService
 
     private string Extract(ToolDefinition tool)
     {
-        RooIndustries.Optimizer.DataFolder.Require();
+        RequireProtected();
         var directory = Path.Combine(Cache, tool.Id);
         var target = Inside(directory, tool.ArchivePath);
         using var zip = ZipFile.OpenRead(Archive);
