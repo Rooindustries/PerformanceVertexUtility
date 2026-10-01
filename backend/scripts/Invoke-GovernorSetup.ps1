@@ -249,7 +249,7 @@ function Register-OtherGovernor($Record){
     $settingsPath=Join-Path $Record.policyRoot 'governor.json'
     $paused=(Test-Path -LiteralPath $settingsPath) -and [bool](Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8|ConvertFrom-Json).paused
     . (Join-Path $AppRoot 'backend\scripts\BrandCompatibility.Common.ps1')
-    $execute=New-RooIndustriesElevatedTaskAction $hostExe ('policy-run "'+$request+'"') (Split-Path $hostExe -Parent)
+    $execute=New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',$request) (Split-Path $hostExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $Record.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     $settings.Enabled=([bool]$Record.enabled -and -not $paused)

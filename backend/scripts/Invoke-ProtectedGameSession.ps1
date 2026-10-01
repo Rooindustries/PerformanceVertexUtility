@@ -55,7 +55,7 @@ if($Action -eq 'Start'){
     [IO.File]::WriteAllText($requestPath,(@{schemaVersion=1;repoRoot=$repoRoot;sessionRoot=$SessionRoot;previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash;confirm=$true}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'Build-OptimizerHost.ps1 must package the background session executable.'}
-    $execute=New-RooIndustriesElevatedTaskAction $workerExe ('run "'+$requestPath+'"') (Split-Path $workerExe -Parent)
+    $execute=New-RooIndustriesElevatedTaskAction $workerExe @('run',$requestPath) (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Force|Out-Null
