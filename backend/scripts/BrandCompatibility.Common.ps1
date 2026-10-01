@@ -64,12 +64,30 @@ function Get-RooIndustriesLocalDataRoot {
 
 $script:RooIndustriesCodeLoadingVariables=@('DOTNET_STARTUP_HOOKS','DOTNET_ADDITIONAL_DEPS','DOTNET_SHARED_STORE','CORECLR_ENABLE_PROFILING','CORECLR_PROFILER','CORECLR_PROFILER_PATH','CORECLR_PROFILER_PATH_32','CORECLR_PROFILER_PATH_64','CORECLR_PROFILER_PATH_ARM64','COR_ENABLE_PROFILING','COR_PROFILER','COR_PROFILER_PATH','COR_PROFILER_PATH_32','COR_PROFILER_PATH_64')
 
+$script:RooIndustriesScriptsRoot=$PSScriptRoot
+
+function Get-RooIndustriesLaunchProblem([string]$Text,[switch]$Bare) {
+    if([string]::IsNullOrEmpty($Text)){return 'is empty'}
+    if($Text -match '["?^*<>|\r\n]'){return 'contains a character that cannot be passed to the clean launcher'}
+    if($Bare -and $Text -match '[&(),;=!%]'){return 'contains a character that needs quoting, but has no space for the console host to quote it by'}
+    if(([regex]::Matches($Text,'%')).Count -gt 1){
+        $names=@([Environment]::GetEnvironmentVariables('Process').Keys)+@([Environment]::GetEnvironmentVariables('User').Keys)+@([Environment]::GetEnvironmentVariables('Machine').Keys)+@('CD','DATE','TIME','RANDOM','ERRORLEVEL','CMDEXTVERSION','CMDCMDLINE','HIGHESTNUMANODENUMBER')
+        foreach($name in $names){if($Text -match ('(?i)%'+[regex]::Escape([string]$name)+'(:[^%]*)?%')){return ('contains %'+$name+'%, which the command interpreter would replace')}}
+    }
+    return $null
+}
+
 function New-RooIndustriesElevatedTaskAction {
-    param([Parameter(Mandatory=$true)][string]$Executable,[string]$Arguments='',[Parameter(Mandatory=$true)][string]$WorkingDirectory)
+    param([Parameter(Mandatory=$true)][string]$Executable,[string[]]$ArgumentList=@(),[Parameter(Mandatory=$true)][string]$WorkingDirectory)
     $system=[Environment]::GetFolderPath('System')
-    $clear=($script:RooIndustriesCodeLoadingVariables|ForEach-Object {'set '+$_+'='}) -join '&'
-    $command='"'+$clear+'&"'+$Executable+'" '+$Arguments+'"'
-    return New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "'+(Join-Path $system 'cmd.exe')+'" /d /s /c '+$command) -WorkingDirectory $WorkingDirectory
+    $launcher=Join-Path $script:RooIndustriesScriptsRoot 'Start-RooIndustriesHelper.cmd'
+    if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Roo Industries files are missing or damaged. Install the app again.'}
+    $parts=@($Executable)+@($ArgumentList)
+    if($parts.Count -gt 4){throw 'The clean launcher starts a program with at most three arguments.'}
+    foreach($part in $parts){if($null -ne ($problem=Get-RooIndustriesLaunchProblem $part)){throw ('Cannot register the elevated task because "'+$part+'" '+$problem+'.')}}
+    if($null -ne ($problem=Get-RooIndustriesLaunchProblem $launcher -Bare:(-not $launcher.Contains(' ')))){throw ('Cannot register the elevated task because the install folder "'+$launcher+'" '+$problem+'.')}
+    $payload=' ?'+($parts -join '?')
+    return New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "'+(Join-Path $system 'cmd.exe')+'" /d /v:off /c call "'+$launcher+'" "'+$payload+'"') -WorkingDirectory $WorkingDirectory
 }
 
 function Get-RooIndustriesDevelopmentDotNet {

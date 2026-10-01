@@ -2,6 +2,7 @@ param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[string]$EvidencePath='
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -141,13 +142,15 @@ try {
     Note 'task' ([ordered]@{name=$taskName;state=[string]$task.State;runLevel=[string]$task.Principal.RunLevel;logonType=[string]$task.Principal.LogonType;multipleInstances=[string]$task.Settings.MultipleInstances;executionTimeLimit=$task.Settings.ExecutionTimeLimit;triggers=@($task.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;start=$_.StartBoundary;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration;user=$_.UserId}});action=($task.Actions[0].Execute+' '+$task.Actions[0].Arguments)})
     Assert ($synced.worker.hostRunning -eq $true -and $synced.registered -and $synced.enabled -and $synced.runAtLogon -and $synced.restartEveryMinute -and $synced.secured) 'Saving the first rule registers, secures and starts the governor with sign-in and one-minute restart triggers'
     Assert ($triggerSid -eq (Get-RooIndustriesOperationOwner).userSid -and [string]$task.Principal.RunLevel -eq 'Highest' -and $task.Settings.ExecutionTimeLimit -eq 'PT0S' -and [string]$task.Settings.MultipleInstances -eq 'IgnoreNew' -and $task.Settings.Priority -eq 6) 'The governor task is bound to this user, elevated, unlimited, single-instance and normal priority'
-    Assert ($task.Actions[0].Execute -like '*\conhost.exe' -and $task.Actions[0].Arguments -like '--headless *cmd.exe" /d /s /c *' -and $task.Actions[0].Arguments -like ('*policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'""')) 'The governor runs without a console window and receives its protected request path as one exact argument'
-    Assert (@('DOTNET_STARTUP_HOOKS','CORECLR_ENABLE_PROFILING','CORECLR_PROFILER_PATH_64','COR_ENABLE_PROFILING')|Where-Object {$task.Actions[0].Arguments -notlike ('*set '+$_+'=&*')}).Count -eq 0 'The governor task clears .NET code-loading settings before the elevated helper starts'
+    $expected=New-RooIndustriesElevatedTaskAction $DotNetPath @((Join-Path $hostDirectory 'Optimizer.Host.dll'),'policy-run',(Join-Path $policyRoot 'worker-request.json')) $hostDirectory
+    Assert ($task.Actions[0].Execute -eq $expected.Execute -and $task.Actions[0].Arguments -ceq $expected.Arguments -and $task.Actions[0].WorkingDirectory -eq $expected.WorkingDirectory) 'The governor runs without a console window and receives its host, command and protected request path through the clean launcher'
+    $launcher=Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Start-RooIndustriesHelper.cmd')
+    Assert ((@([regex]::Matches($launcher,'(?m)^set ([A-Z0-9_]+)=\r?$')|ForEach-Object {$_.Groups[1].Value})|Sort-Object) -join ',') -eq ((@($script:RooIndustriesCodeLoadingVariables)|Sort-Object) -join ',')) 'The clean launcher clears exactly the .NET code-loading settings the helpers refuse'
     $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$synced.worker.state.host.processId)
     $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$worker.ParentProcessId)
     Note 'workerProcess' ([ordered]@{name=$worker.Name;commandLine=$worker.CommandLine;parent=$parent.Name;parentCommandLine=$parent.CommandLine;session=$worker.SessionId})
     $console=Get-CimInstance Win32_Process -Filter ('ProcessId='+$parent.ParentProcessId)
-    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /s /c*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The running governor is started by the clean launcher inside a headless console'
+    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /v:off /c call *Start-RooIndustriesHelper.cmd*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The running governor is started by the clean launcher inside a headless console'
     $existingSeconds=Wait-Until {Same (Read-Controls $first) $wanted} 10
     Assert ($null -ne $existingSeconds) 'The governor applies all 8 controls to an already running matching process'
     $second=Start-Probe

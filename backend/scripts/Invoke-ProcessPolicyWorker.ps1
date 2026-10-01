@@ -76,8 +76,7 @@ function Register-Governor([switch]$Disabled) {
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if(-not $admin){throw 'Saved rules need administrator rights. Open the app as an administrator and try again.'}
     Write-RooIndustriesOperationJson @{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true} $requestPath
-    $arguments=(@($hostArgs|ForEach-Object {'"'+$_+'"'})+@('policy-run',('"'+$requestPath+'"'))) -join ' '
-    $execute=New-RooIndustriesElevatedTaskAction $DotNetPath $arguments $HostDirectory
+    $execute=New-RooIndustriesElevatedTaskAction $DotNetPath (@($hostArgs)+@('policy-run',$requestPath)) $HostDirectory
     $principal=New-ScheduledTaskPrincipal -UserId $owner.userSid -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
     $settings.Enabled=-not $Disabled

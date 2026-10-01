@@ -3,6 +3,7 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $app='C:\Program Files\Roo Industries\Optimization Suite'
 $hostExe=Join-Path $app 'backend\bin\optimizer\Optimizer.Host.exe'
+if(Test-Path -LiteralPath (Join-Path $app 'backend\scripts\BrandCompatibility.Common.ps1')){. (Join-Path $app 'backend\scripts\BrandCompatibility.Common.ps1')}
 $account='rigovtest'
 $work=Join-Path $env:ProgramData 'RooIndustriesGovernorTest'
 $probeExe=Join-Path $work 'RooIndustriesGovernorProbe.exe'
@@ -77,7 +78,7 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         $task=@(Governor-Task $state.sid)
         $out.probe=$probe;$out.task=@($task|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;execute=$_.Actions[0].Execute;arguments=$_.Actions[0].Arguments;triggers=@($_.Triggers|ForEach-Object {[string]$_.CimClass.CimClassName+' '+$_.UserId+' '+$_.Repetition.Interval})}})
         Check ($null -ne $probe -and $probe.cpuPriority -eq $state.original.cpuPriority -and $probe.memoryPriority -eq $state.original.memoryPriority -and @(Worker-Of $state.sid).Count -eq 0) 'Setup stopped the second administrator governor and restored their process'
-        Check ($task.Count -eq 1 -and [string]$task[0].State -ne 'Disabled' -and $task[0].Actions[0].Execute -like '*\conhost.exe' -and $task[0].Actions[0].Arguments -like ('*"'+$hostExe+'" policy-run*') -and @($task[0].Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' -and (([string]$_.UserId -eq $state.sid) -or ([Security.Principal.NTAccount]::new([string]$_.UserId).Translate([Security.Principal.SecurityIdentifier]).Value -eq $state.sid)) -and $_.Repetition.Interval -eq 'PT1M'}).Count -eq 1) 'Their governor task is registered again and enabled, so it starts at their next sign-in'
+        Check ($task.Count -eq 1 -and [string]$task[0].State -ne 'Disabled' -and $task[0].Actions[0].Execute -like '*\conhost.exe' -and $task[0].Actions[0].Arguments -ceq (New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',(Join-Path $state.root 'worker-request.json')) (Split-Path $hostExe -Parent)).Arguments -and @($task[0].Triggers|Where-Object {$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' -and (([string]$_.UserId -eq $state.sid) -or ([Security.Principal.NTAccount]::new([string]$_.UserId).Translate([Security.Principal.SecurityIdentifier]).Value -eq $state.sid)) -and $_.Repetition.Interval -eq 'PT1M'}).Count -eq 1) 'Their governor task is registered again and enabled, so it starts at their next sign-in'
         $acl=Get-Acl -LiteralPath $state.root
         Check ($acl.Owner -eq 'BUILTIN\Administrators' -and $acl.AreAccessRulesProtected -and @($acl.Access|Where-Object {[string]$_.IdentityReference -like ('*\'+$account) -and [string]$_.FileSystemRights -match 'Read'}).Count -ge 1) 'Their rules folder is protected and still readable by them'
     }
