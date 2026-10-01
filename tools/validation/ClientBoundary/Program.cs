@@ -38,6 +38,12 @@ try
     File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(official));
     object Manifest(string target) => new { manifestId = "client-review", appId, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(original)));
+    var gateRoot = Directory.CreateDirectory(Path.Combine(fixture, "gate-root")).FullName;
+    File.WriteAllText(Path.Combine(gateRoot, "temp"), "a file where the temporary folder belongs");
+    var gateMessage = DataFolderGate.Attempt(() => gateRoot, out var gateEnabled);
+    Check(gateMessage is not null && !gateEnabled && gateMessage.Contains("temp", StringComparison.OrdinalIgnoreCase), "A file error while opening the data folder becomes a message for the user instead of an unhandled exception: " + gateMessage);
+    var gateProblem = DataFolderGate.Attempt(() => throw new IOException("The disk is full."), out _);
+    Check(gateProblem == "The disk is full.", "Every other failure of the data folder check is reported with its own message");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", fixture);
     service = new LiveDataService(new BackendLocator());
     Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null, "Client reads the reviewed removal route");
@@ -47,7 +53,7 @@ try
     var applyResult = await service.RequestUninstallCleanupApplyResultAsync(appId, true, true, true);
     savedRollback = applyResult.RecoveryPath;
     var json = applyResult.Value;
-    Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result");
+    Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result: " + applyResult.Error);
     using var applied = JsonDocument.Parse(json!);
     var status = applied.RootElement.GetProperty("status").GetString();
     if (status != "success") Console.WriteLine(json);

@@ -127,6 +127,26 @@ your apps their old settings back and removes it. Your saved rules stay on
 your PC, so they come back if you install the app again. Only install a newer
 beta over the one you have. Going back to an older beta is not supported.
 
+The first time you open a newer beta, the app locks its data folder so only
+administrators can change it. A small window says "Preparing your saved
+settings" while it does this. It can take a few minutes. Please keep it open.
+After that, what carries over and what does not:
+- Your saved rules, settings and undo information carry over. When you use an
+  undo or restore that an older beta saved, the app tells you so and asks you
+  to confirm first.
+- Cleanup backups made by an older beta cannot be restored by the newer one.
+  The files stay on your PC, in the data folder. The app tells you this where
+  the restore button was.
+- Programs and BIOS tool packages that an older beta unpacked are not reused.
+  The app unpacks them again when you open them, and the Firmware page asks you
+  to set up the BIOS tool again. Import your custom Windows settings file again
+  if you had one.
+- A removal that an older beta left half done cannot be resumed. Choose the
+  apps again to start a new removal.
+- Anything the app did not carry over is kept in a folder next to the data
+  folder, named RooIndustriesOptimizationSuite.untrusted-followed by letters
+  and numbers. You can look inside it, or delete it once you are happy.
+
 Before you install a new beta or uninstall, still stop a running game session
 and turn off the timer setting. Otherwise Windows may keep some files in use.
 

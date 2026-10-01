@@ -14,7 +14,8 @@ namespace RooIndustries.OptimizationSuite.Services;
 public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
     bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
-public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals);
+public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
+    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 
@@ -47,33 +48,40 @@ public sealed partial class OptimizerService
 
     public async Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
     {
-        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true });
+        var accept = await EarlierVersionConsent.RequireAsync(journalPath);
+        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true, ["acceptEarlierVersion"] = accept });
         if (result.Status is "restored" or "expired" && FindLastJournal("process") == journalPath) Forget("process");
         return result;
     }
 
-    public Task<JsonElement> SecureDataFolderAsync() => RunHostAsync<JsonElement>("data-secure", new() { ["confirm"] = true }, default, TimeSpan.FromMinutes(10), null);
+    public Task<JsonElement> SecureDataFolderAsync(Action<string>? progress = null)
+        => RunHostAsync<JsonElement>("data-secure", new() { ["confirm"] = true, ["progress"] = true }, default, TimeSpan.FromMinutes(10), bytes => progress?.Invoke(Describe(bytes)), idle: true);
+
+    private static string Describe(ReadOnlyMemory<byte> partial)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(partial);
+            var data = document.RootElement.GetProperty("data");
+            var phase = data.GetProperty("phase").GetString();
+            var files = data.GetProperty("files").GetInt64();
+            var megabytes = data.GetProperty("bytes").GetInt64() / (1024 * 1024);
+            return phase switch
+            {
+                "waiting" => "Another Roo Industries window is preparing the saved settings. Waiting for it to finish.",
+                "finishing" or "switching" => "Finishing up (" + files.ToString("N0") + " files)",
+                "merging" => "Merging changes made while this was running",
+                _ => "Copied " + files.ToString("N0") + " files (" + megabytes.ToString("N0") + " MB)",
+            };
+        }
+        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException) { return ""; }
+    }
 
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
-    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() =>
-    {
-        var store = new ProcessPolicyStore(PolicyRoot);
-        var summary = store.Summary(deep: false);
-        PolicyWorkerStatus worker;
-        try { worker = store.Status(); }
-        catch (Exception error) { worker = new(null, null, error.Message); }
-        var rules = summary.RulesError is null ? store.ReadRules().Select(pair => pair.Rule).ToArray() : [];
-        var journals = new Dictionary<string, ProcessControlJournal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var instance in worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict") ?? [])
-        {
-            try { if (File.Exists(instance.JournalPath)) journals[instance.JournalPath] = OperationFiles.Read<ProcessControlJournal>(instance.JournalPath); }
-            catch (IOException) { }
-            catch (InvalidDataException) { }
-            catch (JsonException) { }
-        }
-        return new GovernorSnapshot(summary, worker, rules, journals);
-    });
+    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot));
+    public Task<PolicyHostState> RetryGovernorRestoreAsync()
+        => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true });
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
         => RunCoreAsync<SavedProcessRule>("rule-save", new() { ["policyRoot"] = PolicyRoot, ["rule"] = rule, ["confirm"] = true });
     public Task<JsonElement> DeleteRuleAsync(string ruleId)
@@ -93,6 +101,7 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation)
     {
+        await EarlierVersionConsent.RequireAsync(queueJournalPath);
         var directory = await NewOperationDirectoryAsync("cleanup");
         var path = Path.Combine(directory, "preview.json");
         await RunCoreAsync<ApplicationCleanupPreview>("cleanup-preview", new()
@@ -113,9 +122,10 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress)
     {
+        var accept = await EarlierVersionConsent.RequireAsync(review.JournalPath);
         var operation = RunCoreAsync<CleanupBatchJournal>("cleanup-batch-apply", new()
         {
-            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["cancellationId"] = cancellationId, ["confirm"] = true,
+            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["cancellationId"] = cancellationId, ["confirm"] = true, ["acceptEarlierVersion"] = accept,
         });
         Exception? observationError = null;
         while (!operation.IsCompleted)
@@ -179,7 +189,7 @@ public sealed partial class OptimizerService
         finally { AppLog.Timing(action, elapsed, outcome); }
     }
 
-    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial)
+    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial, bool idle = false)
     {
         var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
         if (confirmed && action is not ("operations-secure" or "data-secure")) await EnsureStorageAsync().ConfigureAwait(false);
@@ -224,10 +234,17 @@ public sealed partial class OptimizerService
         HostPriority.Value?.Register(process);
         using var stop = new CancellationTokenSource();
         using var abandon = new CancellationTokenSource();
-        var output = HostOutput.ReadAsync(process.StandardOutput.BaseStream, partial, () => stop.IsCancellationRequested, abandon.Token);
-        var errors = process.StandardError.ReadToEndAsync();
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout is { } duration) limit.CancelAfter(duration);
+        Action<ReadOnlyMemory<byte>>? observe = partial;
+        if (idle && timeout is { } window && partial is not null)
+            observe = bytes =>
+            {
+                try { limit.CancelAfter(window); } catch (ObjectDisposedException) { }
+                partial(bytes);
+            };
+        var output = HostOutput.ReadAsync(process.StandardOutput.BaseStream, observe, () => stop.IsCancellationRequested, abandon.Token);
+        var errors = process.StandardError.ReadToEndAsync();
         var written = HostOutput.TryWriteRequestAsync(process.StandardInput.BaseStream, payload, CancellationToken.None);
         try { await process.WaitForExitAsync(limit.Token).ConfigureAwait(false); }
         catch (OperationCanceledException)

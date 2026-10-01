@@ -314,7 +314,7 @@ public sealed class ProcessTarget : IDisposable
     private static uint PriorityValue(string name) => name switch { "Idle" => 0x40, "BelowNormal" => 0x4000, "Normal" => 0x20, "AboveNormal" => 0x8000, "High" => 0x80, "Realtime" => 0x100, _ => throw new InvalidDataException("Unknown CPU priority class.") };
     public void Dispose() { if (!_borrowed) _handle.Dispose(); }
 
-    private sealed class NtFailure(string api, int status, uint access) : Exception(api + " failed with NTSTATUS 0x" + unchecked((uint)status).ToString("X8"))
+    internal sealed class NtFailure(string api, int status, uint access) : Exception(api + " failed with NTSTATUS 0x" + unchecked((uint)status).ToString("X8"))
     {
         public string Api { get; } = api;
         public uint Code { get; } = unchecked((uint)status);

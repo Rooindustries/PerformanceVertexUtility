@@ -13,18 +13,27 @@ public static class DataFolderGate
     {
         RooIndustries.Optimizer.RuntimeEnvironment.Sanitize();
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
-        try { return Opened(DataFolder.Require()); }
-        catch (UnauthorizedAccessException) { }
-        string problem;
-        try
-        {
-            Task.Run(() => new OptimizerService(locator).SecureDataFolderAsync()).GetAwaiter().GetResult();
-            return Opened(DataFolder.Require());
-        }
-        catch (Exception error) { problem = error.Message; }
-        MessageBox(IntPtr.Zero, "Roo Industries could not protect its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
+        var problem = Attempt(() => Protected(locator), out var enabled);
+        if (problem is null) return enabled;
+        MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
         Environment.Exit(1);
         return false;
+    }
+
+    internal static string? Attempt(Func<string> protect, out bool enabled)
+    {
+        enabled = false;
+        try { enabled = Opened(protect()); return null; }
+        catch (Exception error) { return error.Message; }
+    }
+
+    private static string Protected(BackendLocator locator)
+    {
+        try { return DataFolder.Require(); }
+        catch (UnauthorizedAccessException) { }
+        using var preparing = new PreparingWindow(TimeSpan.FromSeconds(1));
+        Task.Run(() => new OptimizerService(locator).SecureDataFolderAsync(preparing.Report)).GetAwaiter().GetResult();
+        return DataFolder.Require();
     }
 
     private static bool Opened(string root)

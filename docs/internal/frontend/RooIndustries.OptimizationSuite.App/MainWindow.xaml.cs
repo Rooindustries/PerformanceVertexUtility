@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -52,13 +53,30 @@ public sealed partial class MainWindow : Window
         App.Theme.SimpleModeChanged += ApplySimpleMode;
         DataGeneration.Settled += OnDataSettled;
         Closed += OnWindowClosed;
+        EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
         ApplySimpleMode();
         Nav.Loaded += OnNavLoaded;
     }
 
+    private Task<bool> AskEarlierVersionAsync(string text)
+    {
+        var answer = new TaskCompletionSource<bool>();
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                var dialog = new ContentDialog { XamlRoot = Content.XamlRoot, Title = "Saved by an older version", Content = text, PrimaryButtonText = "Continue", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                answer.TrySetResult(await dialog.ShowAsync() == ContentDialogResult.Primary);
+            }
+            catch (Exception error) { AppLog.Write("start", "The older version question could not be shown: " + error.Message); answer.TrySetResult(false); }
+        })) answer.TrySetResult(false);
+        return answer.Task;
+    }
+
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        if (EarlierVersionConsent.Ask?.Target == (object)this) EarlierVersionConsent.Ask = null;
         App.Theme.ThemeChanged -= OnThemeChanged;
         App.Theme.EffectsChanged -= ApplyEffects;
         App.Theme.SimpleModeChanged -= ApplySimpleMode;

@@ -75,6 +75,7 @@ public sealed partial class OptimizerService
     private async Task<ProtectedSessionStatus> GameSessionActionAsync(string action, string sessionRoot, string arguments = "")
     {
         ValidateGameSessionRoot(sessionRoot);
+        if (action is "Stop" or "Recover" && await EarlierVersionConsent.RequireAsync(Path.Combine(sessionRoot, "session.json"))) arguments += " -AcceptEarlierVersion";
         var result = await RunAsync<GameSessionOperation>("Invoke-ProtectedGameSession.ps1",
             "-Action " + action + " -SessionRoot " + Quote(sessionRoot) + arguments + " -ConfirmApply", waitForRemoval: true);
         var operation = RequireData(result);

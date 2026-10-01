@@ -75,10 +75,10 @@ public static class TimerStartupControl
     public static void Write(TweakControlRead before, JsonElement desired)
     {
         var target = Target(before.Address);
-        if (before.Address.Target == "system") OperationsFolder.Ensure(OperationsFolder.DefaultRoot);
+        if (before.Address.Target == "system") OperationsFolder.Ensure(Path.GetDirectoryName(target.Root)!);
         Directory.CreateDirectory(target.Root);
+        if (before.Address.Target == "system") OperationsFolder.RequireControlFolder(target.Root);
         using var guard = OperationFiles.Lock(Path.Combine(target.Root, "startup"));
-        TimerControl.RequireFolder(target.Root);
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer startup state changed after review.");
         var scheduler = ConnectScheduler(); dynamic service = scheduler; object? found = null;
         try
@@ -127,7 +127,7 @@ public static class TimerStartupControl
     }
     public static void RequireOwned(string root)
     {
-        var address = new ControlAddress("timer-startup", root == TimerControl.Root(new("timer", "system", "half-millisecond")) ? "system" : "fixture:" + root, "enabled");
+        var address = new ControlAddress("timer-startup", TimerControl.IsSystemControl(root) ? "system" : "fixture:" + root, "enabled");
         if (!Read(address).Value.GetBoolean()) throw new InvalidDataException("An owned enabled startup task is required to start this timer session.");
     }
 }
