@@ -648,3 +648,40 @@ function Test-ScenarioClaimsGameUndoLateField {
     Note 'gameUndo' @{restorable=$stopped.restorable;result=$stopped.result.status}
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 2) 'Undo restored both the field set at the first poll and the one set by a later poll'
 }
+
+function Test-ScenarioClaimsRepoRootRequired {
+    $path=Copy-Probe 'ClaimsRepoRoot.exe'
+    $request=@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;rule=(New-Rule $path @{cpuPriority='High'})}
+    $result=(@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'rule-save' '-') -join "`n")|ConvertFrom-Json
+    Note 'ruleSaveWithEmptyRepoRoot' $result
+    Assert ($result.status -eq 'failed' -and $result.error.message -like '*repository root*') 'Saving a rule with an empty repository root fails instead of skipping the game session checks'
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $script:policyRoot 'rules') -Filter '*.json' -ErrorAction SilentlyContinue).Count -eq 0) 'No rule was written'
+    Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
+    $pause=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$true}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' '-') -join "`n")|ConvertFrom-Json
+    $resume=(@((@{schemaVersion=1;repoRoot='';policyRoot=$script:policyRoot;confirm=$true;paused=$false}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'policy-pause' '-') -join "`n")|ConvertFrom-Json
+    Note 'pauseAndResumeWithEmptyRepoRoot' @{pause=$pause.status;resume=$resume.status;resumeError=$resume.error.message}
+    Assert ($resume.status -eq 'failed' -and $resume.error.message -like '*repository root*') 'Resuming with an empty repository root fails instead of skipping the game session checks'
+}
+
+function Test-ScenarioClaimsGateOnlyForEnabling {
+    $path=Copy-Probe 'ClaimsGateEnable.exe'
+    $rule=New-Rule $path @{cpuPriority='High'}
+    Save-ClaimsRule $rule|Out-Null
+    $holder=Start-ClaimsGateHolder 12000
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    Core 'policy-pause' @{paused=$true}|Out-Null
+    $pauseMs=$clock.ElapsedMilliseconds
+    $rule.enabled=$false
+    $clock.Restart()
+    Save-ClaimsRule $rule|Out-Null
+    $disableMs=$clock.ElapsedMilliseconds
+    Note 'whileGateHeld' @{pauseMs=$pauseMs;disableMs=$disableMs}
+    Assert ($pauseMs -lt 5000 -and $disableMs -lt 5000) 'Pausing the governor and turning a rule off do not wait for the governor gate'
+    $rule.enabled=$true
+    $clock.Restart()
+    Save-ClaimsRule $rule|Out-Null
+    $enableMs=$clock.ElapsedMilliseconds
+    Note 'enableWaited' $enableMs
+    Assert ($enableMs -ge 4000 -and (Test-Path -LiteralPath $holder.released)) 'Turning a rule on still waits for the gate so it cannot race another feature'
+    Wait-ClaimsChild $holder.child|Out-Null
+}
