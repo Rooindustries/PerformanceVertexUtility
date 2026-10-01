@@ -4,6 +4,7 @@ using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
+if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
 
 var repo = Path.GetFullPath(args[0]);
 var fixture = Path.Combine(Path.GetTempPath(), "roo-industries-client-boundary-" + Guid.NewGuid().ToString("N"));
