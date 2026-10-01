@@ -421,3 +421,27 @@ try {$name=$process.ProcessName} catch {}
     Note 'nonExeOwnership' $result
     Assert (@($result.controls) -contains 'cpuPriority') 'A file-name rule for a program that is not an .exe file is seen as owning its control by the PowerShell features'
 }
+
+function Test-ScenarioRestoreAfterExclusion {
+    $path=Copy-Probe 'RooIndustriesGovernorLateExclusion.exe' 'late'
+    $probe=Start-Probe $path
+    $repo=New-ClaimsRepo
+    $before=Read-Field $probe 'memoryPriority'
+    $operation=Join-Path $script:policyParent ('operations\process-'+[Guid]::NewGuid().ToString('N'))
+    $preview=Join-Path $operation 'preview.json'
+    $journal=Join-Path $operation 'journal.json'
+    Core 'process-preview' @{processId=$probe.Id;controls=@{memoryPriority=3};outputPath=$preview;repoRoot=$repo}|Out-Null
+    $applied=Core 'process-apply' @{previewPath=$preview;reviewHash=(Get-FileHash -LiteralPath $preview -Algorithm SHA256).Hash;journalPath=$journal;repoRoot=$repo}
+    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'memoryPriority') -eq 3) 'Apply once changed the memory priority of the app'
+    $catalogPath=Join-Path $repo 'backend\profiles\protected-processes.json'
+    $catalog=[IO.File]::ReadAllText($catalogPath)|ConvertFrom-Json
+    $catalog.protectedProcesses=@($catalog.protectedProcesses)+@([pscustomobject]@{itemId='scenario-late-exclusion';category='scenario';classification='protected';names=@(Split-Path $path -Leaf)})
+    [IO.File]::WriteAllText($catalogPath,($catalog|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
+    $refusal=$null
+    try {Core 'process-preview' @{processId=$probe.Id;controls=@{memoryPriority=4};outputPath=(Join-Path $operation 'second.json');repoRoot=$repo}|Out-Null} catch {$refusal=$_.Exception.Message}
+    Note 'excludedPreview' $refusal
+    Assert ($refusal -like '*excluded by the protection policy*') 'Control: once the app is on the protection list a new change to it is refused'
+    $restored=Core 'process-restore' @{journalPath=$journal;repoRoot=$repo}
+    Note 'restoreAfterExclusion' ([ordered]@{status=$restored.status;memoryPriority=(Read-Field $probe 'memoryPriority');before=$before})
+    Assert ($restored.status -eq 'restored' -and (Read-Field $probe 'memoryPriority') -eq $before) 'Undo still puts the original value back for an app that was put on the protection list after the change'
+}
