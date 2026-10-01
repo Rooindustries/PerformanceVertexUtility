@@ -2,12 +2,13 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Win32;
 using RooIndustries.Optimizer;
 using H = DataRootHarness;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root", "data-folder-schtasks", "data-root-profile"];
+    public static readonly string[] InProcess = ["control-helper", "restart", "hibernation", "cleanup-temp-root", "data-folder-schtasks", "leftover-temp", "data-root-profile"];
 
     public static async Task Run(Action<bool, string> check, string scenario, string mode, string? directory)
     {
@@ -19,6 +20,7 @@ static class ChildEnvironmentChecks
             case "hibernation": Hibernation(check, mode); break;
             case "cleanup-temp-root": CleanupTempRoot(check, mode); break;
             case "data-folder-schtasks": DataFolderSchtasks(check, mode); break;
+            case "leftover-temp": LeftoverTemp(check, mode); break;
             case "data-root-profile": DataRootProfile(check, mode); break;
             case "registry-hook": RegistryHook(check, mode); break;
             case "firmware-provider": FirmwareProvider(check, mode, Required()); break;
@@ -146,6 +148,45 @@ static class ChildEnvironmentChecks
         }
         finally { Directory.Delete(marker, true); }
         check(!Directory.Exists(marker), "The data root scenario leaves no folder behind");
+    }
+
+    static void LeftoverTemp(Action<bool, string> check, string mode)
+    {
+        var name = "roo-industries-leftover-" + Guid.NewGuid().ToString("N");
+        var realTemp = Path.Combine(RuntimeEnvironment.LocalAppData, "Temp");
+        var folder = Path.Combine(realTemp, name);
+        var keyPath = "Software\\RooIndustriesLeftoverTemp-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(keyPath))
+            {
+                key.SetValue("Referencing", "%TEMP%\\" + name + "\\program.exe", RegistryValueKind.ExpandString);
+                key.SetValue("Absolute", folder + "\\data", RegistryValueKind.String);
+            }
+            ChildEnv.Run(check, mode, null, env =>
+            {
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                var expected = string.Join("|", Path.Combine(profile, "AppData", "Roaming"), Path.Combine(profile, "AppData", "Local"), profile, env.Values["ProgramData"], realTemp, realTemp, env.Windows, env.Windows, "%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
+                var expanded = RuntimeEnvironment.ExpandUserVariables("%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%ProgramData%|%TEMP%|%TMP%|%SystemRoot%|%windir%|%UNDEFINED_ROO_INDUSTRIES_VARIABLE%");
+                check(expanded == expected, "Uninstall data expands user-profile variables against the real user's folders, not the process block: " + expanded);
+                check(!string.Equals(Path.GetTempPath().TrimEnd('\\'), realTemp, StringComparison.OrdinalIgnoreCase), "The process TEMP points away from the user's real temp folder, as in a Host the app started");
+                var scope = new RegistryAddress("CurrentUser", "Registry64", keyPath, "key", null);
+                foreach (var (label, install, wanted) in new[] { ("an absolute install location and a registry value that names %TEMP%", folder, "Referencing"), ("an install location that names %TEMP% and an absolute registry value", "%TEMP%\\" + name, "Absolute") })
+                {
+                    var app = new CleanupApplication { AppId = "leftover-temp", DisplayName = "Roo Industries Leftover Temp Fixture", Publisher = null, InstallLocation = install, PackageFamilyName = null };
+                    var result = new LeftoverDiscovery(app, []).Scan(CancellationToken.None, [], [scope]);
+                    var values = result.Candidates.Where(candidate => candidate.Kind == "registryValue").Select(candidate => candidate.Registry!.ValueName).ToArray();
+                    check(values.Contains(wanted), "A leftover under the user's real temp folder is discovered for " + label + " (found: " + string.Join(", ", values) + ")");
+                }
+            });
+        }
+        finally
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(keyPath, false);
+            Directory.Delete(folder, true);
+        }
+        check(!Directory.Exists(folder), "The leftover scenario leaves no folder behind");
     }
 
     static void Restart(Action<bool, string> check, string mode)

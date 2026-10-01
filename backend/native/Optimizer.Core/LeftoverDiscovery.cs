@@ -193,7 +193,7 @@ public sealed class LeftoverDiscovery
             foreach (var valueName in key.GetValueNames())
             {
                 var data = key.GetValue(valueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-                var strings = (data switch { string text => new[] { text }, string[] list => list, _ => [] }).Select(Environment.ExpandEnvironmentVariables).ToArray();
+                var strings = (data switch { string text => new[] { text }, string[] list => list, _ => [] }).Select(RuntimeEnvironment.ExpandUserVariables).ToArray();
                 if (strings.Length == 0) continue;
                 var owners = _peerPaths.Where(peer => strings.Any(text => ReferencesPath(text, peer.Path))).Select(peer => peer.Name).Distinct().ToList();
                 foreach (var owner in owners) referencedOwners.Add(owner);
@@ -263,7 +263,7 @@ public sealed class LeftoverDiscovery
         return Regex.IsMatch(text, "(?:^|[@\\\"'=\\s])" + Regex.Escape(path) + "(?:[\\\\/\\\"'\\s]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
     }
 
-    private static string ExpandPath(string path) => Environment.ExpandEnvironmentVariables(path).TrimEnd('\\', '/');
+    private static string ExpandPath(string path) => RuntimeEnvironment.ExpandUserVariables(path).TrimEnd('\\', '/');
 
     private string Id(string kind, string path) => kind + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_app.AppId + "|" + path.ToUpperInvariant())));
     private static bool Within(string path, string root) => !string.IsNullOrWhiteSpace(root) && (string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));

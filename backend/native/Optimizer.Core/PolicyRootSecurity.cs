@@ -766,7 +766,7 @@ public static class PolicyRootSecurity
     private static string ProfilePath(SecurityIdentifier user)
     {
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + user.Value);
-        return key?.GetValue("ProfileImagePath") is string path ? Environment.ExpandEnvironmentVariables(path) : throw new InvalidDataException("That Windows user has no profile on this PC.");
+        return key?.GetValue("ProfileImagePath") is string path ? RuntimeEnvironment.ExpandUserVariables(path) : throw new InvalidDataException("That Windows user has no profile on this PC.");
     }
 
     public static bool Elevated()
