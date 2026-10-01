@@ -82,12 +82,23 @@ function Governor-Row {
     WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Roo Industries Governor'); if (($t -notcontains 'Reading restore state') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
 }
 function Pick([string]$id, [string]$like) {
-    $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
-    $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
-    $pattern.Expand(); Start-Sleep -Milliseconds 700
-    $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
-    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
-    try { $pattern.Collapse() } catch {}
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
+        $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+        $pattern.Expand(); Start-Sleep -Milliseconds 700
+        $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
+        try { $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select() }
+        catch {
+            if ($_.FullyQualifiedErrorId -ne 'ElementNotEnabledException' -or $attempt -eq 4) { throw }
+            Log "the $id list was refreshed while choosing $like; trying again"
+            try { $pattern.Collapse() } catch {}
+            Start-Sleep -Seconds 2
+            continue
+        }
+        Start-Sleep -Milliseconds 500
+        try { $pattern.Collapse() } catch {}
+        return
+    }
 }
 function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
 function Apply-Reviewed([string]$what, [switch]$NoWait) {
@@ -149,6 +160,8 @@ $probePath = Join-Path $env:TEMP 'RooLoadTimesProbe.exe'
 $probe = $null; $probe2 = $null
 $script:RuleSaved = $false
 $script:RuleTest = $false
+$script:GovernorRule = $false
+$ruleName = 'roo-cache-check rule'
 try {
     Start-Roo
     $app = $script:App
@@ -245,7 +258,6 @@ try {
     $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Roo' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
     $governorBuild = (@(Undo-Profiles) -contains 'Roo Industries Governor')
     if ($governorBuild) {
-        $ruleName = 'roo-cache-check rule'
         $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
         Start-Sleep 3
         $rowBefore = Governor-Row
@@ -260,9 +272,9 @@ try {
         Process-Status '^Review the requested controls' 60 'process review' | Out-Null
         try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
         (WaitFor { ById 'ProcessRuleName' } 10 'rule name').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($ruleName); Start-Sleep 1
-        $script:Cleanup = "delete the governor rule '$ruleName' in Games > Processes"
+        $script:Cleanup = "delete the governor rule '$ruleName' in Games > Processes"; $script:GovernorRule = $true
         Invoke-Element (WaitFor { $b = ById 'ProcessSaveRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'save rule button')
-        $saved = Process-Status '^(Rule saved|Saved rules need attention)' 180 'rule save'
+        $saved = Process-Status '^(Rule saved and (on|enabled)\.|Rule saved\. The governor is paused|Saved rules need attention)' 180 'rule save'
         Check ($saved -match '^Rule saved') 'the governor rule was saved' ($saved + ' :: ' + (ById 'ProcessDetail').Current.Name)
         $sw = [Diagnostics.Stopwatch]::StartNew()
         $rowAfter = Governor-Row
@@ -275,7 +287,7 @@ try {
         Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule button')
         $deleted = Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete'
         Check ($deleted -match '^Rule deleted') 'the governor rule was deleted' ($deleted + ' :: ' + (ById 'ProcessDetail').Current.Name)
-        if ($deleted -match '^Rule deleted') { $script:Cleanup = $null }
+        if ($deleted -match '^Rule deleted') { $script:Cleanup = $null; $script:GovernorRule = $false }
         $rowDeleted = Governor-Row
         Check ($rowDeleted -eq 'No rules') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
         Shot '7-undo-after-delete'
@@ -338,6 +350,18 @@ try {
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
     foreach ($p in @($probe, $probe2)) { if ($p) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
+    if ($script:GovernorRule) {
+        try {
+            if (-not $script:App -or $script:App.HasExited) { Start-Roo }
+            Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
+            try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
+            Pick 'ProcessRulesList' ($ruleName + '*')
+            Invoke-Element (WaitFor { $b = ById 'ProcessDeleteRule'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'delete rule button')
+            $deleted = Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete'
+            if ($deleted -match '^Rule deleted') { $script:GovernorRule = $false; Log 'cleanup: deleted the governor test rule' }
+        } catch { Log ('cleanup: could not delete the governor test rule: ' + $_.Exception.Message) }
+        if ($script:GovernorRule) { Log "CLEANUP NEEDED: delete the governor rule '$ruleName' in Games > Processes" }
+    }
     if ($script:RuleSaved) {
         try {
             if (-not $script:App -or $script:App.HasExited) { Start-Roo }
