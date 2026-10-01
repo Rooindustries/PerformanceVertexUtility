@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants Condition="'$(GovernorTestHooks)' == 'true'">$(DefineConstants);GOVERNOR_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="OptimizerCore" />

@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'GovernorOwnership.Common.ps1')
 $script:RooIndustriesProcessProductName = 'Roo Industries Optimization Suite'
 $script:RooIndustriesAllowedPriorityClasses = @('Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High')
 $script:RooIndustriesAllowedIoPriorities = @('VeryLow', 'Low', 'Normal')
@@ -838,11 +839,16 @@ function Get-RooIndustriesApplicableProcessControlChanges {
     )
     $applicable = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
+    $process = Get-RooIndustriesPropertyValue $CurrentState 'process' $null
     foreach ($change in @(Get-RooIndustriesArray $ControlChanges)) {
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
         if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
             $reason = [string](Get-RooIndustriesPropertyValue $change 'blockedReason' (Get-RooIndustriesPropertyValue $change 'reason' 'Requested process control is blocked.'))
             $skipped.Add([pscustomobject]@{ control = $control; reason = $reason; currentValue = Get-RooIndustriesPropertyValue $change 'currentValue' $null; proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; category = 'blocked' }) | Out-Null
+            continue
+        }
+        if ($process -is [System.Diagnostics.Process] -and (Test-RooIndustriesGovernorOwnsControl $process $control)) {
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $script:RooIndustriesGovernorManaged; currentValue = Get-RooIndustriesControlStateValue $CurrentState $control; proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; category = 'managed' }) | Out-Null
             continue
         }
 
@@ -874,6 +880,7 @@ function Invoke-RooIndustriesProcessControlChange {
     )
     $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
     $value = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null
+    if (Test-RooIndustriesGovernorOwnsControl $Process $control) { throw $script:RooIndustriesGovernorManaged }
     switch ($control) {
         'priorityClass' {
             $priority = [string]$value
