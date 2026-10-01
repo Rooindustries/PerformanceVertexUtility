@@ -66,6 +66,7 @@ try {
             $target=[RooIndustries.Optimization.CpuSets.Target]::new([int]$preview.identity.processId,$true)
             $identity=$target.Identity()
             Assert-RooIndustriesCpuSetIdentity $preview.identity $identity
+            if (@(Get-RooIndustriesGovernorOwnedControls -ProcessId $identity.processId -ExecutablePath $identity.executablePath -CreationTimeFileTimeUtc $identity.creationTimeFileTimeUtc) -contains 'cpuSets') { throw $script:RooIndustriesGovernorManaged }
             $compatibility=Get-RooIndustriesCpuSetProtection $identity ($target.Protection())
             if ($compatibility.protected) { throw 'The target is now protected; leave its controls unchanged.' }
             $current=@($target.Read())
