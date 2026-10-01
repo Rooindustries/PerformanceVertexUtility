@@ -5,9 +5,14 @@ using RooIndustries.Optimizer;
 
 try
 {
+if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
 if (args is ["--probe"] or ["--probe-ready"]) { if (args[0] == "--probe-ready") Console.WriteLine("ready"); Thread.Sleep(TimeSpan.FromMinutes(3)); return; }
+var continueOnFailure = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_SCENARIO_CONTINUE") == "1";
+var failures = 0;
+AppDomain.CurrentDomain.ProcessExit += (_, _) => { if (failures > 0) Environment.ExitCode = 1; };
 void Check(bool condition, string message)
 {
+    if (!condition && continueOnFailure) { failures++; Console.WriteLine("FAIL " + message); return; }
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine("PASS " + message);
 }
@@ -25,9 +30,10 @@ if (args is ["--firmware-verification"]) { FirmwareVerificationChecks.Run(Check)
 if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Check); return; }
 if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
 if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); return; }
-if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); return; }
+if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
-if (args is ["--data-folder"]) { DataFolderChecks.Run(Check); return; }
+if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
+if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ordinal) || args is ["--timer-worker-fake"]) { DataRootChild.Run(args); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
@@ -37,7 +43,7 @@ if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args is ["--batch-state"]) { CleanupBatchStateChecks.Run(Check); return; }
 if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
 BrandCompatibilityChecks.Run(Check);
-DataFolderChecks.Run(Check);
+DataFolderChecks.Run(Check, []);
 using (var self = Process.GetCurrentProcess())
 {
     for (var index = 0; index < 64; index++) OperationOwner.Current();
@@ -206,6 +212,7 @@ finally
 Check(!Directory.Exists(root), "Core validation removes its process and operation files");
 OperationFileChecks.Run(Check);
 ReplaceRaceChecks.Run(Check);
+ReplaceFaultChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 RegistryRefusalChecks.Run(Check);
