@@ -393,6 +393,7 @@ static class GovernorChecks
 #if !OLD_UI
     private static async Task RetryButton(Action<bool, string> check)
     {
+        var baseline = App.Operations.RetryCalls;
         var chrome = Process(100, Chrome);
         var off = Rule(RuleId, "Chrome rule", Chrome, false);
         var failed = Host("stoppedWithConflicts", [Instance(chrome, "cpuPriority", "conflict", "denied", "Access is denied.")]);
@@ -406,14 +407,14 @@ static class GovernorChecks
             return Task.FromResult(Host("stopped", []));
         };
         await panel.RetryRestoreCommand.ExecuteAsync(null);
-        check(App.Operations.RetryCalls == 1 && !panel.RetryAvailable && panel.Status == "The old settings are back." && panel.GovernorDetail == "",
+        check(App.Operations.RetryCalls == baseline + 1 && !panel.RetryAvailable && panel.Status == "The old settings are back." && panel.GovernorDetail == "",
             "Put settings back runs one restore pass and reports the result from fresh governor state");
 
         App.Operations.Governor = Snapshot(true, [Rule(RuleId, "Chrome rule", Chrome, true)], new(failed, false, null));
         App.Operations.RetryRestore = () => Task.FromResult(failed);
         await panel.RefreshRulesCommand.ExecuteAsync(null);
         await panel.RetryRestoreCommand.ExecuteAsync(null);
-        check(App.Operations.RetryCalls == 2 && panel.RetryAvailable && panel.Status == "Some settings still could not be put back."
+        check(App.Operations.RetryCalls == baseline + 2 && panel.RetryAvailable && panel.Status == "Some settings still could not be put back."
                 && panel.GovernorDetail == "Your rules are saved but not used. Some apps kept a setting the governor could not put back." + Retry + " Press Start governor to use your rules again.",
             "Paused with a failed restore offers Put settings back and says when it still fails");
 
