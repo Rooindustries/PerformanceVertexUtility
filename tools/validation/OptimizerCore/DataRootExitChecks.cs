@@ -140,7 +140,7 @@ static partial class DataFolderChecks
         try
         {
             Legacy(strayRoot, ("A.txt", "A"), ("B.txt", "B"));
-            var env = new Dictionary<string, string> { ["ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS"] = "5000", ["ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_AT"] = "detached" };
+            var env = new Dictionary<string, string> { ["ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_MS"] = "5000", ["ROO_INDUSTRIES_TEST_MIGRATION_PAUSE_AT"] = "detached", ["ROO_INDUSTRIES_TEST_MIGRATION_STRAY_PAUSE_MS"] = "250" };
             using var child = H.Start(["--child-secure-data", strayRoot], env);
             var clock = Stopwatch.StartNew();
             while (Directory.Exists(strayRoot) && clock.Elapsed < TimeSpan.FromSeconds(40)) Thread.Sleep(50);
