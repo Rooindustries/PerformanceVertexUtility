@@ -226,10 +226,12 @@ namespace RooIndustries.OptimizationSuite.Services
             => throw new InvalidOperationException("Unexpected restore call.");
         public Task<SavedProcessRule[]> ReadRulesAsync() => Task.FromResult(Array.Empty<SavedProcessRule>());
         public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.FromResult(new PolicyWorkerStatus(null, false, null));
-        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) => Task.FromResult(rule);
+        public Action<SavedProcessRule>? RuleSaved { get; set; }
+        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) { RuleSaved?.Invoke(rule); return Task.FromResult(rule); }
         public Task<JsonElement> DeleteRuleAsync(string ruleId) => Task.FromResult(JsonSerializer.SerializeToElement(new { }));
+        public Exception? PolicyWorkerError { get; set; }
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
-            => Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
+            => PolicyWorkerError is { } failure ? Task.FromException<PolicyWorkerRegistration>(failure) : Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
         public GovernorSnapshot Governor { get; set; } = new(new PolicySummary(false, "missing", false, 0, 0, null), new PolicyWorkerStatus(null, false, null), [], new());
         public Exception? GovernorError { get; set; }
         public Task<GovernorSnapshot> ReadGovernorAsync() => GovernorError is { } error ? Task.FromException<GovernorSnapshot>(error) : Task.FromResult(Governor);

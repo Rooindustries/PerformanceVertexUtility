@@ -412,3 +412,101 @@ function Test-ScenarioPidReuse {
     Note 'secondsFromCheckStartToApply' $(if($null -ne $applied){[Math]::Round($sincePause,1)}else{$null})
     Assert ($null -ne $applied -and $sincePause -le 31) 'The new app gets its rules as soon as the check ends, not after the old app''s retry delay'
 }
+
+function Test-ScenarioTopologyChanged {
+    $path=Copy-Probe
+    $probe=Start-Probe $path
+    $rule=New-Rule $path @{cpuPriority='AboveNormal';affinity=@{group=0;mask='0x3'}} 'Topology changed'
+    $rule.affinityTopologyHash=('A'*64)
+    $before=Read-Field $probe 'affinity'
+    Use-Rule $rule|Out-Null
+    Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal')) 'A rule whose saved CPU topology no longer matches still applies its other fields'
+    Start-Sleep -Seconds 3
+    $issues=@((Get-GovernorState).issues|Where-Object {$_.processId -eq $probe.Id})
+    Note 'topologyIssues' $issues
+    Assert ((Read-Field $probe 'affinity') -eq $before) 'The affinity is left as it was'
+    Assert (@($issues|Where-Object {$_.field -eq 'affinity' -and $_.kind -eq 'topology'}).Count -ge 1 -and @($issues|Where-Object {$_.field -ne 'affinity'}).Count -eq 0) 'Only the affinity is reported as needing review'
+}
+
+function Test-ScenarioRuleFileUnreadable {
+    $pathA=Copy-Probe 'RooIndustriesGovernorProbe.exe' 'a'
+    $pathB=Copy-Probe 'RooIndustriesGovernorProbeB.exe' 'b'
+    $a=Start-Probe $pathA;$b=Start-Probe $pathB
+    Save-Rule (New-Rule $pathA @{cpuPriority='AboveNormal'} 'Rule A')|Out-Null
+    $ruleB=New-Rule $pathB @{cpuPriority='BelowNormal'} 'Rule B'
+    Use-Rule $ruleB|Out-Null
+    Assert ($null -ne (Wait-Until {(Read-Field $a 'cpuPriority') -eq 'AboveNormal' -and (Read-Field $b 'cpuPriority') -eq 'BelowNormal'} 10)) 'Both rules are applied'
+    $file=Join-Path $script:policyRoot ('rules\'+$ruleB.ruleId+'.json')
+    $good=[IO.File]::ReadAllBytes($file)
+    [IO.File]::WriteAllText($file,'{"schemaVersion":1,"ruleId":',[Text.UTF8Encoding]::new($false))
+    $lost=New-Object System.Collections.Generic.List[string]
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    while($clock.Elapsed.TotalSeconds -lt 18){
+        $value=[string](Read-Field $a 'cpuPriority')
+        if($value -ne 'AboveNormal'){$lost.Add([string]([Math]::Round($clock.Elapsed.TotalSeconds,1))+' s '+$value)}
+        Start-Sleep -Milliseconds 100
+    }
+    Note 'ruleALost' @($lost)
+    Assert ($lost.Count -eq 0) 'While another rule file is damaged, the rule that can be read keeps its app set for longer than the read grace period'
+    $later=Start-Probe $pathA
+    Assert ($null -ne (Wait-Field $later 'cpuPriority' 'AboveNormal' 8)) 'A new app for the readable rule still gets its settings'
+    $summary=Core 'policy-summary'
+    $state=Get-GovernorState
+    Note 'damaged' ([ordered]@{unreadableRules=$summary.unreadableRules;rulesError=$summary.rulesError;rules=$summary.rules;errors=$state.errors;status=$state.status})
+    Assert (@($summary.unreadableRules).Count -eq 1 -and @($summary.unreadableRules)[0] -like ('*'+$ruleB.ruleId+'.json*') -and -not $summary.rulesError -and $state.status -eq 'running') 'The damaged file is named and the governor keeps running'
+    Assert ((Read-Field $b 'cpuPriority') -eq 'Normal') 'The app of the damaged rule is given its original setting back'
+    [IO.File]::WriteAllBytes($file,$good)
+    Assert ($null -ne (Wait-Field $b 'cpuPriority' 'BelowNormal' 10)) 'Once the file can be read again its rule applies again'
+}
+
+function Test-ScenarioPinnedUnreadable {
+    $path=Copy-Probe
+    $probe=Start-Probe $path
+    $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Pinned unreadable'
+    $rule.executableHash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    $script:pinnedPath=$path
+    $script:cleanups.Add({Set-ClaimsReadDenied $script:pinnedPath $false})
+    Set-ClaimsReadDenied $path $true
+    Use-Rule $rule|Out-Null
+    Start-Sleep -Seconds 15
+    $beat=Get-Heartbeat
+    $issues=@((Get-GovernorState).issues|Where-Object {$_.processId -eq $probe.Id})
+    Note 'pinnedUnreadable' ([ordered]@{hashAttempts=$(if($beat){$beat.diagnostics.hashAttempts});issues=$issues})
+    Assert ($null -ne $beat -and $beat.diagnostics.hashAttempts -ge 1 -and $beat.diagnostics.hashAttempts -le 7) 'A pinned executable the governor cannot read is retried with growing delays, not on every check'
+    Assert ($issues.Count -ge 1 -and $issues[0].kind -eq 'error' -and $issues[0].message -like '*could not be read to check it*' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'It is reported as unreadable and the app is left unchanged'
+}
+
+function Test-ScenarioDeniedLookups {
+    $deniedPath=Copy-Probe 'RooIndustriesGovernorProbe.exe' 'denied' 'RooIndustriesGovernorFixture.exe'
+    Use-Rule (New-Rule $deniedPath @{cpuPriority='AboveNormal'} 'Denied lookups' 'filename')|Out-Null
+    $denied=Start-Probe $deniedPath '0 1600 0 900' -NoWait
+    Start-Sleep -Seconds 45
+    $beat=Get-Heartbeat
+    Note 'ownerLookups' $(if($beat){$beat.diagnostics.ownerLookups})
+    Assert ($null -ne $beat -and $beat.diagnostics.ownerLookups -eq 1) 'The owner of an app that denies access is looked up once, not at every retry'
+}
+
+function Test-ScenarioConflictHoldsField {
+    $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
+    $fixture=Start-Probe $path '8 1600 30 600' -NoWait
+    $started=[Diagnostics.Stopwatch]::StartNew()
+    $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Conflict holds'
+    Use-Rule $rule|Out-Null
+    Assert ($null -ne (Wait-Field $fixture 'cpuPriority' 'AboveNormal' 6)) 'The rule is applied before the app starts denying access'
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 10} 15 500
+    $rule.enabled=$false
+    Save-Rule $rule|Out-Null
+    Worker 'Pause'|Out-Null
+    $stuck=@(Get-Open $fixture.Id)
+    Assert ($stuck.Count -eq 1 -and $stuck[0].status -eq 'conflict') 'With the rule off and the app denying access the record is kept as a failed restore'
+    $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 42} 45 500
+    $operation=Join-Path $script:policyParent ('operations\process-'+[Guid]::NewGuid().ToString('N'))
+    $preview=Join-Path $operation 'preview.json'
+    Core 'process-preview' @{processId=$fixture.Id;controls=@{cpuPriority='Idle'};outputPath=$preview}|Out-Null
+    $refusal=$null
+    try {Core 'process-apply' @{previewPath=$preview;reviewHash=(Get-FileHash -LiteralPath $preview -Algorithm SHA256).Hash;journalPath=(Join-Path $operation 'journal.json')}|Out-Null} catch {$refusal=$_.Exception.Message}
+    Note 'applyOnceWhileHeld' $refusal
+    Assert ($refusal -like '*Managed by the governor: cpuPriority*' -and (Read-Field $fixture 'cpuPriority') -eq 'AboveNormal') 'Apply once cannot take a field the governor still has to put back'
+    Core 'policy-run' @{durationSeconds=0}|Out-Null
+    Assert ((Read-Field $fixture 'cpuPriority') -eq 'Normal' -and @(Get-Open $fixture.Id).Count -eq 0) 'The pending restore then puts back the original value'
+}
