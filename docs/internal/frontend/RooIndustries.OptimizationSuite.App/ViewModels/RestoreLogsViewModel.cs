@@ -60,14 +60,17 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var leftoverApps = rules is null ? 0 : GovernorDisplay.Apps(GovernorDisplay.Holding(rules));
         var retry = rules is not null && GovernorDisplay.CanRetry(rules, rulesState) ? " · put them back in Games > Processes" : "";
         var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
-        var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
+        var signIn = rules is not null && rulesState == "running" ? GovernorDisplay.SignIn(rules) : "yes";
+        var signInNote = signIn switch { "yes" => "", "no" => " · it won't start when you sign in · press Start governor in Games > Processes", _ => " · couldn't confirm it starts when you sign in · press Start governor in Games > Processes" };
+        var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || rulesState == "notResponding" || rules.Worker.HostRunning is null || rules.Summary.UnreadableRules is { Length: > 0 } || rules.Summary.RulesError is not null || rules.Summary.SecurityProblem is not (null or "missing")
+            || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
         RestoreHeadline = restart ? "Windows feature changes are waiting for restart verification." : windows?.Pending is not null ? "A Windows settings change needs recovery. Open Windows tweaks to review it." : restorable
             ? "Saved settings are available. Open the matching section to restore them."
             : unavailable ? "Some recovery state could not be read. Reopen this page to retry."
                 : "No Windows or process settings to restore.";
-        RestoreState = windows?.Pending is not null ? "medium" : restorable ? "safe" : unavailable ? "medium" : "neutral";
+        RestoreState = windows?.Pending is not null ? "medium" : restorable && !unavailable ? "safe" : unavailable ? "medium" : "neutral";
 
         RestoreRows.Add(new StatusLine(
             "Game priority session",
@@ -81,7 +84,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             "Roo Industries Governor",
             rulesState switch
             {
-                "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · pause it in Games > Processes to put settings back",
+                "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · pause it in Games > Processes to put settings back" + signInNote,
                 "pausing" => "Pausing · " + GovernorDisplay.StillHave(changedApps) + " rule settings · open Games > Processes",
                 "paused" => keptApps > 0 ? "Paused · " + GovernorDisplay.Count(keptApps) + " kept a setting the governor could not put back" + retry : "Paused · settings put back",
                 "off" => rules!.Worker.HostRunning is null ? "Off · the governor's last state could not be read" : leftoverApps > 0 ? "Off · " + GovernorDisplay.StillHave(leftoverApps) + " saved settings" + retry : rules!.Summary.Rules > 0 ? "Off · no rules are on" : "No rules",
@@ -90,7 +93,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                 "notResponding" => "Not responding · " + (leftoverApps > 0 ? GovernorDisplay.Count(leftoverApps) + " with saved settings · " : "") + "open Games > Processes",
                 _ => "Status unavailable",
             },
-            rulesState switch { "running" => "safe", "paused" or "off" when leftoverApps == 0 && rules!.Worker.HostRunning is not null => "neutral", _ => "medium" }));
+            rulesState switch { "running" => signIn == "yes" ? "safe" : "medium", "paused" or "off" when leftoverApps == 0 && rules!.Worker.HostRunning is not null => "neutral", _ => "medium" }));
 
         RestoreRows.Add(new StatusLine("Windows settings", windows is null ? "Status unavailable" : windows.Pending is not null ? restart ? "Check restart completion" : "Interrupted change · review recovery" :
             windows.State?.Profiles.Length > 0 ? windows.State.Profiles.Length + " saved profiles" : "No saved profiles", windows is null || windows.Pending is not null ? "medium" : windows.State?.Profiles.Length > 0 ? "safe" : "neutral"));
