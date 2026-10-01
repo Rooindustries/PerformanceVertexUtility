@@ -157,7 +157,10 @@ foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\
 Assert-ReleaseScripts $repoRoot $stage
 
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
-$smoke = ((@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json) | & (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' '-') -join "`n"
+$netVariables = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)' })
+foreach ($variable in $netVariables) { Remove-Item -LiteralPath ('Env:\' + $variable.Name) }
+try { $smoke = ((@{ schemaVersion = 1; repoRoot = $stage } | ConvertTo-Json) | & (Join-Path $hostOut 'Optimizer.Host.exe') 'tweak-catalog' '-') -join "`n" }
+finally { foreach ($variable in $netVariables) { Set-Item -LiteralPath ('Env:\' + $variable.Name) -Value $variable.Value } }
 if ($LASTEXITCODE -ne 0 -or $smoke -notmatch '"status"\s*:\s*"completed"' -or $smoke -notmatch '"settings"\s*:\s*\[\s*\{') { throw 'The obfuscated helper could not read the Windows tweak catalog.' }
 Write-Host ('Smoke test: the obfuscated helper returned the Windows tweak catalog (' + $smoke.Length + ' characters).')
 
