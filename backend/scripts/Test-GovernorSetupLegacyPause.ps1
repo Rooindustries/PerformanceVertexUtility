@@ -53,7 +53,7 @@ public static class FakeHost {
         }
         Register-ScheduledTask -TaskName $case.task @definition|Out-Null
     }
-    $output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -Action Suspend -AppRoot $app 2>&1)
+    $output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -Action Suspend -AppRoot $app -StatePath (Join-Path $app 'setup-state.json') -LogPath (Join-Path $app 'setup.log') -SetupProcessId $PID 2>&1)
     Check ($LASTEXITCODE -eq 0) ('Governor setup suspends the earlier version''s tasks: '+(($output|Select-Object -Last 3) -join ' / '))
     foreach($case in $cases){
         Check ((Get-ScheduledTask -TaskName $case.task).State -eq 'Disabled') ('The '+$case.label+' rules folder''s task is suspended')
@@ -66,7 +66,8 @@ public static class FakeHost {
         if(Test-Path -LiteralPath $policy){if((Get-Item -LiteralPath $policy -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){cmd.exe /c rmdir ('"'+$policy+'"')|Out-Null}}
         foreach($path in @($case.root,($case.root+'-target'))){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force}}
     }
+    Unregister-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -Confirm:$false -ErrorAction SilentlyContinue
     if(Test-Path -LiteralPath $app){Remove-Item -LiteralPath $app -Recurse -Force}
 }
-Check (-not(Test-Path -LiteralPath $app) -and @(Get-ScheduledTask -TaskName ('*'+$id+'*') -ErrorAction SilentlyContinue).Count -eq 0) 'The scenario removes its tasks, helper and folders'
+Check (-not(Test-Path -LiteralPath $app) -and @(Get-ScheduledTask -TaskName ('*'+$id+'*') -ErrorAction SilentlyContinue).Count -eq 0 -and $null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'The scenario removes its tasks, helper and folders'
 if($script:Failed -gt 0){throw ($script:Failed.ToString()+' governor setup checks failed')}
