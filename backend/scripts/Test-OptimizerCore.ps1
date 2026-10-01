@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateSet('all','branding','operation-files','files','registry','policies','discovery','cleanup','batch','firmware')][string]$Area='all')
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateSet('all','branding','operation-files','files','registry','policies','discovery','cleanup','batch','firmware','control-reads')][string]$Area='all')
 $ErrorActionPreference='Stop'
 if([string]::IsNullOrWhiteSpace($DotNetPath)){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent

@@ -18,15 +18,13 @@ var failures = 0;
 string Describe((TweakControlRead? Read, Exception? Error) result) =>
     result.Error is { } error ? "error " + error.GetType().Name + ": " + error.Message : JsonSerializer.Serialize(result.Read, OperationFiles.Json);
 string Name(ControlAddress address) => address.Kind + "|" + address.Target + "|" + address.Property;
-Dictionary<string, string> Single(Dictionary<string, long> timings)
+Dictionary<string, string> Single()
 {
     var results = new Dictionary<string, string>(StringComparer.Ordinal);
     foreach (var address in addresses)
     {
-        var watch = Stopwatch.StartNew();
         (TweakControlRead?, Exception?) result;
         try { result = (store.Read(address), null); } catch (Exception error) { result = (null, error); }
-        timings[address.Kind] = timings.GetValueOrDefault(address.Kind) + watch.ElapsedMilliseconds;
         results[Name(address)] = Describe(result);
     }
     return results;
@@ -38,30 +36,56 @@ void Report(string check, bool passed, string detail)
     Console.WriteLine((passed ? "PASS " : "FAIL ") + check + " :: " + detail);
     if (!passed) failures++;
 }
-(Dictionary<string, string> Result, long Ms) Timed(Func<Dictionary<string, string>> read)
+HashSet<int> PowerShells() => Process.GetProcessesByName("powershell").Select(process => { using (process) return (process.Id, Parent: ParentOf(process)); }).Where(item => item.Parent == Environment.ProcessId).Select(item => item.Id).ToHashSet();
+string WithoutValue(string described)
 {
-    var watch = Stopwatch.StartNew();
-    var result = read();
-    return (result, watch.ElapsedMilliseconds);
+    if (described.StartsWith("error ", StringComparison.Ordinal)) return described;
+    var node = System.Text.Json.Nodes.JsonNode.Parse(described)!.AsObject();
+    node.Remove("value");
+    return node.ToJsonString();
 }
-HashSet<int> PowerShells() => Process.GetProcessesByName("powershell").Select(process => process.Id).ToHashSet();
 
 Console.WriteLine("Control addresses: " + addresses.Length + " (" + string.Join(", ", addresses.GroupBy(address => address.Kind).Select(group => group.Key + "=" + group.Count())) + ")");
 switch (mode)
 {
     case "parity":
     {
-        var timings = new Dictionary<string, long>(StringComparer.Ordinal);
-        var single1 = Timed(() => Single(timings)); var batch1 = Timed(Batch);
-        var single2 = Timed(() => Single(new())); var batch2 = Timed(Batch);
-        Console.WriteLine("Per-address reads ms: " + single1.Ms + ", " + single2.Ms + "; batched ms: " + batch1.Ms + ", " + batch2.Ms);
-        Console.WriteLine("Per-address ms by kind: " + string.Join(", ", timings.OrderByDescending(pair => pair.Value).Select(pair => pair.Key + "=" + pair.Value)));
-        var unstable = addresses.Select(Name).Where(name => single1.Result[name] != single2.Result[name] || batch1.Result[name] != batch2.Result[name]).ToArray();
-        var different = addresses.Select(Name).Where(name => !unstable.Contains(name) && single1.Result[name] != batch1.Result[name]).ToArray();
-        Save("parity-single-1.json", single1.Result); Save("parity-batch-1.json", batch1.Result); Save("parity-single-2.json", single2.Result); Save("parity-batch-2.json", batch2.Result);
-        Report("every stable control read is identical per-address and batched", different.Length == 0, addresses.Length + " addresses, " + different.Length + " different, " + unstable.Length + " changed between rounds: " + string.Join("; ", different.Concat(unstable)));
-        Report("batched reads resolve every address", batch1.Result.Count == addresses.Length && batch2.Result.Count == addresses.Length, batch1.Result.Count + "/" + addresses.Length);
-        Console.WriteLine("Errors (same in both paths): " + string.Join(" | ", single1.Result.Where(pair => pair.Value.StartsWith("error ", StringComparison.Ordinal)).Select(pair => pair.Key + " => " + pair.Value)));
+        (string Kind, string Property, string Reason)[] volatileFields =
+        [
+            ("service", "running", "a trigger-start service can start or stop on its own between two reads"),
+        ];
+        string SingleNow(ControlAddress address)
+        {
+            try { return Describe((store.Read(address), null)); } catch (Exception error) { return Describe((null, error)); }
+        }
+        var mismatches = new List<string>(); var allowed = new List<string>(); var retried = 0; var compared = 0;
+        for (var round = 1; round <= 3; round++)
+        {
+            var watch = Stopwatch.StartNew();
+            var batch = store.ReadMany(addresses);
+            var batchMs = watch.ElapsedMilliseconds;
+            Save("parity-batch-" + round + ".json", batch.ToDictionary(pair => Name(pair.Key), pair => Describe(pair.Value)));
+            var singles = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var address in addresses)
+            {
+                compared++;
+                var batched = batch.TryGetValue(address, out var found) ? Describe(found) : "missing from batch";
+                var single = SingleNow(address);
+                for (var attempt = 2; attempt <= 3 && single != batched; attempt++) { retried++; single = SingleNow(address); }
+                singles[Name(address)] = single;
+                if (single == batched) continue;
+                var rule = volatileFields.FirstOrDefault(field => field.Kind == address.Kind && field.Property == address.Property);
+                var bothRead = !batched.StartsWith("error ", StringComparison.Ordinal) && !single.StartsWith("error ", StringComparison.Ordinal) && batched != "missing from batch";
+                if (rule.Reason is not null && bothRead && WithoutValue(batched) == WithoutValue(single)) { allowed.Add("round " + round + " " + Name(address) + " (" + rule.Reason + "): batch=" + batched + " single=" + single); continue; }
+                mismatches.Add("round " + round + " " + Name(address) + ": batch=" + batched + " single=" + single);
+            }
+            Save("parity-single-" + round + ".json", singles);
+            Console.WriteLine("round " + round + ": batch " + batchMs + " ms, " + addresses.Length + " addresses compared with per-address reads taken right after");
+        }
+        foreach (var line in allowed) Console.WriteLine("ALLOWED " + line);
+        foreach (var line in mismatches) Console.WriteLine("MISMATCH " + line);
+        Report("every batched read equals a per-address read of the same address taken right after it (3 rounds, per-address retried up to 2 times; only listed volatile fields may differ)", mismatches.Count == 0,
+            compared + " comparisons, " + retried + " per-address retries, " + allowed.Count + " allowed volatile differences, " + mismatches.Count + " mismatches");
         break;
     }
     case "timing":
@@ -240,24 +264,38 @@ switch (mode)
     case "kill":
     case "suspend":
     {
-        var reference = Single(new());
+        var reference = Single();
+        Save("kill-or-suspend-reference.json", reference);
         var before = PowerShells();
         var run = Task.Run(Batch);
         Thread.Sleep(delay);
         var started = PowerShells().Except(before).ToArray();
         Report("control helper processes found", started.Length >= 1, string.Join(",", started));
-        foreach (var id in started.Take(1))
-        {
-            using var target = Process.GetProcessById(id);
-            if (mode == "kill") target.Kill(); else NtSuspendProcess(target.Handle);
-        }
+        Dictionary<string, string> result;
         var watch = Stopwatch.StartNew();
-        var result = run.GetAwaiter().GetResult();
+        var inFlight = !run.IsCompleted;
+        try
+        {
+            foreach (var id in started.Take(1))
+            {
+                using var target = Process.GetProcessById(id);
+                if (mode == "kill") target.Kill(); else NtSuspendProcess(target.Handle);
+            }
+            result = run.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            foreach (var id in started.Take(1))
+            {
+                try { using var target = Process.GetProcessById(id); NtResumeProcess(target.Handle); target.Kill(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            }
+        }
         Console.WriteLine("Batch finished " + watch.ElapsedMilliseconds + " ms after the injected fault.");
         var affected = result.Where(pair => pair.Value != reference[pair.Key]).ToArray();
-        var expected = mode == "kill" ? "Windows control helper exited" : "timed out after 120 seconds";
-        Report("exactly the in-flight address failed with the helper error; every other address matches the per-address read", affected.Length == 1 && affected[0].Value.Contains(expected, StringComparison.Ordinal) && result.Count == reference.Count,
-            string.Join(" | ", affected.Select(pair => pair.Key + " => " + pair.Value)));
+        var detail = string.Join(" | ", affected.Select(pair => pair.Key + " => " + pair.Value));
+        Report("the batch had not finished when the fault was injected", inFlight, "run completed before the fault: " + !inFlight);
+        if (mode == "kill") Report("a killed batch helper changes no result: the in-flight address is read again per address and every address equals the per-address read", inFlight && affected.Length == 0 && result.Count == reference.Count, detail);
+        else Report("exactly the in-flight address failed with the helper error; every other address matches the per-address read", inFlight && affected.Length == 1 && affected[0].Value.Contains("timed out after 120 seconds", StringComparison.Ordinal) && result.Count == reference.Count, detail);
         break;
     }
     default: throw new ArgumentException("Unknown mode.");
@@ -266,6 +304,18 @@ Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILED");
 return failures == 0 ? 0 : 1;
 
 [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr process);
+[DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr process);
+[DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int informationClass, ref ProcessBasicInformation information, int length, IntPtr returned);
+static int ParentOf(Process process)
+{
+    try
+    {
+        var information = new ProcessBasicInformation();
+        return NtQueryInformationProcess(process.Handle, 0, ref information, Marshal.SizeOf<ProcessBasicInformation>(), IntPtr.Zero) == 0 ? (int)information.InheritedFromUniqueProcessId : -1;
+    }
+    catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { return -1; }
+}
+[StructLayout(LayoutKind.Sequential)] struct ProcessBasicInformation { public IntPtr ExitStatus, PebBaseAddress, AffinityMask, BasePriority, UniqueProcessId, InheritedFromUniqueProcessId; }
 
 sealed class TimedDism : DismServicing
 {
