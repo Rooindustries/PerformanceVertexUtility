@@ -19,6 +19,7 @@ static partial class DataFolderChecks
         scenarios.Add(("migration-time", MigrationTime));
         scenarios.Add(("timer-split", TimerSplit));
         scenarios.Add(("timer-migration", TimerMigration));
+        scenarios.Add(("timer-autostart", TimerAutostart));
     }
 
     private static bool WrittenAfter(string file)
@@ -393,5 +394,57 @@ static partial class DataFolderChecks
             check(clock.Elapsed < TimeSpan.FromMinutes(2), "The migration of that folder finishes well inside the helper time limit (" + (int)clock.Elapsed.TotalSeconds + " s)");
         }
         finally { H.Forget(root, Path.Combine(root, "operations")); H.Delete(root); H.Sweep(id); }
+    }
+
+    private static void TimerAutostart(Action<bool, string> check)
+    {
+        var id = H.Name("tauto");
+        var root = Path.Combine(H.Local, id);
+        var operations = Path.Combine(root, "operations");
+        var control = Path.Combine(operations, OperationsFolder.TimerFolder);
+        var state = Path.Combine(H.Local, id + "-state");
+        using var identity = WindowsIdentity.GetCurrent();
+        var user = identity.User!.Value;
+        var task = "RooIndustries.Timer." + OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(user))[..16];
+        if (H.Run("schtasks.exe", "/Query /TN \"" + task + "\"").Exit == 0) { Console.WriteLine("NOTE The sign-in timer task already exists on this PC, so the sign-in timer scenario was skipped."); return; }
+        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_CONTROL", control);
+        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_STATE", state);
+        var store = new WindowsControlStore();
+        var timer = new ControlAddress("timer", "system", "half-millisecond");
+        var startup = new ControlAddress("timer-startup", "system", "enabled");
+        var enabled = false;
+        try
+        {
+            try { store.Read(timer); }
+            catch (InvalidDataException error) { Console.WriteLine("NOTE The sign-in timer scenario is not meaningful on this PC: " + error.Message); return; }
+            OperationsFolder.Ensure(operations);
+            var before = store.Read(startup);
+            store.Write(before, ControlValues.From(true)); enabled = true;
+            check(store.Read(startup).Value.GetBoolean() && File.Exists(Path.Combine(control, "startup.ps1")) && File.Exists(Path.Combine(control, "startup.json")), "The sign-in timer task is registered and its script and receipt are written in the administrators-only control folder");
+            check(PolicyRootSecurity.WriterOf(control) is null, "A standard user cannot change the sign-in script or receipt");
+            H.StandardBackground(new() { ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state }, "--timer-autostart", control);
+            var clock = System.Diagnostics.Stopwatch.StartNew(); var active = false;
+            while (!active && clock.Elapsed < TimeSpan.FromSeconds(40)) { try { active = store.Read(timer).Value.GetBoolean(); } catch (Exception error) when (error is IOException or InvalidDataException) { } if (!active) Thread.Sleep(500); }
+            check(active, "The sign-in timer start, run with a standard token, acquires the 0.5 ms request and the app reads it as active");
+            var worker = WorkerId(state);
+            check(worker > 0 && H.AdministratorsEnabled(worker) == false, "The sign-in worker runs without administrator rights, the Administrators group is deny-only in its token (pid " + worker + ", enabled=" + (H.AdministratorsEnabled(worker)?.ToString() ?? "unknown") + ")");
+            check(Directory.EnumerateFileSystemEntries(state).All(entry => OwnerOf(entry) == user), "Everything the sign-in worker keeps in its own folder was created by the signed-in user");
+            store.Write(store.Read(timer), ControlValues.From(false));
+            check(!store.Read(timer).Value.GetBoolean(), "The app stops the sign-in worker through the administrators-only control folder");
+            var gone = false;
+            for (var index = 0; index < 50 && !gone; index++) { try { using var process = System.Diagnostics.Process.GetProcessById(worker); gone = process.HasExited; } catch (ArgumentException) { gone = true; } if (!gone) Thread.Sleep(100); }
+            check(gone, "The sign-in worker has ended");
+            store.Write(store.Read(startup), ControlValues.From(false)); enabled = false;
+            check(H.Run("schtasks.exe", "/Query /TN \"" + task + "\"").Exit != 0 && !File.Exists(Path.Combine(control, "startup.ps1")), "Turning the sign-in timer off removes its task, script and receipt");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_CONTROL", null); Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_STATE", null);
+            var stray = WorkerId(state);
+            if (stray > 0) { try { using var process = System.Diagnostics.Process.GetProcessById(stray); process.Kill(true); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { } }
+            if (enabled) H.Run("schtasks.exe", "/Delete /TN \"" + task + "\" /F");
+            Thread.Sleep(300);
+            H.Forget(root, operations); H.Delete(root, state); H.Sweep(id);
+        }
     }
 }
