@@ -30,7 +30,9 @@ public sealed class RegistryTweakStore : ITweakStore
 #if ROO_TEST_HOOKS
         if (Environment.GetEnvironmentVariable("ROOTEST_FEATURE_HANG") is { Length: > 0 } flag && File.Exists(flag) && addresses.Any(address => address.Kind == "windows-features"))
         {
-            using var holder = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true });
+            var hold = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true };
+            RuntimeEnvironment.Apply(hold);
+            using var holder = System.Diagnostics.Process.Start(hold);
             return new TaskCompletionSource<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>().Task;
         }
 #endif

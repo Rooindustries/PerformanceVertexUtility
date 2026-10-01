@@ -133,6 +133,7 @@ public sealed class ScewinProvider : IFirmwareProvider
     private static FirmwareCommandResult Command(string executable, string[] arguments, string directory)
     {
         var start = new ProcessStartInfo(executable) { WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        RuntimeEnvironment.Apply(start);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         try
         {

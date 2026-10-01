@@ -204,6 +204,7 @@ public sealed partial class OptimizerService
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
         start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
         foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
         using var process = await Task.Run(() => Process.Start(start)).ConfigureAwait(false) ?? throw new InvalidOperationException("The optimizer helper did not start.");

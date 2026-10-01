@@ -254,6 +254,7 @@ public sealed partial class OptimizerService
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
             WorkingDirectory = _locator.RepoRoot!,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(argument);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
