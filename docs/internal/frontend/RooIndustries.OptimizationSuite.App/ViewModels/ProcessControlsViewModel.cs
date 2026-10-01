@@ -120,7 +120,8 @@ public static class GovernorDisplay
         return state switch
         {
             "running" => (summary.EnabledRules == 1 ? "1 rule is on." : summary.EnabledRules + " rules are on.")
-                + (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } problem ? " " + problem.TrimEnd('.') + "." : summary.UnreadableRules is { Length: > 0 } unread ? " " + string.Join(" ", unread).TrimEnd('.') + ". Those rules are not enforced." : ""),
+                + (worker.State?.Errors.FirstOrDefault(error => summary.UnreadableRules?.Contains(error) != true) is { Length: > 0 } problem ? " " + problem.TrimEnd('.') + "." : "")
+                + (summary.UnreadableRules is { Length: > 0 } unread ? " " + string.Join(" ", unread).TrimEnd('.') + ". Those rules are not enforced." : ""),
             "pausing" => worker.HostRunning == true
                 ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back. Press Pause governor to put them back.",

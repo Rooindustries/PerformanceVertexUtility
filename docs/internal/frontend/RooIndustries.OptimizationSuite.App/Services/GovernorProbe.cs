@@ -16,7 +16,7 @@ namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record GovernorTaskState(string Name, bool Registered, bool Enabled, bool RestartsEveryMinute, int LastResult = 0)
 {
-    public bool LastStartFailed => LastResult != 0 && LastResult is < 0x41300 or > 0x4130F;
+    public bool LastStartFailed => LastResult == 1 || unchecked((uint)LastResult) is >= 0x80070000 and <= 0x8007FFFF and not 0x800710E0;
     public bool Restarts => Registered && Enabled && RestartsEveryMinute && !LastStartFailed;
 }
 
