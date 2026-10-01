@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -105,16 +106,22 @@ public abstract partial class PageViewModelBase : ObservableObject
     private bool _revalidate;
     protected void RevalidateAfterLoad() => _revalidate = true;
 
+    private readonly SemaphoreSlim _running = new(1, 1);
+
     private async Task RunAsync(bool quiet)
     {
-        while (_load is { IsCompleted: false }) await _load;
-        _load = LoadAsync(quiet);
-        await _load;
-        if (!_revalidate || !IsReady) { _revalidate = false; return; }
-        _revalidate = false;
-        _load = LoadAsync(quiet: true);
-        await _load;
-        _revalidate = false;
+        await _running.WaitAsync();
+        try
+        {
+            _load = LoadAsync(quiet);
+            await _load;
+            if (!_revalidate || !IsReady) { _revalidate = false; return; }
+            _revalidate = false;
+            _load = LoadAsync(quiet: true);
+            await _load;
+            _revalidate = false;
+        }
+        finally { _running.Release(); }
     }
 
     private async Task LoadAsync(bool quiet)
