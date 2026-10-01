@@ -203,7 +203,7 @@ public static class TimerControl
         var state = Parse(NativeFiles.ReadBounded(folder, "session.json", 1 << 16, out _));
         if (state is null || !state.Acquired || state.Released) return false;
         using var worker = Running(state);
-        if (worker is null || CommandLine(worker) is not { } command || !command.Contains("--timer-worker", StringComparison.Ordinal) && !command.Contains("--timer-autostart", StringComparison.Ordinal)) return false;
+        if (worker is null || CommandLine(worker) is not { } command || !Arguments(command).Skip(1).Any(argument => argument is "--timer-worker" or "--timer-autostart")) return false;
         found?.Invoke();
         try { worker.Kill(); worker.WaitForExit(10000); }
         catch (Exception error) when (error is InvalidOperationException or Win32Exception) { return false; }
@@ -214,6 +214,13 @@ public static class TimerControl
         var roots = new Roots(OperationsFolder.EnsureTimerFolder(operations), StateFolder);
         using var guard = OperationFiles.Lock(Path.Combine(roots.Control, "control"));
         Start(roots);
+    }
+    private static string[] Arguments(string command)
+    {
+        var list = CommandLineToArgvW(command, out var count);
+        if (list == IntPtr.Zero) return [];
+        try { return Enumerable.Range(0, count).Select(index => Marshal.PtrToStringUni(Marshal.ReadIntPtr(list, index * IntPtr.Size)) ?? "").ToArray(); }
+        finally { LocalFree(list); }
     }
     private static string? CommandLine(Process process)
     {
@@ -386,6 +393,8 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CommandLineToArgvW(string line, out int count);
+    [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(IntPtr process, int kind, IntPtr information, uint length, out uint returned);
     [StructLayout(LayoutKind.Sequential)] private struct TimerPower { public uint Version, ControlMask, StateMask; }
     [DllImport("kernel32.dll", EntryPoint = "GetCurrentProcess")] private static extern IntPtr CurrentProcess();

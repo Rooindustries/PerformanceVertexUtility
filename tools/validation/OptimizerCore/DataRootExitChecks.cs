@@ -27,7 +27,8 @@ static partial class DataFolderChecks
     {
         using var probe = H.Start(["--probe-ready"]);
         probe.StandardOutput.ReadLine();
-        using var fake = H.Start(["--timer-worker-fake"]);
+        using var lookalike = H.Start(["--timer-worker-fake"]);
+        using var fake = H.Start(["--timer-worker-fake", "--timer-worker"]);
         var csrss = Process.GetProcessesByName("csrss").FirstOrDefault()?.Id ?? 4;
         var cases = new List<(string Label, Func<string, string> Content, bool EndsWorker)>
         {
@@ -38,6 +39,7 @@ static partial class DataFolderChecks
             ("the process id of a protected system process", folder => WorkerState(folder, 4, 1, "System"), false),
             ("the process id of a protected service process", folder => WorkerState(folder, csrss, 1, @"C:\Windows\System32\csrss.exe"), false),
             ("the identity of an ordinary program that is not a timer worker", folder => WorkerState(folder, probe.Id, probe.StartTime.ToUniversalTime().ToFileTimeUtc(), Environment.ProcessPath!), false),
+            ("the identity of a program whose command line only contains the text --timer-worker inside a longer argument", folder => WorkerState(folder, lookalike.Id, lookalike.StartTime.ToUniversalTime().ToFileTimeUtc(), Environment.ProcessPath!), false),
             ("the identity of a real timer worker", folder => WorkerState(folder, fake.Id, fake.StartTime.ToUniversalTime().ToFileTimeUtc(), Environment.ProcessPath!), true),
         };
         var state = Path.Combine(H.Local, H.Name("timerstate"));
@@ -59,7 +61,8 @@ static partial class DataFolderChecks
                     check(failure is null && migrated && H.Read(Path.Combine(operations, "journal.json")) == "journal bytes", "The first migration completes when the old timer state holds " + item.Label + ": " + failure?.Message);
                     check(!probe.HasExited, "No program is ended because of " + item.Label);
                     if (item.EndsWorker) check(fake.WaitForExit(15000), "A timer worker identified by the old state, its executable and its command line is ended before its folder is moved");
-                    else check(!fake.HasExited, "The timer worker of another case keeps running");
+                    else check(!fake.HasExited && !lookalike.HasExited, "The timer worker of another case keeps running");
+                    check(!lookalike.HasExited, "A program whose command line only contains --timer-worker inside a longer argument is never ended");
                 }
                 finally { H.Forget(root, operations); H.Delete(root); H.Sweep(id); }
             }
@@ -69,6 +72,7 @@ static partial class DataFolderChecks
             Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_SPLIT_TOKEN", null); Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_STATE", null);
             if (!probe.HasExited) probe.Kill(true);
             if (!fake.HasExited) fake.Kill(true);
+            if (!lookalike.HasExited) lookalike.Kill(true);
             H.Delete(state);
         }
     }
