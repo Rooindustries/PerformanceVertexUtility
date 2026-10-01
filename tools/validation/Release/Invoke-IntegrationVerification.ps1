@@ -178,7 +178,7 @@ function Restore-AppData {
         Check ((@(Get-ChildItem -LiteralPath $local -Directory -Force -ErrorAction SilentlyContinue|Where-Object {$_.Name -match 'OptimizationSuite'}|ForEach-Object Name|Sort-Object) -join '|') -eq (@($before.localSiblings) -join '|')) 'the folders next to the data folder are the ones that existed before this run' ((@($before.localSiblings) -join '|'))
     }
     Invoke-Native reg.exe @('delete',$rooHklm,'/f')|Out-Null
-    if(Test-Path -LiteralPath (Join-Path $backup 'hklm-roo.reg')){$import=Invoke-Native reg.exe @('import',(Join-Path $backup 'hklm-roo.reg'));Log ('HKLM\SOFTWARE\RooIndustries restored, exit '+$import.Exit)}
+    if(Test-Path -LiteralPath (Join-Path $backup 'hklm-roo-industries.reg')){$import=Invoke-Native reg.exe @('import',(Join-Path $backup 'hklm-roo-industries.reg'));Log ('HKLM\SOFTWARE\RooIndustries restored, exit '+$import.Exit)}
     else{Log 'HKLM\SOFTWARE\RooIndustries did not exist before this run; removed'}
     $stateBefore=if($before){$before.tweakStateKey}
     if(Test-Path -LiteralPath (Join-Path $backup 'tweak-state.reg')){
@@ -209,7 +209,7 @@ switch($Phase){
                     $liveItems|Set-Content -LiteralPath (Join-Path $backup ($name+'.fingerprint.txt')) -Encoding UTF8
                 }
             }
-            $export=Invoke-Native reg.exe @('export',$rooHklm,(Join-Path $backup 'hklm-roo.reg'),'/y')
+            $export=Invoke-Native reg.exe @('export',$rooHklm,(Join-Path $backup 'hklm-roo-industries.reg'),'/y')
             Log ('HKLM\SOFTWARE\RooIndustries export exit '+$export.Exit+$(if($export.Exit -ne 0){' (no such key before this run)'}else{''}))
             $state=Get-MachineState
             $state.tweakStateKey=Get-RegistryFingerprint $stateKey
