@@ -57,7 +57,7 @@ public static class RuntimeEnvironment
             ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = PublicFolder() ?? Path.Combine(Path.GetDirectoryName(profile)!, "Public"),
             ["USERPROFILE"] = profile, ["HOMEDRIVE"] = profileDrive, ["HOMEPATH"] = profile[profileDrive.Length..],
             ["LOCALAPPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ["APPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = Environment.UserDomainName, ["COMPUTERNAME"] = Environment.MachineName,
+            ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = UserDomain(), ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(system, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["PROCESSOR_ARCHITECTURE"] = RuntimeInformation.OSArchitecture switch { Architecture.Arm64 => "ARM64", Architecture.X86 => "x86", _ => "AMD64" },
@@ -91,10 +91,16 @@ public static class RuntimeEnvironment
         {
             var root = DataFolder.Root;
             var folder = Path.Combine(root, "temp");
-            if (Directory.Exists(folder) && DataFolder.Secured(root)) return _protectedTemp = folder;
+            if (Directory.Exists(folder) && !new DirectoryInfo(folder).Attributes.HasFlag(FileAttributes.ReparsePoint) && DataFolder.Secured(root)) return _protectedTemp = folder;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or System.Security.SecurityException) { }
         return Path.Combine(windows, "Temp");
+    }
+
+    private static string UserDomain()
+    {
+        try { return Environment.UserDomainName; }
+        catch (InvalidOperationException) { return Environment.MachineName; }
     }
 
     private static string? PublicFolder()
