@@ -30,6 +30,29 @@ function Copy-ReleaseScripts([string]$RepoRoot, [string]$Stage) {
     }
 }
 
+function Copy-ReleaseData([string]$RepoRoot, [string]$Stage) {
+    $samples = @(
+        'app-classification.sample.json', 'cleanup-deletion-manifest.sample.json',
+        'dashboard-backend-status.sample.json', 'driver-hardware-summary.sample.json', 'driver-recommendation-catalog.sample.json',
+        'game-session-profile-preview.sample.json', 'game-tune-session-restore-preview.sample.json', 'game-tune-session-status.sample.json', 'installed-app-inventory.sample.json',
+        'leftover-scan-preview.sample.json', 'nvidia-nip-preview.sample.json', 'nvidia-profile-catalog.sample.json',
+        'official-uninstall-preview.sample.json', 'process-classification.sample.json', 'process-governor-session-status.sample.json',
+        'process-inventory.sample.json', 'process-profile-preview.sample.json', 'product-backend-status.sample.json', 'report-summary.sample.json',
+        'stutter-optimization-preview.sample.json', 'telemetry-snapshot.sample.json', 'uninstall-cleanup-execution-plan.sample.json',
+        'uninstall-queue.sample.json'
+    )
+    foreach ($entry in @(
+        @('backend\catalogs', @('windows-tweaks.json', 'firmware-write-tests.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')),
+        @('backend\profiles', @('*.json')), @('backend\samples', $samples), @('backend\uninstall', @('*.json')), @('modules', @('*.json')))) {
+        $source = Join-Path $RepoRoot $entry[0]
+        $destination = Join-Path $Stage $entry[0]
+        [IO.Directory]::CreateDirectory($destination) | Out-Null
+        foreach ($pattern in $entry[1]) {
+            foreach ($file in (Get-ChildItem -LiteralPath $source -Filter $pattern -File)) { Copy-Item -LiteralPath $file.FullName -Destination $destination }
+        }
+    }
+}
+
 function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
     $known = @{}
     foreach ($file in (Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'backend\scripts') -File)) { if ($file.Extension -in '.ps1', '.cmd') { $known[$file.Name.ToLowerInvariant()] = $file.Name } }
@@ -38,18 +61,18 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
     $sources = New-Object System.Collections.Generic.List[string]
     foreach ($entry in @(
         @('backend\native\Optimizer.Core', '*.cs'), @('backend\native\Optimizer.Host', '*.cs'), @('backend\native\Optimizer.SessionHost', '*.cs'),
-        @('docs\internal\frontend', '*.cs'), @('docs\internal\frontend', '*.xaml'), @('backend\capabilities', '*.json'), @('backend\profiles', '*.json'),
-        @('backend\catalogs', '*.json'), @('modules', '*.json'), @('tools\release', '*.iss'))) {
+        @('docs\internal\frontend', '*.cs'), @('docs\internal\frontend', '*.xaml'), @('tools\release', '*.iss'))) {
         $folder = Join-Path $RepoRoot $entry[0]
         if (-not (Test-Path -LiteralPath $folder)) { continue }
         foreach ($file in (Get-ChildItem -LiteralPath $folder -Filter $entry[1] -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' })) { $sources.Add($file.FullName) }
     }
     foreach ($file in (Get-ChildItem -LiteralPath (Join-Path $Stage 'backend\scripts') -File -Recurse)) { if ($file.Extension -in '.ps1', '.cmd') { $sources.Add($file.FullName) } }
+    foreach ($file in (Get-ChildItem -LiteralPath $Stage -Filter '*.json' -File -Recurse)) { $sources.Add($file.FullName) }
     $calls = @{}
     foreach ($path in $sources) {
         foreach ($match in $literal.Matches([IO.File]::ReadAllText($path))) {
             $key = $match.Groups[1].Value.ToLowerInvariant()
-            if ($known.ContainsKey($key) -and -not (Test-ForbiddenReleaseScript $known[$key]) -and -not $calls.ContainsKey($known[$key])) { $calls[$known[$key]] = $path.Substring($RepoRoot.TrimEnd('\', '/').Length).TrimStart('\', '/') }
+            if ($known.ContainsKey($key) -and -not (Test-ForbiddenReleaseScript $known[$key]) -and -not $calls.ContainsKey($known[$key])) { $calls[$known[$key]] = $path }
         }
     }
     return $calls

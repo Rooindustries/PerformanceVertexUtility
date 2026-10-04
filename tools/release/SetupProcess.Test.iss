@@ -27,7 +27,7 @@ end;
 
 function InitializeSetup(): Boolean;
 var
-  Work, Shell, Dump: String;
+  Work, Shell, Dump, Block: String;
   Code: DWORD;
   Started: DWORD;
   Ran: Boolean;
@@ -44,8 +44,14 @@ begin
   SetEnvironmentVariable('COMPlus_gcServer', '1');
   SetEnvironmentVariable('TEMP', Work + '\marker\temp');
   SetEnvironmentVariable('TMP', Work + '\marker\temp');
+  SetEnvironmentVariable('HOMEDRIVE', Work + '\marker');
+  SetEnvironmentVariable('HOMEPATH', Work + '\marker');
+  SetEnvironmentVariable('PUBLIC', Work + '\marker');
+  SetEnvironmentVariable('USERDOMAIN', 'marker');
 
-  Dump := '-NoProfile -NonInteractive -Command "Get-ChildItem Env: | ForEach-Object { $_.Name + ''='' + $_.Value } | Set-Content -LiteralPath ''' + Work + '\env.txt''; exit 7"';
+  Block := SetupEnvironment(Work + '\setup-temp');
+  SaveStringToFile(Work + '\block.txt', Block, False);
+  Dump := '-NoProfile -NonInteractive -Command "Get-ChildItem Env: | ForEach-Object { $_.Name + ''='' + $_.Value } | Set-Content -LiteralPath ''' + Work + '\env.txt''; Set-Content -LiteralPath ''' + Work + '\bits.txt'' ([IntPtr]::Size*8); exit 7"';
   Started := GetTickCount;
   Ran := RunBounded(Shell, Dump, Work + '\setup-temp', 60000, Code);
   Note('A ran=' + IntToStr(Ord(Ran)) + ' exit=' + IntToStr(Code) + ' ms=' + IntToStr(GetTickCount - Started));
@@ -79,6 +85,9 @@ begin
   for Index := 0 to GetArrayLength(Names) - 1 do
     Note('E ' + Names[Index] + '=' + GetEnv(Names[Index]));
   Note('F unrelated=' + GetEnv('ROO_INDUSTRIES_UNRELATED_MARKER'));
+
+  Ran := RunBounded(Shell, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Work + '\Invoke-GovernorSetup.ps1" -Action Suspend -AppRoot "' + Work + '\governor-app" -StatePath "' + Work + '\governor-state.json" -LogPath "' + Work + '\governor.log"', Work + '\setup-temp', 60000, Code);
+  Note('G ran=' + IntToStr(Ord(Ran)) + ' exit=' + IntToStr(Code));
 
   SaveStringsToFile(Work + '\report.txt', Report, False);
   Result := False;

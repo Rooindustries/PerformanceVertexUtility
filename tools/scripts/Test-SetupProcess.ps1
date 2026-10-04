@@ -7,8 +7,11 @@ if (-not $IsccPath) {
 if (-not $IsccPath) { throw 'Inno Setup 6 was not found.' }
 function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message }; Write-Output ('PASS ' + $Message) }
 $work = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-setup-process-' + [Guid]::NewGuid().ToString('N'))
+if (@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*', 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue).Count -gt 0) { throw 'This check needs a PC without existing governor tasks.' }
 try {
     [IO.Directory]::CreateDirectory((Join-Path $work 'setup-temp')) | Out-Null
+    [IO.Directory]::CreateDirectory((Join-Path $work 'governor-app')) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'backend\scripts\Invoke-GovernorSetup.ps1') -Destination $work
     & $IsccPath /Q "/DOutputDir=$work" (Join-Path $repoRoot 'tools\release\SetupProcess.Test.iss')
     if ($LASTEXITCODE -ne 0) { throw 'The setup process check did not compile.' }
     $process = Start-Process -FilePath (Join-Path $work 'SetupProcessCheck.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/work="' + $work + '"')) -PassThru
@@ -26,6 +29,17 @@ try {
     Assert ($env['ComSpec'] -ceq (Join-Path $system 'cmd.exe') -and $env['SystemDrive'] -ceq [IO.Path]::GetPathRoot($windows).TrimEnd('\')) 'The script sees the real command interpreter and system drive'
     Assert (-not $env.ContainsKey('DOTNET_gcServer') -and -not $env.ContainsKey('COMPlus_gcServer')) 'The script does not see inherited runtime tuning names'
     Assert (@($env.Values | Where-Object { $_ -like ($work + '\marker*') }).Count -eq 0) 'No marker value reaches the script'
+    $names = @([IO.File]::ReadAllText((Join-Path $work 'block.txt')).Split([char]0) | Where-Object { $_ } | ForEach-Object { $_.Split('=')[0] })
+    $sorted = [string[]]$names.Clone()
+    [Array]::Sort($sorted, [StringComparer]::OrdinalIgnoreCase)
+    Assert (($names -join '|') -ceq ($sorted -join '|')) 'The native environment block is sorted by name'
+    Assert ((Get-Content -LiteralPath (Join-Path $work 'bits.txt') -Raw).Trim() -eq '64') 'The bounded helper uses native 64-bit PowerShell'
+    $profile = [Environment]::GetFolderPath('UserProfile')
+    $drive = [IO.Path]::GetPathRoot($profile).TrimEnd('\')
+    Assert ($env['USERPROFILE'] -ceq $profile -and $env['HOMEDRIVE'] -ceq $drive -and $env['HOMEPATH'] -ceq $profile.Substring($drive.Length)) 'The helper receives the token profile and home path'
+    Assert ($env['USERDOMAIN'] -ceq [Environment]::UserDomainName -and $env['DriverData'] -ceq (Join-Path $system 'Drivers\DriverData') -and $env['PUBLIC'] -ceq [Environment]::ExpandEnvironmentVariables((Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Public)) 'The helper receives the real domain and system folders'
+    $machine = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+    foreach ($name in @('NUMBER_OF_PROCESSORS','PROCESSOR_ARCHITECTURE','PROCESSOR_IDENTIFIER','PROCESSOR_LEVEL','PROCESSOR_REVISION')) { Assert ($env[$name] -and $env[$name] -ceq $machine.$name) ('The helper receives the machine value for ' + $name) }
     $timed = @($report | Where-Object { $_ -match '^B ran=0 exit=258 ms=(\d+)$' })
     Assert ($timed.Count -eq 1 -and [int]([regex]::Match($timed[0], '\d+$').Value) -lt 8000) 'A hung script is stopped at the limit with the timed out code'
     Assert ($report -contains 'B finished=0' -and (Test-Path -LiteralPath (Join-Path $work 'started.txt')) -and -not (Test-Path -LiteralPath (Join-Path $work 'finished.txt'))) 'The hung script was running and never finished'
@@ -33,9 +47,11 @@ try {
     Assert ((Test-Path -LiteralPath $childFile) -and -not (Get-Process -Id ([int](Get-Content -LiteralPath $childFile -Raw)) -ErrorAction SilentlyContinue)) 'A program the hung script started is stopped with it'
     Assert ($report -contains 'C ran=0 exit=1') 'A missing program reports failure'
     $pinnedNames = @('DOTNET_EnableDiagnostics', 'COMPlus_EnableDiagnostics', 'DOTNET_EnableDiagnostics_IPC', 'COMPlus_EnableDiagnostics_IPC', 'DOTNET_EnableDiagnostics_Debugger', 'COMPlus_EnableDiagnostics_Debugger', 'DOTNET_EnableDiagnostics_Profiler', 'COMPlus_EnableDiagnostics_Profiler')
+    Assert (@($pinnedNames | Where-Object { $env[$_] -cne '0' }).Count -eq 0) 'Every bounded helper receives all eight diagnostics switches at 0'
     $left = @($report | Where-Object { $_ -like 'E *' } | ForEach-Object { $_.Substring(2) })
     Assert ((($left | Sort-Object) -join ',') -ceq ((@($pinnedNames | ForEach-Object { $_ + '=0' }) | Sort-Object) -join ',')) 'Setup clears every variable that starts with DOTNET_, COMPlus_, CORECLR_, COR_ or COREHOST_, whatever its name, and leaves only the pinned diagnostics switches at 0'
     Assert ($report -contains 'F unrelated=kept') 'Setup leaves an unrelated variable alone'
+    Assert ($report -contains 'G ran=1 exit=0' -and (Get-Content -LiteralPath (Join-Path $work 'governor.log') -Raw) -match 'Suspended 0 governor tasks') 'The real governor setup script completes under the installer environment'
     Assert (-not (Test-Path -LiteralPath (Join-Path $work 'scratch'))) 'No file or folder appeared at a path named by a cleared variable'
     $plain = @($report | Where-Object { $_ -match '^D ran=1 exit=0 ms=(\d+)$' })
     Assert ($plain.Count -eq 1 -and [int]([regex]::Match($plain[0], '\d+$').Value) -ge 11000) 'Setup''s plain wait on the same kind of script has no limit'

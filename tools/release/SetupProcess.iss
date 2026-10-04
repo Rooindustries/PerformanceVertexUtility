@@ -42,6 +42,12 @@ type
     y: Longint;
   end;
 
+function GetCurrentProcess: THandle; external 'GetCurrentProcess@kernel32.dll stdcall';
+function OpenProcessToken(Process: THandle; Access: DWORD; var Token: THandle): BOOL; external 'OpenProcessToken@advapi32.dll stdcall';
+function GetUserProfileDirectory(Token: THandle; Buffer: String; var Size: DWORD): BOOL; external 'GetUserProfileDirectoryW@userenv.dll stdcall';
+function GetUserNameEx(Format: DWORD; Buffer: String; var Size: DWORD): Byte; external 'GetUserNameExW@secur32.dll stdcall';
+function GetActiveProcessorCount(Group: Word): DWORD; external 'GetActiveProcessorCount@kernel32.dll stdcall';
+
 function CreateProcessW(ApplicationName: String; CommandLine: String; ProcessAttributes: DWORD; ThreadAttributes: DWORD; InheritHandles: BOOL; CreationFlags: DWORD; Environment: String; CurrentDirectory: String; var StartupInfo: TStartupInfo; var ProcessInformation: TProcessInformation): BOOL; external 'CreateProcessW@kernel32.dll stdcall';
 function WaitForSingleObject(Handle: THandle; Milliseconds: DWORD): DWORD; external 'WaitForSingleObject@kernel32.dll stdcall';
 function GetExitCodeProcess(Handle: THandle; var ExitCode: DWORD): BOOL; external 'GetExitCodeProcess@kernel32.dll stdcall';
@@ -68,36 +74,87 @@ begin
   Result := Name + '=' + Value + #0;
 end;
 
+function MachineEnvironment(const Name, Default: String): String;
+begin
+  if not RegQueryStringValue(HKLM64, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', Name, Result) then
+    Result := Default;
+end;
+
 function SetupEnvironment(const TempFolder: String): String;
 var
-  Profile: String;
+  Profile, Drive, Domain, Account, PublicFolder, Architecture: String;
+  Token: THandle;
+  Size: DWORD;
 begin
-  Profile := ExtractFileDir(ExtractFileDir(ExpandConstant('{userappdata}')));
+  Token := 0;
+  if not OpenProcessToken(GetCurrentProcess, 8, Token) then
+    RaiseException('Windows could not read the setup user token.');
+  try
+    Size := 32768;
+    SetLength(Profile, Size);
+    if not GetUserProfileDirectory(Token, Profile, Size) then
+      RaiseException('Windows could not read the setup user profile.');
+    SetLength(Profile, Pos(#0, Profile) - 1);
+  finally
+    CloseHandle(Token);
+  end;
+  Drive := ExtractFileDrive(Profile);
+  Domain := GetComputerNameString;
+  Size := 32768;
+  SetLength(Account, Size);
+  if GetUserNameEx(2, Account, Size) <> 0 then
+  begin
+    SetLength(Account, Size);
+    if Pos('\', Account) > 0 then Domain := Copy(Account, 1, Pos('\', Account) - 1);
+  end;
+  if not RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList', 'Public', PublicFolder) then
+    RaiseException('Windows could not read the public profile folder.');
+  StringChangeEx(PublicFolder, '%SystemDrive%', ExtractFileDrive(ExpandConstant('{win}')), True);
+  Architecture := 'AMD64';
+  if ProcessorArchitecture = paArm64 then Architecture := 'ARM64';
+  if ProcessorArchitecture = paX86 then Architecture := 'x86';
   Result :=
-    EnvironmentEntry('SystemRoot', ExpandConstant('{win}')) +
-    EnvironmentEntry('windir', ExpandConstant('{win}')) +
-    EnvironmentEntry('SystemDrive', ExtractFileDrive(ExpandConstant('{win}'))) +
+    EnvironmentEntry('ALLUSERSPROFILE', ExpandConstant('{commonappdata}')) +
+    EnvironmentEntry('APPDATA', ExpandConstant('{userappdata}')) +
+    EnvironmentEntry('CommonProgramFiles', ExpandConstant('{commoncf64}')) +
+    EnvironmentEntry('CommonProgramFiles(x86)', ExpandConstant('{commoncf32}')) +
+    EnvironmentEntry('CommonProgramW6432', ExpandConstant('{commoncf64}')) +
+    EnvironmentEntry('COMPlus_EnableDiagnostics', '0') +
+    EnvironmentEntry('COMPlus_EnableDiagnostics_Debugger', '0') +
+    EnvironmentEntry('COMPlus_EnableDiagnostics_IPC', '0') +
+    EnvironmentEntry('COMPlus_EnableDiagnostics_Profiler', '0') +
+    EnvironmentEntry('COMPUTERNAME', GetComputerNameString) +
     EnvironmentEntry('ComSpec', ExpandConstant('{sys}\cmd.exe')) +
+    EnvironmentEntry('DOTNET_EnableDiagnostics', '0') +
+    EnvironmentEntry('DOTNET_EnableDiagnostics_Debugger', '0') +
+    EnvironmentEntry('DOTNET_EnableDiagnostics_IPC', '0') +
+    EnvironmentEntry('DOTNET_EnableDiagnostics_Profiler', '0') +
+    EnvironmentEntry('DriverData', ExpandConstant('{sys}\Drivers\DriverData')) +
+    EnvironmentEntry('HOMEDRIVE', Drive) +
+    EnvironmentEntry('HOMEPATH', Copy(Profile, Length(Drive) + 1, Length(Profile))) +
+    EnvironmentEntry('LOCALAPPDATA', ExpandConstant('{localappdata}')) +
+    EnvironmentEntry('NUMBER_OF_PROCESSORS', MachineEnvironment('NUMBER_OF_PROCESSORS', IntToStr(GetActiveProcessorCount($FFFF)))) +
+    EnvironmentEntry('OS', MachineEnvironment('OS', 'Windows_NT')) +
     EnvironmentEntry('PATH', ExpandConstant('{sys};{win};{sys}\Wbem;{sys}\WindowsPowerShell\v1.0')) +
     EnvironmentEntry('PATHEXT', '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC') +
+    EnvironmentEntry('PROCESSOR_ARCHITECTURE', Architecture) +
+    EnvironmentEntry('PROCESSOR_IDENTIFIER', MachineEnvironment('PROCESSOR_IDENTIFIER', '')) +
+    EnvironmentEntry('PROCESSOR_LEVEL', MachineEnvironment('PROCESSOR_LEVEL', '')) +
+    EnvironmentEntry('PROCESSOR_REVISION', MachineEnvironment('PROCESSOR_REVISION', '')) +
+    EnvironmentEntry('ProgramData', ExpandConstant('{commonappdata}')) +
+    EnvironmentEntry('ProgramFiles', ExpandConstant('{commonpf64}')) +
+    EnvironmentEntry('ProgramFiles(x86)', ExpandConstant('{commonpf32}')) +
+    EnvironmentEntry('ProgramW6432', ExpandConstant('{commonpf64}')) +
     EnvironmentEntry('PSModulePath', ExpandConstant('{commonpf64}\WindowsPowerShell\Modules;{sys}\WindowsPowerShell\v1.0\Modules')) +
+    EnvironmentEntry('PUBLIC', PublicFolder) +
+    EnvironmentEntry('SystemDrive', ExtractFileDrive(ExpandConstant('{win}'))) +
+    EnvironmentEntry('SystemRoot', ExpandConstant('{win}')) +
     EnvironmentEntry('TEMP', TempFolder) +
     EnvironmentEntry('TMP', TempFolder) +
-    EnvironmentEntry('ProgramFiles', ExpandConstant('{commonpf64}')) +
-    EnvironmentEntry('ProgramW6432', ExpandConstant('{commonpf64}')) +
-    EnvironmentEntry('ProgramFiles(x86)', ExpandConstant('{commonpf32}')) +
-    EnvironmentEntry('CommonProgramFiles', ExpandConstant('{commoncf64}')) +
-    EnvironmentEntry('CommonProgramW6432', ExpandConstant('{commoncf64}')) +
-    EnvironmentEntry('CommonProgramFiles(x86)', ExpandConstant('{commoncf32}')) +
-    EnvironmentEntry('ProgramData', ExpandConstant('{commonappdata}')) +
-    EnvironmentEntry('ALLUSERSPROFILE', ExpandConstant('{commonappdata}')) +
-    EnvironmentEntry('USERPROFILE', Profile) +
-    EnvironmentEntry('APPDATA', ExpandConstant('{userappdata}')) +
-    EnvironmentEntry('LOCALAPPDATA', ExpandConstant('{localappdata}')) +
+    EnvironmentEntry('USERDOMAIN', Domain) +
     EnvironmentEntry('USERNAME', GetUserNameString) +
-    EnvironmentEntry('COMPUTERNAME', GetComputerNameString) +
-    EnvironmentEntry('OS', 'Windows_NT');
-  Result := Result + #0;
+    EnvironmentEntry('USERPROFILE', Profile) +
+    EnvironmentEntry('windir', ExpandConstant('{win}')) + #0;
 end;
 
 function RunProcess(const FileName, Parameters, TempFolder: String; const TimeoutMilliseconds: DWORD; const StopChildren: Boolean; var ExitCode: DWORD): Boolean; forward;
@@ -113,12 +170,20 @@ function RunProcess(const FileName, Parameters, TempFolder: String; const Timeou
 var
   Startup: TStartupInfo;
   Process: TProcessInformation;
-  Command: String;
+  Command, NativeFile, NativeSystem: String;
   Started: DWORD;
 begin
   Result := False;
   ExitCode := 1;
-  Command := '"' + FileName + '" ' + Parameters;
+  NativeFile := FileName;
+  NativeSystem := ExpandConstant('{sys}');
+  if IsWin64 then
+  begin
+    if CompareText(Copy(FileName, 1, Length(NativeSystem) + 1), NativeSystem + '\') = 0 then
+      NativeFile := ExpandConstant('{sysnative}') + Copy(FileName, Length(NativeSystem) + 1, Length(FileName));
+    NativeSystem := ExpandConstant('{sysnative}');
+  end;
+  Command := '"' + NativeFile + '" ' + Parameters;
   Startup.cb := 68;
   Startup.lpReserved := 0;
   Startup.lpDesktop := 0;
@@ -141,7 +206,7 @@ begin
   Process.hThread := 0;
   Process.dwProcessId := 0;
   Process.dwThreadId := 0;
-  if not CreateProcessW(FileName, Command, 0, 0, False, CREATE_UNICODE_ENVIRONMENT or CREATE_NO_WINDOW, SetupEnvironment(TempFolder), ExpandConstant('{sys}'), Startup, Process) then
+  if not CreateProcessW(NativeFile, Command, 0, 0, False, CREATE_UNICODE_ENVIRONMENT or CREATE_NO_WINDOW, SetupEnvironment(TempFolder), NativeSystem, Startup, Process) then
     exit;
   CloseHandle(Process.hThread);
   try

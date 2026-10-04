@@ -3,7 +3,7 @@ using RooIndustries.OptimizationSuite.Services;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] Scenarios = ["app-host", "app-script", "app-live-script", "app-capability-script"];
+    public static readonly string[] Scenarios = ["app-host", "app-script", "app-live-script"];
 
     static void Check(bool condition, string message)
     {
@@ -25,11 +25,6 @@ static class ChildEnvironmentChecks
             {
                 var result = await new LiveDataService(backend).RunBackendScriptResultAsync("Show-ChildEnvironment.ps1");
                 Check(result.Error is null && result.Value?.Trim() == "child-environment-ok", "The app accepted the script's text answer through LiveDataService.RunScriptCoreAsync: " + result.Value + result.Error);
-            }); break;
-            case "app-capability-script": await Script(mode, "Get-RooIndustriesCapabilityRegistry.ps1", "The app's capability script runner", async (backend, service) =>
-            {
-                var rows = await new CapabilityService(backend).GetCapabilitiesAsync();
-                Check(rows.Count == 1 && rows[0].CapabilityId == "fixture.capability", "The app accepted the registry JSON through CapabilityService.RunScriptAsync");
             }); break;
             default: throw new ArgumentException("Unknown child-environment scenario " + scenario);
         }
@@ -58,7 +53,7 @@ static class ChildEnvironmentChecks
             {
                 "Invoke-ProcessCpuSets.ps1" => "param([string]$Action,[int]$TargetProcessId)\n{0}'{\"status\":\"success\",\"changed\":false,\"restoreAvailable\":false,\"data\":null,\"errors\":[]}'\n",
                 "Show-ChildEnvironment.ps1" => "{0}'child-environment-ok'\n",
-                _ => "{0}'{\"capabilities\":[{\"capabilityId\":\"fixture.capability\",\"family\":\"fixture\",\"displayName\":\"Fixture\",\"frontendLabel\":\"Fixture\",\"frontendTab\":\"Game Tune\",\"riskLevel\":\"low\",\"approvalRequired\":false,\"apply\":{\"status\":\"live\"},\"restore\":{\"status\":\"live\"},\"resolvedAvailability\":{\"available\":true}}]}'\n",
+                _ => throw new ArgumentException("Unknown child-environment script " + name),
             };
             File.WriteAllText(Path.Combine(scripts, name), answer.Replace("{0}", ChildEnv.DumpScript("(Join-Path $PSScriptRoot '" + dump + "')")));
             var overrides = new Dictionary<string, string> { ["ROO_INDUSTRIES_BACKEND_ROOT"] = root };

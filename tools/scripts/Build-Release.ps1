@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$IsccPath = '',
     [string]$OutputRoot = '',
@@ -127,25 +127,10 @@ Invoke-Obfuscar $obfuscar $appOut @('Optimizer.Core.dll', 'RooIndustries.Optimiz
 
 $backend = Join-Path $repoRoot 'backend'
 Copy-ReleaseScripts $repoRoot $stage
-Copy-Tree (Join-Path $backend 'catalogs') (Join-Path $stage 'backend\catalogs') @('windows-tweaks.json', 'firmware-write-tests.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')
-Copy-Tree (Join-Path $backend 'capabilities') (Join-Path $stage 'backend\capabilities') @('*.json')
-Copy-Tree (Join-Path $backend 'profiles') (Join-Path $stage 'backend\profiles') @('*.json')
-$samples = @(
-    'app-classification.sample.json', 'capability-registry.sample.json', 'cleanup-deletion-manifest.sample.json',
-    'dashboard-backend-status.sample.json', 'driver-hardware-summary.sample.json', 'driver-recommendation-catalog.sample.json',
-    'game-session-profile-preview.sample.json', 'game-tune-session-restore-preview.sample.json', 'game-tune-session-status.sample.json', 'installed-app-inventory.sample.json',
-    'leftover-scan-preview.sample.json', 'nvidia-nip-preview.sample.json', 'nvidia-profile-catalog.sample.json',
-    'official-uninstall-preview.sample.json', 'process-classification.sample.json', 'process-governor-session-status.sample.json',
-    'process-inventory.sample.json', 'process-profile-preview.sample.json', 'product-backend-status.sample.json', 'report-summary.sample.json',
-    'stutter-optimization-preview.sample.json', 'telemetry-snapshot.sample.json', 'uninstall-cleanup-execution-plan.sample.json',
-    'uninstall-queue.sample.json'
-)
-Copy-Tree (Join-Path $backend 'samples') (Join-Path $stage 'backend\samples') $samples
-Copy-Tree (Join-Path $backend 'uninstall') (Join-Path $stage 'backend\uninstall') @('*.json')
+Copy-ReleaseData $repoRoot $stage
 foreach ($native in @('CpuSets', 'ProcessGovernor', 'ProcessOutput', 'StandbyMemoryHelper')) {
     Copy-Tree (Join-Path $backend "native\$native") (Join-Path $stage "backend\native\$native") @('*.cs')
 }
-Copy-Tree (Join-Path $repoRoot 'modules') (Join-Path $stage 'modules') @('*.json')
 Copy-Tree (Join-Path $repoRoot 'assets\brand\roo-industries') (Join-Path $stage 'assets\brand\roo-industries') @('favicon-96x96.png', 'web-app-manifest-192x192.png', 'embed_logo.png', 'favicon.ico')
 [IO.File]::WriteAllText((Join-Path $stage 'README-BETA.txt'), [IO.File]::ReadAllText((Join-Path $releaseTools 'README-BETA.txt')).Replace('{Version}', $version), [Text.UTF8Encoding]::new($false))
 
