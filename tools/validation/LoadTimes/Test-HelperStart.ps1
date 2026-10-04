@@ -5,6 +5,7 @@
     [switch]$Before
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
@@ -109,7 +110,9 @@ function Wait-RooIndustriesWindow {
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
+    $children=@(Child-Rows $script:App)
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
+    foreach($child in $children){Stop-ProcessRow $child}
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
 }
@@ -119,7 +122,7 @@ function Data-Root {
     $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
 }
-function Log-Since($before) { $all = @(Log-Lines); if ($all.Count -lt $before) { $all } else { @($all | Select-Object -Skip $before) } }
+function Log-Since($before) { $all = @(Log-Lines); if($before.Count -eq 0){return $all}; $last=[Array]::LastIndexOf([object[]]$all,[object]$before[-1]); if($last -lt 0){throw 'The app log rotated or changed; this check cannot establish its log boundary.'}; @($all | Select-Object -Skip ($last+1)) }
 function Log-Lines { $path = Join-Path (Data-Root) 'logs\app.log'; if (Test-Path -LiteralPath $path) { @(Get-Content -LiteralPath $path -Encoding UTF8) } else { @() } }
 function Flush-Starts {
     foreach ($e in @(Get-Event -SourceIdentifier RooIndustriesHelperStartWatch -ErrorAction SilentlyContinue)) {
@@ -151,7 +154,7 @@ try {
     Log ("check=$Check before=$([bool]$Before) install=$install version=" + (Get-Item $Exe).VersionInfo.ProductVersion)
     Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier RooIndustriesHelperStartWatch | Out-Null
     Remove-Item $stopFile -ErrorAction SilentlyContinue
-    $watcher = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1'), '-OutCsv', (Join-Path $OutDir ($Tag + '-processes.csv')), '-StopFile', $stopFile) -WindowStyle Hidden -PassThru
+    $watcher = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1') + '"'), '-OutCsv', ('"' + (Join-Path $OutDir ($Tag + '-processes.csv')) + '"'), '-StopFile', ('"' + $stopFile + '"')) -WindowStyle Hidden -PassThru
     WaitFor { Test-Path (Join-Path $OutDir ($Tag + '-processes.csv.ready')) } 30 'the process watcher' | Out-Null
     Log ('dotnet.exe candidates on this PC: ' + ((Dotnet-Candidates) -join '; '))
     if (Test-Path -LiteralPath $userDotNet) {
@@ -164,7 +167,7 @@ try {
 
     if ($Check -eq 'override') {
         Check (-not (Test-Path -LiteralPath $noSuchDotNet)) 'the override target does not exist' $noSuchDotNet
-        $logBefore = @(Log-Lines).Count
+        $logBefore = @(Log-Lines)
         $env:ROO_INDUSTRIES_DOTNET_EXE = $noSuchDotNet
         $initialNames = @()
         try {
@@ -201,7 +204,7 @@ try {
         Check (Test-Path -LiteralPath $userDotNet) 'a genuine Microsoft dotnet.exe is installed in the user profile (so a fallback would find it)' ($userDotNet + ' ' + $(if (Test-Path -LiteralPath $userDotNet) { (Get-Item $userDotNet).VersionInfo.ProductVersion } else { '' }))
         Rename-Item -LiteralPath $dll -NewName 'hostpolicy.dll.roo-industries-test-off'; $script:Renamed += $dll
         Log 'renamed hostpolicy.dll to hostpolicy.dll.roo-industries-test-off'
-        $logBefore = @(Log-Lines).Count
+        $logBefore = @(Log-Lines)
         Flush-Starts; $script:Starts.Clear()
         Start-RooIndustriesApp
         Nav 'Windows tweaks'
