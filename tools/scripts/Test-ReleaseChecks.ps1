@@ -10,7 +10,7 @@ function Copy-Sources([string]$Target) {
     foreach ($entry in @(
         @('backend\native\Optimizer.Core', @('*.cs')), @('backend\native\Optimizer.Host', @('*.cs')), @('backend\native\Optimizer.SessionHost', @('*.cs')),
         @('docs\internal\frontend', @('*.cs', '*.xaml')), @('backend\capabilities', @('*.json')), @('backend\profiles', @('*.json')),
-        @('backend\catalogs', @('*.json')), @('modules', @('*.json')), @('tools\release', @('*.iss', '*.txt')), @('backend\scripts', @('*.ps1', '*.cmd')))) {
+        @('backend\catalogs', @('*.json')), @('backend\samples', @('*.json')), @('backend\uninstall', @('*.json')), @('modules', @('*.json')), @('tools\release', @('*.iss', '*.txt')), @('backend\scripts', @('*.ps1', '*.cmd')))) {
         $source = Join-Path $repoRoot $entry[0]
         foreach ($file in (Get-ChildItem -LiteralPath $source -Include $entry[1] -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' })) {
             $destination = Join-Path $Target $file.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
@@ -22,6 +22,7 @@ function Copy-Sources([string]$Target) {
 function New-Stage([string]$Root, [string]$Name) {
     $stage = Join-Path $work $Name
     Copy-ReleaseScripts $Root $stage
+    Copy-ReleaseData $Root $stage
     return $stage
 }
 $work = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-release-checks-' + [Guid]::NewGuid().ToString('N'))
@@ -51,7 +52,7 @@ try {
     Copy-Sources $copy
     $list = Join-Path $copy 'tools\release\shipped-scripts.txt'
     $all = [IO.File]::ReadAllText($list)
-    foreach ($called in @(@('Invoke-ProcessPolicyWorker.ps1', 'application code'), @('OperationState.Common.ps1', 'a shipped script'), @('Start-RooIndustriesHelper.cmd', 'a shipped script'), @('Get-RooIndustriesCapabilityRegistry.ps1', 'application code'))) {
+    foreach ($called in @(@('Invoke-ProcessPolicyWorker.ps1', 'application code'), @('OperationState.Common.ps1', 'a shipped script'), @('Start-RooIndustriesHelper.cmd', 'a shipped script'), @('Get-AppClassification.ps1', 'application code'))) {
         $name = $called[0]
         [IO.File]::WriteAllText($list, (($all -split "`r?`n" | Where-Object { $_ -and $_ -ne $name }) -join "`n") + "`n")
         $short = New-Stage $copy ('short-' + $name)
@@ -66,6 +67,13 @@ try {
     $prose = New-Stage $copy 'prose'
     Assert-ReleaseScripts $copy $prose
     Assert $true 'A sentence or a test reference that mentions a developer script does not count as a call'
+    $catalog = Join-Path $prose 'backend\catalogs\release-check.json'
+    [IO.File]::WriteAllText($catalog, '{"script":"backend/scripts/Get-ProcessPolicyAuditHistory.ps1"}')
+    Assert (Refuses { Assert-ReleaseScripts $copy $prose } 'product calls Get-ProcessPolicyAuditHistory.ps1') 'The build checks a script reference in a staged catalog'
+    Remove-Item -LiteralPath $catalog
+    [IO.File]::WriteAllText((Join-Path $copy 'backend\catalogs\source-only.json'), '{"script":"backend/scripts/Get-ProcessPolicyAuditHistory.ps1"}')
+    Assert-ReleaseScripts $copy $prose
+    Assert $true 'A catalog that is absent from the release cannot require its development scripts'
     [IO.File]::WriteAllText($list, $all + "Not-There.ps1`n")
     Assert (Refuses { New-Stage $copy 'absent' } 'not in backend.scripts') 'The build refuses a list entry that is not a script in the repository'
     [IO.File]::WriteAllText($list, $all + "Test-Planted.ps1`n")
