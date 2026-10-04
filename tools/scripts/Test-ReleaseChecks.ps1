@@ -13,7 +13,7 @@ function Copy-Sources([string]$Target) {
         @('backend\catalogs', @('*.json')), @('modules', @('*.json')), @('tools\release', @('*.iss', '*.txt')), @('backend\scripts', @('*.ps1', '*.cmd')))) {
         $source = Join-Path $repoRoot $entry[0]
         foreach ($file in (Get-ChildItem -LiteralPath $source -Include $entry[1] -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' })) {
-            $destination = Join-Path $Target $file.FullName.Substring($repoRoot.Length).TrimStart('\')
+            $destination = Join-Path $Target $file.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
             [IO.Directory]::CreateDirectory((Split-Path $destination -Parent)) | Out-Null
             Copy-Item -LiteralPath $file.FullName -Destination $destination
         }
@@ -75,6 +75,15 @@ try {
         Assert ((Compare-ReleaseVersion $case[0] $case[1]) -eq $case[2]) ('Version ' + $case[0] + ' compares as ' + $case[2] + ' against ' + $case[1])
     }
     Assert (('0.10.0-beta' -lt '0.9.0-beta') -and (Compare-ReleaseVersion '0.10.0-beta' '0.9.0-beta') -gt 0) 'Release versions compare by number, not as text where 0.10.0 would sort before 0.9.0'
+    foreach ($case in @(@('0.10.0-beta.10', '0.10.0-beta.9', 1), @('0.10.0-beta.9', '0.10.0-beta.10', -1), @('0.10.0-9', '0.10.0-beta', -1), @('0.10.0-beta.1.10', '0.10.0-beta.1.9', 1), @('0.10.0-beta.a', '0.10.0-beta.A', 1), @('0.10.0-beta.1', '0.10.0-beta.1.a', -1), @('0.10.0-beta.99999999999999999999', '0.10.0-beta.9999999999999999999', 1))) {
+        Assert ((Compare-ReleaseVersion $case[0] $case[1]) -eq $case[2]) ('Prerelease ' + $case[0] + ' compares as ' + $case[2] + ' against ' + $case[1])
+    }
+    foreach ($invalid in @('0.10.0-beta..1', '0.10.0-beta.01', '0.10.0-beta.')) {
+        Assert (Refuses { Compare-ReleaseVersion $invalid '0.10.0-beta' } 'not a release version') ('Invalid prerelease ' + $invalid + ' is refused')
+    }
+    [IO.File]::WriteAllText((Join-Path $copy 'tools\release\released-versions.txt'), "0.10.0-beta.9`n")
+    Assert-ReleaseVersion $copy '0.10.0-beta.10'
+    Assert (Refuses { Assert-ReleaseVersion $copy '0.10.0-beta.8' } 'not newer') 'The release gate accepts beta.10 after beta.9 and refuses beta.8'
     $project = [xml](Get-Content -LiteralPath (Join-Path $repoRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj') -Raw)
     $version = @($project.Project.PropertyGroup | ForEach-Object { $_.SelectSingleNode('Version') } | Where-Object { $_ })[0].InnerText
     Assert-ReleaseVersion $repoRoot $version

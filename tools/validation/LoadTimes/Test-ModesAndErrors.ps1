@@ -157,10 +157,11 @@ try {
 
     Disable-Script $inventory; Disable-Script $classification
     Nav 'Home'; Start-Sleep 4; Nav 'Memory'
-    Check (Eventually { Memory-Error } 60) 'a revisit whose reads both fail shows the error panel instead of the old list' ''
+    Check (Eventually { (Memory-Loaded) -and (Visible (ById 'PageRefreshNotice')) -and (Visible (ById 'PageRefreshRetry')) } 60) 'a failed quiet refresh keeps the Memory page visible with an out-of-date notice and Refresh' ''
+    Shot 'memory-out-of-date'
     Restore-Script $inventory; Restore-Script $classification
-    Invoke-Element (WaitFor { $b = ById 'MemoryRetry'; if (Visible $b) { $b } } 10 'Retry button')
-    Check (Eventually { (Memory-Loaded) -and -not (Memory-Note) } 60) 'Retry after restoring both scripts loads the full page' ''
+    Invoke-Element (WaitFor { $b = ById 'PageRefreshRetry'; if (Visible $b) { $b } } 10 'Refresh button')
+    Check (Eventually { (Memory-Loaded) -and -not (Memory-Note) -and -not (Visible (ById 'PageRefreshNotice')) } 60) 'Refresh after restoring both scripts loads the full page and clears the out-of-date notice' ''
     Shot 'memory-retry-loaded'
 
     $flag = Join-Path $env:TEMP 'roo-industries-feature-hang.flag'

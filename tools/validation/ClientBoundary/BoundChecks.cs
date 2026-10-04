@@ -47,7 +47,7 @@ static class BoundChecks
         typeof(PolicyRootLease).GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(lease, handle);
         typeof(PolicyRootLease).GetField("_opened", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(lease, opened);
         typeof(OptimizerService).GetField("_storageLease", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(service, lease);
-        foreach (var name in new[] { "GovernorTimeout", "TweakPreviewTimeout", "TweakApplyTimeout" })
+        foreach (var name in new[] { "GovernorTimeout", "TweakPreviewTimeout", "TweakApplyTimeout", "HostReadTimeout" })
             typeof(OptimizerService).GetProperty(name)?.SetValue(service, Bound);
         return service;
     }
@@ -136,6 +136,19 @@ static class BoundChecks
         }
         try
         {
+            await Scenario("An ordinary Host read that hangs is bounded, its process tree exits, and retry succeeds", async () =>
+            {
+                var state = NewState("read-timeout");
+                var hang = Path.Combine(state, "host-hang");
+                File.WriteAllText(hang, "");
+                var service = Service(state);
+                var (first, _, finished) = await Call(() => service.ReadRulesAsync());
+                var gone = await TreeGone(Path.Combine(state, "host-pids.txt"));
+                File.Delete(hang);
+                var (second, rules, retried) = await Call(() => service.ReadRulesAsync());
+                var calls = File.ReadAllLines(Path.Combine(state, "host-calls.log"));
+                return finished && TimedOut(first) && gone && retried && second is null && rules is { Length: 0 } && calls.Length == 2 && !DataGeneration.Changing;
+            });
             await Scenario("Governor worker call that never answers is stopped with the timed-out message, its whole process tree is gone and no change stays marked", async () =>
             {
                 var state = NewState("worker-timeout");

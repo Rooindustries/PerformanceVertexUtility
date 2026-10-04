@@ -87,6 +87,8 @@ public sealed partial class WindowsTweaksPage : Page, IRevalidatingPage
             };
             start.UseShellExecute = false;
             RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
+            if (action == "cleanup")
+                start.Environment["TEMP"] = start.Environment["TMP"] = RooIndustries.Optimizer.RuntimeEnvironment.ExpandUserVariables("%TEMP%");
             using var process = Process.Start(start);
         }
         catch (Exception error) { ViewModel.Status = "Couldn't open this Windows tool."; ViewModel.Detail = error.Message; }
