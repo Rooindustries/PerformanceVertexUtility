@@ -26,6 +26,9 @@ try {
         if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType Directory -Path $path | Out-Null; $created.Add($path); Log "created $path for the check" }
         $paths[$key] = $path
     }
+    $timerState = Join-Path $local 'RooIndustriesOptimizationSuite.Timer'
+    $timerStateExists = Test-Path -LiteralPath $timerState
+    if ($timerStateExists) { $paths['timerState'] = $timerState } else { Log ('SKIPPED the sign-in timer state folder checks :: ' + $timerState + ' does not exist; it appears only after the sign-in timer has run on this PC') }
     $report = [ordered]@{}
     foreach ($key in $paths.Keys) {
         $acl = Get-Acl -LiteralPath $paths[$key]
@@ -37,8 +40,13 @@ try {
         $report[$key] = [ordered]@{ path = $paths[$key]; owner = $owner; ownerName = $acl.Owner; protected = $acl.AreAccessRulesProtected; rules = $rules; icacls = @(& icacls.exe $paths[$key] 2>&1 | ForEach-Object { [string]$_ }) }
         $writers = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.AccessControlType -eq 'Allow' -and $trusted -notcontains $_.IdentityReference.Value -and (([int64]$_.FileSystemRights -band $writeMask) -ne 0) } | ForEach-Object { $_.IdentityReference.Value })
         $reads = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -eq $user -and (([int64]$_.FileSystemRights -band 1) -ne 0) }).Count -gt 0
-        if ($key -eq 'timer') {
-            Check (@($writers | Where-Object { $_ -ne $user }).Count -eq 0 -and $writers -contains $user) 'operations\windows-timer is the one folder the signed-in user can write' ("owner=$owner writers=" + ($writers -join ','))
+        if ($key -eq 'timerState') {
+            $info = Get-Item -LiteralPath $paths[$key] -Force
+            $inside = ([IO.Path]::GetFullPath($paths[$key]).TrimEnd('\') + '\').StartsWith([IO.Path]::GetFullPath($root).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+            Check (-not $info.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint) -and $info.PSIsContainer -and -not $inside) 'the sign-in timer state folder is a plain folder outside the protected data folder' ("path=" + $paths[$key] + " attributes=" + $info.Attributes + " insideDataRoot=$inside")
+            $uacOff = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction SilentlyContinue).EnableLUA -eq 0
+            $ownedByUser = $owner -eq $user -or ($uacOff -and $owner -eq 'S-1-5-32-544')
+            Check ($ownedByUser -and @($writers | Where-Object { $_ -ne $user }).Count -eq 0 -and $writers -contains $user) ('the sign-in timer state folder is owned by the signed-in user' + $(if ($uacOff) { ' (UAC is off on this PC, so the user''s own elevated worker owns what it creates as Administrators)' } else { '' }) + ', who is the only one besides Administrators and SYSTEM that can write it') ("owner=$owner uacOff=$uacOff writers=" + ($writers -join ','))
         } else {
             Check ($trusted -contains $owner -and $writers.Count -eq 0 -and $reads) "$key is owned by Administrators or SYSTEM, only they can write, and the signed-in user can read" ("owner=$owner protected=" + $acl.AreAccessRulesProtected + " writers=" + ($writers -join ',') + " userRead=$reads")
         }
@@ -70,8 +78,8 @@ try { `$out['logRead']='READ '+@(Get-Content -LiteralPath '$log' -TotalCount 1 -
     Check ((@($standard.groups) -join ' ') -match 'deny only') 'runas /trustlevel:0x20000 gave a standard token (Administrators deny-only)' (@($standard.groups) -join ' ')
     foreach ($key in $paths.Keys) {
         $value = [string]$standard.$key
-        if ($key -eq 'timer') {
-            Check ($value -like 'WROTE *') 'a standard token can write operations\windows-timer' $value
+        if ($key -eq 'timerState') {
+            Check ($value -like 'WROTE *') 'a standard token can write the sign-in timer state folder, the only user-writable place' $value
             if ($value -like 'WROTE *') { Remove-Item -LiteralPath $value.Substring(6) -Force }
         } else {
             Check ($value -like 'DENIED *' -and $value -match 'denied') "a standard token is denied writing into $key" $value

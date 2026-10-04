@@ -10,6 +10,7 @@
     [string]$GcDump
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
@@ -66,12 +67,12 @@ function Get-Descendants([int]$root) {
     return $found
 }
 function Stop-App {
-    $helpers = if ($script:App -and -not $script:App.HasExited) { @(Get-Descendants $script:App.Id) } else { @() }
+    $helpers = if ($script:App -and -not $script:App.HasExited) { @(Get-Descendants $script:App.Id | ForEach-Object {Process-Row $_}) } else { @() }
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Log 'app did not exit in 20 s; killing'; $script:App.Kill() } }
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    foreach ($id in $helpers) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+    foreach ($row in $helpers) { Stop-ProcessRow $row }
     if ($helpers.Count) { Log ('stopped leftover helper processes: ' + $helpers.Count) }
-    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" | Where-Object { $_.CommandLine -match 'README' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" | Where-Object { $_.CommandLine -match [regex]::Escape((Join-Path (Split-Path (Split-Path $Exe -Parent) -Parent) 'README')) } | ForEach-Object { Stop-ProcessRow $_ }
     $script:App = $null; $script:Win = $null
     Start-Sleep -Milliseconds 800
 }
@@ -185,7 +186,7 @@ $procmon = $null
 try {
     Log "START label=$Label exe=$Exe version=$((Get-Item $Exe).VersionInfo.ProductVersion)"
     $stopFile = Join-Path $OutDir 'procmon.stop'; Remove-Item $stopFile -ErrorAction SilentlyContinue
-    $procmon = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1'), '-OutCsv', (Join-Path $OutDir 'processes.csv'), '-StopFile', $stopFile) -WindowStyle Hidden -PassThru
+    $procmon = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'Watch-HelperProcesses.ps1') + '"'), '-OutCsv', ('"' + (Join-Path $OutDir 'processes.csv') + '"'), '-StopFile', ('"' + $stopFile + '"')) -WindowStyle Hidden -PassThru
     Start-Sleep 3
     Wake
     for ($run = 1; $run -le $ColdRuns; $run++) {

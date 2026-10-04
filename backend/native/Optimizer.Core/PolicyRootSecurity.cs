@@ -221,6 +221,13 @@ public static class PolicyRootSecurity
 #endif
     }
 
+    private static void StrayPause()
+    {
+#if GOVERNOR_TEST_HOOKS
+        if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MIGRATION_STRAY_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 5000));
+#endif
+    }
+
     private static void Migrate(string root, string parent, string name, SecurityIdentifier user, ProtectedFolder kind)
     {
         var run = new Run();
@@ -268,6 +275,7 @@ public static class PolicyRootSecurity
             {
                 var stray = Path.Combine(parent, name + ".stray-" + Guid.NewGuid().ToString("N"));
                 MoveAway(root, stray); strays.Add(stray);
+                StrayPause();
             }
         }
         Pause("attached");
@@ -317,6 +325,7 @@ public static class PolicyRootSecurity
         {
             var stray = Path.Combine(parent, name + ".stray-" + Guid.NewGuid().ToString("N"));
             MoveAway(root, stray); strays.Add(stray);
+            StrayPause();
             try { Directory.Move(complete, root); break; }
             catch (IOException) when (Directory.Exists(root) && attempt < StrayLimit) { }
         }

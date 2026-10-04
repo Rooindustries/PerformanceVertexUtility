@@ -65,10 +65,13 @@ public sealed class LiveDataService
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
     private readonly Lazy<OptimizerService> _operations;
 
-    public LiveDataService(BackendLocator locator, string? recoveryDirectory = null)
+    private readonly string? _operationsRoot;
+
+    public LiveDataService(BackendLocator locator, string? recoveryDirectory = null, string? operationsRoot = null)
     {
         _locator = locator;
-        _operations = new(() => new OptimizerService(locator));
+        _operationsRoot = operationsRoot;
+        _operations = new(() => new OptimizerService(locator, operationsRoot));
         _recoveryDirectory = recoveryDirectory ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings");
         _recoveryKey = Path.GetFullPath(_recoveryDirectory);
     }
@@ -579,6 +582,7 @@ public sealed class LiveDataService
                 " -ExactTargetAllowlist " + QuotePowerShellArray(cleanupTargets) +
                 " -BackupRoot " + QuotePowerShell(Path.Combine(runRoot, "backup")) +
                 " -RollbackManifestPath " + QuotePowerShell(Path.Combine(runRoot, "rollback-manifest.json"));
+            if (_operationsRoot is not null) args += " -DataRoot " + QuotePowerShell(Path.GetDirectoryName(Path.GetFullPath(_operationsRoot))!);
 
             if (!string.IsNullOrWhiteSpace(officialExecutable))
             {

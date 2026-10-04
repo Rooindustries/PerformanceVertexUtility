@@ -31,6 +31,10 @@ function Set-Worker([string]$Status){
     $body="param([string]`$Action,[string]`$PolicyRoot,[string]`$HostDirectory,[switch]`$ConfirmApply)`r`n# 'Sync'`r`n"+'[pscustomobject]@{schemaVersion=1;status='''+$Status+''';data=[pscustomobject]@{registered=$true;enabled=$true;paused=$false;worker=[pscustomobject]@{hostRunning=$true}};errors=@([pscustomobject]@{message=''forced '+$Status+'''})}|ConvertTo-Json -Depth 5'
     [IO.File]::WriteAllText((Join-Path $appRoot 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'),$body,[Text.UTF8Encoding]::new($true))
 }
+function Set-SilentWorker {
+    $body="param([string]`$Action,[string]`$PolicyRoot,[string]`$HostDirectory,[switch]`$ConfirmApply)`r`n# 'Sync'`r`n"
+    [IO.File]::WriteAllText((Join-Path $appRoot 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'),$body,[Text.UTF8Encoding]::new($true))
+}
 function New-GovernorAction([string]$Root){return New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',(Join-Path $Root 'worker-request.json')) $hostDirectory}
 function Register-Governor([string]$Name,$Description,$Action){
     $principal=New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
@@ -251,6 +255,14 @@ try {
     $run=Invoke-Setup 'silent-helper-suspend' 'Suspend' '' $setup.Id
     Check ($run.exit -eq 0 -and $run.log -match 'policy-status failed \(exit 3\): helper failed on purpose' -and $run.log -notmatch 'Cannot bind argument') 'When the helper exits with an error and prints nothing, setup reports the helper''s own failure instead of a parser error' ("exit="+$run.exit+" "+$run.log)
     $resume=Invoke-Setup 'silent-helper-resume' 'Resume' '' $setup.Id
+    Set-Fixture $false $true $false
+    Set-SilentWorker
+    $null=Invoke-Setup 'silent-worker-suspend' 'Suspend' '' $setup.Id
+    $run=Invoke-Setup 'silent-worker-resume' 'Resume' '' $setup.Id
+    Check ($run.exit -ne 0 -and $null -ne (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue) -and $run.log -match 'Could not resume the governor for .*: Sync failed: the helper printed nothing' -and $run.log -notmatch 'Cannot bind argument') 'When the governor worker prints nothing, Resume reports that instead of a parser error and keeps the recovery task' ("exit="+$run.exit+" "+$run.log)
+    $run=Invoke-Setup 'silent-worker-remove' 'Remove' '' $setup.Id
+    Check ($run.log -match 'Could not stop the governor cleanly for .*: Remove failed: the helper printed nothing' -and $run.log -notmatch 'Cannot bind argument') 'When the governor worker prints nothing, Remove reports that instead of a parser error' ("exit="+$run.exit+" "+$run.log)
+    Register-FakeGovernor
     Remove-Item -LiteralPath $hostExe -Force -ErrorAction SilentlyContinue
     $direct=New-ScheduledTaskAction -Execute (Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe') -Argument ('--headless "'+$hostExe+'" policy-run "'+(Join-Path $policyRoot 'worker-request.json')+'"') -WorkingDirectory $hostDirectory
     $earlier=@(

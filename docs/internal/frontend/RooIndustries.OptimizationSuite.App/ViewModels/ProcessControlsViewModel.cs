@@ -317,7 +317,9 @@ public partial class ProcessControlsViewModel : ObservableObject
     public bool CanApply => !Busy && _review is not null && !RestoreAvailable;
     public bool CanRestore => !Busy && RestoreAvailable;
     public bool HasReview => _review is not null;
-    public bool CanSaveRule => CanApply && !string.IsNullOrWhiteSpace(RuleName);
+    public string RuleBlocker => string.Join(" ", Controls.Where(row => row.Selected.Value is not null).Select(row => ProcessPolicyStore.UnsavableReason(row.Name, row.Selected.Value!.Value)).Where(reason => reason is not null).Distinct());
+    public bool HasRuleBlocker => HasReview && RuleBlocker.Length > 0;
+    public bool CanSaveRule => CanApply && !string.IsNullOrWhiteSpace(RuleName) && RuleBlocker.Length == 0;
     public bool CanManageRule => !Busy && SelectedRule is not null;
     public bool CanPauseGovernor => !Busy && GovernorState is "running" or "pausing" or "stopped" or "notResponding";
     public bool CanStartGovernor => !Busy && (GovernorState is "paused" or "pausing" or "stopped" or "notResponding" || GovernorState == "running" && _signInAtRisk);
@@ -779,7 +781,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()
     {
-        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore), nameof(CanRemoveDamagedRule) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(RuleBlocker), nameof(HasRuleBlocker), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore), nameof(CanRemoveDamagedRule) }) OnPropertyChanged(property);
     }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static ControlOption Option<T>(string label, T value) => new(label, Value(value));

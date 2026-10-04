@@ -62,7 +62,9 @@ public static class OperationsFolder
 
     public static PolicyRootLease Lease(string root) => PolicyRootLease.Acquire(root, Kind, deep: false);
 
-    public static PolicyRootLease LeaseContaining(string path)
+    public static PolicyRootLease LeaseContaining(string path) => Lease(ContainingRoot(path));
+
+    public static string ContainingRoot(string path)
     {
         var full = PolicyRootSecurity.Normalize(path);
         for (var directory = Path.GetDirectoryName(full); directory is not null; directory = Path.GetDirectoryName(directory))
@@ -70,7 +72,7 @@ public static class OperationsFolder
             if (!Directory.Exists(directory)) continue;
             if (PolicyRootSecurity.WriterOf(directory) is not null) break;
             if (PolicyRootSecurity.Problem(directory, Kind, deep: false) is not null) continue;
-            return Lease(directory);
+            return directory;
         }
         throw new UnauthorizedAccessException("The game session folder is not inside the app's protected recovery folder. Open the app as an administrator and try again.");
     }

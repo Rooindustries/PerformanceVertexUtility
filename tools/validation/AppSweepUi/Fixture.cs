@@ -229,8 +229,9 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? FindLastJournal(string kind) => null;
         public Task<ProcessControlSnapshot> ReadProcessControlsAsync(int processId)
             => Task.FromResult(ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
+        public Func<Dictionary<string, JsonElement>, ProcessControlReview>? Review { get; set; }
         public Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
-            => throw new InvalidOperationException("Unexpected preview call.");
+            => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");
         public Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
             => throw new InvalidOperationException("Unexpected apply call.");
         public Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)

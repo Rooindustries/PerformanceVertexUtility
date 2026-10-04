@@ -146,7 +146,7 @@ public sealed class ProtectedSessions
             Thread.Sleep(Math.Min(gatePause, 10000));
         }
 #endif
-        using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
+        using var launcherLease = OperationFiles.Lock(Path.Combine(OperationsFolder.ContainingRoot(root), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
         using var imageLease = ImageMutex(plan.GamePath);
         AcquireImage(imageLease, recovering: false);
         try

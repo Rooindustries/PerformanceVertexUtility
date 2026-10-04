@@ -133,6 +133,11 @@ switch($Phase){
         $s=Describe-State;$out.state=$s
         Check ($s.appRunning -eq 0) 'The desktop app is not running'
         Check ($s.hostRunning -eq $true -and @($s.workers).Count -eq 1) 'Exactly one governor worker is running and its identity is live'
+        Check (@($s.workers).Count -eq 1 -and $s.workers[0].path -ieq $hostExe -and $hostExe.StartsWith('C:\Program Files\',[StringComparison]::OrdinalIgnoreCase)) 'The governor worker runs from the installed Optimizer.Host.exe under C:\Program Files'
+        $workerRow=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$s.hostPid) -ErrorAction SilentlyContinue
+        $launcherRow=if($workerRow){Get-CimInstance Win32_Process -Filter ('ProcessId='+$workerRow.ParentProcessId) -ErrorAction SilentlyContinue}
+        $consoleRow=if($launcherRow){Get-CimInstance Win32_Process -Filter ('ProcessId='+$launcherRow.ParentProcessId) -ErrorAction SilentlyContinue}
+        Check ($launcherRow -and $consoleRow -and $launcherRow.Name -eq 'cmd.exe' -and $launcherRow.CommandLine -match 'Start-RooIndustriesHelper\.cmd' -and $consoleRow.Name -eq 'conhost.exe' -and $consoleRow.CommandLine -match '--headless') 'The governor worker was started through the clean launcher under a hidden console host'
         . (Join-Path $app 'backend\scripts\BrandCompatibility.Common.ps1')
         Check (@($s.tasks).Count -eq 1 -and $s.tasks[0].state -ne 'Disabled' -and $s.tasks[0].execute -like '*\conhost.exe' -and $s.tasks[0].arguments -ceq (New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',(Join-Path $policyRoot 'worker-request.json')) (Split-Path $hostExe -Parent)).Arguments -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskLogonTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1 -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskTimeTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1) 'One enabled governor task runs the installed host headless with sign-in and one-minute triggers'
         Check ($s.rootOwner -eq 'BUILTIN\Administrators' -and $s.rootProtected -and @($s.rootAccess|Where-Object {$_ -match 'FullControl' -and $_ -notmatch '^(NT AUTHORITY\\SYSTEM|BUILTIN\\Administrators):'}).Count -eq 0) 'The rules folder is owned by Administrators with no inherited or user write access'
@@ -281,6 +286,9 @@ switch($Phase){
         Check (@($s.workers).Count -eq 0) 'No governor process is left'
         Check (-not (Test-Path -LiteralPath $app)) 'The app folder is gone'
         Check (@($s.ruleFiles|Where-Object {$_.name -eq ($state.ruleId+'.json')}).Count -eq 1) 'Uninstall kept the saved rules'
+        $keptMarkers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+        Check (Test-Path -LiteralPath (Join-Path $dataRoot 'operations') -PathType Container) 'Uninstall kept the operations folder with its journals'
+        Check ($null -ne $keptMarkers -and $null -ne $keptMarkers.GetValue($dataRoot.ToUpperInvariant())) 'Uninstall kept the data folder protection marker'
         if($probe){Check (Same (Read-Controls $probe) $state.original) 'Uninstall gave the running probe its original 8 controls back'}else{Check $false 'The long-running probe is still alive to verify restoration'}
     }
     'cleanup' {

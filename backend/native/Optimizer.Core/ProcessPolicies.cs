@@ -466,14 +466,18 @@ public sealed class ProcessPolicyStore
         if (rule.CpuSelection is { } selection) ValidateSelection(selection);
     }
 
+    public static string? UnsavableReason(string name, JsonElement value) => name switch
+    {
+        "cpuPriority" when value.ValueKind == JsonValueKind.String && value.GetString() == "Realtime" => "Realtime CPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.",
+        "gpuPriority" when value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var level) && level == 5 => "Realtime GPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.",
+        _ => null,
+    };
+
     private static void RequireSavable(string name, JsonElement value)
     {
+        if (UnsavableReason(name, value) is { } reason) throw new InvalidDataException(reason);
         switch (name)
         {
-            case "cpuPriority" when value.GetString() == "Realtime":
-                throw new InvalidDataException("Realtime CPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.");
-            case "gpuPriority" when value.GetInt32() == 5:
-                throw new InvalidDataException("Realtime GPU priority can freeze the PC, so saved rules do not allow it. Choose High or lower.");
             case "executionQoS":
                 var power = value.Deserialize<PowerThrottling>(OperationFiles.Json) ?? throw new InvalidDataException("Missing QoS state.");
                 if (((power.ControlMask | power.StateMask) & ~5u) != 0)

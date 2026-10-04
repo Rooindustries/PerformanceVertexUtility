@@ -53,3 +53,4 @@ try {
     if(Test-Path -LiteralPath $work){Remove-ScenarioTree $work}
 }
 Write-Output ('SUMMARY '+($selected.Count-$failed)+' of '+$selected.Count+' scenarios passed')
+if($failed -gt 0){exit 1}

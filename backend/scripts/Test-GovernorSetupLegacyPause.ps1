@@ -13,8 +13,8 @@ $local=[Environment]::GetFolderPath('LocalApplicationData')
 $app=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-setup-legacy-'+$id)
 $script=Join-Path $PSScriptRoot 'Invoke-GovernorSetup.ps1'
 $cases=@(
-    @{label='plain';task='RooIndustriesOptimizationSuite.ProcessRules.'+$id+'A';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-a'));link=$false},
-    @{label='junction';task='RooIndustriesOptimizationSuite.ProcessRules.'+$id+'B';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-b'));link=$true}
+    @{label='plain';task=(('RooIndustriesOptimizationSuite' -replace 'Industries','')+'.ProcessRules.'+$id)+'A';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-a'));link=$false},
+    @{label='junction';task=(('RooIndustriesOptimizationSuite' -replace 'Industries','')+'.ProcessRules.'+$id)+'B';root=(Join-Path $local ('RooIndustriesDataFix-setup-'+$id+'-b'));link=$true}
 )
 try {
     [IO.Directory]::CreateDirectory((Join-Path $app 'backend\bin\optimizer'))|Out-Null
