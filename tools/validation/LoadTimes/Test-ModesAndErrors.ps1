@@ -3,6 +3,7 @@
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
@@ -64,7 +65,9 @@ function Start-RooIndustriesApp {
     WaitFor { Named 'Start here' } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
+    $children=@(Child-Rows $script:App)
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
+    foreach($child in $children){Stop-ProcessRow $child}
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
 }
@@ -174,7 +177,7 @@ try {
     $launched = [Diagnostics.Stopwatch]::StartNew()
     try { Start-RooIndustriesApp } finally { Remove-Item Env:ROO_INDUSTRIES_TEST_FEATURE_HANG -ErrorAction SilentlyContinue }
     if (-not (Eventually { (Hook-Count) -gt $hookBefore } 30)) {
-        $script:Skipped++; Log 'SKIPPED the Windows features hang check: this build has no test hooks (build the installer with Build-Release.ps1 -TestHooks)'
+        $script:Skipped++; Log 'NOT RUN the Windows features hang check: it needs a build with test hooks (build the installer with Build-Release.ps1 -TestHooks); a production installer cannot run it'
         Stop-RooIndustriesApp
     }
     else {
@@ -227,7 +230,7 @@ try {
     Check ($secondExited -and $running.Count -eq 1 -and $running[0].Id -eq $first.Id -and -not $first.HasExited) 'a second launch hands over to the open window and exits' ("second exited=" + $secondExited + " app processes=" + $running.Count)
     Check (-not [ModeCheckU32]::IsIconic($firstWindow)) 'the minimized open window is restored after a second launch' ("minimized=" + [ModeCheckU32]::IsIconic($firstWindow) + " foreground is the app window=" + ($foreground -eq $firstWindow) + " (Windows only lets it take the foreground when the second launch had foreground rights; this test launches it from a background task)")
     [ModeCheckU32]::ShowWindow($firstWindow, 9) | Out-Null; [ModeCheckU32]::SetForegroundWindow($firstWindow) | Out-Null; Start-Sleep 1
-    $ownershipFile = Join-Path $env:TEMP 'roo-industries-ownership-probe.txt'
+    $ownershipFile = Join-Path (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp') 'roo-industries-ownership-probe.txt'
     'x' | Set-Content $ownershipFile
     $third = Start-Process $Exe -ArgumentList '--ownership-review', ('"' + $ownershipFile + '"') -PassThru
     $thirdExited = $third.WaitForExit(30000)
@@ -235,15 +238,15 @@ try {
     Check ($thirdExited -and $opened) 'a second launch with --ownership-review opens that review in the open window' ("second exited=" + $thirdExited + " status=" + $(if (ById 'WindowsTweaksStatus') { (ById 'WindowsTweaksStatus').Current.Name } else { '<none>' }))
     Shot 'second-launch-ownership'
     Remove-Item $ownershipFile -Force -ErrorAction SilentlyContinue
-    if (-not $thirdExited) { Stop-Process -Id $third.Id -Force -ErrorAction SilentlyContinue }
-    if (-not $secondExited) { Stop-Process -Id $second.Id -Force -ErrorAction SilentlyContinue }
+    if (-not $thirdExited) { $third.Kill() }
+    if (-not $secondExited) { $second.Kill() }
     Get-Process RooIndustries.OptimizationSuite.App -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $first.Id } | Stop-Process -Force -ErrorAction SilentlyContinue
 
     Nav 'Games'
     $tab = WaitFor { ById 'BackgroundTab' } 30 'Background apps tab'
     Invoke-Element $tab; Start-Sleep 2
     $scroller = try { WaitFor { @($script:Win.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::IsScrollPatternAvailableProperty, $true)) | Where-Object { -not $_.Current.IsOffscreen -and $_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable -and $_.Current.BoundingRectangle.Height -gt 300 } | Select-Object -Last 1) } 30 'scrollable Background apps list' } catch { $null }
-    if (-not $scroller) { $script:Skipped++; Log 'SKIPPED the Background apps scroll check: the list is not long enough to scroll on this PC' }
+    if (-not $scroller) { $script:Skipped++; Log 'NOT RUN the Background apps scroll check: the list is not long enough to scroll on this PC' }
     else {
     $scroll = $scroller.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern)
     $scroll.SetScrollPercent(-1, 60); Start-Sleep 1
@@ -256,7 +259,7 @@ try {
     }
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    if ($script:HangFlag) { Remove-Item $script:HangFlag -Force -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '-n 400 127\.0\.0\.1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
+    if ($script:HangFlag) { Remove-Item $script:HangFlag -Force -ErrorAction SilentlyContinue }
     foreach ($path in @($script:Renamed)) { try { Restore-Script $path } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
     if ($null -ne $wasSimple) { try { if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }; Set-Simple $wasSimple | Out-Null } catch { Log ('CLEANUP NEEDED: simple mode ' + $wasSimple) } }
     Stop-RooIndustriesApp

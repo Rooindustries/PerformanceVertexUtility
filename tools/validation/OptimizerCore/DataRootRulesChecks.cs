@@ -216,10 +216,11 @@ static partial class DataFolderChecks
             var running = store.Read(address);
             check(running.Value.GetBoolean(), "The timer starts and the app reads it as active through the per-user state");
             var worker = WorkerId(state);
-            check(worker > 0 && H.Elevated(worker) == false, "The timer worker runs with the signed-in user's normal rights, not elevated (pid " + worker + ")");
+            check(worker > 0 && (H.ShellElevated || H.Elevated(worker) == false), "The timer worker runs with the signed-in user's normal rights, not elevated (pid " + worker + ")" + (H.ShellElevated ? "; the signed-in user's own desktop shell is elevated on this PC (UAC is off), so a normal-rights token does not exist and the worker has the rights of that shell" : ""));
             check(WorkerId(control) == 0 && !File.Exists(Path.Combine(control, "session.json")), "The worker state is not kept in the data folder");
-            check(Directory.Exists(state) && OwnerOf(state) == user && Directory.EnumerateFileSystemEntries(state).All(entry => OwnerOf(entry) == user),
-                "Everything in the per-user state folder was created by the signed-in user, so the elevated app never wrote there: " + string.Join(", ", Directory.EnumerateFileSystemEntries(state).Select(entry => Path.GetFileName(entry) + "=" + OwnerOf(entry))));
+            string[] stateOwners = H.ShellElevated ? [user, "S-1-5-32-544"] : [user];
+            check(Directory.Exists(state) && stateOwners.Contains(OwnerOf(state)) && Directory.EnumerateFileSystemEntries(state).All(entry => stateOwners.Contains(OwnerOf(entry))),
+                "Everything in the per-user state folder was created by the signed-in user, so the elevated app never wrote there" + (H.ShellElevated ? " (this PC's desktop shell is elevated, UAC is off, so the user's own elevated worker owns its files as Administrators)" : "") + ": " + string.Join(", ", Directory.EnumerateFileSystemEntries(state).Select(entry => Path.GetFileName(entry) + "=" + OwnerOf(entry))));
             check(PolicyRootSecurity.WriterOf(control) is null && File.Exists(Path.Combine(control, "launch.json")) && OwnerOf(control) is "S-1-5-32-544" or "S-1-5-18", "The control folder stays administrators-only and holds the launch request");
             store.Write(running, ControlValues.From(false));
             var stopped = store.Read(address);
@@ -283,7 +284,7 @@ static partial class DataFolderChecks
             {
                 var read = new WindowsControlStore().Read(address);
                 var worker = WorkerId(state);
-                check(read.Value.GetBoolean() && worker > 0 && worker != legacy.Id && H.Elevated(worker) == false, "The timer is running again under the new layout with the signed-in user's normal rights (pid " + worker + ")");
+                check(read.Value.GetBoolean() && worker > 0 && worker != legacy.Id && (H.ShellElevated || H.Elevated(worker) == false), "The timer is running again under the new layout with the signed-in user's normal rights (pid " + worker + ")" + (H.ShellElevated ? "; the signed-in user's own desktop shell is elevated on this PC (UAC is off), so the worker has the rights of that shell" : ""));
                 new WindowsControlStore().Write(read, ControlValues.From(false));
                 check(!new WindowsControlStore().Read(address).Value.GetBoolean(), "The restarted timer stops on request");
             }

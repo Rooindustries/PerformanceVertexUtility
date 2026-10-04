@@ -64,6 +64,16 @@ static class DataRootHarness
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
     }
 
+    public static bool ShellElevated
+    {
+        get
+        {
+            var session = System.Diagnostics.Process.GetCurrentProcess().SessionId;
+            var shell = System.Diagnostics.Process.GetProcessesByName("explorer").Where(candidate => candidate.SessionId == session).Select(candidate => candidate.Id).FirstOrDefault();
+            return shell > 0 && Elevated(shell) == true;
+        }
+    }
+
     public static bool? Elevated(int processId)
     {
         try
