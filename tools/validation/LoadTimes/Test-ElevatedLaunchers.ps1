@@ -108,7 +108,9 @@ function Start-RooIndustriesApp {
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
+    $children=@(Child-Rows $script:App)
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
+    foreach($child in $children){Stop-ProcessRow $child}
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 1
 }
@@ -139,6 +141,7 @@ function Unplant-Name {
 function Test-Inheritance {
     $controlPath = Join-Path $env:TEMP 'RooIndustriesEnvironmentControl.exe'
     $controlTask = 'RooIndustries_EnvironmentControl'
+    if((Test-Path -LiteralPath $controlPath) -or (Get-ScheduledTask -TaskName $controlTask -ErrorAction SilentlyContinue)){throw 'A previous environment control exists; it must be recovered before this scenario.'}
     Copy-Item (Join-Path $system 'PING.EXE') $controlPath -Force
     $action = New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "' + $controlPath + '" -n 60 127.0.0.1') -WorkingDirectory $env:TEMP
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Highest
@@ -195,14 +198,14 @@ try {
     $control = [Diagnostics.ProcessStartInfo]::new((Join-Path $system 'PING.EXE'), '-n 20 127.0.0.1'); $control.UseShellExecute = $false; $control.CreateNoWindow = $true
     $control.EnvironmentVariables['DOTNET_STARTUP_HOOKS'] = 'C:\RooIndustriesNoSuchFolder\hook.dll'
     $controlProcess = [Diagnostics.Process]::Start($control)
-    try { $controlEnv = @([LauncherCheckEnv]::Read($controlProcess.Id)) } finally { Stop-Process -Id $controlProcess.Id -Force -ErrorAction SilentlyContinue }
+    try { $controlEnv = @([LauncherCheckEnv]::Read($controlProcess.Id)) } finally { if(-not $controlProcess.HasExited){$controlProcess.Kill()};$controlProcess.Dispose() }
     Check (@($controlEnv | Where-Object { $_ -like 'DOTNET_STARTUP_HOOKS=*' }).Count -eq 1) 'control: the environment reader sees DOTNET_STARTUP_HOOKS in a process that was started with it' ("variables read=" + $controlEnv.Count)
 }
 catch { $script:Failures++; Log ('FATAL list check ' + ($_ | Out-String)) }
 
 if ($Part -in 'both', 'governor') {
     try {
-        $rulesBefore = Policy-Tasks
+        $rulesBefore = @(Policy-Tasks)
         if ($rulesBefore.Count) { throw "A governor task already exists on this PC ($($rulesBefore[0].TaskName)); refusing to add a test rule." }
         Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $probePath -Force
         $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
@@ -229,7 +232,7 @@ if ($Part -in 'both', 'governor') {
         Check ($saved -match '^Rule saved') 'the governor rule was saved through the app' ($saved + ' :: ' + (ById 'ProcessDetail').Current.Name)
         Shot 'rule-saved'
 
-        $tasks = Policy-Tasks
+        $tasks = @(Policy-Tasks)
         Check ($tasks.Count -ge 1) 'at least one governor task exists after saving a rule' ("tasks=$($tasks.Count): " + (($tasks | ForEach-Object { $_.TaskName }) -join ', '))
         foreach ($task in $tasks) {
             $xmlText = Task-Xml $task.TaskName $task.TaskPath
@@ -292,8 +295,8 @@ if ($Part -in 'both', 'governor') {
         Unplant-Name
         foreach ($started in @($probe, $second)) { if ($started) { try { if (-not $started.HasExited) { $started.Kill() } } catch {} } }
         if ($script:RuleSaved) {
-            foreach ($task in Policy-Tasks) { try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed governor task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) } }
-            if ($requestPath) { Policy-Workers $requestPath | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Log 'cleanup: stopped the governor worker of this run' } }
+            foreach ($task in @(Policy-Tasks | Where-Object { $requestPath -and $_.Description.EndsWith((Split-Path $requestPath -Parent),[StringComparison]::OrdinalIgnoreCase) })) { try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed governor task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) } }
+            if ($requestPath) { Policy-Workers $requestPath | ForEach-Object { Stop-ProcessRow $_; Log 'cleanup: stopped the governor worker of this run' } }
             Log ('CLEANUP NEEDED: the rule ' + $ruleName + ' may still be saved; delete it in Games > Processes')
         }
         Remove-Item $probePath -Force -ErrorAction SilentlyContinue
@@ -388,6 +391,7 @@ if ($Part -in 'both', 'session') {
             if ($leftover -and (Test-Path -LiteralPath $leftover)) {
                 $full = [IO.Path]::GetFullPath($leftover)
                 if ((Split-Path $full -Parent) -ine $operationsRoot -or (Split-Path $full -Leaf) -notlike 'game-session-*') { Log ('CLEANUP NEEDED: remove ' + $full + ' (not a game-session folder directly inside the operations folder, so it was not touched)'); continue }
+                if($recoverRoot -and $full -ieq (Split-Path $recoverRoot -Parent)){Log ('CLEANUP NEEDED: recovery failed; retained the session journal at '+$full);continue}
                 try { Copy-Item -LiteralPath $full -Destination (Join-Path $OutDir (Split-Path $full -Leaf)) -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $full -Recurse -Force; Log ('cleanup: removed ' + $full) } catch { Log ('CLEANUP NEEDED: remove ' + $full) }
             }
         }

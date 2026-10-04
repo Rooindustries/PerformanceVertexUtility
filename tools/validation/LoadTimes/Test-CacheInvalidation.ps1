@@ -3,6 +3,7 @@
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
@@ -118,14 +119,16 @@ $script:Cleanup = $null
 $script:App = $null
 $script:RegistryBefore = $null
 function Start-RooIndustriesApp {
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [CacheCheckU32]::ShowWindow($h, 9) | Out-Null; [CacheCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [CacheCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
+    $children=@(Child-Rows $script:App)
     if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
+    foreach($child in $children){Stop-ProcessRow $child}
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 function Select-ComboItem([string]$id, [string]$like) {
@@ -219,7 +222,7 @@ try {
     Check (Wait-Listed 'ProcessPicker' $true 20) 'Processes list shows a process started while the page was cached' ''
     Select-Tab 'GamesTab'
     Nav 'Home'; Start-Sleep 1
-    Stop-Process -Id $probe.Id -Force; $probe.WaitForExit(10000) | Out-Null
+    if(-not $probe.HasExited){$probe.Kill()}; $probe.WaitForExit(10000) | Out-Null
     Start-Sleep 4
     Nav 'Games'; Start-Sleep 1
     Check (Wait-Listed 'GameSessionLauncher' $false 20) 'Games launcher list drops a process that exited while the page was cached' ''
@@ -252,7 +255,7 @@ try {
     while ((Get-Date) -lt $deadline) { $s = ById 'GameSessionStatus'; if ($s -and $s.Current.Name -eq 'Settings changed elsewhere') { $notice = $true; break }; Start-Sleep 1 }
     Check $notice 'the Games tab with a launcher picked says settings changed elsewhere after a change on another page' ("status before=" + $statusBefore + " now=" + (ById 'GameSessionStatus').Current.Name)
     Shot '5-games-notice'
-    Stop-Process -Id $probe2.Id -Force -ErrorAction SilentlyContinue
+    if(-not $probe2.HasExited){$probe2.Kill()}
 
     $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })
     $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -291,7 +294,7 @@ try {
         $rowDeleted = Governor-Row
         Check ($rowDeleted -eq 'No rules') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
         Shot '7-undo-after-delete'
-        Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+        if(-not $probe.HasExited){$probe.Kill()}
     }
     elseif ($ruleTasksBefore.Count -or $policyRoot) {
         $script:Skipped++; Log ('SKIPPED the process rule check: this PC already has saved process rules or a rule task (' + $ruleTasksBefore.Count + ' tasks); the test does not touch them')
@@ -329,7 +332,7 @@ try {
         $left = @(Combo-Items 'ProcessRulesList') -join ' | '
         if ($left -notmatch 'RooIndustriesLoadTimesProbe') { $script:RuleSaved = $false }
         Check (-not $script:RuleSaved) 'the test rule was deleted and the rule worker stopped' $left
-        Stop-Process -Id $probe2.Id -Force -ErrorAction SilentlyContinue
+        if(-not $probe2.HasExited){$probe2.Kill()}
     }
 
     Stop-RooIndustriesApp
@@ -349,7 +352,7 @@ try {
     Check ($seen.Count -gt 0 -and $low.Count -eq 0) 'opening Windows tweaks while its preload runs raises the preload helper processes to normal priority' $summary
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    foreach ($p in @($probe, $probe2)) { if ($p) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
+    foreach ($p in @($probe, $probe2)) { if ($p -and -not $p.HasExited) { $p.Kill() } }
     if ($script:GovernorRule) {
         try {
             if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
@@ -374,17 +377,7 @@ finally {
         } catch { Log ('cleanup: could not delete the test rule: ' + $_.Exception.Message) }
         if ($script:RuleSaved) { Log 'CLEANUP NEEDED: delete the RooIndustriesLoadTimesProbe rule on the Processes tab and stop the rule worker' }
     }
-    if ($script:RuleTest) {
-        Stop-RooIndustriesApp
-        foreach ($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })) {
-            try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed rule task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) }
-        }
-        Get-CimInstance Win32_Process -Filter "Name like 'Optimizer.Host%'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'process-rules|policy' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Log 'cleanup: stopped a rule worker' }
-        foreach ($root in @(Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ })) {
-            try { Remove-Item $root -Recurse -Force; Log 'cleanup: removed the process-rules folder the test created' } catch { Log ('CLEANUP NEEDED: remove ' + $root) }
-        }
-        if (-not $script:RuleSaved -and $script:Cleanup -match 'rule') { $script:Cleanup = $null }
-    }
+    if ($script:RuleTest -and ($script:RuleSaved -or $script:GovernorRule)) {Log 'CLEANUP NEEDED: rule cleanup failed; retained the rules and recovery state for the owner.'}
     if ($null -ne $script:RegistryBefore -and (Transparency) -ne $script:RegistryBefore) {
         try {
             if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }

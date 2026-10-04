@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory=$true)][ValidateSet('preflight','validators','release-build','install-old','upgrade','install-other','static-checks','scenario','setup-fallbacks','uninstall','summary','cleanup')][string]$Phase,
-    [ValidateSet('loadtimes','invalidation','modes','migration-before','migration-after','migration-undo-timer','permissions','hardware','launchers','launchers-session','override','incomplete','incomplete-before')][string]$Scenario='',
+    [ValidateSet('loadtimes','invalidation','modes','migration-before','migration-after','migration-undo-blocker','migration-timer-on','permissions','hardware','launchers','launchers-session','override','incomplete','incomplete-before')][string]$Scenario='',
     [string]$Source=(Join-Path $env:TEMP 'roo-industries-integration-src'),
     [string]$Evidence=(Join-Path $env:TEMP 'roo-industries-integration-evidence'),
     [string]$OldInstaller='',
@@ -9,19 +9,22 @@
     [string]$Label='other',
     [int]$Minutes=45,
     [string[]]$Only=@(),
-    [string[]]$Expect=@('preflight','validators','release-build','install-old','scenario-migration-before','upgrade','scenario-migration-after','static-checks','scenario-permissions','scenario-migration-undo-timer','scenario-launchers','scenario-override','scenario-incomplete','scenario-invalidation','scenario-modes','setup-fallbacks','scenario-hardware','scenario-loadtimes'),
+    [string[]]$Expect=@('preflight','validators','release-build','install-old','scenario-migration-before','upgrade','scenario-migration-after','static-checks','scenario-migration-undo-blocker','scenario-migration-timer-on','scenario-permissions','scenario-launchers','scenario-override','scenario-incomplete','scenario-invalidation','scenario-modes','setup-fallbacks','scenario-hardware','scenario-loadtimes'),
     [switch]$TestHooks,
     [switch]$ReplaceExisting,
     [string]$BuildOutput='',
     [string]$BackupRoot=(Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'roo-industries-backup')
 )
+trap { if($log){Log ('FAIL unhandled exception :: '+$_.Exception.Message)}else{Write-Output ('FAIL unhandled exception :: '+$_.Exception.Message)}; exit 1 }
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+. (Join-Path $PSScriptRoot '..\LoadTimes\LauncherChecks.Common.ps1')
 $app='C:\Program Files\Roo Industries\Optimization Suite'
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $markerKey='HKLM\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
 $stateKey='HKLM\SOFTWARE\RooIndustriesOptimizationSuite'
 $personalize='HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+$blockerFolder=Join-Path $env:ProgramFiles 'LogiDownloadAssistant'
 $ifeoProbe='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
 $productKeys=@('HKLM:\SOFTWARE\RooIndustries\OptimizationSuite','HKLM:\SOFTWARE\RooIndustries')
 $backup=$BackupRoot
@@ -34,19 +37,22 @@ $requiredChecks=@{
     'setup-fallbacks'=@('setup-fallbacks exit 0')
     'release-build'=@('the dynamic binding guard rejected its own fixture during the release build','the dynamic binding guard passed on the four release assemblies','the release build produced a production installer')
     'static-checks'=@('exactly the three shipped runtimeconfig files are installed','startup hooks are off in app\RooIndustries.OptimizationSuite.App.runtimeconfig.json','startup hooks are off in backend\bin\optimizer\Optimizer.Host.runtimeconfig.json','startup hooks are off in backend\bin\optimizer\session\RooIndustries.SessionHost.runtimeconfig.json','control: Optimizer.Host.exe without those variables','control: RooIndustries.SessionHost.exe without those variables','Optimizer.Host.exe refuses to start with DOTNET_STARTUP_HOOKS set','Optimizer.Host.exe refuses to start with CORECLR_ENABLE_PROFILING and CORECLR_PROFILER_PATH set','RooIndustries.SessionHost.exe refuses to start with DOTNET_STARTUP_HOOKS set','RooIndustries.SessionHost.exe refuses to start with CORECLR_ENABLE_PROFILING and CORECLR_PROFILER_PATH set','the installed product has exactly one uninstall entry')
-    'scenario-launchers'=@('the installed launcher clears every code-loading variable','control: the environment reader sees DOTNET_STARTUP_HOOKS','the governor rule was saved through the app','governor task * registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','protected-session task''s registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','control: a task that starts a program directly, with no launcher, inherits the planted DOTNET_STARTUP_HOOKS','governor worker''s own process environment contains none of the','protected session worker''s own process environment contains none of the','governor worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','protected session worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','the governor worker running after the rule was saved','the governor worker image is the installed Optimizer.Host.exe under C:\Program Files','the protected-session worker image is the installed RooIndustries.SessionHost.exe under C:\Program Files','with the app closed the governor applies the saved rule to a matching process that starts later','the protected session is armed and its worker is running','while the session is armed the launcher has the requested affinity, memory priority and I/O priority','the launcher probe has its original affinity, memory priority, I/O priority and CPU priority back after the stop')
+    'scenario-launchers'=@('the installed launcher clears every code-loading variable','control: the environment reader sees DOTNET_STARTUP_HOOKS','the governor rule was saved through the app','governor task * registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','protected-session task''s registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','control: a task that starts a program directly, with no launcher, inherits the planted DOTNET_STARTUP_HOOKS','governor worker''s own process environment contains none of the','protected session worker''s own process environment contains none of the','governor worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','protected session worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','the governor worker is running after the rule was saved','the governor worker image is the installed Optimizer.Host.exe under C:\Program Files','the protected-session worker image is the installed RooIndustries.SessionHost.exe under C:\Program Files','with the app closed the governor applies the saved rule to a matching process that starts later','the protected session is armed and its worker is running','while the session is armed the launcher has the requested affinity, memory priority and I/O priority','the launcher probe has its original affinity, memory priority, I/O priority and CPU priority back after the stop')
     'scenario-launchers-session'=@('the protected-session worker image is the installed RooIndustries.SessionHost.exe under C:\Program Files','control: a task that starts a program directly, with no launcher, inherits the planted DOTNET_STARTUP_HOOKS','protected-session task''s registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','protected session worker''s own process environment contains none of the','protected session worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','the protected session is armed and its worker is running')
     'scenario-override'=@('control: the process trace sees a dotnet.exe that this scenario starts on purpose','the release app still loads the Windows tweaks rows and finishes reading Windows','the override reached the app','the app started Optimizer.Host.exe children whose image is inside the install folder','the app never started a dotnet.exe')
     'scenario-incomplete'=@('control: the process trace sees a dotnet.exe that this scenario starts on purpose','Windows tweaks shows the missing-files message when hostpolicy.dll is missing','the app log has a Missing hostpolicy.dll line','no dotnet.exe was started anywhere on this PC','the installed Invoke-CleanupExclusions.ps1 refuses','the installed Invoke-ProtectedGameSession.ps1 refuses','hostpolicy.dll is back in place')
     'scenario-permissions'=@('runas /trustlevel:0x20000 gave a standard token','root is owned by Administrators or SYSTEM','operations is owned by Administrators or SYSTEM','timer is owned by Administrators or SYSTEM','firmware is owned by Administrators or SYSTEM','tools is owned by Administrators or SYSTEM','settings is owned by Administrators or SYSTEM','rules is owned by Administrators or SYSTEM','a standard token is denied writing into root','a standard token is denied writing into operations','a standard token is denied writing into timer','a standard token is denied writing into firmware','a standard token is denied writing into tools','a standard token is denied writing into settings','a standard token is denied writing into rules','the sign-in timer state folder is a plain folder outside the protected data folder','the sign-in timer state folder is owned by the signed-in user','a standard token can write the sign-in timer state folder')
-    'scenario-migration-before'=@('the earlier version applied the tweak profile','the earlier version saved the governor rule','the earlier version enforces the rule on the probe','the earlier version has a governor task and a running governor worker to replace','the earlier version registered the sign-in timer')
-    'scenario-migration-undo-timer'=@('the new version undoes the sign-in timer applied by the earlier version')
+    'scenario-migration-before'=@('the earlier version applied the tweak profile','the earlier version saved the governor rule','the earlier version enforces the rule on the probe','the earlier version has a governor task and a running governor worker to replace','the earlier version registered the sign-in timer','the earlier version applied the download folder blocker and saved its receipt')
+    'scenario-migration-undo-blocker'=@('the new version undoes the download folder blocker applied by the earlier version')
+    'scenario-migration-timer-on'=@('the new version starts the timer and creates its state folder outside the data folder','the timer worker runs from the installed helper')
     'scenario-migration-after'=@('the probe from before the upgrade is still running','after the upgrade the governor still enforces the earlier rule','the upgraded install has a governor task','upgraded governor task * registered action equals what the installed New-RooIndustriesElevatedTaskAction produces','the governor worker running after the upgrade is the installed new one','upgraded governor worker''s parent is the cmd.exe the registered action starts under conhost.exe --headless','a process started after the upgrade gets the migrated rule from the new governor','the Undo page lists the profile applied by the earlier version','the app asked once whether to use the backup saved by an older version','the sign-in timer of the earlier version is still registered after the upgrade','the new version restores the tweak applied by the earlier version','deleting the migrated rule gives the probe its normal priority back')
 }
 $noSuch='C:\RooIndustriesNoSuchFolder'
 $dotnet=@((Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'))|Where-Object {Test-Path -LiteralPath $_}|Select-Object -First 1
+if($Phase -eq 'preflight' -and (Test-Path -LiteralPath $Evidence) -and @(Get-ChildItem -LiteralPath $Evidence -Force).Count){Move-Item -LiteralPath $Evidence -Destination ($Evidence+'.previous-'+[DateTime]::UtcNow.Ticks)}
 New-Item -ItemType Directory -Force -Path $Evidence|Out-Null
 $log=Join-Path $Evidence (($Phase+$(if($Phase -eq 'scenario'){'-'+$Scenario}elseif($Phase -eq 'install-other'){'-'+$Label}else{''}))+'.log')
+if(Test-Path -LiteralPath $log){Move-Item -LiteralPath $log -Destination ($log+'.previous-'+[DateTime]::UtcNow.Ticks)}
 function Log([string]$Text){$line=[DateTime]::UtcNow.ToString('o')+' '+$Text;Add-Content -LiteralPath $log -Value $line -Encoding UTF8;$line}
 $script:Failures=0
 function Check([bool]$Ok,[string]$Name,[string]$Detail=''){if(-not $Ok){$script:Failures++};Log ($(if($Ok){'PASS '}else{'FAIL '})+$Name+' :: '+$Detail)}
@@ -63,8 +69,8 @@ function Get-DataFolderState {
         $path=Join-Path $local $name
         if(Test-Path -LiteralPath $path){
             $base=(Get-Item -LiteralPath $path -Force).FullName
-            $items=@(Get-Item -LiteralPath $path -Force)+@(Get-ChildItem -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue)
-            $text=(@($items|ForEach-Object {$_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{$_.Length})+'|'+$_.LastWriteTimeUtc.Ticks})|Sort-Object) -join "`n"
+            $items=@(Get-Item -LiteralPath $path -Force)+@(Get-ChildItem -LiteralPath $path -Recurse -Force -ErrorAction Stop)
+            $text=(@($items|ForEach-Object {$(if(($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ('Cannot back up a reparse point: '+$_.FullName)}); $_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{[string]$_.Length+'|sha256='+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash})+'|'+$_.LastWriteTimeUtc.Ticks})|Sort-Object) -join "`n"
             $name+'|'+$items.Count+'|'+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-','')
         } else {$name+'|<missing>'}
     }
@@ -78,15 +84,17 @@ function Run([string]$Name,[scriptblock]$Body,[switch]$GuardData){
     $ErrorActionPreference='Continue'
     $global:LASTEXITCODE=0
     $output=[Collections.Generic.List[string]]::new()
-    try {& $Body 2>&1|ForEach-Object {$output.Add([string]$_)};$code=$LASTEXITCODE}
+    $errors=0
+    try {& $Body 2>&1|ForEach-Object {if($_ -is [Management.Automation.ErrorRecord]){$errors++};$output.Add([string]$_)};$code=$LASTEXITCODE}
     catch {$output.Add(($_|Out-String));$code=1}
     $output|Set-Content -LiteralPath (Join-Path $Evidence ($Phase+'-'+$Name+'.txt')) -Encoding UTF8
+    $ran=if($Name -eq 'build-host'){@($output|Where-Object {$_ -match 'Optimizer.Host ->'}).Count -gt 0 -and @($output|Where-Object {$_ -match 'Optimizer.SessionHost ->'}).Count -gt 0}elseif($Name -eq 'script-parser'){@($output|Where-Object {$_ -match 'PowerShell parser validation passed for [1-9]\d* files'}).Count -gt 0}else{@($output|Where-Object {$_ -cmatch '^PASS '}).Count -gt 0}
     $passes=@($output|Where-Object {$_ -cmatch '^PASS '}).Count
     $fails=@($output|Where-Object {$_ -cmatch '^FAIL '}).Count
     $skips=@($output|Where-Object {$_ -cmatch '^SKIP'})
     $last=@($output|Where-Object {$_.Trim()}|Select-Object -Last 1)
     if($GuardData){$dataAfter=Get-DataFolderState;Check ($dataAfter -eq $dataBefore) ($Name+' left the real data folders and the protection markers as it found them') $(if($dataAfter -ne $dataBefore){(@(Compare-Object ($dataBefore -split "`n") ($dataAfter -split "`n")|Select-Object -First 4|ForEach-Object {$_.SideIndicator+' '+$_.InputObject}) -join ' // ')}else{'same'})}
-    Check ($code -eq 0 -and $fails -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
+    Check ($ran -and $code -eq 0 -and $errors -eq 0 -and $fails -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
 }
 function Uninstall-App {
     $uninstaller=Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue|Select-Object -First 1
@@ -98,7 +106,7 @@ function Uninstall-App {
 }
 function Stop-AfterInstall {
     Start-Sleep -Seconds 3
-    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" -ErrorAction SilentlyContinue|Where-Object {$_.CommandLine -match 'README'}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" -ErrorAction SilentlyContinue|Where-Object {$_.CommandLine -match [regex]::Escape((Join-Path $app 'README'))}|ForEach-Object {Stop-ProcessRow $_}
     Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
 }
 function Get-MachineState {
@@ -119,6 +127,7 @@ function Get-MachineState {
         appFolder=(Test-Path -LiteralPath 'C:\Program Files\Roo Industries')
         enableTransparency=$(if($null -ne $transparency){[string]$transparency}else{'<absent>'})
         ifeoProbeKey=(Test-Path -LiteralPath $ifeoProbe)
+        downloadBlockerFolder=(Test-Path -LiteralPath $blockerFolder)
         localSiblings=@(Get-ChildItem -LiteralPath $local -Directory -Force -ErrorAction SilentlyContinue|Where-Object {$_.Name -match 'OptimizationSuite'}|ForEach-Object Name|Sort-Object)
         userEnvironmentNames=@((Get-Item -LiteralPath $userEnvironment).GetValueNames()|Sort-Object)
     }
@@ -145,10 +154,11 @@ function Get-RegistryFingerprint([string]$Key) {
 function Get-TreeFingerprint([string]$Path) {
     if(-not (Test-Path -LiteralPath $Path)){return @('<missing>')}
     $base=(Get-Item -LiteralPath $Path -Force).FullName
-    $items=@(Get-Item -LiteralPath $Path -Force)+@(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue)
+    $items=@(Get-Item -LiteralPath $Path -Force)+@(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction Stop)
     @($items|ForEach-Object {
+        if(($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ('Cannot back up a reparse point: '+$_.FullName)}
         $acl=Get-Acl -LiteralPath $_.FullName
-        $_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{$_.Length})+'|'+$_.LastWriteTimeUtc.ToString('o')+'|'+[string]$_.Attributes+'|'+$acl.Sddl
+        $_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{[string]$_.Length+'|sha256='+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash})+'|'+$_.LastWriteTimeUtc.ToString('o')+'|'+[string]$_.Attributes+'|'+$acl.Sddl
     }|Sort-Object)
 }
 function Get-InstalledFingerprint {
@@ -178,6 +188,7 @@ function Restore-Folder([string]$Name){
     $path=Join-Path $local $Name
     $saved=Join-Path $backup $Name
     if(-not (Test-Path -LiteralPath $saved)){
+        if(@($baseline.localSiblings) -contains $Name){throw ('The original backup disappeared for '+$Name+'; the live folder is kept unchanged.')}
         if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force;Log "removed $path"}
         Check (-not (Test-Path -LiteralPath $path)) ($Name+' did not exist before this run and is gone now') $path
         return
@@ -197,7 +208,8 @@ function Restore-Folder([string]$Name){
     Check ($difference.Count -eq 0) ('restored '+$Name+' matches the backup (names, sizes, times, attributes, permissions)') ($expected.Count.ToString()+' items; '+$difference.Count+' differ'+$(if($difference.Count){': '+(Show-Difference $expected @(Get-TreeFingerprint $path))}else{''}))
 }
 function Restore-AppData {
-    $before=if(Test-Path -LiteralPath (Join-Path $backup 'machine-state.json')){Get-Content -LiteralPath (Join-Path $backup 'machine-state.json') -Raw|ConvertFrom-Json}
+    if(-not (Test-Path -LiteralPath (Join-Path $backup 'machine-state.json'))){throw 'No baseline machine-state.json; cleanup refuses to alter any data.'}
+    $before=$baseline
     foreach($name in 'RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries',''),'RooIndustriesOptimizationSuite.Timer'){Restore-Folder $name}
     if($before){
         foreach($sibling in @(Get-ChildItem -LiteralPath $local -Directory -Force -ErrorAction SilentlyContinue|Where-Object {$_.Name -match 'OptimizationSuite' -and @($before.localSiblings) -notcontains $_.Name})){Remove-Item -LiteralPath $sibling.FullName -Recurse -Force -ErrorAction SilentlyContinue;Log ('removed '+$sibling.FullName+' (created by this run)')}
@@ -215,19 +227,33 @@ function Restore-AppData {
     else{Log 'Windows tweak state was not backed up by this run; left as it is'}
 }
 
+if($Phase -in 'install-old','install-other','upgrade','uninstall','cleanup','validators'){
+    $baselinePath=Join-Path $backup 'machine-state.json'
+    if(-not (Test-Path -LiteralPath $baselinePath)){throw 'No baseline machine-state.json; this phase refuses to alter the PC.'}
+    $baseline=Get-Content -LiteralPath $baselinePath -Raw|ConvertFrom-Json
+    $requiredState='backupFormat','appFolder','uninstallEntries','localSiblings','tasks','productKeys','enableTransparency','ifeoProbeKey','downloadBlockerFolder','userEnvironmentNames','tweakStateKey','rooHklmFingerprint','hypervisorlaunchtype','vbsStatus','vbsRunning','rebootPendingCbs','rebootRequiredUpdate','pendingFileRenames'
+    if(@($requiredState|Where-Object {$baseline.PSObject.Properties.Name -notcontains $_}).Count){throw 'The baseline is incomplete; this phase keeps the PC unchanged.'}
+    if($baseline.appFolder -isnot [bool] -or $baseline.ifeoProbeKey -isnot [bool] -or $baseline.downloadBlockerFolder -isnot [bool]){throw 'The baseline has invalid state fields; this phase keeps the PC unchanged.'}
+    foreach($name in 'RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries',''),'RooIndustriesOptimizationSuite.Timer'){if(@($baseline.localSiblings) -contains $name -and (-not (Test-Path -LiteralPath (Join-Path $backup $name)) -or -not (Test-Path -LiteralPath (Join-Path $backup ($name+'.fingerprint.txt'))))){throw ('The backup of '+$name+' is missing; no live data will be touched.')}}
+    if($baseline.backupFormat -ne 2){throw 'Historical backup format requires an audited manual restore; this driver keeps it unchanged.'}
+    if($baseline.appFolder -or @($baseline.uninstallEntries).Count){throw 'The as-found installation has no verified rollback source; this phase refuses to remove it.'}
+}
 switch($Phase){
     'preflight' {
+        $probeNames='RooIndustriesMigrationProbe','RooIndustriesLoadTimesProbe','RooIndustriesLauncherProbe','RooIndustriesProtectedLauncherProbe','RooIndustriesProtectedGameProbe','RooIndustriesEnvironmentControl','RooIndustriesGovernorProbe'
+        if(@(Get-Process $probeNames -ErrorAction SilentlyContinue).Count -or @($probeNames|Where-Object {Test-Path -LiteralPath (Join-Path $env:TEMP ($_+'.exe'))}).Count){throw 'A test probe already exists; preserve it and recover the previous run first.'}
         if(@(Get-Process cs2 -ErrorAction SilentlyContinue).Count){throw 'CS2 is running.'}
         $busy=@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*' -or $_.TaskName -like 'RooIndustries_Governor*' -or ($_.TaskName -like 'Roo Industries Protected Session*' -and [string]$_.State -eq 'Running')})
         if($busy.Count){throw ('Other Roo Industries test tasks exist: '+(($busy|ForEach-Object TaskName) -join ', '))}
         if(Test-Path -LiteralPath $backup){throw "A backup from an earlier run is still at $backup; restore it with -Phase cleanup first."}
         if(@((Get-Item -LiteralPath $userEnvironment).GetValueNames()) -contains $plantedName){throw ($plantedName+' is already set in the user environment; the launcher scenarios plant it and would hide it. Remove it first.')}
-        if((Test-Path -LiteralPath (Join-Path $app 'app')) -and -not $ReplaceExisting){throw 'The app is already installed on this PC. This run uninstalls it and cannot put it back; pass -ReplaceExisting to allow that.'}
+        if(Test-Path -LiteralPath (Join-Path $app 'app')){throw 'The app is already installed. This driver has no verified reinstall source for the as-found installation; use a clean test PC.'}
         New-Item -ItemType Directory -Force -Path $backup|Out-Null
         try {
             foreach($name in 'RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries',''),'RooIndustriesOptimizationSuite.Timer'){
                 $path=Join-Path $local $name
                 if(Test-Path -LiteralPath $path){
+                    $liveItems=@(Get-TreeFingerprint $path)
                     $copy=Invoke-Native robocopy.exe @($path,(Join-Path $backup $name),'/E','/COPYALL','/DCOPY:DAT','/XJ','/R:0','/W:0','/NFL','/NDL','/NP');Log ("backed up $path (robocopy exit "+$copy.Exit+')')
                     if($copy.Exit -ge 8){throw ('The backup of '+$path+' failed (robocopy exit '+$copy.Exit+'); nothing was changed.')}
                     $liveItems=@(Get-TreeFingerprint $path);$saved=@(Get-TreeFingerprint (Join-Path $backup $name))
@@ -236,15 +262,17 @@ switch($Phase){
                 }
             }
             $export=Invoke-Native reg.exe @('export',$rooHklm,(Join-Path $backup 'hklm-roo-industries.reg'),'/y')
-            Log ('HKLM\SOFTWARE\RooIndustries export exit '+$export.Exit+$(if($export.Exit -ne 0){' (no such key before this run)'}else{''}))
+            Log ('HKLM\SOFTWARE\RooIndustries export exit '+$export.Exit+$(if($export.Exit -ne 0){' (export failed or key absent)'}else{''}))
             $state=Get-MachineState
             $state.tweakStateKey=Get-RegistryFingerprint $stateKey
             $state.rooHklmFingerprint=Get-RegistryFingerprint $rooHklm
-            if($state.tweakStateKey -ne '<absent>'){$tweakExport=Invoke-Native reg.exe @('export',$stateKey,(Join-Path $backup 'tweak-state.reg'),'/y');Log ('Windows tweak state export exit '+$tweakExport.Exit)}
+            if($state.rooHklmFingerprint -ne '<absent>' -and $export.Exit -ne 0){throw 'Registry backup failed for the existing Roo Industries key.'}
+            if($state.tweakStateKey -ne '<absent>'){$tweakExport=Invoke-Native reg.exe @('export',$stateKey,(Join-Path $backup 'tweak-state.reg'),'/y');Log ('Windows tweak state export exit '+$tweakExport.Exit);if($tweakExport.Exit -ne 0){throw 'Registry backup failed for existing tweak state.'}}
+            $state.backupFormat=2
             $state|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $backup 'machine-state.json') -Encoding UTF8
             Log ('machine state before: '+($state|ConvertTo-Json -Depth 5 -Compress))
             Log ('installed='+(Test-Path -LiteralPath (Join-Path $app 'app'))+' dotnet='+$dotnet)
-        } catch {Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue;throw}
+        } catch {Log ('Backup incomplete; kept at '+$backup+' for inspection.');throw}
     }
     'validators' {
         $env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
@@ -374,18 +402,23 @@ switch($Phase){
         $done=Join-Path $dir $(if($Scenario -eq 'loadtimes'){'measure.done'}else{$Scenario+'.done'})
         $lines=@(if(Test-Path -LiteralPath $scenarioLog){Get-Content -LiteralPath $scenarioLog -Encoding UTF8})
         $passed=@($lines|Where-Object {$_ -cmatch '^\S+ PASS '}).Count
-        $failed=@($lines|Where-Object {$_ -cmatch '^\S+ FAIL '}).Count
-        $skipped=@($lines|Where-Object {$_ -cmatch '^\S+ SKIPPED '})
+        $failed=@($lines|Where-Object {$_ -cmatch '^\S+ (FAIL|FATAL|ERROR) '}).Count
+        $skipped=@($lines|Where-Object {$_ -cmatch '^\S+ (SKIPPED|NOT RUN) '})
         $cleanup=@($lines|Where-Object {$_ -match 'CLEANUP NEEDED'})+@($console|Where-Object {$_ -match 'CLEANUP NEEDED'})
         $result=@($lines|Where-Object {$_ -match 'RESULT failures=(\d+)'})|Select-Object -Last 1
         foreach($line in $lines){
             if($line -cmatch '^\S+ (PASS|FAIL|SKIPPED) (.*)$'){$text=$Matches[2];$length=[Math]::Min(700,$text.Length);Log ($Matches[1]+' '+$text.Substring(0,$length))}
-            elseif($line -cmatch '^\S+ NOT RUN (.*)$'){Log ('NOTE not run: '+$Matches[1])}
+            elseif($line -cmatch '^\S+ NOT RUN (.*)$'){Log ('SKIPPED '+$Matches[1])}
         }
         if($Scenario -eq 'loadtimes'){
             $rows=@(if(Test-Path -LiteralPath (Join-Path $dir 'loadtimes.csv')){Import-Csv -LiteralPath (Join-Path $dir 'loadtimes.csv')})
-            $bad=@($rows|Where-Object {$_.note -match 'timeout|error'})
-            Check ((Test-Path -LiteralPath $done) -and $rows.Count -gt 0 -and $bad.Count -eq 0) 'loadtimes finished and no page timed out or failed' ('rows='+$rows.Count+' bad='+$bad.Count+' '+(@($bad|Select-Object -First 3|ForEach-Object {$_.page+' '+$_.visit+' '+$_.note}) -join ' / '))
+            $bad=@($rows|Where-Object {$_.note -match 'timeout|error' -or -not $_.complete_ms -or -not $_.usable_ms})
+            $aborted=@($lines|Where-Object {$_ -cmatch '^\S+ (FATAL|ERROR) '})
+            $pageNames='Games','Games/Processes','Games/Background','Remove apps','Graphics drivers','Windows tweaks','Tools','Tools/BIOS settings','Undo changes','Report a bug','Settings','Home','Remove apps/Leftovers','Startup & services','Memory','Timer & cache'
+            foreach($tour in 'tour1','tour2'){foreach($page in $pageNames){$visits=if($page -in 'Remove apps/Leftovers','Startup & services','Memory','Timer & cache'){@('first','revisit')}else{@('first','revisit','third visit')};foreach($visit in $visits){Check (@($rows|Where-Object {$_.tour -eq $tour -and $_.page -eq $page -and $_.visit -eq $visit}).Count -eq 1) ('loadtimes measured '+$tour+' '+$page+' '+$visit) ''}}}
+            foreach($page in 'Start: window','Start: Home'){Check (@($rows|Where-Object {$_.page -eq $page -and $_.tour -like 'cold*'}).Count -eq 3) ('loadtimes measured three cold runs of '+$page) ''}
+            Check (@($rows|Where-Object {$_.page -eq 'Start: Windows tweaks right after launch'}).Count -eq 2) 'loadtimes measured both cold Windows tweaks runs' ''
+            Check ((Test-Path -LiteralPath $done) -and $rows.Count -gt 0 -and $bad.Count -eq 0 -and $aborted.Count -eq 0) 'loadtimes finished and no page timed out or failed' ('rows='+$rows.Count+' bad='+$bad.Count+' '+(@($bad|Select-Object -First 3|ForEach-Object {$_.page+' '+$_.visit+' '+$_.note}) -join ' / '))
         } else {
             Check ((Test-Path -LiteralPath $done) -and $failed -eq 0 -and $passed -gt 0 -and $result -match 'RESULT failures=0') ('scenario '+$Scenario+': PASS '+$passed+' FAIL '+$failed+' SKIPPED '+$skipped.Count) ($(if($result){$result}else{'no RESULT line'})+$(if(-not (Test-Path -LiteralPath $done)){' (not finished)'}else{''}))
             Check ($skipped.Count -eq 0) ('scenario '+$Scenario+' skipped no check') (($skipped|Select-Object -First 3) -join ' / ')
@@ -410,8 +443,8 @@ switch($Phase){
             $file=Join-Path $Evidence ($name+'.log')
             $lines=@(if(Test-Path -LiteralPath $file){Get-Content -LiteralPath $file -Encoding UTF8})
             $passLines=@($lines|Where-Object {$_ -cmatch '^\S+ PASS '}|ForEach-Object {($_ -creplace '^\S+ PASS ','')})
-            $failed=@($lines|Where-Object {$_ -cmatch '^\S+ FAIL '}).Count
-            $skipped=@($lines|Where-Object {$_ -cmatch '^\S+ SKIPPED '}).Count
+            $failed=@($lines|Where-Object {$_ -cmatch '^\S+ (FAIL|FATAL|ERROR) '}).Count
+            $skipped=@($lines|Where-Object {$_ -cmatch '^\S+ (SKIPPED|NOT RUN) '}).Count
             Check ((Test-Path -LiteralPath $file) -and $failed -eq 0 -and $skipped -eq 0 -and ($passLines.Count -gt 0 -or $name -eq 'preflight')) ('phase '+$name+': PASS '+$passLines.Count+' FAIL '+$failed+' SKIPPED '+$skipped) $(if(Test-Path -LiteralPath $file){$file}else{'no log was written'})
             foreach($needle in @($requiredChecks[$name])){
                 $found=@($passLines|Where-Object {$_ -like ('*'+$needle+'*')}).Count
@@ -420,16 +453,16 @@ switch($Phase){
         }
     }
     'cleanup' {
-        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($app+'\',[StringComparison]::OrdinalIgnoreCase)}|ForEach-Object {Log ('stopped '+$_.Name+' from the install folder before the uninstall');Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($app+'\',[StringComparison]::OrdinalIgnoreCase)}|ForEach-Object {Log ('stopped '+$_.Name+' from the install folder before the uninstall');Stop-ProcessRow $_}
         Log ('uninstall: '+(Uninstall-App))
         $probeNames='RooIndustriesMigrationProbe','RooIndustriesLoadTimesProbe','RooIndustriesLauncherProbe','RooIndustriesProtectedLauncherProbe','RooIndustriesProtectedGameProbe','RooIndustriesEnvironmentControl','RooIndustriesGovernorProbe'
-        Get-Process $probeNames -ErrorAction SilentlyContinue|ForEach-Object {Log ('stopped leftover probe '+$_.Name);Stop-Process -Id $_.Id -Force}
-        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($app+'\',[StringComparison]::OrdinalIgnoreCase)}|ForEach-Object {Log ('stopped leftover process '+$_.Name+' from the install folder');Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object {$_.Name -in @($probeNames|ForEach-Object {$_+'.exe'}) -and $_.ExecutablePath -ieq (Join-Path $env:TEMP $_.Name)}|ForEach-Object {Log ('stopped leftover probe '+$_.Name);Stop-ProcessRow $_}
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($app+'\',[StringComparison]::OrdinalIgnoreCase)}|ForEach-Object {Log ('stopped leftover process '+$_.Name+' from the install folder');Stop-ProcessRow $_}
         Start-Sleep -Milliseconds 500
         foreach($leftover in @($probeNames|ForEach-Object {$_+'.exe'})+@('roo-industries-migration-state.json')){$leftoverPath=Join-Path $env:TEMP $leftover;if(Test-Path -LiteralPath $leftoverPath){Remove-Item -LiteralPath $leftoverPath -Force -ErrorAction SilentlyContinue;Log ('removed '+$leftoverPath)}}
         $governorWork=Join-Path $env:TEMP 'roo-industries-governor-installed'
         if(Test-Path -LiteralPath $governorWork){Remove-Item -LiteralPath $governorWork -Recurse -Force -ErrorAction SilentlyContinue;Log ('removed '+$governorWork)}
-        $tasksBefore=if(Test-Path -LiteralPath (Join-Path $backup 'machine-state.json')){@((Get-Content -LiteralPath (Join-Path $backup 'machine-state.json') -Raw|ConvertFrom-Json).tasks)}else{$null}
+        $tasksBefore=@($baseline.tasks)
         foreach($task in @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*','RooIndustriesOptimizationSuite.GovernorSetupWatchdog','RooIndustries_LoadTimes','RooIndustries_EnvironmentControl','RooIndustries.Timer.*','Roo Industries Protected Session*' -ErrorAction SilentlyContinue)){
             if($null -eq $tasksBefore){Log ('kept task '+$task.TaskName+' (there is no record of the tasks before this run)');continue}
             if($tasksBefore -contains ($task.TaskPath+$task.TaskName)){Log ('kept task '+$task.TaskName+' (it existed before this run)');continue}
@@ -440,14 +473,19 @@ switch($Phase){
         if($null -ne $planted){if($planted -ceq $plantedValue){Remove-ItemProperty -LiteralPath $userEnvironment -Name $plantedName;Log ('removed '+$plantedName+' (the harmless value the launcher scenarios plant) from the user environment')}else{Log ('CLEANUP NEEDED: '+$plantedName+' in the user environment is not the value the scenarios plant; left as it is')}}
         if(Test-Path -LiteralPath $backup){
             Restore-AppData
-            $before=if(Test-Path -LiteralPath (Join-Path $backup 'machine-state.json')){Get-Content -LiteralPath (Join-Path $backup 'machine-state.json') -Raw|ConvertFrom-Json}
+            $before=$baseline
             if($before){
-                if($before.enableTransparency -ne '<absent>' -and [string](Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency -ne [string]$before.enableTransparency){Set-ItemProperty $personalize -Name EnableTransparency -Value ([int]$before.enableTransparency) -Type DWord;Log ('EnableTransparency set back to '+$before.enableTransparency)}
+                if($before.enableTransparency -eq '<absent>'){Remove-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue}
+                elseif( [string](Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency -ne [string]$before.enableTransparency){Set-ItemProperty $personalize -Name EnableTransparency -Value ([int]$before.enableTransparency) -Type DWord;Log ('EnableTransparency set back to '+$before.enableTransparency)}
                 if(-not $before.ifeoProbeKey -and (Test-Path -LiteralPath $ifeoProbe)){Remove-Item -LiteralPath $ifeoProbe -Recurse -Force;Log 'removed the protected-session probe image key'}
+                if($before.downloadBlockerFolder -eq $false -and (Test-Path -LiteralPath $blockerFolder)){
+                    if(@(Get-ChildItem -LiteralPath $blockerFolder -Force -ErrorAction SilentlyContinue).Count -eq 0){$reset=Invoke-Native icacls.exe @($blockerFolder,'/reset');Remove-Item -LiteralPath $blockerFolder -Force -ErrorAction SilentlyContinue;Log ('removed the empty download folder the scenarios created at '+$blockerFolder+' (icacls reset exit '+$reset.Exit+')')}
+                    else{Log ('CLEANUP NEEDED: '+$blockerFolder+' holds files and was not there before this run; left as it is')}
+                }
                 $now=Get-MachineState
                 $now.tweakStateKey=Get-RegistryFingerprint $stateKey
                 $now.rooHklmFingerprint=Get-RegistryFingerprint $rooHklm
-                foreach($field in 'hypervisorlaunchtype','vbsStatus','vbsRunning','rebootPendingCbs','rebootRequiredUpdate','appFolder','tweakStateKey','rooHklmFingerprint','enableTransparency','ifeoProbeKey'){Check ([string]$now[$field] -eq [string]$before.$field) ('machine state unchanged: '+$field) ('before='+[string]$before.$field+' now='+[string]$now[$field])}
+                foreach($field in 'hypervisorlaunchtype','vbsStatus','vbsRunning','rebootPendingCbs','rebootRequiredUpdate','appFolder','tweakStateKey','rooHklmFingerprint','enableTransparency','ifeoProbeKey','downloadBlockerFolder'){Check ([string]$now[$field] -eq [string]$before.$field) ('machine state unchanged: '+$field) ('before='+[string]$before.$field+' now='+[string]$now[$field])}
                 $added=@(([string]$now.pendingFileRenames -split '\|')|Where-Object {$_ -and ([string]$before.pendingFileRenames).IndexOf($_,[StringComparison]::OrdinalIgnoreCase) -lt 0})
                 Check ($added.Count -eq 0) 'no pending file rename was added by this run (a restart may have processed older ones)' ('added='+($added -join '|'))
                 foreach($field in 'tasks','productKeys','uninstallEntries','localSiblings','userEnvironmentNames'){Check ((@($now[$field])-join '|') -eq (@($before.$field)-join '|')) ('machine state unchanged: '+$field) ('before='+(@($before.$field)-join '|')+' now='+(@($now[$field])-join '|'))}

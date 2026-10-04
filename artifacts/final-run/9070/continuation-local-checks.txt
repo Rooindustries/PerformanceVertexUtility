@@ -1,0 +1,15 @@
+PASS complete: exit=0 expected=0
+PASS missing: exit=1 expected=1
+PASS empty: exit=1 expected=1
+PASS missing-required: exit=1 expected=1
+PASS failure: exit=1 expected=1
+PASS skipped: exit=1 expected=1
+PASS not-run: exit=1 expected=1
+PASS fatal-after-pass: exit=1 expected=1
+PASS missing-baseline: exit=1 original preserved=True
+PASS historical-baseline: exit=1 original preserved=True
+PASS foreign-installation: exit=1 original preserved=True
+PASS incomplete-baseline: exit=1 original preserved=True
+PASS missing-original-backup: exit=1 original preserved=True
+PASS transport-failure: exit=1 expected=1
+PASS unknown-start-phase: exit=2 expected=2

@@ -1,5 +1,5 @@
 ﻿param(
-    [Parameter(Mandatory)][ValidateSet('before', 'after', 'undo-timer')][string]$Phase,
+    [Parameter(Mandatory)][ValidateSet('before', 'after', 'undo-blocker', 'timer-on')][string]$Phase,
     [Parameter(Mandatory)][string]$OutDir,
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
@@ -24,10 +24,14 @@ $script:LogPath = Join-Path $OutDir ('migration-' + $Phase + '.log')
 $script:Failures = 0
 $Setting = 'windows.0689e69eedc05770'
 $TimerSetting = 'windows.e9d78835a38cf818'
+$BlockerSetting = 'windows.71e22a554a5cb947'
+$BlockerFolder = Join-Path $env:ProgramFiles 'LogiDownloadAssistant'
 $script:OlderAsked = 0
 $script:OlderText = ''
 $script:SawPreparing = $false
 $Profile = 'roo-industries-migration-check'
+$TimerProfile = 'roo-industries-migration-timer'
+$BlockerProfile = 'roo-industries-migration-blocker'
 $RuleName = 'roo-industries-migration-rule'
 $Personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 $StatePath = Join-Path $env:TEMP 'roo-industries-migration-state.json'
@@ -40,6 +44,14 @@ $scripts = Join-Path $install 'backend\scripts'
 $hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $system = [Environment]::GetFolderPath('System')
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
+function Blocker-Receipts { @(foreach ($folder in (Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite'), (Join-Path $env:LOCALAPPDATA 'RooIndustriesOptimizationSuite')) { if (Test-Path -LiteralPath $folder) { Get-ChildItem -LiteralPath $folder -Recurse -Filter 'logitech-downloads.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } } }) }
+function Timer-Task { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })[0] }
+function Timer-Pins($task) {
+    if (-not $task) { return @() }
+    $script = [regex]::Match([string]$task.Actions[0].Arguments, '-File "([^"]+startup\.ps1)"').Groups[1].Value
+    if ($script -and (Test-Path -LiteralPath $script)) { @([regex]::Matches((Get-Content -LiteralPath $script -Raw), '-cne ''([0-9A-F]{64})''') | ForEach-Object { $_.Groups[1].Value }) } else { @() }
+}
+function Installed-Helper-Hashes { @((Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll'), $hostExe | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) }
 function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
 function Policy-Workers([string]$requestPath) { if (-not $requestPath) { return @() }; @(Get-CimInstance Win32_Process -Filter "Name='Optimizer.Host.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'policy-run' -and $_.CommandLine.IndexOf($requestPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) }
 function Any-Policy-Workers { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in 'Optimizer.Host.exe', 'dotnet.exe' -and [string]$_.CommandLine -match 'policy-run' }) }
@@ -117,27 +129,39 @@ function Pick([string]$id, [string]$like) {
 }
 function Process-Status([string]$pattern, [double]$seconds, [string]$what) { WaitFor { $s = ById 'ProcessStatus'; if ($s -and $s.Current.Name -match $pattern) { $s.Current.Name } } $seconds $what }
 function Probe-Priority($id) { try { [string](Get-Process -Id $id -ErrorAction Stop).PriorityClass } catch { '<gone>' } }
-function Set-Profile {
+function Set-Profile([string]$profileName = $Profile) {
     $advanced = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Show advanced options')) } 20 'Show advanced options'
     Set-Toggle $advanced $true; Start-Sleep 1
     $expander = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profiles & tools')) } 20 'Profiles & tools'
     try { $expander.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1
     $name = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profile name'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Edit))) } 20 'Profile name box'
-    $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Profile); Start-Sleep 1
+    $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($profileName); Start-Sleep 1
 }
-function Clear-Profile { $box = $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Profile name'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Edit))); if ($box) { $box.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue(''); Start-Sleep 1 } }
+function Restore-Profile([string]$profileName, [string]$expect, [string]$forbid) {
+    Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+    Set-Profile $profileName
+    $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
+    Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
+    Apply-Reviewed "restore $profileName" $expect $forbid
+}
+function Show-Advanced { Set-Toggle (WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Show advanced options')) } 20 'Show advanced options') $true; Start-Sleep 1 }
 function Choose-Setting([string]$settingId, [string]$search, [string]$choice) {
     $box = WaitFor { ById 'WindowsTweaksSearch' } 30 'search box'
     $box.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($search); Start-Sleep 1
-    Set-Toggle (WaitFor { ById ($settingId + '.select') } 30 ($search + ' row')) $true
-    $combo = WaitFor { ById ($settingId + '.value') } 20 'value combo'
-    $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Start-Sleep -Milliseconds 800
-    $item = WaitFor { $combo.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, $choice)) } 10 "choice $choice"
-    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+    $selector = WaitFor { ById ($settingId + '.select') } 30 ($search + ' row')
+    Set-Toggle $selector $false; Set-Toggle $selector $true
+    $combo = $null; try { $combo = WaitFor { ById ($settingId + '.value') } 5 'value combo' } catch {}
+    if ($combo) {
+        $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Start-Sleep -Milliseconds 800
+        $item = WaitFor { $combo.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, $choice)) } 10 "choice $choice"
+        $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
+    } else {
+        Log ("$search offers a single change, so its switch alone selects it")
+    }
     Invoke-Element (ById 'WindowsTweaksPreview'); Start-Sleep 2; Tweaks-Idle | Out-Null
 }
 function Apply-Reviewed([string]$what, [string]$expect = 'Transparency', [string]$forbid = 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender') {
-    WaitFor { $r = ById 'WindowsTweaksReview'; if ($r -and @($r.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text))).Count) { $r } } 60 "$what review" | Out-Null
+    try {WaitFor { $r = ById 'WindowsTweaksReview'; if ($r -and @($r.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text))).Count) { $r } } 60 "$what review" | Out-Null} catch { Log ('the review did not appear; status: ' + (ById 'WindowsTweaksStatus').Current.Name + ' | detail: ' + (ById 'WindowsTweaksDetail').Current.Name + ' | texts: ' + ((Texts | Select-Object -First 40) -join ' | ')); throw }
     $texts = @(Review-Texts)
     Log ("$what review: " + ($texts -join ' | '))
     if ((($texts -join ' ') -notmatch $expect) -or @($texts | Where-Object { $_ -match $forbid }).Count) { throw "$what review is not exactly the $expect change; refusing to apply" }
@@ -168,6 +192,7 @@ function Open-App {
 $script:App = $null
 try {
     if ($Phase -eq 'before') {
+        if (Test-Path -LiteralPath $BlockerFolder) { throw "$BlockerFolder already exists on this PC; refusing to change it." }
         Open-App
         Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
         $undo = @(Undo-Texts)
@@ -212,26 +237,49 @@ try {
         Check ([bool]$enforced) 'the earlier version enforces the rule on the probe' ('priority=' + (Probe-Priority $probeId))
         Shot 'saved'
         Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
-        Clear-Profile
+        Set-Profile $TimerProfile
         Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Enabled'
         Apply-Reviewed 'timer apply' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
         $timerTask = $null; try { $timerTask = WaitFor { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })[0] } 90 'the sign-in timer task' } catch {}
         Check ($null -ne $timerTask) 'the earlier version registered the sign-in timer' ($(if ($timerTask) { $timerTask.TaskName + ' state=' + $timerTask.State } else { 'no RooIndustries.Timer task' }))
         Shot 'timer'
-        $oldWorkers = @(Any-Policy-Workers | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
+        Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+        Set-Profile $BlockerProfile
+        Choose-Setting $BlockerSetting 'Logitech download folder writes' 'Enabled'
+        Apply-Reviewed 'download folder blocker apply' 'Logitech' 'Transparency|timer|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $blockerFolderMade = $null; try { $blockerFolderMade = WaitFor { if (Test-Path -LiteralPath $BlockerFolder) { $true } } 90 'the download folder' } catch {}
+        $receipts = @(Blocker-Receipts)
+        Check ([bool]$blockerFolderMade -and $receipts.Count -ge 1) 'the earlier version applied the download folder blocker and saved its receipt, the file the older-version question is about' ('folder=' + [bool]$blockerFolderMade + ' receipts=' + ($receipts -join ','))
+        Shot 'blocker'
+        $oldRequest = Join-Path (Data-Root) 'process-rules\worker-request.json'
+        $oldWorkers = @(Any-Policy-Workers | Where-Object {$_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0} | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
         $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
         Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
         [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
-    } elseif ($Phase -eq 'undo-timer') {
-        $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
+    } elseif ($Phase -eq 'undo-blocker') {
+        Open-App
+        Restore-Profile $BlockerProfile 'Logitech' 'Transparency|timer|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $blockerGone = $null; try { $blockerGone = WaitFor { if (-not (Test-Path -LiteralPath $BlockerFolder)) { $true } } 90 'the download folder to be removed' } catch {}
+        Check ([bool]$blockerGone) 'the new version undoes the download folder blocker applied by the earlier version and removes the folder it created' ('folderExists=' + (Test-Path -LiteralPath $BlockerFolder))
+        Shot 'blocker-undone'
+    } elseif ($Phase -eq 'timer-on') {
+        $timerState = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite.Timer'
+        $stateFile = Join-Path $timerState 'session.json'
+        $stampBefore = if (Test-Path -LiteralPath $stateFile) { (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc } else { [DateTime]::MinValue }
+        $earlierTask = Timer-Task
+        $earlierPins = @(Timer-Pins $earlierTask); $installedHashes = @(Installed-Helper-Hashes)
+        Log ('NOTE the sign-in timer registered by the earlier version pins ' + $earlierPins.Count + ' helper file hashes and ' + @($earlierPins | Where-Object { $installedHashes -contains $_ }).Count + ' of them match the installed files')
         Open-App
         Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
-        Clear-Profile
-        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Disabled'
-        Apply-Reviewed 'timer undo' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
-        $timerGone = $null; try { $timerGone = WaitFor { if (@(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count -eq 0) { $true } } 90 'the sign-in timer to be removed' } catch {}
-        Check ([bool]$timerGone) 'the new version undoes the sign-in timer applied by the earlier version' ('tasks=' + @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' }).Count)
-        Shot 'timer-undone'
+        Set-Profile $TimerProfile
+        Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Enabled'
+        Apply-Reviewed 'timer on' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender|Logitech'
+        $stateMade = $null; try { $stateMade = WaitFor { if ((Test-Path -LiteralPath $stateFile) -and (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc -gt $stampBefore) { $true } } 90 'the timer state to be written' } catch {}
+        Check ([bool]$stateMade) 'the new version starts the timer and creates its state folder outside the data folder' ($timerState + ' written=' + [bool]$stateMade)
+        $timerWorker = $null; try { $timerWorker = WaitFor { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') })[0] } 60 'the timer worker' } catch {}
+        Check ($null -ne $timerWorker -and $timerWorker.ExecutablePath -ieq $hostExe) 'the timer worker runs from the installed helper' ($(if ($timerWorker) { 'pid=' + $timerWorker.ProcessId + ' image=' + $timerWorker.ExecutablePath } else { 'no timer worker' }))
+        Shot 'timer-on'
+        foreach ($worker in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') })) { Stop-ProcessRow $worker; Log ('stopped the timer worker pid ' + $worker.ProcessId + ' so it does not run through the later scenarios') }
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
@@ -278,6 +326,7 @@ try {
         $timerTasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })
         Check ($timerTasks.Count -eq 1 -and $timerTasks[0].TaskName -eq $state.timerTask) 'the sign-in timer of the earlier version is still registered after the upgrade' ('now=' + (($timerTasks | ForEach-Object { $_.TaskName + ' ' + $_.State }) -join ',') + ' before=' + $state.timerTask)
         $timerState = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite.Timer'
+        Log ('download folder blocker receipts after the upgrade: ' + (@(Blocker-Receipts) -join ','))
         Log ('sign-in timer state folder after the upgrade: ' + (Test-Path -LiteralPath $timerState) + ' (' + $timerState + ')')
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         try { (WaitFor { ById 'ProcessSavedRules' } 10 'saved rules').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}; Start-Sleep 1

@@ -5,7 +5,7 @@
 # usage: Run-FinalVerification.sh <step> [arguments]
 #   steps: stage | phase <name> [runner arguments] | gi <phase> | screens | reboot | fetch <remote> <local> |
 #          lifecycle | upgrade-path | ui | all
-set -uo pipefail
+set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOST="${HOST:-optimizer-9070}"
 MACHINE="${MACHINE:-SERVI-WINDOWS-D}"
@@ -22,10 +22,10 @@ REMOTE_RELEASE="$WINTEMP\\roo-industries-release"
 mkdir -p "$OUT/runner" "$OUT/suites" "$OUT/lifecycle" "$OUT/screens" "$OUT/installer"
 
 winps() { "$PY" "$ROOT/tools/validation/windows_ssh.py" --host "$HOST" --expected-machine "$MACHINE" run "$1"; }
-winps_text() { local f; f="$(mktemp /tmp/roo-industries-ps-XXXX.ps1)"; printf '%s\n' "$1" > "$f"; winps "$f" 2>&1 | grep -av '^<Objs\|^#< CLIXML'; rm -f "$f"; }
+winps_text() { local f; f="$(mktemp /tmp/roo-industries-ps-XXXX.ps1)"; printf '%s\n' "$1" > "$f"; local status=0; winps "$f" 2>&1 | sed '/^<Objs/d; /^#< CLIXML/d' || status=$?; rm -f "$f"; return "$status"; }
 
 stage() {
-  winps_text "\$p=Join-Path ([IO.Path]::GetTempPath()) '$STAGE'; if(Test-Path -LiteralPath \$p){\$e=\$p+'-empty';[IO.Directory]::CreateDirectory(\$e)|Out-Null;& robocopy.exe \$e \$p /MIR /NFL /NDL /NJH /NJS /NP|Out-Null;Remove-Item -LiteralPath \$p -Recurse -Force -ErrorAction SilentlyContinue;Remove-Item -LiteralPath \$e -Recurse -Force -ErrorAction SilentlyContinue}; 'cleaned'" > /dev/null
+  winps_text "\$p=Join-Path ([IO.Path]::GetTempPath()) '$STAGE'; if(Test-Path -LiteralPath \$p){if(-not(Test-Path -LiteralPath (Join-Path \$p 'source-verification.json'))){throw 'The staging folder has no source snapshot marker; kept unchanged.'};\$e=\$p+'-empty-'+[Guid]::NewGuid().ToString('N');[IO.Directory]::CreateDirectory(\$e)|Out-Null;& robocopy.exe \$e \$p /MIR /NFL /NDL /NJH /NJS /NP|Out-Null;if(\$LASTEXITCODE -ge 8){throw 'Staging cleanup failed; kept the source folder.'};Remove-Item -LiteralPath \$p -Recurse -Force -ErrorAction SilentlyContinue;Remove-Item -LiteralPath \$e -Recurse -Force -ErrorAction SilentlyContinue}; 'cleaned'" > /dev/null
   "$PY" "$ROOT/tools/validation/windows_ssh.py" --host "$HOST" --expected-machine "$MACHINE" upload --directory "$STAGE" --include-frontend > "$OUT/stage.json"
   echo "staged $STAGE at $(git -C "$ROOT" rev-parse --short HEAD)"
 }
@@ -41,7 +41,7 @@ interactive() {
 \$done=Join-Path \$W (\$Script+'.done'); Remove-Item \$done -ErrorAction SilentlyContinue
 \$log=Join-Path \$W (\$Script+'.log'); Remove-Item \$log -ErrorAction SilentlyContinue
 \$task='$TASK'
-if(Get-ScheduledTask -TaskName \$task -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName \$task -Confirm:\$false}
+if(Get-ScheduledTask -TaskName \$task -ErrorAction SilentlyContinue){throw 'The verification task already exists; recover the previous run first.'}
 \$inner="& { try { & '"+(Join-Path \$W \$Script)+"' $arguments *>&1 | Out-File -FilePath '"+\$log+"' -Encoding utf8 -Width 400 } catch { \`\$_ | Out-String | Out-File -FilePath '"+\$log+"' -Append -Encoding utf8 } finally { 'x' | Set-Content '"+\$done+"' } }"
 \$enc=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$inner))
 \$a=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\conhost.exe' -Argument ('--headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+\$enc) -WorkingDirectory \$W
@@ -55,16 +55,20 @@ if(-not (Test-Path \$done)){Stop-ScheduledTask -TaskName \$task -ErrorAction Sil
 Unregister-ScheduledTask -TaskName \$task -Confirm:\$false
 Get-Content \$log -ErrorAction SilentlyContinue
 PS
-  winps "$file" 2>&1 | grep -av '^<Objs\|^#< CLIXML' | sed 's/\r$//' > "$log"
+  local status=0
+  winps "$file" 2>&1 | sed '/^<Objs/d; /^#< CLIXML/d; s/\r$//' > "$log" || status=$?
   rm -f "$file"
-  grep -a '^RESULT done' "$log" | head -1
+  grep -a '^RESULT done' "$log" | head -1 || true
+  [[ "$status" -eq 0 ]] && grep -aq '^RESULT done=True' "$log" && ! grep -aqE '(^| )FAIL |FATAL |ERROR |SKIPPED |NOT RUN ' "$log"
 }
 
 phase() {
   local name="$1"; shift
   local log="$OUT/runner/$(date -u +%H%M%S)-$name.log" minutes="${MINUTES:-60}"
-  interactive 'tools\validation\Release' 'Invoke-IntegrationVerification.ps1' "$minutes" "$log" -Phase "$name" -Source "'$REMOTE_STAGE'" "$@"
-  echo "$log"; echo "FAIL lines: $(grep -ac '^[^ ]* FAIL ' "$log")"
+  interactive 'tools\validation\Release' 'Invoke-IntegrationVerification.ps1' "$minutes" "$log" -Phase "$name" -Source "'$REMOTE_STAGE'" "$@" || return 1
+  local fails; fails="$(grep -ac '^[^ ]* FAIL ' "$log" || true)"
+  echo "$log"; echo "FAIL lines: $fails"
+  grep -aq '^RESULT done=True' "$log" && [[ "$fails" -eq 0 ]]
 }
 
 script() {
@@ -75,7 +79,22 @@ script() {
 
 gi() {
   local label="$1"; shift
-  winps_text "& '$REMOTE_STAGE\\tools\\validation\\Governor\\Test-GovernorInstalled.ps1' -Phase $* " | tee "$OUT/lifecycle/$label.json" | grep -a '^\(PASS\|FAIL\)'
+  local log="$OUT/lifecycle/$label.json"
+  winps_text "& '$REMOTE_STAGE\\tools\\validation\\Governor\\Test-GovernorInstalled.ps1' -Phase $* " > "$log" || return 1
+  cat "$log"
+  "$PY" - "$log" "$*" <<'CHECK'
+import json, sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text()
+result = json.loads(text[text.index('{'):text.rindex('}') + 1])
+checks = result.get('checks', [])
+if sys.argv[2] == 'cleanup':
+    left = result.get('left', {})
+    passed = left.get('tasks') == 0 and left.get('workers') == 0 and left.get('policyRoot') is False
+else:
+    passed = bool(checks) and all(check.get('passed') is True for check in checks)
+raise SystemExit(not passed)
+CHECK
 }
 
 screen() {
@@ -118,6 +137,32 @@ governor_task_state() {
 
 worker_action() {
   winps_text ". 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\BrandCompatibility.Common.ps1'; \$root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules'; & 'C:\\Program Files\\Roo Industries\\Optimization Suite\\backend\\scripts\\Invoke-ProcessPolicyWorker.ps1' -Action $1 -PolicyRoot \$root -ConfirmApply" | tail -3 | cut -c1-300
+}
+
+run_all() {
+  local old="${OLD_INSTALLER:-$REMOTE_INSTALLERS\\RooIndustries-OptimizationSuite-0.9.0-beta-setup.exe}"
+  local new="${NEW_INSTALLER:-$REMOTE_RELEASE\\RooIndustries-OptimizationSuite-0.9.0-beta-setup.exe}"
+  local from="${FROM:-preflight}" go=0 name
+  local -a steps=(preflight validators release-build install-old migration-before upgrade migration-after static-checks migration-undo-blocker migration-timer-on permissions launchers override incomplete invalidation modes setup-fallbacks hardware loadtimes summary)
+  [[ " ${steps[*]} " == *" $from "* ]] || { echo "unknown starting phase: $from"; return 2; }
+  for name in "${steps[@]}"; do
+    [[ "$name" == "$from" ]] && go=1
+    [[ $go -eq 1 ]] || continue
+    [[ " ${SKIP:-} " == *" $name "* ]] && continue
+    echo "== $name $(date -u +%H:%M:%S)"
+    case "$name" in
+      preflight) phase preflight ;;
+      validators) MINUTES=150 phase validators ;;
+      release-build) MINUTES=40 phase release-build -BuildOutput "'$REMOTE_RELEASE'" ;;
+      install-old) phase install-old -OldInstaller "'$old'" ;;
+      upgrade) phase upgrade -NewInstaller "'$new'" ;;
+      static-checks) phase static-checks ;;
+      setup-fallbacks) MINUTES=30 phase setup-fallbacks ;;
+      summary) phase summary ;;
+      loadtimes) MINUTES=90 phase scenario -Scenario loadtimes -Minutes 80 ;;
+      *) MINUTES=45 phase scenario -Scenario "$name" ;;
+    esac || { echo "stopped at $name"; return 1; }
+  done
 }
 
 lifecycle() {
@@ -168,5 +213,6 @@ case "$step" in
   upload) upload "$@" ;;
   giui) giui "$@" ;;
   lifecycle) lifecycle "$@" ;;
+  all) run_all ;;
   *) echo "usage: $0 stage | phase <name> [runner arguments] | gi <label> <phase> | screen <name> [page] | reboot | fetch <remote> <local dir> | upload <local file> <remote path>"; exit 2 ;;
 esac

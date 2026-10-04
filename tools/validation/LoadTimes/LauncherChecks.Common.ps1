@@ -61,3 +61,28 @@ function Check-Chain([string]$label, $worker, [string]$actionArguments) {
     $ok = $worker -and $cmd -and $conhost -and $cmd.Name -eq 'cmd.exe' -and $cmd.ExecutablePath -ieq (Join-Path $system 'cmd.exe') -and $cmd.CommandLine -match '/c' -and $cmd.CommandLine.Contains($actionTail) -and $conhost.Name -eq 'conhost.exe' -and $conhost.ExecutablePath -ieq (Join-Path $system 'conhost.exe') -and $conhost.CommandLine -match '--headless' -and $cmd.CreationDate -ge $conhost.CreationDate -and $worker.CreationDate -ge $cmd.CreationDate
     Check ([bool]$ok) "$label worker's parent is the cmd.exe the registered action starts under conhost.exe --headless" (($chain | ForEach-Object { $_.name + '(' + $_.pid + ')' }) -join ' <- ')
 }
+
+function Stop-ProcessRow($row) {
+    if(-not $row -or -not $row.CreationDate){throw 'Refusing to stop a process without its creation time.'}
+    $process=Get-Process -Id $row.ProcessId -ErrorAction SilentlyContinue
+    if(-not $process){return}
+    try {
+        $null=$process.Handle
+        $current=Process-Row $row.ProcessId
+        if($current -and $current.CreationDate -eq $row.CreationDate -and $current.ExecutablePath -ieq $row.ExecutablePath -and $current.CommandLine -ceq $row.CommandLine){$process.Kill()}
+        elseif($current){throw ('Process identity changed; kept pid '+$row.ProcessId)}
+    } finally {$process.Dispose()}
+}
+function Child-Rows($parent) {
+    if(-not $parent -or $parent.HasExited){return @()}
+    $null=$parent.Handle
+    $all=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+    $found=[Collections.Generic.List[object]]::new()
+    $parents=@([pscustomobject]@{ProcessId=$parent.Id;CreationDate=$parent.StartTime})
+    while($parents.Count){
+        $children=@(foreach($root in $parents){$all|Where-Object {$_.ParentProcessId -eq $root.ProcessId -and $_.CreationDate -ge $root.CreationDate -and $_.ProcessId -ne $parent.Id -and $found.ProcessId -notcontains $_.ProcessId}})
+        foreach($child in $children){$found.Add($child)}
+        $parents=$children
+    }
+    @($found.ToArray())
+}
