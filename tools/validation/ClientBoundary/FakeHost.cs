@@ -20,6 +20,9 @@ static class FakeHost
         string data;
         switch (action)
         {
+            case "rules-list":
+                data = "[]";
+                break;
             case "policy-run":
                 data = JsonSerializer.Serialize(new PolicyHostState { SchemaVersion = 1, Owner = OperationOwner.Current(), Status = "stopped", Host = null, Instances = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow }, OperationFiles.Json);
                 break;

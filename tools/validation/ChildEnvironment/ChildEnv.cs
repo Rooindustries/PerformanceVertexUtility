@@ -14,7 +14,7 @@ sealed class ChildEnv : IDisposable
 {
     static readonly string[] Unrelated = ["LOGONSERVER", "USERDNSDOMAIN", "PYTHONPATH", "NODE_OPTIONS", "DOTNET_gcServer", "COMPlus_gcServer", "JAVA_HOME", "ROOT_MARKER_TEST", "ROOTESTMARKER"];
     static readonly string[] DeveloperNames = ["DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64", "DOTNET_ROOT(x86)"];
-    static readonly string[] Machine = ["OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION"];
+    static readonly string[] Machine = ["OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION"];
 
     public static readonly string[] PowerShellAdds = ["PSExecutionPolicyPreference"];
 
@@ -79,7 +79,7 @@ sealed class ChildEnv : IDisposable
             ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = Environment.UserDomainName, ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(System32, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["PROCESSOR_ARCHITECTURE"] = RuntimeInformation.OSArchitecture switch { Architecture.Arm64 => "ARM64", Architecture.X86 => "x86", _ => "AMD64" },
+            ["PROCESSOR_ARCHITECTURE"] = RuntimeInformation.ProcessArchitecture switch { Architecture.Arm64 => "ARM64", Architecture.Arm => "ARM", Architecture.X86 => "x86", _ => "AMD64" },
         };
         using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
         using (var key = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"))
@@ -156,6 +156,11 @@ sealed class ChildEnv : IDisposable
         var developer = Passthrough();
         if (!developer.ContainsKey(BrandCompatibility.LegacyEnvironmentPrefix + "MARKER_TEST") || !developer.ContainsKey("ROO_INDUSTRIES_TEST_MARKER_TEST") || !developer.ContainsKey("DOTNET_ROOT")) failures.Add("the developer markers are not set in the test process");
         var allowed = new HashSet<string>(Values.Keys, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { "DOTNET_EnableDiagnostics", "COMPlus_EnableDiagnostics", "DOTNET_EnableDiagnostics_IPC", "COMPlus_EnableDiagnostics_IPC", "DOTNET_EnableDiagnostics_Debugger", "COMPlus_EnableDiagnostics_Debugger", "DOTNET_EnableDiagnostics_Profiler", "COMPlus_EnableDiagnostics_Profiler" })
+        {
+            allowed.Add(name);
+            if (actual.GetValueOrDefault(name) != "0") failures.Add(name + " is not pinned to 0");
+        }
         foreach (var pair in product) allowed.Add(pair.Key);
         foreach (var name in tolerated) allowed.Add(name);
         if (!Release) allowed.UnionWith(developer.Keys);

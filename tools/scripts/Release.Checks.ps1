@@ -49,7 +49,7 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
     foreach ($path in $sources) {
         foreach ($match in $literal.Matches([IO.File]::ReadAllText($path))) {
             $key = $match.Groups[1].Value.ToLowerInvariant()
-            if ($known.ContainsKey($key) -and -not (Test-ForbiddenReleaseScript $known[$key]) -and -not $calls.ContainsKey($known[$key])) { $calls[$known[$key]] = $path.Substring($RepoRoot.TrimEnd('\').Length).TrimStart('\') }
+            if ($known.ContainsKey($key) -and -not (Test-ForbiddenReleaseScript $known[$key]) -and -not $calls.ContainsKey($known[$key])) { $calls[$known[$key]] = $path.Substring($RepoRoot.TrimEnd('\', '/').Length).TrimStart('\', '/') }
         }
     }
     return $calls
@@ -57,7 +57,7 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
 
 function Assert-ReleaseScripts([string]$RepoRoot, [string]$Stage) {
     $scripts = Join-Path $Stage 'backend\scripts'
-    $staged = @(Get-ChildItem -LiteralPath $scripts -File -Recurse | ForEach-Object { $_.FullName.Substring($scripts.Length).TrimStart('\') })
+    $staged = @(Get-ChildItem -LiteralPath $scripts -File -Recurse | ForEach-Object { $_.FullName.Substring($scripts.Length).TrimStart('\', '/') })
     foreach ($name in $staged) { if (Test-ForbiddenReleaseScript $name) { throw "The release stage contains $name, a scenario, test or developer script." } }
     $listed = @(Get-ReleaseScriptNames $RepoRoot)
     foreach ($name in $staged) { if ($listed -notcontains $name) { throw "The release stage contains $name, which shipped-scripts.txt does not list." } }
@@ -67,16 +67,29 @@ function Assert-ReleaseScripts([string]$RepoRoot, [string]$Stage) {
 }
 
 function Compare-ReleaseVersion([string]$Left, [string]$Right) {
-    $pattern = '^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$'
+    $pattern = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
     if ($Left -notmatch $pattern) { throw "'$Left' is not a release version." }
     $a = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3]); $suffixA = $Matches[4]
     if ($Right -notmatch $pattern) { throw "'$Right' is not a release version." }
     $b = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3]); $suffixB = $Matches[4]
-    for ($index = 0; $index -lt 3; $index++) { if ($a[$index] -ne $b[$index]) { return [Math]::Sign($a[$index] - $b[$index]) } }
-    if ($suffixA -eq $suffixB) { return 0 }
+    foreach ($suffix in @($suffixA, $suffixB)) {
+        if ($suffix -and @($suffix.Substring(1).Split('.') | Where-Object { $_ -match '^0[0-9]+$' }).Count -gt 0) { throw "'$suffix' is not a release version suffix." }
+    }
+    for ($index = 0; $index -lt 3; $index++) { if ($a[$index] -ne $b[$index]) { return $a[$index].CompareTo($b[$index]) } }
+    if ($suffixA -ceq $suffixB) { return 0 }
     if (-not $suffixA) { return 1 }
     if (-not $suffixB) { return -1 }
-    return [Math]::Sign([string]::CompareOrdinal($suffixA, $suffixB))
+    $partsA = $suffixA.Substring(1).Split('.'); $partsB = $suffixB.Substring(1).Split('.')
+    for ($index = 0; $index -lt [Math]::Min($partsA.Count, $partsB.Count); $index++) {
+        $leftPart = $partsA[$index]; $rightPart = $partsB[$index]
+        if ($leftPart -ceq $rightPart) { continue }
+        $numericA = $leftPart -match '^[0-9]+$'; $numericB = $rightPart -match '^[0-9]+$'
+        if ($numericA -and -not $numericB) { return -1 }
+        if ($numericB -and -not $numericA) { return 1 }
+        if ($numericA -and $leftPart.Length -ne $rightPart.Length) { return $leftPart.Length.CompareTo($rightPart.Length) }
+        return [Math]::Sign([string]::CompareOrdinal($leftPart, $rightPart))
+    }
+    return $partsA.Count.CompareTo($partsB.Count)
 }
 
 function Assert-ReleaseVersion([string]$RepoRoot, [string]$Version) {

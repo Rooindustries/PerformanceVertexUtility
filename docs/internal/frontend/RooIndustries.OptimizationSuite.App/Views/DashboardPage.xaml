@@ -52,6 +52,7 @@
         </Grid>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="20" Padding="0,0,12,12">
+                <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                 <StackPanel Spacing="12">
                     <TextBlock Text="Start here" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <views:AdaptivePanel MinColumnWidth="240" MaxColumns="3">

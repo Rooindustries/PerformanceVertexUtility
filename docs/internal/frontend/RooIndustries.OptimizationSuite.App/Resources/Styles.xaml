@@ -13,6 +13,19 @@
     <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
     <conv:CountToInverseVisibilityConverter x:Key="CountToInverseVisibility" />
 
+    <DataTemplate x:Key="PageRefreshNoticeTemplate">
+        <Grid ColumnSpacing="12" Padding="12" Background="{StaticResource RooIndustriesCanvasDeepBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="{Binding OutOfDateNotice}" TextWrapping="Wrap" VerticalAlignment="Center"
+                       Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" AutomationProperties.AutomationId="PageRefreshNotice" />
+            <Button Grid.Column="1" Content="Refresh" Command="{Binding RetryCommand}"
+                    IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="PageRefreshRetry" />
+        </Grid>
+    </DataTemplate>
+
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource RooIndustriesFontFamily}" />
     </Style>

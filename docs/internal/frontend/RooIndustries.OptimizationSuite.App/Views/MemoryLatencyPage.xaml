@@ -28,6 +28,7 @@
         </Border>
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" MaxWidth="1600" HorizontalAlignment="Stretch" Padding="0,0,6,0">
+                <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                 <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="14">
                         <Grid.ColumnDefinitions>

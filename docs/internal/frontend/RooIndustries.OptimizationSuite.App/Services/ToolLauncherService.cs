@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -58,7 +57,7 @@ public sealed class ToolLauncherService
         {
             if (!Uri.TryCreate(tool.Website, UriKind.Absolute, out var uri) || uri.Scheme != "https")
                 throw new InvalidDataException("The official download address is invalid.");
-            using var browser = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(uri.AbsoluteUri);
             return "Opened the " + tool.Name + " download page.";
         }
         var path = target.FromArchive ? await Task.Run(() => Extract(tool)) : target.Path!;
@@ -70,11 +69,13 @@ public sealed class ToolLauncherService
     private static Process? Start(string path)
     {
         if (!RooIndustries.Optimizer.PolicyRootSecurity.Elevated() || AdministratorsOnly(path))
-            return Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! });
-        if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException("Windows Explorer is not running, so " + Path.GetFileName(path) + " cannot be started with your normal Windows rights.");
-        var explorer = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
-        explorer.ArgumentList.Add(path);
-        return Process.Start(explorer);
+        {
+            var start = new ProcessStartInfo(path) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(path)! };
+            RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
+            return Process.Start(start);
+        }
+        RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(path);
+        return null;
     }
 
     private static bool AdministratorsOnly(string path)
@@ -103,9 +104,6 @@ public sealed class ToolLauncherService
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
     }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetShellWindow();
 
     private string Extract(ToolDefinition tool)
     {

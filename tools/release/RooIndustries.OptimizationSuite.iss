@@ -60,8 +60,8 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\app\{#AppExe}"; WorkingDir: "{app}\app"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\README-BETA.txt"; Description: "Read the beta tester guide"; Flags: postinstall shellexec skipifsilent runasoriginaluser
-Filename: "{app}\app\{#AppExe}"; Description: "Open {#AppName}"; Flags: postinstall shellexec skipifsilent nowait unchecked
+Filename: "{sys}\notepad.exe"; Parameters: """{app}\README-BETA.txt"""; Description: "Read the beta tester guide"; Flags: postinstall skipifsilent runasoriginaluser nowait
+Filename: "{app}\app\{#AppExe}"; Description: "Open {#AppName}"; Flags: postinstall skipifsilent nowait unchecked runascurrentuser
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\setup"

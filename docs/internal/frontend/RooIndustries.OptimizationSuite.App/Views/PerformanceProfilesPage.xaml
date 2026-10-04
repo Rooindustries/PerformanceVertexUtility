@@ -62,6 +62,7 @@
             <TabViewItem Header="Background apps" IsClosable="False" AutomationProperties.AutomationId="BackgroundTab">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Padding="0,12,12,12">
                     <StackPanel Spacing="12">
+                        <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                         <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" Width="28" Height="28" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                         <StackPanel Spacing="16" x:Name="ProcessContent" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">

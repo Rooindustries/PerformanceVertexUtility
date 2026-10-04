@@ -178,6 +178,7 @@ public sealed partial class OptimizerService
     }
 
     private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
+    public TimeSpan HostReadTimeout { get; set; } = TimeSpan.FromMinutes(3);
 
     private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null, Action<ReadOnlyMemory<byte>>? partial = null)
     {
@@ -197,6 +198,7 @@ public sealed partial class OptimizerService
     private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial, bool idle = false)
     {
         var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
+        if (!confirmed) timeout ??= HostReadTimeout;
         if (confirmed && action is not ("operations-secure" or "data-secure")) await EnsureStorageAsync().ConfigureAwait(false);
         using var change = confirmed ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);

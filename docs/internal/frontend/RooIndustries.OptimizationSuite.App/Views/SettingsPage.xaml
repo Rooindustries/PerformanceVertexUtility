@@ -2,6 +2,7 @@
     <Grid Padding="{StaticResource RooIndustriesPageMargin}">
         <ScrollViewer x:Name="SettingsScroller">
             <StackPanel x:Name="SettingsContent" Spacing="18" MaxWidth="1600" HorizontalAlignment="Center">
+                <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                 <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>

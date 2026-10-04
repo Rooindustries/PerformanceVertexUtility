@@ -57,7 +57,7 @@ public static class RuntimeEnvironment
     public static readonly bool Release = false;
 #endif
 
-    private static readonly string[] MachineNames = ["OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION"];
+    private static readonly string[] MachineNames = ["OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION"];
     private static readonly string[] DeveloperPrefixes = [BrandCompatibility.LegacyEnvironmentPrefix];
     private static readonly string[] DeveloperNames = ["DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64", "DOTNET_ROOT(x86)"];
     private static string? _protectedTemp;
@@ -106,7 +106,7 @@ public static class RuntimeEnvironment
             ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = UserDomain(), ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(system, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["PROCESSOR_ARCHITECTURE"] = RuntimeInformation.OSArchitecture switch { Architecture.Arm64 => "ARM64", Architecture.X86 => "x86", _ => "AMD64" },
+            ["PROCESSOR_ARCHITECTURE"] = RuntimeInformation.ProcessArchitecture switch { Architecture.Arm64 => "ARM64", Architecture.Arm => "ARM", Architecture.X86 => "x86", _ => "AMD64" },
         };
         try
         {
@@ -116,6 +116,7 @@ public static class RuntimeEnvironment
                 if (key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string { Length: > 0 } value) child[name] = value;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
+        foreach (var name in Pinned) child[name] = "0";
         if (!Release)
             foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
                 if (entry.Key is string name && entry.Value is string value && (DeveloperPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) || DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase)))
@@ -167,11 +168,15 @@ public static class RuntimeEnvironment
 
     public static void OpenInExplorer(string target)
     {
+        if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException("Windows Explorer is not running. Sign in to Windows, then try again.");
         var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
         Apply(start);
         start.ArgumentList.Add(target);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows Explorer did not start.");
     }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetShellWindow();
 
     private static string ProtectedTemp(string windows)
     {
