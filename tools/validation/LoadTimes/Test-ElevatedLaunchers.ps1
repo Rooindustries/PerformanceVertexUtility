@@ -121,7 +121,7 @@ function Stop-RooIndustriesApp {
     $held=@()
     $waitRows=[Collections.Generic.List[object]]::new()
     try {
-        foreach ($child in $children | Where-Object { $_.ParentProcessId -eq $script:App.Id -and $_.ExecutablePath -ieq $hostExe }) {
+        foreach ($child in $children | Where-Object { $_.ParentProcessId -eq $script:App.Id }) {
             $process=Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue
             if (-not $process) { continue }
             try {
@@ -129,17 +129,23 @@ function Stop-RooIndustriesApp {
                 if (-not $receipt) { $process.Dispose(); continue }
                 $current=Process-Row $child.ProcessId
                 if (-not $current) { $process.Dispose(); continue }
-                if ($current.CreationDate -ne $child.CreationDate -or $current.ExecutablePath -ine $child.ExecutablePath -or $current.CommandLine -cne $child.CommandLine -or $current.ParentProcessId -ne $child.ParentProcessId -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($hostExe)) { throw 'App Host child identity changed; retained.' }
-                $held+=@{process=$process;identity=$receipt.Identity;row=$child}
+                if ($current.CreationDate -ne $child.CreationDate -or $current.ExecutablePath -ine $child.ExecutablePath -or $current.CommandLine -cne $child.CommandLine -or $current.ParentProcessId -ne $child.ParentProcessId -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($child.ExecutablePath)) { throw 'App child identity changed; retained.' }
+                $record=[ordered]@{identity=$receipt.Identity;parent=$child.ParentProcessId;parentIdentity=$script:AppReceipt.Identity;commandLine=$child.CommandLine;capturedUtc=[DateTime]::UtcNow.ToString('o');closeRequestedUtc=$null;exited=$null;exitUtc=$null;observedUtc=$null;waitBudgetSeconds=60}
+                $waitRows.Add($record)
+                $held+=@{process=$process;identity=$receipt.Identity;row=$child;record=$record}
             } catch { $process.Dispose(); throw }
         }
+        $closeRequestedUtc=[DateTime]::UtcNow.ToString('o')
+        foreach($child in $held){$child.record.closeRequestedUtc=$closeRequestedUtc}
         if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Stop-OwnedProcess $script:AppReceipt } }
-        $until=[DateTime]::UtcNow.AddSeconds(10)
+        $waitClock=[Diagnostics.Stopwatch]::StartNew()
         foreach ($child in $held) {
-            $remaining=[Math]::Max(0,[int]($until-[DateTime]::UtcNow).TotalMilliseconds)
+            $remaining=[Math]::Max(0,60000-[int]$waitClock.ElapsedMilliseconds)
             $exited=$child.process.WaitForExit($remaining)
-            $waitRows.Add([ordered]@{identity=$child.identity;parent=$child.row.ParentProcessId;commandLine=$child.row.CommandLine;exited=$exited})
-            if (-not $exited) { Log ('CLEANUP NEEDED: retained app Host child after bounded wait: '+($child.identity|ConvertTo-Json -Compress)) }
+            $child.record.exited=$exited
+            $child.record.observedUtc=[DateTime]::UtcNow.ToString('o')
+            if($exited){$child.record.exitUtc=$child.process.ExitTime.ToUniversalTime().ToString('o')}
+            if (-not $exited) { Log ('CLEANUP NEEDED: retained app child after bounded wait: '+($child.identity|ConvertTo-Json -Compress)) }
         }
         foreach ($child in $children | Where-Object { $_.ProcessId -notin @($held | ForEach-Object { $_.identity.pid }) }) { $current = Process-Row $child.ProcessId; if ($current -and $current.CreationDate -eq $child.CreationDate) { Log ('CLEANUP NEEDED: retained app child for its lifecycle owner: ' + $child.ProcessId) } }
     } finally {
