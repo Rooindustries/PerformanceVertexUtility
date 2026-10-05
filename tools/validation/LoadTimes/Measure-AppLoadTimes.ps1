@@ -104,8 +104,8 @@ function Settle([Diagnostics.Stopwatch]$sw, [double]$quietSeconds, [double]$time
     }
     return $null
 }
-function Add-Row([string]$tour, [string]$page, [string]$visit, $usable, $complete, [string]$note = '', $state = $null) {
-    $row = [pscustomobject]@{ label = $Label; tour = $tour; page = $page; visit = $visit; usable_ms = $usable; complete_ms = $complete; state_ms = $state; note = $note; utc = (Get-Date).ToUniversalTime().ToString('o') }
+function Add-Row([string]$tour, [string]$page, [string]$visit, $usable, $complete, [string]$note = '', $state = $null, [bool]$navigationIncludesTabSwitch = $false) {
+    $row = [pscustomobject]@{ label = $Label; tour = $tour; page = $page; visit = $visit; usable_ms = $usable; complete_ms = $complete; state_ms = $state; note = $note; utc = (Get-Date).ToUniversalTime().ToString('o'); navigation_includes_tab_switch = $navigationIncludesTabSwitch }
     $script:Rows.Add($row); Log ("ROW $tour $page $visit usable=$usable complete=$complete $note")
     $script:Rows | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir 'loadtimes.csv')
 }
@@ -135,7 +135,7 @@ function Measure-Cycle([Diagnostics.Stopwatch]$sw, [scriptblock]$usable, [string
     return @($u, $null)
 }
 $Pages = @(
-    @{ Name = 'Games'; Nav = 'Games'; Usable = { HasName '1. Choose a game' }; Complete = 'cycle:GameSessionRefresh'; Timeout = 60 },
+    @{ Name = 'Games'; Nav = 'Games'; Tab = 'GamesTab'; Usable = { HasName '1. Choose a game' }; Complete = 'cycle:GameSessionRefresh'; Timeout = 60 },
     @{ Name = 'Games/Processes'; Tab = 'ProcessesTab'; Usable = { Visible (ById 'ProcessPicker') }; Complete = 'cycle:ProcessRefresh'; Timeout = 60 },
     @{ Name = 'Games/Background'; Tab = 'BackgroundTab'; Usable = { HasText ' running$' }; Complete = { HasText ' running$' }; Timeout = 60; After = 'GamesTab' },
     @{ Name = 'Remove apps'; Nav = 'Remove apps'; Usable = { HasName 'Remove selected applications, then review leftover files and registry data.' }; Complete = { HasText '^[1-9]\d* apps installed' }; Timeout = 60 },
@@ -161,13 +161,20 @@ function Visit([hashtable]$page, [string]$tour, [string]$visit) {
         $target = WaitFor { ById ($(if ($page.Tab) { $page.Tab } else { $page.Invoke })) } 30 $page.Name
         $sw = [Diagnostics.Stopwatch]::StartNew(); Activate $target
     }
+    if ($page.Nav -and $page.Tab) {
+        $target = WaitFor { ById $page.Tab } 30 $page.Name
+        Activate $target
+    }
+    if ($page.Tab) {
+        WaitFor { $tab = ById $page.Tab; $tab -and $tab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } 10 ($page.Name + ' tab selected') | Out-Null
+    }
     $complete = $page.Complete
     if ($complete -is [string] -and $complete.StartsWith('cycle:')) { $r = Measure-Cycle $sw $page.Usable $complete.Substring(6) $page.Timeout }
     elseif ($complete -is [string] -and $complete -eq 'settle') {
         $u = (Measure-Until $sw $page.Usable $page.Usable $page.Timeout)[0]
         $r = @($u, (Settle $sw 3 $page.Timeout))
     } else { $r = Measure-Until $sw $page.Usable $complete $page.Timeout 60 $page.State }
-    Add-Row $tour $page.Name $visit $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' }) $r[2]
+    Add-Row $tour $page.Name $visit $r[0] $r[1] $(if ($null -eq $r[1]) { 'timeout' } else { '' }) $r[2] ([bool]($page.Nav -and $page.Tab))
     Shot ("$tour-$visit-" + ($page.Name -replace '\W', ''))
     if ($page.After) { $tab = ById $page.After; if ($tab) { Activate $tab } }
     Start-Sleep -Milliseconds 1500
