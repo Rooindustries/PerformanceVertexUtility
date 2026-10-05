@@ -117,11 +117,17 @@ function State-Bytes {
 function Stamp([byte[]]$Bytes) {[ordered]@{type='Binary';length=$Bytes.Length;sha256=[RooInstalledOwnershipProof]::Hash($Bytes)}}
 function State-Object([byte[]]$Bytes) {[Text.Encoding]::UTF8.GetString($Bytes)|ConvertFrom-Json}
 function Same-Object($A,$B) {(ConvertTo-Json -InputObject $A -Depth 100 -Compress) -ceq (ConvertTo-Json -InputObject $B -Depth 100 -Compress)}
+function Open-ClassesKey([string]$Path) {
+    $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $prefix='Software\Classes\'
+    if($sid -cne $currentSid -or -not$Path.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){throw 'User classes path differs'}
+    return [RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::Users,($currentSid+'_Classes\'+$Path.Substring($prefix.Length)))
+}
 function Menu-Rows {
     $rows=New-Object 'Collections.Generic.List[object]'
     function Visit([string]$Path,[int]$Depth) {
         if($Depth -gt 16 -or $rows.Count -gt 10000){throw 'Menu snapshot exceeds its bound'}
-        $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::CurrentUser,$Path)
+        $k=Open-ClassesKey $Path
         if(-not$k){$rows.Add([ordered]@{path=$Path;missing=$true});return}
         try {
             $values=@(foreach($n in $k.GetValueNames()|Sort-Object){[uint32]$t=0;$b=[RooInstalledOwnershipProof]::Read($k,$n,[ref]$t);[ordered]@{name=$n;type=$t;length=$b.Length;sha256=[RooInstalledOwnershipProof]::Hash($b)}})
@@ -138,7 +144,7 @@ function Other-Menus-DuringApply($Now,$AllowedParents) {
     return Same-Object @($menus|Where-Object {$_.path -notin $absent}) @($Now|Where-Object {$_.path -notin $absent})
 }
 function Menu-Absent {
-    $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::CurrentUser,$menu)
+    $k=Open-ClassesKey $menu
     try{return $null -eq $k}finally{if($k){$k.Dispose()}}
 }
 function Call-Host([string]$Action,[hashtable]$Extra=@{}) {
@@ -226,7 +232,7 @@ try {
     $reply=Call-Host 'tweak-apply' @{previewPath=$path;reviewHash=$hash;acceptEarlierVersion=$true}
     $plan|Add-Member -NotePropertyName reviewHash -NotePropertyValue $hash
     $ownedBytes=Observe-OwnedState $reply $plan
-    $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::CurrentUser,$commandKey)
+    $k=Open-ClassesKey $commandKey
     try{[uint32]$t=0;$raw=[RooInstalledOwnershipProof]::Read($k,'',[ref]$t);$actual=[Text.Encoding]::Unicode.GetString($raw).TrimEnd([char]0)}finally{if($k){$k.Dispose()}}
     Check ($reply.changed -eq $true -and $reply.replayed -eq $false -and $t -eq 1 -and $actual -ceq $expected) 'Setting 693 applies the exact installed app ownership-review command' $actual
     Check (Other-Menus-DuringApply (Menu-Rows) @($change.before.missingKeys|ForEach-Object {if($_.StartsWith($sid+'_Classes\',[StringComparison]::OrdinalIgnoreCase)){'Software\Classes\'+$_.Substring(($sid+'_Classes\').Length)}else{$_}})) 'Applying setting 693 preserves every other menu key'
