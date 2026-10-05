@@ -51,10 +51,21 @@ function Invoke-HandoffLocked($Context,[scriptblock]$Body) {
     if(Test-Path -LiteralPath $path){Assert-HandoffProtected $path}
     try{$lock=[IO.File]::Open($path,'OpenOrCreate','ReadWrite','None');Assert-HandoffProtected $path;& $Body}finally{if($lock){$lock.Dispose()}}
 }
-function Get-HandoffResourceState([ValidateSet('process','task')][string]$Kind,$Resource) {
+function Assert-HandoffResource([ValidateSet('process','task')][string]$Kind,$Resource) {
     if($Kind -ceq 'process'){
         Assert-HandoffFields $Resource @('pid','creationTimeFileTimeUtc','imagePath')
         if([string]$Resource.pid -notmatch '^[1-9][0-9]*$' -or [string]$Resource.creationTimeFileTimeUtc -notmatch '^[1-9][0-9]*$' -or [string]$Resource.imagePath -notmatch '^\\\\\?\\[A-Za-z]:\\'){throw 'Handoff process identity invalid'}
+        return
+    }
+    Assert-HandoffFields $Resource @('name','path','xml','sddl')
+    if(-not$Resource.name -or [string]$Resource.path -notmatch '^\\(?:.*\\)?$' -or -not$Resource.xml -or -not$Resource.sddl){throw 'Handoff task identity invalid'}
+    $definition=[xml]$Resource.xml
+    if(-not$definition.Task.Actions.Exec.Command){throw 'Handoff task action missing'}
+    $null=[Security.AccessControl.RawSecurityDescriptor]::new([string]$Resource.sddl)
+}
+function Get-HandoffResourceState([ValidateSet('process','task')][string]$Kind,$Resource) {
+    Assert-HandoffResource $Kind $Resource
+    if($Kind -ceq 'process'){
         try{$process=Get-Process -Id ([int]$Resource.pid) -ErrorAction Stop}catch{if($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*'){return 'gone'};throw}
         try{
             $handle=$process.Handle
@@ -63,11 +74,6 @@ function Get-HandoffResourceState([ValidateSet('process','task')][string]$Kind,$
             return 'live'
         }finally{$process.Dispose()}
     }
-    Assert-HandoffFields $Resource @('name','path','xml','sddl')
-    if(-not$Resource.name -or [string]$Resource.path -notmatch '^\\(?:.*\\)?$' -or -not$Resource.xml -or -not$Resource.sddl){throw 'Handoff task identity invalid'}
-    $definition=[xml]$Resource.xml
-    if(-not$definition.Task.Actions.Exec.Command){throw 'Handoff task action missing'}
-    $null=[Security.AccessControl.RawSecurityDescriptor]::new([string]$Resource.sddl)
     $folder=Get-OwnedTaskFolder $Resource.path
     try{$task=$folder.GetTask($Resource.name)}catch{if($_.Exception.HResult -eq -2147024894){return 'gone'};throw}
     if($task.Name -cne [string]$Resource.name -or $task.Xml -cne [string]$Resource.xml -or $task.GetSecurityDescriptor(7) -cne [string]$Resource.sddl){throw 'Handoff live task XML/security/action changed'}
@@ -101,7 +107,7 @@ function Get-HandoffProducer($Context,[string]$Scenario) {
     if($resources.hash -cne $c.resourcesHash -or $resources.value.scenario -cne $Scenario -or @($resources.value.tasks).Count+@($resources.value.processes).Count -eq 0 -or @($resources.value.tasks).Count+@($resources.value.processes).Count -gt 64){throw 'Handoff producer resource receipt differs'}
     [pscustomobject]@{receiptHash=$completion.hash;resources=$resources.value}
 }
-function Read-HandoffLedgerUnlocked($Context,[switch]$Prune) {
+function Read-HandoffLedgerUnlocked($Context,[switch]$Prune,[switch]$ProvenanceOnly) {
     if(-not(Test-Path -LiteralPath $Context.ledgerPath)){
         foreach($scenario in 'migration-before','migration-timer-on'){if(Test-Path -LiteralPath (Join-Path (Join-Path $Context.root $scenario) 'completed-child.json')){throw 'Handoff ledger missing after completed producer'}}
         return [pscustomobject]@{protocol='roo-loadtimes-ledger/v1';leaseHash=$Context.leaseHash;entries=@()}
@@ -117,15 +123,17 @@ function Read-HandoffLedgerUnlocked($Context,[switch]$Prune) {
         if([string]$entry.index -notmatch '^(0|[1-9][0-9]*)$' -or [int]$entry.index -ge $source.Count -or $entry.childReceiptHash -cne $producer.receiptHash -or (Handoff-Json $entry.resource) -cne (Handoff-Json $source[[int]$entry.index])){throw 'Handoff ledger entry provenance differs'}
         $key=$entry.producer+'|'+$entry.kind+'|'+$entry.index
         if($seen.ContainsKey($key)){throw 'Duplicate handoff provenance'};$seen[$key]=$true
+        Assert-HandoffResource $entry.kind $entry.resource
+        if($ProvenanceOnly){continue}
         $state=Get-HandoffResourceState $entry.kind $entry.resource
         if($state -ceq 'live'){$live.Add($entry)}
     }
-    if($Prune -and $live.Count -ne @($ledger.entries).Count){$ledger.entries=$live.ToArray();Save-HandoffJson $Context.ledgerPath $ledger}
+    if($Prune -and -not$ProvenanceOnly -and $live.Count -ne @($ledger.entries).Count){$ledger.entries=$live.ToArray();Save-HandoffJson $Context.ledgerPath $ledger}
     $ledger
 }
 function Read-HandoffLedger($Context,[switch]$Prune){Invoke-HandoffLocked $Context {Read-HandoffLedgerUnlocked $Context -Prune:$Prune}}
 function Initialize-HandoffLedger($Context) {
-    Invoke-HandoffLocked $Context {$ledger=Read-HandoffLedgerUnlocked $Context;if(-not(Test-Path -LiteralPath $Context.ledgerPath)){Save-HandoffJson $Context.ledgerPath $ledger -Create}}
+    Invoke-HandoffLocked $Context {$ledger=Read-HandoffLedgerUnlocked $Context -ProvenanceOnly;if(-not(Test-Path -LiteralPath $Context.ledgerPath)){Save-HandoffJson $Context.ledgerPath $ledger -Create}}
 }
 function Add-HandoffProducer($Context,[string]$Scenario,[string]$OutDir) {
     if([IO.Path]::GetFullPath($OutDir) -cne (Join-Path $Context.root $Scenario)){throw 'Handoff producer output differs'}
