@@ -195,7 +195,7 @@ try {
     $targetValue = if ((Transparency) -eq '0') { [int]1 } else { [int]0 }
     $registryKey = Open-TransparencyRegistry
     $script:RegistryBefore = New-OwnedRegistryFieldIntent $registryKey 'EnableTransparency' $targetValue 'DWord'
-    $registryBefore = if ($script:RegistryBefore.before -ceq 'absent') { '<absent>' } else { [string]$script:RegistryBefore.original }
+    $transparencyBefore = if ($script:RegistryBefore.before -ceq 'absent') { '<absent>' } else { [string]$script:RegistryBefore.original }
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $advanced = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Show advanced options')) } 20 'Show advanced options'
     Set-Toggle $advanced $true; Start-Sleep 1
@@ -212,17 +212,17 @@ try {
     $choice = WaitFor { $combo.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, $target)) } 10 "choice $target"
     $choice.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 500
     Invoke-Element (ById 'WindowsTweaksPreview'); Start-Sleep 2; Tweaks-Idle | Out-Null
-    $script:Cleanup = "restore the $CheckProfile profile in Windows tweaks; EnableTransparency was $registryBefore"
+    $script:Cleanup = "restore the $CheckProfile profile in Windows tweaks; EnableTransparency was $transparencyBefore"
     Apply-Reviewed 'apply' -NoWait
     $registryAtNav = Transparency
     Nav 'Undo changes'
     $sw = [Diagnostics.Stopwatch]::StartNew()
     WaitFor { $t = @(Texts); if (Has-Profile $t) { $t } } 120 'the new profile on the Undo page left open during the apply' | Out-Null
-    Check $true 'Undo page opened while the apply was running shows the new profile once the apply finishes, without navigating again' ("registry when the Undo page opened=" + $registryAtNav + " (before=" + $registryBefore + "), ms after opening=" + $sw.ElapsedMilliseconds)
-    Check ($registryAtNav -eq $registryBefore) 'the Undo page was opened before the apply reached Windows' "registry at open=$registryAtNav before=$registryBefore"
+    Check $true 'Undo page opened while the apply was running shows the new profile once the apply finishes, without navigating again' ("registry when the Undo page opened=" + $registryAtNav + " (before=" + $transparencyBefore + "), ms after opening=" + $sw.ElapsedMilliseconds)
+    Check ($registryAtNav -eq $transparencyBefore) 'the Undo page was opened before the apply reached Windows' "registry at open=$registryAtNav before=$transparencyBefore"
     WaitFor { if ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.after) { $true } } 60 'the expected typed registry change' | Out-Null
     $registryApplied = Transparency
-    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.after) 'apply changed the registry value' "before=$registryBefore after=$registryApplied"
+    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.after) 'apply changed the registry value' "before=$transparencyBefore after=$registryApplied"
     Shot '2-applied'
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -267,7 +267,7 @@ try {
     Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
     Apply-Reviewed 'restore'
     $registryRestored = Transparency
-    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.before) 'restore returned the registry value' "before=$registryBefore restored=$registryRestored"
+    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.before) 'restore returned the registry value' "before=$transparencyBefore restored=$registryRestored"
     if ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.before) { $script:Cleanup = $null }
     $final = @(Undo-Profiles)
     Check (-not (Has-Profile $final)) 'cached Undo page reloads after the restore and drops the profile' ''
