@@ -59,6 +59,34 @@ function Timer-Pins($task) {
     $script = [regex]::Match([string]$task.Actions[0].Arguments, '-File "([^"]+startup\.ps1)"').Groups[1].Value
     if ($script -and (Test-Path -LiteralPath $script)) { @([regex]::Matches((Get-Content -LiteralPath $script -Raw), '-cne ''([0-9A-F]{64})''') | ForEach-Object { $_.Groups[1].Value }) } else { @() }
 }
+function Timer-Ownership($Task, [string]$ControlRoot, [string]$SessionPath, [DateTime]$StartedAfter) {
+    $state = Get-Content -LiteralPath $SessionPath -Raw | ConvertFrom-Json
+    $launchPath = Join-Path $ControlRoot 'launch.json'
+    $launch = Get-Content -LiteralPath $launchPath -Raw | ConvertFrom-Json
+    $startup = Get-Content -LiteralPath (Join-Path $ControlRoot 'startup.json') -Raw | ConvertFrom-Json
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $assembly = Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll'
+    if (-not $Task -or $startup.phase -cne 'created' -or $startup.taskName -cne $Task.TaskName -or $startup.owner.machine -ine $env:COMPUTERNAME -or $startup.owner.userSid -cne $sid -or
+        $launch.owner.machine -ine $env:COMPUTERNAME -or $launch.owner.userSid -cne $sid -or $launch.root -ine $ControlRoot -or $launch.assemblyPath -ine $assembly -or $launch.assemblyHash -ine (Get-FileHash -LiteralPath $assembly -Algorithm SHA256).Hash -or
+        ($state.launch | ConvertTo-Json -Depth 8 -Compress) -cne ($launch | ConvertTo-Json -Depth 8 -Compress) -or $state.executable -ine $hostExe -or -not $state.acquired -or $state.released -or $null -ne $state.error) { throw 'Timer output does not match this installed helper and its startup/launch receipts; retained.' }
+    $taskReceipt = Get-OwnedTaskReceipt $Task.TaskName $Task.TaskPath
+    Add-Type -AssemblyName System.Xml.Linq
+    $definition = [Xml.Linq.XDocument]::Parse($taskReceipt.xml)
+    $enabled = $definition.Root.Element($definition.Root.Name.Namespace + 'Settings').Element($definition.Root.Name.Namespace + 'Enabled')
+    if ($enabled) { $enabled.Remove() }
+    $fingerprint = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($definition.ToString([Xml.Linq.SaveOptions]::DisableFormatting) + "`n" + $taskReceipt.sddl))).Replace('-', '')
+    if ($fingerprint -ine $startup.definitionHash) { throw 'Timer task native XML/security fingerprint differs from its startup receipt; retained.' }
+    $scriptPath = Join-Path $ControlRoot 'startup.ps1'
+    if ($startup.scriptHash -ine (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash -or [string]$Task.Actions[0].Arguments -notlike ('*"'+$scriptPath+'"*')) { throw 'Timer task action differs from its startup receipt; retained.' }
+    $row = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $state.processId) -ErrorAction Stop
+    if (-not $row -or $row.ExecutablePath -ine $hostExe -or [string]$row.CommandLine -ine ('"'+$hostExe+'" --timer-worker "'+$launchPath+'"')) { throw 'Timer worker command differs from its launch receipt; retained.' }
+    $process = Get-Process -Id $state.processId -ErrorAction Stop
+    try {
+        $owned = New-OwnedProcess $process
+        if ($owned.Identity.creationTimeFileTimeUtc -cne [string]$state.creationTime -or $owned.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($hostExe) -or $process.StartTime.ToUniversalTime() -lt $StartedAfter) { throw 'Timer worker native identity differs from its session receipt; retained.' }
+        [pscustomobject]@{task=$taskReceipt;process=$owned.Identity;sessionPath=$SessionPath;sessionSha256=(Get-FileHash -LiteralPath $SessionPath -Algorithm SHA256).Hash}
+    } finally { $process.Dispose() }
+}
 function Installed-Helper-Hashes { @((Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll'), $hostExe | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) }
 function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
 function Policy-Workers([string]$requestPath) { if (-not $requestPath) { return @() }; @(Get-CimInstance Win32_Process -Filter "Name='Optimizer.Host.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'policy-run' -and $_.CommandLine.IndexOf($requestPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) }
@@ -278,9 +306,13 @@ try {
         Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
         Set-Profile $TimerProfile
         Choose-Setting $TimerSetting 'Start timer at Windows sign-in' 'Enabled'
+        $timerApplyStarted = [DateTime]::UtcNow
         Apply-Reviewed 'timer apply' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender'
         $timerTask = $null; try { $timerTask = WaitFor { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })[0] } 90 'the sign-in timer task' } catch {}
         Check ($null -ne $timerTask) 'the earlier version registered the sign-in timer' ($(if ($timerTask) { $timerTask.TaskName + ' state=' + $timerTask.State } else { 'no RooIndustries.Timer task' }))
+        $timerControl = Join-Path (Data-Root) 'operations\windows-timer'
+        $timerOutput = Timer-Ownership $timerTask $timerControl (Join-Path $timerControl 'session.json') $timerApplyStarted
+        Check ($null -ne $timerOutput.process) 'the earlier timer worker has an exact native identity and matching launch receipt' ('pid=' + $timerOutput.process.pid + ' session=' + $timerOutput.sessionPath + ' sha256=' + $timerOutput.sessionSha256)
         Shot 'timer'
         Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
         Set-Profile $BlockerProfile
@@ -294,8 +326,8 @@ try {
         $oldWorkers = @(Any-Policy-Workers | Where-Object {$_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0} | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
         $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
         Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
-        $script:PersistentOutputTasks = @(Policy-Tasks | ForEach-Object { Get-OwnedTaskReceipt $_.TaskName $_.TaskPath })
-        $script:PersistentOutputProcesses = @(Any-Policy-Workers | Where-Object { $_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0 } | ForEach-Object { (New-OwnedProcess (Get-Process -Id $_.ProcessId)).Identity })
+        $script:PersistentOutputTasks = @(Policy-Tasks | ForEach-Object { Get-OwnedTaskReceipt $_.TaskName $_.TaskPath }) + @($timerOutput.task)
+        $script:PersistentOutputProcesses = @(Any-Policy-Workers | Where-Object { $_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0 } | ForEach-Object { (New-OwnedProcess (Get-Process -Id $_.ProcessId)).Identity }) + @($timerOutput.process)
         [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); probeIdentity = $MigrationProbeIdentity; probeFileIdentity = $MigrationFileIdentity; oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | ForEach-Object { $bytes = [Text.Encoding]::UTF8.GetBytes($_); $file = [IO.File]::Open($StatePath, 'CreateNew', 'Write', 'Read'); try { $file.Write($bytes, 0, $bytes.Length) } finally { $file.Dispose() } }
     } elseif ($Phase -eq 'undo-blocker') {
         Open-App
@@ -317,11 +349,11 @@ try {
         Apply-Reviewed 'timer on' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender|Logitech'
         $stateMade = $null; try { $stateMade = WaitFor { if ((Test-Path -LiteralPath $stateFile) -and (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc -gt $stampBefore) { $true } } 90 'the timer state to be written' } catch {}
         Check ([bool]$stateMade) 'the new version starts the timer and creates its state folder outside the data folder' ($timerState + ' written=' + [bool]$stateMade)
-        $timerWorker = $null; try { $timerWorker = WaitFor { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') })[0] } 60 'the timer worker' } catch {}
-        Check ($null -ne $timerWorker -and $timerWorker.ExecutablePath -ieq $hostExe) 'the timer worker runs from the installed helper' ($(if ($timerWorker) { 'pid=' + $timerWorker.ProcessId + ' image=' + $timerWorker.ExecutablePath } else { 'no timer worker' }))
+        $timerOutput = Timer-Ownership (Timer-Task) (Join-Path (Data-Root) 'operations\windows-timer') $stateFile [DateTime]::MinValue
+        Check ($null -ne $timerOutput.process) 'the timer worker runs from the installed helper' ('pid=' + $timerOutput.process.pid + ' image=' + $timerOutput.process.imagePath + ' session=' + $timerOutput.sessionPath + ' sha256=' + $timerOutput.sessionSha256)
         Shot 'timer-on'
-        $script:PersistentOutputTasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' } | ForEach-Object { Get-OwnedTaskReceipt $_.TaskName $_.TaskPath })
-        $script:PersistentOutputProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') } | ForEach-Object { (New-OwnedProcess (Get-Process -Id $_.ProcessId)).Identity })
+        $script:PersistentOutputTasks = @($timerOutput.task)
+        $script:PersistentOutputProcesses = @($timerOutput.process)
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
