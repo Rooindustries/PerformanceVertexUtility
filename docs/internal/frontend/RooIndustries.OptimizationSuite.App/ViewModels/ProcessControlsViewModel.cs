@@ -98,6 +98,9 @@ public static class GovernorDisplay
     public static PolicyInstance[] Holding(GovernorSnapshot snapshot) => Live(snapshot)
         .Where(instance => !(instance.Status == "applying" && snapshot.Unapplied?.Contains(instance.JournalPath) == true)).ToArray();
 
+    public static PolicyInstance[] LeftAsSet(GovernorSnapshot snapshot) => snapshot.Worker.State?.Instances
+        .Where(instance => instance.Status == "restored" && instance.ErrorKind == "leftAsSet").ToArray() ?? [];
+
     public static int Apps(IEnumerable<PolicyInstance> instances) => instances.Select(instance => Key(instance.Process)).Distinct().Count();
     public static int Changed(GovernorSnapshot snapshot) => Apps(Holding(snapshot).Where(instance => instance.Status is "active" or "applying"));
     public static int Kept(GovernorSnapshot snapshot) => Apps(Holding(snapshot).Where(instance => instance.Status == "conflict"));
@@ -150,10 +153,11 @@ public static class GovernorDisplay
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back. Press Pause governor to put them back.",
             "paused" => (Kept(snapshot) > 0
                 ? "Your rules are saved but not used. Some apps kept a setting the governor could not put back." + retry
+                : LeftAsSet(snapshot).Length > 0 ? "Your rules are saved but not used. " + ProcessControlEngine.LeftAsSet
                 : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
             "off" => worker.HostRunning is null ? "Roo Industries couldn't read the governor's last state, so it can't confirm every app got its old settings back" + Reason(worker.Error) + "."
                 : Kept(snapshot) > 0 ? StillHave(Kept(snapshot)) + " a setting Roo Industries could not put back." + retry
-                : Changed(snapshot) == 0 ? ""
+                : Changed(snapshot) == 0 ? LeftAsSet(snapshot).Length > 0 ? ProcessControlEngine.LeftAsSet : ""
                 : worker.HostRunning == true ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back.",
             "stopped" => (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } last ? last + " " : "")
@@ -186,6 +190,9 @@ public static class GovernorDisplay
     {
         var live = Live(snapshot);
         var holding = Holding(snapshot);
+        var left = LeftAsSet(snapshot).Where(instance => snapshot.Exited?.Contains(Key(instance.Process)) != true
+            && !live.Any(current => Key(current.Process) == Key(instance.Process) && (current.Field is null || instance.Field is null || current.Field == instance.Field)))
+            .Reverse().DistinctBy(instance => (Key(instance.Process), instance.Field)).ToArray();
         var issues = snapshot.Worker.State?.Issues ?? [];
         return snapshot.Rules.Select(rule =>
         {
@@ -193,18 +200,19 @@ public static class GovernorDisplay
                 .Concat(rule.CpuSelection is null ? Array.Empty<string>() : new[] { "Preferred CPUs " + (rule.CpuSelection.Processors is { Length: > 0 } chosen ? chosen.Length + " selected" : rule.CpuSelection.Kind switch
                 { "windowsDefault" => "Windows default", "all" => "all", "performance" => "performance cores", "efficiency" => "efficiency cores", "core" => "one core", "cache" => "one cache group", "numa" => "one NUMA node", var kind => kind }) }));
             var enforced = rule.Enabled && state == "running";
-            var mine = (enforced ? live : holding).Where(instance => instance.RuleId == rule.RuleId).ToArray();
+            var mine = (enforced ? live : holding).Concat(left).Where(instance => instance.RuleId == rule.RuleId).ToArray();
             var lines = new List<(int Process, int Order, string Text)>();
             var held = new Dictionary<int, HashSet<string>>();
             foreach (var instance in mine)
             {
                 var name = Path.GetFileName(instance.Process.ExecutablePath) + " (" + instance.Process.ProcessId + ")";
                 snapshot.Journals.TryGetValue(instance.JournalPath, out var journal);
-                string[] fields = instance.Field is { } field ? [field] : journal?.Changes.Select(change => change.Name).ToArray() ?? [];
+                string[] fields = instance.Field is { } field ? [field] : journal?.Changes
+                    .Where(change => instance.ErrorKind != "leftAsSet" || change.Status == "leftAsSet").Select(change => change.Name).ToArray() ?? [];
                 if (!held.TryGetValue(instance.Process.ProcessId, out var set)) held[instance.Process.ProcessId] = set = new(StringComparer.Ordinal);
-                set.UnionWith(fields);
+                if (instance.ErrorKind != "leftAsSet") set.UnionWith(fields);
                 var label = fields.Length == 0 ? "Settings" : string.Join(", ", fields.Select(ProcessControlsViewModel.Label));
-                lines.Add((instance.Process.ProcessId, Order(fields.FirstOrDefault()), name + " · " + (enforced ? Enforced(instance, label, journal) : Leftover(instance, label))));
+                lines.Add((instance.Process.ProcessId, Order(fields.FirstOrDefault()), name + " · " + (instance.ErrorKind == "leftAsSet" ? label + " · " + ProcessControlEngine.LeftAsSet : enforced ? Enforced(instance, label, journal) : Leftover(instance, label))));
             }
             if (enforced)
                 foreach (var issue in issues.Where(issue => issue.RuleId == rule.RuleId))
@@ -518,7 +526,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void ShowResult(ProcessControlJournal result)
     {
         RestoreAvailable = result.Status is not ("restored" or "expired");
-        Status = result.Status switch { "applied" => "Process controls applied and read back.", "restored" => "Original controls restored.", "expired" => "The process exited; its instance controls have ended.", _ => "Some controls need recovery." };
+        Status = result.Status switch { "applied" => "Process controls applied and read back.", "restored" => result.Changes.Any(change => change.Status == "leftAsSet") ? ProcessControlEngine.LeftAsSet : "Original controls restored.", "expired" => "The process exited; its instance controls have ended.", _ => "Some controls need recovery." };
         Detail = string.Join("\n", result.Changes.Select(change => Label(change.Name) + ": " + change.Status + (change.Error is null ? "" : " · " + change.Error)));
     }
 

@@ -46,8 +46,12 @@ function Test-ScenarioPerFieldRetry {
 }
 
 function Test-ScenarioReassert {
-    $path=Copy-Probe
-    $probe=Start-Probe $path
+    param([string]$RestoreAction='Pause',[string]$FinalPriority='Idle',[switch]$Crash,[switch]$RetryDenied)
+    if($RetryDenied){
+        $path=Copy-Probe 'RooIndustriesGovernorFixture.exe' 'fixture' 'RooIndustriesGovernorFixture.exe'
+        $probe=Start-Probe $path '25 1600 10 600' -NoWait
+        $started=[Diagnostics.Stopwatch]::StartNew()
+    } else {$path=Copy-Probe;$probe=Start-Probe $path}
     Use-Rule (New-Rule $path @{cpuPriority='AboveNormal';ioPriority=1} 'Re-assert')|Out-Null
     Assert ($null -ne (Wait-Until {$c=Read-Controls $probe;$c.cpuPriority -eq 'AboveNormal' -and $c.ioPriority -eq 1} 10)) 'The rule is applied'
     $times=@()
@@ -65,12 +69,31 @@ function Test-ScenarioReassert {
     $cpu=@(Get-Open $probe.Id|Where-Object {$_.field -eq 'cpuPriority'})
     Note 'steppedBack' $cpu
     Assert ($cpu.Count -eq 1 -and $cpu[0].status -eq 'conflict' -and $cpu[0].errorKind -eq 'keepsChanging' -and $cpu[0].error -eq 'This app keeps changing it back, so Roo Industries stepped back.') 'The stepped-back field says the app keeps changing it back'
+    if($FinalPriority -ne 'Idle'){Set-Field $probe 'cpuPriority' $FinalPriority}
     Set-Field $probe 'ioPriority' 0
     Assert ($null -ne (Wait-Field $probe 'ioPriority' 1 6)) 'The other field of the same app is still enforced'
-    Worker 'Pause'|Out-Null
+    if($Crash){
+        foreach($task in $script:tasks){Disable-ScheduledTask -TaskName $task|Out-Null}
+        $worker=Get-WorkerProcess;$worker.Kill();$worker.WaitForExit()
+    }
+    if($RetryDenied){$null=Wait-Until {$started.Elapsed.TotalSeconds -ge 27} 30 250}
+    Worker $RestoreAction|Out-Null
+    if($RetryDenied){
+        $blocked=@(Get-Open $probe.Id|Where-Object {$_.field -eq 'cpuPriority'})
+        $blockedJournal=Get-Content -LiteralPath $blocked[0].journalPath -Raw|ConvertFrom-Json
+        Assert ($blocked.Count -eq 1 -and $blocked[0].errorKind -eq 'denied' -and $blockedJournal.status -ne 'restored' -and @($blockedJournal.changes|Where-Object {$_.status -eq 'leftAsSet'}).Count -eq 0) 'The stepped-back field stays open on a failed read instead of claiming leftAsSet'
+        $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 37} 40 250
+        Core 'policy-run' @{durationSeconds=0}|Out-Null
+    }
     $after=Read-Controls $probe
     Note 'afterPause' $after
-    Assert ($after.cpuPriority -eq 'Normal' -and $after.ioPriority -eq 2) 'Pause puts back the captured originals, including the stepped-back field'
+    Assert ($after.cpuPriority -eq $FinalPriority -and $after.ioPriority -eq 2) ($RestoreAction+' leaves the stepped-back field as another program set it and restores the still-owned field')
+    $closed=@(Get-Records $probe.Id|Where-Object {$_.field -eq 'cpuPriority'})
+    Note 'closedSteppedBack' $closed
+    Assert ($closed.Count -eq 1 -and $closed[0].status -eq 'restored' -and $closed[0].errorKind -eq 'leftAsSet' -and $closed[0].error -eq 'Left as another program set it.') 'The stepped-back governor record is closed with the reason it was left alone'
+    $journal=Get-Content -LiteralPath $closed[0].journalPath -Raw|ConvertFrom-Json
+    Note 'closedSteppedBackJournal' $journal
+    Assert ($journal.status -eq 'restored' -and $journal.changes.Count -eq 1 -and $journal.changes[0].status -eq 'leftAsSet' -and $journal.changes[0].error -eq 'Left as another program set it.') 'The stepped-back recovery journal is closed without claiming the original was restored'
 }
 
 function Test-ScenarioRuleEditOrphan {
@@ -205,14 +228,27 @@ function Test-ScenarioPinnedHashCache {
     $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Pinned executable'
     $rule.executableHash=$hash
     Use-Rule $rule|Out-Null
+    $worker=Get-WorkerProcess
+    if($null -eq $worker){throw 'The pinned-cache fixture governor is not running'}
+    $null=$worker.Handle
+    $workerId=$worker.Id
     $times=@()
+    $baselines=@()
     for($index=0;$index -lt 3;$index++){
-        $probe=Start-Probe $path
-        $clock=[Diagnostics.Stopwatch]::StartNew()
+        [RooIndustriesGovernorScenarioOracle]::Suspend($worker.Handle)
+        try {
+            $probe=Start-Probe $path
+            $baseline=Read-Controls $probe
+            $baselines+=@{pid=$probe.Id;workerPid=$workerId;cpu=$baseline.cpuPriority;io=$baseline.ioPriority;memory=$baseline.memoryPriority}
+            Assert ($baseline.cpuPriority -ceq 'Normal' -and $baseline.ioPriority -eq 2 -and $baseline.memoryPriority -eq 5) ('Pinned fixture '+$index+' confirms its exact normal baseline before governor enforcement')
+            $clock=[Diagnostics.Stopwatch]::StartNew()
+        } finally {[RooIndustriesGovernorScenarioOracle]::Resume($worker.Handle)}
         $null=Wait-Field $probe 'cpuPriority' 'AboveNormal' 20 20
         $times+=[Math]::Round($clock.Elapsed.TotalSeconds,2)
         Start-Sleep -Seconds 2
     }
+    Note 'pinnedFixtureBaselines' $baselines
+    Assert ((Get-WorkerProcess).Id -eq $workerId) 'The same governor keeps its pinned hash cache through all fixture starts'
     Note 'secondsToApplyPinnedExecutable' $times
     Assert ($times[1] -lt 0.8 -and $times[2] -lt 0.8) 'A pinned 1.5 GB executable is hashed once, so later starts get their rules quickly'
 }
@@ -372,6 +408,8 @@ function Test-ScenarioRetryRestore {
     $stuck=@(Get-Open $fixture.Id)
     Note 'afterPause' @($stuck|ForEach-Object {[string]$_.field+' '+$_.status+' '+$_.errorKind})
     Assert ($stuck.Count -eq 1 -and $stuck[0].status -eq 'conflict' -and $stuck[0].errorKind -eq 'denied' -and (Read-Field $fixture 'cpuPriority') -eq 'AboveNormal') 'Pause cannot put the setting back while the app denies access and keeps the record'
+    $blockedJournal=Get-Content -LiteralPath $stuck[0].journalPath -Raw|ConvertFrom-Json
+    Assert ($blockedJournal.status -ne 'restored' -and @($blockedJournal.changes|Where-Object {$_.status -eq 'leftAsSet' -or $_.errorKind -eq 'leftAsSet'}).Count -eq 0) 'A failed read or open keeps the journal and never records leftAsSet'
     $null=Wait-Until {$started.Elapsed.TotalSeconds -ge 40} 45 500
     Core 'policy-run' @{durationSeconds=0}|Out-Null
     $after=@(Get-Open $fixture.Id)

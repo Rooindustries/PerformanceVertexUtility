@@ -35,6 +35,7 @@ if (args is ["--child-env", var fixtureScenario, var fixtureMode, var fixtureDir
 if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
+if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }
 if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
 if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ordinal) || args is ["--timer-worker-fake", ..]) { DataRootChild.Run(args); return; }
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }

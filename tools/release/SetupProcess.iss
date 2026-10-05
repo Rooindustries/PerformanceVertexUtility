@@ -85,6 +85,16 @@ function FolderDriveType(Path: String): DWORD; external 'GetDriveTypeW@kernel32.
 function FolderFullPath(Path: String; Size: DWORD; Buffer: String; Part: DWORD): DWORD; external 'GetFullPathNameW@kernel32.dll stdcall';
 function FolderLongPath(Path: String; Buffer: String; Size: DWORD): DWORD; external 'GetLongPathNameW@kernel32.dll stdcall';
 
+var
+  SetupFolderRefusal: String;
+
+procedure RefuseSetupUserFolder;
+begin
+  SetupFolderRefusal := 'Roo Industries needs this Windows user''s AppData folder on a local fixed drive, in an existing folder that is not a link and is outside Windows and the app''s install folder. Restore the AppData folder setting, then run setup again.';
+  Log(SetupFolderRefusal);
+  RaiseException(SetupFolderRefusal);
+end;
+
 function SetupUserFolder(const Profile: String; const Roaming: Boolean; const InstallFolder: String): String;
 var
   Raw, Name, Key, Full, Ancestor, Blocked: String;
@@ -97,7 +107,7 @@ begin
   if Roaming then Name := 'AppData';
   if RegValueExists(HKCU, Key, Name) then
   begin
-    if not RegQueryStringValue(HKCU, Key, Name, Raw) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+    if not RegQueryStringValue(HKCU, Key, Name, Raw) then RefuseSetupUserFolder;
   end
   else
   begin
@@ -120,35 +130,35 @@ begin
     end;
   end;
   Index := Pos('%', Result);
-  if (Result = '') or ((Index > 0) and (Pos('%', Copy(Result, Index + 1, Length(Result))) > 0)) or (Pos('/', Result) > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  if (Result = '') or ((Index > 0) and (Pos('%', Copy(Result, Index + 1, Length(Result))) > 0)) or (Pos('/', Result) > 0) then RefuseSetupUserFolder;
   for Index := 1 to Length(Result) do
-    if (Ord(Result[Index]) < 32) or (Pos(Result[Index], '<>"|?*') > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+    if (Ord(Result[Index]) < 32) or (Pos(Result[Index], '<>"|?*') > 0) then RefuseSetupUserFolder;
   while (Length(Result) > 3) and (Copy(Result, Length(Result), 1) = '\') do Delete(Result, Length(Result), 1);
   if Roaming and (Copy(Result, 1, 2) = '\\') then
   begin
     Raw := Copy(Result, 3, Length(Result));
-    if (Pos('\', Raw) < 2) or (Pos('\', Raw) = Length(Raw)) or (Pos(':', Raw) > 0) or (Pos('\\', Raw) > 0) or (Pos('\.\', '\' + Raw + '\') > 0) or (Pos('\..\', '\' + Raw + '\') > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+    if (Pos('\', Raw) < 2) or (Pos('\', Raw) = Length(Raw)) or (Pos(':', Raw) > 0) or (Pos('\\', Raw) > 0) or (Pos('\.\', '\' + Raw + '\') > 0) or (Pos('\..\', '\' + Raw + '\') > 0) then RefuseSetupUserFolder;
     exit;
   end;
-  if (Length(Result) < 4) or (Pos(Uppercase(Copy(Result, 1, 1)), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') = 0) or (Copy(Result, 2, 2) <> ':\') or (Pos(':', Copy(Result, 3, Length(Result))) > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  if (Length(Result) < 4) or (Pos(Uppercase(Copy(Result, 1, 1)), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') = 0) or (Copy(Result, 2, 2) <> ':\') or (Pos(':', Copy(Result, 3, Length(Result))) > 0) then RefuseSetupUserFolder;
   SetLength(Full, 32768);
   Size := FolderFullPath(Result, 32768, Full, 0);
-  if (Size = 0) or (Size >= 32768) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  if (Size = 0) or (Size >= 32768) then RefuseSetupUserFolder;
   SetLength(Full, Size);
-  if CompareText(Full, Result) <> 0 then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  if CompareText(Full, Result) <> 0 then RefuseSetupUserFolder;
   if not Roaming then
   begin
-    if (FolderDriveType(ExtractFileDrive(Result) + '\') <> 3) or not DirExists(Result) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings. Choose an existing local folder on a fixed drive.');
+    if (FolderDriveType(ExtractFileDrive(Result) + '\') <> 3) or not DirExists(Result) then RefuseSetupUserFolder;
     SetLength(Full, 32768);
     Size := FolderLongPath(Result, Full, 32768);
-    if (Size = 0) or (Size >= 32768) then RaiseException('Roo Industries could not read the AppData folder path.');
+    if (Size = 0) or (Size >= 32768) then RefuseSetupUserFolder;
     SetLength(Full, Size);
     Result := Full;
     Ancestor := Result;
     while Length(Ancestor) > 3 do
     begin
       Attributes := FolderAttributes(Ancestor);
-      if (Attributes = $FFFFFFFF) or ((Attributes and $400) <> 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+      if (Attributes = $FFFFFFFF) or ((Attributes and $400) <> 0) then RefuseSetupUserFolder;
       Ancestor := RemoveBackslashUnlessRoot(ExtractFileDir(Ancestor));
     end;
     Parts := [ExpandConstant('{win}'), ExpandConstant('{commonpf64}'), ExpandConstant('{commonpf32}'), InstallFolder];
@@ -158,7 +168,7 @@ begin
       SetLength(Full, 32768);
       Size := FolderLongPath(Blocked, Full, 32768);
       if (Size > 0) and (Size < 32768) then begin SetLength(Full, Size); Blocked := Full; end;
-      if (CompareText(Result, Blocked) = 0) or (CompareText(Copy(Result, 1, Length(Blocked) + 1), Blocked + '\') = 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings. Choose a folder outside Windows and the app''s install folder.');
+      if (CompareText(Result, Blocked) = 0) or (CompareText(Copy(Result, 1, Length(Blocked) + 1), Blocked + '\') = 0) then RefuseSetupUserFolder;
     end;
   end;
 end;

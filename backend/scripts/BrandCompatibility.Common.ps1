@@ -97,7 +97,9 @@ function Get-RooIndustriesUserFolder {
     if(-not $Roaming){
         if(([IO.DriveInfo]::new([IO.Path]::GetPathRoot($path))).DriveType -ne 'Fixed' -or -not [IO.Directory]::Exists($path)){throw $problem}
         for($directory=[IO.DirectoryInfo]::new($path);$null -ne $directory;$directory=$directory.Parent){if($directory.Attributes -band [IO.FileAttributes]::ReparsePoint){throw $problem}}
-        foreach($blocked in @([Environment]::GetFolderPath('Windows'),[Environment]::GetFolderPath('ProgramFiles'),[Environment]::GetFolderPath('ProgramFilesX86'),(Split-Path (Split-Path $script:RooIndustriesScriptsRoot -Parent) -Parent))){
+        $installRoot=Get-Variable -Name RooIndustriesInstallRoot -Scope Script -ErrorAction SilentlyContinue
+        $installFolder=if($installRoot -and $installRoot.Value){[string]$installRoot.Value}else{Split-Path (Split-Path $script:RooIndustriesScriptsRoot -Parent) -Parent}
+        foreach($blocked in @([Environment]::GetFolderPath('Windows'),[Environment]::GetFolderPath('ProgramFiles'),[Environment]::GetFolderPath('ProgramFilesX86'),$installFolder)){
             if($blocked){$blocked=[IO.Path]::GetFullPath($blocked)}
             if($blocked -and ($path -ieq $blocked.TrimEnd('\') -or $path.StartsWith($blocked.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase))){throw $problem}
         }
@@ -114,6 +116,30 @@ function Expand-RooIndustriesUserVariables([string]$Text) {
     return [regex]::Replace($Text,'%([^%]+)%',[Text.RegularExpressions.MatchEvaluator]{param($match) if($values.ContainsKey($match.Groups[1].Value)){$values[$match.Groups[1].Value]}else{$match.Value}})
 }
 
+function Test-RooIndustriesDataRootMigrationInFlight([string]$Parent,[string]$Name) {
+    $root=Get-RooIndustriesDataRootMarkerName (Join-Path $Parent $Name)
+    foreach($folder in @(Get-ChildItem -LiteralPath $Parent -Directory -Filter ($Name+'.secure-*') -ErrorAction SilentlyContinue)){
+        try {
+            if($folder.Attributes -band [IO.FileAttributes]::ReparsePoint){continue}
+            $acl=$folder.GetAccessControl();$trusted=@('S-1-5-32-544','S-1-5-18')
+            if($trusted -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value){continue}
+            if(@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow' -and $trusted -notcontains $_.IdentityReference.Value -and (([int64]$_.FileSystemRights -band 0x500D0156) -ne 0)}).Count){continue}
+            foreach($name in @('.migrating','.migrated')){
+                $file=Get-Item -LiteralPath (Join-Path $folder.FullName $name) -Force -ErrorAction SilentlyContinue
+                if(-not $file -or $file.PSIsContainer -or ($file.Attributes -band ([IO.FileAttributes]::ReparsePoint -bor [IO.FileAttributes]::Device)) -or $file.Length -gt 65536){continue}
+                $stream=[IO.File]::Open($file.FullName,'Open','Read','Read')
+                try {
+                    if($stream.Length -gt 65536){continue}
+                    $reader=[IO.StreamReader]::new($stream,[Text.UTF8Encoding]::new($false,$true))
+                    try {$manifest=$reader.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop} finally {$reader.Dispose()}
+                } finally {$stream.Dispose()}
+                if($manifest.source -is [string] -and (Get-RooIndustriesDataRootMarkerName $manifest.source) -ceq $root){return $true}
+            }
+        } catch {continue}
+    }
+    return $false
+}
+
 function Get-RooIndustriesLocalDataRoot {
     param([string]$LocalData=(Get-RooIndustriesLocalAppData),[switch]$Protected)
     if(-not $PSBoundParameters.ContainsKey('LocalData')){
@@ -127,11 +153,14 @@ function Get-RooIndustriesLocalDataRoot {
         $parent=Get-RooIndustriesDataRootMarkerName $LocalData
         foreach($marked in $roots){
             if((Get-RooIndustriesDataRootMarkerName (Split-Path $marked -Parent)) -ine $parent){throw "This Windows user's AppData folder setting changed or names several protected folders. Roo Industries kept the existing data. Restore the folder setting before opening the app again."}
-            if(-not (Test-Path -LiteralPath $marked -PathType Container)){throw 'Roo Industries kept the existing protected data folder because it is missing or damaged. Restore that folder before opening the app again.'}
-            Assert-RooIndustriesProtectedFolder $marked
+            try {
+                if(-not (Test-Path -LiteralPath $marked -PathType Container)){throw 'The marked data folder is missing.'}
+                Assert-RooIndustriesProtectedFolder $marked
+            } catch {throw ('Roo Industries kept the existing data because its protected folder is missing or damaged. Open the Roo Industries app once as an administrator to repair it. '+$_.Exception.Message)}
         }
     }
     $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder
+    if(Test-RooIndustriesDataRootMigrationInFlight $LocalData $script:RooIndustriesLegacyIdentity.dataFolder){throw 'Roo Industries is preparing your saved settings. Try again in a moment.'}
     $current=Join-Path $LocalData 'RooIndustriesOptimizationSuite'
     $root=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ((Test-RooIndustriesDataRootMarked $current) -and -not (Test-RooIndustriesDataRootMarked $legacy))){$legacy}else{$current}
     if($Protected){Assert-RooIndustriesProtectedFolder $root}

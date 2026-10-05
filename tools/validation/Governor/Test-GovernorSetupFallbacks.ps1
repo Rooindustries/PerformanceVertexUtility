@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Script,[Parameter(Mandatory=$true)][string]$OutDir,[ValidateSet('All','Identity','Responses','Poison','FolderDrive')][string]$Scenario='All',[string]$ResponseCase='')
+﻿param([Parameter(Mandatory=$true)][string]$Script,[Parameter(Mandatory=$true)][string]$OutDir,[ValidateSet('All','Identity','Responses','Poison','FolderDrive','UpgradeCommon')][string]$Scenario='All',[string]$ResponseCase='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir|Out-Null
@@ -43,6 +43,7 @@ Set-Content -LiteralPath (Join-Path $policyParent 'fixture-owner.txt') -Value $i
 New-Item -ItemType Directory -Force -Path (Join-Path $appRoot 'backend\scripts'),$hostDirectory,$policyRoot|Out-Null
 $copy=Join-Path $work 'Invoke-GovernorSetup.ps1'
 Copy-Item -LiteralPath $Script -Destination $copy
+Copy-Item -LiteralPath (Join-Path (Split-Path $Script -Parent) 'BrandCompatibility.Common.ps1') -Destination $work
 Copy-Item -LiteralPath (Join-Path (Split-Path $Script -Parent) 'BrandCompatibility.Common.ps1') -Destination (Join-Path $appRoot 'backend\scripts')
 [IO.File]::WriteAllText((Join-Path $appRoot 'backend\scripts\Start-RooIndustriesHelper.cmd'),"@echo off`r`nping -n 900 127.0.0.1 >nul`r`n")
 . (Join-Path $appRoot 'backend\scripts\BrandCompatibility.Common.ps1')
@@ -143,6 +144,84 @@ $setup=$null
 try {
     $setup=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\PING.EXE') -ArgumentList '-n','900','127.0.0.1' -WindowStyle Hidden -PassThru
     $setupCreated=$setup.StartTime.ToUniversalTime().ToFileTimeUtc()
+
+    if($Scenario -in @('All','UpgradeCommon')){
+        $repo=Split-Path (Split-Path (Split-Path $Script -Parent) -Parent) -Parent
+        $installer=[IO.File]::ReadAllText((Join-Path $repo 'tools\release\RooIndustries.OptimizationSuite.iss'))
+        $prepare=[regex]::Match($installer,'(?s)function PrepareSetupFolder: Boolean;.*?\r?\nend;').Value
+        if(-not $prepare){throw 'The installer setup preparation function was not found.'}
+        $files=@([regex]::Matches($installer,'(?m)^Source: .*; Flags: dontcopy\r?$')|ForEach-Object {$_.Value.TrimEnd()}) -join "`r`n"
+        $payload=Join-Path $work 'payload\backend\scripts'
+        New-Item -ItemType Directory -Force -Path $payload|Out-Null
+        Copy-Item -LiteralPath $Script,(Join-Path (Split-Path $Script -Parent) 'BrandCompatibility.Common.ps1') -Destination $payload
+        $legacy=Join-Path $PSScriptRoot 'Fixtures\BrandCompatibility.0.9.0-beta.ps1'
+        Copy-Item -LiteralPath $legacy -Destination (Join-Path $appRoot 'backend\scripts\BrandCompatibility.Common.ps1') -Force
+        $setupHash=(Get-FileHash -LiteralPath $Script -Algorithm SHA256).Hash
+        $commonHash=(Get-FileHash -LiteralPath (Join-Path $payload 'BrandCompatibility.Common.ps1') -Algorithm SHA256).Hash
+        $fixture=@"
+#define SourceDir "$($work)\payload"
+#define GovernorSetupHash "$setupHash"
+#define GovernorSetupCommonHash "$commonHash"
+[Setup]
+AppId=RooIndustriesSetupPayloadCheck$id
+AppName=Roo Industries setup payload check
+AppVersion=0
+DefaultDirName=$appRoot
+UsePreviousAppDir=no
+Uninstallable=no
+PrivilegesRequired=admin
+OutputDir=$work
+OutputBaseFilename=SetupPayloadCheck
+[Files]
+$files
+[Code]
+var SetupFolder: String;
+$prepare
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  SaveStringToFile('$work\payload-result.txt', IntToStr(Ord(PrepareSetupFolder)), False);
+  Result := 'The fixture stops before installation.';
+end;
+"@
+        $iss=Join-Path $work 'SetupPayloadCheck.iss'
+        Set-Content -LiteralPath $iss -Value $fixture -Encoding UTF8
+        $iscc=@((Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),(Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),(Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'))|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Select-Object -First 1
+        if(-not $iscc){throw 'Inno Setup 6 was not found.'}
+        & $iscc /Q $iss
+        if($LASTEXITCODE -ne 0){throw 'The real installer setup preparation did not compile in the fixture.'}
+        $payloadCheck=Start-Process -FilePath (Join-Path $work 'SetupPayloadCheck.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+        Check ($payloadCheck.ExitCode -ne 0 -and (Get-Content -LiteralPath (Join-Path $work 'payload-result.txt') -Raw) -ceq '1') 'The compiled installer verifies its setup payload and stops before installing'
+        $originalCopy=$copy
+        $copy=Join-Path $appRoot 'setup\Invoke-GovernorSetup.ps1'
+        try {
+            foreach($action in @('Suspend','Resume','Remove')){
+                $run=Invoke-Setup ('old-common-'+$action.ToLowerInvariant()) $action '' $setup.Id
+                Check ($run.exit -eq 0) ('The current setup '+$action+' completes with the exact 0.9.0-beta Common installed') ('exit='+$run.exit+' '+$run.log)
+                if($action -eq 'Remove'){Check ($run.log.Contains('kept: older-version timer task')) 'Uninstall logs that an older-version timer task was kept when its helper cannot prove ownership' $run.log}
+            }
+            Check ((Test-Path -LiteralPath (Join-Path $appRoot 'setup\BrandCompatibility.Common.ps1')) -and (Get-FileHash -LiteralPath (Join-Path $appRoot 'setup\BrandCompatibility.Common.ps1')).Hash -ceq $commonHash) 'The compiled installer supplies the exact current Common beside its setup helper'
+        } finally {
+            $copy=$originalCopy
+            Copy-Item -LiteralPath (Join-Path $payload 'BrandCompatibility.Common.ps1') -Destination (Join-Path $appRoot 'backend\scripts') -Force
+        }
+        $originalApp=$appRoot
+        $appRoot=Join-Path $policyParent 'Games\Roo'
+        $copy=Join-Path $appRoot 'setup\Invoke-GovernorSetup.ps1'
+        New-Item -ItemType Directory -Force -Path (Split-Path $copy)|Out-Null
+        Copy-Item -LiteralPath $Script -Destination $copy
+        Copy-Item -LiteralPath (Join-Path $payload 'BrandCompatibility.Common.ps1') -Destination (Split-Path $copy)
+        try {
+            foreach($case in @(@{name='inside-install';local=(Join-Path $appRoot 'AppData');accepted=$false},@{name='beside-install';local=(Join-Path (Split-Path $appRoot) 'Local AppData');accepted=$true})){
+                New-Item -ItemType Directory -Force -Path $case.local|Out-Null
+                $hive=Join-Path $work ($case.name+'.hive')
+                $hiveSource=Join-Path $repo 'tools\validation\SetupMigration\FixtureHive.cs'
+                $prefix="Add-Type -Path '"+$hiveSource+"'; "
+                $prefix+='$h=[SetupMigrationHive]::new('+"'"+$hive+"','"+$case.local+"'); "
+                $run=Invoke-Setup $case.name 'Suspend' $prefix $setup.Id
+                Check $(if($case.accepted){$run.exit -eq 0}else{$run.exit -ne 0 -and $run.log -match 'AppData'}) ('Setup '+$(if($case.accepted){'accepts AppData beside'}else{'refuses AppData inside'})+' a custom install outside Program Files') ('exit='+$run.exit+' '+$run.log)
+            }
+        } finally {$appRoot=$originalApp;$copy=$originalCopy}
+    }
 
     if($Scenario -in @('All','FolderDrive')){
         $fsutil=Join-Path $env:SystemRoot 'System32\fsutil.exe'
@@ -274,7 +353,7 @@ try {
     }
     Unregister-ScheduledTask -TaskName $untrustedName -Confirm:$false
 
-    } elseif($Scenario -ne 'FolderDrive'){Register-FakeGovernor}
+    } elseif($Scenario -notin @('FolderDrive','UpgradeCommon')){Register-FakeGovernor}
     $goodDescription='Roo Industries process rules | '+$me+' | '+$policyRoot
     if($Scenario -eq 'Poison'){
         $decoyWindows=Join-Path $work 'poisoned-Windows'

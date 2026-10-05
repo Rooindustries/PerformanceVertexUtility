@@ -10,6 +10,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/PageViewModelBase.cs" Link="PageViewModelBase.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BugReportViewModel.cs" Link="BugReportViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BulkRemovalViewModel.cs" Link="BulkRemovalViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/DriversProfilesViewModel.cs" Link="DriversProfilesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/MonitoringViewModel.cs" Link="MonitoringViewModel.cs" />

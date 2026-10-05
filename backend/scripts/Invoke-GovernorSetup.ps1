@@ -14,6 +14,7 @@ $schtasks=Join-Path $system 'schtasks.exe'
 $powershell=Join-Path $PSHOME 'powershell.exe'
 $full=$ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
 $script:SchedulerOnly=$false
+$script:SetupCommonLoaded=$false
 $localAppData=''
 $nativeSystem=Join-Path (Split-Path $system -Parent) 'System32'
 $env:SystemRoot=Split-Path $nativeSystem -Parent
@@ -213,7 +214,7 @@ function Get-UserLocalFolder([string]$Sid){
     $profilePath=$profile.value -replace '(?i)%SystemDrive%',(Split-Path $nativeSystem -Qualifier)
     if($full -and $Sid -eq $me){$profilePath=[Environment]::GetFolderPath('UserProfile')}
     if(-not (Resolve-PathText $profilePath) -or $profilePath -match '%.*%'){return ''}
-    if($full -and (Get-Command Get-RooIndustriesUserFolder -ErrorAction SilentlyContinue)){try {return Get-RooIndustriesUserFolder -Sid $Sid -Profile $profilePath} catch {return ''}}
+    if($full -and $script:SetupCommonLoaded){try {return Get-RooIndustriesUserFolder -Sid $Sid -Profile $profilePath} catch {return ''}}
     $ErrorActionPreference='Continue'
     & (Join-Path $nativeSystem 'reg.exe') query ('HKU\'+$Sid) 2>$null|Out-Null
     if($LASTEXITCODE -ne 0){return ''}
@@ -241,7 +242,7 @@ function Get-UserLocalFolder([string]$Sid){
 
 function Test-GovernorRootMarker([string]$Root,[string]$Sid){
     if(-not $Root -or -not (Test-Path -LiteralPath $Root -PathType Container)){return $false}
-    if($full){
+    if($full -and $script:SetupCommonLoaded){
         $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
         return $null -ne $key -and $key.GetValue((Get-RooIndustriesDataRootMarkerName $Root),$null,'DoNotExpandEnvironmentNames') -ceq $Sid
     }
@@ -312,10 +313,10 @@ $appRootPath=(Resolve-PathText $AppRoot).TrimEnd('\')
 if(-not $appRootPath){throw 'The app folder must be a full path on a local drive.'}
 $systemDirectories=@($system,$nativeSystem|Select-Object -Unique)
 $me=(Get-CurrentUser).sid
+$script:RooIndustriesInstallRoot=$appRootPath
 if($full){
     $common=Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1'
-    if(-not (Test-Path -LiteralPath $common -PathType Leaf)){$common=Join-Path $AppRoot 'backend\scripts\BrandCompatibility.Common.ps1'}
-    if(Test-Path -LiteralPath $common -PathType Leaf){. $common;$localAppData=Get-RooIndustriesLocalAppData}else{$localAppData=Get-UserLocalFolder $me;if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}}
+    if(Test-Path -LiteralPath $common -PathType Leaf){. $common;$script:SetupCommonLoaded=$true;$localAppData=Get-RooIndustriesLocalAppData}else{$script:SchedulerOnly=$true;$localAppData=Get-UserLocalFolder $me;if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}}
 }else{
     $localAppData=Get-UserLocalFolder $me
     if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}
@@ -323,7 +324,7 @@ if($full){
 $listed=@(Get-ListedGovernorNames)
 $visible=$null
 if($full){try {$visible=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)} catch {$visible=$null}}
-if(-not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
+if($script:SchedulerOnly -or -not $full -or $null -eq $visible -or $listed.Count -gt $visible.Count){
     Write-Log ('PowerShell runs in '+$ExecutionContext.SessionState.LanguageMode+$(if($full){' but Windows could not list the governor tasks'}else{''})+', so setup uses Task Scheduler only')
     $script:SchedulerOnly=$true
     $tasks=@(Get-GovernorTasks|Where-Object {$_.trusted})
@@ -593,14 +594,19 @@ switch($Action){
                 $records.Add($item)
             }
         }
-        $dataRoot=Get-RooIndustriesLocalDataRoot
-        foreach($root in @(Join-Path $dataRoot 'process-rules')){
-            if((Test-Path -LiteralPath (Join-Path $root 'rules')) -and -not @($records|Where-Object {$_.userSid -eq $me -and [string]$_.policyRoot -ieq $root}).Count){
-                Write-Log ('Found saved rules without a governor task: '+$root)
-                $records.Add([pscustomobject]@{taskName='';taskPath='\';description='';userSid=$me;policyRoot=$root;enabled=$true;wasRunning=$false})
-            }
-        }
         $failures=0
+        try {
+            $dataRoot=Get-RooIndustriesLocalDataRoot
+            foreach($root in @(Join-Path $dataRoot 'process-rules')){
+                if((Test-Path -LiteralPath (Join-Path $root 'rules')) -and -not @($records|Where-Object {$_.userSid -eq $me -and [string]$_.policyRoot -ieq $root}).Count){
+                    Write-Log ('Found saved rules without a governor task: '+$root)
+                    $records.Add([pscustomobject]@{taskName='';taskPath='\';description='';userSid=$me;policyRoot=$root;enabled=$true;wasRunning=$false})
+                }
+            }
+        } catch {
+            $failures++
+            Write-Log ('Could not find saved rules for Windows user '+$me+': '+$_.Exception.Message)
+        }
         foreach($record in $records){
             if($null -eq $record){continue}
             try {
@@ -623,7 +629,7 @@ switch($Action){
                 }
             } catch {
                 $failures++
-                Write-Log ('Could not resume the governor for '+$record.policyRoot+': '+$_.Exception.Message)
+                Write-Log ('Could not resume the governor for Windows user '+$record.userSid+' at '+$record.policyRoot+': '+$_.Exception.Message)
                 if($record.enabled -and $record.taskName -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null}
             }
         }
@@ -633,6 +639,10 @@ switch($Action){
     }
     'Remove' {
         Remove-Watchdog
+        if(Test-Path -LiteralPath $hostExe){
+            try {foreach($message in @((Invoke-Host 'timer-remove-installed' '').messages)){Write-Log ([string]$message)}}
+            catch {Write-Log ('Timer tasks kept because ownership could not be checked: '+$_.Exception.Message)}
+        } else {Write-Log 'kept: older-version timer task, if present; installed helper is missing'}
         foreach($task in @(Get-GovernorTasks|Where-Object {$_.trusted})){
             Disable-ScheduledTask -TaskName $task.taskName -TaskPath $task.taskPath|Out-Null
             if($task.trusted -and $task.userSid -eq $me -and (Test-Path -LiteralPath $workerScript)){

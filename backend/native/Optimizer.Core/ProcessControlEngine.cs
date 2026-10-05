@@ -74,7 +74,7 @@ public sealed class ProcessControlEngine
             existing.Status = "applied";
             foreach (var change in existing.Changes)
             {
-                if (change.Status is "pending" or "restoreIntent" or "restored") { existing.Status = "needsReconciliation"; continue; }
+                if (change.Status is "pending" or "restoreIntent" or "restored" or "leftAsSet") { existing.Status = "needsReconciliation"; continue; }
                 var observation = observedTarget.Read(change.Name);
                 try
                 {
@@ -196,7 +196,11 @@ public sealed class ProcessControlEngine
         return journal;
     }
 
-    public ProcessControlJournal Restore(string journalPath, bool overwrite = false)
+    public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false);
+
+    internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished);
+
+    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished)
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -235,10 +239,26 @@ public sealed class ProcessControlEngine
                 {
                     var current = target.Read(change.Name).Require();
                     if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; change.ErrorKind = null; Save(journalPath, journal); continue; }
+                    if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)))
+                    {
+                        LeaveAsSet(change, current);
+                        Save(journalPath, journal);
+                        continue;
+                    }
                     if (!overwrite && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
-                    if (!overwrite && !ProcessTarget.Equivalent(change.Name, target.Read(change.Name).Require(), change.Desired)) throw new InvalidOperationException("The field changed before restoration.");
+                    if (!overwrite)
+                    {
+                        var beforeWrite = target.Read(change.Name).Require();
+                        if (!ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
+                        {
+                            if (!governor) throw new InvalidOperationException("The field changed before restoration.");
+                            LeaveAsSet(change, beforeWrite);
+                            Save(journalPath, journal);
+                            continue;
+                        }
+                    }
                     target.Write(change.Name, change.Original);
                     var after = target.Read(change.Name).Require();
                     change.Observed = after;
@@ -258,6 +278,16 @@ public sealed class ProcessControlEngine
         return journal;
     }
 
+    public const string LeftAsSet = "Left as another program set it.";
+
+    private static void LeaveAsSet(ControlChange change, JsonElement current)
+    {
+        change.Status = "leftAsSet";
+        change.Observed = current;
+        change.ErrorKind = "leftAsSet";
+        change.Error = LeftAsSet;
+    }
+
     private static bool IsAttempted(ControlChange change) => change.Status is "applyIntent" or "applied" or "restoreIntent";
     private static void Save(string path, ProcessControlJournal journal) { journal.UpdatedAtUtc = DateTime.UtcNow; OperationFiles.Write(path, journal); }
 
@@ -273,7 +303,8 @@ public sealed class ProcessControlEngine
             throw new InvalidDataException("The process recovery journal is incomplete.");
         foreach (var change in journal.Changes)
         {
-            if (change.Status is not ("pending" or "unchanged" or "applyIntent" or "applied" or "restoreIntent" or "restored") ||
+            if (change.Status is not ("pending" or "unchanged" or "applyIntent" or "applied" or "restoreIntent" or "restored" or "leftAsSet") ||
+                change.Status == "leftAsSet" && (change.ErrorKind != "leftAsSet" || change.Error != LeftAsSet || change.Observed is null) ||
                 !journal.Preview.Desired.TryGetValue(change.Name, out var desired) ||
                 !ProcessTarget.Equivalent(change.Name, desired, change.Desired) ||
                 !ProcessTarget.Equivalent(change.Name, journal.Preview.Original[change.Name].Require(), change.Original))

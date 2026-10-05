@@ -9,6 +9,8 @@ namespace RooIndustries.OptimizationSuite
         public static Services.FakeLiveDataService Live { get; } = new();
         public static Services.FakeOptimizerService Operations { get; } = new();
         public static Services.SampleDataService Data { get; } = new();
+        public static Services.BugReportService BugReports { get; set; } = null!;
+        public static string VersionText => "0.10.0-beta fixture";
     }
 }
 
@@ -35,6 +37,7 @@ namespace RooIndustries.OptimizationSuite.Services
 
     public sealed class FakeLiveDataService
     {
+        public Task<LiveDataResult<string>> RunBackendScriptResultAsync(string script) => Task.FromResult(new LiveDataResult<string>("{}", null));
         public ProcessInventory? Inventory { get; set; }
         public ProcessClassification? Classification { get; set; }
         public GameTuneSessionStatus? GameStatusModel { get; set; }

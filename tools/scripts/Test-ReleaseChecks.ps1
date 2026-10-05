@@ -41,6 +41,9 @@ try {
         try { Assert (Refuses { Assert-ReleaseScripts $repoRoot $stage } 'scenario, test or developer script') ('The build refuses a staged ' + $planted) }
         finally { Remove-Item -LiteralPath $path -Force; if ($planted -like 'GovernorScenarios*') { Remove-Item -LiteralPath (Split-Path $path -Parent) -Force } }
     }
+    $marker = Join-Path $stage 'backend\test-hooks.enabled'
+    [IO.File]::WriteAllText($marker, 'test hooks')
+    try { Assert (Refuses { Assert-ReleaseScripts $repoRoot $stage } 'test-hooks.enabled') 'A production stage containing the test-hooks marker is refused' } finally { Remove-Item -LiteralPath $marker -Force }
     $unlisted = Join-Path $stage 'backend\scripts\Get-ProcessPolicyAuditHistory.ps1'
     [IO.File]::WriteAllText($unlisted, '# unlisted')
     try { Assert (Refuses { Assert-ReleaseScripts $repoRoot $stage } 'does not list') 'The build refuses a staged script that the release list does not name' } finally { Remove-Item -LiteralPath $unlisted -Force }

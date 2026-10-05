@@ -66,22 +66,34 @@ function Invoke-Native([string]$File,[string[]]$Arguments,[string[]]$Stdin=@()){
 }
 function Get-DataFolderState {
     $names='RooIndustriesOptimizationSuite',('RooIndustriesOptimizationSuite' -replace 'Industries',''),'RooIndustriesOptimizationSuite.Timer'
+    $rows=[Collections.Generic.List[object]]::new()
     $parts=foreach($name in $names){
         $path=Join-Path $local $name
         if(Test-Path -LiteralPath $path){
             $base=(Get-Item -LiteralPath $path -Force).FullName
             $items=@(Get-Item -LiteralPath $path -Force)+@(Get-ChildItem -LiteralPath $path -Recurse -Force -ErrorAction Stop)
-            $text=(@($items|ForEach-Object {$(if(($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ('Cannot back up a reparse point: '+$_.FullName)}); $_.FullName.Substring($base.Length)+'|'+$(if($_.PSIsContainer){'dir'}else{[string]$_.Length+'|sha256='+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash})+'|'+$_.LastWriteTimeUtc.Ticks})|Sort-Object) -join "`n"
+            $text=(@($items|ForEach-Object {
+                if(($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ('Cannot back up a reparse point: '+$_.FullName)}
+                $relative=$_.FullName.Substring($base.Length);$size=if($_.PSIsContainer){0}else{$_.Length};$hash=if($_.PSIsContainer){''}else{(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash};$ticks=$_.LastWriteTimeUtc.Ticks
+                $line=$relative+'|'+$(if($_.PSIsContainer){'dir'}else{[string]$size+'|sha256='+$hash})+'|'+$ticks
+                $rows.Add([pscustomobject][ordered]@{root=$name;relative=$relative;kind=$(if($_.PSIsContainer){'directory'}else{'file'});size=$size;lastWriteFileTimeUtc=$_.LastWriteTimeUtc.ToFileTimeUtc().ToString();sha256=$hash;hashInput=$line})
+                $line
+            })|Sort-Object) -join "`n"
             $name+'|'+$items.Count+'|'+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-','')
-        } else {$name+'|<missing>'}
+        } else {$rows.Add([pscustomobject][ordered]@{root=$name;relative='';kind='missing';size=$null;lastWriteFileTimeUtc=$null;sha256=$null;hashInput='<missing>'});$name+'|<missing>'}
     }
     $key=Get-Item -LiteralPath ('Registry::'+$markerKey) -ErrorAction SilentlyContinue
     $marks=if($key){@($key.GetValueNames()|Sort-Object|ForEach-Object {$_+'='+$key.GetValue($_)})}else{@('<no marker key>')}
-    (@($parts)+@($marks)) -join "`n"
+    return [pscustomobject][ordered]@{state=(@($parts)+@($marks)) -join "`n";rows=@($rows|Sort-Object root,relative);markers=@($marks)}
 }
 function Run([string]$Name,[scriptblock]$Body,[switch]$GuardData){
     $clock=[Diagnostics.Stopwatch]::StartNew()
-    $dataBefore=if($GuardData){Get-DataFolderState}
+    if($GuardData){
+        $guardId=$Phase+'-'+$Name+'-data-'+[Guid]::NewGuid().ToString('N')
+        $beforePath=Join-Path $Evidence ($guardId+'-before.json');$afterPath=Join-Path $Evidence ($guardId+'-after.json')
+        $dataBefore=Get-DataFolderState
+        $dataBefore|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $beforePath -Encoding UTF8
+    }
     $ErrorActionPreference='Continue'
     $global:LASTEXITCODE=0
     $output=[Collections.Generic.List[string]]::new()
@@ -94,7 +106,20 @@ function Run([string]$Name,[scriptblock]$Body,[switch]$GuardData){
     $fails=@($output|Where-Object {$_ -cmatch '^FAIL '}).Count
     $skips=@($output|Where-Object {$_ -cmatch '^SKIP'})
     $last=@($output|Where-Object {$_.Trim()}|Select-Object -Last 1)
-    if($GuardData){$dataAfter=Get-DataFolderState;Check ($dataAfter -eq $dataBefore) ($Name+' left the real data folders and the protection markers as it found them') $(if($dataAfter -ne $dataBefore){(@(Compare-Object ($dataBefore -split "`n") ($dataAfter -split "`n")|Select-Object -First 4|ForEach-Object {$_.SideIndicator+' '+$_.InputObject}) -join ' // ')}else{'same'})}
+    if($GuardData){
+        $dataAfter=Get-DataFolderState
+        $dataAfter|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $afterPath -Encoding UTF8
+        $same=$dataAfter.state -eq $dataBefore.state
+        $guardDetail='same; before='+$beforePath+'; after='+$afterPath
+        if(-not$same){
+            $beforeRows=@($dataBefore.rows|ForEach-Object {$_|ConvertTo-Json -Compress})+@($dataBefore.markers|ForEach-Object {[ordered]@{marker=$_}|ConvertTo-Json -Compress})
+            $afterRows=@($dataAfter.rows|ForEach-Object {$_|ConvertTo-Json -Compress})+@($dataAfter.markers|ForEach-Object {[ordered]@{marker=$_}|ConvertTo-Json -Compress})
+            $diff=@(Compare-Object $beforeRows $afterRows -CaseSensitive|ForEach-Object {[pscustomobject][ordered]@{side=$(if($_.SideIndicator -ceq '<='){'before'}else{'after'});row=($_.InputObject|ConvertFrom-Json)}})
+            $diffPath=Join-Path $Evidence ($guardId+'-diff.json');ConvertTo-Json -InputObject $diff -Depth 10|Set-Content -LiteralPath $diffPath -Encoding UTF8
+            $guardDetail='before='+$beforePath+'; after='+$afterPath+'; diff='+$diffPath+'; '+(@($diff|ForEach-Object {$_.side+' '+($_.row|ConvertTo-Json -Compress)}) -join ' // ')
+        }
+        Check $same ($Name+' left the real data folders and the protection markers as it found them') $guardDetail
+    }
     Check ($ran -and $code -eq 0 -and $errors -eq 0 -and $fails -eq 0 -and $skips.Count -eq 0) ($Name+' exit '+$code+' in '+[Math]::Round($clock.Elapsed.TotalSeconds)+' s; PASS lines '+$passes+', FAIL lines '+$fails+', SKIP lines '+$skips.Count+'; last line: '+([string]$last).Substring(0,[Math]::Min(120,([string]$last).Length))) (@($output|Where-Object {$_ -match 'FAIL|error|Exception|^SKIP'}|Select-Object -First 3) -join ' / ')
 }
 function Uninstall-App {
@@ -236,6 +261,14 @@ namespace RooVerificationRecovery {
   [DllImport("kernel32.dll",EntryPoint="FindFirstStreamW",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr First(string p,int level,out Stream data,int flags);
   [DllImport("kernel32.dll",EntryPoint="FindNextStreamW",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool Next(IntPtr h,out Stream data);
   [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+  [StructLayout(LayoutKind.Sequential,Pack=4)] public struct DirectoryInfo { public uint Attributes; public long Creation; public long Access; public long Write; public uint Volume; public uint SizeHigh; public uint SizeLow; public uint Links; public uint IdHigh; public uint IdLow; }
+  [DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr OpenDirectory(string p,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
+  [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetFileInformationByHandle(IntPtr h,out DirectoryInfo value);
+  public static DirectoryInfo DirectoryMetadata(string p) {
+   var h=OpenDirectory(p,0,7,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
+   if(h==new IntPtr(-1))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+   try {DirectoryInfo value;if(!GetFileInformationByHandle(h,out value))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());if((value.Attributes&0x400)!=0||(value.Attributes&16)==0)throw new InvalidOperationException("Companion is not a plain directory");return value;}finally{CloseHandle(h);}
+  }
   public static string[] Streams(string p) {
    var names=new List<string>();Stream s;var h=First(p,0,out s,0);
    if(h==new IntPtr(-1)){int e=Marshal.GetLastWin32Error();if(e==38)return names.ToArray();throw new System.ComponentModel.Win32Exception(e);}
@@ -657,13 +690,14 @@ function Assert-RecoveryFolderContract($Folder,$Lease) {
     if($Lease.label -ceq 'validators' -and $Folder.name -ceq 'RooIndustriesOptimizationSuite.Timer'){Assert-RecoveryEqual $original $live 'validators changed timer';return $live}
     $old=@{};if($original[0] -cne '<missing>'){foreach($r in $original){$v=$r|ConvertFrom-Json;$old[[string]$v.relative]=$v}}
     $now=@{};if($live[0] -cne '<missing>'){foreach($r in $live){$v=$r|ConvertFrom-Json;$now[[string]$v.relative]=$v}}
-    $archived=@{};$manifest=Join-Path $p '.migrated'
-    if(Test-Path -LiteralPath $manifest){if(-not$old.ContainsKey('\.migrated') -or $old['\.migrated'].sha256 -cne $now['\.migrated'].sha256){Assert-SealedRecovery $manifest;$m=Read-RecoveryJson $manifest;Assert-RecoveryMigrationManifest $m $p $Lease;if($m.Legacy -and (Test-Path -LiteralPath $m.Legacy)){foreach($r in @(Get-TreeFingerprint $m.Legacy)){$v=$r|ConvertFrom-Json;$archived[[string]$v.relative]=$v}}}}
+    $archived=@{};$manifest=Join-Path $p '.migrated';$inLeaseMigration=$false
+    if(Test-Path -LiteralPath $manifest){if(-not$old.ContainsKey('\.migrated') -or $old['\.migrated'].sha256 -cne $now['\.migrated'].sha256){Assert-SealedRecovery $manifest;$m=Read-RecoveryJson $manifest;Assert-RecoveryMigrationManifest $m $p $Lease;$inLeaseMigration=$true;if($m.Legacy -and (Test-Path -LiteralPath $m.Legacy)){foreach($r in @(Get-TreeFingerprint $m.Legacy)){$v=$r|ConvertFrom-Json;$archived[[string]$v.relative]=$v}}}}
     foreach($r in $now.Values){if(-not $old.ContainsKey([string]$r.relative) -and -not(Test-RecoveryProductPath $r.relative $Folder.name)){throw ('Unknown new root entry '+$p+$r.relative)}}
     foreach($r in $old.Values){
         if(Test-RecoveryProductPath $r.relative $Folder.name){continue}
         if($now.ContainsKey([string]$r.relative)){$n=$now[[string]$r.relative]}elseif($archived.ContainsKey([string]$r.relative)){$n=$archived[[string]$r.relative]}else{throw ('Original non-product entry deleted '+$p+$r.relative)}
-        foreach($field in 'directory','length','creation','attributes','sha256'){if([string]$r.$field -cne [string]$n.$field){throw ('Original non-product entry changed '+$p+$r.relative+' '+$field)}}
+        $creationOnly=$inLeaseMigration -and ($r.directory -or (-not$n.directory -and [string]$r.length -ceq [string]$n.length -and [string]$r.sha256 -ceq [string]$n.sha256 -and [string]$r.write -ceq [string]$n.write -and [string]$r.attributes -ceq [string]$n.attributes))
+        foreach($field in 'directory','length','creation','attributes','sha256'){if($field -ceq 'creation' -and $creationOnly){continue};if([string]$r.$field -cne [string]$n.$field){throw ('Original non-product entry changed '+$p+$r.relative+' '+$field)}}
         if(-not$r.directory -and $r.write -cne $n.write){throw ('Original non-product file timestamp changed '+$p+$r.relative)}
     }
     return $live
@@ -842,24 +876,27 @@ function Test-RecoveryTaskOwnership($Task,$Scope,[string]$Xml,[string]$Sddl) {
             elseif($Task.TaskName -cmatch '^(Roo Industries Protected Session |Roo Protected Session )[0-9A-F]{16}$' -and $parts[0] -cin @('Roo Industries protected game session','Roo protected game session')){foreach($n in Get-RecoveryNames){$prefix=(Join-Path (Join-Path $local $n) 'operations')+'\';if($root.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -and $root.Substring($prefix.Length) -cmatch '^game-session-[a-fA-F0-9]{32}\\session$'){$exe=Join-Path $app 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe';$mode='run'}}}
         }
         if($exe){$suffix=if($mode -ceq 'policy-run'){Get-RecoveryTaskSuffix ($Scope.sid+'|'+$root.ToUpperInvariant()) 20}else{Get-RecoveryTaskSuffix $root.ToLowerInvariant() 16};if(-not $Task.TaskName.EndsWith($suffix,[StringComparison]::Ordinal)){$exe=''}}
-        if($exe -and [string]$action.WorkingDirectory -ieq (Split-Path $exe -Parent)){
+        if($exe -and [string]::Equals([string]$action.WorkingDirectory,(Split-Path $exe -Parent),[StringComparison]::OrdinalIgnoreCase)){
             $request=Join-Path $root 'worker-request.json';$windows=[Environment]::GetFolderPath('Windows');$launcher=Join-Path $app 'backend\scripts\Start-RooIndustriesHelper.cmd'
             if(($launcher+$exe+$request) -notmatch '["?^*<>|\r\n]' -and @((($windows+$launcher+$exe+$request) -split '%')).Count -le 2){
                 foreach($system in @((Join-Path $windows 'System32'),(Join-Path $windows 'Sysnative'))){foreach($prefix in @(('/d /e:on /v:off /c set "SystemRoot='+$windows+'"&call '),'/d /v:off /c call ')){
                     $expected='--headless "'+$system+'\cmd.exe" '+$prefix+'"'+$launcher+'" " ?'+$exe+'?'+$mode+'?'+$request+'"'
-                    if([string]$action.Execute -ieq (Join-Path $system 'conhost.exe') -and [string]$action.Arguments -ceq $expected){return $true}
+                    $arguments=[string]$action.Arguments;$token='?'+$mode+'?';$tokenIndex=$expected.IndexOf($token,[StringComparison]::Ordinal)
+                    if([string]::Equals([string]$action.Execute,(Join-Path $system 'conhost.exe'),[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals($arguments,$expected,[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals($arguments.Substring($tokenIndex,$token.Length),$token,[StringComparison]::Ordinal)){return $true}
                 }}
             }
-            if([string]$action.Execute -ieq $exe -and [string]$action.Arguments -ceq ($mode+' "'+$request+'"')){return $true}
+            if([string]::Equals([string]$action.Execute,$exe,[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$action.Arguments,($mode+' "'+$request+'"'),[StringComparison]::OrdinalIgnoreCase) -and ([string]$action.Arguments).StartsWith($mode+' ',[StringComparison]::Ordinal)){return $true}
         }
         foreach($n in Get-RecoveryNames){$control=Join-Path (Join-Path $local $n) 'operations\windows-timer';$script=Join-Path $control 'startup.ps1';$receipt=Join-Path $control 'startup.json';if(-not(Test-Path -LiteralPath $receipt) -or -not(Test-Path -LiteralPath $script)){continue}
             if(-not([string]$action.Arguments).Contains('"'+$script+'"')){continue}
             try{Assert-SealedRecovery $receipt;Assert-SealedRecovery $script}catch{continue}
-            $r=Read-RecoveryJson $receipt;if($r.owner.userSid -cne $Scope.sid -or $r.owner.machine -cne $env:COMPUTERNAME -or $r.taskName -cne $Task.TaskName -or $r.phase -cne 'created' -or (Get-FileHash -LiteralPath $script).Hash.ToLowerInvariant() -cne [string]$r.scriptHash){continue}
+            $r=Read-RecoveryJson $receipt;$scriptHash=(Get-FileHash -LiteralPath $script).Hash;$receiptScriptHash=[string]$r.scriptHash
+            if($r.owner.userSid -cne $Scope.sid -or $r.owner.machine -cne $env:COMPUTERNAME -or $r.taskName -cne $Task.TaskName -or $r.phase -cne 'created' -or $scriptHash -cnotmatch '\A[0-9A-Fa-f]{64}\z' -or $receiptScriptHash -cnotmatch '\A[0-9A-Fa-f]{64}\z' -or -not [string]::Equals($scriptHash,$receiptScriptHash,[StringComparison]::OrdinalIgnoreCase)){continue}
             Add-Type -AssemblyName System.Xml.Linq
             $x=[System.Xml.Linq.XDocument]::Parse($Xml);$ns=$x.Root.Name.Namespace;$enabled=$x.Root.Element($ns+'Settings').Element($ns+'Enabled');if($enabled){$enabled.Remove()}
             $bytes=[Text.Encoding]::UTF8.GetBytes($x.ToString([System.Xml.Linq.SaveOptions]::DisableFormatting)+"`n"+$Sddl);$sha=[Security.Cryptography.SHA256]::Create();try{$hash=[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
-            if($hash -cne [string]$r.definitionHash){continue}
+            $receiptDefinitionHash=[string]$r.definitionHash
+            if($hash -cnotmatch '\A[0-9A-Fa-f]{64}\z' -or $receiptDefinitionHash -cnotmatch '\A[0-9A-Fa-f]{64}\z' -or -not [string]::Equals($hash,$receiptDefinitionHash,[StringComparison]::OrdinalIgnoreCase)){continue}
             $text=[IO.File]::ReadAllText($script);if($text.Contains("& '"+$app+'\')){return $true}
         }
     }
@@ -915,17 +952,45 @@ function Retain-RecoveryRemnants {
 }
 
 function Get-RecoveryCompanions($Scope,$Lease) {
-    foreach($f in $Scope.folders){$root=Join-Path $local $f.name;$manifest=Join-Path $root '.migrated';if(-not(Test-Path -LiteralPath $manifest)){continue}
+    foreach($f in $Scope.folders){$root=Join-Path $local $f.name;$manifest=Join-Path $root '.migrated'
+        $pattern='^'+[regex]::Escape($f.name)+'\.(untrusted|legacy)-[a-fA-F0-9]{32}$'
+        $new=@(Get-ChildItem -LiteralPath $local -Force -ErrorAction Stop|Where-Object {$_.Name -cmatch $pattern -and @($Lease.siblings) -cnotcontains $_.Name})
+        if(-not(Test-Path -LiteralPath $manifest)){if($new.Count){Log ('Kept migration companions for '+$root+': missing manifest')|Out-Null};continue}
         $original=@($f.expected|Where-Object {$_ -cne '<missing>'}|ForEach-Object {$_|ConvertFrom-Json}|Where-Object relative -CEQ '\.migrated')
-        if($original.Count -and $original[0].sha256 -ceq (Get-FileHash -LiteralPath $manifest).Hash){continue}
+        if($original.Count -and $original[0].sha256 -ceq (Get-FileHash -LiteralPath $manifest).Hash){if($new.Count){Log ('Kept migration companions for '+$root+': manifest is unchanged from baseline')|Out-Null};continue}
         Assert-SealedRecovery $manifest
         $m=Read-RecoveryJson $manifest;Assert-RecoveryMigrationManifest $m $root $Lease
-        if($m.Legacy -and (Test-Path -LiteralPath $m.Legacy)){[pscustomobject]@{name=[IO.Path]::GetFileName($m.Legacy);path=[string]$m.Legacy;root=$root;manifestHash=(Get-FileHash -LiteralPath $manifest).Hash;live=@(Get-TreeFingerprint $m.Legacy)}}
+        if($m.Legacy -and (Test-Path -LiteralPath $m.Legacy)){[pscustomobject]@{name=[IO.Path]::GetFileName($m.Legacy);path=[string]$m.Legacy;root=$root;manifestHash=(Get-FileHash -LiteralPath $manifest).Hash;live=@(Get-TreeFingerprint $m.Legacy)};continue}
+        try {
+            if(-not$m.Legacy){throw 'Manifest has no absent legacy source'}
+            if($new.Count -ne 1 -or $new[0].Name -cnotmatch ('^'+[regex]::Escape($f.name)+'\.untrusted-[a-fA-F0-9]{32}$')){throw ('Expected exactly one new untrusted/legacy sibling; found '+$new.Count)}
+            $candidate=$new[0].FullName;Assert-PlainRecoveryPath $candidate
+            $saved=Join-Path $backup $f.name;Assert-SealedRecovery $saved;Assert-SealedRecovery ($saved+'.manifest.json')
+            $rows=@(Read-RecoveryJson ($saved+'.manifest.json'));Assert-RecoveryEqual @($f.expected) (Recovery-Lines $rows) 'companion original manifest'
+            Assert-RecoveryEqual (Recovery-Lines $rows -DataOnly) (Recovery-Lines @(Get-RecoveryRows $saved) -DataOnly) 'companion sealed baseline'
+            $baselineRoot=@($rows|Where-Object relative -ceq '')
+            if($baselineRoot.Count -ne 1 -or -not$baselineRoot[0].directory){throw 'Original root directory row is missing'}
+            $native=[RooVerificationRecovery.Native]::DirectoryMetadata((ConvertTo-RecoveryNativePath $candidate))
+            if($native.Creation -ne [DateTime]::new([long]$baselineRoot[0].creation,[DateTimeKind]::Utc).ToFileTimeUtc()){throw 'Companion native creation differs from original root'}
+            $write=[DateTime]::FromFileTimeUtc($native.Write);$start=[DateTime]::Parse($m.Started).ToUniversalTime()
+            if($write -lt $start -or $write -lt [DateTime]::Parse($Lease.startUtc).ToUniversalTime() -or $write -gt [DateTime]::UtcNow){throw 'Companion native last-write is outside migration lease'}
+            if(@($rows|Where-Object relative -ceq '\logs\data-folder-migration.log').Count){throw 'Migration log was present before lease'}
+            $migrationLog=Join-Path $root 'logs\data-folder-migration.log';Assert-SealedRecovery $migrationLog
+            $lines=[IO.File]::ReadAllLines((ConvertTo-RecoveryNativePath $migrationLog));$prefix='Entries that were not carried over are kept at '
+            $destinations=@($lines|Where-Object {$_.StartsWith($prefix,[StringComparison]::Ordinal)})
+            if($destinations.Count -ne 1 -or $destinations[0] -cne ($prefix+$candidate)){throw 'Migration log does not name exactly this companion once'}
+            $lookup=@{};foreach($r in $rows){$lookup[[string]$r.relative]=$r}
+            $liveRows=@(Get-RecoveryRows $candidate)
+            foreach($r in $liveRows){$old=$lookup[[string]$r.relative];if(-not$old -or $old.directory -ne $r.directory -or (-not$r.directory -and ($old.length -ne $r.length -or $old.sha256 -cne $r.sha256))){throw ('Companion entry is outside byte-identical baseline: '+$r.relative)}}
+            Assert-RecoveryEqual (Recovery-Lines $liveRows) @(Get-TreeFingerprint $candidate) 'companion drift during qualification'
+            [pscustomobject]@{kind='kept';name=$new[0].Name;path=$candidate;root=$root;manifestHash=(Get-FileHash -LiteralPath $manifest).Hash;logHash=(Get-FileHash -LiteralPath $migrationLog).Hash;nativeCreationFileTimeUtc=$native.Creation.ToString();nativeWriteFileTimeUtc=$native.Write.ToString();live=@(Recovery-Lines $liveRows)}
+        } catch {Log ('Kept migration companions for '+$root+': '+$_.Exception.Message)|Out-Null}
     }
 }
 function Restore-RecoveryCompanions($Plan) {
     $d=Get-RecoveryWorkspace
     $ci=0;foreach($c in @($Plan.companions)){
+        if($c.kind -ceq 'kept'){$f=@($Plan.scope.folders|Where-Object {(Join-Path $local $_.name) -ceq $c.root});if($f.Count -ne 1){throw 'Kept companion has no exact original root plan'};Assert-RecoveryEqual @($f[0].expected) @(Get-TreeFingerprint $c.root) 'original root must be restored before kept companion quarantine'}
         Assert-RecoveryEqual @($c.live) @(Get-TreeFingerprint $c.path) 'companion drift before quarantine'
         $q=Join-Path $d ('quarantine-companion-'+($ci++).ToString('D6'));if([IO.Path]::GetPathRoot($q) -cne [IO.Path]::GetPathRoot($c.path)){$q=$c.path+'.roo-industries-quarantine-'+(Split-Path $d -Leaf)}
         if(Test-Path -LiteralPath $q){throw 'Companion quarantine exists'}

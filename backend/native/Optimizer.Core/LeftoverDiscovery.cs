@@ -78,6 +78,11 @@ public sealed class LeftoverDiscovery
         foreach (var root in roots.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (root.StartsWith(@"\\") || !Path.IsPathFullyQualified(root) || new DriveInfo(Path.GetPathRoot(root)!).DriveType != DriveType.Fixed)
+            {
+                _errors.Add(root + ": not scanned because this folder is not on a local fixed drive.");
+                continue;
+            }
             SearchFolders(root, 0, cancellationToken);
         }
         if (!string.IsNullOrWhiteSpace(_app.PackageFamilyName))

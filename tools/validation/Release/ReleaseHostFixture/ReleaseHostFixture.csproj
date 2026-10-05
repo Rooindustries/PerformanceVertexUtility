@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors><AssemblyName>Optimizer.Host</AssemblyName><StartupHookSupport>false</StartupHookSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(FixtureProgram)" Link="Program.cs" />
+    <ProjectReference Include="../../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" AdditionalProperties="RooIndustriesRelease=true" />
+  </ItemGroup>
+</Project>

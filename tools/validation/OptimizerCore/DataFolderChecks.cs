@@ -72,7 +72,17 @@ static partial class DataFolderChecks
             check(PolicyRootSecurity.Problem(root, DataFolder.Kind) is not null && PolicyRootSecurity.Problem(operations, OperationsFolder.Kind) is null && PolicyRootSecurity.Problem(rules) is null,
                 "Before migration the data folder is open while its recovery and rules folders are already protected");
 
+            var created = new DateTime(2005, 6, 7, 8, 9, 10, DateTimeKind.Utc);
+            var dateFiles = new[] { Path.Combine(root, "settings", "custom.json"), Path.Combine(operations, "journal.json") };
+            var dateFolders = new[] { Path.Combine(root, "settings"), operations };
+            foreach (var path in dateFiles) File.SetCreationTimeUtc(path, created);
+            foreach (var path in dateFolders) Directory.SetCreationTimeUtc(path, created);
+            var fileDates = dateFiles.ToDictionary(path => path, File.GetCreationTimeUtc);
+            var folderDates = dateFolders.ToDictionary(path => path, Directory.GetCreationTimeUtc);
+
             check(PolicyRootSecurity.Secure(root, DataFolder.Kind), "An open data folder is migrated into a protected one");
+            check(fileDates.All(item => File.GetCreationTimeUtc(item.Key) == item.Value), "Migration preserves Date created for carried files");
+            check(folderDates.All(item => Directory.GetCreationTimeUtc(item.Key) == item.Value), "Migration preserves Date created for carried directories");
             check(PolicyRootSecurity.Problem(root, DataFolder.Kind) is null && PolicyRootSecurity.Problem(root, DataFolder.Kind, deep: false) is null && PolicyRootSecurity.WriterOf(root) is null,
                 "The migrated data folder passes the deep and startup checks and no other account can change it");
             check(PolicyRootSecurity.Marked(PolicyRootSecurity.MarkerName(root)) && !PolicyRootSecurity.Secure(root, DataFolder.Kind), "The migrated data folder is marked and is not migrated again");

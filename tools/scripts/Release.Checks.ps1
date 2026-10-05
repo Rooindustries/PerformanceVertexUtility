@@ -78,7 +78,8 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
     return $calls
 }
 
-function Assert-ReleaseScripts([string]$RepoRoot, [string]$Stage) {
+function Assert-ReleaseScripts([string]$RepoRoot, [string]$Stage, [switch]$TestHooks) {
+    if(-not $TestHooks -and (Test-Path -LiteralPath (Join-Path $Stage 'backend\test-hooks.enabled'))){throw 'A production release stage contains backend\test-hooks.enabled.'}
     $scripts = Join-Path $Stage 'backend\scripts'
     $staged = @(Get-ChildItem -LiteralPath $scripts -File -Recurse | ForEach-Object { $_.FullName.Substring($scripts.Length).TrimStart('\', '/') })
     foreach ($name in $staged) { if (Test-ForbiddenReleaseScript $name) { throw "The release stage contains $name, a scenario, test or developer script." } }

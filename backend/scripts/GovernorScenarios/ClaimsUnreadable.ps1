@@ -210,11 +210,12 @@ function Test-ScenarioClaimsGameBackupFirst {
     $path=Copy-Probe $name
     $probe=Start-Probe $path
     $repo=New-ClaimsRepo
+    $hookScripts=New-ClaimsScriptFixture $repo $true
     $state=Join-Path $repo 'backend\state'
     $sessions=Join-Path $state 'game-tune-sessions'
     [IO.Directory]::CreateDirectory($sessions)|Out-Null
     [IO.File]::WriteAllText((Join-Path $sessions 'test-pause-ms.txt'),'60000')
-    $child=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game');stateRoot=$state}
+    $child=Start-ClaimsChild '$scriptsRoot=$hookScripts;$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game');stateRoot=$state;hookScripts=$hookScripts}
     $recorded={$file=@(Get-ChildItem -LiteralPath $sessions -Filter 'session.json' -Recurse -File)[0];$json=[IO.File]::ReadAllText($file.FullName)|ConvertFrom-Json;if($json.restorable -eq $true -and $json.backupManifestPath){$json}}
     $ready=Wait-Until {$null -ne (& $recorded)} 90 100
     Note 'secondsToRecordedSession' $ready
@@ -233,6 +234,38 @@ function Test-ScenarioClaimsGameBackupFirst {
     $stopped=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Stop-GameTuneSession.ps1') -SessionPath $session.sessionPath -BackupPath $session.backupManifestPath -StateRoot $state -ConfirmApply)
     Note 'undoAfterKill' @{status=$stopped.status;restorable=$stopped.restorable;errors=@($stopped.errors|ForEach-Object {$_.message})}
     Assert ($stopped.status -eq 'completed' -and $stopped.restorable -eq $false -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo finds the killed session through its backup and ends restored'
+}
+
+function New-ClaimsScriptFixture([string]$Repo,[bool]$TestHooks){
+    $backend=Join-Path $Repo 'backend'
+    Copy-Item -LiteralPath $scriptsRoot -Destination $backend -Recurse
+    New-Item -ItemType Directory -Path (Join-Path $backend 'bin')|Out-Null
+    Copy-Item -LiteralPath $hostDirectory -Destination (Join-Path $backend 'bin\optimizer') -Recurse
+    if($TestHooks){[IO.File]::WriteAllText((Join-Path $backend 'test-hooks.enabled'),'test hooks')}
+    return Join-Path $backend 'scripts'
+}
+
+function Test-ScenarioClaimsProductionPause {
+    $name='ClaimsProductionPause.exe'
+    $probe=Start-Probe (Copy-Probe $name)
+    $repo=New-ClaimsRepo
+    $fixtureScripts=New-ClaimsScriptFixture $repo $false
+    $state=Join-Path $repo 'backend\state'
+    $sessions=Join-Path $state 'game-tune-sessions'
+    [IO.Directory]::CreateDirectory($sessions)|Out-Null
+    [IO.File]::WriteAllText((Join-Path $sessions 'test-pause-ms.txt'),'60000')
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    $child=Start-ClaimsChild '$scriptsRoot=$fixtureScripts;$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game');stateRoot=$state;fixtureScripts=$fixtureScripts}
+    $finished=$child.process.WaitForExit(15000)
+    Assert $finished 'A script without the hooks marker ignores the 60-second pause file'
+    $result=Wait-ClaimsChild $child 1
+    Note 'productionSession' @{seconds=$clock.Elapsed.TotalSeconds;status=$result.status}
+    Assert ($result.status -eq 'completed' -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'The production session applies its real probe within the normal bound'
+    $backups=@(Get-ChildItem -LiteralPath $sessions -Filter 'backup.json' -Recurse -File)
+    $backup=[IO.File]::ReadAllText($backups[0].FullName)|ConvertFrom-Json
+    Assert (@($backup.snapshots).Count -eq 1 -and $backup.snapshots[0].processId -eq $probe.Id -and $backup.snapshots[0].originalPriorityClass -eq 'Normal' -and $backup.snapshots[0].proposedPriorityClass -eq 'AboveNormal') 'The production proof retains the real priority backup and its exact probe identity'
+    $stopped=Read-ClaimsOutput (& (Join-Path $fixtureScripts 'Stop-GameTuneSession.ps1') -SessionPath $result.sessionPath -BackupPath $result.backupManifestPath -StateRoot $state -ConfirmApply)
+    Assert ($stopped.status -eq 'completed' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo restores the real production probe from its exact session backup'
 }
 
 function Test-ScenarioClaimsOtherAccountSession {

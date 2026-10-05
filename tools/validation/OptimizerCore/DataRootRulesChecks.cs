@@ -9,6 +9,18 @@ static partial class DataFolderChecks
 {
     static partial void RegisterNew(List<(string Name, Action<Action<bool, string>> Run)> scenarios)
     {
+        scenarios.Add(("timer-uninstall", TimerUninstall));
+        scenarios.Add(("marked-missing", check => MarkedRootRecovery(check, "missing")));
+        scenarios.Add(("marked-damaged", check => MarkedRootRecovery(check, "damaged")));
+        scenarios.Add(("marked-reparse", check => MarkedRootRecovery(check, "reparse")));
+        foreach (var refusal in new[] { "other-sid", "other-parent", "malformed", "foreign-receipt" })
+            scenarios.Add(("marked-" + refusal, check => RefusedMarkedRoot(check, refusal)));
+        scenarios.Add(("marked-interrupted-moved", check => InterruptedMarkedRoot(check, "moved")));
+        scenarios.Add(("marked-interrupted-created", check => InterruptedMarkedRoot(check, "created")));
+        scenarios.Add(("marked-crash-moved", check => CrashedMarkedRoot(check, "moved")));
+        scenarios.Add(("marked-crash-created", check => CrashedMarkedRoot(check, "created")));
+        scenarios.Add(("marked-repair-path-swap", RepairPathSwap));
+        scenarios.Add(("inflight-script", InflightScript));
         scenarios.Add(("marker-repair", MarkerRepair));
         scenarios.Add(("legacy-planted", LegacyPlanted));
         scenarios.Add(("earlier-version", EarlierVersionGate));

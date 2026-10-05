@@ -103,8 +103,9 @@ public static class GovernorProbe
             catch (Exception error) { summary = summary with { RulesError = error.Message }; }
         }
         var open = worker.State?.Instances.Where(instance => instance.Status is "active" or "applying" or "conflict").ToArray() ?? [];
+        var tracked = open.Concat(worker.State?.Instances.Where(instance => instance.Status == "restored" && instance.ErrorKind == "leftAsSet") ?? []).ToArray();
         var journals = new Dictionary<string, ProcessControlJournal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var instance in open)
+        foreach (var instance in tracked)
         {
             try { if (File.Exists(instance.JournalPath)) journals[instance.JournalPath] = OperationFiles.Read<ProcessControlJournal>(instance.JournalPath); }
             catch (IOException) { }
@@ -117,8 +118,8 @@ public static class GovernorProbe
         GovernorTaskState? task = null;
         if (!summary.Paused && summary.EnabledRules > 0 && worker.HostRunning is { } alive)
             task = alive ? Cached(policyRoot + "|" + installRoot, Environment.TickCount64, () => ReadTask(policyRoot, installRoot, true)) : ReadTask(policyRoot, installRoot);
-        var running = rules.Length > 0 || open.Length > 0 ? Running() : null;
-        return new GovernorSnapshot(summary, worker, rules, journals, task, ExitedKeys(open.Select(instance => instance.Process), running), unapplied,
+        var running = rules.Length > 0 || tracked.Length > 0 ? Running() : null;
+        return new GovernorSnapshot(summary, worker, rules, journals, task, ExitedKeys(tracked.Select(instance => instance.Process), running), unapplied,
             running?.Values.Select(process => process.ImageName).ToHashSet(StringComparer.OrdinalIgnoreCase));
     }
 

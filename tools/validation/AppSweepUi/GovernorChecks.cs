@@ -97,6 +97,42 @@ static class GovernorChecks
         check(ok, ok ? message : message + "\n    expected:\n      " + string.Join("\n      ", expected) + "\n    got:\n      " + string.Join("\n      ", actual));
     }
 
+    public static async Task LeftAsSetAsync(Action<bool, string> check)
+    {
+        var savedGovernor = App.Operations.Governor;
+        var savedGame = App.Live.GameStatusModel;
+        var savedRestraint = App.Live.GovernorStatusModel;
+        App.Live.GameStatusModel = new GameTuneSessionStatus { Status = "notFound", Restorable = false };
+        App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus { Status = "notFound", Restorable = false };
+        try
+        {
+            var process = Process(100, Chrome);
+            var rule = Rule(RuleId, "Chrome rule", Chrome, true);
+            var left = Instance(process, "cpuPriority", "restored", "leftAsSet", "Left as another program set it.");
+            var owned = Instance(process, "ioPriority", "restored");
+            foreach (var paused in new[] { true, false })
+            {
+                var snapshot = Snapshot(paused, [rule], new(Host("stopped", [left, owned]), false, null));
+                var view = await View(snapshot);
+                Console.WriteLine(string.Join("\n", view));
+                check(view.Any(line => line.StartsWith("Rule ", StringComparison.Ordinal) && line.Contains("Left as another program set it.", StringComparison.Ordinal)), "Processes shows the reason the terminal stepped-back field was left alone");
+                check(view.Any(line => line.StartsWith("Undo: ", StringComparison.Ordinal) && line.Contains("Left as another program set it.", StringComparison.Ordinal)), "Undo reports the foreign value instead of claiming every setting was put back");
+                check(view.Any(line => line.StartsWith("History: ", StringComparison.Ordinal) && line.Contains("Left as another program set it.", StringComparison.Ordinal)), "The closed governor history says Left as another program set it");
+                check(GovernorDisplay.Changed(snapshot) == 0 && GovernorDisplay.Kept(snapshot) == 0, "A closed leftAsSet field is not counted as an owned setting needing recovery");
+            }
+            var denied = Snapshot(false, [rule], new(Host("running", [left], [new(RuleId, process.ProcessId, process.ExecutablePath, "Access is denied.") { Kind = "denied", Field = "cpuPriority" }]), true, null));
+            var deniedView = await View(denied);
+            check(deniedView.Any(line => line.StartsWith("Rule ", StringComparison.Ordinal) && line.Contains("CPU priority unavailable", StringComparison.Ordinal)), "A closed leftAsSet history row cannot hide a later denial for the same process and field");
+            var legacy = Instance(process, null, "restored", "leftAsSet", "Left as another program set it.");
+            var legacyJournal = Journal(process, Owner, ("cpuPriority", Value("High")), ("ioPriority", Value(2)));
+            legacyJournal.Status = "restored"; legacyJournal.Changes[0].Status = "leftAsSet"; legacyJournal.Changes[1].Status = "restored";
+            var legacySnapshot = Snapshot(true, [rule], new(Host("stopped", [legacy]), false, null), new Dictionary<string, ProcessControlJournal> { [legacy.JournalPath] = legacyJournal });
+            var legacyView = await View(legacySnapshot);
+            check(legacyView.Any(line => line.StartsWith("Rule ", StringComparison.Ordinal) && line.Contains("CPU priority · Left as another program set it.", StringComparison.Ordinal)), "A mixed terminal legacy journal names only the field that was left as set");
+        }
+        finally { App.Operations.Governor = savedGovernor; App.Live.GameStatusModel = savedGame; App.Live.GovernorStatusModel = savedRestraint; }
+    }
+
     public static async Task RunAsync(Action<bool, string> check)
     {
         var savedGovernor = App.Operations.Governor;
@@ -118,6 +154,7 @@ static class GovernorChecks
             await RealSnapshot(check);
             await Scheduled(check);
             await Details(check);
+            await LeftAsSetAsync(check);
             Restore(check);
             Probe(check);
 #endif

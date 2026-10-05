@@ -26,8 +26,7 @@ public static class TweakHardwareValues
         if (name == "menu-power") return "\"" + Path.Combine(system, "control.exe") + "\" powercfg.cpl";
         if (name == "menu-startup") return "\"" + Path.Combine(system, "msconfig.exe") + "\"";
         if (name != "menu-ownership") throw new InvalidDataException("Unknown desktop menu action.");
-        var ui = BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UI_EXE");
-        if (ui is null || !Path.IsPathFullyQualified(ui) || !ui.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(ui)) throw new InvalidDataException("Open this review from the Roo Industries desktop app so its ownership-review command can be registered.");
+        var ui = RuntimeEnvironment.OwnershipReviewExecutable();
         return "\"" + ui + "\" --ownership-review \"%1\"";
     }
     [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetPhysicallyInstalledSystemMemory(out ulong memoryKiB);

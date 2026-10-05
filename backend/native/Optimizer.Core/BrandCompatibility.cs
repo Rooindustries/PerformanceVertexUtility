@@ -32,8 +32,8 @@ public static class BrandCompatibility
         if (roots.Any(root => !Path.IsPathFullyQualified(root) || !string.Equals(PolicyRootSecurity.CanonicalPath(Path.GetDirectoryName(root)!), parent, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("This Windows user's AppData folder setting changed or names several protected folders. Roo Industries kept the existing data. Restore the folder setting before opening the app again.");
         foreach (var root in roots)
-            if (!Directory.Exists(root) || PolicyRootSecurity.Problem(root, DataFolder.Kind, deep: false) is not null)
-                throw new InvalidOperationException("Roo Industries kept the existing protected data folder because it is missing or damaged. Restore that folder before opening the app again.");
+            if (!Directory.Exists(root) || PolicyRootSecurity.Problem(root, DataFolder.Kind, deep: false) is not null || PolicyRootSecurity.HasPendingDataRootRepair(root))
+                PolicyRootSecurity.RepairMarkedDataRoot(root);
         return DataRoot(localAppData);
     }
 

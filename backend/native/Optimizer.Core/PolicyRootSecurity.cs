@@ -53,6 +53,72 @@ public static class PolicyRootSecurity
     public static bool Secure(string root, string? userSid = null) => Secure(root, ProtectedFolder.Rules, userSid);
 
     public static bool Secure(string root, ProtectedFolder kind, string? userSid = null)
+        => Secure(root, kind, userSid, repairMarked: false);
+
+    internal static void RepairMarkedDataRoot(string root) => Secure(root, DataFolder.Kind, null, repairMarked: true);
+
+    private sealed record RootRepair(string Owner, string Root, string? KeptAt, string Phase);
+
+    internal static bool HasPendingDataRootRepair(string root)
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(MarkerKey);
+        return key?.GetValue(MarkerName(root) + "|repair") is not null;
+    }
+
+    private static bool EntryExists(string path)
+    {
+        try { _ = File.GetAttributes(path); return true; }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return false; }
+    }
+
+    private static bool RepairDataRoot(string root, string marker, SecurityIdentifier user)
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(MarkerKey, true) ?? throw new UnauthorizedAccessException("The data folder marker is missing.");
+        var pendingName = marker + "|repair";
+        RootRepair? repair = null;
+        if (key.GetValue(pendingName, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is { } pending)
+        {
+            if (key.GetValueKind(pendingName) != RegistryValueKind.String || pending is not string text || text.Length > 65536) throw new InvalidDataException("The pending data folder repair could not be checked. Its folders were kept.");
+            repair = JsonSerializer.Deserialize<RootRepair>(text, OperationFiles.Json) ?? throw new InvalidDataException("The pending data folder repair is empty. Its folders were kept.");
+            if (repair.Owner != user.Value || !string.Equals(repair.Root, root, StringComparison.OrdinalIgnoreCase) || repair.Phase is not ("prepared" or "moved") ||
+                repair.KeptAt is { } kept && (!kept.StartsWith(root + ".untrusted-", StringComparison.OrdinalIgnoreCase) || !Guid.TryParseExact(kept[(root.Length + 11)..], "N", out _)) || repair.Phase == "prepared" && repair.KeptAt is null)
+                throw new InvalidDataException("The pending data folder repair belongs to another folder or Windows user. Its folders were kept.");
+        }
+        if (repair is null)
+        {
+            if (Directory.Exists(root) && Problem(root, DataFolder.Kind, deep: false) is null) return false;
+            var present = EntryExists(root);
+            repair = new(user.Value, root, present ? root + ".untrusted-" + Guid.NewGuid().ToString("N") : null, present ? "prepared" : "moved");
+            key.SetValue(pendingName, JsonSerializer.Serialize(repair, OperationFiles.Json), RegistryValueKind.String); key.Flush();
+        }
+        if (repair.Phase == "prepared")
+        {
+            if (EntryExists(repair.KeptAt!))
+            {
+                if (EntryExists(root)) throw new IOException("Both folders exist during the pending data folder repair. Roo Industries kept them for review.");
+            }
+            else if (EntryExists(root))
+            {
+                if (File.GetAttributes(root).HasFlag(FileAttributes.Directory)) Directory.Move(root, repair.KeptAt!);
+                else File.Move(root, repair.KeptAt!);
+                Pause("repair-moved");
+            }
+            repair = repair with { Phase = "moved" };
+            key.SetValue(pendingName, JsonSerializer.Serialize(repair, OperationFiles.Json), RegistryValueKind.String); key.Flush();
+        }
+        var created = !EntryExists(root);
+        if (created) CreateSecured(root, user, DataFolder.Kind);
+        else if (Problem(root, DataFolder.Kind, deep: false) is not null) throw new UnauthorizedAccessException("The new data folder changed during its pending repair. Roo Industries kept both folders for review.");
+        using var lease = PolicyRootLease.Acquire(root, DataFolder.Kind, deep: false);
+        if (created) Pause("repair-created");
+        Mark(marker, user);
+        DataFolder.WriteRecoveryNotice(root, repair.KeptAt is { } retained && EntryExists(retained) ? retained : null);
+        if (lease.Moved) throw new UnauthorizedAccessException("The new data folder moved during its repair. Roo Industries kept both folders for review.");
+        key.DeleteValue(pendingName, false); key.Flush();
+        return true;
+    }
+
+    private static bool Secure(string root, ProtectedFolder kind, string? userSid, bool repairMarked)
     {
         root = Normalize(root);
         var parent = Path.GetDirectoryName(root) ?? throw new InvalidDataException("The " + kind.Label + " needs a parent folder.");
@@ -87,6 +153,7 @@ public static class PolicyRootSecurity
         try
         {
             LastReport = null;
+            if (repairMarked && Marked(marker) && RepairDataRoot(root, marker, user)) return false;
             if (Directory.Exists(parent) && Adopt(root, parent, name, kind, user)) { Mark(marker, user); Tidy(root, parent, name, kind); return false; }
             if (Directory.Exists(root) && new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint) && !Marked(marker))
                 Directory.Move(root, Path.Combine(parent, name + ".untrusted-" + Guid.NewGuid().ToString("N")));
@@ -95,6 +162,7 @@ public static class PolicyRootSecurity
                 Directory.CreateDirectory(parent);
                 CreateSecured(root, user, kind);
                 Mark(marker, user);
+                if (repairMarked) DataFolder.WriteRecoveryNotice(root, null);
                 Tidy(root, parent, name, kind);
                 return false;
             }
@@ -473,7 +541,8 @@ public static class PolicyRootSecurity
             PreserveProtection(source, target);
         }
         var folderAttributes = info.Attributes & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.NotContentIndexed);
-        if (folderAttributes != 0) File.SetAttributes(target, folderAttributes | FileAttributes.Directory & 0);
+        Directory.SetCreationTimeUtc(target, DateTime.FromFileTimeUtc(info.CreationTicks));
+        if (folderAttributes != 0) File.SetAttributes(target, folderAttributes);
         run.Kept.Add(relative);
         run.Retire.Add(relative);
         return true;
@@ -500,6 +569,7 @@ public static class PolicyRootSecurity
         var existing = new FileInfo(target);
         if (existing.Exists && existing.Length == info.Length && existing.LastWriteTimeUtc.ToFileTimeUtc() == info.LastWriteTicks)
         {
+            File.SetCreationTimeUtc(target, DateTime.FromFileTimeUtc(info.CreationTicks));
             run.Files++; run.Kept.Add(relative); run.Retire.Add(relative); run.Copied[relative] = (info.Length, info.LastWriteTicks);
             return;
         }
@@ -517,6 +587,7 @@ public static class PolicyRootSecurity
             }
         }
         File.SetLastWriteTimeUtc(target, DateTime.FromFileTimeUtc(info.LastWriteTicks));
+        File.SetCreationTimeUtc(target, DateTime.FromFileTimeUtc(info.CreationTicks));
         File.SetAttributes(target, info.Attributes & NativeFiles.Preserved);
         run.Files++; run.Kept.Add(relative); run.Retire.Add(relative); run.Copied[relative] = (info.Length, info.LastWriteTicks);
     }
@@ -812,6 +883,17 @@ public static class PolicyRootSecurity
     }
 
     public static bool OwnedByAdministrators(string folder) => Trusted(new DirectoryInfo(Normalize(folder)).GetAccessControl().GetOwner(typeof(SecurityIdentifier)));
+
+    internal static bool AdministratorOnlyEntry(string path, bool directory)
+    {
+        using var handle = NativeFiles.OpenEntry(path, false);
+        var info = NativeFiles.Info(handle);
+        if (info.IsLink || info.IsDirectory != directory || !NativeFiles.SameFinalPath(NativeFiles.Normalize(NativeFiles.FinalPath(handle) ?? ""), CanonicalPath(path))) return false;
+        if (NativeFiles.SecurityDescriptor(handle) is not { } descriptor) return false;
+        FileSystemSecurity security = directory ? new DirectorySecurity() : new FileSecurity();
+        security.SetSecurityDescriptorBinaryForm(descriptor);
+        return Trusted(security.GetOwner(typeof(SecurityIdentifier))) && Writers(security) is null;
+    }
 
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool GetTokenInformation(IntPtr token, int kind, IntPtr information, int length, out int returned);
