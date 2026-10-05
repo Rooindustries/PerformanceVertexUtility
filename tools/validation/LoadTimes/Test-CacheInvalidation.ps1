@@ -90,7 +90,7 @@ function Wait-Listed([string]$id, [bool]$present, [double]$seconds) {
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
 function New-CacheGameSession {
     $history = WaitFor { $h = ById 'GameSessionHistory'; if ($h -and $h.Current.IsEnabled) { $h } } 30 'previous sessions loaded'
-    $selected = @($history.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection())
+    $selected = @($history.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection())
     if ($selected.Count) {
         try { $new = WaitFor { $b = ById 'GameSessionNew'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'New game session enabled' }
         catch {
