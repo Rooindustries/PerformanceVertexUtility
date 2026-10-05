@@ -1222,7 +1222,7 @@ switch($Phase){
         if(-not $Scenario){throw 'Provide -Scenario.'}
         Register-RecoveryAuxiliaryIntent $Scenario
         $root=Join-Path $Evidence 'scenarios'
-        $arguments=@{Label=$Scenario;Scenario=$Scenario;OutRoot=$root;Minutes=$Minutes}
+        $arguments=@{Label=$Scenario;Scenario=$Scenario;OutRoot=$root;Minutes=$Minutes;InstalledEpochLease=(Join-Path (Get-RecoveryWorkspace) 'lease.json')}
         $actionStartedUtc=[DateTime]::UtcNow
         $clock=[Diagnostics.Stopwatch]::StartNew()
         $ErrorActionPreference='Continue'

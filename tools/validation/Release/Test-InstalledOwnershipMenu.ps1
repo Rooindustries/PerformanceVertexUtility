@@ -33,11 +33,16 @@ function Assert-Plain([string]$Path) {
     $p=[IO.Path]::GetFullPath($Path)
     while($p){$i=Get-Item -LiteralPath $p -Force;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked path refused'};$p=[IO.Path]::GetDirectoryName($p)}
 }
-function Assert-Protected([string]$Path) {
+function Assert-Protected([string]$Path,[switch]$Installed) {
     Assert-Plain $Path
     $a=Get-Acl -LiteralPath $Path
-    if($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin 'S-1-5-18','S-1-5-32-544'){throw 'Unprotected owner refused'}
-    foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin 'S-1-5-18','S-1-5-32-544' -and ([long]$r.FileSystemRights -band 0x500D0156)){throw 'Unprotected writer refused'}}
+    $trusted=@('S-1-5-18','S-1-5-32-544')
+    if($Installed){$trusted+='S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'}
+    if($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $trusted){throw 'Unprotected owner refused'}
+    foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+        if($Installed -and $r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -ceq 'S-1-3-0' -and ($r.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly)){continue}
+        if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin $trusted -and ([long]$r.FileSystemRights -band 0x500D0156)){throw 'Unprotected writer refused'}
+    }
 }
 function New-Protected([string]$Path) {
     if(Test-Path -LiteralPath $Path){throw 'Existing proof directory retained'}
@@ -193,7 +198,7 @@ try {
     New-Protected $OutDir
     $private=Join-Path $RunRoot ('rf3-private-'+[Guid]::NewGuid().ToString('N'));New-Protected $private
     $hostExe=Join-Path $InstallRoot 'backend\bin\optimizer\Optimizer.Host.exe';$uiExe=Join-Path $InstallRoot 'app\RooIndustries.OptimizationSuite.App.exe'
-    foreach($p in $InstallRoot,(Split-Path $uiExe),$uiExe,(Split-Path $hostExe),$hostExe){Assert-Protected $p}
+    foreach($p in $InstallRoot,(Split-Path $uiExe),$uiExe,(Split-Path $hostExe),$hostExe){Assert-Protected $p -Installed}
     $hostHash=(Get-FileHash -LiteralPath $hostExe -Algorithm SHA256).Hash
     $versions=@(foreach($root in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'){Get-ChildItem -LiteralPath $root|ForEach-Object {Get-ItemProperty -LiteralPath $_.PSPath}|Where-Object DisplayName -like '*Optimization Suite*'|ForEach-Object DisplayVersion})
     Check ($versions.Count -eq 1 -and $versions[0] -ceq '0.10.0-beta') 'Production 0.10.0-beta is installed in Program Files'

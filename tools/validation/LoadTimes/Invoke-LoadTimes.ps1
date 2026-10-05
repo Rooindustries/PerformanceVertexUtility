@@ -3,6 +3,7 @@
     [string]$SetupPath,
     [string]$ExpectedSha256,
     [string]$OutRoot = (Join-Path $env:TEMP 'roo-industries-loadtimes'),
+    [string]$InstalledEpochLease,
     [int]$ColdRuns = 3,
     [int]$Tours = 2,
     [int]$ColdTweaksRuns = 2,
@@ -19,6 +20,8 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 . (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+. (Join-Path $PSScriptRoot 'LoadTimesHandoff.Common.ps1')
+$script:HandoffContext = $null
 $taskReceipt = $null
 $script:ChildCompleted = $false
 $script:PersistentResources = $null
@@ -30,6 +33,7 @@ if (@(Get-Process cs2 -ErrorAction SilentlyContinue).Count) { throw 'CS2 is runn
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run from an elevated session.' }
 if (Test-Path -LiteralPath $out) { throw 'Output already exists; choose a fresh label to preserve previous evidence.' }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
+if($InstalledEpochLease){$script:HandoffContext=New-HandoffContext $OutRoot $InstalledEpochLease;Initialize-HandoffLedger $script:HandoffContext}
 
 function Uninstall-App {
     $uninstaller = Get-ChildItem $appDir -Filter 'unins*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -41,22 +45,25 @@ function Uninstall-App {
 }
 
 function Report-UnownedLoadTimesResources {
+    $ledger = if($script:HandoffContext){Read-HandoffLedger $script:HandoffContext -Prune}else{$null}
     $persistent = if ($script:ChildCompleted -and $script:PersistentResources -and $script:PersistentResources.scenario -ceq $Scenario -and $Scenario -in 'migration-before','migration-timer-on') { $script:PersistentResources } else { $null }
     foreach ($name in 'roo-industries-feature-hang.flag', 'RooIndustriesLoadTimesProbe.exe', 'RooIndustriesLauncherProbe.exe', 'RooIndustriesProtectedLauncherProbe.exe', 'RooIndustriesProtectedGameProbe.exe', 'RooIndustriesEnvironmentControl.exe') {
         $path = Join-Path $probeDirectory $name
         if (Test-Path -LiteralPath $path) { "RESULT CLEANUP NEEDED: retained child-owned or unowned file $path" }
     }
     if (Test-Path -LiteralPath $ifeoProbe) { "RESULT CLEANUP NEEDED: retained protected-session registry key $ifeoProbe for its journal owner" }
-    foreach ($candidate in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' -or $_.TaskName -like 'Roo Industries Protected Session *' -or $_.TaskName -eq 'RooIndustries_EnvironmentControl' })) {
+    foreach ($candidate in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' -or $_.TaskName -like 'Roo Industries Protected Session *' -or $_.TaskName -eq 'RooIndustries_EnvironmentControl' -or $_.TaskName -like 'RooIndustries.Timer.*' })) {
         $identity = $candidate.TaskPath + $candidate.TaskName
         if ($ruleTasksBefore -contains $identity -or $sessionTasksBefore -contains $identity) { continue }
         $expected = @($persistent.tasks | Where-Object { $_.name -ceq $candidate.TaskName -and $_.path -ceq $candidate.TaskPath })
         if ($expected.Count -eq 1) { try { Assert-OwnedTaskUnchanged $expected[0]; continue } catch {} }
+        if($ledger -and (Test-HandoffTask $ledger $candidate.TaskName $candidate.TaskPath)){continue}
         "RESULT CLEANUP NEEDED: retained task $identity without a matching completed-child receipt"
     }
     foreach ($process in @(Get-Process RooIndustries.OptimizationSuite.*, Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir + '\', [StringComparison]::OrdinalIgnoreCase) })) {
         $expected = @($persistent.processes | Where-Object { [int]$_.pid -eq $process.Id })
         if ($expected.Count -eq 1) { try { $handle=$process.Handle; if ([RooValidationOwnership.Native]::Created($handle).ToString() -ceq [string]$expected[0].creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Image($handle) -ieq $expected[0].imagePath) { continue } } catch {} }
+        if($ledger -and (Test-HandoffProcess $ledger $process)){continue}
         "RESULT CLEANUP NEEDED: retained installed process $($process.Id) without a matching completed-child receipt"
     }
 }
@@ -93,7 +100,15 @@ $scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-
 $scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; 'migration-undo-blocker' = ' -Phase undo-blocker'; 'migration-timer-on' = ' -Phase timer-on'; 'launchers-session' = ' -Part session'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
 $arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $scenarioExtra }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
+if($script:HandoffContext -and $Scenario -in 'migration-before','migration-timer-on'){
+    $requestPath=Join-Path $out 'producer-request.json'
+    $arguments='--headless "'+$ps+'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'Invoke-LoadTimesProducer.ps1')+'" -RequestPath "'+$requestPath+'" -Minutes '+$Minutes
+}
 $taskReceipt = Register-OwnedProbeTask $task 'C:\Windows\System32\conhost.exe' $arguments $out $sid ($Minutes + 5)
+if($script:HandoffContext -and $Scenario -in 'migration-before','migration-timer-on'){
+    $phase=if($Scenario -ceq 'migration-before'){'before'}else{'timer-on'}
+    $null=New-HandoffProducerRequest $script:HandoffContext $Scenario $out (Join-Path $PSScriptRoot $scenarioScript) @{OutDir=$out;Exe=$exe;Phase=$phase} $taskReceipt
+}
 Start-ScheduledTask -TaskName $task
 $done = Join-Path $out $(if ($scenarioScript) { "$Scenario.done" } else { 'measure.done' })
 $deadline = (Get-Date).AddMinutes($Minutes)
@@ -121,6 +136,7 @@ $script:ChildCompleted = (Test-Path -LiteralPath $done) -and -not $active -and $
 $persistentPath = Join-Path $out 'persistent-resources.json'
 if ($script:ChildCompleted -and (Test-Path -LiteralPath $persistentPath)) { $script:PersistentResources = Get-Content -LiteralPath $persistentPath -Raw | ConvertFrom-Json }
 "RESULT done=$(Test-Path $done) state=$taskState lastResult=$($info.LastTaskResult)"
+if($script:ChildCompleted -and $script:HandoffContext -and $Scenario -in 'migration-before','migration-timer-on'){Add-HandoffProducer $script:HandoffContext $Scenario $out}
 if (-not $script:ChildCompleted) { throw 'The scenario did not finish with exit 0; child-owned resources are retained for recovery.' }
 }
 finally {
