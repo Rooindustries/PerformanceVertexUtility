@@ -15,7 +15,7 @@ $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseF
 if($errors){throw 'Ownership harness parser failed'}
 $native=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -ceq 'Add-Type'},$true))
 if($native.Count -ne 1){throw 'Ownership native helper seam changed'}
-Invoke-Expression $native[0].Extent.Text
+$nativeCode=$native[0].CommandElements[1].Value
 foreach($name in 'State-Bytes','Stamp','State-Object','Same-Object','Menu-Rows','Menu-Absent','Call-Host','Observe-OwnedState','Undo-OwnProfile'){
  $function=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
  if($function.Count -ne 1){throw ('Ownership harness function seam changed: '+$name)}
@@ -24,24 +24,28 @@ foreach($name in 'State-Bytes','Stamp','State-Object','Same-Object','Menu-Rows',
 $fallback=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.TryStatementAst] -and $n.Finally -and $n.Finally.Extent.Text.Contains('$applyAttempted -and -not$undoCompleted')},$true))
 if($fallback.Count -ne 1){throw 'Ownership fallback finally seam changed'}
 $fallbackBlock=[scriptblock]::Create(($fallback[0].Finally.Statements.Extent.Text -join "`n"))
-Add-Type @'
-using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using Microsoft.Win32;
+$privateMapping = @'
 public static class RooPrivateOwnershipMount {
- [DllImport("advapi32.dll")] static extern int RegOverridePredefKey(IntPtr key,IntPtr replacement);
- static RegistryKey root;
+ static Microsoft.Win32.RegistryKey root;
  public static void Mount(string path) {
-  if(root!=null||!System.Text.RegularExpressions.Regex.IsMatch(path,@"^Software\\RooIndustriesTweakTests\\[a-f0-9]{32}$"))throw new InvalidOperationException("Private hive scope differs.");
-  using(var user=RegistryKey.OpenBaseKey(RegistryHive.CurrentUser,RegistryView.Registry64))root=user.OpenSubKey(path,true);
-  if(root==null)throw new InvalidOperationException("Private hive missing.");
-  int error=RegOverridePredefKey(new IntPtr(unchecked((int)0x80000002)),root.Handle.DangerousGetHandle());
-  if(error!=0){root.Dispose();root=null;throw new Win32Exception(error);}
+  if(root!=null||!System.Text.RegularExpressions.Regex.IsMatch(path,@"^Software\\RooIndustriesTweakTests\\[a-f0-9]{32}$"))throw new System.InvalidOperationException("Private hive scope differs.");
+  using(var user=Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.CurrentUser,Microsoft.Win32.RegistryView.Registry64))root=user.OpenSubKey(path,true);
+  if(root==null)throw new System.InvalidOperationException("Private hive missing.");
  }
- public static void Unmount(){int error=RegOverridePredefKey(new IntPtr(unchecked((int)0x80000002)),IntPtr.Zero);if(root!=null){root.Dispose();root=null;}if(error!=0)throw new Win32Exception(error);}
+ public static Microsoft.Win32.RegistryKey OpenMachine() {
+  return Microsoft.Win32.RegistryKey.FromHandle(new Microsoft.Win32.SafeHandles.SafeRegistryHandle(MachineHandle,false),Microsoft.Win32.RegistryView.Registry64);
+ }
+ public static System.IntPtr MachineHandle {
+  get {if(root==null)throw new System.InvalidOperationException("Private State hive is not bound.");return root.Handle.DangerousGetHandle();}
+ }
+ public static void Unmount(){if(root==null)throw new System.InvalidOperationException("Private State hive is not bound.");root.Dispose();root=null;}
 }
 '@
+$openSeam='RegistryKey key=RegistryKey.OpenBaseKey(hive,RegistryView.Registry64);'
+$restoreSeam='new IntPtr(unchecked((int)0x80000002)),path'
+if([regex]::Matches($nativeCode,[regex]::Escape($openSeam)).Count -ne 1 -or [regex]::Matches($nativeCode,[regex]::Escape($restoreSeam)).Count -ne 1){throw 'Ownership native State handle seam changed'}
+$nativeCode=$nativeCode.Replace($openSeam,'RegistryKey key=hive==RegistryHive.LocalMachine ? RooPrivateOwnershipMount.OpenMachine() : RegistryKey.OpenBaseKey(hive,RegistryView.Registry64);').Replace($restoreSeam,'RooPrivateOwnershipMount.MachineHandle,path')
+Add-Type ($nativeCode+"`n"+$privateMapping)
 function Open-ClassesKey([string]$Path){
  $logical='Software\Classes\';$privatePrefix=$fixtureRegistryRoot+'\Menus\'
  if($Path.StartsWith($logical,[StringComparison]::OrdinalIgnoreCase)){$Path=$privatePrefix+$Path}
@@ -102,6 +106,7 @@ try{
   $baselineProfile='baseline-'+[Guid]::NewGuid().ToString('N');$null=Preview-Apply $baselineProfile $foldersId
   [RooPrivateOwnershipMount]::Mount($fixtureRegistryRoot)
   try{
+   Proof ((Get-FileHash -LiteralPath $hostExe -Algorithm SHA256).Hash -ceq $hostHash) ($caseName+': State-only private binding keeps the SHA256 provider available')
    $stateKey='Recovery';$profile='rf3-'+[Guid]::NewGuid().ToString('N');$menu='Software\Classes\*\shell\RooIndustries.TakeOwnership';$commandKey=$fixtureRegistryRoot+'\Menus\'+$menu+'\command'
    $beforeBytes=State-Bytes;$before=State-Object $beforeBytes;$menus=Menu-Rows;$ownedBytes=$null;$applyAttempted=$false;$undoCompleted=$false;$stateRestored=$false;$cleanupFailure=$null;$originalFailure='Injected private lost apply response'
    $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
