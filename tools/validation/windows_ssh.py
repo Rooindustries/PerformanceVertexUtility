@@ -198,7 +198,8 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         "$p.Refresh();$exit=$p.ExitCode;if($exit -eq 0){$status='completed'}",
         "}catch{$_|Out-String|Set-Content -LiteralPath (Join-Path $run 'wrapper-error.log')}finally{",
         "if($r -and -not$p.HasExited){Stop-OwnedProcess $r}",
-        "@{status=$status;childExit=$exit;childIdentity=$(if($r){$r.Identity}else{$null})}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $run 'done.json')",
+        "@{status=$status;childExit=$exit;childIdentity=$(if($r){$r.Identity}else{$null})}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $run 'done.json.pending')",
+        "[IO.File]::Move((Join-Path $run 'done.json.pending'),(Join-Path $run 'done.json'))",
         "}",
         "exit $exit",
     ])
