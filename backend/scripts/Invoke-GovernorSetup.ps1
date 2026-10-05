@@ -633,6 +633,10 @@ switch($Action){
                 if($record.enabled -and $record.taskName -and (Get-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath -ErrorAction SilentlyContinue)){Enable-ScheduledTask -TaskName $record.taskName -TaskPath $record.taskPath|Out-Null}
             }
         }
+        if(Test-Path -LiteralPath $hostExe){
+            try {Write-Log ('Timer startup: '+[string](Invoke-Host 'timer-refresh-installed' '').message)}
+            catch {Write-Log ('Timer startup was left as it was: '+$_.Exception.Message)}
+        }
         Write-Log ('Resumed '+$records.Count+' governor tasks with '+$failures+' failures')
         if($failures -gt 0){Write-Log 'Setup recovery stays registered to turn the governor tasks back on';exit 2}
         Remove-Watchdog

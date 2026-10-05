@@ -46,6 +46,9 @@ try
     object data;
     switch (action)
     {
+        case "timer-refresh-installed":
+            RequireConfirmation(request);
+            data = new { message = TimerStartupControl.RefreshInstalled() }; break;
         case "timer-remove-installed":
             RequireConfirmation(request);
             data = new { messages = TimerStartupControl.RemoveInstalled() }; break;

@@ -196,23 +196,24 @@ public static class TimerStartupControl
         try
         {
             found = Find(scheduler, target.Name);
-            if (!desired.GetBoolean())
+            void RemoveOwned()
             {
                 var existingReceipt = Receipt(target.Root, target.Name); var existingScript = Path.Combine(target.Root, "startup.ps1");
                 if (File.Exists(existingScript) && (existingReceipt is null || OperationFiles.HashFile(existingScript) != existingReceipt.ScriptHash)) throw new InvalidDataException("The startup script has outside changes and was retained.");
-                if (found is not null) service.GetFolder(@"\").DeleteTask(target.Name, 0);
+                if (found is not null) { service.GetFolder(@"\").DeleteTask(target.Name, 0); Marshal.FinalReleaseComObject(found); found = null; }
                 var retained = Find(scheduler, target.Name);
                 if (retained is not null) { Marshal.FinalReleaseComObject(retained); throw new IOException("The owned startup task remains after removal."); }
-                File.Delete(ReceiptPath(target.Root)); File.Delete(existingScript); return;
+                File.Delete(ReceiptPath(target.Root)); File.Delete(existingScript);
             }
-            if (found is not null) { ((dynamic)found).Enabled = true; return; }
-            var assembly = Assembly.GetEntryAssembly()?.Location ?? throw new InvalidDataException("The timer startup helper assembly is missing.");
-            var dotnet = Environment.ProcessPath!;
-            var bundled = Path.GetFileNameWithoutExtension(dotnet).Equals(Path.GetFileNameWithoutExtension(assembly), StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(Path.GetDirectoryName(assembly)!, "hostpolicy.dll"));
-            if (!bundled && !Path.GetFileNameWithoutExtension(dotnet).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"), "dotnet.exe");
-            if (!File.Exists(dotnet)) throw new FileNotFoundException("Install the .NET runtime or provide DOTNET_ROOT before configuring timer startup.", dotnet);
+            if (!desired.GetBoolean()) { RemoveOwned(); return; }
+            var (assembly, dotnet, bundled) = StartupLauncher();
             var script = StartupScript(assembly, dotnet, bundled, target.Root);
             var scriptPath = Path.Combine(target.Root, "startup.ps1");
+            if (found is not null)
+            {
+                if (File.ReadAllBytes(scriptPath).AsSpan().SequenceEqual(new UTF8Encoding(false).GetBytes(script))) { ((dynamic)found).Enabled = true; return; }
+                RemoveOwned();
+            }
             if (File.Exists(scriptPath)) throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
             OperationFiles.Write(ReceiptPath(target.Root), receipt);
@@ -236,6 +237,28 @@ public static class TimerStartupControl
             finally { Marshal.FinalReleaseComObject(definition); }
         }
         finally { if (found is not null) Marshal.FinalReleaseComObject(found); Marshal.FinalReleaseComObject(scheduler); }
+    }
+    private static (string Assembly, string DotNet, bool Bundled) StartupLauncher()
+    {
+        var assembly = Assembly.GetEntryAssembly()?.Location ?? throw new InvalidDataException("The timer startup helper assembly is missing.");
+        var dotnet = Environment.ProcessPath!;
+        var bundled = Path.GetFileNameWithoutExtension(dotnet).Equals(Path.GetFileNameWithoutExtension(assembly), StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(Path.GetDirectoryName(assembly)!, "hostpolicy.dll"));
+        if (!bundled && !Path.GetFileNameWithoutExtension(dotnet).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"), "dotnet.exe");
+        if (!File.Exists(dotnet)) throw new FileNotFoundException("Install the .NET runtime or provide DOTNET_ROOT before configuring timer startup.", dotnet);
+        return (assembly, dotnet, bundled);
+    }
+    public static string RefreshInstalled()
+    {
+        if (!PolicyRootSecurity.Elevated()) throw new UnauthorizedAccessException(OperationsFolder.NotAdministrator);
+        var address = new ControlAddress("timer-startup", "system", "enabled");
+        var target = Target(address);
+        if (!File.Exists(ReceiptPath(target.Root))) return "timer startup is not set up";
+        var before = Read(address);
+        if (!before.Value.GetBoolean()) return "timer startup is off";
+        var (assembly, dotnet, bundled) = StartupLauncher();
+        if (File.ReadAllBytes(Path.Combine(target.Root, "startup.ps1")).AsSpan().SequenceEqual(new UTF8Encoding(false).GetBytes(StartupScript(assembly, dotnet, bundled, target.Root)))) return "timer startup is current";
+        using (var on = JsonDocument.Parse("true")) Write(before, on.RootElement);
+        return "refreshed: timer startup " + target.Name;
     }
     public static void RequireOwned(string root)
     {
