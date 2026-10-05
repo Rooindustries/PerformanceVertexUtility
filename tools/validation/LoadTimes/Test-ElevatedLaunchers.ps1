@@ -215,7 +215,7 @@ function Check-Environment([string]$label, $worker) {
         if (@($prefixes | Where-Object { $name.StartsWith($_,[StringComparison]::OrdinalIgnoreCase) }).Count -and -not ($name -match '^(DOTNET_|COMPlus_)EnableDiagnostics(_(IPC|Debugger|Profiler))?$' -and $value -ceq '0')) { $name }
     })
     ($workerNames | Sort-Object) | Set-Content -LiteralPath (Join-Path $OutDir ('environment-names-' + ($label -replace '\W', '-') + '.txt')) -Encoding UTF8
-    Check ($prefixes.Count -gt 0 -and $script:EnvironmentInherited -and -not $err -and $workerNames.Count -gt 0 -and $present.Count -eq 0) "$label worker's own process environment contains no variables matching the $($prefixes.Count) cleared prefixes except pinned diagnostics switches set to 0, although $plantName was set in the user environment and a launcher-less task inherits it" ("names read=" + $(if ($err) { $err } else { $workerNames.Count }) + " present=" + ($present -join ',') + " planted name reached the launcher-less control=" + $script:EnvironmentInherited)
+    Check ($prefixes.Count -gt 0 -and $script:EnvironmentInherited -and -not $err -and $workerNames.Count -gt 0 -and $present.Count -eq 0) "$label worker's own process environment contains none of the variables matching the $($prefixes.Count) cleared prefixes except pinned diagnostics switches set to 0, although $plantName was set in the user environment and a launcher-less task inherits it" ("names read=" + $(if ($err) { $err } else { $workerNames.Count }) + " present=" + ($present -join ',') + " planted name reached the launcher-less control=" + $script:EnvironmentInherited)
 }
 function Probe-Priority($id) { try { [string](Get-Process -Id $id -ErrorAction Stop).PriorityClass } catch { '<gone>' } }
 function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
@@ -243,7 +243,7 @@ $ifeoBefore = Test-Path -LiteralPath $ifeo
 try {
     $cleared = @(Product-ClearedNames)
     $missingNames = @($clearNames | Where-Object { $name=$_; -not @($cleared | Where-Object { $name.StartsWith($_,[StringComparison]::OrdinalIgnoreCase) }).Count })
-    Check ($cleared.Count -gt 0 -and $missingNames.Count -eq 0) 'the installed launcher prefixes match RuntimeEnvironment.ClearPrefixes and cover every planted code-loading name' ("installed prefixes: " + ($cleared -join ',') + "; uncovered: " + ($missingNames -join ','))
+    Check ($cleared.Count -gt 0 -and $missingNames.Count -eq 0) 'the installed launcher clears every code-loading variable by prefixes matching RuntimeEnvironment.ClearPrefixes and covering every planted name' ("installed prefixes: " + ($cleared -join ',') + "; uncovered: " + ($missingNames -join ','))
     $control = [Diagnostics.ProcessStartInfo]::new((Join-Path $system 'PING.EXE'), '-n 20 127.0.0.1'); $control.UseShellExecute = $false; $control.CreateNoWindow = $true
     $control.EnvironmentVariables['DOTNET_STARTUP_HOOKS'] = 'C:\RooIndustriesNoSuchFolder\hook.dll'
     $controlProcess = [Diagnostics.Process]::Start($control)
