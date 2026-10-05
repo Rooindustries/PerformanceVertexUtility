@@ -41,6 +41,7 @@ public static class PolicyRootSecurity
     private static readonly SecurityIdentifier LocalSystem = new(WellKnownSidType.LocalSystemSid, null);
     private static readonly SecurityIdentifier OwnerRights = new("S-1-3-4");
     private static readonly SecurityIdentifier TrustedInstaller = new("S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464");
+    private static readonly SecurityIdentifier CreatorOwner = new(WellKnownSidType.CreatorOwnerSid, null);
     private const int GenericAll = 0x10000000, GenericWrite = 0x40000000;
     private const FileSystemRights WriteRights = FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.WriteExtendedAttributes |
         FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.WriteAttributes | FileSystemRights.Delete | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
@@ -951,6 +952,7 @@ public static class PolicyRootSecurity
         foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
         {
             if (rule.AccessControlType != AccessControlType.Allow || Trusted(rule.IdentityReference)) continue;
+            if (rule.PropagationFlags.HasFlag(PropagationFlags.InheritOnly) && rule.IdentityReference is SecurityIdentifier creator && creator == CreatorOwner) continue;
             if ((rule.FileSystemRights & WriteRights) != 0 || ((int)rule.FileSystemRights & (GenericAll | GenericWrite)) != 0) return rule.IdentityReference.Value;
         }
         return null;
