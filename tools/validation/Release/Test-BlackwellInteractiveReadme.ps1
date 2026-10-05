@@ -198,6 +198,21 @@ function Own-Reported($Identity,[string]$ExpectedImage) {
         $owned.Add($receipt);$result.ownedProcesses=@($owned|ForEach-Object Identity);Save-Result;return $receipt
     }catch{if(-not$receipt -or -not$owned.Contains($receipt)){$process.Dispose()};throw}
 }
+function Has-OwnedAncestry($Native) {
+    $cursor=$Native;$seen=[Collections.Generic.HashSet[string]]::new()
+    while($cursor -and $cursor.pid -is [int] -and $cursor.creationTimeFileTimeUtc -and $cursor.imagePath -and $seen.Add(([string]$cursor.pid+':'+$cursor.creationTimeFileTimeUtc))){
+        $image=[RooValidationOwnership.Native]::Canonical($cursor.imagePath)
+        $matches=@($owned|Where-Object {$_.Identity.pid -eq $cursor.pid -and $_.Identity.creationTimeFileTimeUtc -ceq [string]$cursor.creationTimeFileTimeUtc -and $_.Identity.imagePath -ieq $image})
+        if($matches.Count -gt 1){throw 'Ambiguous owned native ancestry'}
+        if($matches.Count -eq 1){$receipt=$matches[0];return [RooValidationOwnership.Native]::Created($receipt.handle).ToString() -ceq $receipt.Identity.creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Image($receipt.handle) -ieq $receipt.Identity.imagePath}
+        $parent=$cursor.parent
+        if(-not$parent -or $parent.pid -isnot [int] -or -not$parent.creationTimeFileTimeUtc -or -not$parent.imagePath){return $false}
+        try{$next=[BlackwellNativeProbe]::Inspect($parent.pid)|ConvertFrom-Json}catch{return $false}
+        if($next.creationTimeFileTimeUtc -cne [string]$parent.creationTimeFileTimeUtc -or $next.imagePath -ine $parent.imagePath){return $false}
+        $cursor=$next
+    }
+    return $false
+}
 function Own-Copy($Receipt) {
     try{$identity=$Receipt.Identity;$copies.Add($identity);$result.ownedFiles=@($copies);Save-Result;return $identity}finally{$Receipt.Dispose()}
 }
@@ -278,14 +293,11 @@ try {
             if($windows.Count -eq 1){
                 $window=$windows[0];$wp=Get-Process -Id $window.Current.ProcessId -ErrorAction Stop
                 if($wp.SessionId -ne $session -or $wp.StartTime.ToUniversalTime() -lt $started){throw 'Wizard process not from this desktop attempt'}
-                $snapshot=@(Get-CimInstance Win32_Process);$cursor=@($snapshot|Where-Object ProcessId -eq $wp.Id);$seen=[Collections.Generic.HashSet[int]]::new();$belongs=$false
-                while($cursor.Count -eq 1 -and $seen.Add([int]$cursor[0].ProcessId)){
-                    $ancestor=@($owned|Where-Object {$_.Identity.pid -eq $cursor[0].ProcessId -and [DateTime]::FromFileTimeUtc([long]$_.Identity.creationTimeFileTimeUtc) -eq $cursor[0].CreationDate.ToUniversalTime()})
-                    if($ancestor.Count -eq 1){$belongs=$true;break}
-                    $cursor=@($snapshot|Where-Object ProcessId -eq $cursor[0].ParentProcessId)
-                }
-                if(-not$belongs){throw 'Wizard lacks an owned native caller/setup ancestry; refuse input'}
-                if(-not$case.wizardProcess){$null=Own $wp;$case.wizardProcess=[BlackwellNativeProbe]::Inspect($wp.Id)|ConvertFrom-Json;Capture ($variant+'-wizard')}
+                $wizardNative=[BlackwellNativeProbe]::Inspect($wp.Id)|ConvertFrom-Json
+                if([RooValidationOwnership.Native]::Created($wp.Handle).ToString() -cne $wizardNative.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($wp.Handle) -ine [RooValidationOwnership.Native]::Canonical($wizardNative.imagePath)){throw 'Wizard native identity changed before ancestry verification'}
+                if(-not(Has-OwnedAncestry $wizardNative)){throw 'Wizard lacks an owned native caller/setup ancestry; refuse input'}
+                if(-not$case.wizardProcess){$receipt=Own-Reported $wizardNative $wizardNative.imagePath;if(-not$receipt){throw 'Verified wizard exited before ownership'};$case.wizardProcess=$wizardNative;Capture ($variant+'-wizard')}
+                $wp.Dispose()
                 $radios=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::RadioButton))|Where-Object {$_.Current.Name -match 'accept.*agreement' -and $_.Current.Name -notmatch 'not accept'})
                 foreach($radio in $radios){$radio.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}
                 $finish=Button $window '^&?Finish$'
