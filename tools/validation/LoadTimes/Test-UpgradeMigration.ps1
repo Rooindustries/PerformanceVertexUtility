@@ -105,6 +105,12 @@ function Expected-TimerStartup([string]$ControlRoot) {
     $text += '& ' + (Quote-Literal $hostExe) + " '--timer-autostart' " + (Quote-Literal $ControlRoot) + "`nexit `$LASTEXITCODE`n"
     ,([Text.Encoding]::UTF8.GetBytes($text))
 }
+function Timer-StartupEvidence([string]$ControlRoot, $Task) {
+    $scriptPath = Join-Path $ControlRoot 'startup.ps1'; $receiptPath = Join-Path $ControlRoot 'startup.json'
+    $scriptExists = Test-Path -LiteralPath $scriptPath -PathType Leaf; $receiptExists = Test-Path -LiteralPath $receiptPath -PathType Leaf
+    $receipt = if ($receiptExists) { Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json } else { $null }
+    [ordered]@{ root=$ControlRoot; taskPresent=($null -ne $Task); taskName=$(if ($Task) { $Task.TaskName } else { $null }); scriptExists=$scriptExists; receiptExists=$receiptExists; scriptSha256=$(if ($scriptExists) { (Get-FileHash -LiteralPath $scriptPath).Hash } else { $null }); scriptBytes=$(if ($scriptExists) { (Get-Item -LiteralPath $scriptPath).Length } else { $null }); receiptSha256=$(if ($receiptExists) { (Get-FileHash -LiteralPath $receiptPath).Hash } else { $null }); receiptTaskName=$receipt.taskName; receiptPhase=$receipt.phase; receiptOwnerSid=$receipt.owner.userSid; receiptOwnerMachine=$receipt.owner.machine; receiptScriptHash=$receipt.scriptHash }
+}
 function Installed-Helper-Hashes { @((Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll'), $hostExe | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) }
 function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
 function Policy-Workers([string]$requestPath) { if (-not $requestPath) { return @() }; @(Get-CimInstance Win32_Process -Filter "Name='Optimizer.Host.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'policy-run' -and $_.CommandLine.IndexOf($requestPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) }
@@ -389,6 +395,8 @@ try {
         $stateFile = Join-Path $timerState 'session.json'
         $stampBefore = if (Test-Path -LiteralPath $stateFile) { (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc } else { [DateTime]::MinValue }
         $earlierTask = Timer-Task
+        $controlRoot = Join-Path (Data-Root) 'operations\windows-timer'
+        $startupBefore = Timer-StartupEvidence $controlRoot $earlierTask
         $earlierPins = @(Timer-Pins $earlierTask); $installedHashes = @(Installed-Helper-Hashes)
         Log ('NOTE the sign-in timer registered by the earlier version pins ' + $earlierPins.Count + ' helper file hashes and ' + @($earlierPins | Where-Object { $installedHashes -contains $_ }).Count + ' of them match the installed files')
         Open-App
@@ -398,8 +406,14 @@ try {
         Apply-Reviewed 'timer on' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender|Logitech'
         $stateMade = $null; try { $stateMade = WaitFor { if ((Test-Path -LiteralPath $stateFile) -and (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc -gt $stampBefore) { $true } } 90 'the timer state to be written' } catch {}
         Check ([bool]$stateMade) 'the new version starts the timer and creates its state folder outside the data folder' ($timerState + ' written=' + [bool]$stateMade)
-        $timerOutput = Timer-Ownership (Timer-Task) (Join-Path (Data-Root) 'operations\windows-timer') $stateFile ([DateTime]::MinValue)
+        $timerTask = Timer-Task
+        $timerOutput = Timer-Ownership $timerTask $controlRoot $stateFile ([DateTime]::MinValue)
         Check ($null -ne $timerOutput.process) 'the timer worker runs from the installed helper' ('pid=' + $timerOutput.process.pid + ' image=' + $timerOutput.process.imagePath + ' session=' + $timerOutput.sessionPath + ' sha256=' + $timerOutput.sessionSha256)
+        $scriptBytes = [IO.File]::ReadAllBytes((Join-Path $controlRoot 'startup.ps1'))
+        $expectedBytes = Expected-TimerStartup $controlRoot
+        $bytesMatch = [Convert]::ToBase64String($scriptBytes) -ceq [Convert]::ToBase64String($expectedBytes)
+        Check $bytesMatch 'the sign-in startup script bytes match the current installed helper' ('bytes=' + $scriptBytes.Length + ' sha256=' + (Get-FileHash -LiteralPath (Join-Path $controlRoot 'startup.ps1')).Hash)
+        [ordered]@{ before=$startupBefore; after=(Timer-StartupEvidence $controlRoot $timerTask); task=$timerOutput.task; process=$timerOutput.process; hostDllSha256=(Get-FileHash -LiteralPath (Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll')).Hash; hostExeSha256=(Get-FileHash -LiteralPath $hostExe).Hash } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $OutDir 'timer-startup-applied.json') -Encoding UTF8
         Shot 'timer-on'
         $script:PersistentOutputTasks = @($timerOutput.task)
         $script:PersistentOutputProcesses = @($timerOutput.process)
