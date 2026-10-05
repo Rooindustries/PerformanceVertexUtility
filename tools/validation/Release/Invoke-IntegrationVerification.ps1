@@ -1088,6 +1088,7 @@ if($Phase -in 'install-old','install-other','upgrade','uninstall','cleanup','val
     $recoveryScope=Read-RecoveryScope
     if($baseline.appFolder -or @($baseline.uninstallEntries).Count){throw 'The as-found installation has no verified rollback source; this phase refuses to remove it.'}
 }
+if($Phase -ceq 'install-other' -and (Get-RecoveryWorkspace) -ceq $backup){Open-RecoveryEpoch 'installed'}
 if($Phase -in 'install-other','upgrade','uninstall','scenario','static-checks','setup-fallbacks'){Require-RecoveryEpoch 'installed'|Out-Null}
 switch($Phase){
     'preflight' {
@@ -1174,7 +1175,6 @@ switch($Phase){
         Check ($null -ne $old -and $old.app -ne $fingerprint.app -and $old.host -ne $fingerprint.host) 'the upgrade replaced the app and the helper assemblies (their hashes differ from the earlier install)' ('app '+$old.app+' -> '+$fingerprint.app+', host '+$old.host+' -> '+$fingerprint.host)
     }
     'install-other' {
-        if((Get-RecoveryWorkspace) -ceq $backup){Open-RecoveryEpoch 'installed'}
         Invoke-RecoveryUninstall
         Run ('install-'+$Label) {& (Join-Path $Source 'tools\validation\Governor\Measure-SetupTempAcl.ps1') -Installer $OtherInstaller -OutDir (Join-Path $Evidence ('install-'+$Label))}
         Stop-AfterInstall
