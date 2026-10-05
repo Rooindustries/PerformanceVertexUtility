@@ -56,6 +56,7 @@ static class PolicyChecks
             probe = StartProbe();
             var relaunchedOriginal = Oracle.Memory(probe.Handle);
             var relaunchedGpu = Oracle.Gpu(probe.Handle);
+            var relaunchedCpuSets = Oracle.CpuSets(probe.Handle);
             var relaunched = host.Tick();
             check(relaunched.Instances.Any(instance => instance.Process.ProcessId == oldId && instance.Status == "expired") && Oracle.Memory(probe.Handle) == memory && Oracle.CpuSets(probe.Handle).SequenceEqual(new[] { cpu.Id }), "A new process instance receives a fresh policy operation while the exited instance expires");
             host = new ProcessPolicyHost(store, _ => false);
@@ -74,11 +75,19 @@ static class PolicyChecks
             check(Oracle.Memory(probe.Handle) == 4 && recovered.Instances.Any(instance => instance.Process.ProcessId == probe.Id && instance.Field == "memoryPriority" && instance.Status == "conflict" && instance.ErrorKind == "keepsChanging"), "A policy steps back after three put-backs instead of repeatedly overwriting a program that keeps changing the field");
             store.Save(rule with { Enabled = false });
             host.Tick();
-            check(Oracle.Memory(probe.Handle) == relaunchedOriginal && Oracle.CpuSets(probe.Handle).Length == 0 && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Disabling a rule restores its CPU Sets, GPU priority and the field it stepped back from to their captured originals");
+            check(Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).SequenceEqual(relaunchedCpuSets) && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Disabling a rule restores its still-owned CPU Sets and GPU priority while leaving the relinquished memory field at the other program's value");
+            var disabled = OperationFiles.Read<PolicyHostState>(store.StatePath).Instances.Where(instance => instance.Process.ProcessId == probe.Id).ToArray();
+            var left = disabled.Single(instance => instance.Field == "memoryPriority");
+            var leftJournal = OperationFiles.Read<ProcessControlJournal>(left.JournalPath);
+            var leftChange = leftJournal.Changes.Single();
+            check(disabled.Length == 3 && disabled.All(instance => instance.Status == "restored") && disabled.Where(instance => instance.Field != "memoryPriority").All(instance => instance.ErrorKind is null && instance.Error is null)
+                && left.Relinquished && left.ErrorKind == "leftAsSet" && left.Error == ProcessControlEngine.LeftAsSet && leftJournal.Status == "restored"
+                && leftChange.Name == "memoryPriority" && leftChange.Status == "leftAsSet" && leftChange.ErrorKind == "leftAsSet" && leftChange.Error == ProcessControlEngine.LeftAsSet
+                && leftChange.Original.GetUInt32() == relaunchedOriginal && leftChange.Observed?.GetUInt32() == 4, "The disabled rule closes every instance and records the relinquished memory journal and instance as Left as another program set it.");
             store.Save(rule with { Enabled = true });
             host.Tick();
             check(Oracle.Memory(probe.Handle) == memory && Oracle.Gpu(probe.Handle) == gpu, "Turning the rule back on applies its fields again");
-            check(host.Stop().Status == "stopped" && Oracle.Memory(probe.Handle) == relaunchedOriginal && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Policy stop resolves an available owned restoration and leaves no active controller");
+            check(host.Stop().Status == "stopped" && Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).SequenceEqual(relaunchedCpuSets) && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Policy stop restores the re-enabled rule's freshly captured originals and leaves no active controller");
             var overlapRejected = false;
             try { store.Save(rule with { RuleId = Guid.NewGuid().ToString("N") }); } catch (InvalidDataException) { overlapRejected = true; }
             check(overlapRejected, "Overlapping saved rules cannot fight over the same process field");
