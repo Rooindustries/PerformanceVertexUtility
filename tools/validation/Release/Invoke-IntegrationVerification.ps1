@@ -1174,6 +1174,7 @@ switch($Phase){
         Check ($null -ne $old -and $old.app -ne $fingerprint.app -and $old.host -ne $fingerprint.host) 'the upgrade replaced the app and the helper assemblies (their hashes differ from the earlier install)' ('app '+$old.app+' -> '+$fingerprint.app+', host '+$old.host+' -> '+$fingerprint.host)
     }
     'install-other' {
+        if((Get-RecoveryWorkspace) -ceq $backup){Open-RecoveryEpoch 'installed'}
         Invoke-RecoveryUninstall
         Run ('install-'+$Label) {& (Join-Path $Source 'tools\validation\Governor\Measure-SetupTempAcl.ps1') -Installer $OtherInstaller -OutDir (Join-Path $Evidence ('install-'+$Label))}
         Stop-AfterInstall
