@@ -32,8 +32,8 @@ public static class TimerStartupControl
     }
     private static object ConnectScheduler()
     {
-        dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true)!)!;
-        try { scheduler.Connect(); return scheduler; }
+        var scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true)!)!;
+        try { CallTaskMember(scheduler, "Connect"); return scheduler; }
         catch { Marshal.FinalReleaseComObject(scheduler); throw; }
     }
     internal static string StartupScript(string assembly, string launcher, bool bundled, string root)
@@ -44,17 +44,17 @@ public static class TimerStartupControl
     }
     private static object? Find(object scheduler, string name)
     {
-        dynamic service = scheduler;
-        try { return service.GetFolder(@"\").GetTask(name); }
+        object? folder = null;
+        try { folder = CallTaskMember(scheduler, "GetFolder", @"\")!; return CallTaskMember(folder, "GetTask", name); }
         catch (FileNotFoundException) { return null; }
         catch (COMException error) when (error.HResult == unchecked((int)0x80070002)) { return null; }
+        finally { if (folder is not null) Marshal.FinalReleaseComObject(folder); }
     }
     private static string Fingerprint(object registered)
     {
-        dynamic task = registered;
-        var xml = XDocument.Parse((string)task.Xml); var ns = xml.Root!.Name.Namespace;
+        var xml = XDocument.Parse((string)GetTaskProperty(registered, "Xml")!); var ns = xml.Root!.Name.Namespace;
         xml.Root.Element(ns + "Settings")?.Element(ns + "Enabled")?.Remove();
-        return OperationFiles.Hash(Encoding.UTF8.GetBytes(xml.ToString(SaveOptions.DisableFormatting) + "\n" + (string)task.GetSecurityDescriptor(7)));
+        return OperationFiles.Hash(Encoding.UTF8.GetBytes(xml.ToString(SaveOptions.DisableFormatting) + "\n" + (string)CallTaskMember(registered, "GetSecurityDescriptor", 7)!));
     }
     public static string[] RemoveInstalled() => RemoveForInstall(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..")));
 
