@@ -32,6 +32,7 @@ static partial class DataFolderChecks
         var existing = Find();
         if (existing is not null) { Marshal.FinalReleaseComObject(existing); throw new InvalidOperationException("The exact timer fixture name was already present; it was left intact."); }
         var registered = false;
+        Exception? originalFailure = null;
         try
         {
             using var isolated = new DataRootPrivateHive(Path.Combine(parent, "machine.hive"));
@@ -101,9 +102,18 @@ static partial class DataFolderChecks
                 File.Delete(receiptPath); File.Delete(scriptPath);
             }
         }
+        catch (Exception error)
+        {
+            originalFailure = error;
+            throw;
+        }
         finally
         {
-            if (registered) throw new InvalidOperationException("An incomplete timer fixture needs receipt-based recovery: " + parent);
+            if (registered)
+            {
+                if (originalFailure is not null) Console.Error.WriteLine(originalFailure);
+                throw new InvalidOperationException("An incomplete timer fixture needs receipt-based recovery: " + parent);
+            }
             Marshal.FinalReleaseComObject(folder); Marshal.FinalReleaseComObject(scheduler);
             H.Delete(parent);
         }

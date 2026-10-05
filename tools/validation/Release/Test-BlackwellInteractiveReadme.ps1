@@ -1,7 +1,7 @@
-param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Evidence,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateRange(1,45)][int]$Minutes=45)
+param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Evidence,[Parameter(Mandatory)][ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ExpectedSha256,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateRange(1,45)][int]$Minutes=45)
 $ErrorActionPreference='Stop'
 if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Blackwell-only interactive check'}
-if((Get-FileHash -LiteralPath $Installer).Hash -cne '6C7970601D0A877F3A2A476C2091C4F11154195CE8973E8D28E10070E77B32F2'){throw 'Sealed new installer hash differs'}
+if((Get-FileHash -LiteralPath $Installer).Hash -cne $ExpectedSha256.ToUpperInvariant()){throw 'Sealed new installer hash differs'}
 if(Test-Path -LiteralPath $Evidence){throw 'Evidence exists; choose a new path'}
 [IO.Directory]::CreateDirectory($Evidence)|Out-Null
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
@@ -23,7 +23,7 @@ if(Test-Path -LiteralPath $fixture){throw 'Fixture already exists'}
 [IO.Directory]::CreateDirectory($fixture)|Out-Null
 $owned=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new();$rows=[Collections.Generic.List[object]]::new();$deadline=[DateTime]::UtcNow.AddMinutes($Minutes).AddSeconds(-30);$session=(Get-Process -Id $PID).SessionId;$failure=$null
 $app='C:\Program Files\Roo Industries\Optimization Suite';$readme=Join-Path $app 'README-BETA.txt';$system=[Environment]::SystemDirectory
-$result=[ordered]@{machine=$env:COMPUTERNAME;installer=$Installer;installerSha256=(Get-FileHash -LiteralPath $Installer).Hash;maximumMinutes=$Minutes;cases=@();passed=$false;cleanupPassed=$false;error='';restore='Runner phases must restore this installed epoch after the check'}
+$result=[ordered]@{machine=$env:COMPUTERNAME;installer=$Installer;installerSha256=(Get-FileHash -LiteralPath $Installer).Hash;expectedInstallerSha256=$ExpectedSha256.ToUpperInvariant();maximumMinutes=$Minutes;cases=@();passed=$false;cleanupPassed=$false;error='';restore='Runner phases must restore this installed epoch after the check'}
 function Save-Result {$result.cases=@($rows);$result|ConvertTo-Json -Depth 15|Set-Content -LiteralPath (Join-Path $Evidence 'interactive-readme.json') -Encoding UTF8}
 function Button($Window,[string]$Pattern) {@($Window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))|Where-Object {$_.Current.IsEnabled -and -not$_.Current.IsOffscreen -and $_.Current.Name -match $Pattern})|Select-Object -First 1}
 function Invoke-Button($Button) {$Button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}

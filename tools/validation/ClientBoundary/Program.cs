@@ -17,6 +17,7 @@ var previousRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_RO
 string? recoveryRoot = null;
 string? savedRollback = null;
 string? fixtureOperations = null;
+string? gateRoot = null;
 LiveDataService? service = null;
 void Check(bool condition, string message)
 {
@@ -56,7 +57,9 @@ try
     File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(official));
     object Manifest(string target) => new { manifestId = "client-review", appId, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(original)));
-    var gateRoot = Directory.CreateDirectory(Path.Combine(fixture, "gate-root")).FullName;
+    gateRoot = Directory.CreateDirectory(Path.Combine(fixture, "gate-root")).FullName;
+    if (OperatingSystem.IsWindows() && RooIndustries.Optimizer.PolicyRootSecurity.Elevated())
+        RooIndustries.Optimizer.PolicyRootSecurity.Secure(gateRoot, RooIndustries.Optimizer.DataFolder.Kind);
     File.WriteAllText(Path.Combine(gateRoot, "temp"), "a file where the temporary folder belongs");
     var gateMessage = DataFolderGate.Attempt(() => gateRoot, out var gateEnabled);
     Check(gateMessage is not null && !gateEnabled && gateMessage.Contains("temp", StringComparison.OrdinalIgnoreCase), "A file error while opening the data folder becomes a message for the user instead of an unhandled exception: " + gateMessage);
@@ -161,10 +164,11 @@ finally
     var hostLink = Path.Combine(fixture, "backend", "bin");
     if (Directory.Exists(hostLink) && new DirectoryInfo(hostLink).LinkTarget is not null) Directory.Delete(hostLink, false);
     if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
-    if (fixtureOperations is not null)
+    foreach (var protectedRoot in new[] { fixtureOperations, gateRoot })
     {
+        if (protectedRoot is null) continue;
         using var markers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(RooIndustries.Optimizer.PolicyRootSecurity.MarkerKey, true);
-        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(fixtureOperations), false);
-        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(fixtureOperations) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
+        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(protectedRoot), false);
+        markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(protectedRoot) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
     }
 }
