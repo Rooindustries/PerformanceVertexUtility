@@ -161,6 +161,27 @@ function Tweaks-Idle {
 }
 function Review-Texts { @((ById 'WindowsTweaksReview').FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | ForEach-Object { $_.Current.Name } | Where-Object { $_ }) }
 function Transparency { $v = Get-ItemProperty $Personalize -Name EnableTransparency -ErrorAction SilentlyContinue; if ($v) { [string]$v.EnableTransparency } else { '<absent>' } }
+function Read-MigrationTweakState {
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    try {
+        $key = $base.OpenSubKey('SOFTWARE\RooIndustriesOptimizationSuite\Tweaks\' + $sid)
+        if (-not $key) { throw 'Migration tweak State key is missing.' }
+        try {
+            $security = $key.GetAccessControl()
+            if ($security.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin 'S-1-5-18', 'S-1-5-32-544') { throw 'Migration tweak State owner is unprotected.' }
+            foreach ($ace in $security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+                if ($ace.AccessControlType -eq 'Allow' -and -not ($ace.IdentityReference.Value -eq 'S-1-3-0' -and ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly)) -and $ace.IdentityReference.Value -notin 'S-1-5-18', 'S-1-5-32-544' -and ([long]$ace.RegistryRights -band 0xD0006)) { throw 'Migration tweak State has an untrusted writer.' }
+            }
+            if ($key.GetValueKind('State') -ne 'Binary') { throw 'Migration tweak State is not Binary.' }
+            $bytes = [byte[]]$key.GetValue('State')
+        } finally { $key.Dispose() }
+    } finally { $base.Dispose() }
+    $saved = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+    if ($saved.schemaVersion -ne 1 -or $saved.context.owner.userSid -cne $sid -or $saved.context.owner.machine -ine $env:COMPUTERNAME -or $saved.PSObject.Properties.Name -notcontains 'profiles') { throw 'Migration tweak State context or schema differs.' }
+    Log ('tweak State bytes=' + $bytes.Length + ' sha256=' + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', ''))
+    return $saved
+}
 function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
 function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
@@ -330,8 +351,18 @@ try {
         Shot 'timer'
         Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
         Set-Profile $BlockerProfile
+        $clear = WaitFor { $b = $script:Win.FindFirst($TS::Descendants, [Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Undo picks'), [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Button))); if ($b -and $b.Current.IsEnabled) { $b } } 20 'clear previous timer selections'
+        Invoke-Element $clear
+        WaitFor { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -eq 'Nothing selected' } 20 'previous selections cleared' | Out-Null
         Choose-Setting $BlockerSetting 'Logitech download folder writes' 'Enabled'
         Apply-Reviewed 'download folder blocker apply' 'Logitech' 'Transparency|timer|Hypervisor|SEHOP|IPv6|Firewall|Defender'
+        $blockerState = Read-MigrationTweakState
+        $savedBlocker = @($blockerState.profiles | Where-Object id -CEQ $BlockerProfile)
+        $blockerClaims = @($savedBlocker.controls | Where-Object { $null -ne $_ })
+        $timerClaims = @($blockerClaims | Where-Object { $_.target.address.kind -eq 'timer-startup' -or ($_.target.address.kind -eq 'timer' -and $_.target.address.property -eq 'half-millisecond') })
+        $blockerOnly = $savedBlocker.Count -eq 1 -and @($savedBlocker.selections).Count -eq 1 -and $savedBlocker[0].selections[0].settingId -ceq $BlockerSetting -and $blockerClaims.Count -gt 0 -and @(@($savedBlocker.claims) + $blockerClaims | Where-Object { $null -ne $_ -and $_.settingId -cne $BlockerSetting }).Count -eq 0
+        Check ($blockerOnly -and $timerClaims.Count -eq 0) 'the earlier blocker profile claims only the blocker, with no timer-startup or half-millisecond claim' ('profiles=' + $savedBlocker.Count + ' controls=' + $blockerClaims.Count + ' timerClaims=' + $timerClaims.Count)
+        if (-not $blockerOnly -or $timerClaims.Count -gt 0) { throw 'Blocker fixture shares another setting; refusing to continue.' }
         $blockerFolderMade = $null; try { $blockerFolderMade = WaitFor { if (Test-Path -LiteralPath $BlockerFolder) { $true } } 90 'the download folder' } catch {}
         $receipts = @(Blocker-Receipts)
         Check ([bool]$blockerFolderMade -and $receipts.Count -ge 1) 'the earlier version applied the download folder blocker and saved its receipt, the file the older-version question is about' ('folder=' + [bool]$blockerFolderMade + ' receipts=' + ($receipts -join ','))
@@ -459,6 +490,10 @@ try {
         try {
             $heldTimer = New-OwnedProcess $timerProcess
             if ($heldTimer.Identity.creationTimeFileTimeUtc -cne $timerOutput.process.creationTimeFileTimeUtc -or $heldTimer.Identity.imagePath -ine $timerOutput.process.imagePath) { throw 'Timer identity changed before its profile cleanup; retained.' }
+            $timerUndoState = Read-MigrationTweakState
+            $sharedStartup = @($timerUndoState.profiles | Where-Object id -CNE $TimerProfile | ForEach-Object { $_.controls } | Where-Object { $_.target.address.kind -eq 'timer-startup' -and $_.target.identity -ceq ('timer-startup:' + $timerTaskReceipt.name) })
+            Check ($sharedStartup.Count -eq 0) 'no other profile claims the upgraded timer-startup before the timer profile undo' ('otherClaims=' + $sharedStartup.Count)
+            if ($sharedStartup.Count -gt 0) { throw 'The timer-startup is shared with another profile; refusing a restore that cannot stop it.' }
             Restore-Profile $TimerProfile 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender|Logitech'
             $timerReleased = Get-Content -LiteralPath $timerSession -Raw | ConvertFrom-Json
             Check ($timerProcess.WaitForExit(30000) -and $timerReleased.released -and $null -ne $timerReleased.releaseStatus -and $timerReleased.releaseStatus -ge 0 -and $timerReleased.creationTime -ceq $timerOutput.process.creationTimeFileTimeUtc -and $null -eq $timerReleased.error) 'the existing timer profile cleanup stops the exact sign-in worker and confirms its native release' ('pid=' + $timerOutput.process.pid + ' released=' + $timerReleased.released + ' releaseStatus=' + $timerReleased.releaseStatus)
