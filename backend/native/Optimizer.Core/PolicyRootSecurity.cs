@@ -60,10 +60,20 @@ public static class PolicyRootSecurity
         RequireElevated(kind);
         using var identity = WindowsIdentity.GetCurrent();
         var user = userSid is null ? identity.User ?? throw new InvalidOperationException("The current Windows user SID is unavailable.") : new SecurityIdentifier(userSid);
-        var local = Canonical(user == identity.User ? RuntimeEnvironment.LocalAppData : Path.Combine(ProfilePath(user), "AppData", "Local"));
+        var marker = MarkerName(root);
+        using (var markers = Registry.LocalMachine.OpenSubKey(MarkerKey))
+            if (markers?.GetValue(marker) is { } saved && !string.Equals(saved as string, user.Value, StringComparison.Ordinal))
+                throw new UnauthorizedAccessException("The protected folder marker belongs to another Windows user.");
+        if (user != identity.User && Marked(marker))
+        {
+            using var markers = Registry.LocalMachine.OpenSubKey(MarkerKey);
+            if (markers?.GetValue(marker) is not string owner || owner != user.Value || !Directory.Exists(root) || Problem(root, kind) is not null)
+                throw new UnauthorizedAccessException("The protected folder does not belong to that Windows user or is missing or damaged.");
+            return false;
+        }
+        var local = Canonical(user == identity.User ? RuntimeEnvironment.LocalAppData : RuntimeEnvironment.UserFolder(user.Value, ProfilePath(user), false));
         if (!Canonical(root).StartsWith(local + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("The " + kind.Label + " must be inside the Windows user's local app data.");
-        var marker = MarkerName(root);
         using var mutex = new Mutex(false, MutexName(marker));
         var held = false;
         var waited = Stopwatch.StartNew();
@@ -775,7 +785,9 @@ public static class PolicyRootSecurity
     private static string ProfilePath(SecurityIdentifier user)
     {
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + user.Value);
-        return key?.GetValue("ProfileImagePath") is string path ? RuntimeEnvironment.ExpandUserVariables(path) : throw new InvalidDataException("That Windows user has no profile on this PC.");
+        var raw = key?.GetValue("ProfileImagePath", null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        var path = raw?.Replace("%SystemDrive%", Path.GetPathRoot(Environment.SystemDirectory)!.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        return path is not null && path.Count(character => character == '%') < 2 && Path.IsPathFullyQualified(path) && Directory.Exists(path) ? path : throw new InvalidDataException("That Windows user has no profile on this PC.");
     }
 
     public static bool Elevated()

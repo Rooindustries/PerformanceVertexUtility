@@ -50,48 +50,75 @@ function New-ClaimsProfile([string]$ImageName,[string]$Kind,[string]$IoPriority=
 function Read-ClaimsOutput($Lines){return (@($Lines) -join "`n")|ConvertFrom-Json}
 
 function Remove-ClaimsProfile([string]$Folder){
-    $leaf=(Split-Path $Folder -Leaf).ToUpperInvariant()
+    if(-not $script:claimsProfile -or [IO.Path]::GetFullPath($Folder) -cne [IO.Path]::GetFullPath($script:claimsProfile) -or (Split-Path $Folder -Leaf) -notlike 'roo-industries-claims-*'){throw 'Claims cleanup refused an unrecognized fixture root.'}
     $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_ -like ('*\'+$leaf+'\*')})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
+    $prefix=[IO.Path]::GetFullPath($Folder).TrimEnd('\').ToUpperInvariant()+'\'
+    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_.StartsWith($prefix,[StringComparison]::Ordinal)})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
     for($attempt=0;$attempt -lt 20 -and (Test-Path -LiteralPath $Folder);$attempt++){
         try {Remove-Item -LiteralPath $Folder -Recurse -Force -ErrorAction Stop} catch {Start-Sleep -Milliseconds 500}
     }
-    if(Test-Path -LiteralPath $Folder){throw ('The redirected profile could not be removed: '+$Folder)}
+    if(Test-Path -LiteralPath $Folder){throw ('The claims fixture could not be removed: '+$Folder)}
 }
 
 function Initialize-ClaimsRedirect {
-    $script:claimsProfile=Join-Path ([IO.Path]::GetTempPath()) ('rc-'+[Guid]::NewGuid().ToString('N').Substring(0,8))
+    $local=[Environment]::GetFolderPath('LocalApplicationData')
+    if(-not [IO.Directory]::Exists($local)){throw 'The real LocalAppData fixture parent is unavailable.'}
+    $script:claimsProfile=Join-Path $local ('roo-industries-claims-'+[Guid]::NewGuid().ToString('N'))
+    $script:claimsLocal=Join-Path $script:claimsProfile 'local'
+    $script:claimsData=Join-Path $script:claimsLocal 'RooIndustriesOptimizationSuite'
+    $script:claimsRules=Join-Path $script:claimsData 'process-rules'
+    [IO.Directory]::CreateDirectory($script:claimsProfile)|Out-Null
+    $security=[Security.AccessControl.DirectorySecurity]::new()
+    $security.SetAccessRuleProtection($true,$false)
+    $security.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    foreach($sid in @('S-1-5-32-544','S-1-5-18')){$security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+    (Get-Item -LiteralPath $script:claimsProfile).SetAccessControl($security)
+    [IO.Directory]::CreateDirectory($script:claimsData)|Out-Null
+    [IO.File]::WriteAllText((Join-Path $script:claimsProfile 'fixture.marker'),$script:claimsRules)
     $script:cleanups.Add({
         $status=Core 'policy-status' @{} $script:claimsRules
         if($status.hostRunning -ne $false){throw ('A governor is still running for '+$script:claimsRules)}
+        foreach($child in $script:probes){if(-not $child.HasExited){$child.Kill();$child.WaitForExit(10000)|Out-Null}}
         Remove-ClaimsProfile $script:claimsProfile
+        $script:claimsProfile=$null;$script:claimsLocal=$null;$script:claimsData=$null;$script:claimsRules=$null
     })
-    $script:claimsData=Join-Path $script:claimsProfile 'AppData\Local\RooIndustriesOptimizationSuite'
-    $script:claimsRules=Join-Path $script:claimsData 'process-rules'
-    [IO.Directory]::CreateDirectory($script:claimsData)|Out-Null
+    Note 'claimsIsolation' @{local=$script:claimsLocal;rules=$script:claimsRules;overlay='child-only HKEY_USERS and HKLM PowerShell drive'}
 }
 
 function Start-ClaimsChild([string]$Body,[hashtable]$Values=@{}){
     $id=[Guid]::NewGuid().ToString('N').Substring(0,8)
     $Values['scriptsRoot']=$scriptsRoot
+    if($script:claimsProfile -and -not (Test-Path -LiteralPath (Join-Path $script:claimsProfile 'fixture.marker'))){throw 'Claims fixture marker is missing; no child feature was started.'}
+    $redirect=[bool]$script:claimsProfile
+    if($redirect){$Values['fixtureLocal']=$script:claimsLocal;$Values['fixtureRoot']=$script:claimsData;$Values['fixtureHive']=Join-Path $script:claimsProfile ('hku-'+$id+'.dat')}
     $Values['resultPath']=Join-Path $script:scenarioRoot ('child-'+$id+'.json')
     $text="`$ErrorActionPreference='Stop'`r`n`$ProgressPreference='SilentlyContinue'`r`n"
     foreach($key in $Values.Keys){$text+='$'+$key+"='"+([string]$Values[$key]).Replace("'","''")+"'`r`n"}
     $text+="function Wait-Signal([string]`$Path,[double]`$Seconds){`$clock=[Diagnostics.Stopwatch]::StartNew();while(-not (Test-Path -LiteralPath `$Path)){if(`$clock.Elapsed.TotalSeconds -gt `$Seconds){throw ('No signal '+`$Path)};Start-Sleep -Milliseconds 10}}`r`n"
-    $text+="try {`r`n"+$Body+"`r`n} catch { [IO.File]::WriteAllText(`$resultPath,(@{error=`$_.Exception.Message+' '+`$_.ScriptStackTrace}|ConvertTo-Json -Compress)) }`r`n"
+    $setup=if($redirect){@'
+Add-Type -Path (Join-Path $scriptsRoot 'GovernorScenarios\Claims.Hive.cs')
+$overlay=[RooIndustriesClaimsHive]::new($fixtureHive,$fixtureLocal)
+$machineDrive=(Get-PSDrive HKLM).Root
+if($machineDrive -cne 'HKEY_LOCAL_MACHINE'){throw 'Claims isolation refused an unexpected machine drive.'}
+Remove-PSDrive HKLM -Force
+New-PSDrive -Name HKLM -PSProvider Registry -Root 'HKEY_USERS\RooIndustriesClaimsMachine' -Scope Global|Out-Null
+. (Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')
+$actual=Get-RooIndustriesLocalDataRoot
+if([IO.Path]::GetFullPath($actual).TrimEnd('\') -ine [IO.Path]::GetFullPath($fixtureRoot).TrimEnd('\')){throw ('Claims isolation refused: expected '+$fixtureRoot+', resolver returned '+$actual)}
+'@}else{''}
+    $text+="try {`r`n"+$setup+"`r`n"+$Body+"`r`n} catch { `$failure=`$_;if(`$machineDrive){Remove-PSDrive HKLM -Force;New-PSDrive -Name HKLM -PSProvider Registry -Root `$machineDrive -Scope Global|Out-Null;`$machineDrive=`$null};if(`$overlay){`$overlay.Dispose();`$overlay=`$null};[IO.File]::WriteAllText(`$resultPath,(@{error=`$failure.Exception.Message+' '+`$failure.ScriptStackTrace}|ConvertTo-Json -Compress)) } finally {if(`$machineDrive){Remove-PSDrive HKLM -Force;New-PSDrive -Name HKLM -PSProvider Registry -Root `$machineDrive -Scope Global|Out-Null};if(`$overlay){`$overlay.Dispose()}}`r`n"
     $file=Join-Path $script:scenarioRoot ('child-'+$id+'.ps1')
     [IO.File]::WriteAllText($file,$text,[Text.UTF8Encoding]::new($true))
     $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'),('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$file+'"'))
-    $info.UseShellExecute=$false;$info.CreateNoWindow=$true
-    if($script:claimsProfile -and (Test-Path -LiteralPath $script:claimsProfile)){$info.EnvironmentVariables['USERPROFILE']=$script:claimsProfile}
+    $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     $process=[Diagnostics.Process]::Start($info)
     $script:probes.Add($process)
-    return [pscustomobject]@{process=$process;resultPath=$Values['resultPath']}
+    return [pscustomobject]@{process=$process;resultPath=$Values['resultPath'];output=$process.StandardOutput.ReadToEndAsync();error=$process.StandardError.ReadToEndAsync()}
 }
 
 function Wait-ClaimsChild($Child,[int]$Seconds=240){
     if(-not $Child.process.WaitForExit($Seconds*1000)){throw 'The child PowerShell did not finish in time.'}
-    if(-not (Test-Path -LiteralPath $Child.resultPath)){throw ('The child PowerShell wrote no result (exit '+$Child.process.ExitCode+').')}
+    if(-not (Test-Path -LiteralPath $Child.resultPath)){throw ('The child PowerShell wrote no result (exit '+$Child.process.ExitCode+'): '+$Child.error.Result+' '+$Child.output.Result)}
     $result=[IO.File]::ReadAllText($Child.resultPath)|ConvertFrom-Json
     if($result.error -is [string]){throw ('Child failed: '+$result.error)}
     return $result
@@ -101,7 +128,9 @@ function Invoke-ClaimsChild([string]$Body,[hashtable]$Values=@{}){return Wait-Cl
 
 function Invoke-ClaimsFeature([string]$Script,[hashtable]$Arguments){
     $body='$splat=@{};foreach($property in (ConvertFrom-Json $argumentsJson).PSObject.Properties){$splat[$property.Name]=if($property.Value -is [bool]){[switch]$property.Value}else{$property.Value}};$output=@(& (Join-Path $scriptsRoot $scriptName) @splat) -join "`n";[IO.File]::WriteAllText($resultPath,$output)'
-    return Invoke-ClaimsChild $body @{scriptName=$Script;argumentsJson=($Arguments|ConvertTo-Json -Compress)}
+    $result=Invoke-ClaimsChild $body @{scriptName=$Script;argumentsJson=($Arguments|ConvertTo-Json -Compress)}
+    $script:current.measurements['feature: '+$Script]=$result
+    return $result
 }
 
 function Get-ClaimsCpuSetId([Diagnostics.Process]$Process){
@@ -706,4 +735,55 @@ function Test-ScenarioClaimsRepoRootRequired {
     finally {Pop-Location}
     Note 'resumeWithEmptyRepoRoot' @{status=$resume.status;error=$resume.error.message}
     Assert ($resume.status -eq 'failed' -and $resume.error.message -like '*repository root*') 'Resuming with an empty repository root fails instead of skipping the game session checks'
+}
+
+function Test-ScenarioClaimsRedirectIsolation {
+    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $key='Registry::HKEY_USERS\'+$sid+'\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+    $before=(Get-Item -LiteralPath $key).GetValue('Local AppData',$null,'DoNotExpandEnvironmentNames')
+    Initialize-ClaimsRedirect
+    $probe=Start-Probe (Copy-Probe 'ClaimsIsolation.exe')
+    $result=Invoke-ClaimsChild @'
+$all=@(Get-Process);$mine=@($all|Where-Object {$_.Id -eq [int]$probeId});$direct=Get-Process -Id ([int]$probeId)
+$inventory=(@(& (Join-Path $scriptsRoot 'Get-ProcessInventory.ps1')) -join "`n")|ConvertFrom-Json
+[IO.File]::WriteAllText($resultPath,(@{inventoryCount=@($inventory.processes).Count;inventoryProbe=@($inventory.processes|Where-Object {$_.pid -eq [int]$probeId});inventoryWarnings=$inventory.warnings;inventoryErrors=$inventory.errors;processCount=$all.Count;mine=@($mine|ForEach-Object {$_.ProcessName});directName=$direct.ProcessName;local=(Get-RooIndustriesLocalAppData);root=(Get-RooIndustriesLocalDataRoot);markers=@((Get-Item 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots').GetValueNames())}|ConvertTo-Json -Compress))
+'@ @{probeId=$probe.Id}
+    Note 'childIsolationProof' $result
+    Assert ($result.local -ieq $script:claimsLocal -and $result.root -ieq $script:claimsData) 'The real script resolver reads only the child fixture LocalAppData and rules parent'
+    Assert (@($result.inventoryProbe).Count -eq 1 -and $result.inventoryProbe[0].name -eq 'ClaimsIsolation.exe' -and $result.inventoryProbe[0].canChangePriority) 'The real inventory still sees the exact fixture executable under the overlay'
+    Assert (@($result.markers|Where-Object {-not $_.StartsWith($script:claimsLocal.TrimEnd('\').ToUpperInvariant()+'\',[StringComparison]::Ordinal)}).Count -eq 0) 'Only markers inside this fixture are visible in the child machine overlay'
+    $after=(Get-Item -LiteralPath $key).GetValue('Local AppData',$null,'DoNotExpandEnvironmentNames')
+    Assert ($before -ceq $after) 'The parent process and real user folder registry value are unchanged'
+    $sentinel=Join-Path $script:scenarioRoot 'unsafe-body.txt'
+    $saved=$script:claimsLocal
+    try {
+        $script:claimsLocal=Join-Path $saved 'absent'
+        Assert-Refused {Invoke-ClaimsChild '[IO.File]::WriteAllText($sentinelPath,"unsafe")' @{sentinelPath=$sentinel}} 'could not use' 'A missing redirected folder refuses before the feature body runs'
+    } finally {$script:claimsLocal=$saved}
+    Remove-Item -LiteralPath (Join-Path $script:claimsProfile 'fixture.marker')
+    Assert-Refused {Start-ClaimsChild '[IO.File]::WriteAllText($sentinelPath,"unsafe")' @{sentinelPath=$sentinel}} 'fixture marker is missing' 'A missing fixture marker refuses before any child starts'
+    Assert (-not (Test-Path -LiteralPath $sentinel)) 'Neither isolation failure executed the feature body'
+
+}
+
+function Test-ScenarioCleanupMarkerIsolation {
+    Save-Rule (New-Rule (Copy-Probe 'CleanupMarker.exe') @{cpuPriority='AboveNormal'})|Out-Null
+    $outside=Join-Path $work ('outside-'+[Guid]::NewGuid().ToString('N'))
+    $sameLeaf=Join-Path $outside (Split-Path $script:scenarioRoot -Leaf)
+    [IO.Directory]::CreateDirectory($sameLeaf)|Out-Null
+    $key='HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
+    $name=(Join-Path $sameLeaf 'other-rules').ToUpperInvariant()
+    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    try {
+        New-ItemProperty -LiteralPath $key -Name $name -Value $sid -PropertyType String -ErrorAction Stop|Out-Null
+        Exit-Scenario
+        $markers=Get-Item -LiteralPath $key
+        $ownPrefix=$script:scenarioRoot.TrimEnd('\').ToUpperInvariant()+'\'
+        $remaining=@($markers.GetValueNames()|Where-Object {$_.StartsWith($ownPrefix,[StringComparison]::Ordinal)})
+        Note 'cleanupMarkerIsolation' @{outsideName=$name;outsideValue=$markers.GetValue($name);ownRemaining=$remaining}
+        Assert ($markers.GetValue($name) -ceq $sid -and $remaining.Count -eq 0) 'Cleanup removes its exact root markers while preserving another fixture with the same scenario leaf'
+    } finally {
+        Remove-ItemProperty -LiteralPath $key -Name $name -ErrorAction SilentlyContinue
+        if(Test-Path -LiteralPath $outside){Remove-Item -LiteralPath $outside -Recurse -Force -ErrorAction Stop}
+    }
 }

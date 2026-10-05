@@ -15,8 +15,27 @@ public static class BrandCompatibility
     public const string LegacyJobPrefix = "Global\\RooProtectedSession-";
     public const string LegacyEnvironmentPrefix = "ROO_";
 
-    private static readonly Lazy<string> Local = new(() => DataRoot(RuntimeEnvironment.LocalAppData));
+    private static readonly Lazy<string> Local = new(() => DefaultDataRoot(RuntimeEnvironment.LocalAppData));
     public static string LocalDataRoot => Local.Value;
+
+    private static string DefaultDataRoot(string localAppData)
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey);
+        var roots = (key?.GetValueNames() ?? []).Where(name => !name.Contains('|') &&
+            (string.Equals(Path.GetFileName(name), LegacyDataFolder, StringComparison.OrdinalIgnoreCase) || string.Equals(Path.GetFileName(name), "RooIndustriesOptimizationSuite", StringComparison.OrdinalIgnoreCase)) &&
+            key!.GetValue(name, null, Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) is string sid && sid == identity.User!.Value).ToArray();
+        foreach (var leaf in new[] { LegacyDataFolder, "RooIndustriesOptimizationSuite" })
+            if (key?.GetValue(PolicyRootSecurity.MarkerName(Path.Combine(localAppData, leaf))) is { } owner && !string.Equals(owner as string, identity.User!.Value, StringComparison.Ordinal))
+                throw new InvalidOperationException("The protected data folder marker belongs to another Windows user.");
+        var parent = PolicyRootSecurity.CanonicalPath(localAppData);
+        if (roots.Any(root => !Path.IsPathFullyQualified(root) || !string.Equals(PolicyRootSecurity.CanonicalPath(Path.GetDirectoryName(root)!), parent, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("This Windows user's AppData folder setting changed or names several protected folders. Roo Industries kept the existing data. Restore the folder setting before opening the app again.");
+        foreach (var root in roots)
+            if (!Directory.Exists(root) || PolicyRootSecurity.Problem(root, DataFolder.Kind, deep: false) is not null)
+                throw new InvalidOperationException("Roo Industries kept the existing protected data folder because it is missing or damaged. Restore that folder before opening the app again.");
+        return DataRoot(localAppData);
+    }
 
     public static string DataRoot(string localAppData)
     {

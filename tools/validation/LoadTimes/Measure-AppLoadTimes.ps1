@@ -10,6 +10,8 @@
     [string]$GcDump
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:AppReceipt = $null
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -67,19 +69,15 @@ function Get-Descendants([int]$root) {
     return $found
 }
 function Stop-App {
-    $helpers = if ($script:App -and -not $script:App.HasExited) { @(Get-Descendants $script:App.Id | ForEach-Object {Process-Row $_}) } else { @() }
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Log 'app did not exit in 20 s; killing'; $script:App.Kill() } }
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    foreach ($row in $helpers) { Stop-ProcessRow $row }
-    if ($helpers.Count) { Log ('stopped leftover helper processes: ' + $helpers.Count) }
-    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" | Where-Object { $_.CommandLine -match [regex]::Escape((Join-Path (Split-Path (Split-Path $Exe -Parent) -Parent) 'README')) } | ForEach-Object { Stop-ProcessRow $_ }
-    $script:App = $null; $script:Win = $null
+    Stop-OwnedValidationApp $script:App $script:AppReceipt
+    $script:App = $null; $script:AppReceipt = $null; $script:Win = $null
     Start-Sleep -Milliseconds 800
 }
 function Start-App {
     Stop-App
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     $script:Win = WaitFor { Find-MainWindow $script:App.Id } 120 'main window'
     $window = $sw.ElapsedMilliseconds
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [LoadTimesU32]::ShowWindow($h, 9) | Out-Null

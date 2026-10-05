@@ -67,17 +67,73 @@ public static class RuntimeEnvironment
 
     public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; ";
 
-    public static string Profile
+    private static readonly Lazy<string> TokenProfile = new(() =>
     {
-        get
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var size = 32768;
+        var buffer = new System.Text.StringBuilder(size);
+        if (!GetUserProfileDirectory(identity.Token, buffer, ref size)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        var profile = buffer.ToString();
+        if (!Path.IsPathFullyQualified(profile) || !Directory.Exists(profile)) throw new InvalidOperationException("Roo Industries could not read this Windows user's profile folder.");
+        return profile;
+    });
+    private static readonly Lazy<string> Local = new(() => UserFolder(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, Profile, false));
+    private static readonly Lazy<string> Roaming = new(() => UserFolder(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, Profile, true));
+    public static string Profile => TokenProfile.Value;
+    public static string LocalAppData => Local.Value;
+    public static string RoamingAppData => Roaming.Value;
+    public static string UserTemp => Path.Combine(Profile, "AppData", "Local", "Temp");
+
+    [DllImport("userenv.dll", EntryPoint = "GetUserProfileDirectoryW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetUserProfileDirectory(IntPtr token, System.Text.StringBuilder buffer, ref int size);
+
+    internal static string UserFolder(string sid, string profile, bool roaming)
+    {
+        using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
+        using var hive = users.OpenSubKey(sid) ?? throw new InvalidOperationException("Roo Industries could not read that Windows user's folder settings.");
+        using var key = hive.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders");
+        var name = roaming ? "AppData" : "Local AppData";
+        var value = key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+        string path;
+        if (value is null) path = Path.Combine(profile, "AppData", roaming ? "Roaming" : "Local");
+        else if (value is string raw && key!.GetValueKind(name) is RegistryValueKind.String or RegistryValueKind.ExpandString)
+            path = raw.Replace("%USERPROFILE%", profile, StringComparison.OrdinalIgnoreCase);
+        else throw FolderSettingsProblem();
+        if (path.Length == 0 || path.Count(character => character == '%') > 1 || path.Any(character => character < ' ' || "<>\"|?*".Contains(character)) || path.StartsWith(@"\\?\") || path.StartsWith(@"\\.\")) throw FolderSettingsProblem();
+        if (roaming && path.StartsWith(@"\\"))
         {
-            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!Path.IsPathFullyQualified(profile) || profile.Contains('%')) throw new InvalidOperationException("Roo Industries could not read this Windows user's profile folder.");
-            return profile;
+            var parts = path.TrimEnd('\\')[2..].Split('\\');
+            if (parts.Length < 2 || parts.Any(part => part.Length == 0 || part is "." or ".." || part.Contains(':'))) throw FolderSettingsProblem();
+            return path.TrimEnd('\\');
         }
+        if (path.Length < 4 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\' || path[3..].Contains(':') || !Path.IsPathFullyQualified(path) || path.TrimEnd('\\')[3..].Split('\\').Any(part => part.Length == 0 || part is "." or ".." || part.EndsWith('.') || part.EndsWith(' '))) throw FolderSettingsProblem();
+        path = Path.GetFullPath(path).TrimEnd('\\');
+        if (!roaming)
+        {
+            if (new DriveInfo(Path.GetPathRoot(path)!).DriveType != DriveType.Fixed || !Directory.Exists(path)) throw FolderSettingsProblem();
+            for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
+                if (directory.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw FolderSettingsProblem();
+            var canonical = PolicyRootSecurity.CanonicalPath(path);
+            foreach (var system in new[] { Environment.GetFolderPath(Environment.SpecialFolder.Windows), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), InstallFolder() })
+            {
+                if (string.IsNullOrWhiteSpace(system)) continue;
+                var blocked = PolicyRootSecurity.CanonicalPath(system);
+                if (string.Equals(canonical, blocked, StringComparison.OrdinalIgnoreCase) || canonical.StartsWith(blocked + "\\", StringComparison.OrdinalIgnoreCase)) throw FolderSettingsProblem();
+            }
+        }
+        return path;
     }
 
-    public static string LocalAppData => Path.Combine(Profile, "AppData", "Local");
+    private static string InstallFolder()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        var optimizer = directory.Name.Equals("session", StringComparison.OrdinalIgnoreCase) ? directory.Parent : directory;
+        if (optimizer?.Name.Equals("optimizer", StringComparison.OrdinalIgnoreCase) == true && optimizer.Parent?.Name.Equals("bin", StringComparison.OrdinalIgnoreCase) == true && optimizer.Parent.Parent?.Name.Equals("backend", StringComparison.OrdinalIgnoreCase) == true)
+            return optimizer.Parent.Parent.Parent!.FullName;
+        return directory.Name.Equals("app", StringComparison.OrdinalIgnoreCase) ? directory.Parent!.FullName : directory.FullName;
+    }
+
+    private static InvalidOperationException FolderSettingsProblem() => new("Roo Industries could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder.");
 
     public static Dictionary<string, string> ChildEnvironment() => Build(null);
 
@@ -102,7 +158,7 @@ public static class RuntimeEnvironment
             ["CommonProgramFiles"] = commonFiles, ["CommonProgramW6432"] = commonFiles, ["CommonProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
             ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = ProfileListFolder("Public", systemDrive) ?? Path.Combine(Path.GetDirectoryName(profile)!, "Public"),
             ["USERPROFILE"] = profile, ["HOMEDRIVE"] = profileDrive, ["HOMEPATH"] = profile[profileDrive.Length..],
-            ["LOCALAPPDATA"] = Path.Combine(profile, "AppData", "Local"), ["APPDATA"] = Path.Combine(profile, "AppData", "Roaming"),
+            ["LOCALAPPDATA"] = LocalAppData, ["APPDATA"] = RoamingAppData,
             ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = UserDomain(), ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(system, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -130,7 +186,7 @@ public static class RuntimeEnvironment
         foreach (var (name, value) in ChildEnvironment()) start.Environment[name] = value;
     }
 
-    private static readonly Lazy<Dictionary<string, string>> UserVariables = new(() => Build(Path.Combine(LocalAppData, "Temp")));
+    private static readonly Lazy<Dictionary<string, string>> UserVariables = new(() => Build(UserTemp));
     private static readonly Regex Percent = new("%([^%]+)%", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
     public static string ExpandUserVariables(string text)
@@ -143,8 +199,8 @@ public static class RuntimeEnvironment
         Environment.SetEnvironmentVariable("USERPROFILE", profile);
         Environment.SetEnvironmentVariable("HOMEDRIVE", drive);
         Environment.SetEnvironmentVariable("HOMEPATH", profile[drive.Length..]);
-        Environment.SetEnvironmentVariable("LOCALAPPDATA", Path.Combine(profile, "AppData", "Local"));
-        Environment.SetEnvironmentVariable("APPDATA", Path.Combine(profile, "AppData", "Roaming"));
+        Environment.SetEnvironmentVariable("LOCALAPPDATA", LocalAppData);
+        Environment.SetEnvironmentVariable("APPDATA", RoamingAppData);
     }
 
     public static void Establish()
@@ -206,7 +262,7 @@ public static class RuntimeEnvironment
             using var key = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList");
             if (key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string { Length: > 0 } raw) return null;
             var path = raw.Replace("%SystemDrive%", systemDrive, StringComparison.OrdinalIgnoreCase);
-            return path.Contains('%') || !Path.IsPathFullyQualified(path) ? null : path;
+            return path.Count(character => character == '%') > 1 || !Path.IsPathFullyQualified(path) ? null : path;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
     }

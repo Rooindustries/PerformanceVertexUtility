@@ -198,7 +198,8 @@ public sealed partial class OptimizerService
     private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial, bool idle = false)
     {
         var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
-        if (!confirmed) timeout ??= HostReadTimeout;
+        if (!confirmed || action is "process-apply" or "process-restore" or "rule-save" or "rule-delete" or "cleanup-batch-cancel" or "tweak-custom-import")
+            timeout ??= HostReadTimeout;
         if (confirmed && action is not ("operations-secure" or "data-secure")) await EnsureStorageAsync().ConfigureAwait(false);
         using var change = confirmed ? DataGeneration.BeginChange() : null;
         var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);

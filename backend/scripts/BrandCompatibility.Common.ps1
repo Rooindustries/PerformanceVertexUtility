@@ -36,7 +36,7 @@ function Get-RooIndustriesDataRootMarkerName([string]$Path) {
 
 function Test-RooIndustriesDataRootMarked([string]$Root) {
     $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    return $null -ne $key -and $null -ne $key.GetValue((Get-RooIndustriesDataRootMarkerName $Root))
+    return $null -ne $key -and $key.GetValue((Get-RooIndustriesDataRootMarkerName $Root),$null,'DoNotExpandEnvironmentNames') -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 }
 
 function Assert-RooIndustriesProtectedFolder([string]$Path) {
@@ -72,20 +72,65 @@ function Test-RooIndustriesWrittenAfterProtection([string]$Path) {
     return ($null -ne $latest) -and ((Get-Item -LiteralPath $full -Force).CreationTimeUtc.ToFileTimeUtc() -gt $latest)
 }
 
-function Get-RooIndustriesLocalAppData {
-    $profileFolder=[Environment]::GetFolderPath('UserProfile')
-    if([string]::IsNullOrWhiteSpace($profileFolder) -or -not [IO.Path]::IsPathRooted($profileFolder) -or $profileFolder.Contains('%')){throw "Roo Industries could not read this Windows user's profile folder."}
-    return Join-Path $profileFolder 'AppData\Local'
+function Get-RooIndustriesUserFolder {
+    param([switch]$Roaming,[string]$Sid=([Security.Principal.WindowsIdentity]::GetCurrent().User.Value),[string]$Profile=([Environment]::GetFolderPath('UserProfile')))
+    $problem="Roo Industries could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder."
+    if($Profile -notmatch '^[A-Za-z]:\\' -or -not [IO.Directory]::Exists($Profile)){throw $problem}
+    $hive=Get-Item -LiteralPath ('Registry::HKEY_USERS\'+$Sid) -ErrorAction SilentlyContinue
+    if(-not $hive){throw "Roo Industries could not read that Windows user's folder settings."}
+    $key=Get-Item -LiteralPath ('Registry::HKEY_USERS\'+$Sid+'\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') -ErrorAction SilentlyContinue
+    $name=if($Roaming){'AppData'}else{'Local AppData'}
+    $raw=if($key){$key.GetValue($name,$null,'DoNotExpandEnvironmentNames')}else{$null}
+    if($null -eq $raw){$path=[IO.Path]::Combine($Profile,'AppData',$(if($Roaming){'Roaming'}else{'Local'}))}
+    else {
+        if($raw -isnot [string] -or $key.GetValueKind($name) -notin @('String','ExpandString')){throw $problem}
+        $path=[regex]::Replace($raw,'%USERPROFILE%',[Text.RegularExpressions.MatchEvaluator]{param($match) $Profile},[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    if(-not $path -or $path -match '%.*%|[<>"|?*\x00-\x1F]' -or $path.StartsWith('\\?\') -or $path.StartsWith('\\.\')){throw $problem}
+    if($Roaming -and $path.StartsWith('\\')){
+        $parts=@($path.Substring(2).TrimEnd('\') -split '\\')
+        if($parts.Count -lt 2 -or @($parts|Where-Object {-not $_ -or $_ -in @('.','..') -or $_.Contains(':')}).Count){throw $problem}
+        return $path.TrimEnd('\')
+    }
+    if($path -notmatch '^[A-Za-z]:\\.+' -or $path.Substring(3).Contains(':') -or $path.TrimEnd('\').Substring(3) -match '(^|\\)\.{1,2}(\\|$)|\\{2}|[. ](\\|$)'){throw $problem}
+    $path=[IO.Path]::GetFullPath($path).TrimEnd('\')
+    if(-not $Roaming){
+        if(([IO.DriveInfo]::new([IO.Path]::GetPathRoot($path))).DriveType -ne 'Fixed' -or -not [IO.Directory]::Exists($path)){throw $problem}
+        for($directory=[IO.DirectoryInfo]::new($path);$null -ne $directory;$directory=$directory.Parent){if($directory.Attributes -band [IO.FileAttributes]::ReparsePoint){throw $problem}}
+        foreach($blocked in @([Environment]::GetFolderPath('Windows'),[Environment]::GetFolderPath('ProgramFiles'),[Environment]::GetFolderPath('ProgramFilesX86'),(Split-Path (Split-Path $script:RooIndustriesScriptsRoot -Parent) -Parent))){
+            if($blocked){$blocked=[IO.Path]::GetFullPath($blocked)}
+            if($blocked -and ($path -ieq $blocked.TrimEnd('\') -or $path.StartsWith($blocked.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase))){throw $problem}
+        }
+    }
+    return $path
 }
 
+function Get-RooIndustriesLocalAppData {return Get-RooIndustriesUserFolder}
+function Get-RooIndustriesRoamingAppData {return Get-RooIndustriesUserFolder -Roaming}
+
 function Expand-RooIndustriesUserVariables([string]$Text) {
-    $userTemp=Join-Path (Get-RooIndustriesLocalAppData) 'Temp'
-    $expanded=[regex]::Replace($Text,'%(?:TEMP|TMP)%',[Text.RegularExpressions.MatchEvaluator]{param($match) $userTemp},[Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    return [Environment]::ExpandEnvironmentVariables($expanded)
+    $profile=[Environment]::GetFolderPath('UserProfile')
+    $values=@{USERPROFILE=$profile;LOCALAPPDATA=(Get-RooIndustriesLocalAppData);APPDATA=(Get-RooIndustriesRoamingAppData);TEMP=([IO.Path]::Combine($profile,'AppData','Local','Temp'));TMP=([IO.Path]::Combine($profile,'AppData','Local','Temp'));SystemRoot=([Environment]::GetFolderPath('Windows'));windir=([Environment]::GetFolderPath('Windows'));SystemDrive=([IO.Path]::GetPathRoot([Environment]::GetFolderPath('Windows')).TrimEnd('\'));ProgramFiles=([Environment]::GetFolderPath('ProgramFiles'));'ProgramFiles(x86)'=([Environment]::GetFolderPath('ProgramFilesX86'));ProgramData=([Environment]::GetFolderPath('CommonApplicationData'))}
+    return [regex]::Replace($Text,'%([^%]+)%',[Text.RegularExpressions.MatchEvaluator]{param($match) if($values.ContainsKey($match.Groups[1].Value)){$values[$match.Groups[1].Value]}else{$match.Value}})
 }
 
 function Get-RooIndustriesLocalDataRoot {
     param([string]$LocalData=(Get-RooIndustriesLocalAppData),[switch]$Protected)
+    if(-not $PSBoundParameters.ContainsKey('LocalData')){
+        $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+        $roots=@(if($key){$key.GetValueNames()|Where-Object {-not $_.Contains('|') -and (Split-Path $_ -Leaf) -in @('RooOptimizationSuite','RooIndustriesOptimizationSuite') -and $key.GetValue($_,$null,'DoNotExpandEnvironmentNames') -eq $sid}})
+        foreach($leaf in @('RooOptimizationSuite','RooIndustriesOptimizationSuite')){
+            $owner=if($key){$key.GetValue((Get-RooIndustriesDataRootMarkerName (Join-Path $LocalData $leaf)),$null,'DoNotExpandEnvironmentNames')}else{$null}
+            if($null -ne $owner -and $owner -cne $sid){throw 'The protected data folder marker belongs to another Windows user.'}
+        }
+        $parent=Get-RooIndustriesDataRootMarkerName $LocalData
+        foreach($marked in $roots){
+            if((Get-RooIndustriesDataRootMarkerName (Split-Path $marked -Parent)) -ine $parent){throw "This Windows user's AppData folder setting changed or names several protected folders. Roo Industries kept the existing data. Restore the folder setting before opening the app again."}
+            if(-not (Test-Path -LiteralPath $marked -PathType Container)){throw 'Roo Industries kept the existing protected data folder because it is missing or damaged. Restore that folder before opening the app again.'}
+            Assert-RooIndustriesProtectedFolder $marked
+        }
+    }
     $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder
     $current=Join-Path $LocalData 'RooIndustriesOptimizationSuite'
     $root=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ((Test-RooIndustriesDataRootMarked $current) -and -not (Test-RooIndustriesDataRootMarked $legacy))){$legacy}else{$current}
@@ -108,15 +153,17 @@ function Get-RooIndustriesLaunchProblem([string]$Text,[switch]$Bare) {
 function New-RooIndustriesElevatedTaskAction {
     param([Parameter(Mandatory=$true)][string]$Executable,[string[]]$ArgumentList=@(),[Parameter(Mandatory=$true)][string]$WorkingDirectory)
     $system=[Environment]::GetFolderPath('System')
+    $windows=[Environment]::GetFolderPath('Windows')
+    if($null -ne ($problem=Get-RooIndustriesLaunchProblem $windows -Bare:(-not $windows.Contains(' ')))){throw ('Cannot register the elevated task because the Windows folder '+$problem+'.')}
     $launcher=Join-Path $script:RooIndustriesScriptsRoot 'Start-RooIndustriesHelper.cmd'
     if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Roo Industries files are missing or damaged. Install the app again.'}
     $parts=@($Executable)+@($ArgumentList)
     if($parts.Count -gt 4){throw 'The clean launcher starts a program with at most three arguments.'}
     foreach($part in $parts){if($null -ne ($problem=Get-RooIndustriesLaunchProblem $part)){throw ('Cannot register the elevated task because "'+$part+'" '+$problem+'.')}}
     if($null -ne ($problem=Get-RooIndustriesLaunchProblem $launcher -Bare:(-not $launcher.Contains(' ')))){throw ('Cannot register the elevated task because the install folder "'+$launcher+'" '+$problem+'.')}
-    if(([regex]::Matches($launcher+($parts -join ''),'%')).Count -gt 1){throw 'Cannot register the elevated task because its paths contain more than one % character, which the command interpreter could expand later.'}
+    if(([regex]::Matches($windows+$launcher+($parts -join ''),'%')).Count -gt 1){throw 'Cannot register the elevated task because its paths contain more than one % character, which the command interpreter could expand later.'}
     $payload=' ?'+($parts -join '?')
-    return New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "'+(Join-Path $system 'cmd.exe')+'" /d /v:off /c call "'+$launcher+'" "'+$payload+'"') -WorkingDirectory $WorkingDirectory
+    return New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "'+(Join-Path $system 'cmd.exe')+'" /d /e:on /v:off /c set "SystemRoot='+$windows+'"&call "'+$launcher+'" "'+$payload+'"') -WorkingDirectory $WorkingDirectory
 }
 
 function Get-RooIndustriesDevelopmentDotNet {

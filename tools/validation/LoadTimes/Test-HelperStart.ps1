@@ -5,6 +5,8 @@
     [switch]$Before
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:AppReceipt = $null
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -102,7 +104,15 @@ function Nav([string]$name) {
 function Start-RooIndustriesApp {
     Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     Wait-RooIndustriesWindow
+}
+function Start-SuspendedRooIndustriesApp {
+    Stop-RooIndustriesApp
+    $id = [HelperStartEnv]::StartSuspended($Exe, (Split-Path $Exe -Parent))
+    $script:App = Get-Process -Id $id
+    $script:AppReceipt = New-OwnedProcess $script:App
+    return $id
 }
 function Wait-RooIndustriesWindow {
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
@@ -110,10 +120,7 @@ function Wait-RooIndustriesWindow {
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
-    $children=@(Child-Rows $script:App)
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    foreach($child in $children){Stop-ProcessRow $child}
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-OwnedValidationApp $script:App $script:AppReceipt
     Start-Sleep 1
 }
 function Data-Root {
@@ -171,11 +178,9 @@ try {
         $env:ROO_INDUSTRIES_DOTNET_EXE = $noSuchDotNet
         $initialNames = @()
         try {
-            Stop-RooIndustriesApp
-            $suspendedId = [HelperStartEnv]::StartSuspended($Exe, (Split-Path $Exe -Parent))
+            $suspendedId = Start-SuspendedRooIndustriesApp
             $initialNames = @([HelperStartEnv]::Names($suspendedId))
             [HelperStartEnv]::Resume()
-            $script:App = Get-Process -Id $suspendedId
             Wait-RooIndustriesWindow
         } finally { Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue }
         Nav 'Windows tweaks'
@@ -202,7 +207,7 @@ try {
         Check ($markers -and $null -ne $markers.GetValue($dataRoot.ToUpperInvariant())) 'the data folder is already protected before hostpolicy.dll is renamed (the app protects it through the helper on its first start, so the check starts from a used install)' $dataRoot
         Check (Test-Path -LiteralPath $dll) 'hostpolicy.dll is installed before the check' $dll
         Check (Test-Path -LiteralPath $userDotNet) 'a genuine Microsoft dotnet.exe is installed in the user profile (so a fallback would find it)' ($userDotNet + ' ' + $(if (Test-Path -LiteralPath $userDotNet) { (Get-Item $userDotNet).VersionInfo.ProductVersion } else { '' }))
-        Rename-Item -LiteralPath $dll -NewName 'hostpolicy.dll.roo-industries-test-off'; $script:Renamed += $dll
+        $script:Renamed += (Rename-OwnedFile $dll ($dll + '.roo-industries-test-off'))
         Log 'renamed hostpolicy.dll to hostpolicy.dll.roo-industries-test-off'
         $logBefore = @(Log-Lines)
         Flush-Starts; $script:Starts.Clear()
@@ -248,13 +253,13 @@ try {
                 Check ($run.exit -ne 0 -and $run.text -match 'missing or damaged' -and $caseStarts.Count -eq 0) ("the installed " + $case.Script + ' refuses with the missing-or-damaged message and starts no dotnet.exe') ("exit=$($run.exit) dotnet.exe starts=$($caseStarts.Count) output=" + $run.text.Substring(0, [Math]::Min(300, $run.text.Length)))
             }
         }
-        Rename-Item -LiteralPath ($dll + '.roo-industries-test-off') -NewName 'hostpolicy.dll'; $script:Renamed = @()
+        Restore-OwnedFile $script:Renamed[0]; $script:Renamed = @()
         Check (Test-Path -LiteralPath $dll) 'hostpolicy.dll is back in place' $dll
     }
 }
 catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    foreach ($path in @($script:Renamed)) { try { if (-not (Test-Path -LiteralPath $path)) { Rename-Item -LiteralPath ($path + '.roo-industries-test-off') -NewName (Split-Path $path -Leaf) }; Log ('restored ' + (Split-Path $path -Leaf)) } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
+    foreach ($receipt in @($script:Renamed)) { try { Restore-OwnedFile $receipt; Log ('restored ' + (Split-Path $receipt.Identity.path -Leaf)) } catch { $script:Failures++; Log ('CLEANUP NEEDED: restore ' + $receipt.Identity.path + ': ' + $_.Exception.Message); $receipt.Dispose() } }
     Remove-Item Env:ROO_INDUSTRIES_DOTNET_EXE -ErrorAction SilentlyContinue
     Stop-RooIndustriesApp
     try { Flush-Starts; $script:AllStarts | Export-Csv -NoTypeInformation -Encoding UTF8 -Path (Join-Path $OutDir ($Tag + '-process-starts.csv')) } catch {}

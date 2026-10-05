@@ -313,16 +313,14 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     internal static bool IsProtectedPath(string path)
     {
-        var protectedRoots = new[] { Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.LocalApplicationData,
-            Environment.SpecialFolder.ApplicationData, Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.ProgramFiles,
+        var protectedRoots = new[] { Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.ProgramFiles,
             Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.CommonProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86,
             Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.MyDocuments, Environment.SpecialFolder.StartMenu,
             Environment.SpecialFolder.Programs, Environment.SpecialFolder.Startup, Environment.SpecialFolder.CommonStartMenu,
             Environment.SpecialFolder.CommonPrograms, Environment.SpecialFolder.CommonStartup }
             .Select(Environment.GetFolderPath).Where(root => !string.IsNullOrWhiteSpace(root)).ToList();
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var user = RuntimeEnvironment.LocalAppData;
-        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), Path.Combine(local, "Temp"), Path.GetDirectoryName(local)!, Path.Combine(local, "Packages"), user, Path.Combine(user, "Temp"), Path.GetDirectoryName(user)!, Path.Combine(user, "Packages")]);
+        var local = RuntimeEnvironment.LocalAppData;
+        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), RuntimeEnvironment.UserTemp, local, RuntimeEnvironment.RoamingAppData, Path.GetDirectoryName(local)!, Path.Combine(local, "Packages")]);
         if (protectedRoots.Contains(path, StringComparer.OrdinalIgnoreCase) || Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         return Within(path, Path.Combine(programFiles, "WindowsApps")) || Within(path, Path.Combine(Path.GetPathRoot(path)!, "WindowsApps"));

@@ -515,16 +515,16 @@ static class GovernorChecks
     private static string Under(string root, params string[] names) => root + string.Concat(names.Select(name => Path.DirectorySeparatorChar + name));
 
     private static string Launch(string install, params string[] parts)
-        => "--headless \"" + Under(System32, "cmd.exe") + "\" /d /v:off /c call \"" + Under(install, "backend", "scripts", "Start-RooIndustriesHelper.cmd") + "\" \" ?" + string.Join("?", parts) + "\"";
+        => "--headless \"" + Under(System32, "cmd.exe") + "\" /d /e:on /v:off /c set \"SystemRoot=" + Path.GetDirectoryName(System32) + "\"&call \"" + Under(install, "backend", "scripts", "Start-RooIndustriesHelper.cmd") + "\" \" ?" + string.Join("?", parts) + "\"";
 
     private static string TaskXml(string command, string arguments, string workingDirectory, string user = Sid, string runLevel = "HighestAvailable", string? limit = "PT0S", string? instances = "IgnoreNew", string extraAction = "")
         => "<?xml version=\"1.0\" encoding=\"UTF-16\"?><Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"><RegistrationInfo><Description>Roo Industries process rules | " + Sid + " | " + Data + "</Description></RegistrationInfo>"
             + "<Triggers><TimeTrigger><StartBoundary>2026-10-01T11:00:00</StartBoundary><Repetition><Interval>PT1M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><Enabled>true</Enabled></TimeTrigger></Triggers>"
             + "<Principals><Principal id=\"Author\"><UserId>" + user + "</UserId><LogonType>InteractiveToken</LogonType><RunLevel>" + runLevel + "</RunLevel></Principal></Principals>"
             + "<Settings>" + (instances is null ? "" : "<MultipleInstancesPolicy>" + instances + "</MultipleInstancesPolicy>") + (limit is null ? "" : "<ExecutionTimeLimit>" + limit + "</ExecutionTimeLimit>") + "</Settings>"
-            + "<Actions Context=\"Author\"><Exec><Command>" + command + "</Command><Arguments>" + arguments + "</Arguments><WorkingDirectory>" + workingDirectory + "</WorkingDirectory></Exec>" + extraAction + "</Actions></Task>";
+            + "<Actions Context=\"Author\"><Exec><Command>" + command + "</Command><Arguments>" + System.Security.SecurityElement.Escape(arguments) + "</Arguments><WorkingDirectory>" + workingDirectory + "</WorkingDirectory></Exec>" + extraAction + "</Actions></Task>";
 
-    private static async Task Scheduled(Action<bool, string> check)
+    public static async Task Scheduled(Action<bool, string> check)
     {
         var rule = Rule(RuleId, "Chrome rule", Chrome, true);
         var now = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Local);
@@ -554,6 +554,10 @@ static class GovernorChecks
                  {
                      (TaskXml(Under(System32, "conhost.exe"), "--headless \"" + hostExe + "\" policy-run \"" + request + "\"", host), "the action is the previous direct conhost launch"),
                      (TaskXml(notepad, "", host), "the action is a plain other program"),
+                     (TaskXml(conhost, Launch(Install, hostExe, "policy-run", request).Replace("/d /e:on /v:off /c set \"SystemRoot=" + Path.GetDirectoryName(System32) + "\"&call ", "/d /v:off /c call "), host), "the old clean launcher cannot repair the native environment"),
+                     (TaskXml(conhost, Launch(Install, hostExe, "policy-run", request).Replace("/e:on ", ""), host), "the shell extensions override is missing"),
+                     (TaskXml(conhost, Launch(Install, hostExe, "policy-run", request).Replace("SystemRoot=" + Path.GetDirectoryName(System32), "SystemRoot=" + OtherInstall), host), "the native Windows root is wrong"),
+                     (TaskXml(conhost, Launch(Install, hostExe, "policy-run", request).Replace("&call ", "&echo injected&call "), host), "another native command was added"),
                      (TaskXml(notepad, Launch(Install, hostExe, "policy-run", request), host), "the program is not conhost.exe"),
                      (TaskXml(conhost, Launch(OtherInstall, Under(OtherInstall, "backend", "bin", "optimizer", "Optimizer.Host.exe"), "policy-run", request), host), "the launcher and host belong to another install"),
                      (TaskXml(conhost, Launch(Install, hostExe, "policy-run", Under(OtherData, "worker-request.json")), host), "the request file belongs to another rules folder"),

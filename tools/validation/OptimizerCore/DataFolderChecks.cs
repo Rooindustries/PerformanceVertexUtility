@@ -202,6 +202,8 @@ static partial class DataFolderChecks
             File.WriteAllText(Path.Combine(conversionTarget, "control.lock"), "sentinel");
             var identity = H.Standard("whoami");
             check(identity.Contains("admin-group=False"), "The helper really runs with a standard token: " + identity);
+            var assembly = System.Reflection.Assembly.GetEntryAssembly()!.Location;
+            check(identity.EndsWith("assembly=" + assembly, StringComparison.OrdinalIgnoreCase), "The standard-token subprocess uses the actual running assembly: " + assembly);
             OperationsFolder.Ensure(operations);
             var timer = Path.Combine(operations, OperationsFolder.TimerFolder);
             check(Directory.Exists(timer), "The timer folder exists after the recovery folder is ensured");

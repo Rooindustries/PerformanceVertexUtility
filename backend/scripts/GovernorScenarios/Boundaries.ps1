@@ -141,6 +141,8 @@ function Test-ScenarioMigrationRace {
     Assert ($kept.Count -ge 1) 'The protected copy of the rules is never deleted when the folder is recreated between the two moves'
     Assert ($result.status -eq 'completed' -and $after -eq $before -and (Core 'policy-summary').secured -and (Get-ExposedWriters $legacy).Count -eq 0) 'The protected copy is already the rules folder when the call returns, with the rule byte for byte as before'
     Assert (@($folders|Where-Object {$_ -ne 'process-rules'}).Count -eq 0) 'The empty folder recreated in between is folded into the protected copy and removed, and no half-finished copy is left behind'
+    Core 'policy-secure'|Out-Null
+    Assert ((Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and (Core 'policy-summary').secured -and (Get-ExposedWriters (Join-Path $legacy 'rules')).Count -eq 0) 'Replaying migration after the race retains the exact bytes and protected rules ACL'
 }
 
 function Test-ScenarioMigrationRacePlanted {
@@ -184,9 +186,11 @@ function Test-ScenarioMigrationBusy {
     Write-RooIndustriesOperationJson $rule $ruleFile
     $before=(Get-FileHash -LiteralPath $ruleFile).Hash
     $script:roots.Add($legacy)
-    $holder=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgumentList '/d /c ping -n 40 127.0.0.1 >nul' -WorkingDirectory $legacy -WindowStyle Hidden -PassThru
+    $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe'),'900')
+    $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.WorkingDirectory=$legacy
+    $holder=[Diagnostics.Process]::Start($info)
     $script:probes.Add($holder)
-    $script:cleanups.Add({& taskkill.exe /PID $holder.Id /T /F 2>&1|Out-Null}.GetNewClosure())
+    $script:cleanups.Add({if(-not $holder.HasExited){$holder.Kill();$holder.WaitForExit(10000)|Out-Null}}.GetNewClosure())
     Start-Sleep -Seconds 1
     $failure=$null
     try {Core 'policy-secure'|Out-Null} catch {$failure=$_.Exception.Message}
@@ -196,15 +200,20 @@ function Test-ScenarioMigrationBusy {
     $kept=@($folders|Where-Object {$_ -ne 'process-rules'})
     $copy=if($kept.Count -eq 1 -and $kept[0] -like 'process-rules.secure-*'){Join-Path $script:policyParent $kept[0]}else{$null}
     $copyId=if($copy -and (Test-Path -LiteralPath (Join-Path $copy '.migrating'))){(Get-Content -LiteralPath (Join-Path $copy '.migrating') -Raw|ConvertFrom-Json).id}else{$null}
+    . (Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')
+    Assert (-not (Test-RooIndustriesDataRootMarked $legacy)) 'The writable original has no trusted root marker after the failed migration'
+    if($copy){Assert ((Get-ExposedWriters $copy).Count -eq 0 -and (Get-Item -LiteralPath $copy).GetAccessControl().AreAccessRulesProtected) 'The unfinished recovery copy has a protected administrators-only ACL'}
+    $savedCopy=if($copy){Join-Path $copy ('rules\'+$rule.ruleId+'.json')}else{$null}
+    Assert ($savedCopy -and (Test-Path -LiteralPath $savedCopy) -and (Get-FileHash -LiteralPath $savedCopy).Hash -eq $before -and (Get-ExposedWriters $savedCopy).Count -eq 0) 'The retained copy contains the exact saved rule bytes under a protected file ACL'
     Note 'migrationBusyKept' ([ordered]@{copy=$copy;copyId=$copyId;exposed=if($copy){@(Get-ExposedWriters $copy)}else{$null}})
     Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and $null -ne $copyId -and (Get-ExposedWriters $copy).Count -eq 0) 'The earlier folder is untouched and the unfinished protected copy is kept, administrators-only and marked as unfinished, for the retry'
-    & taskkill.exe /PID $holder.Id /T /F 2>&1|Out-Null
+    if(-not $holder.HasExited){$holder.Kill()}
     $holder.WaitForExit(10000)|Out-Null
     Core 'policy-secure'|Out-Null
     $leftover=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|Where-Object {$_.Name -ne 'process-rules'})
     $finishedId=if(Test-Path -LiteralPath (Join-Path $legacy '.migrated')){(Get-Content -LiteralPath (Join-Path $legacy '.migrated') -Raw|ConvertFrom-Json).id}else{$null}
     Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once nothing holds the folder the migration completes with the rule byte for byte as before'
-    Assert ($null -ne $finishedId -and $finishedId -eq $copyId -and $leftover.Count -eq 0) 'The retry finishes the kept copy instead of starting another one, and nothing is left beside the rules folder'
+    Assert ($null -ne $finishedId -and $finishedId -eq $copyId -and $leftover.Count -eq 0 -and (Get-ExposedWriters (Join-Path $legacy 'rules')).Count -eq 0) 'The retry finishes the kept copy instead of starting another one, and nothing is left beside the rules folder'
 }
 
 function Test-ScenarioMigrationFileLocked {
@@ -226,12 +235,15 @@ function Test-ScenarioMigrationFileLocked {
     $kept=@($folders|Where-Object {$_ -ne 'process-rules'})
     $copy=if($kept.Count -eq 1 -and $kept[0] -like 'process-rules.secure-*'){Join-Path $script:policyParent $kept[0]}else{$null}
     $copyId=if($copy -and (Test-Path -LiteralPath (Join-Path $copy '.migrating'))){(Get-Content -LiteralPath (Join-Path $copy '.migrating') -Raw|ConvertFrom-Json).id}else{$null}
+    . (Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')
+    Assert (-not (Test-RooIndustriesDataRootMarked $legacy)) 'The writable original has no trusted root marker after the failed migration'
+    if($copy){Assert ((Get-ExposedWriters $copy).Count -eq 0 -and (Get-Item -LiteralPath $copy).GetAccessControl().AreAccessRulesProtected) 'The unfinished recovery copy has a protected administrators-only ACL'}
     Assert ((Test-Path -LiteralPath $ruleFile) -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before -and $null -ne $copyId -and (Get-ExposedWriters $copy).Count -eq 0) 'Nothing is moved and the unfinished protected copy is kept, administrators-only and marked as unfinished, for the retry'
     Core 'policy-secure'|Out-Null
     $leftover=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|Where-Object {$_.Name -ne 'process-rules'})
     $finishedId=if(Test-Path -LiteralPath (Join-Path $legacy '.migrated')){(Get-Content -LiteralPath (Join-Path $legacy '.migrated') -Raw|ConvertFrom-Json).id}else{$null}
     Assert ((Core 'policy-summary').secured -and (Get-FileHash -LiteralPath $ruleFile).Hash -eq $before) 'Once the file is free the migration completes with the rule byte for byte as before'
-    Assert ($null -ne $finishedId -and $finishedId -eq $copyId -and $leftover.Count -eq 0) 'The retry finishes the kept copy instead of starting another one, and nothing is left beside the rules folder'
+    Assert ($null -ne $finishedId -and $finishedId -eq $copyId -and $leftover.Count -eq 0 -and (Get-ExposedWriters (Join-Path $legacy 'rules')).Count -eq 0) 'The retry finishes the kept copy instead of starting another one, and nothing is left beside the rules folder'
 }
 
 function Test-ScenarioRenamedMachine {

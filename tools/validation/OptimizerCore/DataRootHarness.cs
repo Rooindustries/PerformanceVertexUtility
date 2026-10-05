@@ -252,7 +252,7 @@ static class DataRootChild
         {
             case "whoami":
                 using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
-                    Console.WriteLine("WHOAMI admin-group=" + new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator));
+                    Console.WriteLine("WHOAMI admin-group=" + new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator) + " assembly=" + System.Reflection.Assembly.GetEntryAssembly()!.Location);
                 return;
             case "junction": Console.WriteLine(Native.Junction(args[1], args[2])); return;
             case "write":

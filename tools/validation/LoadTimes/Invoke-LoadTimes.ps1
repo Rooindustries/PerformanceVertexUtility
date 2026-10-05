@@ -18,34 +18,57 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$taskReceipt = $null
+$script:ChildCompleted = $false
+$script:PersistentResources = $null
+$probeDirectory = $env:TEMP
 $appDir = 'C:\Program Files\Roo Industries\Optimization Suite'
 $exe = Join-Path $appDir 'app\RooIndustries.OptimizationSuite.App.exe'
 $out = Join-Path $OutRoot $Label
 if (@(Get-Process cs2 -ErrorAction SilentlyContinue).Count) { throw 'CS2 is running; refusing to measure.' }
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run from an elevated session.' }
-Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $out) { throw 'Output already exists; choose a fresh label to preserve previous evidence.' }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 function Uninstall-App {
     $uninstaller = Get-ChildItem $appDir -Filter 'unins*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $uninstaller) { return 'not installed' }
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (@(Get-Process RooIndustries.OptimizationSuite.*, Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) { throw 'CLEANUP NEEDED: installed processes remain; close them through their owner before uninstall.' }
     $p = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
     for ($i = 0; $i -lt 60 -and (Test-Path $exe); $i++) { Start-Sleep 1 }
     return "exit=$($p.ExitCode) remaining=$(Test-Path $exe)"
 }
 
+function Report-UnownedLoadTimesResources {
+    $persistent = if ($script:ChildCompleted -and $script:PersistentResources -and $script:PersistentResources.scenario -ceq $Scenario -and $Scenario -in 'migration-before','migration-timer-on') { $script:PersistentResources } else { $null }
+    foreach ($name in 'roo-industries-feature-hang.flag', 'RooIndustriesLoadTimesProbe.exe', 'RooIndustriesLauncherProbe.exe', 'RooIndustriesProtectedLauncherProbe.exe', 'RooIndustriesProtectedGameProbe.exe', 'RooIndustriesEnvironmentControl.exe') {
+        $path = Join-Path $probeDirectory $name
+        if (Test-Path -LiteralPath $path) { "RESULT CLEANUP NEEDED: retained child-owned or unowned file $path" }
+    }
+    if (Test-Path -LiteralPath $ifeoProbe) { "RESULT CLEANUP NEEDED: retained protected-session registry key $ifeoProbe for its journal owner" }
+    foreach ($candidate in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' -or $_.TaskName -like 'Roo Industries Protected Session *' -or $_.TaskName -eq 'RooIndustries_EnvironmentControl' })) {
+        $identity = $candidate.TaskPath + $candidate.TaskName
+        if ($ruleTasksBefore -contains $identity -or $sessionTasksBefore -contains $identity) { continue }
+        $expected = @($persistent.tasks | Where-Object { $_.name -ceq $candidate.TaskName -and $_.path -ceq $candidate.TaskPath })
+        if ($expected.Count -eq 1) { try { Assert-OwnedTaskUnchanged $expected[0]; continue } catch {} }
+        "RESULT CLEANUP NEEDED: retained task $identity without a matching completed-child receipt"
+    }
+    foreach ($process in @(Get-Process RooIndustries.OptimizationSuite.*, Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir + '\', [StringComparison]::OrdinalIgnoreCase) })) {
+        $expected = @($persistent.processes | Where-Object { [int]$_.pid -eq $process.Id })
+        if ($expected.Count -eq 1) { try { $handle=$process.Handle; if ([RooValidationOwnership.Native]::Created($handle).ToString() -ceq [string]$expected[0].creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Image($handle) -ieq $expected[0].imagePath) { continue } } catch {} }
+        "RESULT CLEANUP NEEDED: retained installed process $($process.Id) without a matching completed-child receipt"
+    }
+}
+
 if (@(Get-Process RooIndustries.OptimizationSuite.App -ErrorAction SilentlyContinue).Count) { throw 'The app is open; close it before measuring.' }
 $installedBefore = Test-Path $exe
-$personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-$transparencyBefore = (Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency
 $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' } | ForEach-Object { $_.TaskPath + $_.TaskName })
 $sessionTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' } | ForEach-Object { $_.TaskPath + $_.TaskName })
 if ($SetupPath -and $installedBefore) { throw 'The app is already installed; no verified rollback installer was supplied, so replacement is refused.' }
 $task = 'RooIndustries_LoadTimes'
 $standalone = 'loadtimes', 'invalidation', 'modes', 'hardware', 'launchers', 'launchers-session', 'override', 'incomplete', 'incomplete-before'
 $ifeoProbe = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesProtectedGameProbe.exe'
-$ifeoBefore = Test-Path $ifeoProbe
 try {
 if ($SetupPath) {
     $hash = (Get-FileHash -LiteralPath $SetupPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -56,8 +79,7 @@ if ($SetupPath) {
     $p = Start-Process -FilePath $SetupPath -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$(Join-Path $out 'install.log')`"" -Wait -PassThru
     "RESULT install exit=$($p.ExitCode) ms=$($sw.ElapsedMilliseconds)"
     Start-Sleep 3
-    Get-CimInstance Win32_Process -Filter "Name='notepad.exe'" | Where-Object { $_.CommandLine -match 'README' } | ForEach-Object { Stop-ProcessRow $_ }
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (@(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue).Count) { throw 'CLEANUP NEEDED: installer left an app open; close it through its owner.' }
 }
 if (-not (Test-Path $exe)) { throw 'The app is not installed.' }
 "RESULT version=" + (Get-Item $exe).VersionInfo.ProductVersion
@@ -71,15 +93,14 @@ $scenarioScript = @{ invalidation = 'Test-CacheInvalidation.ps1'; modes = 'Test-
 $scenarioExtra = @{ 'migration-before' = ' -Phase before'; 'migration-after' = ' -Phase after'; 'migration-undo-blocker' = ' -Phase undo-blocker'; 'migration-timer-on' = ' -Phase timer-on'; 'launchers-session' = ' -Part session'; override = ' -Check override'; incomplete = ' -Check incomplete'; 'incomplete-before' = ' -Check incomplete -Before' }[$Scenario]
 $arguments = if ($scenarioScript) { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot $scenarioScript) + '" -OutDir "' + $out + '" -Exe "' + $exe + '"' + $scenarioExtra }
 else { '--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'Measure-AppLoadTimes.ps1') + '" -Label "' + $Label + '" -OutDir "' + $out + '" -ColdRuns ' + $ColdRuns + ' -Tours ' + $Tours + ' -ColdTweaksRuns ' + $ColdTweaksRuns + ' -MemoryPasses ' + $MemoryPasses + $(if ($GcDump) { ' -GcDump "' + $GcDump + '"' } else { '' }) + ' -Exe "' + $exe + '"' + $(if ($SkipAdvanced) { ' -SkipAdvanced' } else { '' }) }
-$action = New-ScheduledTaskAction -Execute 'C:\Windows\System32\conhost.exe' -Argument $arguments -WorkingDirectory $out
-$principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
-Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes ($Minutes + 5)) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) -Force | Out-Null
+$taskReceipt = Register-OwnedProbeTask $task 'C:\Windows\System32\conhost.exe' $arguments $out $sid ($Minutes + 5)
 Start-ScheduledTask -TaskName $task
 $done = Join-Path $out $(if ($scenarioScript) { "$Scenario.done" } else { 'measure.done' })
 $deadline = (Get-Date).AddMinutes($Minutes)
 $started = Get-Date
 while ((Get-Date) -lt $deadline -and -not (Test-Path $done)) {
     Start-Sleep 5
+    Assert-OwnedTaskUnchanged $taskReceipt
     if (((Get-Date) - $started).TotalSeconds -gt 60 -and (Get-ScheduledTask -TaskName $task).State -ne 'Running' -and -not (Test-Path $done)) { "RESULT the scenario task ended without finishing"; break }
 }
 if (-not (Test-Path $done) -and (Get-Date) -ge $deadline) {
@@ -87,62 +108,28 @@ if (-not (Test-Path $done) -and (Get-Date) -ge $deadline) {
     $grace = (Get-Date).AddMinutes(5)
     while ((Get-Date) -lt $grace -and -not (Test-Path $done)) { Start-Sleep 5 }
 }
-$info = Get-ScheduledTaskInfo -TaskName $task
-"RESULT done=$(Test-Path $done) lastResult=$($info.LastTaskResult)"
-if (-not (Test-Path $done)) { Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue; Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
+$exitDeadline = (Get-Date).AddSeconds(30)
+do {
+    Assert-OwnedTaskUnchanged $taskReceipt
+    $taskState = (Get-ScheduledTask -TaskName $taskReceipt.name -TaskPath $taskReceipt.path).State
+    $info = Get-ScheduledTaskInfo -TaskName $taskReceipt.name -TaskPath $taskReceipt.path
+    $active = $taskState -in 'Running','Queued' -or $info.LastTaskResult -eq 267009
+    if (-not $active -or (Get-Date) -ge $exitDeadline) { break }
+    Start-Sleep -Milliseconds 100
+} while ($true)
+$script:ChildCompleted = (Test-Path -LiteralPath $done) -and -not $active -and $info.LastTaskResult -eq 0
+$persistentPath = Join-Path $out 'persistent-resources.json'
+if ($script:ChildCompleted -and (Test-Path -LiteralPath $persistentPath)) { $script:PersistentResources = Get-Content -LiteralPath $persistentPath -Raw | ConvertFrom-Json }
+"RESULT done=$(Test-Path $done) state=$taskState lastResult=$($info.LastTaskResult)"
+if (-not $script:ChildCompleted) { throw 'The scenario did not finish with exit 0; child-owned resources are retained for recovery.' }
 }
 finally {
     function Step([string]$what, [scriptblock]$body) { try { & $body } catch { "RESULT CLEANUP NEEDED: $what failed: " + $_.Exception.Message } }
-    Step 'remove the scheduled task' { if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task -Confirm:$false } }
-    Step 'restore renamed scripts' {
-        foreach ($renamed in @(Get-ChildItem $appDir -Recurse -File -Filter '*.roo-industries-test-off' -ErrorAction SilentlyContinue)) {
-            $original = $renamed.FullName.Substring(0, $renamed.FullName.Length - '.roo-industries-test-off'.Length)
-            if (-not (Test-Path $original)) { Rename-Item $renamed.FullName $original; "RESULT restored renamed script " + $renamed.Name }
-        }
-    }
-    if ($Scenario -in $standalone) {
-        Step 'restore EnableTransparency' {
-            $transparencyAfter = (Get-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue).EnableTransparency
-            if ("$transparencyAfter" -ne "$transparencyBefore") {
-                if ($null -eq $transparencyBefore) { Remove-ItemProperty $personalize -Name EnableTransparency -ErrorAction SilentlyContinue } else { Set-ItemProperty $personalize -Name EnableTransparency -Value $transparencyBefore -Type DWord }
-                "RESULT CLEANUP: EnableTransparency was left at $transparencyAfter; set back to $transparencyBefore"
-            }
-        }
-        Step 'remove rule tasks' {
-            foreach ($ruleTask in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' -and $ruleTasksBefore -notcontains ($_.TaskPath + $_.TaskName) })) {
-                Unregister-ScheduledTask -TaskName $ruleTask.TaskName -TaskPath $ruleTask.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
-                "RESULT CLEANUP: removed rule task " + $ruleTask.TaskName + " left by the run"
-            }
-        }
-        Step 'remove test helpers' {
-            Remove-Item (Join-Path $env:TEMP 'roo-industries-feature-hang.flag') -Force -ErrorAction SilentlyContinue
-            Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -in 'RooIndustriesLoadTimesProbe.exe','RooIndustriesLauncherProbe.exe','RooIndustriesProtectedLauncherProbe.exe','RooIndustriesEnvironmentControl.exe' -and $_.ExecutablePath -ieq (Join-Path $env:TEMP $_.Name)} | ForEach-Object {Stop-ProcessRow $_}
-            Start-Sleep -Milliseconds 500
-            Remove-Item (Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesProtectedGameProbe.exe'), (Join-Path $env:TEMP 'RooIndustriesEnvironmentControl.exe') -Force -ErrorAction SilentlyContinue
-        }
-        Step 'remove the environment control task and the planted name' {
-            if (Get-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'RooIndustries_EnvironmentControl' -Confirm:$false }
-            $planted = (Get-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'DOTNET_STARTUP_HOOKS' -ErrorAction SilentlyContinue).DOTNET_STARTUP_HOOKS
-            if ($planted -ceq 'C:\RooIndustriesNoSuchFolder\hook.dll') { Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'DOTNET_STARTUP_HOOKS'; "RESULT CLEANUP: removed the planted DOTNET_STARTUP_HOOKS from the user environment" }
-        }
-        Step 'remove protected-session leftovers' {
-            if ($Scenario -like 'launchers*') {
-                foreach ($sessionTask in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Roo Industries Protected Session *' -and $sessionTasksBefore -notcontains ($_.TaskPath + $_.TaskName) })) {
-                    Stop-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -ErrorAction SilentlyContinue
-                    Unregister-ScheduledTask -TaskName $sessionTask.TaskName -TaskPath $sessionTask.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
-                    "RESULT CLEANUP: removed protected-session task " + $sessionTask.TaskName + " left by the run"
-                }
-                if (-not $ifeoBefore -and (Test-Path $ifeoProbe)) { Remove-Item $ifeoProbe -Recurse -Force; "RESULT CLEANUP: removed " + $ifeoProbe }
-            }
-        }
-    }
+    Step 'remove the owned scheduled task' { Remove-OwnedTask $taskReceipt }
+    Step 'report resources retained for their owner' { Report-UnownedLoadTimesResources }
     Step 'read the scenario log' {
         $log = Get-ChildItem $out -Filter '*.log' -ErrorAction SilentlyContinue | Select-String 'CLEANUP NEEDED' | ForEach-Object { $_.Line }
         foreach ($line in @($log)) { "RESULT $line" }
-    }
-    Step 'stop the app' {
-        Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Get-Process Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
     }
     if ($Uninstall -or ($Scenario -in $standalone -and $SetupPath -and -not $installedBefore -and -not $KeepInstalled)) { Step 'uninstall the test build' { "RESULT uninstall " + (Uninstall-App) } }
 }

@@ -3,6 +3,8 @@
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:AppReceipt = $null
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -57,6 +59,14 @@ function Nav([string]$name) {
 function Tweaks-Idle { WaitFor { $r = ById 'WindowsTweaksRefresh'; $s = ById 'WindowsTweaksStatus'; if ($r -and $r.Current.IsEnabled -and $s -and $s.Current.Name -notmatch '^Loading') { $s.Current.Name } } 600 'Windows tweaks idle' }
 function Review-Texts { @((ById 'WindowsTweaksReview').FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | ForEach-Object { $_.Current.Name } | Where-Object { $_ }) }
 function Transparency { $v = Get-ItemProperty $Personalize -Name EnableTransparency -ErrorAction SilentlyContinue; if ($v) { [string]$v.EnableTransparency } else { '<absent>' } }
+function Open-TransparencyRegistry {
+    $key = Get-Item -LiteralPath $Personalize
+    try { $name = $key.Name } finally { $key.Dispose() }
+    if (-not $name.StartsWith('HKEY_CURRENT_USER\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Transparency registry hive differs; retained' }
+    $writable = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($name.Substring(18), $true)
+    if (-not $writable) { throw 'Transparency registry key unavailable; retained' }
+    $writable
+}
 function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $CheckProfile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
 function Undo-Profiles { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
 function Find-Row {
@@ -108,7 +118,11 @@ function Apply-Reviewed([string]$what, [switch]$NoWait) {
     Log ("$what review: " + ($texts -join ' | '))
     if ((($texts -join ' ') -notmatch 'Transparency') -or @($texts | Where-Object { $_ -match 'timer|Hypervisor|SEHOP|IPv6|Firewall|Defender' }).Count) { throw "$what review is not exactly the Transparency change; refusing to apply" }
     Set-Toggle (ById 'WindowsTweaksApproval') $true
-    Invoke-Element (WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button')
+    $apply = WaitFor { $b = ById 'WindowsTweaksApply'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'apply button'
+    if ($what -eq 'apply') {
+        if ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -cne $script:RegistryBefore.before) { throw 'EnableTransparency changed before apply; retained' }
+    } else { Assert-OwnedRegistryFieldCurrent $script:RegistryBefore | Out-Null }
+    Invoke-Element $apply
     if ($NoWait) { return }
     Start-Sleep 2
     Tweaks-Idle | Out-Null
@@ -121,15 +135,13 @@ $script:RegistryBefore = $null
 function Start-RooIndustriesApp {
     Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [CacheCheckU32]::ShowWindow($h, 9) | Out-Null; [CacheCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [CacheCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
-    $children=@(Child-Rows $script:App)
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    foreach($child in $children){Stop-ProcessRow $child}
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-OwnedValidationApp $script:App $script:AppReceipt
 }
 function Select-ComboItem([string]$id, [string]$like) {
     for ($attempt = 1; $attempt -le 4; $attempt++) {
@@ -161,6 +173,14 @@ function Host-Tree([int]$appId) {
 
 $probePath = Join-Path $env:TEMP 'RooIndustriesLoadTimesProbe.exe'
 $probe = $null; $probe2 = $null
+$probeFile = $null
+$script:ProbeReceipts = [Collections.Generic.List[object]]::new()
+function Start-CacheProbe([int]$Seconds) {
+    $process = Start-Process $probePath -ArgumentList '-n', $Seconds, '127.0.0.1' -WindowStyle Hidden -PassThru
+    $script:ProbeReceipts.Add((New-OwnedProcess $process))
+    $process | Add-Member -MemberType NoteProperty -Name OwnershipReceipt -Value $script:ProbeReceipts[$script:ProbeReceipts.Count - 1]
+    $process
+}
 $script:RuleSaved = $false
 $script:RuleTest = $false
 $script:GovernorRule = $false
@@ -172,8 +192,10 @@ try {
     $before = @(Undo-Profiles)
     if (Has-Profile $before) { throw "A $CheckProfile profile already exists on this PC; refusing to change it." }
     Log ('Undo before: ' + ($before -join ' | ')); Shot '1-undo-before'
-    $script:RegistryBefore = Transparency
-    $registryBefore = $script:RegistryBefore
+    $targetValue = if ((Transparency) -eq '0') { [int]1 } else { [int]0 }
+    $registryKey = Open-TransparencyRegistry
+    $script:RegistryBefore = New-OwnedRegistryFieldIntent $registryKey 'EnableTransparency' $targetValue 'DWord'
+    $registryBefore = if ($script:RegistryBefore.before -ceq 'absent') { '<absent>' } else { [string]$script:RegistryBefore.original }
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $advanced = WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Show advanced options')) } 20 'Show advanced options'
     Set-Toggle $advanced $true; Start-Sleep 1
@@ -183,7 +205,7 @@ try {
     $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($CheckProfile); Start-Sleep 1
     Log ('profile name set to ' + $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value)
     $row = Find-Row
-    $target = if ($registryBefore -eq '0') { 'On (1)' } else { 'Off (0)' }
+    $target = if ($targetValue -eq 1) { 'On (1)' } else { 'Off (0)' }
     Set-Toggle $row $true
     $combo = WaitFor { ById ($Setting + '.value') } 20 'value combo'
     $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Start-Sleep -Milliseconds 800
@@ -198,9 +220,9 @@ try {
     WaitFor { $t = @(Texts); if (Has-Profile $t) { $t } } 120 'the new profile on the Undo page left open during the apply' | Out-Null
     Check $true 'Undo page opened while the apply was running shows the new profile once the apply finishes, without navigating again' ("registry when the Undo page opened=" + $registryAtNav + " (before=" + $registryBefore + "), ms after opening=" + $sw.ElapsedMilliseconds)
     Check ($registryAtNav -eq $registryBefore) 'the Undo page was opened before the apply reached Windows' "registry at open=$registryAtNav before=$registryBefore"
-    WaitFor { if ((Transparency) -ne $registryBefore) { $true } } 60 'registry change' | Out-Null
+    WaitFor { if ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.after) { $true } } 60 'the expected typed registry change' | Out-Null
     $registryApplied = Transparency
-    Check ($registryApplied -ne $registryBefore) 'apply changed the registry value' "before=$registryBefore after=$registryApplied"
+    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.after) 'apply changed the registry value' "before=$registryBefore after=$registryApplied"
     Shot '2-applied'
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -208,13 +230,13 @@ try {
     Check (Has-Profile $after) 'cached Undo page still lists the new profile on revisit' ("ms=" + $sw.ElapsedMilliseconds)
     Shot '3-undo-after-apply'
 
-    Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $probePath -Force
+    $probeFile = Copy-OwnedProbe (Join-Path $env:SystemRoot 'System32\PING.EXE') $probePath
     Nav 'Games'; Start-Sleep 2; Select-Tab 'ProcessesTab'; Start-Sleep 3
     Check (Wait-Listed 'ProcessPicker' $false 5) 'Processes list does not show the probe before it starts' ''
     Select-Tab 'GamesTab'
     Check (Wait-Listed 'GameSessionLauncher' $false 5) 'Games launcher list does not show the probe before it starts' ''
     Nav 'Home'; Start-Sleep 2
-    $probe = Start-Process $probePath -ArgumentList '-n', '600', '127.0.0.1' -WindowStyle Hidden -PassThru
+    $probe = Start-CacheProbe 600
     Start-Sleep 4
     Nav 'Games'; Start-Sleep 1
     Check (Wait-Listed 'GameSessionLauncher' $true 20) 'Games launcher list shows a process started while the page was cached' ''
@@ -222,14 +244,14 @@ try {
     Check (Wait-Listed 'ProcessPicker' $true 20) 'Processes list shows a process started while the page was cached' ''
     Select-Tab 'GamesTab'
     Nav 'Home'; Start-Sleep 1
-    if(-not $probe.HasExited){$probe.Kill()}; $probe.WaitForExit(10000) | Out-Null
+    Stop-OwnedProcess $probe.OwnershipReceipt; $probe.WaitForExit(10000) | Out-Null
     Start-Sleep 4
     Nav 'Games'; Start-Sleep 1
     Check (Wait-Listed 'GameSessionLauncher' $false 20) 'Games launcher list drops a process that exited while the page was cached' ''
     Select-Tab 'ProcessesTab'
     Check (Wait-Listed 'ProcessPicker' $false 20) 'Processes list drops a process that exited while the page was cached' ''
 
-    $probe2 = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+    $probe2 = Start-CacheProbe 900
     Start-Sleep 4
     Nav 'Home'; Start-Sleep 1; Nav 'Games'; Start-Sleep 1
     Select-Tab 'GamesTab'
@@ -241,11 +263,12 @@ try {
 
     Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
     $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
+    Assert-OwnedRegistryFieldCurrent $script:RegistryBefore | Out-Null
     Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
     Apply-Reviewed 'restore'
     $registryRestored = Transparency
-    Check ($registryRestored -eq $registryBefore) 'restore returned the registry value' "before=$registryBefore restored=$registryRestored"
-    if ($registryRestored -eq $registryBefore) { $script:Cleanup = $null }
+    Check ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.before) 'restore returned the registry value' "before=$registryBefore restored=$registryRestored"
+    if ((Get-OwnedRegistryField $script:RegistryBefore.key $script:RegistryBefore.name) -ceq $script:RegistryBefore.before) { $script:Cleanup = $null }
     $final = @(Undo-Profiles)
     Check (-not (Has-Profile $final)) 'cached Undo page reloads after the restore and drops the profile' ''
     Shot '4-undo-after-restore'
@@ -255,13 +278,13 @@ try {
     while ((Get-Date) -lt $deadline) { $s = ById 'GameSessionStatus'; if ($s -and $s.Current.Name -eq 'Settings changed elsewhere') { $notice = $true; break }; Start-Sleep 1 }
     Check $notice 'the Games tab with a launcher picked says settings changed elsewhere after a change on another page' ("status before=" + $statusBefore + " now=" + (ById 'GameSessionStatus').Current.Name)
     Shot '5-games-notice'
-    if(-not $probe2.HasExited){$probe2.Kill()}
+    Stop-OwnedProcess $probe2.OwnershipReceipt
 
     $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })
     $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
     $governorBuild = (@(Undo-Profiles) -contains 'Roo Industries Governor')
     if ($governorBuild) {
-        $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $probe = Start-CacheProbe 900
         Start-Sleep 3
         $rowBefore = Governor-Row
         Log ('Governor row before the rule: ' + $rowBefore); Shot '5-undo-before-rule'
@@ -294,14 +317,14 @@ try {
         $rowDeleted = Governor-Row
         Check ($rowDeleted -eq 'No rules') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
         Shot '7-undo-after-delete'
-        if(-not $probe.HasExited){$probe.Kill()}
+        Stop-OwnedProcess $probe.OwnershipReceipt
     }
     elseif ($ruleTasksBefore.Count -or $policyRoot) {
         $script:Skipped++; Log ('SKIPPED the process rule check: this PC already has saved process rules or a rule task (' + $ruleTasksBefore.Count + ' tasks); the test does not touch them')
     }
     else {
         Stop-RooIndustriesApp
-        $probe2 = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $probe2 = Start-CacheProbe 900
         Start-RooIndustriesApp
         Nav 'Games'; Start-Sleep 2; Select-Tab 'ProcessesTab'
         Select-ComboItem 'ProcessPicker' '*RooIndustriesLoadTimesProbe*'
@@ -332,7 +355,7 @@ try {
         $left = @(Combo-Items 'ProcessRulesList') -join ' | '
         if ($left -notmatch 'RooIndustriesLoadTimesProbe') { $script:RuleSaved = $false }
         Check (-not $script:RuleSaved) 'the test rule was deleted and the rule worker stopped' $left
-        if(-not $probe2.HasExited){$probe2.Kill()}
+        Stop-OwnedProcess $probe2.OwnershipReceipt
     }
 
     Stop-RooIndustriesApp
@@ -352,7 +375,7 @@ try {
     Check ($seen.Count -gt 0 -and $low.Count -eq 0) 'opening Windows tweaks while its preload runs raises the preload helper processes to normal priority' $summary
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    foreach ($p in @($probe, $probe2)) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+    foreach ($receipt in $script:ProbeReceipts) { try { Stop-OwnedProcess $receipt } catch { $script:Failures++; Log ('CLEANUP NEEDED: probe retained: ' + $_.Exception.Message) } }
     if ($script:GovernorRule) {
         try {
             if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
@@ -378,26 +401,31 @@ finally {
         if ($script:RuleSaved) { Log 'CLEANUP NEEDED: delete the RooIndustriesLoadTimesProbe rule on the Processes tab and stop the rule worker' }
     }
     if ($script:RuleTest -and ($script:RuleSaved -or $script:GovernorRule)) {Log 'CLEANUP NEEDED: rule cleanup failed; retained the rules and recovery state for the owner.'}
-    if ($null -ne $script:RegistryBefore -and (Transparency) -ne $script:RegistryBefore) {
+    if ($null -ne $script:RegistryBefore) {
         try {
-            if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
-            Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
-            $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
-            Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
-            Apply-Reviewed 'cleanup restore'
-        } catch { Log ('cleanup: app restore failed: ' + $_.Exception.Message) }
-        if ((Transparency) -ne $script:RegistryBefore) {
-            try {
-                if ($script:RegistryBefore -eq '<absent>') { Remove-ItemProperty $Personalize -Name EnableTransparency -ErrorAction Stop }
-                else { Set-ItemProperty $Personalize -Name EnableTransparency -Value ([int]$script:RegistryBefore) -Type DWord -ErrorAction Stop }
-                Log ('cleanup: set EnableTransparency back to ' + $script:RegistryBefore + ' directly')
-                $script:Cleanup = "the app may still list the $CheckProfile profile; restore or delete it in Windows tweaks"
-            } catch { Log ('cleanup: could not reset EnableTransparency: ' + $_.Exception.Message) }
-        }
-        else { Log 'cleanup: restored the test profile through the app'; $script:Cleanup = $null }
+            $current = Assert-OwnedRegistryFieldCurrent $script:RegistryBefore
+            if ($current -cne $script:RegistryBefore.before) {
+                try {
+                    if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }
+                    Nav 'Windows tweaks'; Tweaks-Idle | Out-Null
+                    $restore = WaitFor { $b = ById 'WindowsTweaksRestore'; if ($b -and $b.Current.IsEnabled) { $b } } 60 'restore button'
+                    Assert-OwnedRegistryFieldCurrent $script:RegistryBefore | Out-Null
+                    Invoke-Element $restore; Start-Sleep 2; Tweaks-Idle | Out-Null
+                    Apply-Reviewed 'cleanup restore'
+                } catch { Log ('cleanup: app restore failed: ' + $_.Exception.Message) }
+                $current = Assert-OwnedRegistryFieldCurrent $script:RegistryBefore
+                if ($current -cne $script:RegistryBefore.before) {
+                    Restore-OwnedRegistryField $script:RegistryBefore
+                    Log 'cleanup: restored the exact original EnableTransparency presence, kind and raw value directly'
+                    $script:Cleanup = "the app may still list the $CheckProfile profile; restore or delete it in Windows tweaks"
+                }
+                else { Log 'cleanup: restored the test profile through the app'; $script:Cleanup = $null }
+            }
+        } catch { $script:Failures++; Log ('CLEANUP NEEDED: EnableTransparency retained: ' + $_.Exception.Message) }
     }
-    Stop-RooIndustriesApp
-    Remove-Item $probePath -Force -ErrorAction SilentlyContinue
+    if ($registryKey) { $registryKey.Dispose() }
+    try { Stop-RooIndustriesApp } catch { $script:Failures++; Log ('CLEANUP NEEDED: app retained: ' + $_.Exception.Message) }
+    try { Remove-OwnedProbe $probeFile } catch { $script:Failures++; Log ('CLEANUP NEEDED: probe file retained: ' + $_.Exception.Message); if ($probeFile) { $probeFile.Dispose() } }
     if ($script:Cleanup) { Log ('CLEANUP NEEDED: ' + $script:Cleanup) }
     Log ('RESULT failures=' + $script:Failures + ' skipped=' + $script:Skipped)
     'x' | Set-Content (Join-Path $OutDir 'invalidation.done')

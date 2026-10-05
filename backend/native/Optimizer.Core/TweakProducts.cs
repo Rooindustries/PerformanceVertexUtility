@@ -27,7 +27,7 @@ public static class TweakProducts
         {
             foreach (var folder in new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.LocalApplicationData })
             {
-                var path = Path.Combine(Environment.GetFolderPath(folder), @"Microsoft\Edge\Application\msedge.exe");
+                var path = Path.Combine(folder == Environment.SpecialFolder.LocalApplicationData ? RuntimeEnvironment.LocalAppData : Environment.GetFolderPath(folder), @"Microsoft\Edge\Application\msedge.exe");
                 if (File.Exists(path)) { major = Major(FileVersionInfo.GetVersionInfo(path).ProductVersion); break; }
             }
         }

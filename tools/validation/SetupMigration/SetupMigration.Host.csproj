@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>Optimizer.Host</AssemblyName><PlatformTarget>x64</PlatformTarget><EnableDefaultCompileItems>false</EnableDefaultCompileItems><StartupHookSupport>false</StartupHookSupport><NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../backend/native/Optimizer.Host/Program.cs" Link="Program.cs" />
+    <Compile Include="FixtureHive.cs" /><Compile Include="FixtureBootstrap.cs" />
+    <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" AdditionalProperties="GovernorTestHooks=true" />
+  </ItemGroup>
+</Project>

@@ -65,7 +65,7 @@ function Test-ScenarioLauncherSpaces {
     $console=Get-CimInstance Win32_Process -Filter ('ProcessId='+$parent.ParentProcessId)
     Note 'workerChain' ([ordered]@{worker=$worker.CommandLine;parent=$parent.CommandLine;console=$console.CommandLine;session=$worker.SessionId})
     Assert ($worker.CommandLine.Contains((Join-Path $hostDirectory 'Optimizer.Host.dll')) -and $worker.CommandLine.Contains((Join-Path $script:policyRoot 'worker-request.json'))) 'The governor process received its exact host path and request path'
-    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /v:off /c call *Start-RooIndustriesHelper.cmd*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The governor runs under the launcher in a headless console'
+    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /e:on /v:off /c set *SystemRoot=*&call *Start-RooIndustriesHelper.cmd*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The governor runs under the launcher in a headless console'
     $context=New-GameContext
     $session=New-GameSession $context
     Start-GameSession $session|Out-Null
@@ -86,13 +86,9 @@ function Test-ScenarioLauncherCleansEnvironment {
     $own=[RooIndustriesGovernorEnvOracle]::Names([Diagnostics.Process]::GetCurrentProcess().Handle)
     Assert ($own -contains 'PATH' -and $own -contains 'SystemRoot') 'The environment reader sees the names of a known process'
     $profiler=Join-Path $script:scenarioRoot 'no-such-profiler.dll'
-    $saved=@{}
-    foreach($name in @('CORECLR_ENABLE_PROFILING','CORECLR_PROFILER_PATH','DOTNET_DiagnosticPorts')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'User')}
+    Use-UserEnvironment
     $pipe='roo-industries-no-listener-'+[Guid]::NewGuid().ToString('N').Substring(0,8)
-    $script:cleanups.Add({foreach($name in $saved.Keys){[Environment]::SetEnvironmentVariable($name,$saved[$name],'User')}}.GetNewClosure())
-    [Environment]::SetEnvironmentVariable('CORECLR_ENABLE_PROFILING','1','User')
-    [Environment]::SetEnvironmentVariable('CORECLR_PROFILER_PATH',$profiler,'User')
-    [Environment]::SetEnvironmentVariable('DOTNET_DiagnosticPorts',($pipe+',connect,nosuspend'),'User')
+    Set-UserEnvironment ([ordered]@{CORECLR_ENABLE_PROFILING='1';CORECLR_PROFILER_PATH=$profiler;DOTNET_DiagnosticPorts=($pipe+',connect,nosuspend')})
     $conhost=Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe'
     $principal=New-ScheduledTaskPrincipal -UserId (Get-RooIndustriesOperationOwner).userSid -LogonType Interactive -RunLevel Highest
     function Start-ProbeTask([string]$Name,$Action,[string]$Path){
@@ -183,29 +179,54 @@ public static class RooIndustriesGovernorEnvBroadcast {
 '@
 }
 
+function Get-UserEnvironmentValue($Key,[string]$Name) {
+    $state=[pscustomobject]@{present=($Key.GetValueNames() -contains $Name);kind=$null;value=$null}
+    if($state.present){$state.kind=$Key.GetValueKind($Name);$state.value=$Key.GetValue($Name,$null,'DoNotExpandEnvironmentNames')}
+    return $state
+}
+
 function Use-UserEnvironment {
     Initialize-EnvironmentBroadcast
-    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
-    $saved=New-Object System.Collections.Generic.List[object]
-    foreach($name in $key.GetValueNames()){$saved.Add([pscustomobject]@{name=$name;kind=$key.GetValueKind($name);value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)})}
-    $key.Close()
-    $script:userEnvironmentNames=@($saved|ForEach-Object {$_.name})
+    $changes=@{}
+    $readValue=${function:Get-UserEnvironmentValue}
+    $script:userEnvironmentChanges=$changes
     $script:cleanups.Add({
         $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment',$true)
-        $wanted=@($saved|ForEach-Object {$_.name})
-        foreach($name in @($key.GetValueNames()|Where-Object {$wanted -cnotcontains $_})){$key.DeleteValue($name)}
-        foreach($entry in $saved){$key.SetValue($entry.name,$entry.value,$entry.kind)}
-        $key.Close()
-        [RooIndustriesGovernorEnvBroadcast]::Send()
+        $drift=New-Object System.Collections.Generic.List[string]
+        try {
+            foreach($name in $changes.Keys){
+                $entry=$changes[$name]
+                $observed=& $readValue $key $name
+                if(($observed|ConvertTo-Json -Depth 4 -Compress) -cne ($entry.after|ConvertTo-Json -Depth 4 -Compress)){$drift.Add($name);continue}
+                if($entry.before.present){$key.SetValue($name,$entry.before.value,$entry.before.kind)}elseif($observed.present){$key.DeleteValue($name)}
+            }
+        } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
+        if($drift.Count){throw ('Environment cleanup kept values changed outside this scenario: '+($drift -join ', '))}
     }.GetNewClosure())
 }
 
 function Set-UserEnvironment([System.Collections.IDictionary]$Values,[string[]]$Remove=@()) {
+    if($script:userEnvironmentChanges -isnot [hashtable]){throw 'Capture the fixture environment before changing it.'}
     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment',$true)
-    foreach($name in $Remove){if($null -ne $key.GetValue($name,$null)){$key.DeleteValue($name)}}
-    foreach($name in $Values.Keys){$key.SetValue([string]$name,[string]$Values[$name],[Microsoft.Win32.RegistryValueKind]::String)}
-    $key.Close()
-    [RooIndustriesGovernorEnvBroadcast]::Send()
+    try {
+        $names=@{};foreach($name in @($Remove)+@($Values.Keys)){$names[[string]$name]=$true}
+        foreach($name in $names.Keys){
+            $observed=Get-UserEnvironmentValue $key $name
+            if($script:userEnvironmentChanges.ContainsKey($name)){
+                $entry=$script:userEnvironmentChanges[$name]
+                if(($observed|ConvertTo-Json -Depth 4 -Compress) -cne ($entry.after|ConvertTo-Json -Depth 4 -Compress)){throw ('Environment value changed outside this scenario: '+$name)}
+            }else{$script:userEnvironmentChanges[$name]=[pscustomobject]@{before=$observed;after=$observed}}
+        }
+        foreach($name in $Remove){
+            if($key.GetValueNames() -contains $name){$key.DeleteValue($name)}
+            $script:userEnvironmentChanges[$name].after=[pscustomobject]@{present=$false;kind=$null;value=$null}
+        }
+        foreach($name in $Values.Keys){
+            $value=[string]$Values[$name]
+            $key.SetValue([string]$name,$value,[Microsoft.Win32.RegistryValueKind]::String)
+            $script:userEnvironmentChanges[$name].after=[pscustomobject]@{present=$true;kind=[Microsoft.Win32.RegistryValueKind]::String;value=$value}
+        }
+    } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
 }
 
 function Get-PrefixedUserNames {
@@ -383,6 +404,67 @@ function Test-ScenarioLauncherFailsClosed {
 
 function Test-ScenarioLauncherOwnEnvironment {
     . (Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')
+    $realRoot=Get-RooIndustriesLocalDataRoot
+    $profile=[Environment]::GetFolderPath('UserProfile')
+    Initialize-ClaimsRedirect
+    $local=$script:claimsLocal
+    $marker=Join-Path $script:scenarioRoot 'env-markers'
+    [IO.Directory]::CreateDirectory($marker)|Out-Null
+    $body=". '"+(Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1').Replace("'","''")+"'; @{root=(Get-RooIndustriesLocalDataRoot);profile=`$env:USERPROFILE;local=`$env:LOCALAPPDATA;temp=`$env:TEMP}|ConvertTo-Json -Compress"
+    $project=Join-Path $script:scenarioRoot 'launcher-fixture'
+    [IO.Directory]::CreateDirectory($project)|Out-Null
+    Copy-Item -LiteralPath (Join-Path $scriptsRoot 'GovernorScenarios\Launcher.Fixture.cs') -Destination (Join-Path $project 'Program.cs')
+    $coreProject=[Security.SecurityElement]::Escape((Join-Path $repoRoot 'backend\native\Optimizer.Core\Optimizer.Core.csproj'))
+    [IO.File]::WriteAllText((Join-Path $project 'LauncherFixture.csproj'),('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include="'+$coreProject+'" /><Compile Include="'+[Security.SecurityElement]::Escape((Join-Path $repoRoot 'tools\validation\ChildEnvironment\ChildEnv.cs'))+'" Link="ChildEnv.cs" /><Compile Include="'+[Security.SecurityElement]::Escape((Join-Path $scriptsRoot 'GovernorScenarios\Claims.Hive.cs'))+'" Link="Claims.Hive.cs" /></ItemGroup></Project>'))
+    $output=Join-Path $project 'custom-output'
+    & $DotNetPath build (Join-Path $project 'LauncherFixture.csproj') -c Debug -p:GovernorTestHooks=true -o $output | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'Product environment fixture build failed.'}
+    $buildHashes=[ordered]@{}
+    foreach($file in @((Join-Path $output 'LauncherFixture.dll'),(Join-Path $output 'Optimizer.Core.dll'),(Join-Path $project 'Program.cs'),(Join-Path $scriptsRoot 'GovernorScenarios\Claims.Hive.cs'),(Join-Path $repoRoot 'tools\validation\ChildEnvironment\ChildEnv.cs'))){$buildHashes[$file]=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}
+    Note 'product-launch-build-hashes' $buildHashes
+    $cases=@(
+        @{label='bad-nonempty';USERPROFILE=(Join-Path $marker 'no-such-profile');LOCALAPPDATA=(Join-Path $marker 'no-such-local')},
+        @{label='empty';USERPROFILE='';LOCALAPPDATA=''},
+        @{label='absent';USERPROFILE=$null;LOCALAPPDATA=$null}
+    )
+    $windows=[Environment]::GetFolderPath('Windows');$system=[Environment]::GetFolderPath('System')
+    $expected=[ordered]@{windir=$windows;SystemRoot=$windows;ComSpec=(Join-Path $system 'cmd.exe');PATH=($system+';'+$windows+';'+(Join-Path $system 'Wbem')+';'+(Join-Path $system 'WindowsPowerShell\v1.0'));PATHEXT='.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';USERPROFILE=$profile;LOCALAPPDATA=$local;APPDATA=(Join-Path $profile 'AppData\Roaming');TEMP=(Join-Path $windows 'Temp');TMP=(Join-Path $windows 'Temp')}
+    foreach($poison in $cases){
+        if($poison.label -ne 'empty'){
+            if($poison.label -eq 'bad-nonempty'){[IO.Directory]::CreateDirectory($poison.USERPROFILE)|Out-Null}
+            $info=[Diagnostics.ProcessStartInfo]::new((Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'),('-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($body))))
+            $info.UseShellExecute=$false;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true;$info.CreateNoWindow=$true
+            foreach($name in @('USERPROFILE','LOCALAPPDATA')){if($null -eq $poison[$name]){[void]$info.EnvironmentVariables.Remove($name)}else{$info.EnvironmentVariables[$name]=[string]$poison[$name]}}
+            $child=[Diagnostics.Process]::Start($info);$script:probes.Add($child)
+            $answer=$child.StandardOutput.ReadToEnd();$problem=$child.StandardError.ReadToEnd();$child.WaitForExit()
+            $resolved=if($child.ExitCode -eq 0){$answer|ConvertFrom-Json}else{$null}
+            Note ('direct-'+$poison.label) @{exitCode=$child.ExitCode;result=$resolved;error=$problem}
+            Assert ($child.ExitCode -eq 0 -and $resolved.root -ieq $realRoot) ('A direct script ignores '+$poison.label+' process folder values')
+        }
+        $productProfile=if($poison.label -eq 'bad-nonempty'){Join-Path $marker 'product-missing-profile'}else{$poison.USERPROFILE}
+        $info=[Diagnostics.ProcessStartInfo]::new($DotNetPath,('"'+(Join-Path $output 'LauncherFixture.dll')+'" "'+(Join-Path $script:claimsProfile ('launcher-'+$poison.label+'.hive'))+'" "'+$script:claimsLocal+'"'))
+        $info.UseShellExecute=$false;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true;$info.CreateNoWindow=$true
+        foreach($name in @('USERPROFILE','LOCALAPPDATA')){$value=if($name -eq 'USERPROFILE'){$productProfile}else{$poison[$name]};if($null -eq $value){[void]$info.EnvironmentVariables.Remove($name)}else{$info.EnvironmentVariables[$name]=[string]$value}}
+        foreach($name in @('windir','SystemRoot','ComSpec','PATH','PATHEXT','APPDATA','TEMP','TMP')){$info.EnvironmentVariables[$name]=Join-Path $marker $name}
+        $child=[Diagnostics.Process]::Start($info);$script:probes.Add($child)
+        $answer=$child.StandardOutput.ReadToEnd();$problem=$child.StandardError.ReadToEnd();$child.WaitForExit()
+        Assert ($child.ExitCode -eq 0) ('The actual Windows control launcher starts PowerShell with '+$poison.label+' input: '+$problem)
+        $result=$answer|ConvertFrom-Json;$values=$result.variables
+        Note ('product-launch-'+$poison.label) $result
+        $missingPoison=@('windir','SystemRoot','ComSpec','PATH','PATHEXT','APPDATA','TEMP','TMP'|Where-Object {[string]$result.beforeVariables.$_ -cne [string]$info.EnvironmentVariables[$_]})
+        Assert ($missingPoison.Count -eq 0) 'Every planted Windows and temp value reaches the native parent before its actual launcher runs'
+        Assert ($result.beforeUserProfile -ceq $productProfile) ('The native parent received the exact '+$poison.label+' USERPROFILE value')
+        $wrong=@($expected.Keys|Where-Object {[string]$values.$_ -ine [string]$expected[$_]})
+        Note ('wrong-own-values-'+$poison.label) $wrong
+        Assert ($wrong.Count -eq 0) ('The real control helper rebuilds every Windows, user folder and temp value for '+$poison.label+' input')
+        Assert (@($values.PSObject.Properties|Where-Object {$_.Name -match '^(DOTNET_|COMPlus_)' -and $_.Name -notmatch '(?i)^DOTNET_ROOT$|^(DOTNET|COMPlus)_EnableDiagnostics(?:_IPC|_Debugger|_Profiler)?$'}).Count -eq 0) 'Only the existing development runtime path and disabled diagnostics pins remain among .NET-prefixed names'
+        Assert ($result.exitCode -eq 0 -and $values.USERPROFILE -ieq $profile -and $values.LOCALAPPDATA -ieq $local -and ($result.output|ConvertFrom-Json).address.kind -eq 'filesystem' -and $values.TEMP -ieq (Join-Path ([Environment]::GetFolderPath('Windows')) 'Temp')) ('The product launcher rebuilds folders before PowerShell starts for '+$poison.label+' input')
+    }
+    Assert (-not (Test-Path -LiteralPath (Join-Path $marker 'product-missing-profile'))) 'The real product launch never creates the missing planted profile'
+}
+
+function Test-ScenarioLauncherTaskOwnEnvironment {
+    . (Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')
     Initialize-EnvironmentOracle
     $marker=Join-Path $script:scenarioRoot 'env-markers'
     foreach($folder in @($marker,(Join-Path $marker 'temp'),(Join-Path $marker 'profile'),(Join-Path $marker 'local'),(Join-Path $marker 'roaming'))){[IO.Directory]::CreateDirectory($folder)|Out-Null}
@@ -394,19 +476,29 @@ function Test-ScenarioLauncherOwnEnvironment {
     Set-UserEnvironment $planted
     $conhost=Join-Path ([Environment]::GetFolderPath('System')) 'conhost.exe'
     $probePath=Copy-Probe 'RooIndustriesGovernorEnvOwn.exe' 'env'
-    $null=Start-ScenarioTask 'own-probe' (New-RooIndustriesElevatedTaskAction $probePath @('900') (Split-Path $probePath -Parent))
+    $null=Start-ScenarioTask 'own-probe' (New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "'+$probePath+'" 900') -WorkingDirectory (Split-Path $probePath -Parent))
     $probeProcess=Wait-ProbeProcess $probePath
-    if($null -eq $probeProcess){throw 'The probe did not start through the launcher.'}
+    if($null -eq $probeProcess){
+        Note 'ownTaskStartupFailure' @($script:tasks|ForEach-Object {$task=Get-ScheduledTask -TaskName $_;$info=Get-ScheduledTaskInfo -TaskName $_;[ordered]@{name=$task.TaskName;state=[string]$task.State;lastResult=$info.LastTaskResult;lastRun=$info.LastRunTime;action=$task.Actions|Select-Object Execute,Arguments,WorkingDirectory}})
+        throw 'The direct scheduler control did not start.'
+    }
     $probeEntries=@([RooIndustriesGovernorEnvOracle]::Entries($probeProcess.Handle))
     $probeValues=@{};foreach($entry in $probeEntries){$split=$entry.IndexOf('=',1);$probeValues[$entry.Substring(0,$split)]=$entry.Substring($split+1)}
     $delivered=@($planted.Keys|Where-Object {$probeValues.ContainsKey($_) -and [string]$probeValues[$_] -ceq [string]$planted[$_]})
     Note 'markerNamesTheTaskDelivers' $delivered
     Note 'markerNamesWindowsSetItself' @($planted.Keys|Where-Object {$delivered -cnotcontains $_})
     Assert (@('windir','SystemRoot','ComSpec','PATHEXT'|Where-Object {$delivered -cnotcontains $_}).Count -eq 0) 'The task hands a program the marker values for windir, SystemRoot, ComSpec and PATHEXT (so the check below can fail)'
+    $extensionProbe=Copy-Probe 'RooIndustriesGovernorEnvExtensions.exe' 'env'
+    $extensionAction=New-RooIndustriesElevatedTaskAction $extensionProbe @('900') (Split-Path $extensionProbe -Parent)
+    $null=Start-ScenarioTask 'extensions' (New-ScheduledTaskAction -Execute $extensionAction.Execute -Argument ($extensionAction.Arguments.Replace('/d ','/d /e:off ')) -WorkingDirectory $extensionAction.WorkingDirectory)
+    $extensionProcess=Wait-ProbeProcess $extensionProbe
+    Assert ($null -ne $extensionProcess) 'The actual action overrides disabled command extensions and starts under every planted native value'
+    $extensionValues=@{};foreach($entry in @([RooIndustriesGovernorEnvOracle]::Entries($extensionProcess.Handle))){$split=$entry.IndexOf('=',1);$extensionValues[$entry.Substring(0,$split)]=$entry.Substring($split+1)}
+    Assert ($extensionValues.SystemRoot -ieq [Environment]::GetFolderPath('Windows')) 'The native launcher repairs SystemRoot before the program starts'
     $windows=[Environment]::GetFolderPath('Windows')
     $system=[Environment]::GetFolderPath('System')
     $profile=[Environment]::GetFolderPath('UserProfile')
-    $expected=[ordered]@{windir=$windows;SystemRoot=$windows;ComSpec=(Join-Path $system 'cmd.exe');PATH=($system+';'+$windows+';'+(Join-Path $system 'Wbem')+';'+(Join-Path $system 'WindowsPowerShell\v1.0'));PATHEXT='.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';USERPROFILE=$profile;LOCALAPPDATA=(Join-Path $profile 'AppData\Local');APPDATA=(Join-Path $profile 'AppData\Roaming')}
+    $expected=[ordered]@{windir=$windows;SystemRoot=$windows;ComSpec=(Join-Path $system 'cmd.exe');PATH=($system+';'+$windows+';'+(Join-Path $system 'Wbem')+';'+(Join-Path $system 'WindowsPowerShell\v1.0'));PATHEXT='.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';USERPROFILE=$profile;LOCALAPPDATA=(Get-RooIndustriesLocalAppData);APPDATA=(Get-RooIndustriesRoamingAppData)}
     $dataTemp=Join-Path (Get-RooIndustriesLocalDataRoot) 'temp'
     function Assert-OwnEnvironment([string]$Who,$Process){
         $values=@{};foreach($entry in @([RooIndustriesGovernorEnvOracle]::Entries($Process.Handle))){$split=$entry.IndexOf('=',1);$values[$entry.Substring(0,$split)]=$entry.Substring($split+1)}
@@ -418,15 +510,6 @@ function Test-ScenarioLauncherOwnEnvironment {
         $markers=@($values.Keys|Where-Object {[string]$values[$_] -like ('*'+$marker+'*')})
         Assert ($markers.Count -eq 0) ('No marker value is left anywhere in the '+$Who+' process environment')
         Assert (@($values.Keys|Where-Object {Test-ClearedName $_ }).Count -eq 0) ('The '+$Who+' process has no .NET-prefixed variable')
-    }
-    $realRoot=Get-RooIndustriesLocalDataRoot
-    foreach($poison in @(@{USERPROFILE=(Join-Path $marker 'profile');LOCALAPPDATA=(Join-Path $marker 'local')},@{USERPROFILE=(Join-Path $marker 'no-such-profile');LOCALAPPDATA=(Join-Path $marker 'no-such-local')},@{USERPROFILE='';LOCALAPPDATA=''})){
-        $info=[Diagnostics.ProcessStartInfo]::new((Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'),('-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '''+(Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1')+'''; Get-RooIndustriesLocalDataRoot"'))
-        $info.UseShellExecute=$false;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true;$info.CreateNoWindow=$true
-        foreach($name in $poison.Keys){$info.EnvironmentVariables[$name]=[string]$poison[$name]}
-        $child=[Diagnostics.Process]::Start($info)
-        $answer=$child.StandardOutput.ReadToEnd().Trim();$problem=$child.StandardError.ReadToEnd().Trim();$child.WaitForExit()
-        Assert ($answer -ieq $realRoot) ('An elevated script resolves the real app data folder with USERPROFILE='+$(if($poison.USERPROFILE -eq ''){'(empty)'}else{Split-Path $poison.USERPROFILE -Leaf})+' set for it: '+$answer+' '+$problem)
     }
     $path=Copy-Probe
     $rule=Start-Probe $path

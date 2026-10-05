@@ -71,9 +71,20 @@ public static class RooIndustriesGovernorScenarioFixture {
     if(-not ('RooIndustriesGovernorScenarioOracle' -as [type])){
         Add-Type -TypeDefinition @'
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class RooIndustriesGovernorScenarioOracle {
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct Startup { public int Size; public string Reserved, Desktop, Title; public uint X, Y, XSize, YSize, XCount, YCount, Fill, Flags; public ushort Show, ReservedSize; public IntPtr ReservedData, Input, Output, Error; }
+    [StructLayout(LayoutKind.Sequential)] struct CreatedProcess { public IntPtr Process, Thread; public uint ProcessId, ThreadId; }
     [StructLayout(LayoutKind.Sequential)] struct Throttling { public uint Version, ControlMask, StateMask; }
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool CreateProcess(string path, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, bool inherit, uint flags, IntPtr environment, string directory, ref Startup startup, out CreatedProcess created);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern uint ResumeThread(IntPtr thread);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool TerminateProcess(IntPtr process, uint exit);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessTimes(IntPtr process, out long created, out long exited, out long kernel, out long user);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern uint GetPriorityClass(IntPtr process);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessInformation(IntPtr process, int kind, out uint value, uint size);
     [DllImport("kernel32.dll", SetLastError=true, EntryPoint="GetProcessInformation")] static extern bool GetThrottling(IntPtr process, int kind, ref Throttling value, uint size);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetProcessInformation(IntPtr process, int kind, ref uint value, uint size);
@@ -84,6 +95,32 @@ public static class RooIndustriesGovernorScenarioOracle {
     [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr process);
     [DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr process);
     [DllImport("gdi32.dll")] static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int value);
+    public static Process Start(string path, string arguments) {
+        var startup = new Startup { Size = Marshal.SizeOf(typeof(Startup)) };
+        CreatedProcess created;
+        if (!CreateProcess(path, new StringBuilder("\"" + path + "\" " + arguments), IntPtr.Zero, IntPtr.Zero, false, 0x08000024, IntPtr.Zero, null, ref startup, out created)) throw new System.ComponentModel.Win32Exception();
+        Process process = null;
+        bool transferred = false;
+        try {
+            process = Process.GetProcessById((int)created.ProcessId);
+            long nativeTime, heldTime, exitTime, kernelTime, userTime;
+            if (!GetProcessTimes(created.Process, out nativeTime, out exitTime, out kernelTime, out userTime) || !GetProcessTimes(process.Handle, out heldTime, out exitTime, out kernelTime, out userTime)) throw new System.ComponentModel.Win32Exception();
+            if (nativeTime != heldTime) throw new InvalidOperationException("Fixture creation identity changed.");
+            SetIo(created.Process, 2);
+            SetMemory(created.Process, 5);
+            if (GetPriorityClass(created.Process) != 32 || Io(created.Process) != 2 || Memory(created.Process) != 5) throw new InvalidOperationException("Fixture baseline could not be confirmed.");
+            if (ResumeThread(created.Thread) != 1) throw new System.ComponentModel.Win32Exception();
+            transferred = true;
+            return process;
+        } catch {
+            if (!TerminateProcess(created.Process, 1) || WaitForSingleObject(created.Process, 10000) != 0) throw new InvalidOperationException("Fixture initialization failed and its exact creation handle could not stop it.");
+            throw;
+        } finally {
+            CloseHandle(created.Thread);
+            CloseHandle(created.Process);
+            if (!transferred && process != null) process.Dispose();
+        }
+    }
     public static uint Memory(IntPtr p) { uint v; if(!GetProcessInformation(p,0,out v,4)) throw new System.ComponentModel.Win32Exception(); return v; }
     public static void SetMemory(IntPtr p, uint v) { if(!SetProcessInformation(p,0,ref v,4)) throw new System.ComponentModel.Win32Exception(); }
     public static string Qos(IntPtr p) { var t=new Throttling{Version=1}; if(!GetThrottling(p,4,ref t,12)) throw new System.ComponentModel.Win32Exception(); return (t.ControlMask&1)==0?"systemManaged":(t.StateMask&1)!=0?"eco":"high"; }
@@ -105,6 +142,7 @@ function Remove-ScenarioTree([string]$Path){
 }
 
 function Enter-Scenario([string]$Name){
+    $script:claimsProfile=$null;$script:claimsLocal=$null;$script:claimsData=$null;$script:claimsRules=$null
     $script:scenarioRoot=Join-Path $work ($Name+'-'+[Guid]::NewGuid().ToString('N').Substring(0,8))
     $script:policyParent=Join-Path $script:scenarioRoot 'data'
     $script:policyRoot=Join-Path $script:policyParent 'process-rules'
@@ -112,6 +150,12 @@ function Enter-Scenario([string]$Name){
     $script:roots=New-Object System.Collections.Generic.List[string]
     $script:tasks=New-Object System.Collections.Generic.List[string]
     $script:cleanups=New-Object System.Collections.Generic.List[scriptblock]
+    [IO.Directory]::CreateDirectory($script:scenarioRoot)|Out-Null
+    $scenarioAcl=(Get-Item -LiteralPath $script:scenarioRoot).GetAccessControl()
+    $scenarioAcl.SetAccessRuleProtection($true,$true)
+    $scenarioAcl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    $scenarioAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'Modify','ContainerInherit,ObjectInherit','None','Allow'))
+    (Get-Item -LiteralPath $script:scenarioRoot).SetAccessControl($scenarioAcl)
     [IO.Directory]::CreateDirectory($script:policyParent)|Out-Null
 }
 
@@ -124,11 +168,19 @@ function Exit-Scenario {
     }
     foreach($task in $script:tasks){if(Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $task -Confirm:$false}}
     foreach($probe in $script:probes){try {if(-not $probe.HasExited){$probe.Kill()};$probe.WaitForExit(10000)|Out-Null;$probe.Dispose()} catch {}}
-    $leaf=(Split-Path $script:scenarioRoot -Leaf).ToUpperInvariant()
-    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {[string]$_.CommandLine -like ('*'+(Split-Path $script:scenarioRoot -Leaf)+'*')})){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
+    $markerPrefix=[IO.Path]::GetFullPath($script:scenarioRoot).TrimEnd('\').ToUpperInvariant()+'\'
+    foreach($process in @(Get-CimInstance Win32_Process|Where-Object {[string]$_.CommandLine -like ('*'+$script:scenarioRoot+'*')})){
+        $owned=$null
+        try {
+            $owned=Get-Process -Id $process.ProcessId -ErrorAction Stop
+            $null=$owned.Handle
+            if([Math]::Abs(($owned.StartTime.ToUniversalTime()-$process.CreationDate.ToUniversalTime()).Ticks) -lt 10 -and -not $owned.HasExited){$owned.Kill();$owned.WaitForExit(10000)|Out-Null}
+        } catch {$problems.Add('Fixture process cleanup: '+$_.Exception.Message)}
+        finally {if($owned){$owned.Dispose()}}
+    }
     Start-Sleep -Milliseconds 500
     $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_ -like ('*\'+$leaf+'\*')})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
+    if($markers){foreach($name in @($markers.GetValueNames()|Where-Object {$_.StartsWith($markerPrefix,[StringComparison]::Ordinal)})){Remove-ItemProperty -LiteralPath $markers.PSPath -Name $name}}
     for($attempt=0;$attempt -lt 20 -and (Test-Path -LiteralPath $script:scenarioRoot);$attempt++){
         try {Remove-Item -LiteralPath $script:scenarioRoot -Recurse -Force -ErrorAction Stop} catch {Remove-ScenarioTree $script:scenarioRoot;Start-Sleep -Milliseconds 500}
     }
@@ -145,11 +197,9 @@ function Copy-Probe([string]$Name='RooIndustriesGovernorProbe.exe',[string]$Fold
 }
 
 function Start-Probe([string]$Path,[string]$Arguments='3600',[switch]$NoWait){
-    $info=[Diagnostics.ProcessStartInfo]::new($Path,$Arguments)
-    $info.UseShellExecute=$false;$info.CreateNoWindow=$true
-    $process=[Diagnostics.Process]::Start($info)
+    $process=[RooIndustriesGovernorScenarioOracle]::Start($Path,$Arguments)
     $script:probes.Add($process)
-    if(-not $NoWait){$null=Wait-Until {$process.Refresh();$null -ne $process.Handle -and $process.PriorityClass} 10}
+    if(-not $NoWait -and $null -eq (Wait-Until {$null -ne (Read-Controls $process)} 10)){throw 'Fixture controls were not observable within ten seconds.'}
     return $process
 }
 

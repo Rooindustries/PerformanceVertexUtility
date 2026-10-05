@@ -13,6 +13,13 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 
+if (args is ["governor-actions"])
+{
+    await GovernorChecks.Scheduled(Check);
+    Console.WriteLine($"Completed {count} governor action checks.");
+    return;
+}
+
 if (args is ["revisit"])
 {
     await RevisitChecks.RunAsync(Check);

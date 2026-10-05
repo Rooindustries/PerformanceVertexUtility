@@ -44,6 +44,14 @@ $scripts = Join-Path $install 'backend\scripts'
 $hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $system = [Environment]::GetFolderPath('System')
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:MigrationProbe = $null
+$script:MigrationProbeIdentity = $null
+$script:MigrationFile = $null
+$script:MigrationFileIdentity = $null
+$script:AppReceipt = $null
+$script:PersistentOutputTasks = @()
+$script:PersistentOutputProcesses = @()
 function Blocker-Receipts { @(foreach ($folder in (Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite'), (Join-Path $env:LOCALAPPDATA 'RooIndustriesOptimizationSuite')) { if (Test-Path -LiteralPath $folder) { Get-ChildItem -LiteralPath $folder -Recurse -Filter 'logitech-downloads.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } } }) }
 function Timer-Task { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' })[0] }
 function Timer-Pins($task) {
@@ -171,8 +179,9 @@ function Apply-Reviewed([string]$what, [string]$expect = 'Transparency', [string
     Tweaks-Idle | Out-Null
 }
 function Open-App {
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    if (@(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue).Count) { throw 'An app is already open; refusing to stop an unowned process.' }
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     $script:Win = $null
     $deadline = (Get-Date).AddSeconds(900)
     while ((Get-Date) -lt $deadline -and -not $script:Win) {
@@ -189,10 +198,31 @@ function Open-App {
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [MigrationU32]::ShowWindow($h, 9) | Out-Null; [MigrationU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [MigrationU32]::SetForegroundWindow($h) | Out-Null
 }
 
+function Read-MigrationProbeOwnership($State) {
+    if (-not $State.probeIdentity -or -not $State.probeFileIdentity -or -not $State.probeIdentity.creationTimeFileTimeUtc) { throw 'Migration ownership receipt is missing; resources retained.' }
+    if ([int]$State.probeId -ne [int]$State.probeIdentity.pid -or [IO.Path]::GetFullPath($State.probeFileIdentity.path) -ine [IO.Path]::GetFullPath($ProbePath)) { throw 'Migration ownership fields disagree; resources retained.' }
+    if ($State.probeIdentity.imagePath -ine [RooValidationOwnership.Native]::Canonical($ProbePath)) { throw 'Migration image ownership differs; resources retained.' }
+    [pscustomobject]@{probeIdentity=$State.probeIdentity;probeFileIdentity=$State.probeFileIdentity}
+}
+
+function Remove-MigrationProbe {
+    $stopped = $true
+    try {
+        if ($script:MigrationProbeIdentity) { Stop-OwnedProcessIdentity $script:MigrationProbeIdentity }
+        elseif ($script:MigrationProbe) { Stop-OwnedProcess $script:MigrationProbe }
+    } catch { $stopped = $false; Log ('CLEANUP NEEDED: migration probe retained: ' + $_.Exception.Message) }
+    if (-not $stopped) { return }
+    try {
+        if ($script:MigrationFile) { Remove-OwnedProbe $script:MigrationFile }
+        elseif ($script:MigrationFileIdentity) { $file = Open-OwnedProbe $script:MigrationFileIdentity; try { Remove-OwnedProbe $file } finally { $file.Dispose() } }
+    } catch { Log ('CLEANUP NEEDED: migration probe file retained: ' + $_.Exception.Message) }
+}
+
 $script:App = $null
 try {
     if ($Phase -eq 'before') {
         if (Test-Path -LiteralPath $BlockerFolder) { throw "$BlockerFolder already exists on this PC; refusing to change it." }
+        if ((Test-Path -LiteralPath $StatePath) -or (Test-Path -LiteralPath $ProbePath)) { throw 'Migration fixture already exists; recover it before starting.' }
         Open-App
         Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
         $undo = @(Undo-Texts)
@@ -215,8 +245,11 @@ try {
         $registryApplied = Transparency
         Check ($registryApplied -ne $registryBefore) 'the earlier version applied the tweak profile' "before=$registryBefore after=$registryApplied"
 
-        Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $ProbePath -Force
+        $script:MigrationFile = Copy-OwnedProbe (Join-Path $system 'PING.EXE') $ProbePath
+        $script:MigrationFileIdentity = $MigrationFile.Identity
         $probe = Start-Process $ProbePath -ArgumentList '-n', '7200', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $script:MigrationProbe = New-OwnedProcess $probe
+        $script:MigrationProbeIdentity = $MigrationProbe.Identity
         $probeId = $probe.Id
         (Get-Process -Id $probeId).PriorityClass = 'Normal'
         Check ((Probe-Priority $probeId) -eq 'Normal') 'the probe starts at normal priority (a process started by a scheduled task inherits below normal, so it is set explicitly)' ('priority=' + (Probe-Priority $probeId))
@@ -255,7 +288,9 @@ try {
         $oldWorkers = @(Any-Policy-Workers | Where-Object {$_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0} | ForEach-Object { [ordered]@{ pid = $_.ProcessId; created = $_.CreationDate.ToUniversalTime().ToString('o'); name = $_.Name } })
         $oldTasks = @(Policy-Tasks | ForEach-Object { $_.TaskName })
         Check ($oldWorkers.Count -ge 1 -and $oldTasks.Count -ge 1) 'the earlier version has a governor task and a running governor worker to replace' ('workers=' + $oldWorkers.Count + ' tasks=' + $oldTasks.Count)
-        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+        $script:PersistentOutputTasks = @(Policy-Tasks | ForEach-Object { Get-OwnedTaskReceipt $_.TaskName $_.TaskPath })
+        $script:PersistentOutputProcesses = @(Any-Policy-Workers | Where-Object { $_.CommandLine.IndexOf($oldRequest,[StringComparison]::OrdinalIgnoreCase) -ge 0 } | ForEach-Object { (New-OwnedProcess (Get-Process -Id $_.ProcessId)).Identity })
+        [ordered]@{ registryBefore = $registryBefore; registryApplied = $registryApplied; probeId = $probe.Id; probeStart = $probe.StartTime.ToUniversalTime().ToString('o'); probeIdentity = $MigrationProbeIdentity; probeFileIdentity = $MigrationFileIdentity; oldWorkers = $oldWorkers; oldTasks = $oldTasks; timerTask = $(if ($timerTask) { $timerTask.TaskName } else { '' }) } | ConvertTo-Json -Depth 5 | ForEach-Object { $bytes = [Text.Encoding]::UTF8.GetBytes($_); $file = [IO.File]::Open($StatePath, 'CreateNew', 'Write', 'Read'); try { $file.Write($bytes, 0, $bytes.Length) } finally { $file.Dispose() } }
     } elseif ($Phase -eq 'undo-blocker') {
         Open-App
         Restore-Profile $BlockerProfile 'Logitech' 'Transparency|timer|Hypervisor|SEHOP|IPv6|Firewall|Defender'
@@ -279,11 +314,17 @@ try {
         $timerWorker = $null; try { $timerWorker = WaitFor { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') })[0] } 60 'the timer worker' } catch {}
         Check ($null -ne $timerWorker -and $timerWorker.ExecutablePath -ieq $hostExe) 'the timer worker runs from the installed helper' ($(if ($timerWorker) { 'pid=' + $timerWorker.ProcessId + ' image=' + $timerWorker.ExecutablePath } else { 'no timer worker' }))
         Shot 'timer-on'
-        foreach ($worker in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') })) { Stop-ProcessRow $worker; Log ('stopped the timer worker pid ' + $worker.ProcessId + ' so it does not run through the later scenarios') }
+        $script:PersistentOutputTasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'RooIndustries.Timer.*' } | ForEach-Object { Get-OwnedTaskReceipt $_.TaskName $_.TaskPath })
+        $script:PersistentOutputProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $hostExe -and [string]$_.CommandLine -match '(^|\s)--timer-worker(\s|$)' -and [string]$_.CommandLine -like ('*'+$timerState+'*') } | ForEach-Object { (New-OwnedProcess (Get-Process -Id $_.ProcessId)).Identity })
     } else {
         $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
         Copy-Item -LiteralPath $StatePath -Destination (Join-Path $OutDir 'migration-state.json') -Force
+        $ownership = Read-MigrationProbeOwnership $state
+        $script:MigrationFile = Open-OwnedProbe $ownership.probeFileIdentity
+        $script:MigrationProbeIdentity = $ownership.probeIdentity
+        $script:MigrationFileIdentity = $ownership.probeFileIdentity
         $probe = Get-Process -Id $state.probeId -ErrorAction SilentlyContinue
+        if ($probe) { $script:MigrationProbe = New-OwnedProcess $probe; if ($MigrationProbe.Identity.creationTimeFileTimeUtc -cne $MigrationProbeIdentity.creationTimeFileTimeUtc -or $MigrationProbe.Identity.imagePath -ine $MigrationProbeIdentity.imagePath) { throw 'Migration process identity changed; retained.' } }
         Check ($null -ne $probe -and $probe.StartTime.ToUniversalTime().ToString('o') -eq $state.probeStart) 'the probe from before the upgrade is still running' ('pid=' + $state.probeId)
         $enforced = $null; try { $enforced = WaitFor { if ((Probe-Priority $state.probeId) -eq 'BelowNormal') { $true } } 150 'rule enforced after upgrade' } catch {}
         Check ([bool]$enforced) 'after the upgrade the governor still enforces the earlier rule' ('priority=' + (Probe-Priority $state.probeId))
@@ -302,12 +343,13 @@ try {
         Check ($null -ne $worker -and $old -notcontains ([string]$worker.ProcessId + '|' + $worker.CreationDate.ToUniversalTime().ToString('o'))) 'the governor worker running after the upgrade is the installed new one, not the worker of the earlier version' ($(if ($worker) { 'pid=' + $worker.ProcessId + ' image=' + $worker.ExecutablePath + ' earlier=' + ($old -join ',') } else { 'no governor worker from ' + $hostExe + ' for ' + $upgradedRequest }))
         if ($worker) { Check-Chain 'upgraded governor' $worker ([xml](Task-Xml $tasks[0].TaskName $tasks[0].TaskPath)).Task.Actions.Exec.Arguments }
         $fresh = Start-Process $ProbePath -ArgumentList '-n', '7200', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $freshReceipt = New-OwnedProcess $fresh
         try {
             (Get-Process -Id $fresh.Id).PriorityClass = 'Normal'
             $freshStart = Probe-Priority $fresh.Id
             $freshEnforced = $null; try { $freshEnforced = WaitFor { if ((Probe-Priority $fresh.Id) -eq 'BelowNormal') { $true } } 150 'rule applied to a new process after the upgrade' } catch {}
             Check ($freshStart -eq 'Normal' -and [bool]$freshEnforced) 'a process started after the upgrade gets the migrated rule from the new governor (starts Normal, reaches BelowNormal)' ("started at $freshStart, now " + (Probe-Priority $fresh.Id))
-        } finally { try { if (-not $fresh.HasExited) { $fresh.Kill() } } catch {} }
+        } finally { Stop-OwnedProcess $freshReceipt; $fresh.Dispose() }
         Open-App
         Log ('version ' + (Get-Item $Exe).VersionInfo.ProductVersion)
         $undo = @(Undo-Texts)
@@ -339,9 +381,11 @@ try {
     }
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    if ($Phase -eq 'after' -or $script:Failures -gt 0) { Get-Process RooIndustriesMigrationProbe -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; Remove-Item $ProbePath -Force -ErrorAction SilentlyContinue }
+    try { if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Stop-OwnedProcess $script:AppReceipt } } } catch { Log ('CLEANUP NEEDED: migration app retained: ' + $_.Exception.Message) }
+    if ($Phase -eq 'after' -or $script:Failures -gt 0) { Remove-MigrationProbe }
+    if ($script:MigrationFile) { $script:MigrationFile.Dispose() }
     if ($Phase -eq 'before' -and $script:Failures -gt 0) { Log ('CLEANUP NEEDED: the earlier version may have left the ' + $Profile + ' profile applied and the ' + $RuleName + ' rule saved; restore the profile and delete the rule in the app') }
+    if ($script:Failures -eq 0 -and $Phase -in 'before','timer-on') { [ordered]@{ scenario=('migration-' + $Phase); tasks=$script:PersistentOutputTasks; processes=$script:PersistentOutputProcesses } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutDir 'persistent-resources.json') -Encoding UTF8 }
     Log ('RESULT failures=' + $script:Failures)
     'x' | Set-Content (Join-Path $OutDir ('migration-' + $Phase + '.done'))
 }

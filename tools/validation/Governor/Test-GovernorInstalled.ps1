@@ -1,33 +1,68 @@
-param([Parameter(Mandatory=$true)][string]$Phase,[string]$Installer='')
+param([Parameter(Mandatory)][string]$Phase,[Parameter(Mandatory)][Alias('GIWork')][string]$Work,[Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$SourceManifestSha256,[Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{32}$')][string]$FixtureId,[string]$OwnerSha256='',[string]$Installer='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+if($Phase -in 'kill-setup','kill-setup-rerun','legacy-before'){throw 'This historical mode cannot prove exclusive child ownership. Use the retained tools/validation/SetupMigration/Test-SetupMigration.ps1 interrupted-Resume E2E; no mutation was performed.'}
+function Assert-GiProtected([string]$Path){
+ $p=[IO.Path]::GetFullPath($Path)
+ while($p){$item=Get-Item -LiteralPath $p -Force;if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Reparse fixture ancestry: '+$p)};$p=[IO.Path]::GetDirectoryName($p)}
+ $acl=Get-Acl -LiteralPath $Path
+ if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin 'S-1-5-18','S-1-5-32-544'){throw 'Fixture owner is not admin'}
+ foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin 'S-1-5-18','S-1-5-32-544' -and ([long]$ace.FileSystemRights -band 0x500D0156)){throw 'Fixture allows non-admin changes'}}
+}
+$Source=[IO.Path]::GetFullPath($Source).TrimEnd('\');$Work=[IO.Path]::GetFullPath($Work).TrimEnd('\')
+Assert-GiProtected $Source
+$manifestPath=Join-Path $Source 'source-verification.json'
+if((Get-FileHash -LiteralPath $manifestPath).Hash -ine $SourceManifestSha256){throw 'Source receipt changed'}
+$manifest=Get-Content -Raw -LiteralPath $manifestPath|ConvertFrom-Json
+$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($manifest.protocol -cne 'roo-industries-source-snapshot/v2' -or $manifest.machine -ine $env:COMPUTERNAME -or $manifest.sid -cne $sid -or $manifest.frameId -cne $FixtureId){throw 'Source fixture scope differs'}
+foreach($file in $manifest.files.PSObject.Properties){$path=[IO.Path]::GetFullPath((Join-Path $Source $file.Name));if(-not$path.StartsWith($Source+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Source traversal'};Assert-GiProtected ([IO.Path]::GetDirectoryName($path));if((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint -or (Get-FileHash -LiteralPath $path).Hash -ine $file.Value){throw ('Staged source changed: '+$file.Name)}}
+. (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
+function Get-GiDirectoryId([string]$Path){$handle=[RooValidationOwnership.Native]::CreateFile($Path,0,7,[IntPtr]::Zero,3,0x02200000,[IntPtr]::Zero);try{if($handle.IsInvalid){throw 'Cannot identify fixture folder'};[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}}
+$runRoot=Split-Path $Source -Parent
+if((Split-Path $Work -Parent) -ine $runRoot -or (Split-Path $Work -Leaf) -cne ('gi-'+$FixtureId)){throw 'GI work must be this source frame GUID child'}
+$ownerPath=Join-Path $Work 'fixture-owner.json';$statePath=Join-Path $Work 'state.json'
+if($Phase -eq 'initialize'){
+ if(Test-Path -LiteralPath $Work){throw 'Existing GI work retained; use its exact receipt or a fresh source frame'}
+ Assert-GiProtected $runRoot;[IO.Directory]::CreateDirectory($Work)|Out-Null;Assert-GiProtected $Work
+ $owner=[ordered]@{protocol='roo-industries-gi-owner/v1';machine=$env:COMPUTERNAME;sid=$sid;fixtureId=$FixtureId;source=$Source;sourceManifestSha256=$SourceManifestSha256;work=$Work;directoryId=(Get-GiDirectoryId $Work)}
+ [IO.File]::WriteAllText($ownerPath,($owner|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false));$OwnerSha256=(Get-FileHash -LiteralPath $ownerPath).Hash
+ [IO.File]::WriteAllText($statePath,(@{protocol='roo-industries-gi/v1';fixtureId=$FixtureId;ownerSha256=$OwnerSha256;probes=@()}|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
+}
+Assert-GiProtected $Work
+if(-not$OwnerSha256 -or -not(Test-Path -LiteralPath $ownerPath) -or (Get-FileHash -LiteralPath $ownerPath).Hash -ine $OwnerSha256){throw 'Missing or substituted GI ownership receipt; retained'}
+$fixtureOwner=Get-Content -Raw -LiteralPath $ownerPath|ConvertFrom-Json;$fixtureOwnerHash=$OwnerSha256
+if($fixtureOwner.protocol -cne 'roo-industries-gi-owner/v1' -or $fixtureOwner.machine -ine $env:COMPUTERNAME -or $fixtureOwner.sid -cne $sid -or $fixtureOwner.fixtureId -cne $FixtureId -or $fixtureOwner.source -ine $Source -or $fixtureOwner.sourceManifestSha256 -ine $SourceManifestSha256 -or $fixtureOwner.work -ine $Work -or $fixtureOwner.directoryId -cne (Get-GiDirectoryId $Work)){throw 'GI fixture identity differs; retained'}
+if(-not(Test-Path -LiteralPath $statePath)){throw 'GI state receipt missing; retained'}
+$state=Get-Content -Raw -LiteralPath $statePath|ConvertFrom-Json
+function Assert-GiState {
+ if($state.protocol -cne 'roo-industries-gi/v1' -or $state.fixtureId -cne $fixtureOwner.fixtureId -or $state.ownerSha256 -ine $fixtureOwnerHash -or -not$state.PSObject.Properties['probes']){throw 'Missing or substituted GI state; retained'}
+}
+Assert-GiState
 $app='C:\Program Files\Roo Industries\Optimization Suite'
 $hostExe=Join-Path $app 'backend\bin\optimizer\Optimizer.Host.exe'
 $workerScript=Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1'
-$work=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-installed'
-$statePath=Join-Path $work 'state.json'
 $local=[Environment]::GetFolderPath('LocalApplicationData')
-$markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-$currentRoot=Join-Path $local 'RooIndustriesOptimizationSuite';$legacyRoot=Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
-$dataRoot=if((Test-Path -LiteralPath $legacyRoot -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($currentRoot.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacyRoot.ToUpperInvariant()))){$legacyRoot}else{$currentRoot}
-$policyRoot=Join-Path $dataRoot 'process-rules'
-[IO.Directory]::CreateDirectory($work)|Out-Null
-$out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;user=[Security.Principal.WindowsIdentity]::GetCurrent().Name;policyRoot=$policyRoot;checks=@()}
+if(Test-Path -LiteralPath $app){. (Join-Path $app 'backend\scripts\BrandCompatibility.Common.ps1');$dataRoot=Get-RooIndustriesLocalDataRoot;if($state.dataRoot -and $dataRoot -ine $state.dataRoot){throw 'Installed governor data root changed; retained'}}else{$dataRoot=$state.dataRoot}
+$bootUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+$policyRoot=if($dataRoot){Join-Path $dataRoot 'process-rules'}else{$null}
+$out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;fixtureId=$FixtureId;ownerSha256=$OwnerSha256;policyRoot=$policyRoot;checks=@()}
 function Check([bool]$Condition,[string]$Message){$script:out.checks+=[ordered]@{passed=$Condition;check=$Message};if($Condition){"PASS $Message"}else{"FAIL $Message"}}
 $OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Host-Call([string]$Action,[hashtable]$Extra=@{}){
-    $request=@{schemaVersion=1;repoRoot=$app;policyRoot=$policyRoot;confirm=$true}
-    foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
-    if((Test-Path -LiteralPath $workerScript) -and ([IO.File]::ReadAllText($workerScript) -match "'-'")){
-        $result=(@(($request|ConvertTo-Json -Depth 12 -Compress)|& $hostExe $Action '-') -join "`n")|ConvertFrom-Json
-        if($result.status -ne 'completed'){throw ($Action+': '+$result.error.message)}
-        return $result.data
-    }
-    $path=Join-Path $work ('request-'+[Guid]::NewGuid().ToString('N')+'.json')
-    [IO.File]::WriteAllText($path,($request|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
-    try {$result=(@(& $hostExe $Action $path) -join "`n")|ConvertFrom-Json} finally {Remove-Item -LiteralPath $path -Force}
-    if($result.status -ne 'completed'){throw ($Action+': '+$result.error.message)}
-    return $result.data
+ if($Action -notin 'policy-status','process-status'){Assert-GiProductScope}
+ $request=@{schemaVersion=1;repoRoot=$app;policyRoot=$policyRoot;confirm=$true}
+ foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
+ $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
+ try{$text=@(($request|ConvertTo-Json -Depth 32 -Compress)|& $hostExe $Action '-' 2>&1)|ForEach-Object {[string]$_};$exit=$LASTEXITCODE}finally{$ErrorActionPreference=$previous}
+ $result=($text -join "`n")|ConvertFrom-Json
+ if($exit -ne 0 -or $result.status -cne 'completed'){throw ($Action+': '+$result.error.message)}
+ return $result.data
+}
+function Set-StateValue([string]$Name,$Value){if($state.PSObject.Properties[$Name]){$state.$Name=$Value}else{$state|Add-Member -NotePropertyName $Name -NotePropertyValue $Value}}
+function Save-State{
+ $tmp=$statePath+'.'+[Guid]::NewGuid().ToString('N')+'.tmp';[IO.File]::WriteAllText($tmp,($state|ConvertTo-Json -Depth 32),[Text.UTF8Encoding]::new($false))
+ if(Test-Path -LiteralPath $statePath){[IO.File]::Replace($tmp,$statePath,$statePath+'.previous-'+[Guid]::NewGuid().ToString('N'))}else{[IO.File]::Move($tmp,$statePath)}
 }
 Add-Type -TypeDefinition @'
 using System;
@@ -56,14 +91,127 @@ function Read-Controls([Diagnostics.Process]$Process){
 }
 function Same($Left,$Right){return (($Left|ConvertTo-Json -Compress) -eq ($Right|ConvertTo-Json -Compress))}
 function Wait-Until([scriptblock]$Condition,[double]$Seconds){$clock=[Diagnostics.Stopwatch]::StartNew();while($true){$met=$false;try{$met=[bool](& $Condition)}catch{};if($met){break};if($clock.Elapsed.TotalSeconds -ge $Seconds){return $null};Start-Sleep -Milliseconds 50};return [Math]::Round($clock.Elapsed.TotalSeconds,3)}
-$probeExe=Join-Path $work 'probe\RooIndustriesGovernorProbe.exe'
-function Start-Probe {
-    $info=[Diagnostics.ProcessStartInfo]::new($probeExe,'7200');$info.UseShellExecute=$false;$info.CreateNoWindow=$true
-    return [Diagnostics.Process]::Start($info)
+$probeExe=Join-Path $Work 'probe\RooIndustriesGovernorProbe.exe'
+function Assert-GiProbeReceipt($Row){
+ if(-not$Row -or -not$Row.identity -or -not$Row.file -or -not$Row.identity.pid -or -not$Row.identity.creationTimeFileTimeUtc -or -not$Row.identity.imagePath -or -not$Row.file.id -or -not$Row.file.hash -or $Row.file.path -ine $probeExe){throw 'Incomplete or foreign GI probe receipt; retained'}
+ $file=Open-OwnedProbe $Row.file
+ try{if($Row.identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($Row.file.path)){throw 'Probe receipt image differs; retained'}}finally{$file.Dispose()}
 }
-function Get-Probe([int]$Id){try{$p=Get-Process -Id $Id -ErrorAction Stop;if($p.Path -eq $probeExe){return $p}}catch{};return $null}
-function Tasks{@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like '*OptimizationSuite.ProcessRules.*'})}
-function Workers{@(Get-CimInstance Win32_Process|Where-Object {$_.Name -in @('Optimizer.Host.exe','dotnet.exe') -and [string]$_.CommandLine -match 'policy-run'})}
+function Get-GiProbe($Row){
+ Assert-GiProbeReceipt $Row
+ $p=Get-Process -Id $Row.identity.pid -ErrorAction SilentlyContinue
+ if(-not$p){return $null}
+ try{if([RooValidationOwnership.Native]::Created($p.Handle).ToString() -cne $Row.identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($p.Handle) -ine $Row.identity.imagePath){throw 'GI probe native identity differs; retained'};return $p}catch{$p.Dispose();throw}
+}
+function Get-Probe([int]$Id){$rows=@($state.probes|Where-Object {$_.identity.pid -eq $Id -and -not$_.stopped});if($rows.Count -ne 1){throw 'Probe has no unique retained receipt'};Get-GiProbe $rows[0]}
+function Start-Probe {
+ $file=Open-OwnedProbe $state.probeFile;$receipt=$null
+ try{$info=[Diagnostics.ProcessStartInfo]::new($probeExe,'7200');$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$p=[Diagnostics.Process]::Start($info);$receipt=New-OwnedProcess $p
+ $row=[pscustomobject]@{identity=$receipt.Identity;file=$state.probeFile;original=$null;stopped=$false;bootUtc=$bootUtc};Set-StateValue 'probes' @(@($state.probes)+@($row));Save-State
+ $row.original=Read-Controls $p;Save-State;return $p
+ }catch{if($receipt){Stop-OwnedProcess $receipt};throw}finally{$file.Dispose()}
+}
+function Stop-GiProbes {
+ foreach($row in @($state.probes|Where-Object {-not$_.stopped})){
+  Assert-GiProbeReceipt $row
+  if($bootUtc -and $row.bootUtc -and $row.bootUtc -cne $bootUtc){$row.stopped=$true;$row|Add-Member -NotePropertyName stopReason -NotePropertyValue 'observed reboot' -Force;Save-State;continue}
+  Stop-OwnedProcessIdentity $row.identity
+  $row.stopped=$true;Save-State
+ }
+}
+function Assert-GiRule {
+ if(-not$state.ruleId -or $state.ruleId -notmatch '^[0-9a-f]{32}$' -or -not$state.ruleSha256 -or -not$policyRoot){throw 'Missing rule receipt; retained'}
+ $path=Join-Path $policyRoot ('rules\'+$state.ruleId+'.json')
+ if(-not(Test-Path -LiteralPath $path) -or (Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint -or (Get-FileHash -LiteralPath $path).Hash -ine $state.ruleSha256){throw 'Owned rule changed; retained'}
+ return $path
+}
+function Remove-GiRule {
+ if($state.ruleDeleted){return}
+ $path=Assert-GiRule
+ Host-Call 'rule-delete' @{ruleId=$state.ruleId}|Out-Null
+ if(Test-Path -LiteralPath $path){throw 'Owned rule deletion did not complete'}
+ Set-StateValue 'ruleDeleted' $true;Save-State
+}
+function Tasks {
+ if(-not$policyRoot){return @()}
+ $hash=[Security.Cryptography.SHA256]::Create();try{$suffix=([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($sid+'|'+$policyRoot.ToUpperInvariant())))).Replace('-','').Substring(0,20)}finally{$hash.Dispose()}
+ $names=@(('RooIndustriesOptimizationSuite.ProcessRules.'+$suffix),('RooOptimizationSuite.ProcessRules.'+$suffix))
+ $tasks=@(Get-ScheduledTask -TaskName $names -TaskPath '\' -ErrorAction SilentlyContinue)
+ if($tasks.Count -gt 1){throw 'Both governor task identities exist; retained'}
+ foreach($task in $tasks){
+  $brand=if($task.TaskName -ceq $names[0]){'Roo Industries'}else{'Roo'}
+  try{$principalSid=if($task.Principal.UserId -match '^S-1-') {[Security.Principal.SecurityIdentifier]::new($task.Principal.UserId).Value}else{[Security.Principal.NTAccount]::new($task.Principal.UserId).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{throw 'Governor task principal cannot be identified; retained'}
+  if($task.Description -cne ($brand+' process rules | '+$sid+' | '+$policyRoot) -or $principalSid -cne $sid -or $task.Principal.GroupId){throw 'Governor task scope differs; retained'}
+  if(Test-Path -LiteralPath $hostExe){$expected=New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',(Join-Path $policyRoot 'worker-request.json')) (Split-Path $hostExe -Parent);if(@($task.Actions).Count -ne 1 -or $task.Actions[0].Execute -ine $expected.Execute -or $task.Actions[0].Arguments -cne $expected.Arguments -or $task.Actions[0].WorkingDirectory -ine $expected.WorkingDirectory){throw 'Governor task action differs; retained'}}
+ }
+ return $tasks
+}
+function Assert-GiProductScope {
+ if(-not(Test-Path -LiteralPath $app) -or -not$policyRoot -or $dataRoot -ine (Get-RooIndustriesLocalDataRoot)){throw 'Installed product root differs; retained'}
+ [void](Tasks)
+}
+function Workers {
+ if(-not(Test-Path -LiteralPath $hostExe)){return @()}
+ $status=Host-Call 'policy-status'
+ if($null -eq $status.hostRunning){throw 'Governor worker status identity unreadable'}
+ if(-not$status.hostRunning){return @()}
+ $identity=$status.state.host
+ if(-not$identity -or -not$identity.creationTimeFileTimeUtc -or $identity.executablePath -ine $hostExe){throw 'Governor status host identity differs'}
+ $p=Get-Process -Id $identity.processId -ErrorAction Stop
+ try{if([RooValidationOwnership.Native]::Created($p.Handle).ToString() -cne $identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($p.Handle) -ine [RooValidationOwnership.Native]::Canonical($hostExe)){throw 'Governor native host identity differs'}}finally{$p.Dispose()}
+ $row=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$identity.processId)
+ if(-not$row -or $row.ExecutablePath -ine $hostExe){throw 'Governor process row contradicts native identity'}
+ return @($row)
+}
+function Get-GiTaskWithoutEnabled([string]$Text) {
+ $xml=[xml]$Text;$ns=[Xml.XmlNamespaceManager]::new($xml.NameTable);$ns.AddNamespace('t',$xml.DocumentElement.NamespaceURI)
+ $node=$xml.SelectSingleNode('/t:Task/t:Settings/t:Enabled',$ns);if($node){[void]$node.ParentNode.RemoveChild($node)}
+ $xml.OuterXml
+}
+function Set-GiTaskDisabled {
+ $tasks=@(Tasks);if($tasks.Count -ne 1){throw 'Expected one exact governor task'}
+ $before=Get-OwnedTaskReceipt $tasks[0].TaskName $tasks[0].TaskPath
+ if($state.taskVisual){throw 'Earlier task fixture must be restored first'}
+ Set-StateValue 'taskVisual' ([pscustomobject]@{before=$before;after=$null;expectedEnabled=$false});Save-State;Assert-OwnedTaskUnchanged $before
+ $task=(Get-OwnedTaskFolder $before.path).GetTask($before.name);$task.Enabled=$false
+ $after=Get-OwnedTaskReceipt $before.name $before.path
+ if($after.sddl -cne $before.sddl -or (Get-GiTaskWithoutEnabled $after.xml) -cne (Get-GiTaskWithoutEnabled $before.xml) -or (Get-OwnedTaskFolder $after.path).GetTask($after.name).Enabled){throw 'Task changed beyond expected enabled state; retained'}
+ $state.taskVisual.after=$after;Save-State
+}
+function Restore-GiTask {
+ if(-not$state.taskVisual){return}
+ $r=$state.taskVisual
+ if(-not$r.after){throw 'Task fixture transition lacks final receipt; retained for recovery owner'}
+ Assert-OwnedTaskUnchanged $r.after
+ $before=[xml]$r.before.xml;$ns=[Xml.XmlNamespaceManager]::new($before.NameTable);$ns.AddNamespace('t',$before.DocumentElement.NamespaceURI)
+ $enabled=$before.SelectSingleNode('/t:Task/t:Settings/t:Enabled',$ns);$restoreEnabled=if($enabled){[Xml.XmlConvert]::ToBoolean($enabled.InnerText)}else{$true}
+ $task=(Get-OwnedTaskFolder $r.after.path).GetTask($r.after.name);$task.Enabled=$restoreEnabled
+ Assert-OwnedTaskUnchanged $r.before;Set-StateValue 'taskVisual' $null;Save-State
+}
+function Set-GiDamagedRule {
+ Assert-GiProductScope
+ $path=Join-Path $policyRoot ('rules\damaged-'+$FixtureId+'.json')
+ if($state.damagedRule -or (Test-Path -LiteralPath $path)){throw 'Existing damaged-rule fixture retained'}
+ $source=Join-Path $Work ('damaged-source-'+[Guid]::NewGuid().ToString('N')+'.json');[IO.File]::WriteAllText($source,'{ this is not a rule')
+ $file=Copy-OwnedProbe $source $path
+ try{Set-StateValue 'damagedRule' $file.Identity;Save-State}finally{$file.Dispose()}
+}
+function Remove-GiDamagedRule {
+ if(-not$state.damagedRule){throw 'Missing damaged-rule receipt; retained'}
+ if($state.damagedRule.path -ine (Join-Path $policyRoot ('rules\damaged-'+$FixtureId+'.json'))){throw 'Foreign damaged-rule path'}
+ $file=Open-OwnedProbe $state.damagedRule;try{Remove-OwnedProbe $file}finally{$file.Dispose()}
+ Set-StateValue 'damagedRule' $null;Save-State
+}
+function Invoke-GiCleanup {
+    Assert-GiState
+        if($state.taskVisual){Restore-GiTask}
+        if($state.damagedRule){Remove-GiDamagedRule}
+        if($state.ruleId -and -not$state.ruleDeleted){if(-not(Test-Path -LiteralPath $hostExe)){throw 'Installed rule-delete API is absent; retain rule for sealed recovery owner'};Remove-GiRule}
+        Stop-GiProbes
+        if($state.probeFile -and -not$state.probeFileRemoved){$file=Open-OwnedProbe $state.probeFile;try{Remove-OwnedProbe $file;Set-StateValue 'probeFileRemoved' $true;Save-State}finally{$file.Dispose()}}
+        $out.left=[ordered]@{ownedProbes=@($state.probes|Where-Object {-not$_.stopped}).Count;ownedRuleRemaining=($state.ruleId -and -not$state.ruleDeleted);evidenceRetained=(Test-Path -LiteralPath $Work)}
+        Check ($out.left.ownedProbes -eq 0 -and -not$out.left.ownedRuleRemaining -and $out.left.evidenceRetained) 'Fixture probes and only its GUID rule were cleaned; evidence retained'
+}
 function Describe-State {
     $result=[ordered]@{}
     $result.tasks=@(Tasks|ForEach-Object {[ordered]@{name=$_.TaskName;state=[string]$_.State;execute=$_.Actions[0].Execute;arguments=$_.Actions[0].Arguments;runLevel=[string]$_.Principal.RunLevel;triggers=@($_.Triggers|ForEach-Object {[ordered]@{kind=$_.CimClass.CimClassName;interval=$_.Repetition.Interval;duration=$_.Repetition.Duration}})}})
@@ -72,7 +220,7 @@ function Describe-State {
     Mark 'workers'
     $status=if(Test-Path -LiteralPath $hostExe){try{Host-Call 'policy-status'}catch{$_.Exception.Message}}else{'no host'}
     Mark 'status'
-    $result.hostRunning=$status.hostRunning;$result.stateStatus=$status.state.status;$result.hostPid=$status.state.host.processId
+    $result.hostRunning=$status.hostRunning;$result.stateStatus=$status.state.status;$result.hostPid=$status.state.host.processId;$result.hostIdentity=$status.state.host
     $result.instances=@($status.state.instances|ForEach-Object {[ordered]@{pid=$_.process.processId;status=$_.status;journal=$_.journalPath}})
     Mark 'instances'
     $result.ruleFiles=@(if(Test-Path -LiteralPath (Join-Path $policyRoot 'rules')){Get-ChildItem -LiteralPath (Join-Path $policyRoot 'rules') -Filter *.json|ForEach-Object {[ordered]@{name=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}}})
@@ -91,15 +239,20 @@ function Describe-State {
     return $result
 }
 function Mark([string]$Name){if($env:ROO_INDUSTRIES_GOVERNOR_TRACE){[IO.File]::AppendAllText($env:ROO_INDUSTRIES_GOVERNOR_TRACE,$Name+' '+[DateTime]::Now.ToString('HH:mm:ss.fff')+"`r`n")}}
-$state=if(Test-Path -LiteralPath $statePath){Get-Content -Raw -LiteralPath $statePath|ConvertFrom-Json}else{[pscustomobject]@{}}
-function Save-State{[IO.File]::WriteAllText($statePath,($state|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))}
-function Set-StateValue([string]$Name,$Value){if($state.PSObject.Properties[$Name]){$state.$Name=$Value}else{$state|Add-Member -NotePropertyName $Name -NotePropertyValue $Value}}
-
 switch($Phase){
+    'initialize' {Check $true 'Fresh protected fixture scope retained'}
+    'disable-task' {Set-GiTaskDisabled;Check $true 'Exact governor task disabled with receipt'}
+    'restore-task' {Restore-GiTask;Check $true 'Exact governor task restored byte for byte'}
+    'damage-rule' {Set-GiDamagedRule;Check $true 'GUID damaged rule fixture retained'}
+    'remove-damaged-rule' {Remove-GiDamagedRule;Check $true 'Exact damaged rule removed'}
+    'resume' {Assert-GiProductScope;$text=@(& $workerScript -Action Resume -PolicyRoot $policyRoot -ConfirmApply) -join "`n";$result=$text|ConvertFrom-Json;Check ($result.status -ceq 'completed') 'Exact installed governor resumed'}
     'describe' {$out.state=Describe-State}
     'create-rule' {
         [IO.Directory]::CreateDirectory((Split-Path $probeExe -Parent))|Out-Null
-        if(-not (Test-Path -LiteralPath $probeExe)){Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication}
+        if($state.ruleId -or $state.probeFile -or (Test-Path -LiteralPath $probeExe)){throw 'Existing fixture resources retained'}
+        $compiled=Join-Path $Work ('compile-'+[Guid]::NewGuid().ToString('N')+'.exe')
+        Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $compiled -OutputType ConsoleApplication
+        $file=Copy-OwnedProbe $compiled $probeExe;try{Set-StateValue 'probeFile' $file.Identity;Save-State}finally{$file.Dispose()}
         $probe=Start-Probe
         Wait-Until {$null -ne (Read-Controls $probe)} 15|Out-Null
         $original=Read-Controls $probe
@@ -117,7 +270,10 @@ switch($Phase){
             matchMode='path';executablePath=$probeExe;executableHash=$null;affinityTopologyHash=$topologyHash
             controls=@{cpuPriority=$cpuClass;affinity=@{group=0;mask='0x3'};ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
             cpuSelection=@{kind='logical';topologyHash=$topologyHash;processors=@(@{group=0;index=[int]$cpu.index});oneThreadPerCore=$false}}
+        Set-StateValue 'ruleId' $rule.ruleId;Set-StateValue 'dataRoot' $dataRoot;Save-State
+        if(Test-Path -LiteralPath (Join-Path $policyRoot ('rules\'+$rule.ruleId+'.json'))){throw 'GUID rule already exists; retained'}
         Host-Call 'rule-save' @{rule=$rule}|Out-Null
+        Set-StateValue 'ruleSha256' (Get-FileHash -LiteralPath (Join-Path $policyRoot ('rules\'+$rule.ruleId+'.json'))).Hash;Save-State
         $legacy=([IO.File]::ReadAllText($workerScript) -notmatch "'Sync'")
         $text=if($legacy){@(& $workerScript -Action Start -PolicyRoot $policyRoot -ConfirmApply) -join "`n"}else{@(& $workerScript -Action Sync -PolicyRoot $policyRoot -ConfirmApply) -join "`n"}
         $out.startResult=$text|ConvertFrom-Json
@@ -142,7 +298,7 @@ switch($Phase){
         Check (@($s.tasks).Count -eq 1 -and $s.tasks[0].state -ne 'Disabled' -and $s.tasks[0].execute -like '*\conhost.exe' -and $s.tasks[0].arguments -ceq (New-RooIndustriesElevatedTaskAction $hostExe @('policy-run',(Join-Path $policyRoot 'worker-request.json')) (Split-Path $hostExe -Parent)).Arguments -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskLogonTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1 -and @($s.tasks[0].triggers|Where-Object {$_.kind -eq 'MSFT_TaskTimeTrigger' -and $_.interval -eq 'PT1M'}).Count -eq 1) 'One enabled governor task runs the installed host headless with sign-in and one-minute triggers'
         Check ($s.rootOwner -eq 'BUILTIN\Administrators' -and $s.rootProtected -and @($s.rootAccess|Where-Object {$_ -match 'FullControl' -and $_ -notmatch '^(NT AUTHORITY\\SYSTEM|BUILTIN\\Administrators):'}).Count -eq 0) 'The rules folder is owned by Administrators with no inherited or user write access'
         Check (@($s.ruleFiles).Count -ge 1 -and @($s.ruleFiles|Where-Object {$_.name -eq ($state.ruleId+'.json')}).Count -eq 1) 'The saved rule is still present'
-        if($probe){Check (Same (Read-Controls $probe) $state.wanted) 'The long-running probe still has all 8 requested controls'}
+        Check ($probe -and (Same (Read-Controls $probe) $state.wanted)) 'The long-running probe still has all 8 requested controls'
         $fresh=Start-Probe
         $seconds=Wait-Until {Same (Read-Controls $fresh) $state.wanted} 10
         $out.newProcessSeconds=$seconds
@@ -153,7 +309,7 @@ switch($Phase){
         $out.powerShellPlan=@($plan.skippedControls|ForEach-Object {[string]$_.control+": "+[string]$_.category+" "+[string]$_.reason})
         $thrown=$null;try {Invoke-RooIndustriesProcessControlChange $fresh ([pscustomobject]@{control='priorityClass';proposedValue='High'})} catch {$thrown=$_.Exception.Message}
         Check (@($plan.changes).Count -eq 0 -and @($plan.skippedControls|Where-Object {$_.category -eq 'managed' -and $_.reason -eq 'Managed by the governor'}).Count -eq 2 -and $thrown -eq 'Managed by the governor' -and (Same (Read-Controls $fresh) $state.wanted)) 'GameTune, Background limits and Background profile skip or refuse fields the governor owns and report Managed by the governor'
-        $fresh.Kill();$fresh.WaitForExit()
+        $freshRow=@($state.probes|Where-Object {$_.identity.pid -eq $fresh.Id -and -not$_.stopped})[0];Stop-OwnedProcessIdentity $freshRow.identity;$freshRow.stopped=$true;Save-State;$fresh.Dispose()
     }
     'measure' {
         $s=Describe-State;$out.state=$s
@@ -170,36 +326,25 @@ switch($Phase){
     'app-cycle' {
         $before=Describe-State
         $exe=Join-Path $app 'app\RooIndustries.OptimizationSuite.App.exe'
-        $process=Start-Process $exe -PassThru
+        if(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue){throw 'An app is already running; retained'}
+        $process=Start-Process $exe -PassThru;$appReceipt=New-OwnedProcess $process
+        try {
         Start-Sleep -Seconds 20
         $during=Describe-State
         $process.CloseMainWindow()|Out-Null
-        if(-not $process.WaitForExit(20000)){$process.Kill()}
+        if(-not $process.WaitForExit(20000)){Stop-OwnedProcess $appReceipt}
         Start-Sleep -Seconds 3
         $after=Describe-State
         $probe=Get-Probe $state.probePid
         $out.before=$before;$out.during=$during;$out.after=$after
-        Check ($before.hostPid -and $before.hostPid -eq $during.hostPid -and $during.hostPid -eq $after.hostPid -and $after.hostRunning -eq $true) 'Opening and closing the app leaves the same governor running'
-        if($probe){Check (Same (Read-Controls $probe) $state.wanted) 'The probe keeps its rules after the app closes'}
+        Check ($before.hostIdentity -and (Same $before.hostIdentity $during.hostIdentity) -and (Same $during.hostIdentity $after.hostIdentity) -and $after.hostRunning -eq $true) 'Opening and closing the app leaves the same governor running'
+        Check ($probe -and (Same (Read-Controls $probe) $state.wanted)) 'The probe keeps its rules after the app closes'
+        }finally{Stop-OwnedProcess $appReceipt;$process.Dispose()}
     }
-    'legacy-before' {
-        $before=Describe-State;$out.before=$before
-        $scriptPath=Join-Path $work 'limited.ps1';$result=Join-Path $work 'limited.json';Remove-Item -LiteralPath $result -ErrorAction SilentlyContinue
-        [IO.File]::WriteAllText($scriptPath,("`$r=[ordered]@{elevated=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}`ntry{[IO.File]::WriteAllText('"+(Join-Path $policyRoot 'rules\planted-by-user.txt')+"','x');`$r.createInRules='allowed'}catch{`$r.createInRules='denied: '+`$_.Exception.Message}`n`$r|ConvertTo-Json|Set-Content -LiteralPath '"+$result+"'"),[Text.UTF8Encoding]::new($true))
-        $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes([IO.File]::ReadAllText($scriptPath)))
-        Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -Wait
-        Wait-Until {Test-Path -LiteralPath $result} 60|Out-Null
-        $out.limited=Get-Content -Raw -LiteralPath $result|ConvertFrom-Json
-        Remove-Item -LiteralPath (Join-Path $policyRoot 'rules\planted-by-user.txt') -Force -ErrorAction SilentlyContinue
-        Check ($out.limited.elevated -eq $false -and $out.limited.createInRules -eq 'allowed') 'BEFORE: a non-elevated process of the same user can write into the rules folder of the earlier version'
-        $pid0=$before.hostPid
-        Stop-Process -Id $pid0 -Force
-        Start-Sleep -Seconds 95
-        $after=Describe-State;$out.afterKill=$after
-        Check ($after.hostRunning -ne $true) 'BEFORE: a killed worker of the earlier version is not restarted within 95 seconds'
-        $text=@(& $workerScript -Action Stop -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
-        $text=@(& $workerScript -Action Start -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
-        $out.restarted=Describe-State
+    'new-paused-probe' {
+        $probe=Start-Probe
+        Set-StateValue 'probePid' $probe.Id;Save-State
+        Check (Same (Read-Controls $probe) $state.original) 'A new probe after the paused reboot retains all 8 original controls'
     }
     'new-probe' {
         $probe=Start-Probe
@@ -209,75 +354,29 @@ switch($Phase){
         Check ($null -ne $seconds) ('A new long-running probe gets all 8 controls ('+$seconds+' s)')
     }
     'pause' {
+        Assert-GiProductScope
         $text=@(& $workerScript -Action Pause -PolicyRoot $policyRoot -ConfirmApply) -join "`n"
         $out.pauseResult=$text|ConvertFrom-Json
         $probe=Get-Probe $state.probePid
         $s=Describe-State;$out.state=$s
         Check ($out.pauseResult.status -eq 'completed' -and $out.pauseResult.data.paused -and @($s.workers).Count -eq 0 -and @($s.tasks).Count -eq 1 -and $s.tasks[0].state -eq 'Disabled') 'Pause stops the installed governor and disables its task'
-        if($probe){Check (Same (Read-Controls $probe) $state.original) 'Pause gives the probe its original 8 controls back'}
+        Check ($probe -and (Same (Read-Controls $probe) $state.original)) 'Pause gives the probe its original 8 controls back'
     }
     'verify-paused' {
         $probe=Get-Probe $state.probePid
         $s=Describe-State;$out.state=$s
         Check (@($s.tasks).Count -eq 1 -and $s.tasks[0].state -eq 'Disabled' -and @($s.workers).Count -eq 0 -and [string]$s.governorJson -match '"paused":\s*true') 'After setup the governor is still paused: task disabled, no worker, pause kept'
-        if($probe){Check (Same (Read-Controls $probe) $state.original) 'After setup the paused rules are not applied to the probe'}
+        Check ($probe -and (Same (Read-Controls $probe) $state.original)) 'After setup the paused rules are not applied to the probe'
         Start-Sleep -Seconds 75
         $later=Describe-State;$out.later=$later
-        Check (@($later.workers).Count -eq 0 -and $later.tasks[0].state -eq 'Disabled' -and (-not $probe -or (Same (Read-Controls $probe) $state.original))) 'Seventy-five seconds later nothing restarted the paused governor'
+        Check (@($later.workers).Count -eq 0 -and $later.tasks[0].state -eq 'Disabled' -and ($probe -and (Same (Read-Controls $probe) $state.original))) 'Seventy-five seconds later nothing restarted the paused governor'
     }
-    'kill-setup' {
-        $probe=Get-Probe $state.probePid
-        $before=Describe-State;$out.before=$before
-        $setupLog=Join-Path $work 'setup-killed.log'
-        Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
-        $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
-        $started=[DateTime]::Now.AddSeconds(-2)
-        $suspended=Wait-Until {$log=Join-Path $app 'setup\governor-setup.log';(Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).LastWriteTime -ge $started -and ([IO.File]::ReadAllText($log) -match 'Suspend Suspended')} 120
-        $killed=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')}|Sort-Object {$_.ProcessId -eq $setup.Id})
-        foreach($process in $killed){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
-        [IO.File]::AppendAllText((Join-Path $work 'kill-progress.txt'),([DateTime]::UtcNow.ToString('o')+' killed '+(($killed|ForEach-Object {$_.Name+':'+$_.ProcessId}) -join ',')+"`r`n"))
-        $killedAt=[DateTime]::UtcNow
-        Start-Sleep -Seconds 2
-        $afterKill=Describe-State;$out.afterKill=[ordered]@{tasks=@($afterKill.tasks|ForEach-Object {$_.state});workers=@($afterKill.workers).Count;hostFile=$afterKill.hostFile.sha256}
-        $out.killedProcesses=@($killed|ForEach-Object {$_.Name+' '+$_.ProcessId})
-        $out.setupLogTail=@(Get-Content -LiteralPath $setupLog -Tail 5 -ErrorAction SilentlyContinue|ForEach-Object {[string]$_})
-        $watchdog=Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue
-        $out.watchdog=if($watchdog){[ordered]@{state=[string]$watchdog.State;actions=@($watchdog.Actions|ForEach-Object {$_.Arguments});triggers=@($watchdog.Triggers|ForEach-Object {[string]$_.CimClass.CimClassName+' '+$_.StartBoundary})}}else{$null}
-        Check ($null -ne $suspended -and $killed.Count -ge 1 -and @($afterKill.workers).Count -eq 0 -and $afterKill.tasks[0].state -eq 'Disabled' -and $null -ne $watchdog) 'Setup was killed right after it stopped the governor; the task is disabled and a recovery task is waiting'
-        Check ($afterKill.hostFile.sha256 -eq $before.hostFile.sha256 -and (Test-Path -LiteralPath $hostExe)) 'The killed setup left the installed files unchanged'
-        if($probe){Check (Same (Read-Controls $probe) $state.original) 'The stopped governor gave the probe its original values'}
-        $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 480
-        $out.recoveredSecondsAfterKill=if($back){[Math]::Round(([DateTime]::UtcNow-$killedAt).TotalSeconds,1)}else{$null}
-        $recovered=Describe-State;$out.recovered=[ordered]@{tasks=@($recovered.tasks|ForEach-Object {$_.state});workers=@($recovered.workers).Count;hostRunning=$recovered.hostRunning}
-        Check ($null -ne $back -and $recovered.tasks[0].state -ne 'Disabled') ('The governor came back on its own after the killed setup ('+$out.recoveredSecondsAfterKill+' s) and enforces the rule again')
-        Check ($null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'The recovery task removed itself'
-        $out.leftoverSetupFolders=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'is-*.tmp' -ErrorAction SilentlyContinue|ForEach-Object {$_.Name})
-    }
-    'kill-setup-rerun' {
-        $probe=Get-Probe $state.probePid
-        $setupLog=Join-Path $work 'setup-killed-rerun.log'
-        Remove-Item -LiteralPath $setupLog -ErrorAction SilentlyContinue
-        $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$setupLog+'"') -PassThru
-        $started=[DateTime]::Now.AddSeconds(-2)
-        $suspended=Wait-Until {$log=Join-Path $app 'setup\governor-setup.log';(Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).LastWriteTime -ge $started -and ([IO.File]::ReadAllText($log) -match 'Suspend Suspended')} 120
-        foreach($process in @(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -eq $setup.Id -or ($_.ExecutablePath -like '*\is-*.tmp\*' -and $_.Name -like 'RooIndustries-OptimizationSuite-*')})){Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue}
-        Start-Sleep -Seconds 2
-        $afterKill=Describe-State;$out.afterKill=[ordered]@{tasks=@($afterKill.tasks|ForEach-Object {$_.state});workers=@($afterKill.workers).Count}
-        $rerunLog=Join-Path $work 'setup-rerun.log'
-        $rerun=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$rerunLog+'"') -PassThru -Wait
-        $out.rerunExit=$rerun.ExitCode
-        $out.rerunLog=@(Get-Content -LiteralPath $rerunLog|Where-Object {$_ -match 'Governor|Suspend|Resume|recovery'}|ForEach-Object {[string]$_})
-        $back=Wait-Until {$d=Describe-State;$d.hostRunning -eq $true -and (-not $probe -or (Same (Read-Controls $probe) $state.wanted))} 60
-        $s=Describe-State;$out.state=[ordered]@{tasks=@($s.tasks|ForEach-Object {$_.state});hostRunning=$s.hostRunning}
-        Check ($null -ne $suspended -and $afterKill.tasks[0].state -eq 'Disabled' -and $rerun.ExitCode -eq 0 -and $null -ne $back -and $s.tasks[0].state -ne 'Disabled') 'Running setup again right after a killed setup brings the governor back and enforces the rule'
-        Check ($null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'No recovery task is left after the second setup'
-    }
-    'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
+    'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostIdentity' $s.hostIdentity;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
     'verify-replaced' {
         $s=Describe-State;$out.state=$s
-        Check ($s.hostRunning -eq $true -and $s.hostPid -ne $state.recordedHostPid) 'A new governor worker runs after setup'
+        Check ($s.hostRunning -eq $true -and $state.recordedHostIdentity -and $s.hostIdentity -and $s.hostIdentity.creationTimeFileTimeUtc -cne $state.recordedHostIdentity.creationTimeFileTimeUtc) 'A new governor worker runs after setup'
         Check ($s.hostFile.createdUtc -ne $state.recordedHostFile.createdUtc) 'Setup deleted and replaced the host files'
-        Check ((@($s.ruleFiles|ForEach-Object {$_.sha256}) -join ',') -eq (@($state.recordedRules|ForEach-Object {$_.sha256}) -join ',')) 'Setup kept the saved rules byte for byte'
+        Check ((Same @($s.ruleFiles|Sort-Object name) @($state.recordedRules|Sort-Object name))) 'Setup kept the saved rules byte for byte'
     }
     'verify-removed' {
         $probe=Get-Probe $state.probePid
@@ -291,17 +390,10 @@ switch($Phase){
         Check ($null -ne $keptMarkers -and $null -ne $keptMarkers.GetValue($dataRoot.ToUpperInvariant())) 'Uninstall kept the data folder protection marker'
         if($probe){Check (Same (Read-Controls $probe) $state.original) 'Uninstall gave the running probe its original 8 controls back'}else{Check $false 'The long-running probe is still alive to verify restoration'}
     }
-    'cleanup' {
-        Get-Process -Name 'RooIndustriesGovernorProbe' -ErrorAction SilentlyContinue|Stop-Process -Force
-        foreach($task in Tasks){Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}
-        foreach($worker in Workers){Stop-Process -Id $worker.ProcessId -Force -ErrorAction SilentlyContinue}
-        Start-Sleep -Seconds 1
-        if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force}
-        Get-ChildItem -LiteralPath $dataRoot -Directory -ErrorAction SilentlyContinue|Where-Object {$_.Name -like 'process-rules.*'}|Remove-Item -Recurse -Force
-        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
-        $out.left=[ordered]@{tasks=@(Tasks).Count;workers=@(Workers).Count;policyRoot=(Test-Path -LiteralPath $policyRoot);app=(Test-Path -LiteralPath $app)}
-    }
+    'cleanup' {Invoke-GiCleanup}
+    default {throw ('Unknown GI phase: '+$Phase)}
 }
-$json=$out|ConvertTo-Json -Depth 12
-if(Test-Path -LiteralPath $work){[IO.File]::WriteAllText((Join-Path $work ('phase-'+$Phase+'-'+[DateTime]::UtcNow.ToString('yyyyMMddHHmmss')+'.json')),$json,[Text.UTF8Encoding]::new($false))}
+$json=$out|ConvertTo-Json -Depth 20
+[IO.File]::WriteAllText((Join-Path $Work ('phase-'+$Phase+'-'+[Guid]::NewGuid().ToString('N')+'.json')),$json,[Text.UTF8Encoding]::new($false))
 $json
+if(@($out.checks|Where-Object {-not$_.passed}).Count){exit 1}

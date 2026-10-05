@@ -238,7 +238,7 @@ public static class GovernorProbe
         if (root.Element(ns + "Actions")?.Elements().ToArray() is not [{ } exec] || exec.Name != ns + "Exec") return false;
         var hostDirectory = Path.Combine(expected.InstallRoot, "backend", "bin", "optimizer");
         var launcher = Path.Combine(expected.InstallRoot, "backend", "scripts", "Start-RooIndustriesHelper.cmd");
-        var prefix = "--headless \"" + Path.Combine(expected.SystemDirectory, "cmd.exe") + "\" /d /v:off /c call \"" + launcher + "\" \" ?";
+        var prefix = "--headless \"" + Path.Combine(expected.SystemDirectory, "cmd.exe") + "\" /d /e:on /v:off /c set \"SystemRoot=" + Path.GetDirectoryName(expected.SystemDirectory) + "\"&call \"" + launcher + "\" \" ?";
         var arguments = Text(exec.Element(ns + "Arguments"));
         if (!Same(Text(exec.Element(ns + "Command")).Trim('"'), Path.Combine(expected.SystemDirectory, "conhost.exe")) || !Same(Text(exec.Element(ns + "WorkingDirectory")), hostDirectory)
             || !arguments.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !arguments.EndsWith('"')) return false;
