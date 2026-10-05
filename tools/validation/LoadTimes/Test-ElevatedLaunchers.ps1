@@ -293,7 +293,8 @@ if ($Part -in 'both', 'governor') {
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
         Pick 'ProcessPicker' ('*' + $probeName + '*')
-        Process-Status '^Controls for' 60 'probe controls' | Out-Null
+        Log ('picked ProcessPicker probe ' + $probeName + ' pid=' + $probeId)
+        Log (Process-Status '^Controls for' 60 'probe controls')
         Pick 'cpuPriority' 'Below normal'
         Invoke-Element (WaitFor { $b = ById 'ProcessPreview'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'review button')
         Process-Status '^Review the requested controls' 60 'process review' | Out-Null
