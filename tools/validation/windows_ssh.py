@@ -34,7 +34,24 @@ def invoke(host: str, machine: str, script: str, capture: bool = True):
     payload = guarded.encode('utf-8')
     if len(payload) > 65536:
         raise ValueError('Inline Windows SSH scripts are limited to 65536 UTF-8 bytes; transfer bulk data to a protected file and invoke its verified path.')
-    bootstrap = "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()));& ([scriptblock]::Create($s))}catch{Write-Error $_;exit 1}"
+    bootstrap = (
+        "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{"
+        "$a=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('S'),1);$b=$a.DefineDynamicModule('S').DefineType('RooSshLifetime',385);$ready=$b.DefineField('Ready',[bool],22);"
+        "$m=$b.DefinePInvokeMethod('Info','ntdll.dll','NtQueryInformationProcess',8214,1,[int],[type[]]@([IntPtr],[int],[IntPtr],[int],[int].MakeByRefType()),1,3);$m.SetImplementationFlags(128);"
+        "$d=[Diagnostics.Process];$m=$b.DefineMethod('Watch',22,[void],[type[]]@($d));$il=$m.GetILGenerator();$loop=$il.DefineLabel();$quit=$il.DefineLabel();$count=$il.DeclareLocal([int]);$o=[Reflection.Emit.OpCodes];$il.Emit($o::Ldc_I4,20);$il.Emit($o::Stloc_0);$il.MarkLabel($loop);"
+        "$il.Emit($o::Ldarg_0);$il.Emit($o::Ldc_I4,250);$il.Emit($o::Callvirt,$d.GetMethod('WaitForExit',[type[]]@([int])));$il.Emit($o::Brtrue,$quit);$il.Emit($o::Volatile);$il.Emit($o::Ldsfld,$ready);$il.Emit($o::Brtrue,$loop);"
+        "$il.Emit($o::Ldloc_0);$il.Emit($o::Ldc_I4_1);$il.Emit($o::Sub);$il.Emit($o::Stloc_0);$il.Emit($o::Ldloc_0);$il.Emit($o::Ldc_I4_0);$il.Emit($o::Bgt,$loop);$il.MarkLabel($quit);"
+        "$il.Emit($o::Ldc_I4_1);$il.Emit($o::Call,[Environment].GetMethod('Exit',[type[]]@([int])));$il.Emit($o::Ret);$native=$b.CreateType();"
+        "$child=$d::GetCurrentProcess();$ssh=$null;$size=[IntPtr]::Size*6;$z=[Runtime.InteropServices.Marshal];$buf=$z::AllocHGlobal($size);"
+        "try{for($i=0;$i -lt 12;$i++){[int]$written=0;if([RooSshLifetime]::Info($child.Handle,0,$buf,$size,[ref]$written) -ne 0 -or $written -ne $size){throw 'SSH ancestry unavailable'};"
+        "$parent=$d::GetProcessById($z::ReadIntPtr($buf,[IntPtr]::Size*5).ToInt32());$held=$parent.Handle;if($parent.StartTime -gt $child.StartTime){throw 'SSH ancestor identity changed'};"
+        "if([IO.Path]::GetFileName($parent.MainModule.FileName) -in 'sshd.exe','sshd-session.exe'){$ssh=$parent;break};$child=$parent}}finally{$z::FreeHGlobal($buf)};"
+        "if(-not$ssh){throw 'SSH session ancestor missing'};$watch=[Threading.Thread]::new([Delegate]::CreateDelegate([Threading.ThreadStart],$ssh,$native.GetMethod('Watch')));$watch.IsBackground=$true;$watch.Start();"
+        "$inputStream=[IO.BufferedStream]::new([Console]::OpenStandardInput(),4096);$line=[Text.StringBuilder]::new();"
+        "while($true){$c=$inputStream.ReadByte();if($c -lt 0){throw 'SSH payload ended before newline'};if($c -eq 10){break};if($line.Length -ge 87384){throw 'SSH payload exceeds 65536 bytes'};[void]$line.Append([char]$c)};"
+        "$native.GetField('Ready').SetValue($null,$true);$bytes=[Convert]::FromBase64String($line.ToString());if($bytes.Length -gt 65536){throw 'SSH payload exceeds 65536 bytes'};$s=[Text.Encoding]::UTF8.GetString($bytes);& ([scriptblock]::Create($s));if(-not$?){exit 1};exit 0"
+        "}catch{[Console]::Error.WriteLine($_.Exception.Message.Substring(0,[Math]::Min(2048,$_.Exception.Message.Length)));exit 1}"
+    )
     encoded = base64.b64encode(bootstrap.encode('utf-16le')).decode()
     command = 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + encoded
     return subprocess.run(['ssh', '-T', *SSH_OPTIONS, host, command],

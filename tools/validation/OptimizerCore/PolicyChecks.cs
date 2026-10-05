@@ -80,14 +80,17 @@ static class PolicyChecks
             var left = disabled.Single(instance => instance.Field == "memoryPriority");
             var leftJournal = OperationFiles.Read<ProcessControlJournal>(left.JournalPath);
             var leftChange = leftJournal.Changes.Single();
+            const string leftMessage = "Left as another program set it.";
             check(disabled.Length == 3 && disabled.All(instance => instance.Status == "restored") && disabled.Where(instance => instance.Field != "memoryPriority").All(instance => instance.ErrorKind is null && instance.Error is null)
-                && left.Relinquished && left.ErrorKind == "leftAsSet" && left.Error == ProcessControlEngine.LeftAsSet && leftJournal.Status == "restored"
-                && leftChange.Name == "memoryPriority" && leftChange.Status == "leftAsSet" && leftChange.ErrorKind == "leftAsSet" && leftChange.Error == ProcessControlEngine.LeftAsSet
+                && left.Relinquished && left.ErrorKind == "leftAsSet" && left.Error == leftMessage && leftJournal.Status == "restored"
+                && leftChange.Name == "memoryPriority" && leftChange.Status == "leftAsSet" && leftChange.ErrorKind == "leftAsSet" && leftChange.Error == leftMessage
                 && leftChange.Original.GetUInt32() == relaunchedOriginal && leftChange.Observed?.GetUInt32() == 4, "The disabled rule closes every instance and records the relinquished memory journal and instance as Left as another program set it.");
             store.Save(rule with { Enabled = true });
             host.Tick();
             check(Oracle.Memory(probe.Handle) == memory && Oracle.Gpu(probe.Handle) == gpu, "Turning the rule back on applies its fields again");
-            check(host.Stop().Status == "stopped" && Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).SequenceEqual(relaunchedCpuSets) && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Policy stop restores the re-enabled rule's freshly captured originals and leaves no active controller");
+            var stopped = host.Stop();
+            check(stopped.Status == "stopped" && stopped.Host is null && stopped.Instances.All(instance => instance.Status is "restored" or "expired")
+                && Oracle.Memory(probe.Handle) == 4 && Oracle.CpuSets(probe.Handle).SequenceEqual(relaunchedCpuSets) && Oracle.Gpu(probe.Handle) == relaunchedGpu, "Policy stop restores the re-enabled rule's freshly captured originals and leaves no active controller");
             var overlapRejected = false;
             try { store.Save(rule with { RuleId = Guid.NewGuid().ToString("N") }); } catch (InvalidDataException) { overlapRejected = true; }
             check(overlapRejected, "Overlapping saved rules cannot fight over the same process field");
