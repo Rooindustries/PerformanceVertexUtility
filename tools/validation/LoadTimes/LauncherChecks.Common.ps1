@@ -40,7 +40,8 @@ function Product-Launcher([string]$executable, [string[]]$argumentList, [string]
 }
 function Product-ClearedNames {
     $command = '. ' + (Quote-Literal (Join-Path $scripts 'BrandCompatibility.Common.ps1')) + '; ConvertTo-Json -InputObject @($script:RooIndustriesClearedPrefixes) -Compress'
-    $prefixes = @(Invoke-Ps51 $command | ConvertFrom-Json)
+    $decoded = Invoke-Ps51 $command | ConvertFrom-Json
+    $prefixes = @($decoded)
     if (-not $prefixes.Count -or @($prefixes | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count) { throw 'The installed cleared-prefix list is null, empty or malformed.' }
     $runtime = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\..\backend\native\Optimizer.Core\RuntimeEnvironment.cs')
     $declaration = [regex]::Match($runtime, 'public static readonly string\[\] ClearPrefixes\s*=\s*\[([^\]]*)\];')
