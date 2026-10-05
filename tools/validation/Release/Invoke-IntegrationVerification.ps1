@@ -74,9 +74,9 @@ function Get-DataFolderState {
             $items=@(Get-Item -LiteralPath $path -Force)+@(Get-ChildItem -LiteralPath $path -Recurse -Force -ErrorAction Stop)
             $text=(@($items|ForEach-Object {
                 if(($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ('Cannot back up a reparse point: '+$_.FullName)}
-                $relative=$_.FullName.Substring($base.Length);$size=if($_.PSIsContainer){0}else{$_.Length};$hash=if($_.PSIsContainer){''}else{(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash};$ticks=$_.LastWriteTimeUtc.Ticks
+                $relative=$_.FullName.Substring($base.Length);$size=if($_.PSIsContainer){0}else{$_.Length};$hash=if($_.PSIsContainer){''}else{(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash};$lastWrite=if($_.PSIsContainer){[IO.Directory]::GetLastWriteTimeUtc($_.FullName)}else{[IO.File]::GetLastWriteTimeUtc($_.FullName)};$ticks=$lastWrite.Ticks
                 $line=$relative+'|'+$(if($_.PSIsContainer){'dir'}else{[string]$size+'|sha256='+$hash})+'|'+$ticks
-                $rows.Add([pscustomobject][ordered]@{root=$name;relative=$relative;kind=$(if($_.PSIsContainer){'directory'}else{'file'});size=$size;lastWriteFileTimeUtc=$_.LastWriteTimeUtc.ToFileTimeUtc().ToString();sha256=$hash;hashInput=$line})
+                $rows.Add([pscustomobject][ordered]@{root=$name;relative=$relative;kind=$(if($_.PSIsContainer){'directory'}else{'file'});size=$size;lastWriteFileTimeUtc=$lastWrite.ToFileTimeUtc().ToString();sha256=$hash;hashInput=$line})
                 $line
             })|Sort-Object) -join "`n"
             $name+'|'+$items.Count+'|'+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-','')
