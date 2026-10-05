@@ -38,6 +38,9 @@ static partial class DataFolderChecks
         Exception? originalFailure = null;
         try
         {
+            // Task Scheduler resolves dispatch type information through HKLM. Load the interfaces
+            // against real HKLM before the private-hive fixture hides that registration information.
+            WarmTimerUninstallDispatch(scheduler, folder, name, owner.UserSid, parent, ref registered);
             using var isolated = new DataRootPrivateHive(Path.Combine(parent, "machine.hive"));
             PolicyRootSecurity.Secure(root, DataFolder.Kind);
             OperationsFolder.Secure(Path.Combine(root, "operations"));
@@ -139,6 +142,64 @@ static partial class DataFolderChecks
             H.Delete(parent);
         }
         check(!Directory.Exists(parent) && FindTaskAbsent(name), "Timer uninstall fixtures, private hive and exact task are removed");
+    }
+
+    private static void WarmTimerUninstallDispatch(object scheduler, object folder, string name, string sid, string parent, ref bool registered)
+    {
+        var parts = new List<object>();
+        object Own(object value) { if (!parts.Any(item => ReferenceEquals(item, value))) parts.Add(value); return value; }
+        object Part(object target, string member, params object?[] arguments) => Own(GetTaskProperty(target, member, arguments)!);
+        try
+        {
+            var definition = Own(CallTaskMember(scheduler, "NewTask", 0)!);
+            SetTaskProperty(Part(definition, "RegistrationInfo"), "Description", "Roo Industries timer fixture metadata warm-up");
+            var principal = Part(definition, "Principal");
+            SetTaskProperty(principal, "UserId", sid); SetTaskProperty(principal, "LogonType", 3); SetTaskProperty(principal, "RunLevel", 0);
+            var settings = Part(definition, "Settings");
+            SetTaskProperty(settings, "Enabled", false); SetTaskProperty(settings, "ExecutionTimeLimit", "PT0S"); SetTaskProperty(settings, "MultipleInstances", 2);
+            SetTaskProperty(settings, "DisallowStartIfOnBatteries", false); SetTaskProperty(settings, "StopIfGoingOnBatteries", false); SetTaskProperty(settings, "StartWhenAvailable", true);
+            var trigger = Own(CallTaskMember(Part(definition, "Triggers"), "Create", 9)!); SetTaskProperty(trigger, "UserId", sid);
+            var action = Own(CallTaskMember(Part(definition, "Actions"), "Create", 0)!);
+            var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+            SetTaskProperty(action, "Path", Path.Combine(system, "cmd.exe")); SetTaskProperty(action, "Arguments", "/d /c exit 0"); SetTaskProperty(action, "WorkingDirectory", system);
+            registered = true;
+            var task = Own(CallTaskMember(folder, "RegisterTaskDefinition", name, definition, 2, sid, null, 3, null)!);
+            if ((bool)GetTaskProperty(task, "Enabled")!) throw new InvalidOperationException("The metadata warm-up task was enabled unexpectedly.");
+            var xml = (string)GetTaskProperty(task, "Xml")!;
+            var sddl = (string)CallTaskMember(task, "GetSecurityDescriptor", 7)!;
+            File.WriteAllText(Path.Combine(parent, "metadata-task.json"), System.Text.Json.JsonSerializer.Serialize(new { taskName = name, xml, sddl, disabled = true }));
+            var tasks = Own(CallTaskMember(folder, "GetTasks", 1)!);
+            object? listed = null;
+            for (var index = 1; index <= (int)GetTaskProperty(tasks, "Count")!; index++)
+            {
+                var item = Part(tasks, "Item", index);
+                if ((string)GetTaskProperty(item, "Name")! == name) { listed = item; break; }
+            }
+            if (listed is null) throw new InvalidOperationException("The metadata warm-up task was not in its native collection.");
+            var actual = Part(listed, "Definition");
+            _ = GetTaskProperty(Part(actual, "RegistrationInfo"), "Description");
+            var actualPrincipal = Part(actual, "Principal");
+            foreach (var property in new[] { "UserId", "LogonType", "RunLevel" }) _ = GetTaskProperty(actualPrincipal, property);
+            var actions = Part(actual, "Actions"); var triggers = Part(actual, "Triggers");
+            _ = GetTaskProperty(actions, "Count"); _ = GetTaskProperty(triggers, "Count");
+            var actualAction = Part(actions, "Item", 1); var actualTrigger = Part(triggers, "Item", 1);
+            foreach (var property in new[] { "Type", "Path", "Arguments", "WorkingDirectory" }) _ = GetTaskProperty(actualAction, property);
+            foreach (var property in new[] { "Type", "UserId" }) _ = GetTaskProperty(actualTrigger, property);
+            _ = GetTaskProperty(Part(actual, "Settings"), "Enabled");
+            var live = Own(CallTaskMember(folder, "GetTask", name)!);
+            if ((string)GetTaskProperty(live, "Xml")! != xml || (string)CallTaskMember(live, "GetSecurityDescriptor", 7)! != sddl)
+                throw new InvalidOperationException("The metadata warm-up task changed; cleanup refused.");
+            CallTaskMember(folder, "DeleteTask", name, 0);
+            try
+            {
+                Own(CallTaskMember(folder, "GetTask", name)!);
+                throw new InvalidOperationException("The metadata warm-up task remains after removal.");
+            }
+            catch (COMException error) when (error.HResult == unchecked((int)0x80070002)) { }
+            catch (FileNotFoundException) { }
+            registered = false;
+        }
+        finally { foreach (var part in parts.AsEnumerable().Reverse()) Marshal.FinalReleaseComObject(part); }
     }
 
     private static object? GetTaskProperty(object target, string member, params object?[] arguments) => InvokeTaskMember(target, member, BindingFlags.GetProperty, arguments);
