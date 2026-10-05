@@ -349,7 +349,7 @@ try {
         Apply-Reviewed 'timer on' 'timer' 'Transparency|Hypervisor|SEHOP|IPv6|Firewall|Defender|Logitech'
         $stateMade = $null; try { $stateMade = WaitFor { if ((Test-Path -LiteralPath $stateFile) -and (Get-Item -LiteralPath $stateFile).LastWriteTimeUtc -gt $stampBefore) { $true } } 90 'the timer state to be written' } catch {}
         Check ([bool]$stateMade) 'the new version starts the timer and creates its state folder outside the data folder' ($timerState + ' written=' + [bool]$stateMade)
-        $timerOutput = Timer-Ownership (Timer-Task) (Join-Path (Data-Root) 'operations\windows-timer') $stateFile [DateTime]::MinValue
+        $timerOutput = Timer-Ownership (Timer-Task) (Join-Path (Data-Root) 'operations\windows-timer') $stateFile ([DateTime]::MinValue)
         Check ($null -ne $timerOutput.process) 'the timer worker runs from the installed helper' ('pid=' + $timerOutput.process.pid + ' image=' + $timerOutput.process.imagePath + ' session=' + $timerOutput.sessionPath + ' sha256=' + $timerOutput.sessionSha256)
         Shot 'timer-on'
         $script:PersistentOutputTasks = @($timerOutput.task)
