@@ -195,12 +195,31 @@ function Read-MigrationTweakState {
 function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
 function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
+function Find-PickItem($combo, [string]$like) {
+    $item = @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0]
+    if ($item) { return $item }
+    $container = $null
+    if (-not $combo.TryGetCurrentPattern([Windows.Automation.ItemContainerPattern]::Pattern, [ref]$container)) { return $null }
+    $cursor = $null
+    for ($i = 0; $i -lt 1000; $i++) {
+        $cursor = $container.FindItemByProperty($cursor, $null, $null)
+        if (-not $cursor) { return $null }
+        $virtual = $null; $isVirtual = $cursor.TryGetCurrentPattern([Windows.Automation.VirtualizedItemPattern]::Pattern, [ref]$virtual)
+        $name = $cursor.Current.Name
+        if (-not $name -and $isVirtual) { $virtual.Realize(); $name = $cursor.Current.Name }
+        if ($name -notlike $like) { continue }
+        if ($isVirtual) { $virtual.Realize() }
+        $scroll = $null; if ($cursor.TryGetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern, [ref]$scroll)) { $scroll.ScrollIntoView() }
+        return $cursor
+    }
+    $null
+}
 function Pick([string]$id, [string]$like) {
     for ($attempt = 1; $attempt -le 4; $attempt++) {
         $combo = WaitFor { $c = ById $id; if ($c -and $c.Current.IsEnabled) { $c } } 60 "$id enabled"
         $pattern = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
         $pattern.Expand(); Start-Sleep -Milliseconds 700
-        $item = WaitFor { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0] } 20 "$id item $like"
+        $item = WaitFor { Find-PickItem $combo $like } 20 "$id item $like"
         try { $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select() }
         catch {
             if ($_.FullyQualifiedErrorId -ne 'ElementNotEnabledException' -or $attempt -eq 4) { throw }
