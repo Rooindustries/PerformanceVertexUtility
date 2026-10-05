@@ -126,7 +126,11 @@ function Uninstall-App {
     $uninstaller=Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue|Select-Object -First 1
     if(-not $uninstaller){return 'not installed'}
     Assert-RecoveryIdle
-    $p=Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+    Assert-SealedRecovery $Evidence
+    $nativeEvidence=Join-Path $Evidence ($Phase+'-uninstall-'+[Guid]::NewGuid().ToString('N'))
+    New-SealedDirectory $nativeEvidence
+    $script:NativeUninstallLog=Join-Path $nativeEvidence 'native-uninstall.log'
+    $p=Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="'+$script:NativeUninstallLog+'"') -Wait -PassThru
     for($i=0;$i -lt 60 -and (Test-Path -LiteralPath (Join-Path $app 'app'));$i++){Start-Sleep 1}
     'exit='+$p.ExitCode+' appLeft='+(Test-Path -LiteralPath (Join-Path $app 'app'))
 }
@@ -1259,8 +1263,16 @@ switch($Phase){
     }
     'uninstall' {
         $before=@(Get-ChildItem -LiteralPath $app -Filter 'unins*.exe' -ErrorAction SilentlyContinue).Count
+        $timerTasksBefore=@(Get-ScheduledTask -ErrorAction Stop|Where-Object TaskName -Like 'RooIndustries.Timer.*')
         Invoke-RecoveryUninstall
         Check ($before -ge 1) 'the installed app was uninstalled by its own uninstaller' 'verified successful exit and no installed writers'
+        $nativeLogExists=$script:NativeUninstallLog -and (Test-Path -LiteralPath $script:NativeUninstallLog -PathType Leaf)
+        Check ([bool]$nativeLogExists) 'the native uninstall log was retained in protected evidence' $script:NativeUninstallLog
+        $nativeLogText=if($nativeLogExists){Assert-SealedRecovery $script:NativeUninstallLog;[IO.File]::ReadAllText($script:NativeUninstallLog)}else{''}
+        foreach($timer in $timerTasksBefore){
+            Check ($nativeLogText -match ('(?m)removed: timer task '+[regex]::Escape($timer.TaskName)+'\s*$')) ('the native uninstall log confirms removed: timer task '+$timer.TaskName) $script:NativeUninstallLog
+            Check (@(Get-ScheduledTask -TaskName $timer.TaskName -TaskPath $timer.TaskPath -ErrorAction SilentlyContinue).Count -eq 0) ('the uninstall removed timer task '+$timer.TaskPath+$timer.TaskName) ''
+        }
         $entries=@((Get-MachineState).uninstallEntries)
         Check ($entries.Count -eq 0) 'the uninstall removed the product''s uninstall entry' ($entries -join ',')
         Check (@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue).Count -eq 0) 'the uninstall removed every governor task' ''
