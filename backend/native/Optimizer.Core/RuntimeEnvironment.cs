@@ -191,6 +191,11 @@ public static class RuntimeEnvironment
             foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
                 if (entry.Key is string name && entry.Value is string value && (DeveloperPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) || DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase)))
                     child[name] = value;
+#if ROO_INDUSTRIES_TEST_HOOKS
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            if (entry.Key is string name && entry.Value is string value && name.StartsWith("ROO_INDUSTRIES_TEST_", StringComparison.OrdinalIgnoreCase))
+                child[name] = value;
+#endif
         return child;
     }
 
