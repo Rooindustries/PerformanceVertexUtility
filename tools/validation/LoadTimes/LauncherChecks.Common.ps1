@@ -56,9 +56,12 @@ function Check-Chain([string]$label, $worker, [string]$actionArguments) {
     $cmd = if ($worker) { Process-Row $worker.ParentProcessId }
     $conhost = if ($cmd) { Process-Row $cmd.ParentProcessId }
     $actionTail = ($actionArguments -replace '^--headless\s+"[^"]*cmd\.exe"\s*', '')
+    $unquotedSetTail = $actionTail -creplace '^(/d /e:on /v:off /c set )"SystemRoot=([^"\r\n]+)"(&call )', '$1SystemRoot=$2$3'
+    $cmdArguments = if ($cmd) { $cmd.CommandLine -replace ('^(?:"' + [regex]::Escape($cmd.ExecutablePath) + '"|' + [regex]::Escape($cmd.ExecutablePath) + ')\s+'), '' }
+    $conhostArguments = if ($conhost) { $conhost.CommandLine -replace ('^(?:"' + [regex]::Escape($conhost.ExecutablePath) + '"|' + [regex]::Escape($conhost.ExecutablePath) + ')\s+'), '' }
     $chain = @($worker, $cmd, $conhost) | Where-Object { $_ } | ForEach-Object { [ordered]@{ pid = $_.ProcessId; parent = $_.ParentProcessId; name = $_.Name; image = $_.ExecutablePath; created = $_.CreationDate.ToUniversalTime().ToString('o'); commandLine = $_.CommandLine } }
     $chain | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutDir ('chain-' + ($label -replace '\W', '-') + '.json')) -Encoding UTF8
-    $ok = $worker -and $cmd -and $conhost -and $cmd.Name -eq 'cmd.exe' -and $cmd.ExecutablePath -ieq (Join-Path $system 'cmd.exe') -and $cmd.CommandLine -match '/c' -and $cmd.CommandLine.Contains($actionTail) -and $conhost.Name -eq 'conhost.exe' -and $conhost.ExecutablePath -ieq (Join-Path $system 'conhost.exe') -and $conhost.CommandLine -match '--headless' -and $cmd.CreationDate -ge $conhost.CreationDate -and $worker.CreationDate -ge $cmd.CreationDate
+    $ok = $worker -and $cmd -and $conhost -and $cmd.Name -eq 'cmd.exe' -and $cmd.ExecutablePath -ieq (Join-Path $system 'cmd.exe') -and ($cmdArguments -ceq $actionTail -or $cmdArguments -ceq $unquotedSetTail) -and $conhost.Name -eq 'conhost.exe' -and $conhost.ExecutablePath -ieq (Join-Path $system 'conhost.exe') -and $conhostArguments -ceq $actionArguments -and $cmd.CreationDate -ge $conhost.CreationDate -and $worker.CreationDate -ge $cmd.CreationDate
     Check ([bool]$ok) "$label worker's parent is the cmd.exe the registered action starts under conhost.exe --headless" (($chain | ForEach-Object { $_.name + '(' + $_.pid + ')' }) -join ' <- ')
 }
 
