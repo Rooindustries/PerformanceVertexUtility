@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.Optimizer;
@@ -21,6 +22,8 @@ static class BoundChecks
         [IO.File]::AppendAllText((Join-Path $state 'worker-calls.log'),"$PID $Action`n")
         if(Test-Path (Join-Path $state 'worker-hang')){
             $child=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\PING.EXE') -ArgumentList '-n','400','127.0.0.1' -WindowStyle Hidden -PassThru
+            $self=Get-Process -Id $PID
+            [IO.File]::WriteAllText((Join-Path $state 'worker-pids.txt.identity'),($PID.ToString()+':'+$self.StartTime.ToUniversalTime().Ticks+' '+$child.Id+':'+$child.StartTime.ToUniversalTime().Ticks))
             [IO.File]::WriteAllText((Join-Path $state 'worker-pids.txt'),"$PID $($child.Id)")
             $child.WaitForExit()
         }
@@ -60,6 +63,27 @@ static class BoundChecks
         catch (Exception error) { return (error, default, true); }
     }
 
+    static async Task<(Exception? Error, T? Value, bool Finished)> HungCall<T>(string state, Func<Task<T>> call)
+    {
+        var task = Task.Run(call);
+        try
+        {
+            if (await Task.WhenAny(task, Task.Delay(Safety)) != task) return (null, default, false);
+            try { return (null, await task, true); }
+            catch (Exception error) { return (error, default, true); }
+        }
+        finally
+        {
+            if (!task.IsCompleted)
+            {
+                KillTree(Path.Combine(state, "host-pids.txt"));
+                if (await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5))) == task)
+                    try { await task; } catch (Exception) { }
+                else throw new InvalidOperationException("The fixture helper did not settle after cleanup.");
+            }
+        }
+    }
+
     static int[] Pids(string file) => File.Exists(file) ? File.ReadAllText(file).Split(' ').Select(int.Parse).ToArray() : [];
 
     static bool Alive(int id)
@@ -78,8 +102,20 @@ static class BoundChecks
 
     static void KillTree(string file)
     {
+        if (!File.Exists(file + ".identity")) return;
+        var identities = File.ReadAllText(file + ".identity").Split(' ').Select(value => value.Split(':'))
+            .GroupBy(parts => int.Parse(parts[0])).ToDictionary(group => group.Key, group => long.Parse(group.First()[1]));
         foreach (var id in Pids(file))
-            try { using var process = Process.GetProcessById(id); process.Kill(entireProcessTree: true); } catch (Exception) { }
+            try
+            {
+                if (!identities.TryGetValue(id, out var started)) continue;
+                using var process = Process.GetProcessById(id);
+                _ = process.SafeHandle;
+                if (process.StartTime.ToUniversalTime().Ticks == started) process.Kill(entireProcessTree: true);
+            }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
+            catch (System.ComponentModel.Win32Exception) { }
     }
 
     static bool TimedOut(Exception? error) => error is TimeoutException timeout && timeout.Message == AppLog.TimedOut;
@@ -105,9 +141,183 @@ static class BoundChecks
         return new(plan, path, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
     }
 
+    static async Task<bool> Mutation(string action)
+    {
+        var state = NewState(action);
+        var service = Service(state);
+        var storage = Path.Combine(state, "operations");
+        using var target = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true })!;
+        try
+        {
+            var engine = new ProcessControlEngine(_ => false);
+            var plan = engine.Preview(target.Id, new() { ["cpuPriority"] = JsonSerializer.SerializeToElement("BelowNormal") });
+            var preview = Path.Combine(storage, "preview.json");
+            OperationFiles.Write(preview, plan);
+            var journal = Path.Combine(storage, "journal.json");
+            var review = new ProcessControlReview(plan, preview, OperationFiles.HashFile(preview), journal);
+            var rule = new SavedProcessRule
+            {
+                SchemaVersion = 1, RuleId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(), Name = "Bounds fixture", Enabled = false,
+                MatchMode = "path", ExecutablePath = plan.Identity.ExecutablePath, ExecutableHash = null, Controls = plan.Desired, CpuSelection = null,
+            };
+            var rulePath = Path.Combine(service.PolicyRoot, "rules", rule.RuleId + ".json");
+            var custom = Path.Combine(state, "constructor.json");
+            File.WriteAllText(custom, """{"switches":{"fixture":{"Type":"Registry","Header":"Bounds fixture","Params":{"Section":"User","Path":"Software\\RooIndustriesBoundsFixture","Name":"Fixture","ValueOn":"1","ValueOff":"0"}}}}""");
+            var savedCustom = Path.Combine(state, "custom-data", "settings", "custom-windows-settings.json");
+            var batch = Path.Combine(storage, "batch.json");
+            var partPreview = new ApplicationCleanupPreview
+            {
+                SchemaVersion = 1, Owner = OperationOwner.Current(), OperationId = Guid.NewGuid().ToString("N"), Source = Path.Combine(state, "fixture-source"),
+                AppId = "fixture:bounds", DisplayName = "Bounds fixture", ProviderIdentityHash = "fixture", InventoryHash = "fixture", Selection = [], Registry = null, Files = null,
+            };
+            var partPath = Path.Combine(storage, "part.json");
+            OperationFiles.Write(partPath, partPreview);
+            var batchPreviewPath = Path.Combine(storage, "batch-preview.json");
+            var batchPreview = CleanupBatch.Preview(batchPreviewPath, [new(partPath, OperationFiles.HashFile(partPath), Path.Combine(storage, "part-journal.json"))]);
+            OperationFiles.Write(batch, new CleanupBatchJournal
+            {
+                SchemaVersion = 1, PreviewPath = batchPreviewPath, ReviewHash = OperationFiles.HashFile(batchPreviewPath), Preview = batchPreview,
+                RestoreStarted = false, Status = "running", Entries = [new() { OperationId = partPreview.OperationId, Status = "pending" }], UpdatedAtUtc = DateTime.UtcNow,
+            });
+            var batchHash = OperationFiles.HashFile(batch);
+            async Task<JsonElement> Invoke()
+            {
+                object result = action switch
+                {
+                    "process-apply" => await service.ApplyControlsAsync(review),
+                    "process-restore" => await service.RestoreControlsAsync(journal),
+                    "rule-save" => await service.SaveRuleAsync(rule),
+                    "rule-delete" => await service.DeleteRuleAsync(rule.RuleId),
+                    "cleanup-batch-cancel" => await service.CancelCleanupBatchAsync(batch),
+                    "tweak-custom-import" => await service.ImportWindowsSettingsAsync(custom),
+                    _ => throw new InvalidOperationException(action),
+                };
+                return JsonSerializer.SerializeToElement(result, OperationFiles.Json);
+            }
+            bool Durable()
+            {
+                target.Refresh();
+                if (target.HasExited) return false;
+                return action switch
+                {
+                    "process-apply" or "process-restore" => OperationFiles.Read<ProcessControlJournal>(journal) is var saved && saved.Preview.OperationId == plan.OperationId &&
+                        saved.Changes.Single().Original.GetString() == plan.Original["cpuPriority"].Require().GetString() &&
+                        saved.Changes.Single().Desired.GetString() == "BelowNormal" && saved.Status == (action == "process-apply" ? "applied" : "restored") &&
+                        target.PriorityClass.ToString() == (action == "process-apply" ? "BelowNormal" : plan.Original["cpuPriority"].Require().GetString()),
+                    "rule-save" => OperationFiles.Read<SavedProcessRule>(rulePath) is var saved && saved.RuleId == rule.RuleId && saved.Controls["cpuPriority"].GetString() == "BelowNormal",
+                    "rule-delete" => !File.Exists(rulePath),
+                    "cleanup-batch-cancel" => OperationFiles.HashFile(batch) == batchHash && OperationFiles.Read<CleanupBatchCancellation>(batch + ".cancel").BatchId == batchPreview.BatchId,
+                    "tweak-custom-import" => OperationFiles.Read<CustomTweakFile>(savedCustom).Entries is [{ Name: "Bounds fixture" }],
+                    _ => false,
+                };
+            }
+            try
+            {
+                if (action == "process-restore") await service.ApplyControlsAsync(review);
+                if (action == "rule-delete") await service.SaveRuleAsync(rule);
+                if (action == "tweak-custom-import") await service.ImportWindowsSettingsAsync(custom);
+                var baseline = File.Exists(Path.Combine(state, "host-calls.log")) ? File.ReadAllLines(Path.Combine(state, "host-calls.log")).Length : 0;
+                var previousCustom = action == "tweak-custom-import" ? OperationFiles.HashFile(savedCustom) : null;
+                File.WriteAllText(Path.Combine(state, "host-hang-after"), "");
+                var watch = Stopwatch.StartNew();
+                var (error, value, finished) = await HungCall(state, Invoke);
+                var gone = await TreeGone(Path.Combine(state, "host-pids.txt"));
+                var preserved = Durable();
+                var pointer = !action.StartsWith("process-", StringComparison.Ordinal) || service.FindLastJournal("process") == journal;
+                var backup = previousCustom is null || OperationFiles.HashFile(savedCustom + ".previous.json") == previousCustom;
+                var released = !DataGeneration.Changing;
+                Console.WriteLine($"{action}: finished={finished}, error={error?.GetType().Name ?? "none"}, elapsedMs={watch.ElapsedMilliseconds}, treeGone={gone}, durable={preserved}, pointer={pointer}, backup={backup}, targetAlive={!target.HasExited}, changing={!released}, returned={value.ValueKind}");
+                if (!finished) return false;
+                File.Delete(Path.Combine(state, "host-hang-after"));
+                var (retryError, retried, done) = await Call(Invoke);
+                var retryState = Durable();
+                var pointerAfter = action != "process-restore" || service.FindLastJournal("process") is null;
+                var calls = File.ReadAllLines(Path.Combine(state, "host-calls.log")).Skip(baseline).ToArray();
+                var matching = calls.Length == 2 && calls.All(line => line.EndsWith(" " + action, StringComparison.Ordinal)) && calls[0].Split(' ')[0] != calls[1].Split(' ')[0];
+                Console.WriteLine($"{action}: retryDone={done}, retryError={retryError?.GetType().Name ?? "none"}, retryState={retryState}, recoveryPointerAfter={pointerAfter}, newHelper={matching}, changing={DataGeneration.Changing}, result={retried.ValueKind}");
+                return TimedOut(error) && value.ValueKind == JsonValueKind.Undefined && gone && preserved && pointer && backup && released && done && retryError is null && retryState && pointerAfter && matching && !DataGeneration.Changing;
+            }
+            finally
+            {
+                KillTree(Path.Combine(state, "host-pids.txt"));
+                if (File.Exists(journal)) engine.Restore(journal);
+            }
+        }
+        finally { if (!target.HasExited) { target.Kill(entireProcessTree: true); await target.WaitForExitAsync(); } }
+    }
+
+    static async Task<bool> EngineIntents()
+    {
+        var state = NewState("engine-intents");
+        var service = Service(state);
+        using var target = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true })!;
+        try
+        {
+            var engine = new ProcessControlEngine(_ => false);
+            var plan = engine.Preview(target.Id, new() { ["cpuPriority"] = JsonSerializer.SerializeToElement("BelowNormal") });
+            var preview = Path.Combine(state, "operations", "preview.json");
+            var journal = Path.Combine(state, "operations", "journal.json");
+            OperationFiles.Write(preview, plan);
+            var review = new ProcessControlReview(plan, preview, OperationFiles.HashFile(preview), journal);
+            void Seed(string status, string intent, string priority)
+            {
+                target.PriorityClass = Enum.Parse<ProcessPriorityClass>(priority);
+                var saved = OperationFiles.Read<ProcessControlJournal>(journal);
+                saved.Status = status;
+                saved.Changes.Single().Status = intent;
+                OperationFiles.Write(journal, saved);
+            }
+            try
+            {
+                await service.ApplyControlsAsync(review);
+                foreach (var priority in new[] { plan.Original["cpuPriority"].Require().GetString()!, "BelowNormal" })
+                {
+                    Seed("applying", "applyIntent", priority);
+                    var applied = await service.ApplyControlsAsync(review);
+                    target.Refresh();
+                    var good = applied.Status == "applied" && applied.Changes.Single().Status == "applied" && target.PriorityClass == ProcessPriorityClass.BelowNormal;
+                    Console.WriteLine($"applyIntent observed={priority}: reconciled={good}");
+                    if (!good) return false;
+                    Seed("applied", "restoreIntent", priority);
+                    var restored = await service.RestoreControlsAsync(journal);
+                    target.Refresh();
+                    good = restored.Status == "restored" && restored.Changes.Single().Status == "restored" && target.PriorityClass.ToString() == plan.Original["cpuPriority"].Require().GetString();
+                    Console.WriteLine($"restoreIntent observed={priority}: reconciled={good}");
+                    if (!good) return false;
+                }
+                Seed("applying", "applyIntent", "AboveNormal");
+                var conflict = await service.ApplyControlsAsync(review);
+                target.Refresh();
+                var refused = conflict.Status == "needsReconciliation" && target.PriorityClass == ProcessPriorityClass.AboveNormal;
+                Console.WriteLine("applyIntent foreign value AboveNormal: retained=" + refused);
+                if (!refused) return false;
+                Seed("applied", "restoreIntent", "AboveNormal");
+                conflict = await service.RestoreControlsAsync(journal);
+                target.Refresh();
+                refused = conflict.Status == "needsReconciliation" && target.PriorityClass == ProcessPriorityClass.AboveNormal && service.FindLastJournal("process") == journal;
+                Console.WriteLine("restoreIntent foreign value AboveNormal: retained=" + refused);
+                if (!refused) return false;
+                File.AppendAllText(preview, " ");
+                var (error, _, done) = await Call(() => service.ApplyControlsAsync(review));
+                Console.WriteLine("changed reviewed bytes: refused=" + (done && error is InvalidOperationException));
+                return done && error is InvalidOperationException && !DataGeneration.Changing;
+            }
+            finally
+            {
+                OperationFiles.Write(preview, plan);
+                if (File.Exists(journal))
+                {
+                    Seed("applied", "restoreIntent", "BelowNormal");
+                    engine.Restore(journal);
+                }
+            }
+        }
+        finally { if (!target.HasExited) { target.Kill(entireProcessTree: true); await target.WaitForExitAsync(); } }
+    }
+
     public static async Task Run(string repo, string? filter)
     {
-        root = Path.Combine(Path.GetTempPath(), "roo-industries-bounds-" + Guid.NewGuid().ToString("N"));
+        root = Path.Combine(repo, "bounds-fixtures", Guid.NewGuid().ToString("N"));
         var scripts = Path.Combine(root, "backend", "scripts");
         Directory.CreateDirectory(scripts);
         Directory.CreateDirectory(Path.Combine(root, "backend", "samples"));
@@ -136,19 +346,70 @@ static class BoundChecks
         }
         try
         {
+            await Scenario("cleanup-identity preserves a reused PID and terminates only a matching owned process", async () =>
+            {
+                var state = NewState("cleanup-identity");
+                var file = Path.Combine(state, "host-pids.txt");
+                using var target = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true })!;
+                try
+                {
+                    var started = target.StartTime.ToUniversalTime().Ticks;
+                    File.WriteAllText(file, target.Id + " " + target.Id);
+                    File.WriteAllText(file + ".identity", target.Id + ":" + (started - 1) + " " + target.Id + ":" + (started - 1));
+                    KillTree(file);
+                    await Task.Delay(100);
+                    if (target.HasExited) return false;
+                    File.WriteAllText(file + ".identity", target.Id + ":" + started + " " + target.Id + ":" + started);
+                    KillTree(file);
+                    var exited = target.WaitForExitAsync();
+                    return await Task.WhenAny(exited, Task.Delay(5000)) == exited && target.HasExited;
+                }
+                finally { if (!target.HasExited) { target.Kill(entireProcessTree: true); await target.WaitForExitAsync(); } }
+            });
+            await Scenario("ordinary-exceptional-cleanup stops an unbounded fixture helper at the safety cutoff", async () =>
+            {
+                var state = NewState("ordinary-exceptional-cleanup");
+                File.WriteAllText(Path.Combine(state, "host-hang"), "");
+                var service = Service(state);
+                service.HostReadTimeout = Timeout.InfiniteTimeSpan;
+                try
+                {
+                    var (_, _, finished) = await HungCall(state, () => service.ReadRulesAsync());
+                    return !finished && await TreeGone(Path.Combine(state, "host-pids.txt")) && !DataGeneration.Changing;
+                }
+                finally { KillTree(Path.Combine(state, "host-pids.txt")); }
+            });
             await Scenario("An ordinary Host read that hangs is bounded, its process tree exits, and retry succeeds", async () =>
             {
                 var state = NewState("read-timeout");
                 var hang = Path.Combine(state, "host-hang");
                 File.WriteAllText(hang, "");
                 var service = Service(state);
-                var (first, _, finished) = await Call(() => service.ReadRulesAsync());
-                var gone = await TreeGone(Path.Combine(state, "host-pids.txt"));
-                File.Delete(hang);
-                var (second, rules, retried) = await Call(() => service.ReadRulesAsync());
-                var calls = File.ReadAllLines(Path.Combine(state, "host-calls.log"));
-                return finished && TimedOut(first) && gone && retried && second is null && rules is { Length: 0 } && calls.Length == 2 && !DataGeneration.Changing;
+                try
+                {
+                    var (first, _, finished) = await HungCall(state, () => service.ReadRulesAsync());
+                    var gone = await TreeGone(Path.Combine(state, "host-pids.txt"));
+                    if (!finished) return false;
+                    File.Delete(hang);
+                    var (second, rules, retried) = await Call(() => service.ReadRulesAsync());
+                    var calls = File.ReadAllLines(Path.Combine(state, "host-calls.log"));
+                    return TimedOut(first) && gone && retried && second is null && rules is { Length: 0 } && calls.Length == 2 && !DataGeneration.Changing;
+                }
+                finally { KillTree(Path.Combine(state, "host-pids.txt")); }
             });
+            foreach (var action in new[] { "process-apply", "process-restore", "rule-save", "rule-delete", "cleanup-batch-cancel", "tweak-custom-import" })
+                await Scenario("mutation " + action + " times out after a durable commit, preserves state and retries", () => Mutation(action));
+            await Scenario("engine-intents reconcile original and desired values, preserve foreign changes and refuse changed previews", EngineIntents);
+            foreach (var action in new[] { "tweak-recover", "restore-point-create", "cleanup-batch-apply", "cleanup-batch-restore" })
+                await Scenario("exception " + action + " remains unbounded", async () =>
+                {
+                    var state = NewState(action);
+                    File.WriteAllText(Path.Combine(state, "host-slow"), "12000");
+                    var service = Service(state);
+                    var (error, _, done) = await Call(() => (Task<JsonElement>)typeof(OptimizerService).GetMethod("RunCoreAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .MakeGenericMethod(typeof(JsonElement)).Invoke(service, [action, new Dictionary<string, object?> { ["confirm"] = true }, CancellationToken.None, null, null])!);
+                    return done && error is null && !DataGeneration.Changing;
+                });
             await Scenario("Governor worker call that never answers is stopped with the timed-out message, its whole process tree is gone and no change stays marked", async () =>
             {
                 var state = NewState("worker-timeout");
@@ -278,8 +539,8 @@ static class BoundChecks
         finally
         {
             foreach (var (name, value) in previous) Environment.SetEnvironmentVariable(name, value);
-            try { Directory.Delete(root, true); } catch (Exception) { }
         }
+        Console.WriteLine("Retained bounds fixture: " + root);
         Console.WriteLine(ran + " bound scenarios ran, " + failures.Count + " failed.");
         if (ran == 0 || failures.Count > 0) throw new InvalidOperationException("Bound checks failed: " + string.Join("; ", failures));
     }

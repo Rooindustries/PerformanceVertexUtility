@@ -49,7 +49,7 @@ $hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $sessionExe = Join-Path $install 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe'
 $system = [Environment]::GetFolderPath('System')
 $clearNames = @('DOTNET_STARTUP_HOOKS', 'DOTNET_ADDITIONAL_DEPS', 'DOTNET_SHARED_STORE', 'CORECLR_ENABLE_PROFILING', 'CORECLR_PROFILER', 'CORECLR_PROFILER_PATH', 'CORECLR_PROFILER_PATH_32', 'CORECLR_PROFILER_PATH_64', 'CORECLR_PROFILER_PATH_ARM64', 'COR_ENABLE_PROFILING', 'COR_PROFILER', 'COR_PROFILER_PATH', 'COR_PROFILER_PATH_32', 'COR_PROFILER_PATH_64')
-$ruleName = 'roo-industries-launcher-check rule'
+$ruleName = 'roo-industries-launcher-check rule ' + [Guid]::NewGuid().ToString('N')
 $probeName = 'RooIndustriesLauncherProbe'
 $probePath = Join-Path $env:TEMP ($probeName + '.exe')
 $sessionLauncherPath = Join-Path $env:TEMP 'RooIndustriesProtectedLauncherProbe.exe'
@@ -59,6 +59,14 @@ $ifeo = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
 function Check([bool]$ok, [string]$name, [string]$detail) { if (-not $ok) { $script:Failures++ }; Log ($(if ($ok) { 'PASS ' } else { 'FAIL ' }) + $name + ' :: ' + $detail) }
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:AppReceipt = $null
+$probeFile = $null
+$sessionLauncherFile = $null
+$sessionGameFile = $null
+$probeReceipt = $null
+$secondReceipt = $null
+$sessionLauncherReceipt = $null
 function Shot([string]$name) {
     $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
     $b = New-Object Drawing.Bitmap $bounds.Width, $bounds.Height; $g = [Drawing.Graphics]::FromImage($b)
@@ -103,15 +111,16 @@ function Process-Status([string]$pattern, [double]$seconds, [string]$what) { Wai
 function Start-RooIndustriesApp {
     Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [LauncherCheckU32]::ShowWindow($h, 9) | Out-Null; [LauncherCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [LauncherCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { $script:Win.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
     $children=@(Child-Rows $script:App)
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    foreach($child in $children){Stop-ProcessRow $child}
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Stop-OwnedProcess $script:AppReceipt } }
+    foreach ($child in $children) { $current = Process-Row $child.ProcessId; if ($current -and $current.CreationDate -eq $child.CreationDate) { Log ('CLEANUP NEEDED: retained app child for its lifecycle owner: ' + $child.ProcessId) } }
+    if (@(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue).Count) { throw 'CLEANUP NEEDED: another app process remains; retained without an ownership receipt.' }
     Start-Sleep 1
 }
 function Data-Root {
@@ -120,37 +129,42 @@ function Data-Root {
     $current = Join-Path $local 'RooIndustriesOptimizationSuite'; $legacy = Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
     if ((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($markers -and $null -ne $markers.GetValue($current.ToUpperInvariant()) -and $null -eq $markers.GetValue($legacy.ToUpperInvariant()))) { $legacy } else { $current }
 }
-$plantKey = 'HKCU:\Environment'
 $plantName = 'DOTNET_STARTUP_HOOKS'
 $plantValue = 'C:\RooIndustriesNoSuchFolder\hook.dll'
 $script:Planted = $false
 $script:EnvironmentInherited = $false
 function Plant-Name {
-    if ($null -ne (Get-ItemProperty -LiteralPath $plantKey -Name $plantName -ErrorAction SilentlyContinue)) { throw ($plantName + ' is already set in the user environment; refusing to overwrite it.') }
-    New-ItemProperty -LiteralPath $plantKey -Name $plantName -Value $plantValue -PropertyType String | Out-Null
+    if ($script:EnvironmentConflict) { throw 'A concurrent environment write was retained; refusing another plant.' }
+    if (-not $script:plantRegistry) { $script:plantRegistry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true) }
+    if (-not $script:plantRegistry) { throw 'User environment key is missing; refusing to create it.' }
+    $script:PlantReceipt = Set-OwnedRegistryField $script:plantRegistry $plantName $plantValue 'String'
     $script:Planted = $true
-    Log ('planted ' + $plantName + ' (a path that does not exist) in the user environment, without a broadcast')
+    Log ('planted ' + $plantName + ' with an exact typed original field receipt, without a broadcast')
 }
 function Unplant-Name {
     if (-not $script:Planted) { return }
-    $current = (Get-ItemProperty -LiteralPath $plantKey -Name $plantName -ErrorAction SilentlyContinue).$plantName
-    if ($current -ceq $plantValue) { Remove-ItemProperty -LiteralPath $plantKey -Name $plantName; Log ('removed ' + $plantName + ' from the user environment') }
-    else { Log ('CLEANUP NEEDED: ' + $plantName + ' in the user environment is not the planted value; left as it is') }
+    try { Restore-OwnedRegistryField $script:PlantReceipt; Log ('restored original ' + $plantName + ' field') }
+    catch { $script:EnvironmentConflict = $true; Log ('CLEANUP NEEDED: environment field retained: ' + $_.Exception.Message) }
     $script:Planted = $false
 }
-function Test-Inheritance {
-    $controlPath = Join-Path $env:TEMP 'RooIndustriesEnvironmentControl.exe'
-    $controlTask = 'RooIndustries_EnvironmentControl'
+function Test-Inheritance(
+    [string]$controlPath = (Join-Path $env:TEMP 'RooIndustriesEnvironmentControl.exe'),
+    [string]$controlTask = 'RooIndustries_EnvironmentControl',
+    [string]$controlUserId = ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value),
+    [int]$controlLogonType = 3
+) {
     if((Test-Path -LiteralPath $controlPath) -or (Get-ScheduledTask -TaskName $controlTask -ErrorAction SilentlyContinue)){throw 'A previous environment control exists; it must be recovered before this scenario.'}
-    Copy-Item (Join-Path $system 'PING.EXE') $controlPath -Force
-    $action = New-ScheduledTaskAction -Execute (Join-Path $system 'conhost.exe') -Argument ('--headless "' + $controlPath + '" -n 60 127.0.0.1') -WorkingDirectory $env:TEMP
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Highest
+    $controlFile = Copy-OwnedProbe (Join-Path $system 'PING.EXE') $controlPath
+    $controlReceipt = $null
+    $controlTaskReceipt = $null
     $process = $null
     try {
-        Register-ScheduledTask -TaskName $controlTask -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) -Force | Out-Null
+        $controlTaskReceipt = Register-OwnedProbeTask $controlTask (Join-Path $system 'conhost.exe') ('--headless "' + $controlPath + '" -n 60 127.0.0.1') $env:TEMP $controlUserId 5 $controlLogonType
+        $controlStarted = [DateTime]::UtcNow
         Start-ScheduledTask -TaskName $controlTask
-        $row = WaitFor { @(Get-CimInstance Win32_Process -Filter "Name='RooIndustriesEnvironmentControl.exe'" -ErrorAction SilentlyContinue)[0] } 30 'the launcher-less control process'
+        $row = WaitFor { @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $controlPath -and $_.CreationDate.ToUniversalTime() -ge $controlStarted })[0] } 30 'the launcher-less control process'
         $process = Get-Process -Id $row.ProcessId -ErrorAction Stop
+        $controlReceipt = New-OwnedProcess $process
         $names = @(Env-Names ([LauncherCheckEnv]::Read([int]$row.ProcessId)))
         ($names | Sort-Object) | Set-Content -LiteralPath (Join-Path $OutDir 'environment-names-control.txt') -Encoding UTF8
         $inherited = $names -contains $plantName
@@ -158,10 +172,10 @@ function Test-Inheritance {
         $script:EnvironmentInherited = $inherited
     }
     finally {
-        Stop-ScheduledTask -TaskName $controlTask -ErrorAction SilentlyContinue
-        if ($process) { try { if (-not $process.HasExited) { $process.Kill() } } catch {} }
-        Unregister-ScheduledTask -TaskName $controlTask -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-Item $controlPath -Force -ErrorAction SilentlyContinue
+        try { Remove-OwnedTask $controlTaskReceipt } catch { Log ('CLEANUP NEEDED: control task retained: ' + $_.Exception.Message) }
+        try { Stop-OwnedProcess $controlReceipt } catch { Log ('CLEANUP NEEDED: control process retained: ' + $_.Exception.Message) }
+        try { Remove-OwnedProbe $controlFile } catch { Log ('CLEANUP NEEDED: control file retained: ' + $_.Exception.Message) }
+        $controlFile.Dispose()
     }
 }
 function Check-Environment([string]$label, $worker) {
@@ -188,6 +202,10 @@ $requestPath = $null
 $script:RuleSaved = $false
 $script:SessionRoot = $null
 $script:SessionTask = $null
+$script:SessionTaskReceipt = $null
+$script:SessionStopped = $false
+$script:SessionIfeoBefore = $null
+$script:SessionIfeoAfter = $null
 $script:PreviewDir = $null
 $script:StartedSessionDir = $null
 $ifeoBefore = Test-Path -LiteralPath $ifeo
@@ -198,7 +216,8 @@ try {
     $control = [Diagnostics.ProcessStartInfo]::new((Join-Path $system 'PING.EXE'), '-n 20 127.0.0.1'); $control.UseShellExecute = $false; $control.CreateNoWindow = $true
     $control.EnvironmentVariables['DOTNET_STARTUP_HOOKS'] = 'C:\RooIndustriesNoSuchFolder\hook.dll'
     $controlProcess = [Diagnostics.Process]::Start($control)
-    try { $controlEnv = @([LauncherCheckEnv]::Read($controlProcess.Id)) } finally { if(-not $controlProcess.HasExited){$controlProcess.Kill()};$controlProcess.Dispose() }
+    $directControlReceipt = New-OwnedProcess $controlProcess
+    try { $controlEnv = @([LauncherCheckEnv]::Read($controlProcess.Id)) } finally { Stop-OwnedProcess $directControlReceipt; $controlProcess.Dispose() }
     Check (@($controlEnv | Where-Object { $_ -like 'DOTNET_STARTUP_HOOKS=*' }).Count -eq 1) 'control: the environment reader sees DOTNET_STARTUP_HOOKS in a process that was started with it' ("variables read=" + $controlEnv.Count)
 }
 catch { $script:Failures++; Log ('FATAL list check ' + ($_ | Out-String)) }
@@ -207,8 +226,9 @@ if ($Part -in 'both', 'governor') {
     try {
         $rulesBefore = @(Policy-Tasks)
         if ($rulesBefore.Count) { throw "A governor task already exists on this PC ($($rulesBefore[0].TaskName)); refusing to add a test rule." }
-        Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $probePath -Force
+        $probeFile = Copy-OwnedProbe (Join-Path $system 'PING.EXE') $probePath
         $probe = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $probeReceipt = New-OwnedProcess $probe
         $probeId = $probe.Id
         (Get-Process -Id $probeId).PriorityClass = 'Normal'
         Check ((Probe-Priority $probeId) -eq 'Normal') 'the probe starts at normal priority (a process started by a scheduled task inherits below normal, so it is set explicitly)' ('priority=' + (Probe-Priority $probeId))
@@ -254,7 +274,8 @@ if ($Part -in 'both', 'governor') {
             $still = @(Policy-Workers $requestPath)
             Check ($worker -and $still.Count -ge 1 -and $still[0].ProcessId -eq $worker.ProcessId) 'with the app closed the same governor worker is still running' ("pid before=$(if ($worker) { $worker.ProcessId }) after=" + (($still | ForEach-Object { $_.ProcessId }) -join ','))
             $second = Start-Process $probePath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
-            $secondId = $second.Id
+            $secondReceipt = New-OwnedProcess $second
+        $secondId = $second.Id
             (Get-Process -Id $secondId).PriorityClass = 'Normal'
             $startedAt = Probe-Priority $secondId
             $later = $null; try { $later = WaitFor { if ((Probe-Priority $secondId) -eq 'BelowNormal') { $true } } 150 'rule applied to a later process' } catch {}
@@ -291,16 +312,31 @@ if ($Part -in 'both', 'governor') {
                 if ((Process-Status '^(Rule deleted|Couldn.t update the rule)' 180 'rule delete') -match '^Rule deleted') { $script:RuleSaved = $false; Log 'cleanup: deleted the governor test rule through the app' }
             } catch { Log ('cleanup: could not delete the governor test rule: ' + $_.Exception.Message) }
         }
-        Stop-RooIndustriesApp
+        try { Stop-RooIndustriesApp } catch { Log ('CLEANUP NEEDED: app cleanup retained resources: ' + $_.Exception.Message) }
         Unplant-Name
-        foreach ($started in @($probe, $second)) { if ($started) { try { if (-not $started.HasExited) { $started.Kill() } } catch {} } }
+        foreach ($owned in @($probeReceipt, $secondReceipt)) { try { Stop-OwnedProcess $owned } catch { Log ('CLEANUP NEEDED: probe retained: ' + $_.Exception.Message) } }
         if ($script:RuleSaved) {
-            foreach ($task in @(Policy-Tasks | Where-Object { $requestPath -and $_.Description.EndsWith((Split-Path $requestPath -Parent),[StringComparison]::OrdinalIgnoreCase) })) { try { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false; Log ('cleanup: removed governor task ' + $task.TaskName) } catch { Log ('CLEANUP NEEDED: remove scheduled task ' + $task.TaskName) } }
-            if ($requestPath) { Policy-Workers $requestPath | ForEach-Object { Stop-ProcessRow $_; Log 'cleanup: stopped the governor worker of this run' } }
+            Log 'CLEANUP NEEDED: governor tasks and workers retained for their saved-rule owner; no fallback ownership receipt exists.'
             Log ('CLEANUP NEEDED: the rule ' + $ruleName + ' may still be saved; delete it in Games > Processes')
         }
-        Remove-Item $probePath -Force -ErrorAction SilentlyContinue
+        try { Remove-OwnedProbe $probeFile } catch { Log ('CLEANUP NEEDED: probe file retained: ' + $_.Exception.Message) }
+        if ($probeFile) { $probeFile.Dispose() }
     }
+}
+function Get-LauncherIfeoFields {
+    $key = Get-Item -LiteralPath (Join-Path $ifeo 'PerfOptions') -ErrorAction SilentlyContinue
+    $fields = [ordered]@{}
+    try { foreach ($name in 'CpuPriorityClass','IoPriority','PagePriority') { $fields[$name] = if ($key) { Get-OwnedRegistryField $key $name } else { 'absent' } } }
+    finally { if ($key) { $key.Dispose() } }
+    $fields
+}
+function Invoke-LauncherSessionCleanup([string]$Root, [string]$Action) {
+    if ($Root -ine $script:ExpectedSessionRoot) { throw 'CLEANUP NEEDED: unexpected session root; retained' }
+    Assert-OwnedTaskUnchanged $script:SessionTaskReceipt
+    if (-not $script:SessionIfeoBefore -or -not $script:SessionIfeoAfter) { throw 'CLEANUP NEEDED: session registry ownership is missing; retained' }
+    $fields = Get-LauncherIfeoFields
+    foreach ($name in 'CpuPriorityClass','IoPriority','PagePriority') { if ($fields[$name] -cne $script:SessionIfeoAfter[$name] -and $fields[$name] -cne $script:SessionIfeoBefore[$name]) { throw ('CLEANUP NEEDED: session registry field changed; retained ' + $name) } }
+    Run-Script 'Invoke-ProtectedGameSession.ps1' @('-Action', $Action, '-SessionRoot', $Root, '-ConfirmApply')
 }
 function Launcher-State([int]$id) { [ordered]@{ affinity = '0x{0:X}' -f [int64](Get-Process -Id $id -ErrorAction Stop).ProcessorAffinity; memory = [LauncherCheckPriority]::Memory($id); io = [LauncherCheckPriority]::Io($id) } }
 function Session-Workers([string]$sessionRoot) { if (-not $sessionRoot) { return @() }; @(Get-CimInstance Win32_Process -Filter "Name='RooIndustries.SessionHost.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -ieq $sessionExe -and $_.CommandLine.IndexOf($sessionRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) }
@@ -308,9 +344,11 @@ if ($Part -in 'both', 'session') {
     $script:ExpectedSessionRoot = $null
     try {
         if ($ifeoBefore) { throw 'The protected-session probe image key already exists; refusing to overwrite it.' }
-        Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $sessionLauncherPath -Force
-        Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') $sessionGamePath -Force
+        $script:SessionIfeoBefore = Get-LauncherIfeoFields
+        $sessionLauncherFile = Copy-OwnedProbe (Join-Path $system 'PING.EXE') $sessionLauncherPath
+        $sessionGameFile = Copy-OwnedProbe (Join-Path $system 'PING.EXE') $sessionGamePath
         $sessionLauncher = Start-Process $sessionLauncherPath -ArgumentList '-n', '900', '127.0.0.1' -WindowStyle Hidden -PassThru
+        $sessionLauncherReceipt = New-OwnedProcess $sessionLauncher
         Start-Sleep 2
         $baseline = Launcher-State $sessionLauncher.Id
         $baselinePriority = Probe-Priority $sessionLauncher.Id
@@ -318,10 +356,13 @@ if ($Part -in 'both', 'session') {
         $wantedMask = $baselineMask -band (-$baselineMask)
         $wanted = [ordered]@{ affinity = '0x{0:X}' -f $wantedMask; memory = $(if ($baseline.memory -eq 3) { 4 } else { 3 }); io = $(if ($baseline.io -eq 1) { 2 } else { 1 }) }
         Check ($baselineMask -ne $wantedMask -and $wanted.memory -ne $baseline.memory -and $wanted.io -ne $baseline.io) 'the session will change the launcher probe from values it really has now (a different affinity, memory priority and I/O priority are requested)' ("launcher now: " + ($baseline | ConvertTo-Json -Compress) + " requested: " + ($wanted | ConvertTo-Json -Compress))
-        $script:PreviewDir = Join-Path (Data-Root) 'operations\game-session-roo-industries-launcher-check'
-        New-Item -ItemType Directory -Force -Path $script:PreviewDir | Out-Null
+        $script:PreviewDir = Join-Path (Data-Root) ('operations\game-session-roo-industries-launcher-check-' + [Guid]::NewGuid().ToString('N'))
+        if (Test-Path -LiteralPath $script:PreviewDir) { throw 'Session preview folder already exists; retained.' }
+        New-Item -ItemType Directory -Path $script:PreviewDir | Out-Null
         $controls = Join-Path $script:PreviewDir 'controls.json'
-        Set-Content -LiteralPath $controls -Value (@{ cpuPriority = 'AboveNormal'; ioPriority = $wanted.io; memoryPriority = $wanted.memory; affinity = @{ group = 0; mask = $wanted.affinity } } | ConvertTo-Json -Compress) -Encoding ASCII
+        $controlBytes = [Text.Encoding]::ASCII.GetBytes((@{ cpuPriority = 'AboveNormal'; ioPriority = $wanted.io; memoryPriority = $wanted.memory; affinity = @{ group = 0; mask = $wanted.affinity } } | ConvertTo-Json -Compress))
+        $controlFile = [IO.File]::Open($controls, 'CreateNew', 'Write', 'Read')
+        try { $controlFile.Write($controlBytes, 0, $controlBytes.Length) } finally { $controlFile.Dispose() }
         $previewPath = Join-Path $script:PreviewDir 'preview.json'
         $preview = Run-Script 'Invoke-ProtectedGameSession.ps1' @('-Action', 'Preview', '-LauncherProcessId', [string]$sessionLauncher.Id, '-GamePath', $sessionGamePath, '-ControlsPath', $controls, '-PreviewPath', $previewPath, '-AcceptLauncherScope')
         $previewData = Parse-Json $preview.text
@@ -330,12 +371,24 @@ if ($Part -in 'both', 'session') {
         Plant-Name
         $script:EnvironmentInherited = $false
         Test-Inheritance
+        if (-not $script:ExpectedSessionRoot) { throw 'Preview returned no expected session identity; refusing start.' }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $suffix = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($script:ExpectedSessionRoot.ToLowerInvariant())))).Replace('-', '').Substring(0, 16) } finally { $sha.Dispose() }
+        $expectedTaskName = 'Roo Industries Protected Session ' + $suffix
+        Assert-OwnedTaskAbsent $expectedTaskName
+        Assert-OwnedTaskAbsent ('Roo Protected Session ' + $suffix)
+        $fields = Get-LauncherIfeoFields
+        foreach ($name in 'CpuPriorityClass','IoPriority','PagePriority') { if ($fields[$name] -cne $script:SessionIfeoBefore[$name]) { throw ('Session registry changed before start; retained ' + $name) } }
+        $script:SessionIfeoAfter = [ordered]@{}
+        foreach ($entry in @(@('CpuPriorityClass',6),@('IoPriority',[int]$wanted.io),@('PagePriority',[int]$wanted.memory))) { $script:SessionIfeoAfter[$entry[0]] = ConvertTo-Json -InputObject ([ordered]@{kind=4;value=$entry[1]}) -Compress }
         $start = Run-Script 'Invoke-ProtectedGameSession.ps1' @('-Action', 'Start', '-PreviewPath', $previewPath, '-ReviewHash', [string]$previewData.data.reviewHash, '-ConfirmApply')
         Set-Content -LiteralPath (Join-Path $OutDir 'session-start.txt') -Value ('exit ' + $start.exit + "`n" + $start.text) -Encoding UTF8
         $startData = Parse-Json $start.text
         $script:SessionRoot = if ($startData) { $startData.data.sessionRoot } else { $null }
         if ($script:SessionRoot) { $script:StartedSessionDir = Split-Path $script:SessionRoot -Parent }
         $script:SessionTask = if ($startData) { $startData.data.taskName }
+        if ($script:SessionRoot -ine $script:ExpectedSessionRoot -or $script:SessionTask -cne $expectedTaskName) { throw 'Start returned an unexpected session identity; retained for recovery.' }
+        $script:SessionTaskReceipt = Get-OwnedTaskReceipt $script:SessionTask
         Check ($start.exit -eq 0 -and $startData.data.worker.state.status -eq 'armed' -and $startData.data.worker.hostRunning -eq $true) 'the protected session is armed and its worker is running' ("exit=$($start.exit) status=" + $startData.data.worker.state.status + " registry=" + $startData.data.worker.state.registryStatus + " job=" + $startData.data.worker.state.jobStatus)
         Check ((Test-Path -LiteralPath $ifeo) -and $startData.data.worker.state.registryStatus -eq 'applied' -and $startData.data.worker.state.jobStatus -eq 'applied') 'arming wrote the probe image launch settings and attached the job' ("ifeo key present=" + (Test-Path -LiteralPath $ifeo))
         $task = Get-ScheduledTask -TaskName $script:SessionTask -ErrorAction SilentlyContinue
@@ -356,15 +409,16 @@ if ($Part -in 'both', 'session') {
         try { $armedState = WaitFor { $s = Launcher-State $sessionLauncher.Id; if ($s.affinity -eq $wanted.affinity -and $s.memory -eq $wanted.memory -and $s.io -eq $wanted.io) { $s } } 30 'the launcher defaults while armed' } catch {}
         Check ($null -ne $armedState) 'while the session is armed the launcher has the requested affinity, memory priority and I/O priority' ("before=" + ($baseline | ConvertTo-Json -Compress) + " now=" + (Launcher-State $sessionLauncher.Id | ConvertTo-Json -Compress) + " requested=" + ($wanted | ConvertTo-Json -Compress))
         Shot 'session-armed'
-        $stop = Run-Script 'Invoke-ProtectedGameSession.ps1' @('-Action', 'Stop', '-SessionRoot', $script:SessionRoot, '-ConfirmApply')
+        $stop = Invoke-LauncherSessionCleanup $script:SessionRoot 'Stop'
         Set-Content -LiteralPath (Join-Path $OutDir 'session-stop.txt') -Value ('exit ' + $stop.exit + "`n" + $stop.text) -Encoding UTF8
         $stopData = Parse-Json $stop.text
         $state = $stopData.data.worker.state
         Check ($stop.exit -eq 0 -and $state.status -eq 'stopped' -and $state.registryStatus -eq 'restored' -and $state.jobStatus -eq 'cleared' -and $stopData.data.worker.hostRunning -eq $false) 'stopping the session reports it stopped with the launch settings restored and the job cleared' ("exit=$($stop.exit) status=" + $state.status + " registry=" + $state.registryStatus + " job=" + $state.jobStatus + " hostRunning=" + $stopData.data.worker.hostRunning)
-        if ($stop.exit -eq 0) { $script:SessionRoot = $null }
+        if ($stop.exit -eq 0) { $script:SessionRoot = $null; $script:SessionStopped = $true }
         $after = $null
         try { $after = WaitFor { $s = Launcher-State $sessionLauncher.Id; if ($s.affinity -eq $baseline.affinity -and $s.memory -eq $baseline.memory -and $s.io -eq $baseline.io) { $s } } 20 'the launcher defaults after the stop' } catch {}
-        Check (-not (Test-Path -LiteralPath $ifeo)) 'the probe image launch settings key is gone after the stop' $ifeo
+        $fields = Get-LauncherIfeoFields
+        Check (@('CpuPriorityClass','IoPriority','PagePriority' | Where-Object { $fields[$_] -cne $script:SessionIfeoBefore[$_] }).Count -eq 0) 'the probe image launch setting fields are restored after the stop' $ifeo
         $gone = $null
         try { $gone = WaitFor { if ($null -eq (Get-ScheduledTask -TaskName $script:SessionTask -ErrorAction SilentlyContinue) -and @(Session-Workers $script:ExpectedSessionRoot).Count -eq 0) { $true } } 20 'the session task and worker to go' } catch {}
         Check ([bool]$gone) 'the protected-session task and every SessionHost process of this session are gone after the stop' ("task=" + [bool](Get-ScheduledTask -TaskName $script:SessionTask -ErrorAction SilentlyContinue) + " workers=" + @(Session-Workers $script:ExpectedSessionRoot).Count)
@@ -373,29 +427,25 @@ if ($Part -in 'both', 'session') {
     catch { $script:Failures++; Log ('FATAL protected-session part ' + ($_ | Out-String)); try { Shot 'fatal-session' } catch {} }
     finally {
         Unplant-Name
-        $recoverRoot = if ($script:SessionRoot) { $script:SessionRoot } elseif ($script:ExpectedSessionRoot -and (Test-Path -LiteralPath (Join-Path $script:ExpectedSessionRoot 'session.json'))) { $script:ExpectedSessionRoot } else { $null }
+        $recoverRoot = if ($script:SessionStopped) { $null } elseif ($script:SessionRoot) { $script:SessionRoot } elseif ($script:ExpectedSessionRoot -and (Test-Path -LiteralPath (Join-Path $script:ExpectedSessionRoot 'session.json'))) { $script:ExpectedSessionRoot } else { $null }
         if ($recoverRoot) {
             foreach ($action in 'Stop', 'Recover') {
-                $run = Run-Script 'Invoke-ProtectedGameSession.ps1' @('-Action', $action, '-SessionRoot', $recoverRoot, '-ConfirmApply')
+                try { $run = Invoke-LauncherSessionCleanup $recoverRoot $action } catch { Log ('CLEANUP NEEDED: protected-session recovery refused: ' + $_.Exception.Message); break }
                 Log ("cleanup: $action exit=" + $run.exit)
                 if ($run.exit -eq 0) { $script:SessionRoot = $null; $recoverRoot = $null; break }
             }
             if ($recoverRoot) { Log ('CLEANUP NEEDED: stop or recover the protected session at ' + $recoverRoot) }
         }
-        $sessionTasks = @(Get-ScheduledTask -TaskName 'Roo Industries Protected Session *' -ErrorAction SilentlyContinue | Where-Object { ($script:SessionTask -and $_.TaskName -eq $script:SessionTask) -or ($script:ExpectedSessionRoot -and $_.Description.EndsWith($script:ExpectedSessionRoot, [StringComparison]::OrdinalIgnoreCase)) })
-        foreach ($leftoverTask in $sessionTasks) { Stop-ScheduledTask -TaskName $leftoverTask.TaskName -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $leftoverTask.TaskName -Confirm:$false -ErrorAction SilentlyContinue; Log ('cleanup: removed the session task ' + $leftoverTask.TaskName) }
-        if (-not $ifeoBefore -and (Test-Path -LiteralPath $ifeo)) { Remove-Item -LiteralPath $ifeo -Recurse -Force -ErrorAction SilentlyContinue; Log ('cleanup: removed ' + $ifeo) }
-        if ($sessionLauncher) { try { if (-not $sessionLauncher.HasExited) { $sessionLauncher.Kill() } } catch {} }
-        $operationsRoot = Join-Path (Data-Root) 'operations'
+        if ($script:SessionTask -and (Get-ScheduledTask -TaskName $script:SessionTask -ErrorAction SilentlyContinue)) { Log ('CLEANUP NEEDED: retained protected-session task for its journal owner: ' + $script:SessionTask) }
+        if (Test-Path -LiteralPath $ifeo) { Log ('CLEANUP NEEDED: retained protected-session IFEO key and every unrelated field: ' + $ifeo) }
+        try { Stop-OwnedProcess $sessionLauncherReceipt } catch { Log ('CLEANUP NEEDED: session launcher retained: ' + $_.Exception.Message) }
         foreach ($leftover in @($script:PreviewDir, $script:StartedSessionDir, $(if ($script:ExpectedSessionRoot) { Split-Path $script:ExpectedSessionRoot -Parent }))) {
-            if ($leftover -and (Test-Path -LiteralPath $leftover)) {
-                $full = [IO.Path]::GetFullPath($leftover)
-                if ((Split-Path $full -Parent) -ine $operationsRoot -or (Split-Path $full -Leaf) -notlike 'game-session-*') { Log ('CLEANUP NEEDED: remove ' + $full + ' (not a game-session folder directly inside the operations folder, so it was not touched)'); continue }
-                if($recoverRoot -and $full -ieq (Split-Path $recoverRoot -Parent)){Log ('CLEANUP NEEDED: recovery failed; retained the session journal at '+$full);continue}
-                try { Copy-Item -LiteralPath $full -Destination (Join-Path $OutDir (Split-Path $full -Leaf)) -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $full -Recurse -Force; Log ('cleanup: removed ' + $full) } catch { Log ('CLEANUP NEEDED: remove ' + $full) }
-            }
+            if ($leftover -and (Test-Path -LiteralPath $leftover)) { Log ($(if ($script:SessionStopped) { 'NOTE: retained completed session evidence for epoch recovery: ' } else { 'CLEANUP NEEDED: retained session evidence for epoch recovery: ' }) + $leftover) }
         }
-        Remove-Item $sessionLauncherPath, $sessionGamePath -Force -ErrorAction SilentlyContinue
+        foreach ($file in @($sessionLauncherFile, $sessionGameFile)) {
+            try { Remove-OwnedProbe $file } catch { Log ('CLEANUP NEEDED: session probe file retained: ' + $_.Exception.Message) }
+            if ($file) { $file.Dispose() }
+        }
     }
 }
 Log ('RESULT failures=' + $script:Failures)

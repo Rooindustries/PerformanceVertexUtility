@@ -14,7 +14,10 @@ $schtasks=Join-Path $system 'schtasks.exe'
 $powershell=Join-Path $PSHOME 'powershell.exe'
 $full=$ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
 $script:SchedulerOnly=$false
-$localAppData=if($full){[Environment]::GetFolderPath('LocalApplicationData')}else{$env:LOCALAPPDATA}
+$localAppData=''
+$nativeSystem=Join-Path (Split-Path $system -Parent) 'System32'
+$env:SystemRoot=Split-Path $nativeSystem -Parent
+$env:windir=$env:SystemRoot
 
 function Write-Log([string]$Text){
     $line=[DateTime]::UtcNow.ToString('o')+' '+$Action+' '+$Text
@@ -68,8 +71,6 @@ function Resolve-PathText([string]$Path){
 
 function Test-StartsWith([string]$Text,[string]$Prefix){return $Text.Length -ge $Prefix.Length -and $Text.Substring(0,$Prefix.Length) -ieq $Prefix}
 
-function Test-Contains([string]$Text,[string]$Needle){return $Text.ToUpperInvariant().Contains($Needle.ToUpperInvariant())}
-
 function Get-ListedGovernorNames {
     return @(Invoke-Schtasks /Query /FO CSV /NH|ForEach-Object {([string]$_ -split '","')[0].Trim('"')}|Where-Object {$_ -match '^(\\[^\\]+)*\\[^\\]*OptimizationSuite\.ProcessRules\.[^\\]*$'}|Select-Object -Unique)
 }
@@ -85,6 +86,8 @@ function Get-GovernorSources {
     foreach($name in @(Get-ListedGovernorNames)){
         $xml=@(Invoke-Schtasks /Query /TN $name /XML) -join "`n"
         if($script:SchtasksExit -ne 0 -or -not $xml){Write-Log ('Task Scheduler could not describe '+$name+', so setup leaves it alone');continue}
+        $definition=Join-Path (Join-Path $nativeSystem 'Tasks') $name.TrimStart('\')
+        try {$stored=Get-Content -LiteralPath $definition -Raw -ErrorAction Stop;if($stored){$xml=$stored}} catch {}
         $info=if($xml -match '(?s)<RegistrationInfo>.*?</RegistrationInfo>'){$Matches[0]}else{''}
         $description=if($info -match '(?s)<Description>(.*?)</Description>'){ConvertFrom-XmlText $Matches[1]}else{''}
         $principal=if($xml -match '(?s)<Principals>.*?</Principals>'){$Matches[0]}else{''}
@@ -99,22 +102,80 @@ function Get-GovernorSources {
     }
 }
 
+function Get-GovernorArguments([string]$Text){
+    if($Text -match '[\x00-\x1F]'){return @()}
+    $parts=@()
+    while($Text){
+        $Text=$Text.TrimStart(' ')
+        if(-not $Text){break}
+        if($Text.StartsWith('"')){
+            $end=$Text.IndexOf('"',1)
+            if($end -lt 0){return @()}
+            $parts+=($Text.Substring(1,$end-1))
+            $Text=$Text.Substring($end+1)
+            if($Text -and -not $Text.StartsWith(' ')){return @()}
+        } else {
+            $end=$Text.IndexOf(' ')
+            if($end -lt 0){$end=$Text.Length}
+            $part=$Text.Substring(0,$end)
+            if($part.Contains('"')){return @()}
+            $parts+=$part
+            $Text=$Text.Substring($end)
+        }
+    }
+    return $parts
+}
+
+function Test-GovernorDotNet([string]$Executable,[string]$HostDirectory){
+    if((Split-Path $Executable -Leaf) -ine 'dotnet.exe' -or (Resolve-PathText $Executable) -ine $Executable){return $false}
+    try {
+        $file=Get-Item -LiteralPath $Executable -ErrorAction Stop
+        if($file.PSIsContainer -or $file.VersionInfo.OriginalFilename -notin @('dotnet.exe','.NET Host','.NET Core Host')){return $false}
+        $signature=Get-AuthenticodeSignature -LiteralPath $Executable -ErrorAction Stop
+        if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?:^|,\s*)O=Microsoft Corporation(?:,|$)'){return $false}
+        $options=(Get-Content -LiteralPath (Join-Path $HostDirectory 'Optimizer.Host.runtimeconfig.json') -Raw -ErrorAction Stop|ConvertFrom-Json).runtimeOptions
+        return @(@($options.framework)+@($options.frameworks)|Where-Object {$_.name -eq 'Microsoft.NETCore.App' -and $_.version -is [string] -and $_.version}).Count -gt 0
+    } catch {return $false}
+}
+
+function Test-GovernorPayload($Parts,[string]$Root){
+    $hostDirectory=$appRootPath+'\backend\bin\optimizer'
+    $request=$Root+'\worker-request.json'
+    if($Parts.Count -eq 3){return $Parts[0] -ieq ($hostDirectory+'\Optimizer.Host.exe') -and $Parts[1] -ceq 'policy-run' -and $Parts[2] -ieq $request}
+    if($Parts.Count -eq 4 -and $Parts[1] -ieq ($hostDirectory+'\Optimizer.Host.dll') -and $Parts[2] -ceq 'policy-run' -and $Parts[3] -ieq $request){return Test-GovernorDotNet $Parts[0] $hostDirectory}
+    return $false
+}
+
 function Test-GovernorAction($Task,[string]$Root){
     if($Task.actionCount -ne 1){return $false}
     $execute=[string]$Task.execute
     $arguments=[string]$Task.arguments
-    $hostDirectory=$appRootPath+'\backend\bin\optimizer'
-    $hostExe=$hostDirectory+'\Optimizer.Host.exe'
-    $hostDll=$hostDirectory+'\Optimizer.Host.dll'
     $launcher=$appRootPath+'\backend\scripts\Start-RooIndustriesHelper.cmd'
     foreach($directory in $systemDirectories){
         if($execute -ine ($directory+'\conhost.exe')){continue}
-        $clean='--headless "'+$directory+'\cmd.exe" /d /v:off /c call "'+$launcher+'" "'
-        if((Test-StartsWith $arguments $clean) -and ((Test-Contains $arguments ('?'+$hostExe+'?policy-run?')) -or (Test-Contains $arguments ('?policy-run?'+$Root+'\worker-request.json')))){return $true}
-        if((Test-StartsWith $arguments '--headless "') -and ((Test-Contains $arguments ('"'+$hostExe+'" policy-run "')) -or (Test-Contains $arguments ('"'+$hostDll+'" policy-run "')))){return $true}
+        foreach($shell in @(('/d /e:on /v:off /c set "SystemRoot='+(Split-Path $directory -Parent)+'"&call '),'/d /v:off /c call ')){
+            $clean='--headless "'+$directory+'\cmd.exe" '+$shell+'"'+$launcher+'" " ?'
+            if((Test-StartsWith $arguments $clean) -and $arguments.EndsWith('"')){
+                $parts=@($arguments.Substring($clean.Length,$arguments.Length-$clean.Length-1) -split '\?')
+                $text=$launcher+($parts -join '')
+                if($text -match '["?^*<>|\r\n]' -or @($text -split '%').Count -gt 2){return $false}
+                return Test-GovernorPayload $parts $Root
+            }
+        }
+        $clear=(@('DOTNET_STARTUP_HOOKS','DOTNET_ADDITIONAL_DEPS','DOTNET_SHARED_STORE','CORECLR_ENABLE_PROFILING','CORECLR_PROFILER','CORECLR_PROFILER_PATH','CORECLR_PROFILER_PATH_32','CORECLR_PROFILER_PATH_64','CORECLR_PROFILER_PATH_ARM64','COR_ENABLE_PROFILING','COR_PROFILER','COR_PROFILER_PATH','COR_PROFILER_PATH_32','COR_PROFILER_PATH_64')|ForEach-Object {'set '+$_+'='}) -join '&'
+        $inline='--headless "'+$directory+'\cmd.exe" /d /s /c "'+$clear+'&'
+        if((Test-StartsWith $arguments $inline) -and $arguments.EndsWith('"')){
+            $body=$arguments.Substring($inline.Length,$arguments.Length-$inline.Length-1)
+            $parts=@(Get-GovernorArguments $body)
+            if($parts.Count -notin @(3,4)){return $false}
+            $expected='"'+$parts[0]+'" '+$(if($parts.Count -eq 4){'"'+$parts[1]+'" '})+'policy-run "'+$Root+'\worker-request.json"'
+            if($body -ine $expected -or @($body -split '%').Count -gt 2){return $false}
+            return Test-GovernorPayload $parts $Root
+        }
+        if(Test-StartsWith $arguments '--headless '){return Test-GovernorPayload @(Get-GovernorArguments $arguments.Substring(11)) $Root}
+        return $false
     }
-    if(Test-StartsWith $arguments ('"'+$hostDll+'" policy-run "')){return $true}
-    return ($execute -ieq $hostExe -and (Test-Contains $arguments 'policy-run'))
+    return Test-GovernorPayload (@($execute)+@(Get-GovernorArguments $arguments)) $Root
 }
 
 function Get-GovernorProblem($Task,$Parts,[string]$Root,$Local){
@@ -124,11 +185,68 @@ function Get-GovernorProblem($Task,$Parts,[string]$Root,$Local){
     if($Parts[0] -ne 'Roo Industries process rules' -and $Parts[0] -ne ('Roo Industries process rules' -replace ' Industries','')){return 'its description does not start with the product text'}
     if($Parts[1] -notmatch '^S-1-[0-9]+(-[0-9]+)+$'){return 'its description does not name a Windows user'}
     if(-not $Root){return 'its description does not name a valid rules folder'}
-    if(-not $Local -or $Root.Length -lt $Local.Length -or $Root.Substring(0,$Local.Length) -ine $Local){return 'its rules folder is outside the profile of the user its description names'}
+    if((-not $Local -or $Root.Length -lt $Local.Length -or $Root.Substring(0,$Local.Length) -ine $Local) -and -not (Test-GovernorRootMarker $Root $Parts[1])){return 'its rules folder is outside the profile of the user its description names'}
     if($Task.runLevel -ne 'Highest'){return 'it does not run with the highest privileges'}
     if((Get-Sid $Task.userId) -ne $Parts[1]){return 'it does not run as the user its description names'}
     if(-not (Test-GovernorAction $Task $Root)){return 'it does not start the governor of this installation'}
     return $null
+}
+
+function Get-RawRegistryValue([string]$Key,[string]$Name){
+    $ErrorActionPreference='Continue'
+    $output=@(& (Join-Path $nativeSystem 'reg.exe') query $Key /v $Name 2>$null)
+    $code=$LASTEXITCODE
+    if($code -ne 0){return @{present=$false;value='';kind=''}}
+    foreach($line in $output){
+        if([string]$line -match ('^\s*'+[regex]::Escape($Name)+'\s+(REG_[A-Z0-9_]+)\s*(.*)$')){return @{present=$true;kind=$Matches[1];value=$Matches[2]}}
+    }
+    throw "Roo Industries could not read that Windows user's folder settings."
+}
+
+function Get-UserLocalFolder([string]$Sid){
+    if($full){
+        $key=Get-Item -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$Sid) -ErrorAction SilentlyContinue
+        $raw=if($key){$key.GetValue('ProfileImagePath',$null,'DoNotExpandEnvironmentNames')}else{$null}
+        $profile=@{present=($null -ne $raw);value=$raw;kind=$(if($raw -is [string] -and $key.GetValueKind('ProfileImagePath') -in @('String','ExpandString')){'REG_SZ'}else{''})}
+    }else{$profile=Get-RawRegistryValue ('HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$Sid) 'ProfileImagePath'}
+    if(-not $profile.present -or $profile.kind -notin @('REG_SZ','REG_EXPAND_SZ')){return ''}
+    $profilePath=$profile.value -replace '(?i)%SystemDrive%',(Split-Path $nativeSystem -Qualifier)
+    if($full -and $Sid -eq $me){$profilePath=[Environment]::GetFolderPath('UserProfile')}
+    if(-not (Resolve-PathText $profilePath) -or $profilePath -match '%.*%'){return ''}
+    if($full -and (Get-Command Get-RooIndustriesUserFolder -ErrorAction SilentlyContinue)){try {return Get-RooIndustriesUserFolder -Sid $Sid -Profile $profilePath} catch {return ''}}
+    $ErrorActionPreference='Continue'
+    & (Join-Path $nativeSystem 'reg.exe') query ('HKU\'+$Sid) 2>$null|Out-Null
+    if($LASTEXITCODE -ne 0){return ''}
+    $raw=Get-RawRegistryValue ('HKU\'+$Sid+'\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') 'Local AppData'
+    if($raw.present){
+        if($raw.kind -notin @('REG_SZ','REG_EXPAND_SZ')){return ''}
+        $local=$raw.value -replace '(?i)%USERPROFILE%',$profilePath.Replace('$','$$')
+    }else{$local=Join-Path $profilePath 'AppData\Local'}
+    if($local -match '%.*%' -or -not (Resolve-PathText $local) -or $local -match '^[A-Za-z]:\\$' -or -not (Test-Path -LiteralPath $local -PathType Container)){return ''}
+    $local=(Get-Item -LiteralPath $local -Force -ErrorAction Stop).FullName.TrimEnd('\')
+    for($ancestor=$local;$ancestor;$ancestor=Split-Path $ancestor -Parent){
+        $item=Get-Item -LiteralPath $ancestor -Force -ErrorAction SilentlyContinue
+        if(-not $item -or $item.Attributes -band 1024){return ''}
+    }
+    foreach($blocked in @((Split-Path $nativeSystem -Parent),$AppRoot)){
+        if($local -ieq $blocked -or (Test-StartsWith ($local+'\') ($blocked.TrimEnd('\')+'\'))){return ''}
+    }
+    $programFiles=Get-RawRegistryValue 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion' 'ProgramFilesDir'
+    $programFilesX86=Get-RawRegistryValue 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion' 'ProgramFilesDir (x86)'
+    foreach($blocked in @($programFiles.value,$programFilesX86.value)){
+        if($blocked -and ($local -ieq $blocked -or (Test-StartsWith ($local+'\') ($blocked.TrimEnd('\')+'\')))){return ''}
+    }
+    return (Get-Item -LiteralPath $local -Force -ErrorAction Stop).FullName.TrimEnd('\')
+}
+
+function Test-GovernorRootMarker([string]$Root,[string]$Sid){
+    if(-not $Root -or -not (Test-Path -LiteralPath $Root -PathType Container)){return $false}
+    if($full){
+        $key=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
+        return $null -ne $key -and $key.GetValue((Get-RooIndustriesDataRootMarkerName $Root),$null,'DoNotExpandEnvironmentNames') -ceq $Sid
+    }
+    $marker=Get-RawRegistryValue 'HKLM\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' ((Get-Item -LiteralPath $Root -Force).FullName.ToUpperInvariant())
+    return $marker.present -and $marker.kind -eq 'REG_SZ' -and $marker.value -ceq $Sid
 }
 
 function Get-GovernorTasks {
@@ -136,8 +254,7 @@ function Get-GovernorTasks {
         try {
             $parts=@([string]$task.description -split ' \| ',3)
             $sid=if($parts.Count -eq 3 -and $parts[1] -match '^S-1-[0-9]+(-[0-9]+)+$'){$parts[1]}else{''}
-            $profilePath=if($sid){[string](Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$sid) -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath}else{''}
-            $localPath=if($profilePath){Resolve-PathText (Join-Path $profilePath 'AppData\Local')}elseif($sid -and $sid -eq $me){Resolve-PathText $localAppData}else{''}
+            $localPath=if($sid){Get-UserLocalFolder $sid}else{''}
             $local=if($localPath){$localPath.TrimEnd('\')+'\'}else{$null}
             $root=if($parts.Count -eq 3){Resolve-PathText $parts[2]}else{''}
             $problem=Get-GovernorProblem $task $parts $root $local
@@ -193,8 +310,16 @@ function Remove-Watchdog {
 
 $appRootPath=(Resolve-PathText $AppRoot).TrimEnd('\')
 if(-not $appRootPath){throw 'The app folder must be a full path on a local drive.'}
-$systemDirectories=@($system,(Join-Path $env:SystemRoot 'System32')|Select-Object -Unique)
+$systemDirectories=@($system,$nativeSystem|Select-Object -Unique)
 $me=(Get-CurrentUser).sid
+if($full){
+    $common=Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1'
+    if(-not (Test-Path -LiteralPath $common -PathType Leaf)){$common=Join-Path $AppRoot 'backend\scripts\BrandCompatibility.Common.ps1'}
+    if(Test-Path -LiteralPath $common -PathType Leaf){. $common;$localAppData=Get-RooIndustriesLocalAppData}else{$localAppData=Get-UserLocalFolder $me;if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}}
+}else{
+    $localAppData=Get-UserLocalFolder $me
+    if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}
+}
 $listed=@(Get-ListedGovernorNames)
 $visible=$null
 if($full){try {$visible=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)} catch {$visible=$null}}
@@ -255,7 +380,7 @@ function Save-Records($Records){
 function Start-HostProcess([string]$HostAction,[string]$Json,[string]$Path){
     $ErrorActionPreference='Continue'
     $output=if($Path){@(& $hostExe $HostAction $Path 2>&1)}else{@($Json|& $hostExe $HostAction '-' 2>&1)}
-    $code=$LASTEXITCODE
+    $code=$global:LASTEXITCODE
     $errors=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_})
     $text=(@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n").Trim()
     $result=$null
@@ -276,7 +401,7 @@ function Invoke-Host([string]$HostAction,[string]$PolicyRoot,[hashtable]$Extra=@
             $run=Start-HostProcess $HostAction '' $path
         } finally {Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue}
     }
-    if($run.exitCode -ne 0 -or $run.result.status -ne 'completed'){
+    if($run.exitCode -ne 0 -or $run.stderr -or -not $run.text.StartsWith('{') -or $run.result -isnot [pscustomobject] -or $run.result.status -isnot [string] -or $run.result.status -cne 'completed' -or $run.result.data -isnot [pscustomobject]){
         $reason=if($run.result -and $run.result.error.message){[string]$run.result.error.message}elseif($run.stderr){$run.stderr}elseif($run.text){$run.text}else{'the helper printed nothing'}
         throw ($HostAction+' failed (exit '+$run.exitCode+'): '+$reason.Substring(0,[Math]::Min(400,$reason.Length)))
     }
@@ -285,16 +410,19 @@ function Invoke-Host([string]$HostAction,[string]$PolicyRoot,[hashtable]$Extra=@
 
 function Invoke-Worker([string]$WorkerAction,[string]$PolicyRoot){
     $ErrorActionPreference='Continue'
+    $global:LASTEXITCODE=0
     $output=@(& $workerScript -Action $WorkerAction -PolicyRoot $PolicyRoot -HostDirectory (Split-Path $hostExe -Parent) -ConfirmApply 2>&1)
+    $code=$global:LASTEXITCODE
     $errors=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_})
     $text=(@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n").Trim()
     $result=$null
-    if($text){try {$result=$text|ConvertFrom-Json} catch {}}
-    if($null -eq $result -or $null -eq $result.status){
-        $reason=if($errors.Count){($errors -join ' ').Trim()}elseif($text){$text}else{'the helper printed nothing'}
+    if($text){try {$result=ConvertFrom-Json -InputObject $text -ErrorAction Stop} catch {}}
+    if($code -ne 0 -or $errors.Count -gt 0 -or -not $text.StartsWith('{') -or $result -isnot [pscustomobject] -or $result.status -isnot [string] -or $result.status -cne 'completed' -or $result.data -isnot [pscustomobject]){
+        $messages=@($result.errors|ForEach-Object {$_.message}|Where-Object {$_})
+        $reason=if($errors.Count){($errors -join ' ').Trim()}elseif($messages.Count){$messages -join '; '}elseif(-not $text){'the helper printed nothing'}else{'invalid response: '+$text}
+        if($code -ne 0){$reason='exit '+$code+': '+$reason}
         throw ($WorkerAction+' failed: '+$reason.Substring(0,[Math]::Min(400,$reason.Length)))
     }
-    if($result.status -ne 'completed'){throw ($result.errors|ForEach-Object {$_.message}) -join '; '}
     return $result
 }
 
@@ -313,28 +441,55 @@ function New-AdminOnlyDirectory([string]$Path){
 }
 
 function Get-Workers {
-    $prefix=(Join-Path $AppRoot 'backend\bin\optimizer')+'\'
     $script:WorkersKnown=$true
     try {$all=@(Get-CimInstance Win32_Process -Filter "Name='Optimizer.Host.exe'" -ErrorAction Stop)}
     catch {$script:WorkersKnown=$false;Write-Log ('Windows could not list processes ('+$_.Exception.Message+')');return @()}
-    return @($all|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -and [string]$_.CommandLine -match 'policy-run'})
+    return @($all|Where-Object {
+        $parts=@(Get-GovernorArguments ([string]$_.CommandLine))
+        $_.ExecutablePath -ieq $hostExe -and $parts.Count -eq 3 -and $parts[0] -ieq $hostExe -and $parts[1] -ceq 'policy-run'
+    })
+}
+
+function Stop-GovernorIdentity([int]$ProcessId,[string]$Created){
+    $process=$null
+    try {
+        $process=[Diagnostics.Process]::GetProcessById($ProcessId)
+        [void]$process.Handle
+        if($process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -cne $Created){return $false}
+        $process.Kill()
+        return $true
+    } catch {return $false}
+    finally {if($process){$process.Dispose()}}
 }
 
 function Stop-Leftovers($Tasks){
-    $workers=@(Get-Workers)
-    if(-not $script:WorkersKnown){
-        foreach($task in @($Tasks)){Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null;Write-Log ('Ended governor task '+$task.taskName+' through Task Scheduler')}
-        $running=@(Get-Process -Name 'Optimizer.Host' -ErrorAction SilentlyContinue|Where-Object {$_.Path -and $_.Path.StartsWith((Join-Path $AppRoot 'backend\bin\optimizer')+'\',[StringComparison]::OrdinalIgnoreCase)})
-        Write-Log ($running.Count.ToString()+' helper processes from the app folder are still running; setup closes them before replacing files')
-        return
+    $opened=@{}
+    try {
+        foreach($process in @(Get-Process -Name 'Optimizer.Host' -ErrorAction SilentlyContinue)){
+            try {[void]$process.Handle;if($process.Path -ieq $hostExe){$opened[$process.Id]=$process;continue}} catch {}
+            $process.Dispose()
+        }
+        $workers=@(Get-Workers)
+        if(-not $script:WorkersKnown){
+            foreach($task in @($Tasks)){Invoke-Schtasks /End /TN ($task.taskPath+$task.taskName)|Out-Null;Write-Log ('Ended governor task '+$task.taskName+' through Task Scheduler')}
+            Write-Log ($opened.Count.ToString()+' helper processes from the app folder may still be running; setup closes them before replacing files')
+            return
+        }
+        foreach($worker in $workers){
+            $process=$opened[[int]$worker.ProcessId]
+            if(-not $process -or -not $worker.CreationDate){continue}
+            $created=$process.StartTime.ToUniversalTime().ToFileTimeUtc()
+            if(($created-($created%10)) -ne $worker.CreationDate.ToUniversalTime().ToFileTimeUtc()){continue}
+            if(Stop-GovernorIdentity ([int]$worker.ProcessId) $created.ToString()){
+                Write-Log ('Ended leftover governor process '+$worker.ProcessId+': '+$worker.CommandLine)
+            }
+        }
+        $clock=[Diagnostics.Stopwatch]::StartNew()
+        while(@(Get-Workers).Count -gt 0 -and $clock.Elapsed.TotalSeconds -lt 10){Start-Sleep -Milliseconds 200}
+        if(@(Get-Workers).Count -gt 0 -and $script:WorkersKnown){throw 'A Roo Industries Governor process is still running from the app folder.'}
+    } finally {
+        foreach($process in $opened.Values){$process.Dispose()}
     }
-    foreach($worker in $workers){
-        Write-Log ('Ending leftover governor process '+$worker.ProcessId+': '+$worker.CommandLine)
-        Stop-Process -Id $worker.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-    $clock=[Diagnostics.Stopwatch]::StartNew()
-    while(@(Get-Workers).Count -gt 0 -and $clock.Elapsed.TotalSeconds -lt 10){Start-Sleep -Milliseconds 200}
-    if(@(Get-Workers).Count -gt 0 -and $script:WorkersKnown){throw 'A Roo Industries Governor process is still running from the app folder.'}
 }
 
 function Test-Alive($Identity,[string]$OwnerSid){
@@ -361,7 +516,10 @@ function Stop-Governor($Task){
         Move-Item -LiteralPath $temporary -Destination $target -Force
         $clock=[Diagnostics.Stopwatch]::StartNew()
         while((Test-Alive $state.host $Task.userSid) -and $clock.Elapsed.TotalSeconds -lt 30){Start-Sleep -Milliseconds 200}
-        if(Test-Alive $state.host $Task.userSid){Write-Log ('Governor of Windows user '+$Task.userSid+' did not stop in time; ending it. Its apps keep the rule settings until they close or the governor starts again');Stop-Process -Id ([int]$state.host.processId) -Force -ErrorAction SilentlyContinue}
+        if(Test-Alive $state.host $Task.userSid){
+            if(Stop-GovernorIdentity ([int]$state.host.processId) ([string]$state.host.creationTimeFileTimeUtc)){Write-Log ('Governor of Windows user '+$Task.userSid+' did not stop in time; ended it. Its apps keep the rule settings until they close or the governor starts again')}
+            elseif(Test-Alive $state.host $Task.userSid){throw 'The governor did not stop and its process identity could not be confirmed for termination.'}
+        }
         else {Write-Log ('Governor of Windows user '+$Task.userSid+' stopped and restored settings for '+$Task.policyRoot)}
         return [pscustomobject]@{wasRunning=$true;state=$state}
     }
@@ -435,13 +593,7 @@ switch($Action){
                 $records.Add($item)
             }
         }
-        $local=[Environment]::GetFolderPath('LocalApplicationData')
-        $markers=Get-Item -LiteralPath 'HKLM:\SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots' -ErrorAction SilentlyContinue
-        $current=Join-Path $local 'RooIndustriesOptimizationSuite'
-        $legacy=Join-Path $local ('RooIndustriesOptimizationSuite' -replace 'Industries','')
-        $currentMarked=$null -ne $markers -and $null -ne $markers.GetValue($current.ToUpperInvariant())
-        $legacyMarked=$null -ne $markers -and $null -ne $markers.GetValue($legacy.ToUpperInvariant())
-        $dataRoot=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ($currentMarked -and -not $legacyMarked)){$legacy}else{$current}
+        $dataRoot=Get-RooIndustriesLocalDataRoot
         foreach($root in @(Join-Path $dataRoot 'process-rules')){
             if((Test-Path -LiteralPath (Join-Path $root 'rules')) -and -not @($records|Where-Object {$_.userSid -eq $me -and [string]$_.policyRoot -ieq $root}).Count){
                 Write-Log ('Found saved rules without a governor task: '+$root)

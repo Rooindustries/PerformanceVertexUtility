@@ -68,9 +68,9 @@ public sealed class LeftoverDiscovery
         if (!string.IsNullOrWhiteSpace(_app.InstallLocation)) AddFile(_app.InstallLocation, "Published installation location", false);
         var roots = fileRoots?.ToArray() ?? new[]
         {
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow"),
+            RuntimeEnvironment.LocalAppData,
+            RuntimeEnvironment.RoamingAppData,
+            Path.Combine(RuntimeEnvironment.Profile, "AppData", "LocalLow"),
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
@@ -81,7 +81,7 @@ public sealed class LeftoverDiscovery
             SearchFolders(root, 0, cancellationToken);
         }
         if (!string.IsNullOrWhiteSpace(_app.PackageFamilyName))
-            AddFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages", _app.PackageFamilyName), "Exact package-family data directory", true);
+            AddFile(Path.Combine(RuntimeEnvironment.LocalAppData, "Packages", _app.PackageFamilyName), "Exact package-family data directory", true);
         var scopes = registryRoots?.ToArray() ?? new[]
         {
             new RegistryAddress("CurrentUser", "Registry64", "Software", "key", null),
@@ -287,9 +287,9 @@ public sealed class LeftoverDiscovery
     internal static bool MicrosoftOwnedPath(string path)
     {
         if (Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var profile = RuntimeEnvironment.Profile;
         if (!string.IsNullOrWhiteSpace(profile) && Within(path, Path.Combine(profile, "AppData", "LocalLow", "Microsoft"))) return true;
-        var packages = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages").TrimEnd('\\');
+        var packages = Path.Combine(RuntimeEnvironment.LocalAppData, "Packages").TrimEnd('\\');
         if (path.StartsWith(packages + "\\", StringComparison.OrdinalIgnoreCase))
         {
             var family = path[(packages.Length + 1)..].Split('\\')[0];
@@ -297,7 +297,7 @@ public sealed class LeftoverDiscovery
         }
         foreach (var folder in new[] { Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolder.ApplicationData })
         {
-            var root = Environment.GetFolderPath(folder);
+            var root = folder == Environment.SpecialFolder.LocalApplicationData ? RuntimeEnvironment.LocalAppData : folder == Environment.SpecialFolder.ApplicationData ? RuntimeEnvironment.RoamingAppData : Environment.GetFolderPath(folder);
             if (!string.IsNullOrWhiteSpace(root) && Within(path, Path.Combine(root, "Microsoft"))) return true;
         }
         foreach (var folder in new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.CommonProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86 })

@@ -13,8 +13,16 @@ if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Sour
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $scriptsRoot=$PSScriptRoot
 $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$work=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-scenarios-'+[Guid]::NewGuid().ToString('N'))
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+$work=Join-Path (Get-RooIndustriesLocalAppData) ('rgs-'+[Guid]::NewGuid().ToString('N').Substring(0,16))
 [IO.Directory]::CreateDirectory($work)|Out-Null
+$workAcl=[Security.AccessControl.DirectorySecurity]::new()
+$workAcl.SetAccessRuleProtection($true,$false)
+$workAcl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+foreach($sid in @('S-1-5-32-544','S-1-5-18')){$workAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+$workAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow'))
+(Get-Item -LiteralPath $work).SetAccessControl($workAcl)
+[IO.File]::WriteAllText((Join-Path $work 'fixture.marker'),$work)
 if(-not $HostDirectory){
     $HostDirectory=Join-Path $work 'host'
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -p:GovernorTestHooks=true -o $HostDirectory | Out-Null
@@ -25,7 +33,9 @@ if(-not $HostDirectory){
 $hostDirectory=$HostDirectory
 $probeDirectory=Join-Path $work 'probe'
 Initialize-ScenarioFixtures
-$evidence=[ordered]@{startedAtUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;scenarios=[ordered]@{}}
+$sourceHashes=[ordered]@{}
+foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $scriptsRoot 'GovernorScenarios') -File)+@(Get-Item -LiteralPath $PSCommandPath,(Join-Path $scriptsRoot 'BrandCompatibility.Common.ps1'),(Join-Path $hostDirectory 'Optimizer.Host.dll'),(Join-Path $hostDirectory 'Optimizer.Core.dll'))){$sourceHashes[$file.FullName]=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}
+$evidence=[ordered]@{sourceHashes=$sourceHashes;startedAtUtc=[DateTime]::UtcNow.ToString('o');machine=$env:COMPUTERNAME;scenarios=[ordered]@{}}
 $failed=0
 try {
     foreach($name in $selected){

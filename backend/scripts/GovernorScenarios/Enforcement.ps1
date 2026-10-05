@@ -495,10 +495,19 @@ function Test-ScenarioPinnedUnreadable {
     $probe=Start-Probe $path
     $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Pinned unreadable'
     $rule.executableHash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    $snapshot=Core 'process-status' @{processId=$probe.Id}
+    Note 'pinnedIdentity' $snapshot.identity
+    Assert ($snapshot.identity.processId -eq $probe.Id -and $snapshot.identity.executablePath -ieq $path -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'The pinned rule names the exact running fixture before read access is denied'
     $script:pinnedPath=$path
     $script:cleanups.Add({Set-ClaimsReadDenied $script:pinnedPath $false})
     Set-ClaimsReadDenied $path $true
-    Use-Rule $rule|Out-Null
+    $denied=$false
+    try {$opened=[IO.File]::OpenRead($path);$opened.Dispose()} catch {$denied=$true}
+    Assert $denied 'The exact pinned executable denies an actual byte read before the governor starts'
+    $synced=Use-Rule $rule
+    $saved=@(Core 'rules-list'|Where-Object {$_.ruleId -eq $rule.ruleId})
+    Note 'pinnedInputs' @{worker=$synced.worker;rule=$saved;summary=(Core 'policy-summary')}
+    Assert ($synced.worker.hostRunning -eq $true -and $saved.Count -eq 1 -and $saved[0].enabled -eq $true -and $saved[0].executablePath -ieq $path -and $saved[0].executableHash -ceq $rule.executableHash) 'The live worker reads the exact enabled pinned rule from this fixture root'
     Start-Sleep -Seconds 15
     $beat=Get-Heartbeat
     $issues=@((Get-GovernorState).issues|Where-Object {$_.processId -eq $probe.Id})

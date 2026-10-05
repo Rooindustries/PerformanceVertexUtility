@@ -80,6 +80,89 @@ begin
     Result := Default;
 end;
 
+function FolderAttributes(Path: String): DWORD; external 'GetFileAttributesW@kernel32.dll stdcall';
+function FolderDriveType(Path: String): DWORD; external 'GetDriveTypeW@kernel32.dll stdcall';
+function FolderFullPath(Path: String; Size: DWORD; Buffer: String; Part: DWORD): DWORD; external 'GetFullPathNameW@kernel32.dll stdcall';
+function FolderLongPath(Path: String; Buffer: String; Size: DWORD): DWORD; external 'GetLongPathNameW@kernel32.dll stdcall';
+
+function SetupUserFolder(const Profile: String; const Roaming: Boolean; const InstallFolder: String): String;
+var
+  Raw, Name, Key, Full, Ancestor, Blocked: String;
+  Index, Size: Integer;
+  Attributes: DWORD;
+  Parts: TArrayOfString;
+begin
+  Key := 'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders';
+  Name := 'Local AppData';
+  if Roaming then Name := 'AppData';
+  if RegValueExists(HKCU, Key, Name) then
+  begin
+    if not RegQueryStringValue(HKCU, Key, Name, Raw) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  end
+  else
+  begin
+    Raw := Profile + '\AppData\Local';
+    if Roaming then Raw := Profile + '\AppData\Roaming';
+  end;
+  Result := '';
+  Index := 1;
+  while Index <= Length(Raw) do
+  begin
+    if CompareText(Copy(Raw, Index, 13), '%USERPROFILE%') = 0 then
+    begin
+      Result := Result + Profile;
+      Index := Index + 13;
+    end
+    else
+    begin
+      Result := Result + Copy(Raw, Index, 1);
+      Index := Index + 1;
+    end;
+  end;
+  Index := Pos('%', Result);
+  if (Result = '') or ((Index > 0) and (Pos('%', Copy(Result, Index + 1, Length(Result))) > 0)) or (Pos('/', Result) > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  for Index := 1 to Length(Result) do
+    if (Ord(Result[Index]) < 32) or (Pos(Result[Index], '<>"|?*') > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  while (Length(Result) > 3) and (Copy(Result, Length(Result), 1) = '\') do Delete(Result, Length(Result), 1);
+  if Roaming and (Copy(Result, 1, 2) = '\\') then
+  begin
+    Raw := Copy(Result, 3, Length(Result));
+    if (Pos('\', Raw) < 2) or (Pos('\', Raw) = Length(Raw)) or (Pos(':', Raw) > 0) or (Pos('\\', Raw) > 0) or (Pos('\.\', '\' + Raw + '\') > 0) or (Pos('\..\', '\' + Raw + '\') > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+    exit;
+  end;
+  if (Length(Result) < 4) or (Pos(Uppercase(Copy(Result, 1, 1)), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') = 0) or (Copy(Result, 2, 2) <> ':\') or (Pos(':', Copy(Result, 3, Length(Result))) > 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  SetLength(Full, 32768);
+  Size := FolderFullPath(Result, 32768, Full, 0);
+  if (Size = 0) or (Size >= 32768) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  SetLength(Full, Size);
+  if CompareText(Full, Result) <> 0 then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+  if not Roaming then
+  begin
+    if (FolderDriveType(ExtractFileDrive(Result) + '\') <> 3) or not DirExists(Result) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings. Choose an existing local folder on a fixed drive.');
+    SetLength(Full, 32768);
+    Size := FolderLongPath(Result, Full, 32768);
+    if (Size = 0) or (Size >= 32768) then RaiseException('Roo Industries could not read the AppData folder path.');
+    SetLength(Full, Size);
+    Result := Full;
+    Ancestor := Result;
+    while Length(Ancestor) > 3 do
+    begin
+      Attributes := FolderAttributes(Ancestor);
+      if (Attributes = $FFFFFFFF) or ((Attributes and $400) <> 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings.');
+      Ancestor := RemoveBackslashUnlessRoot(ExtractFileDir(Ancestor));
+    end;
+    Parts := [ExpandConstant('{win}'), ExpandConstant('{commonpf64}'), ExpandConstant('{commonpf32}'), InstallFolder];
+    for Index := 0 to GetArrayLength(Parts) - 1 do
+    begin
+      Blocked := RemoveBackslashUnlessRoot(Parts[Index]);
+      SetLength(Full, 32768);
+      Size := FolderLongPath(Blocked, Full, 32768);
+      if (Size > 0) and (Size < 32768) then begin SetLength(Full, Size); Blocked := Full; end;
+      if (CompareText(Result, Blocked) = 0) or (CompareText(Copy(Result, 1, Length(Blocked) + 1), Blocked + '\') = 0) then RaiseException('Roo Industries could not use this Windows user''s AppData folder settings. Choose a folder outside Windows and the app''s install folder.');
+    end;
+  end;
+end;
+
 function SetupEnvironment(const TempFolder: String): String;
 var
   Profile, Drive, Domain, Account, PublicFolder, Architecture: String;
@@ -115,7 +198,7 @@ begin
   if ProcessorArchitecture = paX86 then Architecture := 'x86';
   Result :=
     EnvironmentEntry('ALLUSERSPROFILE', ExpandConstant('{commonappdata}')) +
-    EnvironmentEntry('APPDATA', ExpandConstant('{userappdata}')) +
+    EnvironmentEntry('APPDATA', SetupUserFolder(Profile, True, ExtractFileDir(RemoveBackslashUnlessRoot(TempFolder)))) +
     EnvironmentEntry('CommonProgramFiles', ExpandConstant('{commoncf64}')) +
     EnvironmentEntry('CommonProgramFiles(x86)', ExpandConstant('{commoncf32}')) +
     EnvironmentEntry('CommonProgramW6432', ExpandConstant('{commoncf64}')) +
@@ -132,7 +215,7 @@ begin
     EnvironmentEntry('DriverData', ExpandConstant('{sys}\Drivers\DriverData')) +
     EnvironmentEntry('HOMEDRIVE', Drive) +
     EnvironmentEntry('HOMEPATH', Copy(Profile, Length(Drive) + 1, Length(Profile))) +
-    EnvironmentEntry('LOCALAPPDATA', ExpandConstant('{localappdata}')) +
+    EnvironmentEntry('LOCALAPPDATA', SetupUserFolder(Profile, False, ExtractFileDir(RemoveBackslashUnlessRoot(TempFolder)))) +
     EnvironmentEntry('NUMBER_OF_PROCESSORS', MachineEnvironment('NUMBER_OF_PROCESSORS', IntToStr(GetActiveProcessorCount($FFFF)))) +
     EnvironmentEntry('OS', MachineEnvironment('OS', 'Windows_NT')) +
     EnvironmentEntry('PATH', ExpandConstant('{sys};{win};{sys}\Wbem;{sys}\WindowsPowerShell\v1.0')) +
@@ -181,7 +264,6 @@ begin
   begin
     if CompareText(Copy(FileName, 1, Length(NativeSystem) + 1), NativeSystem + '\') = 0 then
       NativeFile := ExpandConstant('{sysnative}') + Copy(FileName, Length(NativeSystem) + 1, Length(FileName));
-    NativeSystem := ExpandConstant('{sysnative}');
   end;
   Command := '"' + NativeFile + '" ' + Parameters;
   Startup.cb := 68;

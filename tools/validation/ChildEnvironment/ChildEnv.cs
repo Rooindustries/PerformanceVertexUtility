@@ -75,7 +75,7 @@ sealed class ChildEnv : IDisposable
             ["CommonProgramFiles"] = commonFiles, ["CommonProgramW6432"] = commonFiles, ["CommonProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
             ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = KnownFolder(new Guid("DFDF76A2-C82A-4D63-906A-5644AC457385")),
             ["USERPROFILE"] = profile, ["HOMEDRIVE"] = drive, ["HOMEPATH"] = profile[drive.Length..],
-            ["LOCALAPPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ["APPDATA"] = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            ["LOCALAPPDATA"] = AppData(profile, "Local AppData", "Local"), ["APPDATA"] = AppData(profile, "AppData", "Roaming"),
             ["USERNAME"] = Environment.UserName, ["USERDOMAIN"] = Environment.UserDomainName, ["COMPUTERNAME"] = Environment.MachineName,
             ["OS"] = "Windows_NT", ["DriverData"] = Path.Combine(System32, "Drivers", "DriverData"),
             ["NUMBER_OF_PROCESSORS"] = Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -233,9 +233,18 @@ sealed class ChildEnv : IDisposable
         return File.Exists(muxer) ? muxer : throw new FileNotFoundException("dotnet.exe was not found next to the running runtime.", muxer);
     }
 
+    static string AppData(string profile, string name, string suffix)
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        using var key = Registry.Users.OpenSubKey(identity.User!.Value + @"\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders");
+        var raw = key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        return raw is null ? Path.Combine(profile, "AppData", suffix) : Path.GetFullPath(raw.Replace("%USERPROFILE%", profile, StringComparison.OrdinalIgnoreCase));
+    }
+
     static string KnownFolder(Guid id)
     {
-        if (SHGetKnownFolderPath(id, 0, IntPtr.Zero, out var path) != 0) throw new Win32Exception("The known folder is unavailable.");
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        if (SHGetKnownFolderPath(id, 0x4000, identity.Token, out var path) != 0) throw new Win32Exception("The known folder is unavailable.");
         try { return Marshal.PtrToStringUni(path)!; }
         finally { Marshal.FreeCoTaskMem(path); }
     }

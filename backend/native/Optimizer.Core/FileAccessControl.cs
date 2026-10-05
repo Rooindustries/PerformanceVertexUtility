@@ -13,7 +13,7 @@ public static class FileAccessControl
         if (address.Kind == "file-ownership" && address.Target.StartsWith("selected:", StringComparison.Ordinal)) return FileLease.NormalizePath(address.Target[9..]);
         return address.Target switch
         {
-            "store-search" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalState\store.db"),
+            "store-search" => Path.Combine(RuntimeEnvironment.LocalAppData, @"Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalState\store.db"),
             "razer-downloads" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"Installer\Razer"),
             "logitech-downloads" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LogiDownloadAssistant"),
             "telemetry-consent" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wsqmcons.exe"),

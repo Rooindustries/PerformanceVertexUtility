@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$Name,[string]$Click='',[string]$Page='Games',[int]$SettleSeconds=6)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../LoadTimes/CleanupOwnership.Common.ps1')
+$script:AppReceipt=$null
 $ProgressPreference='SilentlyContinue'
 $W=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-ui'
 [IO.Directory]::CreateDirectory($W)|Out-Null
@@ -24,11 +26,18 @@ function ById($root,$id){$root.FindFirst($TS::Descendants,[Windows.Automation.Pr
 function ByNameType($root,$name,$type){$root.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$type)))}
 function Invoke-Element($e){try{$e.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}catch{$e.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}}
 function Shot([string]$n){$bounds=[Windows.Forms.Screen]::PrimaryScreen.Bounds;$b=New-Object Drawing.Bitmap $bounds.Width,$bounds.Height;$g=[Drawing.Graphics]::FromImage($b);$g.CopyFromScreen($bounds.X,$bounds.Y,0,0,$b.Size);$f=Join-Path $W ('shot-'+$n+'.png');$b.Save($f,[Drawing.Imaging.ImageFormat]::Png);$g.Dispose();$b.Dispose();Log ('screenshot '+$f)}
+function Start-GovernorCaptureApp {
+    Stop-GovernorCaptureApp
+    $script:App=Start-Process $Exe -PassThru
+    $script:AppReceipt=New-OwnedProcess $script:App
+}
+function Stop-GovernorCaptureApp {
+    Stop-OwnedValidationApp $script:App $script:AppReceipt
+}
 $app=$null
 try {
     [RooIndustriesGovernorUser32]::mouse_event(1,3,0,0,[IntPtr]::Zero);Start-Sleep -Milliseconds 200;[RooIndustriesGovernorUser32]::mouse_event(1,-3,0,0,[IntPtr]::Zero)
-    Get-Process RooIndustries.OptimizationSuite.App -ErrorAction SilentlyContinue|Stop-Process -Force
-    $app=Start-Process $Exe -PassThru
+    Start-GovernorCaptureApp
     $win=WaitFor {@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*'})[0]} 120 'main window'
     $h=[IntPtr]::new($win.Current.NativeWindowHandle);[RooIndustriesGovernorUser32]::ShowWindow($h,3)|Out-Null;[RooIndustriesGovernorUser32]::SetForegroundWindow($h)|Out-Null
     $nav=WaitFor {ByNameType $win $Page ([Windows.Automation.ControlType]::ListItem)} 60 ('nav '+$Page)
@@ -60,6 +69,6 @@ try {
     Shot $Name
 } catch { Log ('ERROR '+($_|Out-String)) ; try {Shot ($Name+'-error')} catch {} }
 finally {
-    if($app -and -not $app.HasExited){$app.CloseMainWindow()|Out-Null;if(-not $app.WaitForExit(15000)){$app.Kill()}}
+    try {Stop-GovernorCaptureApp} catch {Log ('CLEANUP NEEDED: '+$_.Exception.Message)}
     Get-Content -LiteralPath $log
 }

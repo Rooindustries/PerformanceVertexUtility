@@ -3,6 +3,9 @@
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
+$script:AppReceipt = $null
+$script:SecondaryAppReceipts = [Collections.Generic.List[object]]::new()
 . (Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1')
 $ProgressPreference = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -26,6 +29,7 @@ $script:LogPath = Join-Path $OutDir 'modes.log'
 $script:Failures = 0
 $script:Renamed = @()
 $script:HangFlag = $null
+$script:OwnershipFileReceipt = $null
 $script:Skipped = 0
 
 function Log([string]$m) { [IO.File]::AppendAllText($script:LogPath, (Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff') + 'Z ' + $m + "`r`n") }
@@ -60,16 +64,17 @@ function Nav([string]$name) {
 function Start-RooIndustriesApp {
     Stop-RooIndustriesApp
     $script:App = Start-Process $Exe -PassThru
+    $script:AppReceipt = New-OwnedProcess $script:App
     $script:Win = WaitFor { @($A::RootElement.FindAll($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $script:App.Id)) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0] } 60 'main window'
     $h = [IntPtr]::new($script:Win.Current.NativeWindowHandle); [ModeCheckU32]::ShowWindow($h, 9) | Out-Null; [ModeCheckU32]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 1600, 1000, 0x0040) | Out-Null; [ModeCheckU32]::SetForegroundWindow($h) | Out-Null
     WaitFor { Named 'Start here' } 60 'Home' | Out-Null
 }
 function Stop-RooIndustriesApp {
-    $children=@(Child-Rows $script:App)
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { $script:App.Kill() } }
-    foreach($child in $children){Stop-ProcessRow $child}
-    Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-OwnedValidationApp $script:App $script:AppReceipt
     Start-Sleep 1
+}
+function Stop-SecondaryApps {
+    foreach ($receipt in $script:SecondaryAppReceipts) { Stop-OwnedProcess $receipt }
 }
 function Set-Simple([bool]$simple) {
     Nav 'Settings'
@@ -116,10 +121,12 @@ function Script-Path([string]$name) {
     if ($found.Count -ne 1) { throw "Expected one $name under the install folder, found $($found.Count)." }
     return $found[0].FullName
 }
-function Disable-Script([string]$path) { Rename-Item $path ($path + '.roo-industries-test-off'); $script:Renamed += $path; Log ("disabled " + (Split-Path $path -Leaf)) }
+function Disable-Script([string]$path) { $script:Renamed += (Rename-OwnedFile $path ($path + '.roo-industries-test-off')); Log ("disabled " + (Split-Path $path -Leaf)) }
 function Restore-Script([string]$path) {
-    if (Test-Path ($path + '.roo-industries-test-off')) { Rename-Item ($path + '.roo-industries-test-off') $path }
-    $script:Renamed = @($script:Renamed | Where-Object { $_ -ne $path }); Log ("restored " + (Split-Path $path -Leaf))
+    $receipts = @($script:Renamed | Where-Object { $_.Identity.path -ieq $path })
+    if ($receipts.Count -ne 1) { throw ('Rename ownership receipt absent or ambiguous; retained ' + $path) }
+    Restore-OwnedFile $receipts[0]
+    $script:Renamed = @($script:Renamed | Where-Object { $_ -ne $receipts[0] }); Log ("restored " + (Split-Path $path -Leaf))
 }
 function Memory-Error { @(Named 'Memory information is unavailable').Count -gt 0 }
 function Memory-Loaded { (@(Named 'Memory by process').Count -gt 0) -and -not (Memory-Error) }
@@ -170,8 +177,7 @@ try {
     $flag = Join-Path $env:TEMP 'roo-industries-feature-hang.flag'
     $checkingText = 'Checking' + [char]0x2026
     $featureRow = 'Hyper-V: Hypervisor Platform'; $otherRow = 'Transparency Effects'; $otherId = 'windows.0689e69eedc05770'
-    $script:HangFlag = $flag
-    Set-Content $flag 'x'
+    $script:HangFlag = New-OwnedTextFile $flag 'x'
     $env:ROO_INDUSTRIES_TEST_FEATURE_HANG = $flag
     $hookBefore = Hook-Count
     $launched = [Diagnostics.Stopwatch]::StartNew()
@@ -208,7 +214,7 @@ try {
         Check ($check -and $check.Current.IsEnabled) 'review stays available for settings that were read while the feature rows could not be checked' ("picked $otherRow $current -> $target")
         $pickPattern = (ById ($otherId + '.select')).GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
         if ([string]$pickPattern.Current.ToggleState -eq 'On') { $pickPattern.Toggle(); Start-Sleep 1 }
-        Remove-Item $flag -Force
+        Remove-OwnedProbe $script:HangFlag; $script:HangFlag = $null
         Invoke-Element (ById 'WindowsTweaksRefresh')
         Start-Sleep 2
         Tweaks-Settled 120 | Out-Null
@@ -223,6 +229,7 @@ try {
     Nav 'Settings'
     [ModeCheckU32]::ShowWindow($firstWindow, 6) | Out-Null; Start-Sleep 1
     $second = Start-Process $Exe -PassThru
+    $script:SecondaryAppReceipts.Add((New-OwnedProcess $second))
     $secondExited = $second.WaitForExit(30000)
     Start-Sleep 2
     $running = @(Get-Process RooIndustries.OptimizationSuite.App -ErrorAction SilentlyContinue)
@@ -231,16 +238,15 @@ try {
     Check (-not [ModeCheckU32]::IsIconic($firstWindow)) 'the minimized open window is restored after a second launch' ("minimized=" + [ModeCheckU32]::IsIconic($firstWindow) + " foreground is the app window=" + ($foreground -eq $firstWindow) + " (Windows only lets it take the foreground when the second launch had foreground rights; this test launches it from a background task)")
     [ModeCheckU32]::ShowWindow($firstWindow, 9) | Out-Null; [ModeCheckU32]::SetForegroundWindow($firstWindow) | Out-Null; Start-Sleep 1
     $ownershipFile = Join-Path (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp') 'roo-industries-ownership-probe.txt'
-    'x' | Set-Content $ownershipFile
+    $script:OwnershipFileReceipt = New-OwnedTextFile $ownershipFile 'x'
     $third = Start-Process $Exe -ArgumentList '--ownership-review', ('"' + $ownershipFile + '"') -PassThru
+    $script:SecondaryAppReceipts.Add((New-OwnedProcess $third))
     $thirdExited = $third.WaitForExit(30000)
     $opened = Eventually { $status = ById 'WindowsTweaksStatus'; $status -and $status.Current.Name -eq 'Review file ownership' } 45
     Check ($thirdExited -and $opened) 'a second launch with --ownership-review opens that review in the open window' ("second exited=" + $thirdExited + " status=" + $(if (ById 'WindowsTweaksStatus') { (ById 'WindowsTweaksStatus').Current.Name } else { '<none>' }))
     Shot 'second-launch-ownership'
-    Remove-Item $ownershipFile -Force -ErrorAction SilentlyContinue
-    if (-not $thirdExited) { $third.Kill() }
-    if (-not $secondExited) { $second.Kill() }
-    Get-Process RooIndustries.OptimizationSuite.App -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $first.Id } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Remove-OwnedProbe $script:OwnershipFileReceipt; $script:OwnershipFileReceipt = $null
+    Stop-SecondaryApps
 
     Nav 'Games'
     $tab = WaitFor { ById 'BackgroundTab' } 30 'Background apps tab'
@@ -259,8 +265,9 @@ try {
     }
 } catch { $script:Failures++; Log ('FATAL ' + ($_ | Out-String)); try { Shot 'fatal' } catch {} }
 finally {
-    if ($script:HangFlag) { Remove-Item $script:HangFlag -Force -ErrorAction SilentlyContinue }
-    foreach ($path in @($script:Renamed)) { try { Restore-Script $path } catch { Log ('CLEANUP NEEDED: restore ' + $path) } }
+    try { Stop-SecondaryApps } catch { Log ('CLEANUP NEEDED: secondary app retained: ' + $_.Exception.Message) }
+    foreach ($receipt in @($script:HangFlag, $script:OwnershipFileReceipt)) { try { Remove-OwnedProbe $receipt } catch { $script:Failures++; Log ('CLEANUP NEEDED: file retained: ' + $_.Exception.Message); if ($receipt) { $receipt.Dispose() } } }
+    foreach ($receipt in @($script:Renamed)) { try { Restore-Script $receipt.Identity.path } catch { $script:Failures++; Log ('CLEANUP NEEDED: restore ' + $receipt.Identity.path + ': ' + $_.Exception.Message); $receipt.Dispose() } }
     if ($null -ne $wasSimple) { try { if (-not $script:App -or $script:App.HasExited) { Start-RooIndustriesApp }; Set-Simple $wasSimple | Out-Null } catch { Log ('CLEANUP NEEDED: simple mode ' + $wasSimple) } }
     Stop-RooIndustriesApp
     Log ('RESULT failures=' + $script:Failures + ' skipped=' + $script:Skipped)

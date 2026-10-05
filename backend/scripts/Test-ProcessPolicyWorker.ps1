@@ -154,7 +154,7 @@ try {
     $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$worker.ParentProcessId)
     Note 'workerProcess' ([ordered]@{name=$worker.Name;commandLine=$worker.CommandLine;parent=$parent.Name;parentCommandLine=$parent.CommandLine;session=$worker.SessionId})
     $console=Get-CimInstance Win32_Process -Filter ('ProcessId='+$parent.ParentProcessId)
-    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /v:off /c call *Start-RooIndustriesHelper.cmd*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The running governor is started by the clean launcher inside a headless console'
+    Assert ($parent.Name -eq 'cmd.exe' -and $parent.CommandLine -like '*/d /e:on /v:off /c set *SystemRoot=*&call *Start-RooIndustriesHelper.cmd*' -and $console.Name -eq 'conhost.exe' -and $console.CommandLine -like '*--headless*') 'The running governor is started by the clean launcher inside a headless console'
     $existingSeconds=Wait-Until {Same (Read-Controls $first) $wanted} 10
     Assert ($null -ne $existingSeconds) 'The governor applies all 8 controls to an already running matching process'
     $second=Start-Probe
@@ -186,7 +186,7 @@ $result.modifyRule=Attempt {[IO.File]::AppendAllText('RULE',' ')}
 $result.deleteRule=Attempt {[IO.File]::Delete('RULE')}
 $result.createControlFile=Attempt {[IO.File]::WriteAllText('ROOT\governor.json','{"schemaVersion":1,"paused":false}')}
 $result.replaceRequest=Attempt {[IO.File]::WriteAllText('ROOT\worker-request.json','{}')}
-$result.changePermissions=Attempt {$acl=Get-Acl -LiteralPath 'ROOT\rules';$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($result.user,'FullControl','ContainerInherit,ObjectInherit','None','Allow'));Set-Acl -LiteralPath 'ROOT\rules' -AclObject $acl}
+$result.changePermissions=Attempt {$acl=Get-Acl -LiteralPath 'ROOT\rules';$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($result.user),'FullControl','ContainerInherit,ObjectInherit','None','Allow'));Set-Acl -LiteralPath 'ROOT\rules' -AclObject $acl}
 $result.renameRoot=Attempt {[IO.Directory]::Move('ROOT','ROOT.moved')}
 $result.renameParent=Attempt {[IO.Directory]::Move('PARENT','PARENT.moved')}
 $result|ConvertTo-Json|Set-Content -LiteralPath 'OUT' -Encoding UTF8

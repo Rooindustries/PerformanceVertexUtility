@@ -29,11 +29,17 @@ static class RetainedGpuChecks
         Environment.SetEnvironmentVariable("DOTNET_ROOT_X64", Path.GetDirectoryName(dotnet));
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-retained-gpu-check-" + Guid.NewGuid().ToString("N"));
         var launcherPath = Path.Combine(Bin, "RooIndustriesRetainedLauncher.exe");
-        OperationsFolder.Secure(root); File.Copy(GamePath, launcherPath, false);
+        var evidence=Path.Combine(repo,"artifacts","validation","retained-gpu-cleanup-"+Guid.NewGuid().ToString("N"));
+        var fixture=new FixtureScope(root,evidence);var launcherCopy=new FixtureCopy(GamePath,launcherPath);
+        var identities=new Dictionary<Process,FixtureProcess>(); Process? launcher=null;
         var engine = new ProtectedSessions(_ => false);
         var states = new List<string>(); var workers = new List<Process>();
         var proof = new List<object>(); var passed = 0;
         void Check(bool result, string message) { if (!result) throw new InvalidOperationException(message); Console.WriteLine("PASS " + message); passed++; }
+        ProtectedSessionState State(string path) => engine.Status(path).State ?? throw new InvalidDataException("Missing state.");
+        try
+        {
+        fixture.Secure();launcherCopy.Create();
         var classifier = typeof(ProtectedSessions).Assembly.GetType("RooIndustries.Optimizer.LaunchGpuHandles")!
             .GetMethod("Initializing", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .CreateDelegate<Func<ControlRead, RunningProcess, bool>>();
@@ -47,10 +53,7 @@ static class RetainedGpuChecks
         Check(!classifier(ControlRead.From(2), Age(10)), "A known original is not an initialization failure");
         Check(!classifier(Failure(0xC000000D, "OpenProcess"), Age(10)), "An error from a different API cannot authorize initialization waiting");
         Check(!classifier(Failure(0xC000000D, kind: "win32"), Age(10)), "An error from a different status namespace cannot authorize initialization waiting");
-        ProtectedSessionState State(string path) => engine.Status(path).State ?? throw new InvalidDataException("Missing state.");
-        using var launcher = Start(launcherPath, "--retained-launcher", root);
-        try
-        {
+        launcher = Start(launcherPath, "--retained-launcher", root); identities.Add(launcher,FixtureProcess.Started(launcher,evidence));
             Until(() => File.Exists(Path.Combine(root, "launcher-ready")), "Fixture launcher not ready.");
             for (var trial = 0; trial < 8; trial++)
             {
@@ -59,7 +62,7 @@ static class RetainedGpuChecks
                 OperationFiles.Write(previewPath, engine.Preview(launcher.Id, GamePath, new() { ["gpuPriority"] = JsonSerializer.SerializeToElement(3) }, true));
                 var request = Path.Combine(session, "request.json");
                 OperationFiles.Write(request, new { schemaVersion = 1, repoRoot = Path.GetFullPath(repo), sessionRoot = session, previewPath, reviewHash = OperationFiles.HashFile(previewPath), confirm = true });
-                var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", request); workers.Add(worker);
+                var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", request); workers.Add(worker); identities.Add(worker,FixtureProcess.Started(worker,evidence));
                 Until(() => File.Exists(Path.Combine(session, "session.json")) && State(session).Status == "armed", "GPU session did not arm.");
                 var gameRoot = Path.Combine(root, "game-" + trial); Directory.CreateDirectory(gameRoot);
                 OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = gameRoot, session });
@@ -67,6 +70,8 @@ static class RetainedGpuChecks
                 var born = OperationFiles.Read<JsonElement>(Path.Combine(gameRoot, "born.json"));
                 using var game = Process.GetProcessById(born.GetProperty("pid").GetInt32());
                 _ = game.Handle;
+                var gameIdentity=FixtureProcess.Ready(Path.Combine(gameRoot,"born.json"),GamePath,["--retained-game",gameRoot,session],true,evidence);identities.Add(game,gameIdentity);
+                if(FixtureProcess.Created(game)!=gameIdentity.Creation)throw new InvalidDataException("Fixture game handle identity mismatch.");
                 File.WriteAllText(Path.Combine(gameRoot, "oracle-ready"), "");
                 Until(() => File.Exists(Path.Combine(gameRoot, "locked.json")), "GPU fixture did not restrict later handles.");
                 var locked = OperationFiles.Read<JsonElement>(Path.Combine(gameRoot, "locked.json")).GetProperty("atUtc").GetDateTime();
@@ -111,7 +116,7 @@ static class RetainedGpuChecks
                     Check(true, "Retained handle reapplies a reset to its captured original");
                     engine.Command(session, "stop");
                 }
-                else if (trial == 1) worker.Kill();
+                else if (trial == 1) identities[worker].Stop();
                 else if (trial == 2)
                 {
                     Oracle.SetGpu(game, 1);
@@ -123,7 +128,8 @@ static class RetainedGpuChecks
                     var watch = OperationFiles.Read<ProtectedWatchReady>(Path.Combine(session, "watch.json"));
                     using var watcher = Process.GetProcessById(watch.Watcher.ProcessId);
                     Check(watcher.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() == watch.Watcher.CreationTimeFileTimeUtc, "Crash test binds to the owned watcher identity");
-                    watcher.Kill(); watcher.WaitForExit(10000);
+                    using var watcherIdentity=FixtureProcess.Identity(watch.Watcher,["watch",Path.Combine(session,"watch-request.json")],true,evidence)??throw new InvalidDataException("Fixture watcher exited.");
+                    watcherIdentity.Stop(); watcher.WaitForExit(10000);
                 }
                 Check(worker.WaitForExit(20000), "The owned controller exits");
                 if (trial != 3) Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "Recovery watcher did not finish.");
@@ -140,27 +146,17 @@ static class RetainedGpuChecks
         catch (CleanupSignal) { Check(true, "A controlled failure while GPU class 3 is active exercises fixture cleanup"); }
         finally
         {
-            foreach (var worker in workers) { if (!worker.HasExited) { worker.Kill(); worker.WaitForExit(10000); } worker.Dispose(); }
-            File.WriteAllText(Path.Combine(root, "stop-launcher"), "");
-            if (!launcher.WaitForExit(15000)) { launcher.Kill(); launcher.WaitForExit(10000); }
-            foreach (var session in states)
-            {
-                var watchPath = Path.Combine(session, "watch.json");
-                if (File.Exists(watchPath))
-                {
-                    var identity = OperationFiles.Read<ProtectedWatchReady>(watchPath).Watcher;
-                    try
-                    {
-                        using var watcher = Process.GetProcessById(identity.ProcessId);
-                        _ = watcher.SafeHandle;
-                        if (watcher.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() != identity.CreationTimeFileTimeUtc) throw new InvalidDataException("Fixture watcher identity changed.");
-                        if (!watcher.WaitForExit(20000)) throw new TimeoutException("Fixture watcher did not finish before cleanup.");
-                    }
-                    catch (ArgumentException) { }
-                }
-                if (File.Exists(Path.Combine(session, "session.json"))) engine.Recover(session, State(session).Preview.OperationId);
-            }
-            File.Delete(launcherPath); Directory.Delete(root, true);
+            bool finished=true;
+            void Step(Action action){try{action();}catch{finished=false;throw;}}
+            FixtureScope.Finish(
+                ()=>Step(()=>{foreach(var worker in workers){identities[worker].Stop();worker.Dispose();}}),
+                ()=>Step(()=>{if(launcher is not null){File.WriteAllText(Path.Combine(root,"stop-launcher"),"");if(!launcher.WaitForExit(15000))identities[launcher].Stop();launcher.Dispose();}}),
+                ()=>Step(()=>{foreach(var session in states){if(File.Exists(Path.Combine(session,"session.json"))){FixtureScope.AwaitRecovery(session,evidence);engine.Recover(session,State(session).Preview.OperationId);}}}),
+                ()=>Step(()=>{foreach(var identity in identities.Values)identity.Stop();}),
+                ()=>{fixture.Cleanup(finished);},
+                ()=>{launcherCopy.Remove();},
+                ()=>{foreach(var identity in identities.Values)identity.Dispose();});
+
         }
         Check(!Directory.Exists(root), "Fixture cleanup waits for the recovery watcher and removes its directory");
         OperationFiles.Write(Path.Combine(repo, "artifacts", "validation", "retained-gpu-result.json"), new { passed, proof });
@@ -169,7 +165,7 @@ static class RetainedGpuChecks
 
     internal static void Launcher(string root)
     {
-        var children = new List<Process>(); File.WriteAllText(Path.Combine(root, "launcher-ready"), "");
+        var children = new List<Process>(); Directory.CreateDirectory(Path.Combine(root,"process-receipts")); File.WriteAllText(Path.Combine(root, "launcher-ready"), "");
         try
         {
             var until = DateTime.UtcNow.AddMinutes(8);
@@ -179,18 +175,18 @@ static class RetainedGpuChecks
                 if (File.Exists(path))
                 {
                     var request = OperationFiles.Read<JsonElement>(path); File.Delete(path);
-                    children.Add(Start(GamePath, "--retained-game", request.GetProperty("root").GetString()!, request.GetProperty("session").GetString()!));
+                    var child=Start(GamePath, "--retained-game", request.GetProperty("root").GetString()!, request.GetProperty("session").GetString()!);_ = child.Handle;children.Add(child);
                 }
                 Thread.Sleep(20);
             }
         }
-        finally { foreach (var child in children) { if (!child.HasExited) { child.Kill(); child.WaitForExit(10000); } child.Dispose(); } }
+        finally { foreach (var child in children) { if (!child.HasExited) { using var owned=FixtureProcess.Started(child,Path.Combine(root,"process-receipts"));owned.Stop(); child.WaitForExit(10000); } child.Dispose(); } }
     }
 
     internal static void Game(string root, string session)
     {
         using var self = Process.GetCurrentProcess(); _ = self.Handle;
-        OperationFiles.Write(Path.Combine(root, "born.json"), new { pid = self.Id });
+        OperationFiles.Write(Path.Combine(root, "born.json"), new { pid = self.Id, creationTimeFileTimeUtc = FixtureProcess.Created(self).ToString(), administrator = true });
         var transfer = Path.Combine(session, "gpu-handles", self.Id + "-" + self.StartTime.ToUniversalTime().ToFileTimeUtc() + ".transfer.json");
         Until(() => File.Exists(transfer) && File.Exists(Path.Combine(root, "oracle-ready")), "Handles were not captured before fixture restriction.");
         DenyNewGpuHandles(self);
