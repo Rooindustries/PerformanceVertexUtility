@@ -15,6 +15,9 @@ public static class MigrationU32 {
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);
+ [DllImport("shell32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CommandLineToArgvW(string command,out int count);
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+ public static string[] SplitCommandLine(string command){int count;var memory=CommandLineToArgvW(command,out count);if(memory==IntPtr.Zero)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());try{var arguments=new string[count];for(int i=0;i<count;i++)arguments[i]=Marshal.PtrToStringUni(Marshal.ReadIntPtr(memory,i*IntPtr.Size));return arguments;}finally{LocalFree(memory);}}
 }
 '@
 [MigrationU32]::SetProcessDPIAware() | Out-Null
@@ -84,9 +87,10 @@ function Timer-Ownership($Task, [string]$ControlRoot, [string]$SessionPath, [Dat
     $assembly = Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll'
     if ($launch.owner.machine -ine $env:COMPUTERNAME -or $launch.owner.userSid -cne $sid -or $launch.root -ine $ControlRoot -or $launch.assemblyPath -ine $assembly -or $launch.assemblyHash -ine (Get-FileHash -LiteralPath $assembly -Algorithm SHA256).Hash -or
         ($state.launch | ConvertTo-Json -Depth 8 -Compress) -cne ($launch | ConvertTo-Json -Depth 8 -Compress) -or $state.executable -ine $hostExe -or -not $state.acquired -or $state.released -or $null -ne $state.error) { throw 'Timer output does not match this installed helper and its startup/launch receipts; retained.' }
-    $expectedCommand = '"' + $hostExe + '" --timer-' + $LaunchKind + ' "' + $(if ($LaunchKind -ceq 'autostart') { $ControlRoot } else { $launchPath }) + '"'
+    $expectedArgument = if ($LaunchKind -ceq 'autostart') { $ControlRoot } else { $launchPath }
     $row = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $state.processId) -ErrorAction Stop
-    if (-not $row -or $row.ExecutablePath -ine $hostExe -or [string]$row.CommandLine -ine $expectedCommand) { throw 'Timer worker command differs from its launch receipt; retained.' }
+    $arguments = if ($row) { [MigrationU32]::SplitCommandLine([string]$row.CommandLine) } else { @() }
+    if (-not $row -or $row.ExecutablePath -ine $hostExe -or $arguments.Count -ne 3 -or -not [string]::Equals($arguments[0], $hostExe, [StringComparison]::OrdinalIgnoreCase) -or $arguments[1] -cne ('--timer-' + $LaunchKind) -or -not [string]::Equals($arguments[2], $expectedArgument, [StringComparison]::OrdinalIgnoreCase)) { throw 'Timer worker command differs from its launch receipt; retained.' }
     $process = Get-Process -Id $state.processId -ErrorAction Stop
     try {
         $owned = New-OwnedProcess $process
