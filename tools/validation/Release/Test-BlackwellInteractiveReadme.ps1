@@ -244,6 +244,28 @@ function Has-OwnedAncestry($Native) {
     }
     return $false
 }
+function Own-SetupDescendants {
+    $family=[Collections.Generic.List[object]]::new()
+    foreach($process in @(Get-Process -ErrorAction Stop|Where-Object {$_.ProcessName -like 'RooIndustries-OptimizationSuite-0.10.0-beta-setup*'})){
+        try{
+            $native=[BlackwellNativeProbe]::Inspect($process.Id)|ConvertFrom-Json
+            $leaf=[IO.Path]::GetFileName($native.imagePath)
+            if(($leaf -ine 'RooIndustries-OptimizationSuite-0.10.0-beta-setup.exe' -and $leaf -ine 'RooIndustries-OptimizationSuite-0.10.0-beta-setup.tmp') -or -not(Has-OwnedAncestry $native)){continue}
+            $receipt=Own-Reported $native $native.imagePath
+            if($receipt){$family.Add(@{native=$native;receipt=$receipt;depth=0})}
+        }catch{if($process.HasExited){continue};throw}finally{$process.Dispose()}
+    }
+    foreach($row in $family){
+        $cursor=$row.native;$seen=[Collections.Generic.HashSet[string]]::new()
+        while($cursor.parent){
+            if(-not$seen.Add(([string]$cursor.pid+':'+$cursor.creationTimeFileTimeUtc))){throw 'Setup family ancestry cycle; retained'}
+            $parent=$cursor.parent;$matches=@($family|Where-Object {$_.native.pid -eq $parent.pid -and $_.native.creationTimeFileTimeUtc -ceq [string]$parent.creationTimeFileTimeUtc -and $_.native.imagePath -ieq $parent.imagePath})
+            if($matches.Count -gt 1){throw 'Ambiguous setup family parent; retained'}
+            if($matches.Count -eq 0){break};$row.depth++;$cursor=$matches[0].native
+        }
+    }
+    @($family|Sort-Object {[int]$_.depth} -Descending|ForEach-Object {$_.receipt})
+}
 function Own-Copy($Receipt) {
     try{$identity=$Receipt.Identity;$copies.Add($identity);$result.ownedFiles=@($copies);Save-Result;return $identity}finally{$Receipt.Dispose()}
 }
@@ -345,6 +367,7 @@ try {
         if($case.finishInvoked -and -not$case.notepadUiCleanup){try{$case.notepadUiCleanup=Restore-NotepadTabs $tabsBefore $case.notepadStartCaptures $started}catch{$case.notepadUiCleanup=@{passed=$false;error=$_.Exception.Message}}}
         if($notepadStarts){$case.notepadStartCaptures=@(Read-NotepadStarts $notepadStarts);$notepadStarts.Dispose();$notepadStarts=$null}
         $case.steps=@($steps);Save-Result
+        foreach($receipt in @(Own-SetupDescendants)){Stop-OwnedProcess $receipt}
         foreach($receipt in $owned){Stop-OwnedProcess $receipt}
         if($variant -ceq 'normal-uac' -and [BlackwellReadmeDesktop]::Name() -ne 'Default'){Start-Sleep -Seconds 3;if([BlackwellReadmeDesktop]::Name() -ne 'Default'){throw 'Own Medium caller stopped, but UAC input desktop remains; retained evidence, no arbitrary consent process was killed'}}
         $case.completed=$true;Save-Result
@@ -358,6 +381,7 @@ finally {
         try{if(Test-Path -LiteralPath $report.metadata){Assert-PlainAncestry $report.metadata;$identity=(Get-Content -Raw -LiteralPath $report.metadata|ConvertFrom-Json).probe;$null=Own-Reported $identity $report.image}}
         catch{$clean=$false;$result.error+='; reported caller cleanup: '+$_.Exception.Message}
     }
+    try{foreach($receipt in @(Own-SetupDescendants)){Stop-OwnedProcess $receipt}}catch{$clean=$false;$result.error+='; setup family cleanup: '+$_.Exception.Message}
     $result.ownedProcesses=@($owned|ForEach-Object Identity)
     foreach($receipt in $owned){try{Stop-OwnedProcess $receipt;$receipt.process.Dispose()}catch{$clean=$false;$result.error+='; exact process cleanup: '+$_.Exception.Message}}
     foreach($lease in $readLeases){$lease.Dispose()}
