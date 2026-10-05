@@ -38,7 +38,9 @@ Copy-Item -LiteralPath $ResourcePath -Destination (Join-Path $OutDir 'persistent
  $function=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Report-UnownedLoadTimesResources'},$true)
  if($errors -or -not$function){throw 'Actual consumer function missing or malformed'};Invoke-Expression $function.Extent.Text
  $script:HandoffContext=$context;$script:ChildCompleted=$false;$script:PersistentResources=$null;$Scenario='permissions';$appDir=$OutDir;$probeDirectory=$OutDir;$ifeoProbe='HKLM:\SOFTWARE\RooIndustriesHandoffAbsent-'+[Guid]::NewGuid().ToString('N');$ruleTasksBefore=@();$sessionTasksBefore=@()
- Check (@(Report-UnownedLoadTimesResources).Count -eq 0) 'actual next-scenario consumer accepts completed producer worker and task'
+ $report=@(Report-UnownedLoadTimesResources);$report|Set-Content -LiteralPath (Join-Path $OutDir 'consumer-before.txt')
+ Check (@(Get-Process Optimizer.Host -ErrorAction Stop|Where-Object Id -EQ $p.Id).Count -eq 1) 'private installed-image worker is present in the actual consumer process enumeration'
+ Check (@($report|Where-Object {$_ -like ('*retained installed process '+$p.Id+' *') -or $_ -like ('*retained task '+$task.path+$task.name+' *')}).Count -eq 0) 'actual next-scenario consumer accepts completed producer worker and task'
  $foreign=Register-OwnedProbeTask ('RooIndustries.Timer.foreign-'+[Guid]::NewGuid().ToString('N')) (Join-Path ([Environment]::SystemDirectory) 'cmd.exe') '/d /c exit 0' $OutDir ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) 5
  Refuses {Test-HandoffTask $ledger $foreign.name $foreign.path -Require} 'foreign timer task refused'
  Check ([bool](@(Report-UnownedLoadTimesResources)|Where-Object {$_ -like ('*CLEANUP NEEDED*'+$foreign.name+'*')})) 'actual consumer names foreign timer task and refuses it'
@@ -52,7 +54,16 @@ Copy-Item -LiteralPath $ResourcePath -Destination (Join-Path $OutDir 'persistent
  [IO.File]::WriteAllBytes($context.ledgerPath,$ledgerCopy)
  $completed=Join-Path $producer 'completed-child.json';$renamed=Rename-OwnedFile $completed ($completed+'.held')
  try{Refuses {Read-HandoffLedger $context} 'missing producer completed receipt refused'}finally{Restore-OwnedFile $renamed}
- Stop-OwnedProcess $owned;Remove-OwnedTask $task;$task=$null
+ $folder=Get-OwnedTaskFolder $task.path;$liveTask=$folder.GetTask($task.name);$definition=$liveTask.Definition;$definition.Actions.Item(1).Arguments='/d /c exit 1'
+ $null=$folder.RegisterTaskDefinition($task.name,$definition,6,[Security.Principal.WindowsIdentity]::GetCurrent().User.Value,$null,3,$task.sddl)
+ $task=Get-OwnedTaskReceipt $task.name $task.path
+ Initialize-HandoffLedger $context
+ Check $true 'legitimate task transition does not block scenario initialization'
+ Refuses {Read-HandoffLedger $context} 'changed task remains refused at resource acceptance boundary'
+ Remove-OwnedTask $task;$task=$null
+ $afterTransition=Read-HandoffLedger $context -Prune
+ Check (@($afterTransition.entries|Where-Object kind -CEQ 'task').Count -eq 0 -and (Test-HandoffProcess $afterTransition $p)) 'removed transitioned task is pruned while unchanged worker remains owned'
+ Stop-OwnedProcess $owned
  $pruned=Read-HandoffLedger $context -Prune
  Check (@($pruned.entries).Count -eq 0) 'gone resources dropped from ledger'
  Check (-not(Test-HandoffProcess $pruned $p)) 'gone worker is not adopted'
@@ -61,7 +72,7 @@ finally{
  foreach($r in @($task,$foreign)){if($r){try{Remove-OwnedTask $r}catch{$checks.Add(@{passed=$false;check='Private task cleanup: '+$_.Exception.Message})}}}
  if($owned){try{Stop-OwnedProcess $owned;$owned.process.Dispose()}catch{$checks.Add(@{passed=$false;check='Private process cleanup: '+$_.Exception.Message})}}
  if($workerFile){$workerFile.Dispose()}
- $result=@{phase='loadtimes-handoff-private';machine=$env:COMPUTERNAME;passed=($checks.Count -ge 11 -and @($checks|Where-Object {-not$_.passed}).Count -eq 0);checks=$checks.ToArray()}
+ $result=@{phase='loadtimes-handoff-private';machine=$env:COMPUTERNAME;passed=($checks.Count -ge 15 -and @($checks|Where-Object {-not$_.passed}).Count -eq 0);checks=$checks.ToArray()}
  $result|ConvertTo-Json -Depth 20|Set-Content -LiteralPath (Join-Path $OutDir 'result.json')
 }
 if(-not$result.passed){exit 1}
