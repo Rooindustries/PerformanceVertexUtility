@@ -1289,7 +1289,7 @@ switch($Phase){
             $failed=@($lines|Where-Object {$_ -cmatch '^\S+ (FAIL|FATAL|ERROR) '}).Count
             $skipped=@($lines|Where-Object {$_ -cmatch '^\S+ (SKIPPED|NOT RUN) '}).Count
             Check ((Test-Path -LiteralPath $file) -and $failed -eq 0 -and $skipped -eq 0 -and ($passLines.Count -gt 0 -or $name -eq 'preflight')) ('phase '+$name+': PASS '+$passLines.Count+' FAIL '+$failed+' SKIPPED '+$skipped) $(if(Test-Path -LiteralPath $file){$file}else{'no log was written'})
-            foreach($needle in @($requiredChecks[$name])){
+            foreach($needle in @($requiredChecks[$name]|Where-Object {$_})){
                 $found=@($passLines|Where-Object {$_ -like ('*'+$needle+'*')}).Count
                 Check ($found -ge 1) ('phase '+$name+' ran the check: '+$needle) ('passed '+$found+' time(s)')
             }
