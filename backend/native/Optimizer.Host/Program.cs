@@ -46,6 +46,9 @@ try
     object data;
     switch (action)
     {
+        case "timer-remove-installed":
+            RequireConfirmation(request);
+            data = new { messages = TimerStartupControl.RemoveInstalled() }; break;
         case "tweak-catalog":
             var tweakCatalog = ReadTweakCatalog(request.RepoRoot);
             data = new { catalog = tweakCatalog, hash = tweakCatalog.Digest };

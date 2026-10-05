@@ -61,7 +61,21 @@ sealed class FixtureScope
                 foreach (var path in files.Where(path=>Path.GetFileName(path).Equals("session.json",StringComparison.OrdinalIgnoreCase)))
                 {
                     using var doc = JsonDocument.Parse(File.ReadAllText(path)); var state = doc.RootElement;
-                    if (state.GetProperty("status").GetString() != "stopped" || state.GetProperty("registryStatus").GetString() != "restored" || state.GetProperty("jobStatus").GetString() != "cleared") throw new InvalidOperationException("Fixture has unfinished recovery: " + path);
+                    if (state.GetProperty("status").GetString() is not ("stopped" or "stoppedWithErrors") || state.GetProperty("registryStatus").GetString() != "restored" || state.GetProperty("jobStatus").GetString() != "cleared") throw new InvalidOperationException("Fixture has unfinished recovery: " + path);
+                    foreach(var game in state.GetProperty("games").EnumerateArray()){
+                        var identity=game.GetProperty("identity").Deserialize<RunningProcess>(OperationFiles.Json)??throw new InvalidDataException("Fixture game identity is invalid.");
+                        foreach(var field in game.GetProperty("fields").EnumerateArray()){
+                            var status=field.GetProperty("status").GetString();var route=field.GetProperty("route").GetString();
+                            if(route switch{"launch"=>status is not ("expired" or "restartRequired"),"job"=>status!="released","native"=>status is not ("restored" or "expired"),_=>true})throw new InvalidOperationException("Fixture has unfinished control recovery: "+path);
+                            if(route=="native" && (!field.TryGetProperty("journalPath",out var requiredJournal) || requiredJournal.ValueKind!=JsonValueKind.String || string.IsNullOrWhiteSpace(requiredJournal.GetString())))throw new InvalidDataException("Fixture native control lacks its recovery journal.");
+                            if(field.TryGetProperty("journalPath",out var journalPath) && journalPath.ValueKind!=JsonValueKind.Null){
+                                var journal=Path.GetFullPath(journalPath.GetString()!);if(!journal.StartsWith(Root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Fixture recovery journal is outside its root.");
+                                using var saved=JsonDocument.Parse(File.ReadAllText(journal));if(saved.RootElement.GetProperty("status").GetString() is not ("restored" or "expired"))throw new InvalidOperationException("Fixture has unfinished native journal: "+journal);
+                                identity.Verify(saved.RootElement.GetProperty("preview").GetProperty("identity").Deserialize<RunningProcess>(OperationFiles.Json)??throw new InvalidDataException("Fixture journal identity is invalid."));
+                            }
+                        }
+                    }
+                    foreach(var game in state.GetProperty("games").EnumerateArray())FixtureProcess.RequireExited(game.GetProperty("identity").Deserialize<RunningProcess>(OperationFiles.Json)??throw new InvalidDataException("Fixture game identity is invalid."));
                     if(!state.TryGetProperty("host",out var host))throw new InvalidDataException("Fixture recovery state lacks host identity.");
                     var hostIdentity=host.Deserialize<RunningProcess>(OperationFiles.Json)??throw new InvalidDataException("Fixture host identity is invalid.");
                     using(var hostProcess=FixtureProcess.Identity(hostIdentity,["run",Path.Combine(Path.GetDirectoryName(path)!,"request.json")],true,Path.GetDirectoryName(evidence)!)){if(hostProcess is not null && !hostProcess.Wait(0))throw new InvalidOperationException("Fixture host is still running.");}
@@ -188,6 +202,14 @@ sealed class FixtureProcess : IDisposable
         if (!image.Equals(Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase) || parsed.Length != args.Length + 1 || !parsed.Skip(1).SequenceEqual(args, StringComparer.Ordinal))throw new InvalidDataException("Unowned native fixture image/command; process retained.");
         Token();if(sid!=identity.User!.Value || elevated!=expectedElevation)throw new InvalidDataException("Unowned native fixture token; process retained.");
     }
+    internal static void RequireExited(RunningProcess identity)
+    {
+        if(identity.ProcessId<=0 || !long.TryParse(identity.CreationTimeFileTimeUtc,out var expected) || expected<=0)throw new InvalidDataException("Fixture actor identity is invalid.");
+        using var handle=OpenProcess(0x101000,false,identity.ProcessId);
+        if(handle.IsInvalid){var error=Marshal.GetLastWin32Error();if(error==87)return;throw new Win32Exception(error);}
+        Check(GetProcessTimes(handle,out var created,out _,out _,out _));if(created!=expected)return;
+        var wait=WaitForSingleObject(handle,0);if(wait==uint.MaxValue)throw new Win32Exception(Marshal.GetLastWin32Error());if(wait!=0)throw new InvalidOperationException("An exact native fixture game actor is still running.");
+    }
     internal bool Wait(int milliseconds) { var result = WaitForSingleObject(handle, checked((uint)milliseconds)); if (result == uint.MaxValue) throw new Win32Exception(Marshal.GetLastWin32Error()); return result == 0; }
     internal void Stop() { if (Wait(0)) return; Check(GetProcessTimes(handle, out var created, out _, out _, out _)); if (created != Creation || Command(handle) != command) throw new InvalidDataException("Held fixture identity changed."); Check(TerminateProcess(handle, 1)); if (!Wait(10000)) throw new TimeoutException("Owned fixture did not stop."); }
     internal static long Created(Process process) { Check(GetProcessTimes(process.SafeHandle, out var created, out _, out _, out _)); return created; }
@@ -228,7 +250,7 @@ static class StandardFixtureHolder
         var ready = Path.Combine(directory, "holder-ready.json"); var stop = Path.Combine(directory, "holder-stop"); var script = Path.Combine(directory, "hold.cmd");
         var probe=probeRead?"@whoami /user /fo csv >\""+Path.Combine(directory,"holder-user.csv")+"\"\r\n@powershell.exe -NoProfile -NonInteractive -Command \"try { [IO.File]::OpenRead('"+dll+"').Dispose(); 'readable'; exit 0 } catch { $_.Exception.InnerException.GetType().FullName; $_.Exception.Message; exit 9 }\" >\""+Path.Combine(directory,"holder-source-read.txt")+"\" 2>&1\r\n@if errorlevel 9 (echo denied) else (echo readable) >\""+Path.Combine(directory,"holder-source-read.exit")+"\"\r\n":"";
         File.WriteAllText(script, probe+"@\"" + dotnet + "\" \"" + dll + "\" --hold-lock \"" + path + "\" \"" + ready + "\" \"" + stop + "\"\r\n");
-        var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "runas.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, Arguments = "/trustlevel:0x20000 \"cmd.exe /d /c \"" + script + "\"\"" };
+        var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "runas.exe")) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, Arguments = "/trustlevel:0x20000 \"cmd.exe /d /c \"" + script + "\"\"" };
         using var starter = Process.Start(info) ?? throw new InvalidOperationException("runas did not start"); using var owned = FixtureProcess.Started(starter, evidence); var output = starter.StandardOutput.ReadToEndAsync(); var errors = starter.StandardError.ReadToEndAsync();
         var watch = Stopwatch.StartNew(); try { while (!File.Exists(ready)) { if (watch.Elapsed.TotalSeconds >= seconds) throw new TimeoutException("The standard-token lock holder did not start; runas " + (starter.HasExited ? "exit " + starter.ExitCode + " " + output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult() : "is still running")); Thread.Sleep(100); } return FixtureProcess.Ready(ready, dotnet, [dll, "--hold-lock", path, ready, stop], false, evidence); }
         catch { FixtureScope.Finish(()=>owned.Stop(),()=>SignalStop(directory));throw; }

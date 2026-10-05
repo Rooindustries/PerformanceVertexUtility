@@ -202,9 +202,7 @@ public partial class BugReportViewModel : ObservableObject
         if (SavedPath is not { } path) return;
         try
         {
-            var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), "/select,\"" + path + "\"") { UseShellExecute = false };
-            RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
-            using var process = Process.Start(start);
+            RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(path, select: true);
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {

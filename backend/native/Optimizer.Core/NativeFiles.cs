@@ -7,7 +7,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.Optimizer;
 
-internal readonly record struct HandleInfo(FileAttributes Attributes, long Length, long LastWriteTicks, uint Links)
+internal readonly record struct HandleInfo(FileAttributes Attributes, long Length, long LastWriteTicks, uint Links, long CreationTicks)
 {
     public bool IsLink => Attributes.HasFlag(FileAttributes.ReparsePoint);
     public bool IsDirectory => Attributes.HasFlag(FileAttributes.Directory);
@@ -58,7 +58,7 @@ internal static class NativeFiles
     public static HandleInfo Info(SafeFileHandle handle)
     {
         if (!GetFileInformationByHandle(handle, out var information)) throw Fail(Marshal.GetLastWin32Error(), "");
-        return new((FileAttributes)information.Attributes, ((long)information.SizeHigh << 32) | information.SizeLow, information.Write, information.Links);
+        return new((FileAttributes)information.Attributes, ((long)information.SizeHigh << 32) | information.SizeLow, information.Write, information.Links, information.Creation);
     }
 
     public static string? FinalPath(SafeFileHandle handle)

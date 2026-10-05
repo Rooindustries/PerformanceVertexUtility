@@ -23,6 +23,32 @@ public static class DataFolder
     private static bool _resumed;
 
     private sealed record Suspended(string[] Tasks, bool Timer, string Operations);
+    private sealed record Recovery(string Message);
+
+    internal static void WriteRecoveryNotice(string root, string? keptAt)
+    {
+        var message = keptAt is null
+            ? "The earlier data folder was gone, so Roo Industries started fresh. Its saved rules and undo history are no longer available."
+            : "The earlier data folder was damaged, so Roo Industries started fresh. Its saved rules and undo history were not loaded. The old folder was kept at: " + keptAt;
+        using var lease = PolicyRootLease.Acquire(root, Kind, deep: false);
+        File.WriteAllBytes(Path.Combine(root, "data-root-recovery.json"), JsonSerializer.SerializeToUtf8Bytes(new Recovery(message), Json));
+        if (lease.Moved) throw new UnauthorizedAccessException("The data folder moved while Roo Industries wrote its recovery notice.");
+    }
+
+    public static string? RecoveryNotice(string root)
+    {
+        using var lease = PolicyRootLease.Acquire(root, Kind, deep: false);
+        var bytes = NativeFiles.ReadBounded(root, "data-root-recovery.json", 1 << 16, out _);
+        return bytes is null ? null : JsonSerializer.Deserialize<Recovery>(bytes, Json)?.Message;
+    }
+
+    public static void AcknowledgeRecoveryNotice(string root, string message)
+    {
+        using var lease = PolicyRootLease.Acquire(root, Kind, deep: false);
+        var bytes = NativeFiles.ReadBounded(root, "data-root-recovery.json", 1 << 16, out _);
+        if (bytes is not null && JsonSerializer.Deserialize<Recovery>(bytes, Json)?.Message == message)
+            File.Delete(Path.Combine(root, "data-root-recovery.json"));
+    }
 
     public static string Root => PolicyRootSecurity.Normalize(BrandCompatibility.LocalDataRoot);
 

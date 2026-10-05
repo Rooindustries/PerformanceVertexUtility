@@ -15,7 +15,6 @@ $hostDirectory=Join-Path $root 'backend\bin\optimizer'
 $hostArgs=@(Join-Path $hostDirectory 'Optimizer.Host.dll')
 if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $hostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $hostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1');$DotNetPath=Get-RooIndustriesDevelopmentDotNet $hostDirectory}
-$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $hostDll=Join-Path $root 'backend\bin\optimizer\Optimizer.Host.dll'
 if(-not(Test-Path $hostDll)){throw 'Build the cleanup host with backend\scripts\Build-OptimizerHost.ps1 before using exclusions.'}
 $request=@{schemaVersion=1;repoRoot=$root}
@@ -28,9 +27,12 @@ if($Action -eq 'Save'){
 }
 if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
 $OutputEncoding=[Text.UTF8Encoding]::new($false)
-$output=@(($request|ConvertTo-Json -Depth 32)|& $DotNetPath @hostArgs $coreAction '-') -join "`n"
-$code=$LASTEXITCODE
+$previousRoot=[Environment]::GetEnvironmentVariable('DOTNET_ROOT','Process')
+try {
+    if($hostArgs.Count -gt 0){$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent}
+    $output=@(($request|ConvertTo-Json -Depth 32)|& $DotNetPath @hostArgs $coreAction '-') -join "`n"
+    $code=$LASTEXITCODE
+} finally {if($hostArgs.Count -gt 0){[Environment]::SetEnvironmentVariable('DOTNET_ROOT',$previousRoot,'Process')}}
 $result=$output|ConvertFrom-Json
 if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
 $output
-

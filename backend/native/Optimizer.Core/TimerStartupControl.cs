@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
+using Microsoft.Win32;
+using System.Security.Principal;
 
 namespace RooIndustries.Optimizer;
 
@@ -54,6 +56,115 @@ public static class TimerStartupControl
         xml.Root.Element(ns + "Settings")?.Element(ns + "Enabled")?.Remove();
         return OperationFiles.Hash(Encoding.UTF8.GetBytes(xml.ToString(SaveOptions.DisableFormatting) + "\n" + (string)task.GetSecurityDescriptor(7)));
     }
+    public static string[] RemoveInstalled() => RemoveForInstall(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..")));
+
+    public static string[] RemoveForInstall(string install)
+    {
+        if (!PolicyRootSecurity.Elevated()) throw new UnauthorizedAccessException(OperationsFolder.NotAdministrator);
+        install = PolicyRootSecurity.Normalize(install);
+        using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey);
+        var roots = (markers?.GetValueNames() ?? []).Where(root => !root.Contains('|') && Path.IsPathFullyQualified(root) &&
+            (string.Equals(Path.GetFileName(root), BrandCompatibility.LegacyDataFolder, StringComparison.OrdinalIgnoreCase) || string.Equals(Path.GetFileName(root), "RooIndustriesOptimizationSuite", StringComparison.OrdinalIgnoreCase)))
+            .Select(root => (Root: root, Sid: markers!.GetValue(root, null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string)).Where(row => row.Sid is not null).ToArray();
+        var messages = new List<string>();
+        var scheduler = ConnectScheduler();
+        object folder = CallTaskMember(scheduler, "GetFolder", @"\")!;
+        object tasks = CallTaskMember(folder, "GetTasks", 1)!;
+        try
+        {
+            for (var index = 1; index <= (int)GetTaskProperty(tasks, "Count")!; index++)
+            {
+                object found = GetTaskProperty(tasks, "Item", index)!;
+                try
+                {
+                    var name = (string)GetTaskProperty(found, "Name")!;
+                    if (!name.StartsWith("RooIndustries.Timer.", StringComparison.Ordinal)) continue;
+                    var candidates = roots.Where(row => name == "RooIndustries.Timer." + OperationFiles.Hash(Encoding.UTF8.GetBytes(row.Sid!))[..16]).ToArray();
+                    var removed = false;
+                    var older = candidates.Length == 0;
+                    foreach (var candidate in candidates)
+                    {
+                        try
+                        {
+                            var dataRoot = PolicyRootSecurity.CanonicalPath(candidate.Root);
+                            using var rootLease = PolicyRootLease.Acquire(dataRoot, DataFolder.Kind, deep: false);
+                            var operations = Path.Combine(dataRoot, "operations");
+                            var root = Path.Combine(operations, OperationsFolder.TimerFolder);
+                            if (!PolicyRootSecurity.AdministratorOnlyEntry(operations, true) || !PolicyRootSecurity.AdministratorOnlyEntry(root, true)) { older = true; continue; }
+                            using var operationLease = PolicyRootLease.Acquire(operations, OperationsFolder.Kind, deep: false);
+                            using var guard = OperationFiles.Lock(Path.Combine(root, "startup"));
+                            var receiptPath = ReceiptPath(root); var scriptPath = Path.Combine(root, "startup.ps1");
+                            if (!File.Exists(receiptPath) || !PolicyRootSecurity.AdministratorOnlyEntry(receiptPath, false) || !PolicyRootSecurity.AdministratorOnlyEntry(scriptPath, false)) { older = true; continue; }
+                            var receipt = OperationFiles.Read<TimerStartupReceipt>(receiptPath);
+                            static bool Digest(string value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);
+                            if (receipt.Owner.Machine != Environment.MachineName || receipt.Owner.UserSid != candidate.Sid || receipt.TaskName != name || receipt.Phase != "created" || !Digest(receipt.ScriptHash) || !Digest(receipt.DefinitionHash)) throw new InvalidDataException("The timer receipt does not match its Windows owner and task.");
+                            if (!string.Equals(Fingerprint(found), receipt.DefinitionHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The timer task fingerprint differs from its receipt.");
+                            var startupRoot = root;
+                            var com = new List<object>();
+                            object ReadCom(object target, string member, params object[] arguments)
+                            {
+                                var value = GetTaskProperty(target, member, arguments)!;
+                                if (Marshal.IsComObject(value) && !com.Any(prior => ReferenceEquals(prior, value))) com.Add(value);
+                                return value;
+                            }
+                            try
+                            {
+                                var definition = ReadCom(found, "Definition");
+                                var principal = ReadCom(definition, "Principal");
+                                var registration = ReadCom(definition, "RegistrationInfo");
+                                var actions = ReadCom(definition, "Actions");
+                                var triggers = ReadCom(definition, "Triggers");
+                                var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                                static string Sid(string value)
+                                {
+                                    try { return new SecurityIdentifier(value).Value; }
+                                    catch (ArgumentException) { return ((SecurityIdentifier)new NTAccount(value).Translate(typeof(SecurityIdentifier))).Value; }
+                                }
+                                if ((string)ReadCom(registration, "Description") != "Roo Industries timer request at Windows sign-in" || Sid((string)ReadCom(principal, "UserId")) != candidate.Sid || (int)ReadCom(principal, "LogonType") != 3 || (int)ReadCom(principal, "RunLevel") != 0 || (int)ReadCom(actions, "Count") != 1 || (int)ReadCom(triggers, "Count") != 1) throw new InvalidDataException("The timer principal or description differs from the native definition.");
+                                var action = ReadCom(actions, "Item", 1); var trigger = ReadCom(triggers, "Item", 1);
+                                var prefix = "--headless \"" + Path.Combine(system, @"WindowsPowerShell\v1.0\powershell.exe") + "\" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"";
+                                var arguments = prefix + scriptPath + "\"";
+                                if ((int)ReadCom(action, "Type") != 0 || !string.Equals((string)ReadCom(action, "Path"), Path.Combine(system, "conhost.exe"), StringComparison.OrdinalIgnoreCase) || !string.Equals((string)ReadCom(action, "Arguments"), arguments, StringComparison.OrdinalIgnoreCase) || !string.IsNullOrEmpty((string)ReadCom(action, "WorkingDirectory")) || (int)ReadCom(trigger, "Type") != 9 || Sid((string)ReadCom(trigger, "UserId")) != candidate.Sid) throw new InvalidDataException("The timer action or trigger differs from the native definition.");
+                                startupRoot = Path.GetDirectoryName(((string)ReadCom(action, "Arguments"))[prefix.Length..^1])!;
+                            }
+                            finally { for (var member = com.Count - 1; member >= 0; member--) Marshal.FinalReleaseComObject(com[member]); }
+                            var binary = Path.Combine(install, "backend", "bin", "optimizer");
+                            var assembly = Path.Combine(binary, "Optimizer.Host.dll"); var launcher = Path.Combine(binary, "Optimizer.Host.exe");
+                            if (!PolicyRootSecurity.AdministratorOnlyEntry(install, true) || !PolicyRootSecurity.AdministratorOnlyEntry(binary, true) || !PolicyRootSecurity.AdministratorOnlyEntry(assembly, false) || !PolicyRootSecurity.AdministratorOnlyEntry(launcher, false)) throw new InvalidDataException("The installed timer helper files are not administrator-owned plain files.");
+                            using var scriptFile = NativeFiles.OpenFile(scriptPath);
+                            if (NativeFiles.Info(scriptFile).Links != 1) throw new InvalidDataException("The timer startup script has another hard link.");
+                            using var receiptFile = NativeFiles.OpenFile(receiptPath);
+                            if (NativeFiles.Info(receiptFile).Links != 1) throw new InvalidDataException("The timer startup receipt has another hard link.");
+                            var bytes = File.ReadAllBytes(scriptPath);
+                            if (!string.Equals(OperationFiles.Hash(bytes), receipt.ScriptHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The timer startup script hash differs from its receipt.");
+                            if (!bytes.AsSpan().SequenceEqual(new UTF8Encoding(false).GetBytes(StartupScript(assembly, launcher, true, startupRoot)))) throw new InvalidDataException("The timer startup script bytes differ from this install.");
+                            if (!string.Equals(Fingerprint(found), receipt.DefinitionHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The timer task fingerprint differs from its receipt.");
+                            if (rootLease.Moved || operationLease.Moved) throw new IOException("The timer recovery folder moved while its ownership was checked.");
+                            CallTaskMember(folder, "DeleteTask", name, 0);
+                            var remaining = Find(scheduler, name);
+                            if (remaining is not null) { Marshal.FinalReleaseComObject(remaining); throw new IOException("The owned timer task remains after removal."); }
+                            messages.Add("removed: timer task " + name); removed = true; break;
+                        }
+                        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or JsonException or ArgumentException or COMException or IdentityNotMappedException)
+                        { messages.Add("kept: timer task " + name + ": " + error.Message); }
+                    }
+                    if (!removed) messages.Add((older ? "kept: older-version timer task " : "kept: timer task with different ownership ") + name);
+                }
+                finally { Marshal.FinalReleaseComObject(found); }
+            }
+            return messages.ToArray();
+        }
+        finally { Marshal.FinalReleaseComObject(tasks); Marshal.FinalReleaseComObject(folder); Marshal.FinalReleaseComObject(scheduler); }
+    }
+
+    private static object? GetTaskProperty(object target, string member, params object[] arguments) => InvokeTaskMember(target, member, BindingFlags.GetProperty, arguments);
+    private static object? CallTaskMember(object target, string member, params object[] arguments) => InvokeTaskMember(target, member, BindingFlags.InvokeMethod, arguments);
+    private static object? InvokeTaskMember(object target, string member, BindingFlags kind, params object[] arguments)
+    {
+        try { return target.GetType().InvokeMember(member, kind | BindingFlags.Public | BindingFlags.Instance, null, target, arguments); }
+        catch (TargetInvocationException error) when (error.InnerException is { } inner) { throw inner; }
+    }
+
     public static TweakControlRead Read(ControlAddress address)
     {
         var target = Target(address); var receipt = Receipt(target.Root, target.Name);

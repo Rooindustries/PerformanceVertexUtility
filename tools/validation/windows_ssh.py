@@ -34,12 +34,12 @@ def invoke(host: str, machine: str, script: str, capture: bool = True):
     payload = guarded.encode('utf-8')
     if len(payload) > 65536:
         raise ValueError('Inline Windows SSH scripts are limited to 65536 UTF-8 bytes; transfer bulk data to a protected file and invoke its verified path.')
-    bootstrap = "$ErrorActionPreference='Stop';try{$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()));& ([scriptblock]::Create($s))}catch{Write-Error $_;exit 1}"
+    bootstrap = "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()));& ([scriptblock]::Create($s))}catch{Write-Error $_;exit 1}"
     encoded = base64.b64encode(bootstrap.encode('utf-16le')).decode()
     command = 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + encoded
     return subprocess.run(['ssh', '-T', *SSH_OPTIONS, host, command],
                           input=base64.b64encode(payload).decode() + '\n',
-                          capture_output=capture, text=True, check=True)
+                          capture_output=capture, text=True, encoding='utf-8', check=True)
 
 
 
@@ -166,7 +166,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         raise ValueError('Invalid private task name.')
     run = receipt['runRoot'] + '\\execution-' + uuid.uuid4().hex
     payload = base64.b64encode(json.dumps(arguments).encode()).decode()
-    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=(Get-Content -Raw -LiteralPath (Join-Path $run 'task.json')|ConvertFrom-Json);wrapper=(Get-Content -Raw -LiteralPath (Join-Path $run 'wrapper.json')|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message);exit 1}}"
+    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=(Get-Content -Raw -LiteralPath (Join-Path $run 'task.json')|ConvertFrom-Json);wrapper=(Get-Content -Raw -LiteralPath (Join-Path $run 'wrapper.json')|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message);exit 1}}"
     child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
     wrapper = "\n".join([
         "$ErrorActionPreference='Stop'",
@@ -198,7 +198,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
     setup += f"$deadline=[DateTime]::UtcNow.AddMinutes({minutes+1});while([DateTime]::UtcNow -lt $deadline -and -not(Test-Path -LiteralPath (Join-Path $run 'done.json'))){{Start-Sleep -Milliseconds 250}}\n"
     setup += "if(Test-Path -LiteralPath (Join-Path $run 'done.json')){$completed=Get-Content -Raw (Join-Path $run 'done.json')|ConvertFrom-Json}\n"
     setup += "}finally{if($receipt){$taskError=$null;try{Assert-OwnedTaskUnchanged $receipt}catch{$taskError=$_};foreach($f in 'child.json','wrapper.json'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Stop-OwnedProcessIdentity (Get-Content -Raw $p|ConvertFrom-Json)}};if($taskError){throw $taskError};Remove-OwnedTask $receipt}}\n"
-    setup += "foreach($f in 'child.log','child-error.log','wrapper-error.log'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Get-Content -LiteralPath $p}}\n"
+    setup += "foreach($f in 'child.log','child-error.log','wrapper-error.log'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Get-Content -LiteralPath $p -Encoding UTF8}}\n"
     setup += "$ok=$completed -and $completed.status -ceq 'completed' -and $completed.childExit -eq 0;@{run=$run;task=$name;completion=$completed;passed=[bool]$ok}|ConvertTo-Json -Depth 15 -Compress\nif(-not$ok){exit 1}"
     return invoke(host, machine, setup)
 

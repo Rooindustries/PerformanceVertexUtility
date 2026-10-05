@@ -36,6 +36,7 @@ public sealed class PolicyInstance
     public string? Error { get; set; }
     public string? Field { get; init; }
     public string? ErrorKind { get; set; }
+    public bool Relinquished { get; set; }
 }
 
 public sealed class PolicyHostState
@@ -905,14 +906,16 @@ public sealed class ProcessPolicyHost
         {
             instance.Status = "conflict";
             instance.ErrorKind = "keepsChanging";
+            instance.Relinquished = true;
             instance.Error = KeepsChanging;
+            Save();
             _watched.Remove(instance.JournalPath);
             return;
         }
         try
         {
             var journal = _engine.Reassert(instance.JournalPath, out var wrote);
-            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status); return; }
+            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status, journal); return; }
             if (journal.Status == "applied")
             {
                 if (wrote) watch.Reasserts.Add(Now);
@@ -922,7 +925,7 @@ public sealed class ProcessPolicyHost
                 instance.Error = null;
                 return;
             }
-            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored")) { Restore(instance); return; }
+            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored" or "leftAsSet")) { Restore(instance); return; }
             var failed = journal.Changes.FirstOrDefault(change => change.Error is not null);
             instance.ErrorKind = failed?.ErrorKind ?? "error";
             instance.Error = failed?.Error ?? "Windows did not accept the requested value.";
@@ -941,8 +944,8 @@ public sealed class ProcessPolicyHost
         {
             if (instance.Status == "applying" && !File.Exists(instance.JournalPath)) { Discard(instance); return; }
             var journal = _engine.Apply(instance.PreviewPath, instance.ReviewHash, instance.JournalPath);
-            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status); return; }
-            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored")) { Restore(instance); return; }
+            if (journal.Status is "restored" or "expired") { Finish(instance, journal.Status, journal); return; }
+            if (journal.Changes.Any(change => change.Status is "pending" or "restoreIntent" or "restored" or "leftAsSet")) { Restore(instance); return; }
             _watched[instance.JournalPath] = new Watch { Desired = journal.Changes.ToDictionary(change => change.Name, change => change.Desired, StringComparer.Ordinal), NextCheck = Now };
             instance.Status = "active";
             instance.ErrorKind = null;
@@ -1220,11 +1223,12 @@ public sealed class ProcessPolicyHost
         return _state;
     }
 
-    private void Finish(PolicyInstance instance, string status)
+    private void Finish(PolicyInstance instance, string status, ProcessControlJournal? journal = null)
     {
         instance.Status = status;
-        instance.Error = null;
-        instance.ErrorKind = null;
+        var left = status == "restored" && journal?.Changes.Any(change => change.Status == "leftAsSet") == true;
+        instance.Error = left ? ProcessControlEngine.LeftAsSet : null;
+        instance.ErrorKind = left ? "leftAsSet" : null;
         _watched.Remove(instance.JournalPath);
         _retries.Remove("restore|" + instance.JournalPath);
         _retries.Remove("reconcile|" + instance.JournalPath);
@@ -1272,12 +1276,21 @@ public sealed class ProcessPolicyHost
                 return;
             }
             ProcessControlJournal restored;
+            if (instance.ErrorKind == "keepsChanging" && !instance.Relinquished)
+            {
+                instance.Relinquished = true;
+                Save();
+            }
             for (var attempt = 0; ; attempt++)
             {
-                try { restored = _engine.Restore(instance.JournalPath, overwrite: true); break; }
+                try { restored = _engine.RestoreGovernor(instance.JournalPath, instance.Relinquished); break; }
                 catch (InstanceBusyException) when (attempt < 10) { Thread.Sleep(200); }
             }
-            if (restored.Status is "restored" or "expired") { Finish(instance, restored.Status); return; }
+            if (restored.Status is "restored" or "expired")
+            {
+                Finish(instance, restored.Status, restored);
+                return;
+            }
             var failed = restored.Changes.FirstOrDefault(change => change.Error is not null);
             instance.Status = "conflict";
             instance.ErrorKind = failed?.ErrorKind ?? "error";

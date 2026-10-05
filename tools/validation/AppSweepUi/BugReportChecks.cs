@@ -21,8 +21,65 @@ static class BugReportChecks
         }
     }
 
+    public static async Task OpenFolderAsync(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-report-folder-" + Guid.NewGuid().ToString("N"));
+        var logs = Directory.CreateDirectory(Path.Combine(root, "logs")).FullName;
+        var sender = new FakeSender();
+        var savedService = RooIndustries.OptimizationSuite.App.BugReports;
+        var savedObserver = AppLog.Observer;
+        var observations = new List<string>();
+        try
+        {
+            RooIndustries.OptimizationSuite.App.BugReports = new(null, sender, Path.Combine(root, "reports"), logs, new BugRedactor(null, null, null));
+            var view = new RooIndustries.OptimizationSuite.ViewModels.BugReportViewModel { Description = "Private report folder fixture" };
+            await view.LoadAsync(); await view.AttachAsync(); await view.SaveAsync();
+            check(view.SavedPath is { } path && File.Exists(path), "The actual bug-report viewmodel saves a private report before Open folder");
+            var method = typeof(RooIndustries.OptimizationSuite.ViewModels.BugReportViewModel).GetMethod("OpenFolder")!;
+            var calls = Calls(method);
+            check(calls.Any(call => call.DeclaringType == typeof(RooIndustries.Optimizer.RuntimeEnvironment) && call.Name == "OpenInExplorer") && !calls.Any(call => call.DeclaringType == typeof(System.Diagnostics.Process) && call.Name == "Start"), "The compiled bug-report opener uses the shared Explorer handoff");
+            if (OperatingSystem.IsWindows())
+            {
+                check(ShellWindow() == IntPtr.Zero, "The no-shell proof runs in a Windows session without a desktop Explorer");
+                AppLog.Observer = (_, detail) => observations.Add(detail ?? "");
+                view.OpenFolder();
+                check(observations.Any(text => text.Contains("Windows Explorer is not running. Sign in to Windows, then try again.", StringComparison.Ordinal)), "Open folder refuses through the shared shell guard when no desktop Explorer exists");
+            }
+            check(sender.Calls.Count == 0, "The folder proof never sends a report or contacts a webhook");
+        }
+        finally { AppLog.Observer = savedObserver; RooIndustries.OptimizationSuite.App.BugReports = savedService; Directory.Delete(root, true); }
+        check(!Directory.Exists(root), "The native report folder fixture is removed");
+    }
+
+    private static IEnumerable<System.Reflection.MethodBase> Calls(System.Reflection.MethodInfo method)
+    {
+        var codes = typeof(System.Reflection.Emit.OpCodes).GetFields().Where(field => field.FieldType == typeof(System.Reflection.Emit.OpCode)).Select(field => (System.Reflection.Emit.OpCode)field.GetValue(null)!).ToDictionary(code => unchecked((ushort)code.Value));
+        var bytes = method.GetMethodBody()!.GetILAsByteArray()!;
+        for (var offset = 0; offset < bytes.Length;)
+        {
+            var value = (ushort)bytes[offset++];
+            if (value == 0xfe) value = (ushort)(0xfe00 | bytes[offset++]);
+            var code = codes[value];
+            if (code.OperandType == System.Reflection.Emit.OperandType.InlineMethod && method.Module.ResolveMethod(BitConverter.ToInt32(bytes, offset)) is { } called) yield return called;
+            offset += code.OperandType switch
+            {
+                System.Reflection.Emit.OperandType.InlineNone => 0,
+                System.Reflection.Emit.OperandType.ShortInlineBrTarget or System.Reflection.Emit.OperandType.ShortInlineI or System.Reflection.Emit.OperandType.ShortInlineVar => 1,
+                System.Reflection.Emit.OperandType.InlineVar => 2,
+                System.Reflection.Emit.OperandType.InlineI8 or System.Reflection.Emit.OperandType.InlineR => 8,
+                System.Reflection.Emit.OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(bytes, offset),
+                _ => 4,
+            };
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetShellWindow")]
+    private static extern IntPtr ShellWindow();
+
     public static async Task RunAsync(Action<bool, string> check)
     {
+        var calls = Calls(typeof(RooIndustries.OptimizationSuite.ViewModels.BugReportViewModel).GetMethod("OpenFolder")!);
+        check(calls.Any(call => call.DeclaringType == typeof(RooIndustries.Optimizer.RuntimeEnvironment) && call.Name == "OpenInExplorer") && !calls.Any(call => call.DeclaringType == typeof(System.Diagnostics.Process) && call.Name == "Start"), "The compiled bug-report opener uses the shared Explorer handoff");
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-bug-report-" + Guid.NewGuid().ToString("N"));
         var logs = Path.Combine(root, "logs");
         Directory.CreateDirectory(logs);

@@ -108,7 +108,8 @@ public static class RooIndustriesGovernorScenarioOracle {
             if (nativeTime != heldTime) throw new InvalidOperationException("Fixture creation identity changed.");
             SetIo(created.Process, 2);
             SetMemory(created.Process, 5);
-            if (GetPriorityClass(created.Process) != 32 || Io(created.Process) != 2 || Memory(created.Process) != 5) throw new InvalidOperationException("Fixture baseline could not be confirmed.");
+            var cpu = GetPriorityClass(created.Process); var io = Io(created.Process); var memory = Memory(created.Process);
+            if (cpu != 32 || io != 2 || memory != 5) throw new InvalidOperationException("Fixture baseline could not be confirmed: CPU=" + cpu + ", I/O=" + io + ", memory=" + memory + ".");
             if (ResumeThread(created.Thread) != 1) throw new System.ComponentModel.Win32Exception();
             transferred = true;
             return process;
@@ -172,9 +173,11 @@ function Exit-Scenario {
     foreach($process in @(Get-CimInstance Win32_Process|Where-Object {[string]$_.CommandLine -like ('*'+$script:scenarioRoot+'*')})){
         $owned=$null
         try {
-            $owned=Get-Process -Id $process.ProcessId -ErrorAction Stop
+            try {$owned=Get-Process -Id $process.ProcessId -ErrorAction Stop}
+            catch {if($_.FullyQualifiedErrorId -cne 'NoProcessFoundForGivenId,Microsoft.PowerShell.Commands.GetProcessCommand'){throw};continue}
             $null=$owned.Handle
-            if([Math]::Abs(($owned.StartTime.ToUniversalTime()-$process.CreationDate.ToUniversalTime()).Ticks) -lt 10 -and -not $owned.HasExited){$owned.Kill();$owned.WaitForExit(10000)|Out-Null}
+            if([Math]::Abs(($owned.StartTime.ToUniversalTime()-$process.CreationDate.ToUniversalTime()).Ticks) -ge 10){throw 'Fixture process creation identity changed; retained'}
+            if(-not $owned.HasExited){$owned.Kill();$owned.WaitForExit(10000)|Out-Null}
         } catch {$problems.Add('Fixture process cleanup: '+$_.Exception.Message)}
         finally {if($owned){$owned.Dispose()}}
     }

@@ -133,6 +133,20 @@ public static class RuntimeEnvironment
         return directory.Name.Equals("app", StringComparison.OrdinalIgnoreCase) ? directory.Parent!.FullName : directory.FullName;
     }
 
+    public static string OwnershipReviewExecutable()
+    {
+        var root = InstallFolder();
+        var folder = Path.Combine(root, "app");
+        var ui = Path.Combine(folder, "RooIndustries.OptimizationSuite.App.exe");
+        try
+        {
+            if (PolicyRootSecurity.AdministratorOnlyEntry(root, true) && PolicyRootSecurity.AdministratorOnlyEntry(folder, true) && PolicyRootSecurity.AdministratorOnlyEntry(ui, false)) return ui;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
+        if (!Release && BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UI_EXE") is { } development && Path.IsPathFullyQualified(development) && development.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(development)) return development;
+        throw new InvalidDataException("The Roo Industries ownership-review app is missing, damaged, or outside a protected install folder. Install the app again.");
+    }
+
     private static InvalidOperationException FolderSettingsProblem() => new("Roo Industries could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder.");
 
     public static Dictionary<string, string> ChildEnvironment() => Build(null);
@@ -222,11 +236,17 @@ public static class RuntimeEnvironment
     private static string[] Prefixed()
         => Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => ClearPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToArray();
 
-    public static void OpenInExplorer(string target)
+    public static void OpenInExplorer(string target, bool select = false)
     {
         if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException("Windows Explorer is not running. Sign in to Windows, then try again.");
+        if (select)
+        {
+            if (!Path.IsPathFullyQualified(target)) throw new InvalidOperationException("The selected file needs a full path.");
+            target = Path.GetFullPath(target);
+        }
         var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
         Apply(start);
+        if (select) start.ArgumentList.Add("/select,");
         start.ArgumentList.Add(target);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows Explorer did not start.");
     }

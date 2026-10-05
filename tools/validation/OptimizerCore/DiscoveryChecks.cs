@@ -53,6 +53,18 @@ static class DiscoveryChecks
         }
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Discovery validation leaves no file or registry fixtures");
         ProductBoundaries(check);
+        UncRoaming(check);
+    }
+
+    private static void UncRoaming(Action<bool, string> check)
+    {
+        var roaming = @"\\127.0.0.1\RooIndustriesRoamingFixture-" + Guid.NewGuid().ToString("N");
+        var app = new CleanupApplication { AppId = "fixture:unc", DisplayName = "Roo Industries UNC fixture", Publisher = null, InstallLocation = null, PackageFamilyName = null };
+        var before = Environment.GetEnvironmentVariable("APPDATA");
+        var scan = new LeftoverDiscovery(app, []).Scan(CancellationToken.None, [roaming], []);
+        Console.WriteLine("MEASURE uncScan " + System.Text.Json.JsonSerializer.Serialize(scan, OperationFiles.Json));
+        check(!scan.Complete && scan.Candidates.Length == 0 && scan.Errors.SequenceEqual([roaming + ": not scanned because this folder is not on a local fixed drive."]), "A UNC roaming scope is reported as not scanned before elevated enumeration");
+        check(Environment.GetEnvironmentVariable("APPDATA") == before, "Skipping elevated roaming discovery leaves the child's APPDATA unchanged");
     }
 
     private static void ProductBoundaries(Action<bool, string> check)

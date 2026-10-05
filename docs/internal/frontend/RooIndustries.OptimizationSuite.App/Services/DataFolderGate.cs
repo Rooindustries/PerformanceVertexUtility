@@ -44,6 +44,11 @@ public static class DataFolderGate
 
     private static bool Opened(string root)
     {
+        if (PolicyRootSecurity.Elevated() && DataFolder.RecoveryNotice(root) is { } notice)
+        {
+            MessageBox(IntPtr.Zero, notice, "Roo Industries Optimization Suite", 0x40);
+            DataFolder.AcknowledgeRecoveryNotice(root, notice);
+        }
         var temporary = Directory.CreateDirectory(Path.Combine(root, "temp"));
         foreach (var entry in temporary.EnumerateFileSystemInfos().Where(entry => entry.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-1)))
         {

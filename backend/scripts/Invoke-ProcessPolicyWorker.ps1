@@ -27,7 +27,6 @@ $hostArgs=@($hostDll)
 if(Test-Path -LiteralPath (Join-Path $HostDirectory 'hostpolicy.dll')){$DotNetPath=Join-Path $HostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
 if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
-$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $requestPath=Join-Path $PolicyRoot 'worker-request.json'
 $task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIdentity.policyTask+$suffix) $description ($script:RooIndustriesLegacyIdentity.policyDescription+$owner.userSid+' | '+$PolicyRoot)
 if($task){$taskName=$task.TaskName;$description=$task.Description}
@@ -36,8 +35,12 @@ $OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;policyRoot=$PolicyRoot;confirm=$true}
     foreach($key in $Extra.Keys){$request[$key]=$Extra[$key]}
-    $text=@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath @hostArgs $CoreAction '-') -join "`n"
-    $exitCode=$LASTEXITCODE
+    $previousRoot=[Environment]::GetEnvironmentVariable('DOTNET_ROOT','Process')
+    try {
+        if($hostArgs.Count -gt 0){$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent}
+        $text=@(($request|ConvertTo-Json -Depth 32 -Compress)|& $DotNetPath @hostArgs $CoreAction '-') -join "`n"
+        $exitCode=$LASTEXITCODE
+    } finally {if($hostArgs.Count -gt 0){[Environment]::SetEnvironmentVariable('DOTNET_ROOT',$previousRoot,'Process')}}
     if([string]::IsNullOrWhiteSpace($text)){throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned no output.')}
     try {$result=$text|ConvertFrom-Json} catch {throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned '+$text.Substring(0,[Math]::Min(300,$text.Length)))}
     if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}

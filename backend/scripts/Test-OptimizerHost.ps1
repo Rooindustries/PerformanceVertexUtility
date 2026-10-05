@@ -25,11 +25,14 @@ if($Scenario -eq 'RequestFiles'){
     $netNames=@(Get-ChildItem Env:|Where-Object {$_.Name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'}|ForEach-Object {[pscustomobject]@{name=$_.Name;value=$_.Value}})
     foreach($item in $netNames){Remove-Item -LiteralPath ('Env:\'+$item.name)}
     function Invoke-HostRaw([string]$Dll,[string]$HostAction,[string]$Argument,[string]$Body){
-        $text=@(if($Argument -eq '-'){$Body|& $DotNetPath $Dll $HostAction '-'}else{& $DotNetPath $Dll $HostAction $Argument}) -join "`n"
+        $ErrorActionPreference='Continue'
+        $output=@(if($Argument -eq '-'){$Body|& $DotNetPath $Dll $HostAction '-' 2>&1}else{& $DotNetPath $Dll $HostAction $Argument 2>&1})
         $code=$LASTEXITCODE
+        $text=@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}) -join "`n"
+        $diagnostics=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n"
         $parsed=$null
         try {$parsed=$text|ConvertFrom-Json}catch{}
-        return [pscustomobject]@{exit=$code;status=$parsed.status;message=$parsed.error.message;text=$text}
+        return [pscustomobject]@{exit=$code;status=$parsed.status;message=$parsed.error.message;text=$text;stderr=$diagnostics}
     }
     try {
         [IO.Directory]::CreateDirectory($caseRoot)|Out-Null
@@ -77,6 +80,7 @@ if($Scenario -eq 'RequestFiles'){
             [Environment]::SetEnvironmentVariable($set.name,$set.value,'Process')
             try {$refused=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable($set.name,$null,'Process')}
             Assert ($refused.exit -ne 0 -and $refused.message -like ('*will not run with these .NET settings in its environment: '+$set.name+'.*')) ('A release helper refuses '+$set.name+' even though no list names it')
+            if($set.name -ceq 'COREHOST_TRACE'){Assert ($refused.stderr -match 'Tracing enabled @') 'The trace refusal captures native host diagnostics without emitting PowerShell errors';Write-Output ('Captured COREHOST_TRACE stderr lines: '+@($refused.stderr -split "`n").Count)}
         }
         [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','0','Process')
         try {$pinned=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}

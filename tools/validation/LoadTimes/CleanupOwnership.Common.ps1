@@ -68,9 +68,14 @@ function Stop-OwnedProcess($Receipt) {
 }
 function Stop-OwnedProcessIdentity($Identity) {
     if(-not$Identity -or -not$Identity.creationTimeFileTimeUtc -or -not$Identity.imagePath){throw 'Incomplete process ownership receipt; retained'}
-    $p=Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue
+    try {$p=Get-Process -Id $Identity.pid -ErrorAction Stop}
+    catch {if($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*'){return};throw}
     if(-not$p){return}
-    try{[RooValidationOwnership.Native]::Stop($p.Handle,[long]$Identity.creationTimeFileTimeUtc,$Identity.imagePath)}finally{$p.Dispose()}
+    try{
+        try {$handle=$p.Handle} catch {if($p.HasExited){return};throw}
+        if($null -eq $handle -or $handle -eq [IntPtr]::Zero){if($p.HasExited){return};throw 'Live process has no native handle; retained'}
+        [RooValidationOwnership.Native]::Stop($handle,[long]$Identity.creationTimeFileTimeUtc,$Identity.imagePath)
+    }finally{$p.Dispose()}
 }
 function Get-OwnedRegistryField($Key,[string]$Name) {
     if($Key.GetValueNames() -notcontains $Name){return 'absent'}

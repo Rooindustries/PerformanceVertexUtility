@@ -66,9 +66,7 @@ static class FixtureCleanupChecks
         Reject(() => { using var forged = FixtureProcess.Ready(Path.Combine(evidence, "forged-ready.json"), dotnet, [dll, "--hold-lock", "wrong", "wrong", "wrong"], false, evidence); }, "Forged ready PID with unrelated native command is refused");
         Check(!sentinel.HasExited, "Unrelated held sentinel survives forged readiness");
         Reject(() => { using var forged = FixtureProcess.Ready(Path.Combine(evidence, "forged-ready.json"), dotnet, [dll, "--cleanup-sentinel", frame,privateArgument], false, evidence); }, "Native elevated token contradicts forged standard-token JSON and is refused");
-        Check(!sentinel.HasExited, "Sentinel survives token-validation failure"); owned.Stop(); Check(sentinel.WaitForExit(5000), "Only exact held native fixture identity is terminated");
-        }
-        finally { owned.Stop(); }
+        Check(!sentinel.HasExited, "Sentinel survives token-validation failure");
         Check(!Directory.GetFiles(evidence,"*.json").Any(path=>File.ReadAllText(path).Contains(privateArgument)),"Unrelated same-image sentinel private argument never enters receipts");
         var conflictRoot = NewRoot(); var conflict = new FixtureScope(conflictRoot, evidence); conflict.Secure(() => { Directory.CreateDirectory(conflictRoot); Mark(conflictRoot); });
         var conflictName = PolicyRootSecurity.MarkerName(conflictRoot); var timestamp = key.GetValue(conflictName + PolicyRootSecurity.ProtectedAtSuffix);
@@ -83,9 +81,20 @@ static class FixtureCleanupChecks
             Reject(() => scope.Cleanup(true), status + " recovery evidence refuses directory deletion"); Check(Directory.Exists(root) && File.Exists(Path.Combine(root, "session.json")), status + " recovery evidence survives cleanup");
             File.Delete(Path.Combine(root, "session.json")); scope.Cleanup(true);
         }
-        var recoveredRoot=NewRoot();var recoveredScope=new FixtureScope(recoveredRoot,evidence);recoveredScope.Secure(()=>{Directory.CreateDirectory(recoveredRoot);Mark(recoveredRoot);});
-        var hostInfo=new ProcessStartInfo(Path.ChangeExtension(dll,".exe")){UseShellExecute=false,CreateNoWindow=true};hostInfo.Environment["DOTNET_ROOT_X64"]=Path.GetDirectoryName(dotnet);hostInfo.ArgumentList.Add("run");hostInfo.ArgumentList.Add(Path.Combine(recoveredRoot,"request.json"));
-        using(var host=Process.Start(hostInfo)!){using var hostOwned=FixtureProcess.Started(host,evidence);try{var identity=new RunningProcess(host.Id,hostOwned.Creation.ToString(),Path.ChangeExtension(dll,".exe"));OperationFiles.Write(Path.Combine(recoveredRoot,"session.json"),new {status="stopped",registryStatus="restored",jobStatus="cleared",host=identity,errors=Array.Empty<string>(),games=Array.Empty<object>()});hostOwned.Stop();recoveredScope.Cleanup(true);Check(!Directory.Exists(recoveredRoot),"Actual camel-case recovered status and run/request host schema allow cleanup after native host exit");}finally{hostOwned.Stop();}}
+        foreach(var status in new[]{"stopped","stoppedWithErrors"}){
+            var recoveredRoot=NewRoot();var recoveredScope=new FixtureScope(recoveredRoot,evidence);recoveredScope.Secure(()=>{Directory.CreateDirectory(recoveredRoot);Mark(recoveredRoot);});
+            var hostInfo=new ProcessStartInfo(Path.ChangeExtension(dll,".exe")){UseShellExecute=false,CreateNoWindow=true};hostInfo.Environment["DOTNET_ROOT_X64"]=Path.GetDirectoryName(dotnet);hostInfo.ArgumentList.Add("run");hostInfo.ArgumentList.Add(Path.Combine(recoveredRoot,"request.json"));
+            using(var host=Process.Start(hostInfo)!){using var hostOwned=FixtureProcess.Started(host,evidence);try{
+                var identity=new RunningProcess(host.Id,hostOwned.Creation.ToString(),Path.ChangeExtension(dll,".exe"));var journal=Path.Combine(recoveredRoot,"gpu-journal.json");
+                void Save(string fieldStatus,string journalStatus,RunningProcess? gameIdentity=null,bool hasJournal=true){var game=gameIdentity??identity;OperationFiles.Write(journal,new{status=journalStatus,preview=new{identity=game}});OperationFiles.Write(Path.Combine(recoveredRoot,"session.json"),new {status,registryStatus="restored",jobStatus="cleared",host=identity,errors=status=="stoppedWithErrors"?new[]{"Native restoration needs reconciliation: gpuPriority"}:Array.Empty<string>(),games=new[]{new{identity=game,fields=new[]{new{name="gpuPriority",route="native",status=fieldStatus,journalPath=hasJournal?journal:null}}}}});}
+                Save("restored","restored");Reject(()=>recoveredScope.Cleanup(true),status+" live native host prevents deletion");Check(!host.HasExited && Directory.Exists(recoveredRoot),status+" active native host and recovery evidence survive");hostOwned.Stop();
+                Save("applied","restored");Reject(()=>recoveredScope.Cleanup(true),status+" contradictory applied native field preserves recovery");
+                Save("restored","needsReconciliation");Reject(()=>recoveredScope.Cleanup(true),status+" unreconciled native journal preserves recovery");
+                Save("restored","restored",hasJournal:false);Reject(()=>recoveredScope.Cleanup(true),status+" restored field without its native journal preserves recovery");
+                Save("restored","restored",new RunningProcess(sentinel.Id,owned.Creation.ToString(),dotnet));Reject(()=>recoveredScope.Cleanup(true),status+" live exact native game actor preserves recovery");Check(!sentinel.HasExited && Directory.Exists(recoveredRoot),status+" live unrelated sentinel and fixture survive actor refusal");
+                Save("restored","restored");recoveredScope.Cleanup(true);Check(!Directory.Exists(recoveredRoot),status+" terminal native host and restored field/journal allow exact fixture cleanup");
+            }finally{hostOwned.Stop();}}
+        }
         var watchRoot=NewRoot();var watchScope=new FixtureScope(watchRoot,evidence);watchScope.Secure(()=>{Directory.CreateDirectory(watchRoot);Mark(watchRoot);});
         var watchInfo=new ProcessStartInfo(Path.ChangeExtension(dll,".exe")){UseShellExecute=false,CreateNoWindow=true};watchInfo.Environment["DOTNET_ROOT_X64"]=Path.GetDirectoryName(dotnet);watchInfo.ArgumentList.Add("watch");watchInfo.ArgumentList.Add(Path.Combine(watchRoot,"watch-request.json"));
         using(var watcher=Process.Start(watchInfo)!){using var watchOwned=FixtureProcess.Started(watcher,evidence);try{var native=new RunningProcess(watcher.Id,watchOwned.Creation.ToString(),Path.ChangeExtension(dll,".exe"));OperationFiles.Write(Path.Combine(watchRoot,"watch.json"),new ProtectedWatchReady(OperationOwner.Current(),Guid.NewGuid().ToString("N"),native,native,true));Reject(()=>FixtureScope.AwaitRecovery(watchRoot,evidence),"Held live recovery watcher times out without termination");Check(!watcher.HasExited && File.Exists(Path.Combine(watchRoot,"watch.json")),"Live recovery watcher and exact evidence survive timeout");}finally{watchOwned.Stop();}}
@@ -94,9 +103,12 @@ static class FixtureCleanupChecks
         var heldRoot=NewRoot();var heldScope=new FixtureScope(heldRoot,evidence);heldScope.Secure(()=>{Directory.CreateDirectory(heldRoot);Mark(heldRoot);});var heldPath=Path.Combine(heldRoot,"held-recovery.txt");using(var heldFile=new FileStream(heldPath,FileMode.CreateNew,FileAccess.ReadWrite,FileShare.None)){Reject(()=>heldScope.Cleanup(true),"Native held file prevents tree deletion and cleanup failure is surfaced");Check(Directory.Exists(heldRoot) && File.Exists(heldPath),"Held recovery bytes survive failed directory deletion");}heldScope.Cleanup(true);
         var collidedRoot = NewRoot(); key.SetValue(PolicyRootSecurity.MarkerName(collidedRoot), "prior", RegistryValueKind.String);
         Reject(() => { _ = new FixtureScope(collidedRoot, evidence); }, "Preexisting marker collision refuses before mutation"); Check(Equals(key.GetValue(PolicyRootSecurity.MarkerName(collidedRoot)), "prior"), "Preexisting marker value survives collision"); key.DeleteValue(PolicyRootSecurity.MarkerName(collidedRoot));
+        owned.Stop(); Check(sentinel.WaitForExit(5000), "Only exact held native fixture identity is terminated");
         var after = Snapshot(); File.WriteAllText(Path.Combine(frame, "registry-after.json"), after); Check(after == before, "Complete typed registry snapshot is restored exactly");
         Check(!Directory.GetDirectories(frame, "case-*").Any() && !Directory.Exists(legacy), "Zero disposable root leftovers");
         File.WriteAllText(Path.Combine(frame, "cleanup-result.json"), JsonSerializer.Serialize(new { passed = checks.Count, checks, sentinel = new {pid=sentinel.Id,creationTimeFileTimeUtc=owned.Creation.ToString()}, sentinelExited = sentinel.HasExited, registryEqual = before == after, roots = Directory.GetDirectories(frame, "case-*"), sourceHash = OperationFiles.HashFile(dll), unreadableSourceHash = OperationFiles.HashFile(unreadableDll) }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        finally { owned.Stop(); }
     }
     internal static void Sentinel() { Thread.Sleep(TimeSpan.FromMinutes(3)); }
 }
