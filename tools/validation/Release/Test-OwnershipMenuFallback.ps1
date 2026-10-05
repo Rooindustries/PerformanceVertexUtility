@@ -82,6 +82,7 @@ try{
  [IO.File]::WriteAllText((Join-Path $privateRoot 'build.log'),$stdout.Result+"`n"+$stderr.Result)
  if($build.ExitCode -ne 0){throw 'Private Host fixture build failed; retained private build.log'}
 }finally{$build.Dispose()}
+$hostHash=(Get-FileHash -LiteralPath $hostExe -Algorithm SHA256).Hash
 $filesId='windows.13b6c0d8fb231462';$foldersId='windows.c26219e8cf004354';$choice='choice-9bcf07ce29d33486';$expected='"'+$uiExe+'" --ownership-review "%1"'
 try{
  foreach($caseName in 'lost-response','foreign-shared-profile','foreign-menu','foreign-unrelated-profile'){
