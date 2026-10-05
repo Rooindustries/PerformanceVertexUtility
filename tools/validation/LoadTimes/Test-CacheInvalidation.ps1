@@ -88,6 +88,28 @@ function Wait-Listed([string]$id, [bool]$present, [double]$seconds) {
     return $false
 }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
+function New-CacheGameSession {
+    $history = WaitFor { $h = ById 'GameSessionHistory'; if ($h -and $h.Current.IsEnabled) { $h } } 30 'previous sessions loaded'
+    $selected = @($history.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection())
+    if ($selected.Count) {
+        try { $new = WaitFor { $b = ById 'GameSessionNew'; if ($b -and $b.Current.IsEnabled) { $b } } 30 'New game session enabled' }
+        catch {
+            $status = (ById 'GameSessionStatus').Current.Name
+            if (-not $status.StartsWith('Stopped ', [StringComparison]::Ordinal)) { throw "New stays disabled while a session is outstanding (not restored): $status" }
+            throw "New stays disabled for the selected restored session: $status"
+        }
+        Invoke-Element $new
+    }
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        $detail = ById 'GameSessionDetail'
+        if ($detail -and $detail.Current.Name -eq 'Stop or recover the existing session before starting another.') { throw $detail.Current.Name }
+        $picker = ById 'GameSessionLauncher'
+        if ($picker -and $picker.Current.IsEnabled) { Check $true 'Games launcher picker is editable for a new session' ("previous selection=$($selected.Count)"); return }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    throw "Games launcher picker stayed disabled after New: $((ById 'GameSessionStatus').Current.Name)"
+}
 function Governor-Row {
     Nav 'Undo changes'
     WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Roo Industries Governor'); if (($t -notcontains 'Reading restore state') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
@@ -234,6 +256,7 @@ try {
     Nav 'Games'; Start-Sleep 2; Select-Tab 'ProcessesTab'; Start-Sleep 3
     Check (Wait-Listed 'ProcessPicker' $false 5) 'Processes list does not show the probe before it starts' ''
     Select-Tab 'GamesTab'
+    New-CacheGameSession
     Check (Wait-Listed 'GameSessionLauncher' $false 5) 'Games launcher list does not show the probe before it starts' ''
     Nav 'Home'; Start-Sleep 2
     $probe = Start-CacheProbe 600
