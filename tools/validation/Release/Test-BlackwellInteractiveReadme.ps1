@@ -96,7 +96,7 @@ if(-not$DotNetPath){$DotNetPath=Join-Path ([Environment]::GetFolderPath('UserPro
 $fixture=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('AppData\Local\Temp\roo-blackwell-readme-'+[Guid]::NewGuid().ToString('N'))
 if(Test-Path -LiteralPath $fixture){throw 'Fixture already exists'}
 [IO.Directory]::CreateDirectory($fixture)|Out-Null
-$readLeases=[Collections.Generic.List[object]]::new();$owned=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new();$rows=[Collections.Generic.List[object]]::new();$deadline=[DateTime]::UtcNow.AddMinutes($Minutes).AddSeconds(-30);$session=(Get-Process -Id $PID).SessionId;$failure=$null
+$callerReports=[Collections.Generic.List[object]]::new();$readLeases=[Collections.Generic.List[object]]::new();$owned=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new();$rows=[Collections.Generic.List[object]]::new();$deadline=[DateTime]::UtcNow.AddMinutes($Minutes).AddSeconds(-30);$session=(Get-Process -Id $PID).SessionId;$failure=$null
 $app='C:\Program Files\Roo Industries\Optimization Suite';$readme=Join-Path $app 'README-BETA.txt';$system=[Environment]::SystemDirectory
 $result=[ordered]@{machine=$env:COMPUTERNAME;installer=$Installer;installerSha256=(Get-FileHash -LiteralPath $Installer).Hash;expectedInstallerSha256=$ExpectedSha256.ToUpperInvariant();maximumMinutes=$Minutes;cases=@();passed=$false;cleanupPassed=$false;error='';restore='Runner phases must restore this installed epoch after the check';fixture=$fixture;ownedFiles=@();ownedProcesses=@()}
 function Save-Result {$result.cases=@($rows);$result|ConvertTo-Json -Depth 15|Set-Content -LiteralPath (Join-Path $Evidence 'interactive-readme.json') -Encoding UTF8}
@@ -183,6 +183,21 @@ function Assert-KvmApproval($Request,$Approval,[string]$EvidenceRoot) {
 }
 function Capture([string]$Label) {$bounds=[Windows.Forms.Screen]::PrimaryScreen.Bounds;$bitmap=[Drawing.Bitmap]::new($bounds.Width,$bounds.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap);try{$graphics.CopyFromScreen($bounds.Location,[Drawing.Point]::Empty,$bounds.Size);$bitmap.Save((Join-Path $Evidence ($Label+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}}
 function Own($Process) {$receipt=New-OwnedProcess $Process;if($receipt){$owned.Add($receipt);$result.ownedProcesses=@($owned|ForEach-Object Identity);Save-Result};$receipt}
+function Own-Reported($Identity,[string]$ExpectedImage) {
+    $creation=0L
+    if(-not$Identity -or $Identity.pid -isnot [int] -or $Identity.pid -le 0 -or -not[long]::TryParse([string]$Identity.creationTimeFileTimeUtc,[ref]$creation) -or $creation -le 0 -or $Identity.imagePath -ine $ExpectedImage){throw 'Incomplete or different reported process identity; retained'}
+    $process=Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue
+    if(-not$process){return $null}
+    $receipt=$null
+    try{
+        $receipt=New-OwnedProcess $process
+        if(-not$receipt){$process.Dispose();return $null}
+        if($receipt.Identity.creationTimeFileTimeUtc -cne [string]$Identity.creationTimeFileTimeUtc -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($ExpectedImage)){throw 'Reported process identity changed; retained'}
+        $existing=@($owned|Where-Object {$_.Identity.pid -eq $receipt.Identity.pid -and $_.Identity.creationTimeFileTimeUtc -ceq $receipt.Identity.creationTimeFileTimeUtc -and $_.Identity.imagePath -ceq $receipt.Identity.imagePath})
+        if($existing.Count){$process.Dispose();return $existing[0]}
+        $owned.Add($receipt);$result.ownedProcesses=@($owned|ForEach-Object Identity);Save-Result;return $receipt
+    }catch{if(-not$receipt -or -not$owned.Contains($receipt)){$process.Dispose()};throw}
+}
 function Own-Copy($Receipt) {
     try{$identity=$Receipt.Identity;$copies.Add($identity);$result.ownedFiles=@($copies);Save-Result;return $identity}finally{$Receipt.Dispose()}
 }
@@ -211,14 +226,14 @@ try {
             $exeIdentity=Own-Copy (Copy-OwnedProbe (Join-Path $fixture 'compiled-launcher.exe') $exe);Seal-Readable $exeIdentity
             $pathIdentity=Own-Copy (New-OwnedTextFile (Join-Path $dir 'installer-path.txt') $sealedInstaller);Seal-Readable $pathIdentity
             $shaIdentity=Own-Copy (New-OwnedTextFile (Join-Path $dir 'expected-sha256.txt') $ExpectedSha256.ToUpperInvariant());Seal-Readable $shaIdentity
-            $metadata=Join-Path $Evidence 'normal-caller.json'
+            $metadata=Join-Path $Evidence 'normal-caller.json';$callerReports.Add(@{metadata=$metadata;image=$exe})
             & $DotNetPath (Join-Path $root 'tools\validation\Release\BlackwellHarness\bin\Release\net8.0-windows\BlackwellHarness.dll') direct $exe $metadata > (Join-Path $Evidence 'normal-caller.log') 2>&1
             if($LASTEXITCODE -ne 0){throw 'Normal caller did not prove Medium shell handoff'}
-            $native=(Get-Content -Raw -LiteralPath $metadata|ConvertFrom-Json).probe;$case.caller=$native;$launcher=Get-Process -Id $native.pid -ErrorAction SilentlyContinue
-            if($launcher){$ownedLauncher=Own $launcher;if($ownedLauncher -and ($ownedLauncher.Identity.creationTimeFileTimeUtc -cne $native.creationTimeFileTimeUtc -or $ownedLauncher.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($exe))){throw 'Normal caller identity changed'}}
+            $native=(Get-Content -Raw -LiteralPath $metadata|ConvertFrom-Json).probe;$case.caller=$native
+            $ownedLauncher=Own-Reported $native $exe;$launcher=if($ownedLauncher){$ownedLauncher.process}else{$null}
         }else{$setup=Start-Process -FilePath $Installer -PassThru;$null=Own $setup;$case.setupPid=$setup.Id;$case.caller=[BlackwellNativeProbe]::Inspect($PID)|ConvertFrom-Json}
         while([DateTime]::UtcNow -lt $caseDeadline){
-            if($variant -ceq 'normal-uac' -and -not$setup -and (Test-Path -LiteralPath (Join-Path $dir 'setup-started.json'))){$request=Get-Content -Raw -LiteralPath (Join-Path $dir 'setup-started.json')|ConvertFrom-Json;$setup=Get-Process -Id $request.pid -ErrorAction SilentlyContinue;if($setup){$null=Own $setup;$case.setupPid=$setup.Id}}
+            if($variant -ceq 'normal-uac' -and -not$setup -and (Test-Path -LiteralPath (Join-Path $dir 'setup-started.json'))){$request=Get-Content -Raw -LiteralPath (Join-Path $dir 'setup-started.json')|ConvertFrom-Json;$setupReceipt=Own-Reported $request $sealedInstaller;if($setupReceipt){$setup=$setupReceipt.process;$case.setupPid=$setup.Id}}
             $desktop=[BlackwellReadmeDesktop]::Name()
             if($desktop -ne 'Default'){
                 if($variant -cne 'normal-uac'){$case.error='Unexpected secure desktop in elevated case; no input sent.';break}
@@ -267,8 +282,7 @@ try {
                 while($cursor.Count -eq 1 -and $seen.Add([int]$cursor[0].ProcessId)){
                     $ancestor=@($owned|Where-Object {$_.Identity.pid -eq $cursor[0].ProcessId -and [DateTime]::FromFileTimeUtc([long]$_.Identity.creationTimeFileTimeUtc) -eq $cursor[0].CreationDate.ToUniversalTime()})
                     if($ancestor.Count -eq 1){$belongs=$true;break}
-                    $parent=@($owned|Where-Object {$_.Identity.pid -eq $cursor[0].ParentProcessId -and [DateTime]::FromFileTimeUtc([long]$_.Identity.creationTimeFileTimeUtc) -le $cursor[0].CreationDate.ToUniversalTime()})
-                    if($parent.Count -eq 1){$belongs=$true;break};$cursor=@($snapshot|Where-Object ProcessId -eq $cursor[0].ParentProcessId)
+                    $cursor=@($snapshot|Where-Object ProcessId -eq $cursor[0].ParentProcessId)
                 }
                 if(-not$belongs){throw 'Wizard lacks an owned native caller/setup ancestry; refuse input'}
                 if(-not$case.wizardProcess){$null=Own $wp;$case.wizardProcess=[BlackwellNativeProbe]::Inspect($wp.Id)|ConvertFrom-Json;Capture ($variant+'-wizard')}
@@ -296,12 +310,9 @@ try {
 finally {
     $clean=@($rows|Where-Object {$_.finishInvoked -and (-not$_.notepadUiCleanup -or -not$_.notepadUiCleanup.passed)}).Count -eq 0
     if($notepadStarts){try{$notepadStarts.Dispose()}catch{$clean=$false;$result.error+='; native start watcher cleanup: '+$_.Exception.Message}}
-    foreach($identity in @($copies|Where-Object {$_.path -like '*\IntegrityProbe.exe'})){
-        try{
-            $handle=[RooValidationOwnership.Native]::CreateFile($identity.path,0,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
-            try{if($handle.IsInvalid -or [RooValidationOwnership.Native]::FileId($handle) -cne $identity.id -or (Get-FileHash -LiteralPath $identity.path).Hash -cne $identity.hash){throw 'Pending launcher file differs; retained'}}finally{$handle.Dispose()}
-            foreach($p in @(Get-Process -ErrorAction SilentlyContinue|Where-Object {try{$_.Path -ieq $identity.path}catch{$false}})){$processReceipt=New-OwnedProcess $p;if($processReceipt){$owned.Add($processReceipt)}}
-        }catch{$clean=$false;$result.error+='; pending launcher identity: '+$_.Exception.Message}
+    foreach($report in $callerReports){
+        try{if(Test-Path -LiteralPath $report.metadata){Assert-PlainAncestry $report.metadata;$identity=(Get-Content -Raw -LiteralPath $report.metadata|ConvertFrom-Json).probe;$null=Own-Reported $identity $report.image}}
+        catch{$clean=$false;$result.error+='; reported caller cleanup: '+$_.Exception.Message}
     }
     $result.ownedProcesses=@($owned|ForEach-Object Identity)
     foreach($receipt in $owned){try{Stop-OwnedProcess $receipt;$receipt.process.Dispose()}catch{$clean=$false;$result.error+='; exact process cleanup: '+$_.Exception.Message}}
