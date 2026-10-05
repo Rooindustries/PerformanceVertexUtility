@@ -24,7 +24,12 @@ public sealed class BackendLocator
     {
         if (!Installed) return;
         foreach (var name in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => name.StartsWith(RooIndustries.Optimizer.BrandCompatibility.LegacyEnvironmentPrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
+        {
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (name.StartsWith("ROO_INDUSTRIES_TEST_", StringComparison.OrdinalIgnoreCase)) continue;
+#endif
             Environment.SetEnvironmentVariable(name, null);
+        }
     }
 
     public bool SamplesAvailable => SamplesDirectory is not null && Directory.Exists(SamplesDirectory);
