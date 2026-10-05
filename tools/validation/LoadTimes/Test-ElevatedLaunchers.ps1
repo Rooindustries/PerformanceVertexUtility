@@ -118,8 +118,34 @@ function Start-RooIndustriesApp {
 }
 function Stop-RooIndustriesApp {
     $children=@(Child-Rows $script:App)
-    if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Stop-OwnedProcess $script:AppReceipt } }
-    foreach ($child in $children) { $current = Process-Row $child.ProcessId; if ($current -and $current.CreationDate -eq $child.CreationDate) { Log ('CLEANUP NEEDED: retained app child for its lifecycle owner: ' + $child.ProcessId) } }
+    $held=@()
+    $waitRows=[Collections.Generic.List[object]]::new()
+    try {
+        foreach ($child in $children | Where-Object { $_.ParentProcessId -eq $script:App.Id -and $_.ExecutablePath -ieq $hostExe }) {
+            $process=Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue
+            if (-not $process) { continue }
+            try {
+                $receipt=New-OwnedProcess $process
+                if (-not $receipt) { $process.Dispose(); continue }
+                $current=Process-Row $child.ProcessId
+                if (-not $current) { $process.Dispose(); continue }
+                if ($current.CreationDate -ne $child.CreationDate -or $current.ExecutablePath -ine $child.ExecutablePath -or $current.CommandLine -cne $child.CommandLine -or $current.ParentProcessId -ne $child.ParentProcessId -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($hostExe)) { throw 'App Host child identity changed; retained.' }
+                $held+=@{process=$process;identity=$receipt.Identity;row=$child}
+            } catch { $process.Dispose(); throw }
+        }
+        if ($script:App -and -not $script:App.HasExited) { $script:App.CloseMainWindow() | Out-Null; if (-not $script:App.WaitForExit(20000)) { Stop-OwnedProcess $script:AppReceipt } }
+        $until=[DateTime]::UtcNow.AddSeconds(10)
+        foreach ($child in $held) {
+            $remaining=[Math]::Max(0,[int]($until-[DateTime]::UtcNow).TotalMilliseconds)
+            $exited=$child.process.WaitForExit($remaining)
+            $waitRows.Add([ordered]@{identity=$child.identity;parent=$child.row.ParentProcessId;commandLine=$child.row.CommandLine;exited=$exited})
+            if (-not $exited) { Log ('CLEANUP NEEDED: retained app Host child after bounded wait: '+($child.identity|ConvertTo-Json -Compress)) }
+        }
+        foreach ($child in $children | Where-Object { $_.ProcessId -notin @($held | ForEach-Object { $_.identity.pid }) }) { $current = Process-Row $child.ProcessId; if ($current -and $current.CreationDate -eq $child.CreationDate) { Log ('CLEANUP NEEDED: retained app child for its lifecycle owner: ' + $child.ProcessId) } }
+    } finally {
+        foreach ($child in $held) { $child.process.Dispose() }
+        if ($waitRows.Count) { $waitRows.ToArray() | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutDir ('app-child-wait-'+[Guid]::NewGuid().ToString('N')+'.json')) -Encoding UTF8 }
+    }
     if (@(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue).Count) { throw 'CLEANUP NEEDED: another app process remains; retained without an ownership receipt.' }
     Start-Sleep 1
 }
@@ -179,12 +205,17 @@ function Test-Inheritance(
     }
 }
 function Check-Environment([string]$label, $worker) {
-    $names = @(Product-ClearedNames)
-    $workerNames = @(); $err = $null
-    try { $workerNames = @(Env-Names ([LauncherCheckEnv]::Read([int]$worker.ProcessId))) } catch { $err = $_.Exception.Message }
-    $present = @($workerNames | Where-Object { $names -contains $_ })
+    $prefixes = @(Product-ClearedNames)
+    $workerEnvironment = @(); $workerNames = @(); $err = $null
+    try { $workerEnvironment = @([LauncherCheckEnv]::Read([int]$worker.ProcessId)); $workerNames = @(Env-Names $workerEnvironment) } catch { $err = $_.Exception.Message }
+    $present = @(foreach ($entry in $workerEnvironment) {
+        $index=([string]$entry).IndexOf('=',1)
+        if ($index -le 0) { continue }
+        $name=([string]$entry).Substring(0,$index); $value=([string]$entry).Substring($index+1)
+        if (@($prefixes | Where-Object { $name.StartsWith($_,[StringComparison]::OrdinalIgnoreCase) }).Count -and -not ($name -match '^(DOTNET_|COMPlus_)EnableDiagnostics(_(IPC|Debugger|Profiler))?$' -and $value -ceq '0')) { $name }
+    })
     ($workerNames | Sort-Object) | Set-Content -LiteralPath (Join-Path $OutDir ('environment-names-' + ($label -replace '\W', '-') + '.txt')) -Encoding UTF8
-    Check ($script:EnvironmentInherited -and $workerNames.Count -gt 0 -and $present.Count -eq 0) "$label worker's own process environment contains none of the $($names.Count) code-loading variables, although $plantName was set in the user environment and a launcher-less task inherits it" ("names read=" + $(if ($err) { $err } else { $workerNames.Count }) + " present=" + ($present -join ',') + " planted name reached the launcher-less control=" + $script:EnvironmentInherited)
+    Check ($prefixes.Count -gt 0 -and $script:EnvironmentInherited -and -not $err -and $workerNames.Count -gt 0 -and $present.Count -eq 0) "$label worker's own process environment contains no variables matching the $($prefixes.Count) cleared prefixes except pinned diagnostics switches set to 0, although $plantName was set in the user environment and a launcher-less task inherits it" ("names read=" + $(if ($err) { $err } else { $workerNames.Count }) + " present=" + ($present -join ',') + " planted name reached the launcher-less control=" + $script:EnvironmentInherited)
 }
 function Probe-Priority($id) { try { [string](Get-Process -Id $id -ErrorAction Stop).PriorityClass } catch { '<gone>' } }
 function Policy-Tasks { @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '*OptimizationSuite.ProcessRules.*' }) }
@@ -211,8 +242,8 @@ $script:StartedSessionDir = $null
 $ifeoBefore = Test-Path -LiteralPath $ifeo
 try {
     $cleared = @(Product-ClearedNames)
-    $missingNames = @($clearNames | Where-Object { $cleared -notcontains $_ })
-    Check ($cleared.Count -ge $clearNames.Count -and $missingNames.Count -eq 0) 'the installed launcher clears every code-loading variable the app itself refuses (none dropped from its list)' ("installed list has $($cleared.Count): " + ($cleared -join ',') + "; missing: " + ($missingNames -join ','))
+    $missingNames = @($clearNames | Where-Object { $name=$_; -not @($cleared | Where-Object { $name.StartsWith($_,[StringComparison]::OrdinalIgnoreCase) }).Count })
+    Check ($cleared.Count -gt 0 -and $missingNames.Count -eq 0) 'the installed launcher prefixes match RuntimeEnvironment.ClearPrefixes and cover every planted code-loading name' ("installed prefixes: " + ($cleared -join ',') + "; uncovered: " + ($missingNames -join ','))
     $control = [Diagnostics.ProcessStartInfo]::new((Join-Path $system 'PING.EXE'), '-n 20 127.0.0.1'); $control.UseShellExecute = $false; $control.CreateNoWindow = $true
     $control.EnvironmentVariables['DOTNET_STARTUP_HOOKS'] = 'C:\RooIndustriesNoSuchFolder\hook.dll'
     $controlProcess = [Diagnostics.Process]::Start($control)

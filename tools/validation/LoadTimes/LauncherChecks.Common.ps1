@@ -39,8 +39,15 @@ function Product-Launcher([string]$executable, [string[]]$argumentList, [string]
     try { $text | ConvertFrom-Json } catch { Log ('could not build the expected action: ' + $text); $null }
 }
 function Product-ClearedNames {
-    $command = '. ' + (Quote-Literal (Join-Path $scripts 'BrandCompatibility.Common.ps1')) + '; $script:RooIndustriesCodeLoadingVariables | ConvertTo-Json -Compress'
-    [string[]](Invoke-Ps51 $command | ConvertFrom-Json)
+    $command = '. ' + (Quote-Literal (Join-Path $scripts 'BrandCompatibility.Common.ps1')) + '; ConvertTo-Json -InputObject @($script:RooIndustriesClearedPrefixes) -Compress'
+    $prefixes = @(Invoke-Ps51 $command | ConvertFrom-Json)
+    if (-not $prefixes.Count -or @($prefixes | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count) { throw 'The installed cleared-prefix list is null, empty or malformed.' }
+    $runtime = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\..\backend\native\Optimizer.Core\RuntimeEnvironment.cs')
+    $declaration = [regex]::Match($runtime, 'public static readonly string\[\] ClearPrefixes\s*=\s*\[([^\]]*)\];')
+    if (-not $declaration.Success) { throw 'RuntimeEnvironment.ClearPrefixes is missing or malformed.' }
+    $expected = @([regex]::Matches($declaration.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    if (-not $expected.Count -or (($prefixes | Sort-Object) -join ',') -cne (($expected | Sort-Object) -join ',')) { throw 'Installed launcher prefixes differ from RuntimeEnvironment.ClearPrefixes.' }
+    [string[]]$prefixes
 }
 function Task-Xml([string]$name, [string]$path) { [string](Export-ScheduledTask -TaskName $name -TaskPath $path) }
 function Check-TaskLauncher([string]$label, [string]$xmlText, [string]$executable, [string[]]$argumentList, [string]$workingDirectory) {
