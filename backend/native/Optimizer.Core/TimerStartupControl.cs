@@ -214,7 +214,13 @@ public static class TimerStartupControl
                 if (File.ReadAllBytes(scriptPath).AsSpan().SequenceEqual(new UTF8Encoding(false).GetBytes(script))) { ((dynamic)found).Enabled = true; return; }
                 RemoveOwned();
             }
-            if (File.Exists(scriptPath)) throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
+            if (File.Exists(scriptPath))
+            {
+                var leftover = Receipt(target.Root, target.Name);
+                if (leftover is null || leftover.Owner.UserSid != OperationOwner.Current().UserSid || leftover.Owner.Machine != Environment.MachineName || OperationFiles.HashFile(scriptPath) != leftover.ScriptHash)
+                    throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
+                File.Delete(ReceiptPath(target.Root)); File.Delete(scriptPath);
+            }
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
             OperationFiles.Write(ReceiptPath(target.Root), receipt);
             using (var output = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) output.Write(new UTF8Encoding(false).GetBytes(script));
