@@ -45,6 +45,20 @@ public static class BlackwellReadmeControls {
   var name=new StringBuilder(256);GetClassName(child,name,name.Capacity);
   if(a!=pid||b!=pid||!IsChild(parent,child)||!IsWindowVisible(child)||!IsWindowEnabled(child)||name.ToString()!=expectedClass)throw new InvalidOperationException("Native wizard control identity differs");
  }
+ delegate bool EnumWindow(IntPtr h,IntPtr p);
+ [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr h,EnumWindow callback,IntPtr parameter);
+ [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h,StringBuilder text,int size);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr SendMessageTimeout(IntPtr h,uint message,IntPtr w,IntPtr l,uint flags,uint milliseconds,out IntPtr result);
+ public static object CheckClassicWindow(int window,int pid,string expectedTitle) {
+  IntPtr h=new IntPtr(window);uint actual;GetWindowThreadProcessId(h,out actual);var title=new StringBuilder(512);var name=new StringBuilder(256);GetWindowText(h,title,title.Capacity);GetClassName(h,name,name.Capacity);
+  if(!IsWindow(h)||actual!=pid||name.ToString()!="Notepad"||title.ToString()!=expectedTitle||title.ToString().StartsWith("*",StringComparison.Ordinal))throw new InvalidOperationException("Native README window identity differs");
+  var edits=new List<IntPtr>();EnumChildWindows(h,delegate(IntPtr child,IntPtr parameter){var cls=new StringBuilder(256);GetClassName(child,cls,cls.Capacity);if(cls.ToString()=="Edit")edits.Add(child);return true;},IntPtr.Zero);
+  if(edits.Count!=1)throw new InvalidOperationException("Native README edit ambiguous or absent");uint editPid;GetWindowThreadProcessId(edits[0],out editPid);IntPtr modified;
+  if(editPid!=pid||SendMessageTimeout(edits[0],0x00b8,IntPtr.Zero,IntPtr.Zero,3,1000,out modified)==IntPtr.Zero||modified!=IntPtr.Zero)throw new InvalidOperationException("Native README modified-state refuses close");
+  return new {hwnd=window,pid=pid,title=title.ToString(),edit=edits[0].ToInt64(),modified=false};
+ }
+ public static void CloseClassicWindow(int window,int pid,string expectedTitle) {CheckClassicWindow(window,pid,expectedTitle);if(!PostMessage(new IntPtr(window),0x0010,IntPtr.Zero,IntPtr.Zero))throw new InvalidOperationException("Native README WM_CLOSE failed");}
  public static object[] ReadChecks(int window,int control,int pid) {
   AssertControl(window,control,pid,"TNewCheckListBox");IAccessible value=null;
   try {var iid=new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");int hr=AccessibleObjectFromWindow(new IntPtr(control),0xfffffffc,ref iid,out value);if(hr!=0||value==null)Marshal.ThrowExceptionForHR(hr);
@@ -81,7 +95,7 @@ public sealed class BlackwellNotepadStarts : System.IDisposable {
  readonly string image,document;readonly int session;System.Threading.Thread thread;bool disposed;
  public BlackwellNotepadStarts(string expectedImage,string expectedDocument,int expectedSession){image=expectedImage;document=expectedDocument;session=expectedSession;}
  public void Start(){lock(gate){if(disposed||thread!=null)throw new InvalidOperationException("Native observer already started or disposed");Sample();thread=new System.Threading.Thread(Observe);thread.IsBackground=true;thread.Start();}}
- static string Command(IntPtr handle){int needed;NtQueryInformationProcess(handle,60,IntPtr.Zero,0,out needed);if(needed<16||needed>131072)throw new InvalidOperationException("Native notepad command length unavailable");IntPtr buffer=Marshal.AllocHGlobal(needed);try{if(NtQueryInformationProcess(handle,60,buffer,needed,out needed)!=0)throw new InvalidOperationException("Native notepad command unavailable");return Marshal.PtrToStringUni(Marshal.ReadIntPtr(buffer,IntPtr.Size==8?8:4),(ushort)Marshal.ReadInt16(buffer)/2);}finally{Marshal.FreeHGlobal(buffer);}}
+ public static string Command(IntPtr handle){int needed;NtQueryInformationProcess(handle,60,IntPtr.Zero,0,out needed);if(needed<16||needed>131072)throw new InvalidOperationException("Native notepad command length unavailable");IntPtr buffer=Marshal.AllocHGlobal(needed);try{if(NtQueryInformationProcess(handle,60,buffer,needed,out needed)!=0)throw new InvalidOperationException("Native notepad command unavailable");return Marshal.PtrToStringUni(Marshal.ReadIntPtr(buffer,IntPtr.Size==8?8:4),(ushort)Marshal.ReadInt16(buffer)/2);}finally{Marshal.FreeHGlobal(buffer);}}
  void Observe(){var timer=System.Diagnostics.Stopwatch.StartNew();try{while(timer.Elapsed.TotalSeconds<30&&!stop.WaitOne(5)){Sample();}}catch(Exception error){lock(gate){rows.Add(new {pid=0,observedUtc=DateTime.UtcNow.ToString("o"),commandLine="",nativeJson="",parentNativeJson="",error=error.GetBaseException().Message});}}}
  void Sample(){var snapshot=CreateToolhelp32Snapshot(2,0);if(snapshot==new IntPtr(-1))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());try{var entry=new ProcessEntry();entry.size=(uint)Marshal.SizeOf(typeof(ProcessEntry));if(Process32First(snapshot,ref entry)){do{if(String.Equals(entry.image,"notepad.exe",StringComparison.OrdinalIgnoreCase))Capture((int)entry.pid);}while(Process32Next(snapshot,ref entry));}}finally{CloseHandle(snapshot);}}
  void Capture(int pid){System.Diagnostics.Process process=null;try{process=System.Diagnostics.Process.GetProcessById(pid);var handle=process.Handle;long creation,exit,kernel,user;if(!GetProcessTimes(handle,out creation,out exit,out kernel,out user))return;string key=pid+":"+creation;if(!seen.Add(key)||process.SessionId!=session)return;string command=Command(handle);string[] args=BlackwellReadmeControls.Args(command);if(args.Length!=2||!String.Equals(args[0],image,StringComparison.OrdinalIgnoreCase)||!String.Equals(args[1],document,StringComparison.OrdinalIgnoreCase))return;
@@ -96,7 +110,7 @@ if(-not$DotNetPath){$DotNetPath=Join-Path ([Environment]::GetFolderPath('UserPro
 $fixture=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('AppData\Local\Temp\roo-blackwell-readme-'+[Guid]::NewGuid().ToString('N'))
 if(Test-Path -LiteralPath $fixture){throw 'Fixture already exists'}
 [IO.Directory]::CreateDirectory($fixture)|Out-Null
-$callerReports=[Collections.Generic.List[object]]::new();$readLeases=[Collections.Generic.List[object]]::new();$owned=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new();$rows=[Collections.Generic.List[object]]::new();$deadline=[DateTime]::UtcNow.AddMinutes($Minutes).AddSeconds(-30);$session=(Get-Process -Id $PID).SessionId;$failure=$null
+$callerReports=[Collections.Generic.List[object]]::new();$readLeases=[Collections.Generic.List[object]]::new();$owned=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new();$rows=[Collections.Generic.List[object]]::new();$deadline=[DateTime]::UtcNow.AddMinutes($Minutes).AddSeconds(-30);$session=(Get-Process -Id $PID).SessionId;$failure=$null;$case=$null
 $app='C:\Program Files\Roo Industries\Optimization Suite';$readme=Join-Path $app 'README-BETA.txt';$system=[Environment]::SystemDirectory
 $result=[ordered]@{machine=$env:COMPUTERNAME;installer=$Installer;installerSha256=(Get-FileHash -LiteralPath $Installer).Hash;expectedInstallerSha256=$ExpectedSha256.ToUpperInvariant();maximumMinutes=$Minutes;cases=@();passed=$false;cleanupPassed=$false;error='';restore='Runner phases must restore this installed epoch after the check';fixture=$fixture;ownedFiles=@();ownedProcesses=@()}
 function Save-Result {$result.cases=@($rows);$result|ConvertTo-Json -Depth 15|Set-Content -LiteralPath (Join-Path $Evidence 'interactive-readme.json') -Encoding UTF8}
@@ -141,25 +155,32 @@ function Read-NotepadStarts($Watcher) { $decoded=ConvertFrom-Json -InputObject $
 function Is-NotepadImage([string]$Image) { $Image -ieq ('\\?\'+(Join-Path ([Environment]::SystemDirectory) 'notepad.exe')) -or $Image -match '^\\\\\?\\C:\\Program Files\\WindowsApps\\Microsoft\.WindowsNotepad_[^\\]+\\Notepad\\Notepad\.exe$' }
 function Get-NotepadTabs {
     $windows=@([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -match 'Notepad'})
-    @(foreach($window in $windows){$p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle;try{if(-not(Is-NotepadImage ([RooValidationOwnership.Native]::Image($h)))){continue};$tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem))|ForEach-Object {$selected=$false;$pattern=$null;if($_.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$pattern)){$selected=$pattern.Current.IsSelected};@{key=($_.GetRuntimeId() -join ':');name=$_.Current.Name;selected=$selected}});@{pid=$p.Id;created=[RooValidationOwnership.Native]::Created($h).ToString();image=[RooValidationOwnership.Native]::Image($h);tabs=$tabs}}finally{$p.Dispose()}})
+    @(foreach($window in $windows){$p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle;try{if(-not(Is-NotepadImage ([RooValidationOwnership.Native]::Image($h)))){continue};$tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem))|ForEach-Object {$selected=$false;$pattern=$null;if($_.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$pattern)){$selected=$pattern.Current.IsSelected};@{key=($_.GetRuntimeId() -join ':');name=$_.Current.Name;selected=$selected}});@{pid=$p.Id;created=[RooValidationOwnership.Native]::Created($h).ToString();image=[RooValidationOwnership.Native]::Image($h);hwnd=$window.Current.NativeWindowHandle;tabs=$tabs}}finally{$p.Dispose()}})
 }
-function Restore-NotepadTabs($Before) {
+function Restore-NotepadTabs($Before,$Starts,[DateTime]$Started) {
     $closed=[Collections.Generic.List[object]]::new()
     $windows=@([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -match 'Notepad'})
-    $candidates=[Collections.Generic.List[object]]::new()
+    $candidates=[Collections.Generic.List[object]]::new();$classic=[Collections.Generic.List[object]]::new()
     foreach($window in $windows){
         $p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle
         try{
-            $created=[RooValidationOwnership.Native]::Created($h).ToString();$image=[RooValidationOwnership.Native]::Image($h);if(-not(Is-NotepadImage $image)){continue};$old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $created -and $_.image -ceq $image})
+            $created=[RooValidationOwnership.Native]::Created($h).ToString();$image=[RooValidationOwnership.Native]::Image($h);if(-not(Is-NotepadImage $image)){continue};$old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $created -and $_.image -ceq $image -and $_.hwnd -eq $window.Current.NativeWindowHandle})
             $tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)))
-            $matches=@($tabs|Where-Object {$key=$_.GetRuntimeId() -join ':';$_.Current.Name -match '^README-BETA\.txt(?:\. Unmodified\.)?$' -and @($old.tabs|Where-Object {$_.key -ceq $key}).Count -eq 0})
+            $matches=@($tabs|Where-Object {$key=$_.GetRuntimeId() -join ':';$_.Current.Name -match '^README-BETA\.txt(?:\. Unmodified\.)?$' -and @($old|ForEach-Object {$_.tabs}|Where-Object {$_.key -ceq $key}).Count -eq 0})
             if($matches.Count -gt 1){throw 'README tab ambiguous; existing Notepad retained'}
             foreach($tab in $matches){$candidates.Add(@{window=$window;tab=$tab;pid=$p.Id;created=$created;image=$image})}
+            if($old.Count -eq 0 -and $tabs.Count -eq 0 -and $window.Current.Name -ceq 'README-BETA.txt - Notepad'){
+                $captures=@($Starts|Where-Object {$_.nativeJson -and -not$_.error}|ForEach-Object {$capture=$_;$native=$capture.nativeJson|ConvertFrom-Json;if($native.pid -eq $p.Id -and $native.creationTimeFileTimeUtc -ceq $created -and [RooValidationOwnership.Native]::Canonical($native.imagePath) -ceq $image){@{capture=$capture;native=$native}}})
+                if($captures.Count -ne 1){throw 'Classic README lacks one exact native launch capture; retain'}
+                $native=$captures[0].native;$argv=@([BlackwellReadmeControls]::Args([BlackwellNotepadStarts]::Command($h)));$parent=@($owned|Where-Object {$_.Identity.pid -eq $native.parent.pid -and [long]$_.Identity.creationTimeFileTimeUtc -le [long]$created})
+                if($native.imagePath -ine (Join-Path $system 'notepad.exe') -or $native.session -ne $session -or [DateTime]::FromFileTimeUtc([long]$created) -lt $Started -or $argv.Count -ne 2 -or $argv[0] -ine (Join-Path $system 'notepad.exe') -or $argv[1] -ine $readme -or $parent.Count -ne 1 -or ($native.parent.creationTimeFileTimeUtc -and $native.parent.creationTimeFileTimeUtc -cne $parent[0].Identity.creationTimeFileTimeUtc)){throw 'Classic README identity/argv/parent differs; retain'}
+                $check=[BlackwellReadmeControls]::CheckClassicWindow($window.Current.NativeWindowHandle,$p.Id,'README-BETA.txt - Notepad');$classic.Add(@{window=$window;pid=$p.Id;created=$created;image=$image;native=$native;commandLine=[BlackwellNotepadStarts]::Command($h);parentReceipt=$parent[0].Identity;before=$check})
+            }
             $after=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)))
-            foreach($original in @($old.tabs)){$same=@($after|Where-Object {($_.GetRuntimeId() -join ':') -ceq $original.key -and $_.Current.Name -ceq $original.name});if($same.Count -ne 1){throw 'An original Notepad tab changed; preserve window and report'};if($original.selected){$same[0].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}}
+            foreach($original in @($old|ForEach-Object {$_.tabs})){$same=@($after|Where-Object {($_.GetRuntimeId() -join ':') -ceq $original.key -and $_.Current.Name -ceq $original.name});if($same.Count -ne 1){throw 'An original Notepad tab changed; preserve window and report'};if($original.selected){$same[0].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}}
         }finally{$p.Dispose()}
     }
-    if($candidates.Count -gt 1){throw 'README tab ownership ambiguous across windows; retain all'}
+    if($candidates.Count+$classic.Count -gt 1){throw 'README ownership ambiguous across windows; retain all'}
     foreach($candidate in $candidates){
         $p=Get-Process -Id $candidate.pid;$h=$p.Handle
         try{
@@ -168,8 +189,18 @@ function Restore-NotepadTabs($Before) {
             if($buttons.Count -ne 1 -or $tab.Current.Name -notmatch '^README-BETA\.txt(?:\. Unmodified\.)?$'){throw 'README tab close identity differs; retained'}
             $tabKey=$tab.GetRuntimeId() -join ':';$tabName=$tab.Current.Name;$buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();$closed.Add(@{pid=$p.Id;created=$candidate.created;image=$candidate.image;tabKey=$tabKey;name=$tabName});Start-Sleep -Milliseconds 200
             $after=@($candidate.window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)))
-            $old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $candidate.created -and $_.image -ceq $candidate.image})
-            foreach($original in @($old.tabs)){$same=@($after|Where-Object {($_.GetRuntimeId() -join ':') -ceq $original.key -and $_.Current.Name -ceq $original.name});if($same.Count -ne 1){throw 'An original Notepad tab changed; preserve window and report'};if($original.selected){$same[0].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}}
+            $old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $candidate.created -and $_.image -ceq $candidate.image -and $_.hwnd -eq $candidate.window.Current.NativeWindowHandle})
+            foreach($original in @($old|ForEach-Object {$_.tabs})){$same=@($after|Where-Object {($_.GetRuntimeId() -join ':') -ceq $original.key -and $_.Current.Name -ceq $original.name});if($same.Count -ne 1){throw 'An original Notepad tab changed; preserve window and report'};if($original.selected){$same[0].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}}
+        }finally{$p.Dispose()}
+    }
+    foreach($candidate in $classic){
+        $p=Get-Process -Id $candidate.pid;$h=$p.Handle
+        try{
+            if($p.HasExited -or [RooValidationOwnership.Native]::Created($h).ToString() -cne $candidate.created -or [RooValidationOwnership.Native]::Image($h) -cne $candidate.image -or [BlackwellNotepadStarts]::Command($h) -cne $candidate.commandLine){throw 'Classic README changed before WM_CLOSE; retain'}
+            $hwnd=$candidate.window.Current.NativeWindowHandle;[BlackwellReadmeControls]::CloseClassicWindow($hwnd,$p.Id,'README-BETA.txt - Notepad');$until=[DateTime]::UtcNow.AddSeconds(5)
+            while([DateTime]::UtcNow -lt $until -and [BlackwellReadmeControls]::IsWindow([IntPtr]$hwnd)){Start-Sleep -Milliseconds 100}
+            if([BlackwellReadmeControls]::IsWindow([IntPtr]$hwnd)){throw 'Classic README remained or save prompt appeared; no further input'}
+            $closed.Add(@{pid=$p.Id;created=$candidate.created;image=$candidate.image;hwnd=$hwnd;action='WM_CLOSE';before=$candidate.before;windowGone=$true;parentReceipt=$candidate.parentReceipt})
         }finally{$p.Dispose()}
     }
     @{passed=$true;closedOnlyNewReadmeTabs=@($closed);existingNotepadProcessesStopped=0}
@@ -230,8 +261,8 @@ try {
     foreach($variant in 'already-elevated','normal-uac'){
         if([DateTime]::UtcNow -ge $deadline){throw 'Overall45-minute bound reached'}
         $started=[DateTime]::UtcNow;$caseDeadline=$started.AddMinutes(20);if($caseDeadline -gt $deadline){$caseDeadline=$deadline}
-        $case=[ordered]@{name=$variant;startedUtc=$started.ToString('o');status='missing-proof';caller=$null;setupPid=$null;wizardProcess=$null;readmeChecked=$false;finishInvoked=$false;notepad=$null;notepadCommandLine=$null;expectedNotepadIntegrity=$(if($variant -ceq 'normal-uac'){'Medium'}else{'High'});notepadParentContext=$null;notepadStartCaptures=@();notepadUiCleanup=$null;uacCriteria=$null;uacApproval=$null;steps=@();error=''}
-        $steps=[Collections.Generic.List[object]]::new();$before=@(Get-Process -ErrorAction SilentlyContinue|ForEach-Object {$_.Id});$setup=$null;$launcher=$null;$dir=$null;$lastAction='';$lastActionUtc=[DateTime]::MinValue;$notepadStarts=$null;$uacRequest=$null;$uacWaitUntil=$null;$uacReceipt=$null;$uacReceiptUntil=$null;$tabsBefore=Get-NotepadTabs
+        $case=[ordered]@{name=$variant;startedUtc=$started.ToString('o');status='missing-proof';caller=$null;setupPid=$null;wizardProcess=$null;readmeChecked=$false;finishInvoked=$false;notepad=$null;notepadCommandLine=$null;expectedNotepadIntegrity=$(if($variant -ceq 'normal-uac'){'Medium'}else{'High'});notepadParentContext=$null;notepadStartCaptures=@();notepadUiCleanup=$null;completed=$false;notepadWindowsBefore=@();uacCriteria=$null;uacApproval=$null;steps=@();error=''}
+        $steps=[Collections.Generic.List[object]]::new();$rows.Add($case);Save-Result;$before=@(Get-Process -ErrorAction SilentlyContinue|ForEach-Object {$_.Id});$setup=$null;$launcher=$null;$dir=$null;$lastAction='';$lastActionUtc=[DateTime]::MinValue;$notepadStarts=$null;$uacRequest=$null;$uacWaitUntil=$null;$uacReceipt=$null;$uacReceiptUntil=$null;$tabsBefore=Get-NotepadTabs;$case.notepadWindowsBefore=@($tabsBefore);Save-Result
         $notepadStarts=[BlackwellNotepadStarts]::new((Join-Path $system 'notepad.exe'),$readme,$session)
         if($variant -ceq 'normal-uac'){
             $dir=Join-Path $fixture $variant;[IO.Directory]::CreateDirectory($dir)|Out-Null;$exe=Join-Path $dir 'IntegrityProbe.exe'
@@ -283,7 +314,7 @@ try {
                 $case.notepadParentContext=if($notepads[0].parentNativeJson){$notepads[0].parentNativeJson|ConvertFrom-Json}else{$null}
                 $case.status=if($native.integrity -ceq $case.expectedNotepadIntegrity -and [bool]$native.elevated -eq ($variant -ceq 'already-elevated') -and $native.session -eq $session -and $native.imagePath -ieq (Join-Path $system 'notepad.exe') -and $args.Count -eq 2 -and $args[0] -ieq (Join-Path $system 'notepad.exe') -and $args[1] -ieq $readme -and [DateTime]::FromFileTimeUtc([long]$native.creationTimeFileTimeUtc) -ge $started -and ($variant -ceq 'already-elevated' -or $uacReceipt)){'passed'}else{'failed'}
                 if(-not$native.parent.imagePath){$known=@($owned|Where-Object {$_.Identity.pid -eq $native.parent.pid});if($known.Count -eq 1){$native.parent|Add-Member -NotePropertyName imagePath -NotePropertyValue $known[0].Identity.imagePath;$native.parent|Add-Member -NotePropertyName imageEvidence -NotePropertyValue 'owned setup receipt captured before its exit'}}
-                Capture ($variant+'-readme');$case.notepadUiCleanup=Restore-NotepadTabs $tabsBefore;break
+                Save-Result;Capture ($variant+'-readme');$case.notepadUiCleanup=Restore-NotepadTabs $tabsBefore $case.notepadStartCaptures $started;Save-Result;break
             }
             if($case.finishInvoked -and $notepads.Count -gt 1){$case.error='Ambiguous matching native README starts; refuse ownership.';break}
             if($case.finishInvoked){Start-Sleep -Milliseconds 50;continue}
@@ -311,16 +342,17 @@ try {
             Start-Sleep -Milliseconds 200
         }
         if(-not$case.error -and $case.status -ceq 'missing-proof'){$case.error='The wizard/README evidence did not complete within the per-case/overall bound.'}
-        if($case.finishInvoked -and -not$case.notepadUiCleanup){try{$case.notepadUiCleanup=Restore-NotepadTabs $tabsBefore}catch{$case.notepadUiCleanup=@{passed=$false;error=$_.Exception.Message}}}
+        if($case.finishInvoked -and -not$case.notepadUiCleanup){try{$case.notepadUiCleanup=Restore-NotepadTabs $tabsBefore $case.notepadStartCaptures $started}catch{$case.notepadUiCleanup=@{passed=$false;error=$_.Exception.Message}}}
         if($notepadStarts){$case.notepadStartCaptures=@(Read-NotepadStarts $notepadStarts);$notepadStarts.Dispose();$notepadStarts=$null}
-        $case.steps=@($steps);$rows.Add($case);Save-Result
+        $case.steps=@($steps);Save-Result
         foreach($receipt in $owned){Stop-OwnedProcess $receipt}
         if($variant -ceq 'normal-uac' -and [BlackwellReadmeDesktop]::Name() -ne 'Default'){Start-Sleep -Seconds 3;if([BlackwellReadmeDesktop]::Name() -ne 'Default'){throw 'Own Medium caller stopped, but UAC input desktop remains; retained evidence, no arbitrary consent process was killed'}}
+        $case.completed=$true;Save-Result
     }
     $result.passed=@($rows).Count -eq 2 -and @($rows|Where-Object {$_.status -cne 'passed'}).Count -eq 0
-}catch{$failure=$_;$result.error=$_.Exception.Message;$result.passed=$false}
+}catch{$failure=$_;$result.error=$_.Exception.Message;$result.passed=$false;if($case -and -not$case.completed){$case.error=$_.Exception.Message;$case.status='failed';$case.steps=@($steps);if($notepadStarts){try{$case.notepadStartCaptures=@(Read-NotepadStarts $notepadStarts)}catch{$case.notepadStartCapturesError=$_.Exception.Message}};if($case.finishInvoked -and -not$case.notepadUiCleanup){$case.notepadUiCleanup=@{passed=$false;error='Aborted case UI cleanup incomplete'}};Save-Result}}
 finally {
-    $clean=@($rows|Where-Object {$_.finishInvoked -and (-not$_.notepadUiCleanup -or -not$_.notepadUiCleanup.passed)}).Count -eq 0
+    $clean=-not$failure -and @($rows|Where-Object {-not$_.completed -or ($_.finishInvoked -and (-not$_.notepadUiCleanup -or -not$_.notepadUiCleanup.passed))}).Count -eq 0
     if($notepadStarts){try{$notepadStarts.Dispose()}catch{$clean=$false;$result.error+='; native start watcher cleanup: '+$_.Exception.Message}}
     foreach($report in $callerReports){
         try{if(Test-Path -LiteralPath $report.metadata){Assert-PlainAncestry $report.metadata;$identity=(Get-Content -Raw -LiteralPath $report.metadata|ConvertFrom-Json).probe;$null=Own-Reported $identity $report.image}}
@@ -332,7 +364,7 @@ finally {
     foreach($identity in $copies){try{$copy=Open-OwnedProbe $identity;try{Remove-OwnedProbe $copy}finally{$copy.Dispose()}}catch{$clean=$false;$result.error+='; exact file cleanup: '+$_.Exception.Message}}
     $filesDeadline=[DateTime]::UtcNow.AddSeconds(5);while([DateTime]::UtcNow -lt $filesDeadline -and @($copies|Where-Object {Test-Path -LiteralPath $_.path}).Count){Start-Sleep -Milliseconds 100}
     try{if(@(Get-ChildItem -LiteralPath $fixture -Recurse -Force|Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint}).Count){throw 'Reparse fixture retained'};$unknown=@(Get-ChildItem -LiteralPath $fixture -File -Recurse -Force|Where-Object {$_.Name -notin 'compiled-launcher.exe','probe-report.json','probe-report.json.tmp','setup-started.json','setup-started.json.tmp','setup-error.json','probe-error.txt'});if($unknown.Count){throw 'Unknown fixture entries retained'};Remove-Item -LiteralPath $fixture -Recurse -Force}catch{$clean=$false;$result.error+='; fixture cleanup: '+$_.Exception.Message}
-    $result.cleanupPassed=$clean;Save-Result
+    $result.cleanupPassed=$clean;$result.passed=$result.passed -and $clean;Save-Result
 }
 if($failure){Write-Output ('FAIL interactive README check: '+$result.error);throw $failure}
 if(@($rows|Where-Object {$_.status -ceq 'failed'}).Count){Write-Output ('FAIL native interactive README identity or integrity: '+(Join-Path $Evidence 'interactive-readme.json'));exit 1}
