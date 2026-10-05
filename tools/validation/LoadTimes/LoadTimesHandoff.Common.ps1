@@ -69,7 +69,8 @@ function Get-HandoffResourceState([ValidateSet('process','task')][string]$Kind,$
         try{$process=Get-Process -Id ([int]$Resource.pid) -ErrorAction Stop}catch{if($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*'){return 'gone'};throw}
         try{
             $handle=$process.Handle
-            if([RooValidationOwnership.Native]::Created($handle).ToString() -cne [string]$Resource.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($handle) -cne [string]$Resource.imagePath){throw 'Handoff live process identity changed'}
+            if([RooValidationOwnership.Native]::Created($handle).ToString() -cne [string]$Resource.creationTimeFileTimeUtc){return 'gone'}
+            if([RooValidationOwnership.Native]::Image($handle) -cne [string]$Resource.imagePath){throw 'Handoff live process identity changed'}
             if($process.HasExited){return 'gone'}
             return 'live'
         }finally{$process.Dispose()}

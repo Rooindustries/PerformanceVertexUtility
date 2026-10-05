@@ -9,6 +9,23 @@ if(Test-Path -LiteralPath $OutDir){throw 'Existing handoff proof retained'}
 $checks=[Collections.Generic.List[object]]::new();$owned=$null;$task=$null;$foreign=$null;$ledgerCopy=$null;$workerFile=$null
 function Check([bool]$Ok,[string]$Name){$checks.Add(@{passed=$Ok;check=$Name});if(-not$Ok){throw $Name};'PASS '+$Name}
 function Refuses([scriptblock]$Body,[string]$Name){$refused=$false;try{& $Body|Out-Null}catch{$refused=$true};Check $refused $Name}
+function New-PrivateProcessLedger($Identity,[string]$Name){
+ $case=Join-Path $OutDir $Name;[IO.Directory]::CreateDirectory($case)|Out-Null
+ $caseEpoch=Join-Path $case 'epoch-installed';$caseScenarios=Join-Path $case 'scenarios';[IO.Directory]::CreateDirectory($caseEpoch)|Out-Null;[IO.Directory]::CreateDirectory($caseScenarios)|Out-Null
+ $caseLease=Join-Path $caseEpoch 'lease.json';Save-HandoffJson $caseLease @{label='installed';sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;startUtc=[DateTime]::UtcNow.ToString('o');baselineHash=('A'*64)} -Create
+ $caseContext=New-HandoffContext $caseScenarios $caseLease;Initialize-HandoffLedger $caseContext
+ $caseProducer=Join-Path $caseScenarios 'migration-timer-on';[IO.Directory]::CreateDirectory($caseProducer)|Out-Null
+ $caseResources=Join-Path $case 'fixture-resources.json';Save-HandoffJson $caseResources @{scenario='migration-timer-on';tasks=@();processes=@($Identity)} -Create
+ $caseRequest=New-HandoffProducerRequest $caseContext 'migration-timer-on' $caseProducer $fixture @{OutDir=$caseProducer;ResourcePath=$caseResources} $task
+ $casePsi=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $Source 'tools\validation\LoadTimes\Invoke-LoadTimesProducer.ps1')+'" -RequestPath "'+$caseRequest+'" -Minutes 2'));$casePsi.UseShellExecute=$false;$casePsi.CreateNoWindow=$true
+ $caseWrapper=[Diagnostics.Process]::Start($casePsi);$caseWrapperReceipt=New-OwnedProcess $caseWrapper
+ try{if(-not$caseWrapper.WaitForExit(180000)){Stop-OwnedProcess $caseWrapperReceipt;throw 'Own private process producer timeout'};if($caseWrapper.ExitCode -ne 0){throw 'Native private process producer failed'}}finally{$caseWrapper.Dispose()}
+ $caseCompleted=Get-HandoffProducer $caseContext 'migration-timer-on'
+ $caseLedger=[ordered]@{protocol='roo-loadtimes-ledger/v1';leaseHash=$caseContext.leaseHash;entries=@([ordered]@{producer='migration-timer-on';childReceiptHash=$caseCompleted.receiptHash;kind='process';index=0;resource=$caseCompleted.resources.processes[0]})}
+ Save-HandoffJson $caseContext.ledgerPath $caseLedger
+ Initialize-HandoffLedger $caseContext
+ $caseContext
+}
 try{
  $epoch=Join-Path $OutDir 'epoch-installed';$scenarios=Join-Path $OutDir 'scenarios';[IO.Directory]::CreateDirectory($epoch)|Out-Null;[IO.Directory]::CreateDirectory($scenarios)|Out-Null
  $lease=Join-Path $epoch 'lease.json';@{label='installed';sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;startUtc=[DateTime]::UtcNow.ToString('o');baselineHash=('A'*64)}|ConvertTo-Json|Set-Content -LiteralPath $lease
@@ -45,8 +62,16 @@ Copy-Item -LiteralPath $ResourcePath -Destination (Join-Path $OutDir 'persistent
  Refuses {Test-HandoffTask $ledger $foreign.name $foreign.path -Require} 'foreign timer task refused'
  Check ([bool](@(Report-UnownedLoadTimesResources)|Where-Object {$_ -like ('*CLEANUP NEEDED*'+$foreign.name+'*')})) 'actual consumer names foreign timer task and refuses it'
  Remove-OwnedTask $foreign;$foreign=$null
- $bad=$owned.Identity|ConvertTo-Json|ConvertFrom-Json;$bad.creationTimeFileTimeUtc=([long]$bad.creationTimeFileTimeUtc+1).ToString()
- Refuses {Get-HandoffResourceState 'process' $bad} 'changed-creation PID refused without stopping worker'
+ $bad=$owned.Identity|ConvertTo-Json|ConvertFrom-Json;$bad.creationTimeFileTimeUtc=([long]$bad.creationTimeFileTimeUtc-1).ToString()
+ Check ((Get-HandoffResourceState 'process' $bad) -ceq 'gone') 'live reused PID with different creation means recorded process is gone'
+ $reuseContext=New-PrivateProcessLedger $bad 'reused-pid';$reuseLedger=Read-HandoffLedger $reuseContext -Prune
+ Check (@($reuseLedger.entries).Count -eq 0 -and @((Read-HandoffJson $reuseContext.ledgerPath).value.entries).Count -eq 0) 'different-creation process row is pruned from the retained ledger'
+ Check (-not(Test-HandoffProcess $reuseLedger $p) -and (Get-HandoffResourceState 'process' $owned.Identity) -ceq 'live') 'reused PID is neither adopted nor stopped'
+ $imageChanged=$owned.Identity|ConvertTo-Json|ConvertFrom-Json;$imageChanged.imagePath=[RooValidationOwnership.Native]::Canonical((Join-Path $PSHOME 'powershell.exe'))
+ Refuses {Get-HandoffResourceState 'process' $imageChanged} 'same-creation process with different image is refused'
+ $imageContext=New-PrivateProcessLedger $imageChanged 'changed-image'
+ Refuses {Read-HandoffLedger $imageContext -Prune} 'same-creation different-image ledger row is refused at the boundary'
+ Check ((Get-HandoffResourceState 'process' $owned.Identity) -ceq 'live' -and (Test-HandoffProcess (Read-HandoffLedger $context -Prune) $p)) 'unchanged PID creation and image remain live and owned'
  $ledgerCopy=[IO.File]::ReadAllBytes($context.ledgerPath);$tampered=$ledger|ConvertTo-Json -Depth 30|ConvertFrom-Json;$tampered.entries[0].childReceiptHash='0'*64;$tampered|ConvertTo-Json -Depth 30|Set-Content -LiteralPath $context.ledgerPath
  Refuses {Read-HandoffLedger $context} 'tampered ledger refused'
  '{broken'|Set-Content -LiteralPath $context.ledgerPath
@@ -72,7 +97,7 @@ finally{
  foreach($r in @($task,$foreign)){if($r){try{Remove-OwnedTask $r}catch{$checks.Add(@{passed=$false;check='Private task cleanup: '+$_.Exception.Message})}}}
  if($owned){try{Stop-OwnedProcess $owned;$owned.process.Dispose()}catch{$checks.Add(@{passed=$false;check='Private process cleanup: '+$_.Exception.Message})}}
  if($workerFile){$workerFile.Dispose()}
- $result=@{phase='loadtimes-handoff-private';machine=$env:COMPUTERNAME;passed=($checks.Count -ge 15 -and @($checks|Where-Object {-not$_.passed}).Count -eq 0);checks=$checks.ToArray()}
+ $result=@{phase='loadtimes-handoff-private';machine=$env:COMPUTERNAME;passed=($checks.Count -ge 20 -and @($checks|Where-Object {-not$_.passed}).Count -eq 0);checks=$checks.ToArray()}
  $result|ConvertTo-Json -Depth 20|Set-Content -LiteralPath (Join-Path $OutDir 'result.json')
 }
 if(-not$result.passed){exit 1}
