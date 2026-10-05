@@ -103,7 +103,8 @@ public static class TimerStartupControl
                             var com = new List<object>();
                             object ReadCom(object target, string member, params object[] arguments)
                             {
-                                var value = GetTaskProperty(target, member, arguments)!;
+                                var value = GetTaskProperty(target, member, arguments);
+                                if (value is null) return null!;
                                 if (Marshal.IsComObject(value) && !com.Any(prior => ReferenceEquals(prior, value))) com.Add(value);
                                 return value;
                             }

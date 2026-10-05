@@ -371,7 +371,18 @@ switch($Phase){
         $later=Describe-State;$out.later=$later
         Check (@($later.workers).Count -eq 0 -and $later.tasks[0].state -eq 'Disabled' -and ($probe -and (Same (Read-Controls $probe) $state.original))) 'Seventy-five seconds later nothing restarted the paused governor'
     }
-    'record' {$s=Describe-State;$out.state=$s;Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostIdentity' $s.hostIdentity;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State}
+    'record' {
+        $s=Describe-State;$out.state=$s
+        Set-StateValue ('record_'+$Phase) $s;Set-StateValue 'recordedHostPid' $s.hostPid;Set-StateValue 'recordedHostIdentity' $s.hostIdentity;Set-StateValue 'recordedHostFile' $s.hostFile;Set-StateValue 'recordedRules' $s.ruleFiles;Save-State
+        Check (Test-Path -LiteralPath $statePath -PathType Leaf) 'The governor replacement snapshot was written'
+        $saved=Get-Content -Raw -LiteralPath $statePath|ConvertFrom-Json
+        Check ($null -ne $saved -and $saved.protocol -ceq 'roo-industries-gi/v1' -and $saved.fixtureId -ceq $FixtureId -and $saved.ownerSha256 -ieq $OwnerSha256) 'The written governor replacement snapshot parses and keeps its fixture identity'
+        $required='record_record','recordedHostPid','recordedHostIdentity','recordedHostFile','recordedRules'
+        $present=@($required|Where-Object {-not$saved.PSObject.Properties[$_]}).Count -eq 0
+        $rules=@($saved.recordedRules)
+        $validRules=$rules.Count -gt 0 -and @($rules|Where-Object {-not$_.name -or $_.sha256 -notmatch '^[0-9a-fA-F]{64}$'}).Count -eq 0
+        Check ($present -and $saved.recordedHostPid -gt 0 -and $saved.recordedHostIdentity.processId -eq $saved.recordedHostPid -and $saved.recordedHostIdentity.creationTimeFileTimeUtc -match '^\d+$' -and $saved.recordedHostFile.createdUtc -and $validRules -and (Same $saved.recordedHostIdentity $s.hostIdentity) -and (Same $saved.recordedHostFile $s.hostFile) -and (Same $rules @($s.ruleFiles))) 'The parsed snapshot retains the host identity, host creation time and rule hashes needed to verify replacement'
+    }
     'verify-replaced' {
         $s=Describe-State;$out.state=$s
         Check ($s.hostRunning -eq $true -and $state.recordedHostIdentity -and $s.hostIdentity -and $s.hostIdentity.creationTimeFileTimeUtc -cne $state.recordedHostIdentity.creationTimeFileTimeUtc) 'A new governor worker runs after setup'
