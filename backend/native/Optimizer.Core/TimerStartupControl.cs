@@ -203,7 +203,7 @@ public static class TimerStartupControl
                 if (found is not null) { service.GetFolder(@"\").DeleteTask(target.Name, 0); Marshal.FinalReleaseComObject(found); found = null; }
                 var retained = Find(scheduler, target.Name);
                 if (retained is not null) { Marshal.FinalReleaseComObject(retained); throw new IOException("The owned startup task remains after removal."); }
-                File.Delete(ReceiptPath(target.Root)); File.Delete(existingScript);
+                File.Delete(existingScript); File.Delete(ReceiptPath(target.Root));
             }
             if (!desired.GetBoolean()) { RemoveOwned(); return; }
             var (assembly, dotnet, bundled) = StartupLauncher();
@@ -219,7 +219,7 @@ public static class TimerStartupControl
                 var leftover = Receipt(target.Root, target.Name);
                 if (leftover is null || leftover.Owner.UserSid != OperationOwner.Current().UserSid || leftover.Owner.Machine != Environment.MachineName || OperationFiles.HashFile(scriptPath) != leftover.ScriptHash)
                     throw new IOException("A timer startup script already exists without an active owned task. Review its retained state before replacing it.");
-                File.Delete(ReceiptPath(target.Root)); File.Delete(scriptPath);
+                File.Delete(scriptPath); File.Delete(ReceiptPath(target.Root));
             }
             var receipt = new TimerStartupReceipt(OperationOwner.Current(), target.Name, "creating", "", OperationFiles.Hash(Encoding.UTF8.GetBytes(script)));
             OperationFiles.Write(ReceiptPath(target.Root), receipt);
