@@ -265,7 +265,8 @@ public static class SecondAccountNative {
         $start = @{
             FilePath = $powershell; ArgumentList = @( $arguments | ForEach-Object { Command-Argument $_ })
             PassThru = $true; WindowStyle = 'Hidden'
-            RedirectStandardOutput = (Join-Path $dir 'console.out'); RedirectStandardError = (Join-Path $dir 'console.err')
+            RedirectStandardOutput = (Join-Path $OutDir ('runner-' + $Label + '-console.out'))
+            RedirectStandardError = (Join-Path $OutDir ('runner-' + $Label + '-console.err'))
         }
         $process = Start-Process @start
         $owned = New-OwnedProcess $process
