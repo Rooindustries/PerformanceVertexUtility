@@ -261,7 +261,7 @@ public static class SecondAccountNative {
         }
         $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $runner,
             '-Phase', $Phase, '-Source', $Source, '-Evidence', $dir, '-BackupRoot', $BackupRoot)
-        foreach ($name in $Extra.Keys) { $arguments += @('-' + $name, [string]$Extra[$name]) }
+        foreach ($name in $Extra.Keys) { $arguments += @(('-' + $name), [string]$Extra[$name]) }
         $start = @{
             FilePath = $powershell; ArgumentList = @( $arguments | ForEach-Object { Command-Argument $_ })
             PassThru = $true; WindowStyle = 'Hidden'
@@ -277,7 +277,7 @@ public static class SecondAccountNative {
             Stop-Receipt $owned
             throw ('Runner timed out in ' + $Label + '; sealed recovery and child evidence retained.')
         }
-        $lines = @(Get-Content -LiteralPath (Join-Path $dir ($Phase + '.log')) -ErrorAction Stop)
+        $lines = @([IO.File]::ReadAllLines((Join-Path $dir ($Phase + '.log'))))
         $named = @($lines | Where-Object { $_ -cmatch '^\S+ PASS ' })
         $errors = @($lines | Where-Object { $_ -cmatch '^\S+ (FAIL|FATAL|ERROR|SKIPPED|NOT RUN) ' })
         Save-Json ('runner-' + $Label + '-result.json') ([ordered]@{
