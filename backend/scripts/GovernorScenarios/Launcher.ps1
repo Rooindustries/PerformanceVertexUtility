@@ -171,18 +171,6 @@ function Test-ClearedName([string]$Name) {
     return $false
 }
 
-function Initialize-EnvironmentBroadcast {
-    if('RooIndustriesGovernorEnvBroadcast' -as [type]){return}
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class RooIndustriesGovernorEnvBroadcast {
-    [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wparam, string lparam, uint flags, uint timeout, out UIntPtr result);
-    public static void Send() { UIntPtr result; SendMessageTimeout((IntPtr)0xFFFF, 0x1A, UIntPtr.Zero, "Environment", 2, 5000, out result); }
-}
-'@
-}
-
 function Get-UserEnvironmentValue($Key,[string]$Name) {
     $state=[pscustomobject]@{present=($Key.GetValueNames() -contains $Name);kind=$null;value=$null}
     if($state.present){$state.kind=$Key.GetValueKind($Name);$state.value=$Key.GetValue($Name,$null,'DoNotExpandEnvironmentNames')}
@@ -190,7 +178,6 @@ function Get-UserEnvironmentValue($Key,[string]$Name) {
 }
 
 function Use-UserEnvironment {
-    Initialize-EnvironmentBroadcast
     Initialize-EnvironmentOracle
     $shellWindow=[RooIndustriesGovernorEnvOracle]::GetShellWindow()
     $shellProcess=[IntPtr]::Zero
@@ -217,7 +204,7 @@ function Use-UserEnvironment {
                     if(($observed|ConvertTo-Json -Depth 4 -Compress) -cne ($entry.after|ConvertTo-Json -Depth 4 -Compress)){$drift.Add($name);continue}
                     if($entry.before.present){$key.SetValue($name,$entry.before.value,$entry.before.kind)}elseif($observed.present){$key.DeleteValue($name)}
                 }
-            } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
+            } finally {$key.Close()}
             if($shellProcess -ne [IntPtr]::Zero){
                 [uint32]$currentShellProcessId=0
                 [void][RooIndustriesGovernorEnvOracle]::GetWindowThreadProcessId([RooIndustriesGovernorEnvOracle]::GetShellWindow(),[ref]$currentShellProcessId)
