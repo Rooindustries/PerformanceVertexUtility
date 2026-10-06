@@ -224,7 +224,8 @@ public static class SecondAccountNative {
 '@
     function Start-Secondary([string]$Name, [string]$File, [string[]]$ArgumentList, [switch]$Logon) {
         $command = ((@($File) + $ArgumentList | ForEach-Object { Command-Argument $_ }) -join ' ')
-        $launch = if ($Logon) {
+        $credentialed = $Logon -or $script:EnableLUA -eq 0
+        $launch = if ($credentialed) {
             [SecondAccountNative]::Logon($accountName, $script:Password, $File, $command, (Split-Path $File -Parent))
         } else {
             [SecondAccountNative]::Elevated($script:FullToken, $File, $command, (Split-Path $File -Parent))
@@ -243,7 +244,7 @@ public static class SecondAccountNative {
             identity = $receipt.Identity; commandLine = $command
             sid = [SecondAccountNative]::ProcessSid($launch.process)
             elevated = [SecondAccountNative]::IsElevated($launch.process); logonWithProfile = $true
-            transport = $(if ($Logon) { 'CreateProcessWithLogonW' } else { 'CreateProcessWithTokenW: secondary linked administrator token' })
+            transport = $(if ($credentialed) { 'CreateProcessWithLogonW' } else { 'CreateProcessWithTokenW: secondary linked administrator token' })
         })
         Require ([SecondAccountNative]::ProcessSid($launch.process) -ceq $script:AccountSid) ($Name + ' runs as B') $script:AccountSid
         if (-not $Logon) { Require ([SecondAccountNative]::IsElevated($launch.process)) ($Name + ' runs elevated as B') }
