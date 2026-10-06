@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $FailureModes = @(
+    'Preflight exits nonzero or lacks its matching result JSON, or another runner phase has no named PASS: retain the runner result and fail.',
+    'EnableLUA is missing or invalid, or B startup/helper elevation differs from its recorded expectation: record FAIL without skipping the token check.',
     'Account creation or Administrators membership fails: record FAIL, retain the created SID and remove only that account.',
     'LOGON_WITH_PROFILE fails or loads the wrong profile: record FAIL before any timer request and retain the native error and token identity.',
     'The secondary token is filtered or desktop/UIA access fails: record FAIL; never substitute the main account or claim the dashboard loaded.',
@@ -44,6 +46,8 @@ $script:BeforeAudit = $null
 $script:CurrentStage = 'preconditions'
 $script:StartedUtc = [DateTime]::UtcNow
 $script:Password = $null
+$script:EnableLUA = $null
+$script:ExpectedStartupElevated = $null
 $accountName = 'RooF2_' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $install = Split-Path (Split-Path $Exe -Parent) -Parent
 $hostExe = Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
@@ -60,6 +64,7 @@ function Save-Result {
         startedUtc = $script:StartedUtc.ToString('o'); observedUtc = [DateTime]::UtcNow.ToString('o')
         stage = $script:CurrentStage; passed = ($script:CurrentStage -ceq 'complete' -and $script:Failures -eq 0)
         failures = $script:Failures; account = $accountName; sid = $script:AccountSid
+        enableLUA = $script:EnableLUA; expectedStartupElevated = $script:ExpectedStartupElevated
         failureModes = $FailureModes; checks = $script:Checks.ToArray()
         processes = @($script:Processes | ForEach-Object { $_.Identity }); log = $script:LogPath
     })
@@ -99,6 +104,10 @@ function Resolve-Sid([string]$Value) {
 try {
     Require ($env:OS -ceq 'Windows_NT' -and $env:COMPUTERNAME -ceq 'SERVI-WINDOWS-D') 'the scenario is running only on optimizer-9070' $env:COMPUTERNAME
     Require ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 'the main account is elevated'
+    $script:EnableLUA = (Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction Stop).EnableLUA
+    Require ($script:EnableLUA -in 0, 1) 'EnableLUA is recorded as 0 or 1' ('EnableLUA=' + $script:EnableLUA)
+    $script:ExpectedStartupElevated = ($script:EnableLUA -eq 0)
+    Check $true 'B startup and helper elevation expectation is recorded' ('EnableLUA=' + $script:EnableLUA + ' expectedElevated=' + $script:ExpectedStartupElevated)
     $acl = [Security.AccessControl.DirectorySecurity]::new()
     $acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)')
     Set-Acl -LiteralPath $OutDir -AclObject $acl
@@ -268,13 +277,19 @@ public static class SecondAccountNative {
             throw ('Runner timed out in ' + $Label + '; sealed recovery and child evidence retained.')
         }
         $lines = @(Get-Content -LiteralPath (Join-Path $dir ($Phase + '.log')) -ErrorAction Stop)
-        $named = @($lines | Where-Object { $_ -cmatch '^\S+ (PASS|FAIL) ' })
+        $named = @($lines | Where-Object { $_ -cmatch '^\S+ PASS ' })
         $errors = @($lines | Where-Object { $_ -cmatch '^\S+ (FAIL|FATAL|ERROR|SKIPPED|NOT RUN) ' })
         Save-Json ('runner-' + $Label + '-result.json') ([ordered]@{
             phase = $Phase; exit = $process.ExitCode; identity = $owned.Identity; checks = $named
             log = (Join-Path $dir ($Phase + '.log')); logSha256 = (Get-FileHash -LiteralPath (Join-Path $dir ($Phase + '.log'))).Hash
         })
-        Require ($process.ExitCode -eq 0 -and $named.Count -gt 0 -and $errors.Count -eq 0) ('runner ' + $Label + ' completed its named checks') ('exit=' + $process.ExitCode + ' log=' + $dir)
+        if ($Phase -eq 'preflight') {
+            $resultPath = Join-Path $OutDir ('runner-' + $Label + '-result.json')
+            $result = Get-Content -LiteralPath $resultPath -Raw -ErrorAction Stop | ConvertFrom-Json
+            Require ($result.phase -ceq $Phase -and $result.exit -eq 0 -and
+                $result.logSha256 -ceq (Get-FileHash -LiteralPath (Join-Path $dir ($Phase + '.log'))).Hash) 'runner preflight result JSON records this successful invocation' $resultPath
+        }
+        Require ($process.ExitCode -eq 0 -and $errors.Count -eq 0 -and ($named.Count -gt 0 -or $Phase -eq 'preflight')) ('runner ' + $Label + ' completed its named checks') ('exit=' + $process.ExitCode + ' log=' + $dir)
         $dir
     }
     function Run-OldHost([string]$Action, [hashtable]$Fields) {
@@ -583,14 +598,15 @@ public static class SecondAccountNative {
 
     Save-Result
     $migrationSource = Join-Path $PSScriptRoot 'Test-UpgradeMigration.ps1'
-    $tokens = $null; $parseErrors = $null
-    $migrationAst = [Management.Automation.Language.Parser]::ParseFile($migrationSource, [ref]$tokens, [ref]$parseErrors)
-    Require ($parseErrors.Count -eq 0) 'the migration expected-bytes helper source parses'
     foreach ($name in 'Quote-Literal', 'Expected-TimerStartup') {
-        $definition = @($migrationAst.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] }, $false) | Where-Object Name -ceq $name)
+        $helperSource = if ($name -ceq 'Quote-Literal') { Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1' } else { $migrationSource }
+        $tokens = $null; $parseErrors = $null
+        $helperAst = [Management.Automation.Language.Parser]::ParseFile($helperSource, [ref]$tokens, [ref]$parseErrors)
+        Require ($parseErrors.Count -eq 0) 'the migration expected-bytes helper source parses' $helperSource
+        $definition = @($helperAst.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] }, $false) | Where-Object Name -ceq $name)
         Require ($definition.Count -eq 1) ('the exact migration ' + $name + ' helper is available')
         . ([scriptblock]::Create($definition[0].Extent.Text))
-        Save-Json ('helper-' + $name + '.json') ([ordered]@{source=$migrationSource;sourceSha256=(Get-FileHash -LiteralPath $migrationSource).Hash;bodySha256=(Hash-Bytes ([Text.Encoding]::UTF8.GetBytes($definition[0].Extent.Text)))})
+        Save-Json ('helper-' + $name + '.json') ([ordered]@{source=$helperSource;sourceSha256=(Get-FileHash -LiteralPath $helperSource).Hash;bodySha256=(Hash-Bytes ([Text.Encoding]::UTF8.GetBytes($definition[0].Extent.Text)))})
     }
     Require ([Diagnostics.Process]::GetCurrentProcess().SessionId -gt 0) 'the runner has an interactive main-account desktop'
     Require ($install -ieq 'C:\Program Files\Roo Industries\Optimization Suite') 'the scenario uses the normal installed Program Files path' $install
@@ -692,10 +708,12 @@ public static class SecondAccountNative {
     $script:CurrentStage = 'B-autostart'
     $autostartTime = [DateTime]::UtcNow
     $startup = Start-Secondary 'B-startup-script' $powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $script:ControlRoot 'startup.ps1')) -Logon
-    Require (-not [SecondAccountNative]::IsElevated($startup.handle)) 'the B sign-in script runs with normal Windows rights'
+    $startupElevated = [SecondAccountNative]::IsElevated($startup.handle)
+    Require ($startupElevated -eq $script:ExpectedStartupElevated) 'B startup script elevation matches the recorded EnableLUA' ('EnableLUA=' + $script:EnableLUA + ' expected=' + $script:ExpectedStartupElevated + ' actual=' + $startupElevated)
     $worker = WaitFor { Capture-TimerWorker 'fixed-autostart' $autostartTime 'autostart' } 60 'the installed B --timer-autostart helper to acquire the timer'
     $workerRow = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $worker.Identity.pid)
-    Require ($workerRow.ParentProcessId -eq $startup.Identity.pid -and -not [SecondAccountNative]::IsElevated($worker.handle)) 'the normal-rights installed helper is the child of the exact B startup-script invocation'
+    $helperElevated = [SecondAccountNative]::IsElevated($worker.handle)
+    Require ($workerRow.ParentProcessId -eq $startup.Identity.pid -and $helperElevated -eq $script:ExpectedStartupElevated) 'B helper is the exact startup-script child with elevation matching the recorded EnableLUA' ('EnableLUA=' + $script:EnableLUA + ' expected=' + $script:ExpectedStartupElevated + ' actual=' + $helperElevated + ' parent=' + $workerRow.ParentProcessId + ' startup=' + $startup.Identity.pid)
     Check $true 'B startup hash checks pass and start the exact installed --timer-autostart helper' ($worker.Identity | ConvertTo-Json -Compress)
     Stop-Receipt $worker
     Require ($worker.process.WaitForExit(5000)) 'only the exact owned B autostart helper was stopped'
