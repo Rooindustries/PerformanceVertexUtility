@@ -37,10 +37,21 @@ public sealed partial class OptimizerService
     private sealed record PartialTweaks(TweakInspection Inspection, long Generation);
     private PartialTweaks? _pendingTweaks;
     public (TweakInspection Inspection, long Generation)? PendingWindowsTweaks => Volatile.Read(ref _pendingTweaks) is { } pending && DataGeneration.IsCurrent(pending.Generation) ? (pending.Inspection, pending.Generation) : null;
-    public void PrefetchWindowsTweaks()
+    public void PrefetchWindowsTweaks() => _ = Task.Run(async () =>
     {
+        await RefreshSignInStartAsync().ConfigureAwait(false);
         foreach (var read in new Task[] { ReadWindowsTweakCatalogAsync(background: true), ReadWindowsRecoveryAsync(background: true), ReadWindowsTweaksAsync(background: true) })
             _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
+    });
+    private async Task RefreshSignInStartAsync()
+    {
+        if (!BackendLocator.Installed || !File.Exists(Path.Combine(OperationsFolder.DefaultRoot, OperationsFolder.TimerFolder, "startup.json"))) return;
+        try
+        {
+            var result = await RunCoreAsync<JsonElement>("timer-refresh-installed", new() { ["confirm"] = true }, timeout: TimeSpan.FromMinutes(1)).ConfigureAwait(false);
+            AppLog.Write("timer", "Sign-in start: " + result.GetProperty("message").GetString());
+        }
+        catch (Exception error) { AppLog.Write("timer", "Sign-in start refresh failed: " + error.Message); }
     }
     private async Task<TweakInspection> ReadStatusAsync(bool streamed)
     {
