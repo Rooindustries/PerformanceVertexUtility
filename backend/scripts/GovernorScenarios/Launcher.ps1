@@ -22,6 +22,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 public static class RooIndustriesGovernorEnvOracle {
     [StructLayout(LayoutKind.Sequential)] struct Basic { public IntPtr Exit, Peb, Affinity, Priority, Id, Parent; }
+    [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int kind, ref Basic info, int size, out int length);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool ReadProcessMemory(IntPtr process, IntPtr address, byte[] buffer, IntPtr size, out IntPtr read);
     static byte[] Read(IntPtr process, long address, int size) { var buffer=new byte[size]; IntPtr read; if(!ReadProcessMemory(process,(IntPtr)address,buffer,(IntPtr)size,out read)) throw new System.ComponentModel.Win32Exception(); return buffer; }
@@ -187,21 +191,41 @@ function Get-UserEnvironmentValue($Key,[string]$Name) {
 
 function Use-UserEnvironment {
     Initialize-EnvironmentBroadcast
+    Initialize-EnvironmentOracle
+    $shellWindow=[RooIndustriesGovernorEnvOracle]::GetShellWindow()
+    $shellProcess=[IntPtr]::Zero
+    [uint32]$shellProcessId=0
+    $shellEnvironment=@()
+    if($shellWindow -ne [IntPtr]::Zero){
+        [void][RooIndustriesGovernorEnvOracle]::GetWindowThreadProcessId($shellWindow,[ref]$shellProcessId)
+        $shellProcess=[RooIndustriesGovernorEnvOracle]::OpenProcess(0x1010,$false,$shellProcessId)
+        if($shellProcess -eq [IntPtr]::Zero){throw [ComponentModel.Win32Exception]::new()}
+        try {$shellEnvironment=@([RooIndustriesGovernorEnvOracle]::Entries($shellProcess)|Sort-Object -CaseSensitive)}
+        catch {[void][RooIndustriesGovernorEnvOracle]::CloseHandle($shellProcess);throw}
+    }else{Note 'desktopShellEnvironment' 'No desktop shell window; comparison skipped for this non-interactive run'}
     $changes=@{}
     $readValue=${function:Get-UserEnvironmentValue}
     $script:userEnvironmentChanges=$changes
     $script:cleanups.Add({
-        $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment',$true)
-        $drift=New-Object System.Collections.Generic.List[string]
         try {
-            foreach($name in $changes.Keys){
-                $entry=$changes[$name]
-                $observed=& $readValue $key $name
-                if(($observed|ConvertTo-Json -Depth 4 -Compress) -cne ($entry.after|ConvertTo-Json -Depth 4 -Compress)){$drift.Add($name);continue}
-                if($entry.before.present){$key.SetValue($name,$entry.before.value,$entry.before.kind)}elseif($observed.present){$key.DeleteValue($name)}
+            $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment',$true)
+            $drift=New-Object System.Collections.Generic.List[string]
+            try {
+                foreach($name in $changes.Keys){
+                    $entry=$changes[$name]
+                    $observed=& $readValue $key $name
+                    if(($observed|ConvertTo-Json -Depth 4 -Compress) -cne ($entry.after|ConvertTo-Json -Depth 4 -Compress)){$drift.Add($name);continue}
+                    if($entry.before.present){$key.SetValue($name,$entry.before.value,$entry.before.kind)}elseif($observed.present){$key.DeleteValue($name)}
+                }
+            } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
+            if($shellProcess -ne [IntPtr]::Zero){
+                [uint32]$currentShellProcessId=0
+                [void][RooIndustriesGovernorEnvOracle]::GetWindowThreadProcessId([RooIndustriesGovernorEnvOracle]::GetShellWindow(),[ref]$currentShellProcessId)
+                $shellAfter=@([RooIndustriesGovernorEnvOracle]::Entries($shellProcess)|Sort-Object -CaseSensitive)
+                Assert ($currentShellProcessId -eq $shellProcessId -and ($shellAfter|ConvertTo-Json -Compress) -ceq ($shellEnvironment|ConvertTo-Json -Compress)) 'The desktop shell environment is unchanged by this scenario'
             }
-        } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
-        if($drift.Count){throw ('Environment cleanup kept values changed outside this scenario: '+($drift -join ', '))}
+            if($drift.Count){throw ('Environment cleanup kept values changed outside this scenario: '+($drift -join ', '))}
+        } finally {if($shellProcess -ne [IntPtr]::Zero){[void][RooIndustriesGovernorEnvOracle]::CloseHandle($shellProcess)}}
     }.GetNewClosure())
 }
 
@@ -226,7 +250,7 @@ function Set-UserEnvironment([System.Collections.IDictionary]$Values,[string[]]$
             $key.SetValue([string]$name,$value,[Microsoft.Win32.RegistryValueKind]::String)
             $script:userEnvironmentChanges[$name].after=[pscustomobject]@{present=$true;kind=[Microsoft.Win32.RegistryValueKind]::String;value=$value}
         }
-    } finally {$key.Close();[RooIndustriesGovernorEnvBroadcast]::Send()}
+    } finally {$key.Close()}
 }
 
 function Get-PrefixedUserNames {
