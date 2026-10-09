@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "title": "Memory guides",
+  "intro": "Short, safe steps that help games run smoothly when RAM is tight. Each guide says what to check first, so you only change what needs changing.",
+  "guides": [
+    {
+      "id": "rated-speed",
+      "title": "Run your RAM at its rated speed (XMP or EXPO)",
+      "summary": "Most RAM kits run at a slow default speed until you turn on their profile in the BIOS.",
+      "steps": [
+        "Open Task Manager (Ctrl+Shift+Esc), go to Performance > Memory and look at Speed.",
+        "Compare it with the speed on your RAM kit's label or product page, for example 6000 MT/s.",
+        "If Task Manager shows less, restart into your BIOS and turn on the memory profile: XMP on most Intel boards, EXPO or DOCP on most AMD boards. Save and restart.",
+        "Play for a while. If the PC crashes, freezes or won't start, go back into the BIOS and pick a lower profile, or load the default settings."
+      ],
+      "note": "Some tools, such as CPU-Z, show half the number (3000 MHz for a 6000 MT/s kit). That's the same speed, shown a different way."
+    },
+    {
+      "id": "dual-channel",
+      "title": "Use two sticks in the right slots",
+      "summary": "One stick of RAM runs in single channel, which can cost real FPS in CPU-heavy games.",
+      "steps": [
+        "Open Task Manager > Performance > Memory and look at Slots used, for example 2 of 4.",
+        "If you have one stick, a matching pair is the better setup for gaming.",
+        "On a board with four slots, two sticks usually go in the second and fourth slots counted from the CPU, often labeled A2 and B2. Check your motherboard manual to be sure.",
+        "Four sticks give you more RAM but can stop it from reaching its rated speed, especially with DDR5."
+      ],
+      "note": "Turn the PC off and unplug it before you move RAM."
+    },
+    {
+      "id": "enough-ram",
+      "title": "Check whether you're running out of RAM",
+      "summary": "When RAM fills up, Windows moves data to disk and games stutter.",
+      "steps": [
+        "Start your game, then open Task Manager > Performance > Memory.",
+        "If In use is close to your total RAM, or Committed is close to its limit, you're running out.",
+        "Close apps you don't need while you play, or see the background apps guide below.",
+        "16 GB is the minimum for current games. 32 GB is the comfortable amount if you stream, keep a browser open or play large open-world games.",
+        "If memory use keeps climbing over days without a reason, restart the PC."
+      ],
+      "note": "Low Free memory on its own is normal. See the Standby memory guide."
+    },
+    {
+      "id": "background-apps",
+      "title": "Calm background apps while you play",
+      "summary": "Browsers, launchers and chat apps keep using RAM and CPU while you play.",
+      "steps": [
+        "Close what you don't need before you start a game.",
+        "For apps you keep open, use Games & processes > Background apps. It can lower their priority and memory priority, so Windows keeps your game's memory first when RAM runs low.",
+        "On Intel CPUs with E-cores, or AMD Ryzen CPUs with two CCDs, the Background apps preset can keep background apps at Normal priority and move them to the E-cores or the second CCD, away from your game.",
+        "In your browser, turn on Memory Saver (Chrome) or Sleeping tabs (Edge) so idle tabs give memory back."
+      ],
+      "note": "Memory priority doesn't limit how much RAM an app can use. It decides whose memory Windows takes back first when RAM runs short."
+    },
+    {
+      "id": "page-file",
+      "title": "Keep the page file on",
+      "summary": "The page file lets Windows handle memory spikes. Turning it off can crash games even on PCs with lots of RAM.",
+      "steps": [
+        "Press Win+R, type sysdm.cpl and press Enter.",
+        "Go to Advanced > Performance Settings > Advanced > Virtual memory > Change.",
+        "Make sure Automatically manage paging file size for all drives is ticked.",
+        "If you set a custom size before, switch back to automatic unless you have a specific reason."
+      ],
+      "note": "If you can, keep the page file on your fastest SSD."
+    },
+    {
+      "id": "standby",
+      "title": "Understand Standby memory and memory cleaners",
+      "summary": "Windows keeps recently used files in spare RAM so they load faster. It gives that memory back the moment a program needs it.",
+      "steps": [
+        "In Task Manager > Performance > Memory, Cached is mostly Standby memory, and Standby memory counts as Available.",
+        "Low Free memory is normal and isn't a problem by itself.",
+        "Memory cleaner apps that empty the cache usually make things slower afterwards, because Windows has to read those files from disk again.",
+        "Only clear Standby memory if you've measured stutter that goes away right after clearing it."
+      ],
+      "note": "Available memory is the number that matters. Free memory isn't."
+    },
+    {
+      "id": "memory-integrity",
+      "title": "Know what Memory Integrity costs",
+      "summary": "Memory Integrity (Core isolation) and virtualization-based security protect your PC but can lower FPS in some games.",
+      "steps": [
+        "Check it in Windows Security > Device security > Core isolation details.",
+        "The FPS preset on the Windows tweaks page explains the trade-off and can turn these features off. Read its warnings before you use it.",
+        "Some anti-cheat systems check these settings. If a game won't start afterwards, undo the preset."
+      ],
+      "note": "Don't turn these off on a PC you use for banking, work or school."
+    }
+  ]
+}

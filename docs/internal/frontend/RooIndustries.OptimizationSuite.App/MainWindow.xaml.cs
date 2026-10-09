@@ -54,6 +54,7 @@ public sealed partial class MainWindow : Window
         DataGeneration.Settled += OnDataSettled;
         App.Updates.Changed += OnUpdateChanged;
         Closed += OnWindowClosed;
+        MemoryRelief.Attach(this);
         EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
         ApplySimpleMode();
@@ -95,6 +96,7 @@ public sealed partial class MainWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         if (EarlierVersionConsent.Ask?.Target == (object)this) EarlierVersionConsent.Ask = null;
+        MemoryRelief.Detach(this);
         App.Theme.ThemeChanged -= OnThemeChanged;
         App.Theme.EffectsChanged -= ApplyEffects;
         App.Theme.SimpleModeChanged -= ApplySimpleMode;
@@ -153,7 +155,7 @@ public sealed partial class MainWindow : Window
     private void ApplySimpleMode()
     {
         var advanced = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
-        foreach (var item in new[] { NavStartup, NavMemory, NavTimer }) item.Visibility = advanced;
+        foreach (var item in new[] { NavStartup, NavTimer }) item.Visibility = advanced;
     }
 
     private void ApplyEffects()

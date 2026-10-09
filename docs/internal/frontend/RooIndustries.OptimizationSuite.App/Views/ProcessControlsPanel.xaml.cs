@@ -16,7 +16,7 @@ public sealed partial class ProcessControlsPanel : UserControl
     {
         InitializeComponent();
         _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
-        _timer.Tick += async (_, _) => await ViewModel.ObserveAsync();
+        _timer.Tick += async (_, _) => { if (!MemoryRelief.Minimized) await ViewModel.ObserveAsync(); };
         ViewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); }
