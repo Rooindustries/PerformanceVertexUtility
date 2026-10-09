@@ -22,6 +22,7 @@ public sealed class SettingsStore
 
     public void Set(string key, string value)
     {
+        _values = Load(_filePath);
         _values[key] = value;
         try
         {

@@ -53,6 +53,7 @@ function WaitForSingleObject(Handle: THandle; Milliseconds: DWORD): DWORD; exter
 function GetExitCodeProcess(Handle: THandle; var ExitCode: DWORD): BOOL; external 'GetExitCodeProcess@kernel32.dll stdcall';
 function TerminateProcess(Handle: THandle; ExitCode: DWORD): BOOL; external 'TerminateProcess@kernel32.dll stdcall';
 function CloseHandle(Handle: THandle): BOOL; external 'CloseHandle@kernel32.dll stdcall';
+function OpenProcess(Access: DWORD; InheritHandle: BOOL; ProcessId: DWORD): THandle; external 'OpenProcess@kernel32.dll stdcall';
 function GetTickCount: DWORD; external 'GetTickCount@kernel32.dll stdcall';
 function PeekMessage(var Message: TWindowMessage; Window: HWND; FilterMin: DWORD; FilterMax: DWORD; Remove: DWORD): BOOL; external 'PeekMessageW@user32.dll stdcall';
 function TranslateMessage(var Message: TWindowMessage): BOOL; external 'TranslateMessage@user32.dll stdcall';
@@ -66,6 +67,27 @@ begin
   begin
     TranslateMessage(Message);
     DispatchMessage(Message);
+  end;
+end;
+
+procedure WaitForUpdateApp;
+var
+  ProcessId, WaitResult: DWORD;
+  Process: THandle;
+begin
+  ProcessId := StrToIntDef(ExpandConstant('{param:ROOWAITPID|0}'), 0);
+  if ProcessId = 0 then exit;
+  Process := OpenProcess($100000, False, ProcessId);
+  if Process = 0 then
+  begin
+    Log('Update app PID ' + IntToStr(ProcessId) + ' is already gone or cannot be opened.');
+    exit;
+  end;
+  try
+    WaitResult := WaitForSingleObject(Process, 60000);
+    Log('Wait for update app PID ' + IntToStr(ProcessId) + ' returned ' + IntToStr(WaitResult) + '. Continuing setup.');
+  finally
+    CloseHandle(Process);
   end;
 end;
 

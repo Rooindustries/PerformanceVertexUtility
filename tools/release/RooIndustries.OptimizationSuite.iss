@@ -151,6 +151,7 @@ function InitializeSetup(): Boolean;
 begin
   ClearCodeLoading;
   LogInstallKind;
+  WaitForUpdateApp;
   Result := True;
 end;
 
@@ -239,11 +240,27 @@ begin
 end;
 
 procedure DeinitializeSetup();
+var
+  AppPath: String;
+  Code: Integer;
 begin
   if GovernorSuspended and not GovernorResumed then
     RunGovernorSetup('Resume');
   if (SetupFolder <> '') and DirExists(SetupFolder) then
     DelTree(SetupFolder, True, True, True);
+  if WizardSilent and (ExpandConstant('{param:ROORELAUNCH|0}') = '1') then
+  begin
+    AppPath := ExpandConstant('{app}\app\{#AppExe}');
+    if FileExists(AppPath) then
+    begin
+      if Exec(AppPath, '', ExpandConstant('{app}\app'), SW_SHOWNORMAL, ewNoWait, Code) then
+        Log('Relaunched Roo Industries after update setup.')
+      else
+        Log('Could not relaunch Roo Industries after update setup: ' + IntToStr(Code));
+    end
+    else
+      Log('Roo Industries update relaunch skipped because the app executable is missing.');
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

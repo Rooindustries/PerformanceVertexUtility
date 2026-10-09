@@ -10,7 +10,7 @@
     <Title>Roo Industries Optimization Suite</Title>
     <Product>Roo Industries Optimization Suite</Product>
     <Company>Roo Industries</Company>
-    <Version>0.10.0-beta</Version>
+    <Version>0.11.0-beta</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
@@ -48,6 +48,17 @@
     <WriteLinesToFile File="$(BugReportWebhookFile)" Lines="$([MSBuild]::Escape('url=$(ROO_INDUSTRIES_BUG_WEBHOOK)'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
     <ItemGroup>
       <EmbeddedResource Include="$(BugReportWebhookFile)" LogicalName="RooIndustries.BugReportWebhook" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="EmbedUpdateFeed" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <UpdateFeedFile>$(IntermediateOutputPath)update-feed.txt</UpdateFeedFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(UpdateFeedFile)" Lines="$([MSBuild]::Escape('url=$(ROO_INDUSTRIES_UPDATE_FEED)'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(UpdateFeedFile)" LogicalName="RooIndustries.UpdateFeed" />
     </ItemGroup>
   </Target>
 

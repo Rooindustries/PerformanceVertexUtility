@@ -2,6 +2,7 @@
     [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE,
     [string]$IsccPath = '',
     [string]$OutputRoot = '',
+    [AllowEmptyString()][string]$UpdateFeedUrl,
     [switch]$TestHooks
 )
 
@@ -15,6 +16,11 @@ if ($env:GovernorTestHooks) { throw 'GovernorTestHooks is set in this environmen
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).ProviderPath
 $releaseTools = Join-Path $repoRoot 'tools\release'
+if (-not $PSBoundParameters.ContainsKey('UpdateFeedUrl')) { $UpdateFeedUrl = [IO.File]::ReadAllText((Join-Path $releaseTools 'update-feed.txt')).Trim() }
+if ($UpdateFeedUrl) {
+    $feedUri = $null
+    if (-not [Uri]::TryCreate($UpdateFeedUrl, [UriKind]::Absolute, [ref]$feedUri) -or $feedUri.Scheme -ne 'https') { throw 'UpdateFeedUrl must be an HTTPS URL, or empty to disable updates.' }
+}
 $appProject = Join-Path $repoRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
 if (-not $OutputRoot) { $OutputRoot = Join-Path $repoRoot 'artifacts\release' }
 $OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot).TrimEnd('\')
@@ -91,6 +97,7 @@ $dotnet = Resolve-DotNetSdk $DotNetPath
 $iscc = Resolve-Iscc $IsccPath
 Write-Host "Version $version using $dotnet and $iscc"
 Write-Host ('Bug report webhook: ' + $(if ([string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_BUG_WEBHOOK)) { 'not set, testers save reports to a file' } else { 'embedded from ROO_INDUSTRIES_BUG_WEBHOOK' }))
+Write-Host ('Update feed: ' + $(if ($UpdateFeedUrl) { $UpdateFeedUrl } else { 'not set, updates disabled' }))
 
 $work = Join-Path $OutputRoot ('work-' + $version)
 $stage = Join-Path $work 'stage'
@@ -112,7 +119,7 @@ $common = @('-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:Us
 Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj'), '-o', $hostOut) + $common) 'Helper publish'
 Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimizer.SessionHost\Optimizer.SessionHost.csproj'), '-o', $sessionOut) + $common) 'Session helper publish'
 Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x64', '-p:WindowsAppSDKSelfContained=true', '-p:WindowsPackageType=None', ('-p:SelfContainedIntermediateOutputPath=' + (Join-Path $work 'wasdk') + '/'),
-    ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest'))) + $common) 'App publish'
+    ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest')), ('-p:ROO_INDUSTRIES_UPDATE_FEED=' + $UpdateFeedUrl)) + $common) 'App publish'
 
 foreach ($config in @((Join-Path $hostOut 'Optimizer.Host.runtimeconfig.json'), (Join-Path $sessionOut 'RooIndustries.SessionHost.runtimeconfig.json'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.runtimeconfig.json'))) {
     if ((Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).runtimeOptions.configProperties.'System.StartupHookProvider.IsSupported' -ne $false) { throw ('Startup hooks are not disabled in ' + $config) }
