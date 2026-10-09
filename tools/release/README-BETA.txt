@@ -62,8 +62,9 @@ no "Run anyway" button. The beta can't run while it's on.
   Start, then start the game from its launcher (Steam, Battle.net and so on).
 - Background apps has a preset that keeps background apps at normal priority
   and moves them to your E-cores (Intel) or your second CCD (AMD Ryzen with two
-  CCDs), away from your game. The other preset lowers their priority instead.
-  Both also set memory priority, so Windows keeps your game's memory first.
+  CCDs), away from your game. The other preset lowers their CPU priority
+  and memory priority instead, so Windows keeps your game's memory first
+  when RAM runs low.
 - The Memory page has short guides for getting the most out of your RAM.
 
 

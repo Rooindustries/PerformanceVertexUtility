@@ -129,8 +129,7 @@ static class ServiceControls
                     value = ControlValues.From(status.State == 4); break;
                 default: throw new InvalidDataException("Unknown service setting: " + address.Property);
             }
-            var change = address.Property == "running" ? ControlValues.From(value.ValueKind != JsonValueKind.True) : value;
-            if (!CanOpen(manager, address.Target, WriteAccess(address.Property, change)))
+            if (address.Property != "running" && !CanOpen(manager, address.Target, WriteAccess(address.Property, value)))
                 throw new InvalidDataException("Windows doesn't let administrators change the " + address.Property.Replace('-', ' ') + " of this service: " + address.Target);
             var allowed = address.Property == "startup" ? ((config.Type & 3) != 0 ? new uint[] { 0, 1, 2, 3, 4 } : new uint[] { 2, 3, 4 }).Select(ControlValues.From).ToArray() : null;
             if (allowed is not null && !allowed.Any(choice => ControlValues.Equal(choice, value))) throw new InvalidDataException("The service has a startup value that its service type cannot restore through Windows APIs.");
@@ -175,7 +174,7 @@ static class ServiceControls
     }
     private static uint WriteAccess(string property, JsonElement value) => property switch
     {
-        "startup" or "delayed-start" => 1 | 2,
+        "startup" or "delayed-start" => 2,
         "running" => 4 | (value.ValueKind == JsonValueKind.True ? 16u : 32u),
         _ => throw new InvalidDataException("Unknown service setting."),
     };

@@ -21,7 +21,7 @@ public sealed class ProcessControlEngine
 
     public ProcessControlPreview Preview(int processId, Dictionary<string, JsonElement> desired, CpuSelection? cpuSelection = null)
     {
-        using var target = Open(processId, readControls: desired.Keys);
+        using var target = Open(processId);
         var identity = target.Identity();
         if (_excluded(identity)) throw new InvalidOperationException("This application is excluded by the protection policy.");
         target.RequireUnprotected();
