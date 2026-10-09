@@ -119,7 +119,11 @@ try
             var sessionLauncher = request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required.");
             var governor = new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.RootFor(request.OutputPath));
             governor.RequireUnownedLaunch(Path.GetFullPath(Require(request.GamePath, "game executable")), sessionControls.Keys);
-            using (var launcherProcess = new ProcessTarget(sessionLauncher)) governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys);
+            try { using var launcherProcess = new ProcessTarget(sessionLauncher); governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys); }
+            catch (Exception error) when (error is ProcessEndedException || error is RooIndustries.Optimization.CpuSets.NativeFailure { Api: "OpenProcess", NativeErrorCode: 87 })
+            {
+                throw new InvalidOperationException(ProtectedSessions.LauncherClosed);
+            }
             data = new ProtectedSessions(Excluded).Preview(sessionLauncher, Require(request.GamePath, "game executable"), sessionControls, request.AcceptLauncherScope == true);
             OperationFiles.Write(Require(request.OutputPath, "output path"), (ProtectedSessionPreview)data);
             break;

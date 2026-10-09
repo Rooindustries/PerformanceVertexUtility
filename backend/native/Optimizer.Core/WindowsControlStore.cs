@@ -129,6 +129,9 @@ static class ServiceControls
                     value = ControlValues.From(status.State == 4); break;
                 default: throw new InvalidDataException("Unknown service setting: " + address.Property);
             }
+            var change = address.Property == "running" ? ControlValues.From(value.ValueKind != JsonValueKind.True) : value;
+            if (!CanOpen(manager, address.Target, WriteAccess(address.Property, change)))
+                throw new InvalidDataException("Windows doesn't let administrators change the " + address.Property.Replace('-', ' ') + " of this service: " + address.Target);
             var allowed = address.Property == "startup" ? ((config.Type & 3) != 0 ? new uint[] { 0, 1, 2, 3, 4 } : new uint[] { 2, 3, 4 }).Select(ControlValues.From).ToArray() : null;
             if (allowed is not null && !allowed.Any(choice => ControlValues.Equal(choice, value))) throw new InvalidDataException("The service has a startup value that its service type cannot restore through Windows APIs.");
             return new(address, "service:" + address.Target.ToUpperInvariant() + ":" + address.Property, binding, value,
@@ -138,7 +141,7 @@ static class ServiceControls
     }
     public static void Write(ControlAddress address, JsonElement value)
     {
-        using var manager = Manager(); using var service = Open(manager, address.Target, 1 | 2 | 4 | 16 | 32);
+        using var manager = Manager(); using var service = Open(manager, address.Target, WriteAccess(address.Property, value));
         switch (address.Property)
         {
             case "startup":
@@ -169,6 +172,20 @@ static class ServiceControls
                 break;
             default: throw new InvalidDataException("Unknown service setting.");
         }
+    }
+    private static uint WriteAccess(string property, JsonElement value) => property switch
+    {
+        "startup" or "delayed-start" => 1 | 2,
+        "running" => 4 | (value.ValueKind == JsonValueKind.True ? 16u : 32u),
+        _ => throw new InvalidDataException("Unknown service setting."),
+    };
+    private static bool CanOpen(ServiceHandle manager, string name, uint access)
+    {
+        using var handle = OpenService(manager, name, access);
+        if (!handle.IsInvalid) return true;
+        var code = Marshal.GetLastWin32Error();
+        if (code == 5) return false;
+        throw new Win32Exception(code, "OpenService(" + name + ") failed (Win32 " + code + ").");
     }
     private static ServiceHandle Manager()
     {

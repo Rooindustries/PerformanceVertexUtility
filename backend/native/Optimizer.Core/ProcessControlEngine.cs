@@ -33,6 +33,9 @@ public sealed class ProcessControlEngine
             desired.Add("cpuSets", JsonSerializer.SerializeToElement(cpuSelection.Resolve(topology)));
         }
         ValidateNames(desired.Keys);
+        var blocked = _retained is null ? ProcessTarget.BlockedControls(processId, desired.Keys) : new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in blocked.Keys) desired.Remove(name);
+        if (desired.Count == 0) throw new ProcessControlBlockedException(blocked.Keys);
         var original = new Dictionary<string, ControlRead>(StringComparer.Ordinal);
         foreach (var pair in desired)
         {
@@ -46,6 +49,7 @@ public sealed class ProcessControlEngine
         {
             SchemaVersion = 1, OperationId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(),
             Identity = identity, Original = original, Desired = desired, TopologyHash = CpuSelection.Fingerprint(topology),
+            Blocked = blocked.Count == 0 ? null : blocked,
         };
     }
 
@@ -76,6 +80,12 @@ public sealed class ProcessControlEngine
             {
                 if (change.Status is "pending" or "restoreIntent" or "restored" or "leftAsSet") { existing.Status = "needsReconciliation"; continue; }
                 var observation = observedTarget.Read(change.Name);
+                if (change.Error is not null && observation.Known && ProcessTarget.Equivalent(change.Name, observation.Require(), change.Original))
+                {
+                    existing.Status = "needsReconciliation";
+                    change.Observed = observation.Value;
+                    continue;
+                }
                 try
                 {
                     if (!ProcessTarget.Equivalent(change.Name, observation.Require(), change.Desired)) throw new InvalidOperationException("Another controller changed this field; the saved policy is suspended.");
@@ -121,6 +131,7 @@ public sealed class ProcessControlEngine
 
     private static ProcessControlJournal Execute(ProcessTarget target, ProcessControlJournal journal, string journalPath)
     {
+        var failed = false;
         foreach (var change in journal.Changes)
         {
             try
@@ -132,30 +143,34 @@ public sealed class ProcessControlEngine
                     if (!ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another controller changed this field; the saved policy is suspended.");
                     continue;
                 }
-                if (change.Status == "applyIntent" && ProcessTarget.Equivalent(change.Name, current, change.Desired)) { change.Status = "applied"; change.Observed = current; Save(journalPath, journal); continue; }
+                if (change.Status == "applyIntent" && ProcessTarget.Equivalent(change.Name, current, change.Desired)) { Succeeded(change, "applied", current); Save(journalPath, journal); continue; }
                 if (!ProcessTarget.Equivalent(change.Name, change.Original, current)) throw new InvalidOperationException("A concurrent change replaced the reviewed original.");
-                if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { change.Status = "unchanged"; change.Observed = current; Save(journalPath, journal); continue; }
+                if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { Succeeded(change, "unchanged", current); Save(journalPath, journal); continue; }
                 change.Status = "applyIntent";
                 Save(journalPath, journal);
                 target.Write(change.Name, change.Desired);
                 var after = target.Read(change.Name).Require();
                 change.Observed = after;
                 if (!ProcessTarget.Equivalent(change.Name, after, change.Desired)) throw new InvalidOperationException("Windows readback differs from the requested value.");
-                change.Status = "applied";
+                Succeeded(change, "applied", after);
                 Save(journalPath, journal);
             }
             catch (Exception error)
             {
                 change.Error = error.Message;
                 change.ErrorKind = ProcessFailures.Denied(error) ? "denied" : null;
-                journal.Status = "needsReconciliation";
+                failed = true;
                 Save(journalPath, journal);
-                return journal;
             }
         }
-        journal.Status = "applied";
+        journal.Status = failed ? "needsReconciliation" : "applied";
         Save(journalPath, journal);
         return journal;
+    }
+
+    private static void Succeeded(ControlChange change, string status, JsonElement observed)
+    {
+        change.Status = status; change.Observed = observed; change.Error = null; change.ErrorKind = null;
     }
 
     public ProcessControlJournal Reassert(string journalPath, out bool wrote)

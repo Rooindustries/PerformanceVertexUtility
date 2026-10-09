@@ -26,17 +26,20 @@ public partial class ProcessControlRow : ObservableObject
     [ObservableProperty] private bool _available;
     public ControlOption[] Options { get; }
     [ObservableProperty] private ControlOption _selected;
-    public ProcessControlRow(string name, string label, ControlRead current, ControlOption[] options)
+    public ProcessControlRow(string name, string label, ControlRead current, ControlOption[] options, bool blocked)
     {
         Name = name; Label = label;
         Options = new[] { new ControlOption("Keep current", null) }.Concat(options).ToArray();
         _selected = Options[0];
-        Update(current);
+        Update(current, blocked);
     }
-    public void Update(ControlRead current)
+    public void Update(ControlRead current, bool blocked)
     {
-        Available = current.Known && current.Error is null && current.Value is not null;
-        Current = Available ? "Current: " + ProcessControlsViewModel.Describe(Name, current.Require()) : "Unavailable: " + (current.Error?.Message ?? "The control could not be read.");
+        var readable = current.Known && current.Error is null && current.Value is not null;
+        Available = readable && !blocked;
+        if (!Available) Selected = Options[0];
+        Current = !readable ? "Unavailable: " + (current.Error?.Message ?? "The control could not be read.")
+            : "Current: " + ProcessControlsViewModel.Describe(Name, current.Require()) + (blocked ? ". Can't be changed while this app runs." : "");
     }
 }
 
@@ -415,8 +418,8 @@ public partial class ProcessControlsViewModel : ObservableObject
             if (snapshot.Protection.Require().GetUInt32() != 0xfffffffe) throw new InvalidOperationException("Windows reports a protected application. Choose another process.");
             _snapshot = snapshot;
             var affinity = snapshot.Controls["affinity"];
-            CpuSetsAvailable = Readable(snapshot.Controls["cpuSets"]);
-            AffinityAvailable = Readable(affinity);
+            CpuSetsAvailable = Readable(snapshot.Controls["cpuSets"]) && !IsBlocked(snapshot, "cpuSets");
+            AffinityAvailable = Readable(affinity) && !IsBlocked(snapshot, "affinity");
             if (AffinityAvailable)
             {
                 var value = affinity.Require().Deserialize<AffinityState>(OperationFiles.Json)!;
@@ -426,7 +429,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             }
             foreach (var name in new[] { "cpuPriority", "ioPriority", "gpuPriority", "memoryPriority", "executionQoS", "priorityBoost" })
             {
-                var row = new ProcessControlRow(name, Label(name), snapshot.Controls[name], Options(name));
+                var row = new ProcessControlRow(name, Label(name), snapshot.Controls[name], Options(name), IsBlocked(snapshot, name));
                 row.PropertyChanged += Changed;
                 Controls.Add(row);
             }
@@ -438,7 +441,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             }
             RuleName = Path.GetFileNameWithoutExtension(snapshot.Identity.ExecutablePath);
             Status = "Controls for " + process.Name;
-            Detail = "Preferred CPUs: " + DescribeRead("cpuSets", snapshot.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", affinity) + ".";
+            Detail = BlockedNotice(snapshot) + "Preferred CPUs: " + DescribeRead("cpuSets", snapshot.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", affinity) + ".";
         }
         catch (Exception error) { if (version == _selectionVersion) { Status = "Process controls are unavailable."; Detail = error.Message; } }
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
@@ -495,7 +498,8 @@ public partial class ProcessControlsViewModel : ObservableObject
         {
             var desired = Desired();
             _review = await App.Operations.PreviewControlsAsync(SelectedProcess!.Id, desired.Controls, desired.Selection);
-            ReviewSummary = string.Join("\n", _review.Plan.Desired.Select(pair => Label(pair.Key) + ": " + Describe(pair.Key, _review.Plan.Original[pair.Key].Require()) + " → " + Describe(pair.Key, pair.Value)));
+            ReviewSummary = string.Join("\n", _review.Plan.Desired.Select(pair => Label(pair.Key) + ": " + Describe(pair.Key, _review.Plan.Original[pair.Key].Require()) + " → " + Describe(pair.Key, pair.Value))
+                .Concat((_review.Plan.Blocked?.Keys ?? Enumerable.Empty<string>()).Select(name => Label(name) + ": won't change. " + ProcessTarget.WriteBlocked)));
             Status = "Review the requested controls.";
             Detail = "Apply once changes this process instance. Save rule applies to matching launches while the rule worker runs.";
         }
@@ -526,9 +530,38 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void ShowResult(ProcessControlJournal result)
     {
         RestoreAvailable = result.Status is not ("restored" or "expired");
-        Status = result.Status switch { "applied" => "Process controls applied and read back.", "restored" => result.Changes.Any(change => change.Status == "leftAsSet") ? ProcessControlEngine.LeftAsSet : "Original controls restored.", "expired" => "The process exited; its instance controls have ended.", _ => "Some controls need recovery." };
-        Detail = string.Join("\n", result.Changes.Select(change => Label(change.Name) + ": " + change.Status + (change.Error is null ? "" : " · " + change.Error)));
+        var applying = result.Changes.Any(change => change.Status is "applied" or "unchanged" or "applyIntent" or "pending");
+        Status = result.Status switch
+        {
+            "applied" => "Done. Every control was changed and checked.",
+            "restored" => result.Changes.Any(change => change.Status == "leftAsSet") ? ProcessControlEngine.LeftAsSet : "Original controls restored.",
+            "expired" => "The process exited; its instance controls have ended.",
+            _ when applying && result.Changes.Any(change => change.Status is "applied" or "unchanged") => "Some controls didn't change. The others were applied.",
+            _ => "The controls didn't change.",
+        };
+        var lines = result.Changes.Select(Outcome).ToList();
+        if (result.Changes.Any(change => change.Name == "affinity" && change.Status == "applied"))
+            lines.Add("To check CPU cores in Task Manager: Details, right-click the app, Set affinity.");
+        if (result.Changes.Any(change => change.Name == "cpuSets" && change.Status == "applied"))
+            lines.Add("Preferred CPU cores don't show in Task Manager's Set affinity. The app checks them for you.");
+        Detail = string.Join("\n", lines);
     }
+
+    private static string Outcome(ControlChange change) => Label(change.Name) + ": " + change.Status switch
+    {
+        "applied" => "set to " + Describe(change.Name, change.Desired),
+        "unchanged" => "already " + Describe(change.Name, change.Desired),
+        "restored" => "back to " + Describe(change.Name, change.Original),
+        "leftAsSet" => "left as another program set it",
+        _ when change.Error is not null => "not changed. " + (change.ErrorKind == "denied" ? "Windows refused the change. Games with anti-cheat often block this." : change.Error),
+        _ => "not changed",
+    };
+
+    private static bool IsBlocked(ProcessControlSnapshot snapshot, string name) => snapshot.Blocked?.ContainsKey(name) == true;
+    private static string BlockedNotice(ProcessControlSnapshot snapshot)
+        => snapshot.Blocked is { Count: > 0 } blocked
+            ? "This app doesn't let other apps change " + string.Join(", ", blocked.Keys.Select(ProcessControlBlockedException.Label)) + " while it runs. Games with anti-cheat often do this. To set a game's priority and CPU cores, use the Games tab and set it up before the game starts.\n"
+            : "";
 
     [RelayCommand]
     private async Task SaveRuleAsync()
@@ -643,10 +676,10 @@ public partial class ProcessControlsViewModel : ObservableObject
                 Status = "Controls changed after review. Preview again.";
             }
             _snapshot = fresh;
-            CpuSetsAvailable = Readable(fresh.Controls["cpuSets"]);
-            AffinityAvailable = Readable(fresh.Controls["affinity"]);
-            Detail = "Preferred CPUs: " + DescribeRead("cpuSets", fresh.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", fresh.Controls["affinity"]) + ".";
-            foreach (var row in Controls) row.Update(fresh.Controls[row.Name]);
+            CpuSetsAvailable = Readable(fresh.Controls["cpuSets"]) && !IsBlocked(fresh, "cpuSets");
+            AffinityAvailable = Readable(fresh.Controls["affinity"]) && !IsBlocked(fresh, "affinity");
+            Detail = BlockedNotice(fresh) + "Preferred CPUs: " + DescribeRead("cpuSets", fresh.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", fresh.Controls["affinity"]) + ".";
+            foreach (var row in Controls) row.Update(fresh.Controls[row.Name], IsBlocked(fresh, row.Name));
             NotifyState();
         }
         catch (Exception error)
