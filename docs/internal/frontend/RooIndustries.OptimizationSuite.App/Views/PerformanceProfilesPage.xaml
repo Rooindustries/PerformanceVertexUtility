@@ -15,11 +15,11 @@
                     <Border Grid.Column="0" Width="3" Height="16" CornerRadius="1.5" VerticalAlignment="Center" Background="{x:Bind PlanState, Converter={StaticResource RiskToBrush}}" />
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{x:Bind PlanWithRam}" FontSize="11" FontWeight="SemiBold" Foreground="{x:Bind PlanState, Converter={StaticResource RiskToBrush}}" />
+                        <TextBlock Text="{x:Bind PlanWithRam}" TextWrapping="Wrap" FontSize="11" FontWeight="SemiBold" Foreground="{x:Bind PlanState, Converter={StaticResource RiskToBrush}}" />
                     </StackPanel>
                 </Grid>
                 <TextBlock Grid.Column="1" Text="{x:Bind Role}" VerticalAlignment="Center" FontSize="13" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="{x:Bind Priority}" VerticalAlignment="Center" FontSize="13" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{x:Bind Priority}" TextWrapping="Wrap" VerticalAlignment="Center" FontSize="13" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
             </Grid>
         </DataTemplate>
     </Page.Resources>
@@ -92,6 +92,10 @@
                                                 <TextBlock Text="{x:Bind ViewModel.ActionDetail, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             </StackPanel>
                                             <views:AdaptivePanel MinColumnWidth="150" MaxColumns="4" Compact="True">
+                                                <ComboBox IsEnabled="{x:Bind ViewModel.CanSelectPreset, Mode=OneWay}" SelectedIndex="{x:Bind ViewModel.ProcessPresetIndex, Mode=TwoWay}" AutomationProperties.AutomationId="BackgroundPriorityPreset" AutomationProperties.Name="Background app preset" HorizontalAlignment="Stretch">
+                                                    <ComboBoxItem Content="Lower background apps" />
+                                                    <ComboBoxItem Content="{x:Bind ViewModel.PlacementLabel, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.PlacementAvailable, Mode=OneWay}" />
+                                                </ComboBox>
                                                 <Button Command="{x:Bind ViewModel.PreviewPlanCommand}" Padding="12,8" AutomationProperties.Name="Review process changes" IsEnabled="{x:Bind ViewModel.CanRunProcessAction, Mode=OneWay}">
                                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                                         <Image Width="14" Height="14" Source="ms-appx:///Assets/Icons/search.svg" AutomationProperties.AccessibilityView="Raw" />
@@ -111,6 +115,7 @@
                                                     </StackPanel>
                                                 </Button>
                                             </views:AdaptivePanel>
+                                            <TextBlock Text="{x:Bind ViewModel.PlacementReason, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             <Grid ColumnSpacing="8">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />

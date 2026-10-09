@@ -27,6 +27,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string _actionDetail = "Review the selected priorities, then apply them. Restore returns changed processes to their saved settings.";
     [ObservableProperty] private string _restoreHint = "No saved process settings";
     [NotifyPropertyChangedFor(nameof(CanRunProcessAction))]
+    [ObservableProperty] private int _processPresetIndex;
+    [ObservableProperty] private string _placementLabel = "Background apps on E-cores or CCD1, normal priority";
+    [NotifyPropertyChangedFor(nameof(CanRunProcessAction))]
+    [ObservableProperty] private bool _placementAvailable;
+    [ObservableProperty] private string _placementReason = "Reading CPU topology…";
+    [NotifyPropertyChangedFor(nameof(CanRunProcessAction))]
+    [NotifyPropertyChangedFor(nameof(CanSelectPreset))]
     [NotifyPropertyChangedFor(nameof(CanRestoreProfile))]
     [NotifyPropertyChangedFor(nameof(CanCheckMatchTune))]
     [NotifyPropertyChangedFor(nameof(CanStartMatchTune))]
@@ -41,10 +48,10 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _hasGameRunning;
     [ObservableProperty] private string _matchTuneStatus = "No game priorities checked yet";
     [ObservableProperty] private string _matchTuneDetail =
-        "Raises the game CPU priority, leaves OBS and Discord unchanged, and lowers the priority of launchers and browser helpers.";
+        "Raises the game CPU priority with normal memory priority, leaves OBS and Discord unchanged, and lowers CPU and memory priority for launchers and browser helpers.";
     [ObservableProperty] private string _governorStatus = "Background limits not checked yet";
     [ObservableProperty] private string _governorDetail =
-        "Watches for background CPU spikes and lowers priority or I/O until CPU use drops.";
+        "Watches for background CPU spikes and lowers CPU, I/O and memory priority until CPU use drops.";
     [NotifyPropertyChangedFor(nameof(CanRestoreMatchTune))]
     [ObservableProperty] private bool _matchTuneRestoreAvailable;
     [NotifyPropertyChangedFor(nameof(CanRestoreGovernor))]
@@ -64,8 +71,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         string BackupManifestPath);
 
     private readonly List<GameAppRow> _all = new();
+    private List<ProcessItem> _loadedProcesses = new();
+    private string ProcessPreset => ProcessPresetIndex == 1 ? "placement" : "lower";
     public ObservableCollection<GameAppRow> Rows { get; } = new();
-    public bool CanRunProcessAction => !ActionBusy;
+    public bool CanSelectPreset => !ActionBusy;
+    public bool CanRunProcessAction => !ActionBusy && (ProcessPresetIndex == 0 || PlacementAvailable);
     public bool CanRestoreProfile => !ActionBusy && RestoreAvailable;
     public bool CanCheckMatchTune => !ActionBusy;
     public bool CanStartMatchTune => !ActionBusy && HasGameRunning;
@@ -74,10 +84,22 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     public bool CanStartGovernor => !ActionBusy;
     public bool CanRestoreGovernor => !ActionBusy && GovernorRestoreAvailable;
 
-    private static readonly string[] QuietCategories = { "browserWebView", "launcher", "vendorUtility", "backgroundApp" };
-
     protected override async Task LoadCoreAsync()
     {
+        var placement = await App.Live.GetBackgroundPlacementResultAsync();
+        if (!string.IsNullOrWhiteSpace(placement.Value))
+        {
+            using var placementDocument = JsonDocument.Parse(placement.Value);
+            var value = placementDocument.RootElement;
+            PlacementAvailable = value.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.True;
+            PlacementLabel = ExtractString(value, "label") ?? PlacementLabel;
+            PlacementReason = ExtractString(value, "reason") ?? "CPU placement is unavailable.";
+        }
+        else
+        {
+            PlacementAvailable = false;
+            PlacementReason = placement.Error ?? "CPU topology could not be read.";
+        }
         var classification = await App.Live.GetProcessClassificationAsync();
         var processes = classification?.Processes;
         if (processes is null || processes.Count == 0)
@@ -100,26 +122,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             GameStatusLevel = "neutral";
         }
 
-        _all.Clear();
-        foreach (var p in processes
-            .Where(p => p.Category != "windowsCore" && !Naming.IsNonActionable(p.Name)
-                        && !LocalDisplayFilter.Default.IsHidden(Naming.FriendlyName(p.Name), p.Name, null))
-            .OrderByDescending(p => p.WorkingSetBytes))
-        {
-            var (plan, state) = PlanFor(p);
-            _all.Add(new GameAppRow(
-                Naming.FriendlyName(p.Name),
-                Naming.CategoryLabel(p.Category),
-                FriendlyPriority(p.PriorityClass),
-                p.CpuPercent.ToString("0.#", CultureInfo.InvariantCulture) + "%",
-                Format.Bytes(p.WorkingSetBytes),
-                plan,
-                state));
-        }
-
-        AppsCount = _all.Count;
-        KeepCount = _all.Count(r => r.Plan == "Excluded");
-        QuietCount = _all.Count(r => r.Plan == "Lower priority");
+        _loadedProcesses = processes;
+        BuildRows();
         var savedRecovery = App.Live.ProcessProfileRecovery;
         _lastBackupPath = savedRecovery?.Path;
         _lastBackupId = savedRecovery?.Id;
@@ -133,6 +137,31 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         IsEmpty = _all.Count == 0;
     }
 
+    private void BuildRows()
+    {
+        _all.Clear();
+        foreach (var p in _loadedProcesses
+            .Where(p => p.Category != "windowsCore" && !Naming.IsNonActionable(p.Name)
+                        && !LocalDisplayFilter.Default.IsHidden(Naming.FriendlyName(p.Name), p.Name, null))
+            .OrderByDescending(p => p.WorkingSetBytes))
+        {
+            var (plan, state) = PlanFor(p);
+            _all.Add(new GameAppRow(
+                Naming.FriendlyName(p.Name),
+                Naming.CategoryLabel(p.Category),
+                FriendlyPriority(p.PriorityClass) + " · Memory " + (p.MemoryPriorityAvailable ? FriendlyMemoryPriority(p.MemoryPriority) : "unavailable"),
+                p.CpuPercent.ToString("0.#", CultureInfo.InvariantCulture) + "%",
+                Format.Bytes(p.WorkingSetBytes),
+                plan,
+                state));
+        }
+
+        AppsCount = _all.Count;
+        KeepCount = _all.Count(r => r.Plan == "Excluded");
+        QuietCount = _all.Count(r => r.PlanState == "low");
+        ApplyFilter();
+    }
+
     [RelayCommand]
     private async Task PreviewPlanAsync()
     {
@@ -142,7 +171,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Reading the current process list and checking what Roo Industries can safely tune.";
         try
         {
-            var response = await App.Live.PreviewProcessProfileResultAsync();
+            var response = await App.Live.PreviewProcessProfileResultAsync(preset: ProcessPreset);
             if (response.Value is null || response.Error is not null)
             {
                 ActionTitle = "Plan not confirmed";
@@ -173,7 +202,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Roo Industries is applying reversible process controls to this session.";
         try
         {
-            var response = await App.Live.ApplyProcessProfileResultAsync();
+            var response = await App.Live.ApplyProcessProfileResultAsync(preset: ProcessPreset);
             if (response.Value is null)
             {
                 ActionTitle = "Process priorities not confirmed";
@@ -507,12 +536,26 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
     }
 
-    private static (string plan, string state) PlanFor(ProcessItem p)
+    private (string plan, string state) PlanFor(ProcessItem p)
     {
-        if (p.Category == "foregroundGame") return ("Boost", "safe");
-        if (p.Protection == "protected") return ("Excluded", "neutral");
-        if (QuietCategories.Contains(p.Category)) return ("Lower priority", "low");
+        if (p.Protected || p.Blocked || p.Protection == "protected") return ("Excluded", "neutral");
+        if (ProcessPresetIndex == 1)
+            return p.BackgroundPlacementEligible && PlacementAvailable ? ("Normal CPU + memory; background CPUs", "low") : ("Excluded", "neutral");
+        if (p.Classification == "gameTarget") return ("Boost CPU · Memory Normal", "safe");
+        if (p.Classification == "demotionCandidate") return ("Lower CPU · Memory Low", "low");
         return ("Watch", "neutral");
+    }
+
+    private static string FriendlyMemoryPriority(int? priority) => priority switch
+    {
+        1 => "Very low", 2 => "Low", 3 => "Medium", 4 => "Below normal", 5 => "Normal", _ => "unavailable"
+    };
+
+    partial void OnProcessPresetIndexChanged(int value)
+    {
+        ActionTitle = "Process priorities";
+        ActionDetail = value == 1 ? "Review normal CPU, I/O and memory priorities with placement on the background CPUs. Saved rules, games and protected apps are excluded." : "Review lower CPU and memory priorities for background apps. Restore returns the saved originals.";
+        BuildRows();
     }
 
     private static string FriendlyPriority(string? priorityClass) => priorityClass switch
@@ -636,11 +679,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var resultSummary = ExtractString(root, "result", "summary");
-            if (!string.IsNullOrWhiteSpace(resultSummary)) return resultSummary!;
+            if (!string.IsNullOrWhiteSpace(resultSummary)) return resultSummary! + SummarizeControls(root);
 
             var status = ExtractString(root, "status");
             var previewCount = root.TryGetProperty("preview", out var preview) && preview.ValueKind == JsonValueKind.Array ? preview.GetArrayLength() : 0;
-            if (previewCount > 0) return (status ?? "Ready") + ": " + previewCount.ToString(CultureInfo.InvariantCulture) + " process control item" + (previewCount == 1 ? "" : "s") + " reviewed.";
+            if (previewCount > 0) return (status ?? "Ready") + ": " + previewCount.ToString(CultureInfo.InvariantCulture) + " process control item" + (previewCount == 1 ? "" : "s") + " reviewed." + SummarizeControls(root);
         }
         catch
         {
@@ -648,6 +691,31 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         return fallback;
     }
+
+    private static string SummarizeControls(JsonElement root)
+    {
+        if (!root.TryGetProperty("preview", out var preview) || preview.ValueKind != JsonValueKind.Array) return string.Empty;
+        var lines = new List<string>();
+        foreach (var item in preview.EnumerateArray())
+        {
+            if (!item.TryGetProperty("controlChanges", out var changes) || changes.ValueKind != JsonValueKind.Array) continue;
+            var fields = new List<string>();
+            foreach (var change in changes.EnumerateArray())
+            {
+                var control = ExtractString(change, "control");
+                var label = control switch { "priorityClass" => "CPU", "memoryPriority" => "Memory", "ioPriority" => "I/O", "affinityMask" => "CPUs", "gpuPriority" => "GPU", _ => control ?? "Control" };
+                var current = change.TryGetProperty("currentValue", out var from) ? ControlValue(control, from) : "unavailable";
+                var proposed = change.TryGetProperty("proposedValue", out var to) ? ControlValue(control, to) : "unavailable";
+                var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
+                fields.Add(label + " " + current + " → " + proposed + (blocked ? " (skipped: " + ExtractString(change, "blockedReason") + ")" : string.Empty));
+            }
+            if (fields.Count > 0) lines.Add((ExtractString(item, "processName") ?? "App") + ": " + string.Join("; ", fields));
+        }
+        return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
+    }
+
+    private static string ControlValue(string? control, JsonElement value)
+        => control == "memoryPriority" && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var memory) ? FriendlyMemoryPriority(memory) : value.ToString();
 
     private static string SessionStatusTitle(string? json, string fallback)
     {
@@ -683,7 +751,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var resultSummary = ExtractString(root, "result", "summary");
-            if (!string.IsNullOrWhiteSpace(resultSummary)) return resultSummary!;
+            if (!string.IsNullOrWhiteSpace(resultSummary)) return resultSummary! + SummarizeControls(root);
 
             var issue = ExtractIssue(root, "errors") ?? ExtractIssue(root, "warnings");
             var status = ExtractString(root, "status") ?? ExtractString(root, "sessionStatus") ?? "ready";

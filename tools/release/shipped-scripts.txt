@@ -1,4 +1,5 @@
 Apply-ProcessProfile.ps1
+BackgroundPlacement.Common.ps1
 AppxInventory.Common.ps1
 BackendExecutor.Common.ps1
 BrandCompatibility.Common.ps1
@@ -14,6 +15,7 @@ Get-DriverHardwareSummary.ps1
 Get-GameTuneSessionStatus.ps1
 Get-InstalledAppInventory.ps1
 Get-ProcessClassification.ps1
+Get-BackgroundPlacement.ps1
 Get-ProcessGovernorSessionStatus.ps1
 Get-ProcessInventory.ps1
 GovernorOwnership.Common.ps1

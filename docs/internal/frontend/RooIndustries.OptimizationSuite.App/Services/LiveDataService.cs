@@ -132,8 +132,11 @@ public sealed class LiveDataService
         return age > LiveAge && result.Value is not null ? result with { Stale = true } : result;
     }
 
-    public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
+    public Task<LiveDataResult<string>> GetBackgroundPlacementResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Get-BackgroundPlacement.ps1", ct);
+
+    public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default, string preset = "lower")
+        => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct, "-Preset " + preset);
 
     private static Task<IDisposable> EnterGovernorGateAsync()
     {
@@ -165,7 +168,7 @@ public sealed class LiveDataService
         public void Dispose() { if (Interlocked.Exchange(ref _released, 1) == 0) release.Set(); }
     }
 
-    public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
+    public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default, string preset = "lower")
     {
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
@@ -177,7 +180,7 @@ public sealed class LiveDataService
         var generation = Guid.NewGuid().ToString("N");
         if (!TryWriteGeneration(ProcessGenerationPath, generation, "process profile", out var generationError))
             return new(null, generationError);
-        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply").ConfigureAwait(false);
+        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply -Preset " + preset).ConfigureAwait(false);
         var recovery = ProcessProfileRecovery.FromApply(result.Value, generation);
         if (recovery is null)
         {
