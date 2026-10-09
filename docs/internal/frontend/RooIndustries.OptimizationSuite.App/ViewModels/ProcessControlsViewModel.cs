@@ -312,6 +312,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private ushort _affinityGroup;
     private Task _readTask = Task.CompletedTask;
     private bool _observing;
+    private bool _resultShown;
     private bool _signInAtRisk;
 
     public ProcessControlsViewModel() => _selectedCpuMode = CpuModes[0];
@@ -407,6 +408,7 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private async Task ReadProcessAsync(CpuProcessChoice? process, int version)
     {
+        _resultShown = false;
         _snapshot = null; Controls.Clear(); Cpus.Clear(); _editingRuleId = null; SelectedCpuMode = CpuModes[0]; SetHardAffinity = false; OneThreadPerCore = false;
         CpuSetsAvailable = false; AffinityAvailable = false; _affinityGroup = 0; AffinityMask = ""; AffinityLabel = "Hard-affinity CPU mask";
         if (process is null) { NotifyState(); return; }
@@ -447,7 +449,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
     }
 
-    private void Changed(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == "Selected") Invalidate(); }
+    private void Changed(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == "Selected") { _resultShown = false; Invalidate(); } }
 
     private (Dictionary<string, JsonElement> Controls, CpuSelection? Selection) Desired()
     {
@@ -493,6 +495,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private async Task PreviewAsync()
     {
         if (!CanPreview) return;
+        _resultShown = false;
         Busy = true;
         try
         {
@@ -529,6 +532,7 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private void ShowResult(ProcessControlJournal result)
     {
+        _resultShown = true;
         RestoreAvailable = result.Status is not ("restored" or "expired");
         var applying = result.Changes.Any(change => change.Status is "applied" or "unchanged" or "applyIntent" or "pending");
         Status = result.Status switch
@@ -678,7 +682,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             _snapshot = fresh;
             CpuSetsAvailable = Readable(fresh.Controls["cpuSets"]) && !IsBlocked(fresh, "cpuSets");
             AffinityAvailable = Readable(fresh.Controls["affinity"]) && !IsBlocked(fresh, "affinity");
-            Detail = BlockedNotice(fresh) + "Preferred CPUs: " + DescribeRead("cpuSets", fresh.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", fresh.Controls["affinity"]) + ".";
+            if (!_resultShown) Detail = BlockedNotice(fresh) + "Preferred CPUs: " + DescribeRead("cpuSets", fresh.Controls["cpuSets"]) + ". Hard affinity: " + DescribeRead("affinity", fresh.Controls["affinity"]) + ".";
             foreach (var row in Controls) row.Update(fresh.Controls[row.Name], IsBlocked(fresh, row.Name));
             NotifyState();
         }
