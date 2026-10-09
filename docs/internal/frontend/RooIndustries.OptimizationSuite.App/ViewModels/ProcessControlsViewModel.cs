@@ -449,7 +449,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
     }
 
-    private void Changed(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == "Selected") { _resultShown = false; Invalidate(); } }
+    private void Changed(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == "Selected") Invalidate(); }
 
     private (Dictionary<string, JsonElement> Controls, CpuSelection? Selection) Desired()
     {
@@ -515,7 +515,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     {
         if (!CanApply || _review is null) return;
         Busy = true;
-        try { _journal = _review.JournalPath; ShowResult(await App.Operations.ApplyControlsAsync(_review)); Invalidate(); }
+        try { _journal = _review.JournalPath; var result = await App.Operations.ApplyControlsAsync(_review); Invalidate(); ShowResult(result, restoring: false); }
         catch (Exception error) { Status = "The change was not confirmed."; Detail = error.Message; RestoreAvailable = _journal is not null && File.Exists(_journal); }
         finally { Busy = false; }
     }
@@ -525,41 +525,42 @@ public partial class ProcessControlsViewModel : ObservableObject
     {
         if (!CanRestore || _journal is null) return;
         Busy = true;
-        try { ShowResult(await App.Operations.RestoreControlsAsync(_journal)); Invalidate(); }
+        try { var result = await App.Operations.RestoreControlsAsync(_journal); Invalidate(); ShowResult(result, restoring: true); }
         catch (Exception error) { Status = "Recovery needs attention."; Detail = error.Message; }
         finally { Busy = false; }
     }
 
-    private void ShowResult(ProcessControlJournal result)
+    private void ShowResult(ProcessControlJournal result, bool restoring)
     {
         _resultShown = true;
         RestoreAvailable = result.Status is not ("restored" or "expired");
-        var applying = result.Changes.Any(change => change.Status is "applied" or "unchanged" or "applyIntent" or "pending");
         Status = result.Status switch
         {
-            "applied" => "Done. Every control was changed and checked.",
             "restored" => result.Changes.Any(change => change.Status == "leftAsSet") ? ProcessControlEngine.LeftAsSet : "Original controls restored.",
             "expired" => "The process exited; its instance controls have ended.",
-            _ when applying && result.Changes.Any(change => change.Status is "applied" or "unchanged") => "Some controls didn't change. The others were applied.",
+            _ when restoring => "Some controls weren't restored. Another app changed them or Windows refused.",
+            "applied" => "Done. Every control was changed and checked.",
+            _ when result.Changes.Any(change => change.Error is null && change.Status is "applied" or "unchanged") => "Some controls didn't change. The others were applied.",
             _ => "The controls didn't change.",
         };
-        var lines = result.Changes.Select(Outcome).ToList();
-        if (result.Changes.Any(change => change.Name == "affinity" && change.Status == "applied"))
+        var lines = result.Changes.Select(change => Outcome(change, restoring)).ToList();
+        if (!restoring && result.Changes.Any(change => change.Name == "affinity" && change.Status == "applied" && change.Error is null))
             lines.Add("To check CPU cores in Task Manager: Details, right-click the app, Set affinity.");
-        if (result.Changes.Any(change => change.Name == "cpuSets" && change.Status == "applied"))
+        if (!restoring && result.Changes.Any(change => change.Name == "cpuSets" && change.Status == "applied" && change.Error is null))
             lines.Add("Preferred CPU cores don't show in Task Manager's Set affinity. The app checks them for you.");
         Detail = string.Join("\n", lines);
     }
 
-    private static string Outcome(ControlChange change) => Label(change.Name) + ": " + change.Status switch
-    {
-        "applied" => "set to " + Describe(change.Name, change.Desired),
-        "unchanged" => "already " + Describe(change.Name, change.Desired),
-        "restored" => "back to " + Describe(change.Name, change.Original),
-        "leftAsSet" => "left as another program set it",
-        _ when change.Error is not null => "not changed. " + (change.ErrorKind == "denied" ? "Windows refused the change. Games with anti-cheat often block this." : change.Error),
-        _ => "not changed",
-    };
+    private static string Outcome(ControlChange change, bool restoring) => Label(change.Name) + ": " + (
+        change.Status == "leftAsSet" ? "left as another program set it"
+        : change.Error is not null ? (restoring ? "not restored. " : "not changed. ") + (change.ErrorKind == "denied" ? "Windows refused the change. Games with anti-cheat often block this." : change.Error)
+        : change.Status switch
+        {
+            "applied" => "set to " + Describe(change.Name, change.Desired),
+            "unchanged" => "already " + Describe(change.Name, change.Desired),
+            "restored" => "back to " + Describe(change.Name, change.Original),
+            _ => restoring ? "not restored" : "not changed",
+        });
 
     private static bool IsBlocked(ProcessControlSnapshot snapshot, string name) => snapshot.Blocked?.ContainsKey(name) == true;
     private static string BlockedNotice(ProcessControlSnapshot snapshot)
@@ -823,7 +824,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         finally { Busy = false; }
     }
 
-    private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
+    private void Invalidate() { _review = null; ReviewSummary = ""; _resultShown = false; NotifyState(); }
     private void NotifyState()
     {
         foreach (var property in new[] { nameof(CanEdit), nameof(CanEditCpuSelection), nameof(CanEditAffinity), nameof(CanEditCpuChoices), nameof(HasProcess), nameof(ShowLogicalCpus), nameof(ShowTopology), nameof(CanPreview), nameof(CanApply), nameof(CanRestore), nameof(HasReview), nameof(RuleBlocker), nameof(HasRuleBlocker), nameof(CanSaveRule), nameof(CanManageRule), nameof(CanPauseGovernor), nameof(CanStartGovernor), nameof(CanRetryRestore), nameof(CanRemoveDamagedRule) }) OnPropertyChanged(property);
