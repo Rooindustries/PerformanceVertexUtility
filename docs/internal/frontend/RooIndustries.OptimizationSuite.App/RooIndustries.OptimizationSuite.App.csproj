@@ -21,6 +21,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <EnableMsixTooling>true</EnableMsixTooling>
     <DefaultLanguage>en-US</DefaultLanguage>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(RooIndustriesTestHooks)' == 'true'">
@@ -36,6 +37,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\Tweaks\presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
     <EmbeddedResource Include="Assets\Tweaks\icons.json" LogicalName="RooIndustries.TweakIcons.json" />
+    <EmbeddedResource Include="Assets\Guides\memory-guides.json" LogicalName="RooIndustries.MemoryGuides.json" />
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
     <ProjectReference Include="..\..\..\..\backend\native\Optimizer.Core\Optimizer.Core.csproj" />
     <Content Include="Assets\**\*.*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets')" />
   </ItemGroup>

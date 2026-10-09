@@ -57,6 +57,7 @@
                         <TextBlock Text="{x:Bind ViewModel.MemoryDetail, Mode=OneWay}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                     </StackPanel>
                 </Border>
+                <views:MemoryGuidesPanel />
                 <views:AdaptivePanel MinColumnWidth="380" MaxColumns="2">
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
