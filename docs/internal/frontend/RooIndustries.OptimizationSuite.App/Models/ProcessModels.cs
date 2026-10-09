@@ -39,6 +39,10 @@ public sealed class ProcessItem
     public List<string>? RoleTags { get; set; }
     public List<string>? ReasonCodes { get; set; }
     public string? PriorityClass { get; set; }
+    public int? MemoryPriority { get; set; }
+    public bool MemoryPriorityAvailable { get; set; }
+    public bool BackgroundPlacementEligible { get; set; }
+    public string? MemoryPriorityStatus { get; set; }
     public double CpuPercent { get; set; }
     public long WorkingSetBytes { get; set; }
     public long PrivateBytes { get; set; }

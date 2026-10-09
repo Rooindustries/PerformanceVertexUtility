@@ -29,18 +29,20 @@ function Get-RestoreCandidate {
     try { $currentPath = $live.Path } catch { $currentPath = $null }
     $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $pathMatches = $true
-    if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath) -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
     }
+    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null) $controlState.startTimeUtc
 
     return [pscustomobject]@{
         exists = $true
-        matches = ($nameMatches -and $pathMatches)
+        matches = ($nameMatches -and $pathMatches -and $startMatches)
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
-        currentControlState = Get-RooIndustriesProcessControlState $processId $null
+        currentControlState = $controlState
         currentPath = $currentPath
-        blockedReason = if ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the backup snapshot.' }
+        blockedReason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was restored.' } elseif ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the backup snapshot.' }
     }
 }
 
@@ -71,6 +73,7 @@ function New-RollbackPreviewEntry {
     $originalPriority = [string](Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' '')
     $originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
     $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
@@ -78,10 +81,11 @@ function New-RollbackPreviewEntry {
     $currentPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'priorityClass' $Candidate.currentPriorityClass } else { $Candidate.currentPriorityClass }
     $currentAffinityMask = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null } else { $null }
     $currentIoPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'ioPriority' $null } else { $null }
+    $currentMemoryPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'memoryPriority' $null } else { $null }
     $currentGpuPriority = if ($currentState) { Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null } else { $null }
-    $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches) -or (-not (Test-RooIndustriesPriorityAllowed $originalPriority))
+    $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches) -or (-not (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring))
     $reason = if ($blocked) {
-        if (-not (Test-RooIndustriesPriorityAllowed $originalPriority)) {
+        if (-not (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring)) {
             "Original priority class '$originalPriority' is outside the allow-list."
         } else {
             [string]$Candidate.blockedReason
@@ -91,14 +95,17 @@ function New-RollbackPreviewEntry {
     }
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority) -and [string]$currentPriority -ne [string]$originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$currentPriority -ne [string]$originalPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
         if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
+        }
+        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority) -and [string]$currentMemoryPriority -ne [string]$originalMemoryPriority) {
+            $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' $currentMemoryPriority $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority.')) | Out-Null
         }
         if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
             if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
@@ -125,12 +132,15 @@ function New-RollbackPreviewEntry {
         processId = $processId
         processName = $processName
         executablePath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
+        processStartTimeUtc = Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null
         currentPriorityClass = $currentPriority
         proposedPriorityClass = if ($blocked) { $currentPriority } else { $originalPriority }
         currentAffinityMask = $currentAffinityMask
         proposedAffinityMask = if ($blocked) { $currentAffinityMask } else { $originalAffinityMask }
         currentIoPriority = $currentIoPriority
+        currentMemoryPriority = $currentMemoryPriority
         proposedIoPriority = if ($blocked) { $currentIoPriority } else { $originalIoPriority }
+        proposedMemoryPriority = if ($blocked) { $currentMemoryPriority } else { $originalMemoryPriority }
         currentGpuPriority = $currentGpuPriority
         proposedGpuPriority = if ($blocked) { $currentGpuPriority } else { $originalGpuPriority }
         gpuPriorityAvailable = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false
@@ -152,6 +162,7 @@ function New-RollbackPreviewEntry {
             priorityClass = $currentPriority
             affinityMask = $currentAffinityMask
             ioPriority = $currentIoPriority
+            memoryPriority = $currentMemoryPriority
             gpuPriority = $currentGpuPriority
         }
         proposedState = [pscustomobject]@{
@@ -159,6 +170,7 @@ function New-RollbackPreviewEntry {
             priorityClass = if ($blocked) { $currentPriority } else { $originalPriority }
             affinityMask = if ($blocked) { $currentAffinityMask } else { $originalAffinityMask }
             ioPriority = if ($blocked) { $currentIoPriority } else { $originalIoPriority }
+            memoryPriority = if ($blocked) { $currentMemoryPriority } else { $originalMemoryPriority }
             gpuPriority = if ($blocked) { $currentGpuPriority } else { $originalGpuPriority }
             reason = $reason
         }
@@ -185,10 +197,12 @@ function New-BackupEnvelopeMetadata {
                 priorityClass = Get-RooIndustriesPropertyValue $snap 'originalPriorityClass' $null
                 affinityMask = Get-RooIndustriesPropertyValue $snap 'originalAffinityMask' $null
                 ioPriority = Get-RooIndustriesPropertyValue $snap 'originalIoPriority' $null
+                memoryPriority = Get-RooIndustriesPropertyValue $snap 'originalMemoryPriority' $null
                 gpuPriority = Get-RooIndustriesPropertyValue $snap 'originalGpuPriority' $null
                 proposedPriorityClass = Get-RooIndustriesPropertyValue $snap 'proposedPriorityClass' $null
                 proposedAffinityMask = Get-RooIndustriesPropertyValue $snap 'proposedAffinityMask' $null
                 proposedIoPriority = Get-RooIndustriesPropertyValue $snap 'proposedIoPriority' $null
+                proposedMemoryPriority = Get-RooIndustriesPropertyValue $snap 'proposedMemoryPriority' $null
                 proposedGpuPriority = Get-RooIndustriesPropertyValue $snap 'proposedGpuPriority' $null
             }
         }) | Out-Null
@@ -235,9 +249,10 @@ try {
             }
 
             $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
-            if ($null -eq $live) {
-                $skipped.Add((New-RestoreSkippedItem $entry 'Process exited before rollback.' @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
+            $identity = Get-RestoreCandidate $entry
+            $live = $identity.process
+            if (-not $identity.exists -or -not $identity.matches) {
+                $skipped.Add((New-RestoreSkippedItem $entry $identity.blockedReason @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
                 continue
             }
 
@@ -262,6 +277,7 @@ try {
                         restoredPriorityClass = $afterControls.priorityClass
                         restoredAffinityMask = $afterControls.affinityMask
                         restoredIoPriority = $afterControls.ioPriority
+                        restoredMemoryPriority = $afterControls.memoryPriority
                         restoredGpuPriority = $afterControls.gpuPriority
                         restoredControls = @($appliedControls.ToArray())
                         ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''

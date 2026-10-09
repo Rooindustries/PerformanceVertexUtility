@@ -1,6 +1,7 @@
 param(
     [string]$ProfilePath = '',
     [string]$TargetGameProcessName = '',
+    [ValidateSet('lower', 'placement')][string]$Preset = 'lower',
     [string]$OutputPath = '',
     [string]$StateRoot = '',
     [switch]$ConfirmApply
@@ -31,18 +32,20 @@ function Get-LiveProcessIdentity {
     try { $currentPath = $live.Path } catch { $currentPath = $null }
     $expectedPath = Get-RooIndustriesPropertyValue $PreviewEntry 'executablePath' $null
     $pathMatches = $true
-    if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath) -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
     }
+    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null) $controlState.startTimeUtc
 
     return [pscustomobject]@{
         exists = $true
-        matches = ($nameMatches -and $pathMatches)
+        matches = ($nameMatches -and $pathMatches -and $startMatches)
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
-        currentControlState = Get-RooIndustriesProcessControlState $processId $null
+        currentControlState = $controlState
         currentPath = $currentPath
-        reason = if ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the preview entry.' }
+        reason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was changed.' } elseif ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the preview entry.' }
     }
 }
 
@@ -60,6 +63,7 @@ function New-ApplySkippedItem {
         proposedPriorityClass = Get-RooIndustriesPropertyValue $Entry 'proposedPriorityClass' $null
         proposedAffinityMask = Get-RooIndustriesPropertyValue $Entry 'proposedAffinityMask' $null
         proposedIoPriority = Get-RooIndustriesPropertyValue $Entry 'proposedIoPriority' $null
+        proposedMemoryPriority = Get-RooIndustriesPropertyValue $Entry 'proposedMemoryPriority' $null
         proposedGpuPriority = Get-RooIndustriesPropertyValue $Entry 'proposedGpuPriority' $null
         controlChanges = @(Get-RooIndustriesArray $ControlChanges)
         skippedControls = @(Get-RooIndustriesArray $SkippedControls)
@@ -82,6 +86,7 @@ function New-BackupMetadata {
                 priorityClass = Get-RooIndustriesPropertyValue $snap 'originalPriorityClass' $null
                 affinityMask = Get-RooIndustriesPropertyValue $snap 'originalAffinityMask' $null
                 ioPriority = Get-RooIndustriesPropertyValue $snap 'originalIoPriority' $null
+                memoryPriority = Get-RooIndustriesPropertyValue $snap 'originalMemoryPriority' $null
                 gpuPriority = Get-RooIndustriesPropertyValue $snap 'originalGpuPriority' $null
                 executablePath = Get-RooIndustriesPropertyValue $snap 'executablePath' $null
             }
@@ -113,7 +118,7 @@ try {
     $resolvedProfilePath = Resolve-RooIndustriesPath $ProfilePath $defaultProfilePath
     $profile = Read-RooIndustriesJsonFile $resolvedProfilePath
 
-    $previewArgs = @{ ProfilePath = $resolvedProfilePath }
+    $previewArgs = @{ ProfilePath = $resolvedProfilePath; Preset = $Preset }
     if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
         $previewArgs['TargetGameProcessName'] = $TargetGameProcessName
     }
@@ -166,6 +171,9 @@ try {
     $candidateEntries = New-Object System.Collections.Generic.List[object]
     foreach ($entry in @(Get-RooIndustriesPropertyArray $previewEnvelope 'preview')) {
         $entryChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
+        foreach ($change in @($entryChanges | Where-Object { $_.control -eq 'memoryPriority' -and $_.blocked })) {
+            $skipped.Add((New-ApplySkippedItem $entry $change.blockedReason @() @($change) 'blocked')) | Out-Null
+        }
         $applicablePreviewChanges = @($entryChanges | Where-Object { -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false) })
         $isChange = ($applicablePreviewChanges.Count -gt 0)
         $isBlocked = [bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)
@@ -188,6 +196,11 @@ try {
             continue
         }
 
+        if ($Preset -eq 'placement' -and @(Get-RooIndustriesGovernorProcessControls $identity.process).Count -gt 0) {
+            $skipped.Add((New-ApplySkippedItem $entry $script:RooIndustriesGovernorManaged $entryChanges @() 'managed')) | Out-Null
+            continue
+        }
+
         $livePlan = Get-RooIndustriesApplicableProcessControlChanges $entryChanges $identity.currentControlState
         foreach ($skippedControl in @(Get-RooIndustriesPropertyArray $livePlan 'skippedControls')) {
             $skipped.Add((New-ApplySkippedItem $entry ([string](Get-RooIndustriesPropertyValue $skippedControl 'reason' 'Process control was skipped.')) @() @($skippedControl) ([string](Get-RooIndustriesPropertyValue $skippedControl 'category' 'skipped')))) | Out-Null
@@ -206,7 +219,9 @@ try {
             originalAffinityMask = Get-RooIndustriesPropertyValue $identity.currentControlState 'affinityMask' $null
             proposedAffinityMask = Get-RooIndustriesPropertyValue $entry 'proposedAffinityMask' $null
             originalIoPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'ioPriority' $null
+            originalMemoryPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'memoryPriority' $null
             proposedIoPriority = Get-RooIndustriesPropertyValue $entry 'proposedIoPriority' $null
+            proposedMemoryPriority = Get-RooIndustriesPropertyValue $entry 'proposedMemoryPriority' $null
             originalGpuPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'gpuPriority' $null
             proposedGpuPriority = Get-RooIndustriesPropertyValue $entry 'proposedGpuPriority' $null
             controlChanges = @($liveChanges)
@@ -245,13 +260,14 @@ try {
 
     $changed = New-Object System.Collections.Generic.List[object]
     foreach ($snapshot in @($snapshots.ToArray())) {
-        $live = Get-Process -Id ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) -ErrorAction SilentlyContinue
-        if ($null -eq $live) {
-            $skipped.Add((New-ApplySkippedItem $snapshot 'Process exited before apply.' @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'exited')) | Out-Null
+        $identity = Get-LiveProcessIdentity $snapshot
+        if (-not $identity.exists -or -not $identity.matches) {
+            $skipped.Add((New-ApplySkippedItem $snapshot $identity.reason @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'identity-mismatch')) | Out-Null
             continue
         }
-        if (-not (Test-RooIndustriesProcessNameEquals $live.ProcessName ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')))) {
-            $skipped.Add((New-ApplySkippedItem $snapshot 'Process identity changed before apply.' @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'identity-mismatch')) | Out-Null
+        $live = $identity.process
+        if ($Preset -eq 'placement' -and @(Get-RooIndustriesGovernorProcessControls $live).Count -gt 0) {
+            $skipped.Add((New-ApplySkippedItem $snapshot $script:RooIndustriesGovernorManaged @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'managed')) | Out-Null
             continue
         }
 
@@ -277,7 +293,9 @@ try {
                     originalAffinityMask = Get-RooIndustriesPropertyValue $snapshot 'originalAffinityMask' $null
                     appliedAffinityMask = $afterControls.affinityMask
                     originalIoPriority = Get-RooIndustriesPropertyValue $snapshot 'originalIoPriority' $null
+                    originalMemoryPriority = Get-RooIndustriesPropertyValue $snapshot 'originalMemoryPriority' $null
                     appliedIoPriority = $afterControls.ioPriority
+                    appliedMemoryPriority = $afterControls.memoryPriority
                     originalGpuPriority = Get-RooIndustriesPropertyValue $snapshot 'originalGpuPriority' $null
                     appliedGpuPriority = $afterControls.gpuPriority
                     appliedControls = @($appliedControls.ToArray())

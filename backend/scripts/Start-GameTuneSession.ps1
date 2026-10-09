@@ -149,7 +149,9 @@ try {
                         currentAffinityMask = Get-RooIndustriesPropertyValue $entry 'currentAffinityMask' $null
                         proposedAffinityMask = Get-RooIndustriesPropertyValue $entry 'proposedAffinityMask' $null
                         currentIoPriority = Get-RooIndustriesPropertyValue $entry 'currentIoPriority' $null
+                        currentMemoryPriority = Get-RooIndustriesPropertyValue $entry 'currentMemoryPriority' $null
                         proposedIoPriority = Get-RooIndustriesPropertyValue $entry 'proposedIoPriority' $null
+                        proposedMemoryPriority = Get-RooIndustriesPropertyValue $entry 'proposedMemoryPriority' $null
                         currentGpuPriority = Get-RooIndustriesPropertyValue $entry 'currentGpuPriority' $null
                         proposedGpuPriority = Get-RooIndustriesPropertyValue $entry 'proposedGpuPriority' $null
                         controlChanges = @($entryControlChanges)
@@ -187,6 +189,7 @@ try {
                     priorityClass = Get-RooIndustriesPropertyValue $identity.currentControlState 'priorityClass' $identity.currentPriorityClass
                     affinityMask = Get-RooIndustriesPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
                     ioPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
+                    memoryPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'memoryPriority' $identity.currentMemoryPriority
                     gpuPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
                 }
                 if (-not $snapshotKeys.Contains($snapshotKey)) {
@@ -199,7 +202,9 @@ try {
                         originalAffinityMask = Get-RooIndustriesPropertyValue $identity.currentControlState 'affinityMask' $identity.currentAffinityMask
                         proposedAffinityMask = Get-RooIndustriesPropertyValue $entry 'proposedAffinityMask' $null
                         originalIoPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'ioPriority' $identity.currentIoPriority
+                        originalMemoryPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'memoryPriority' $identity.currentMemoryPriority
                         proposedIoPriority = Get-RooIndustriesPropertyValue $entry 'proposedIoPriority' $null
+                        proposedMemoryPriority = Get-RooIndustriesPropertyValue $entry 'proposedMemoryPriority' $null
                         originalGpuPriority = Get-RooIndustriesPropertyValue $identity.currentControlState 'gpuPriority' $identity.currentGpuPriority
                         proposedGpuPriority = Get-RooIndustriesPropertyValue $entry 'proposedGpuPriority' $null
                         controlChanges = @($entryControlChanges)
@@ -222,6 +227,7 @@ try {
                             'priorityClass' { $known.originalPriorityClass = $originalState.priorityClass }
                             'affinityMask' { $known.originalAffinityMask = $originalState.affinityMask }
                             'ioPriority' { $known.originalIoPriority = $originalState.ioPriority }
+                            'memoryPriority' { $known.originalMemoryPriority = $originalState.memoryPriority }
                             'gpuPriority' { $known.originalGpuPriority = $originalState.gpuPriority }
                         }
                     }
@@ -253,6 +259,7 @@ try {
                         priorityClass = $afterControls.priorityClass
                         affinityMask = $afterControls.affinityMask
                         ioPriority = $afterControls.ioPriority
+                        memoryPriority = $afterControls.memoryPriority
                         gpuPriority = $afterControls.gpuPriority
                     }
                     $changedItem = New-RooIndustriesGameTuneChangedItem $entry $originalState $appliedState @($appliedControls.ToArray()) $pollIndex

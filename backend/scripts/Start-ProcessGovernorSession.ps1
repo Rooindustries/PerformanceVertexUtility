@@ -79,7 +79,9 @@ function New-GovernorChangedItem {
         originalAffinityMask = Get-RooIndustriesPropertyValue $OriginalState 'affinityMask' $null
         appliedAffinityMask = Get-RooIndustriesPropertyValue $AppliedState 'affinityMask' $null
         originalIoPriority = Get-RooIndustriesPropertyValue $OriginalState 'ioPriority' $null
+        originalMemoryPriority = Get-RooIndustriesPropertyValue $OriginalState 'memoryPriority' $null
         appliedIoPriority = Get-RooIndustriesPropertyValue $AppliedState 'ioPriority' $null
+        appliedMemoryPriority = Get-RooIndustriesPropertyValue $AppliedState 'memoryPriority' $null
         originalGpuPriority = Get-RooIndustriesPropertyValue $OriginalState 'gpuPriority' $null
         appliedGpuPriority = Get-RooIndustriesPropertyValue $AppliedState 'gpuPriority' $null
         appliedControls = @(Get-RooIndustriesArray $AppliedControls)
@@ -110,7 +112,9 @@ function New-GovernorRestoredItem {
         originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
         restoredAffinityMask = Get-RooIndustriesPropertyValue $RestoredState 'affinityMask' $null
         originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+        originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
         restoredIoPriority = Get-RooIndustriesPropertyValue $RestoredState 'ioPriority' $null
+        restoredMemoryPriority = Get-RooIndustriesPropertyValue $RestoredState 'memoryPriority' $null
         originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
         restoredGpuPriority = Get-RooIndustriesPropertyValue $RestoredState 'gpuPriority' $null
         restoredControls = @(Get-RooIndustriesArray $RestoredControls)
@@ -130,6 +134,7 @@ function Get-GovernorRestoreChanges {
     $originalPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' $null
     $originalAffinity = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
     if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) -ne [string]$originalPriority) {
         $changes.Add((New-RooIndustriesControlChange 'priorityClass' (Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
@@ -139,6 +144,9 @@ function Get-GovernorRestoreChanges {
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
         $changes.Add((New-RooIndustriesControlChange 'ioPriority' (Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) -ne [string]$originalMemoryPriority) {
+        $changes.Add((New-RooIndustriesControlChange 'memoryPriority' (Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority after governor restraint.')) | Out-Null
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
         $changes.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
@@ -496,7 +504,9 @@ try {
                         originalAffinityMask = $originalState.affinityMask
                         proposedAffinityMask = Get-RooIndustriesPropertyValue $entryToApply 'proposedAffinityMask' $null
                         originalIoPriority = $originalState.ioPriority
+                        originalMemoryPriority = $originalState.memoryPriority
                         proposedIoPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedIoPriority' $null
+                        proposedMemoryPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedMemoryPriority' $null
                         originalGpuPriority = $originalState.gpuPriority
                         proposedGpuPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedGpuPriority' $null
                         controlChanges = @($entryChanges)
