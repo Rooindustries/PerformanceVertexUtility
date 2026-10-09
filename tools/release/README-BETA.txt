@@ -53,7 +53,21 @@ no "Run anyway" button. The beta can't run while it's on.
   Windows, but later restarts follow the BIOS boot order.
 
 
-5. The FPS preset
+5. Games, background apps and memory
+------------------------------------
+- Games & processes > Processes changes a running app's priorities and CPU
+  cores. Games with anti-cheat (for example Call of Duty) don't let other apps
+  change them while they run. The app tells you which settings are blocked.
+  For those games use the Games tab: set it up while the game is closed, press
+  Start, then start the game from its launcher (Steam, Battle.net and so on).
+- Background apps has a preset that keeps background apps at normal priority
+  and moves them to your E-cores (Intel) or your second CCD (AMD Ryzen with two
+  CCDs), away from your game. The other preset lowers their priority instead.
+  Both also set memory priority, so Windows keeps your game's memory first.
+- The Memory page has short guides for getting the most out of your RAM.
+
+
+6. The FPS preset
 -----------------
 The FPS preset button picks up to 15 Windows security settings (settings your
 PC doesn't have are skipped). Turned off together, they raised average FPS by
@@ -74,7 +88,7 @@ the FPS preset on a PC you use for banking, work or school.
 "Undo all my tweaks" puts everything back after a restart.
 
 
-6. Undo
+7. Undo
 -------
 - The app saves the original value of every setting before it changes it.
 - To go back, open the Windows tweaks page and click "Undo all my tweaks",
@@ -86,7 +100,7 @@ the FPS preset on a PC you use for banking, work or school.
   the undo button still works.
 
 
-7. Where your data is
+8. Where your data is
 ---------------------
 - The app itself: C:\Program Files\Roo Industries\Optimization Suite
 - Your undo information, saved choices and review files:
@@ -101,7 +115,7 @@ the FPS preset on a PC you use for banking, work or school.
 Please don't delete these while you're testing, or undo can't work.
 
 
-8. Reporting problems
+9. Reporting problems
 ---------------------
 Use "Report a bug" in the app menu (next to Settings). It fills in your PC
 specs for you. Add your Discord or email if you want a reply, describe what
@@ -117,8 +131,17 @@ to a file" instead, then "Open folder", and send that zip file to the
 Roo Industries contact who gave you the beta.
 
 
-9. Updating and uninstalling
-----------------------------
+10. Updating and uninstalling
+-----------------------------
+From this version on, the app updates itself. It checks for a new beta when
+it opens and every few hours after that, downloads it in the background and
+checks that it really comes from Roo Industries. When it's ready, you see
+"Version ... is ready to install". Press Install now: the app closes, updates
+and opens again by itself, usually within a minute. You don't need to
+download or run a setup file again. You can also check by hand, or turn off
+automatic downloads, in Settings > Updates. The app never installs an update
+while a game session or the timer setting is running; stop them first.
+
 The installer takes care of the Roo Industries Governor (the part that keeps
 your saved process rules on). When you install a new beta, it pauses the
 governor, gives your apps their old settings back, updates the files and then
