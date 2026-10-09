@@ -62,7 +62,7 @@ public sealed record PowerThrottling([property: JsonRequired] uint ControlMask, 
 }
 
 public sealed record ProcessControlSnapshot(RunningProcess Identity, ControlRead Protection,
-    IReadOnlyList<LogicalCpu> Topology, IReadOnlyDictionary<string, ControlRead> Controls);
+    IReadOnlyList<LogicalCpu> Topology, IReadOnlyDictionary<string, ControlRead> Controls, IReadOnlyDictionary<string, string>? Blocked = null);
 
 public sealed record ProcessControlPreview
 {
@@ -73,6 +73,18 @@ public sealed record ProcessControlPreview
     public required Dictionary<string, ControlRead> Original { get; init; }
     public required Dictionary<string, JsonElement> Desired { get; init; }
     public required string TopologyHash { get; init; }
+    public Dictionary<string, string>? Blocked { get; init; }
+}
+
+public sealed class ProcessControlBlockedException(IEnumerable<string> controls)
+    : UnauthorizedAccessException("Windows doesn't let other apps change " + string.Join(", ", controls.Select(ProcessControlBlockedException.Label)) +
+        " for this app while it runs. Games with anti-cheat often block this. Use the Games tab to set it up before the game starts.")
+{
+    public static string Label(string name) => name switch
+    {
+        "cpuPriority" => "CPU priority", "affinity" => "CPU cores", "cpuSets" => "preferred CPU cores", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority",
+        "memoryPriority" => "memory priority", "executionQoS" => "power mode", "priorityBoost" => "priority boost", _ => name,
+    };
 }
 
 public sealed class ControlChange
