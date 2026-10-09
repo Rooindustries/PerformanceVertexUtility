@@ -22,6 +22,19 @@
                     </Grid>
                 </Border>
                 <Border Style="{StaticResource PanelBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Updates" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock x:Name="UpdateStatusText" TextWrapping="Wrap" AutomationProperties.AutomationId="UpdateStatusText" />
+                        <TextBlock x:Name="UpdateNotesText" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="UpdateNotesText" />
+                        <ToggleSwitch x:Name="AutomaticUpdatesToggle" Header="Download updates automatically" Toggled="AutomaticUpdates_Toggled" AutomationProperties.AutomationId="AutomaticUpdatesToggle" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="UpdateCheckButton" Content="Check for updates" Click="UpdateCheck_Click" AutomationProperties.AutomationId="UpdateCheckButton" />
+                            <Button x:Name="UpdateDownloadButton" Content="Download" Click="UpdateDownload_Click" AutomationProperties.AutomationId="UpdateDownloadButton" />
+                            <Button x:Name="UpdateInstallButton" Content="Install update" Click="UpdateInstall_Click" AutomationProperties.AutomationId="UpdateInstallButton" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}">
                     <StackPanel Spacing="14">
                         <TextBlock Text="Appearance" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         <views:AdaptivePanel MinColumnWidth="260" MaxColumns="2">

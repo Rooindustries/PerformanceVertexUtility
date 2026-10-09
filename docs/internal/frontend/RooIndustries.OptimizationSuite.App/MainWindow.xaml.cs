@@ -52,12 +52,30 @@ public sealed partial class MainWindow : Window
         App.Theme.EffectsChanged += ApplyEffects;
         App.Theme.SimpleModeChanged += ApplySimpleMode;
         DataGeneration.Settled += OnDataSettled;
+        App.Updates.Changed += OnUpdateChanged;
         Closed += OnWindowClosed;
         EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
         ApplySimpleMode();
         Nav.Loaded += OnNavLoaded;
+        OnUpdateChanged();
     }
+
+    private void OnUpdateChanged()
+    {
+        var state = App.Updates.State;
+        UpdateBanner.Title = state.Banner;
+        UpdateBanner.Message = state.Notes;
+        UpdateBanner.IsOpen = App.Updates.ShowBanner;
+        UpdateBanner.Severity = state.BannerKind == "failed" ? InfoBarSeverity.Warning : state.BannerKind == "updated" ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
+        UpdateBannerInstall.Content = state.BannerKind == "failed" ? "Try again" : "Install now";
+        UpdateBannerInstall.Visibility = state.Ready ? Visibility.Visible : Visibility.Collapsed;
+        UpdateBannerInstall.IsEnabled = !state.Busy;
+        ContentFrame.IsEnabled = !state.Installing;
+    }
+
+    private async void UpdateInstall_Click(object sender, RoutedEventArgs args) => await App.Updates.InstallAsync(Content.XamlRoot);
+    private void UpdateLater_Click(object sender, RoutedEventArgs args) => App.Updates.Later();
 
     private Task<bool> AskEarlierVersionAsync(string text)
     {
@@ -81,6 +99,8 @@ public sealed partial class MainWindow : Window
         App.Theme.EffectsChanged -= ApplyEffects;
         App.Theme.SimpleModeChanged -= ApplySimpleMode;
         DataGeneration.Settled -= OnDataSettled;
+        App.Updates.Changed -= OnUpdateChanged;
+        if (ReferenceEquals(App.MainWindow, this)) App.Updates.Stop();
     }
 
     private void OnDataSettled() => DispatcherQueue.TryEnqueue(async () =>

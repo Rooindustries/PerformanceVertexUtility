@@ -14,6 +14,7 @@
     <InternalsVisibleTo Include="OptimizerCore" />
     <EmbeddedResource Include="WindowsControls.ps1" />
     <EmbeddedResource Include="../../catalogs/adobe-hosts.txt" LogicalName="Optimizer.Core.AdobeHosts.txt" />
+    <EmbeddedResource Include="../../../tools/release/update-keys.json" LogicalName="Optimizer.Core.UpdateKeys.json" />
     <Compile Include="../CpuSets/RooIndustriesCpuSets.cs" Link="Interop/CpuSets.cs" />
   </ItemGroup>
 </Project>
