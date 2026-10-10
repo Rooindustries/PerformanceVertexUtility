@@ -78,7 +78,7 @@ public sealed record ProcessControlPreview
 
 public sealed class ProcessControlBlockedException(IEnumerable<string> controls)
     : UnauthorizedAccessException("Windows doesn't let other apps change " + string.Join(", ", controls.Select(ProcessControlBlockedException.Label)) +
-        " for this app while it runs. Games with anti-cheat often block this. Use the Games tab to set it up before the game starts.")
+        " for this app while it runs. If it's a game with anti-cheat, set it up on the Games tab before you start the game.")
 {
     public static string Label(string name) => name switch
     {
