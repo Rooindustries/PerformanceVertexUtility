@@ -66,6 +66,7 @@ sealed class FixtureScope
                         var identity=game.GetProperty("identity").Deserialize<RunningProcess>(OperationFiles.Json)??throw new InvalidDataException("Fixture game identity is invalid.");
                         foreach(var field in game.GetProperty("fields").EnumerateArray()){
                             var status=field.GetProperty("status").GetString();var route=field.GetProperty("route").GetString();
+                            if(route=="native" && status=="conflict" && field.TryGetProperty("journalPath",out var unapplied) && unapplied.ValueKind==JsonValueKind.Null){FixtureProcess.RequireExited(identity);continue;}
                             if(route switch{"launch"=>status is not ("expired" or "restartRequired"),"job"=>status!="released","native"=>status is not ("restored" or "expired"),_=>true})throw new InvalidOperationException("Fixture has unfinished control recovery: "+path);
                             if(route=="native" && (!field.TryGetProperty("journalPath",out var requiredJournal) || requiredJournal.ValueKind!=JsonValueKind.String || string.IsNullOrWhiteSpace(requiredJournal.GetString())))throw new InvalidDataException("Fixture native control lacks its recovery journal.");
                             if(field.TryGetProperty("journalPath",out var journalPath) && journalPath.ValueKind!=JsonValueKind.Null){

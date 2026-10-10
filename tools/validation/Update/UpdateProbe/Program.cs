@@ -1,6 +1,28 @@
 using System.Text.Json;
+using System.Reflection;
 using RooIndustries.Optimizer;
 
+if (args is ["--embedded-feed", var assemblyPath, var outputPath])
+{
+    var assembly = Assembly.LoadFile(Path.GetFullPath(assemblyPath));
+    using var resource = assembly.GetManifestResourceStream("RooIndustries.UpdateFeed") ?? throw new InvalidDataException("Embedded feed is missing");
+    using var reader = new StreamReader(resource);
+    var feed = reader.ReadToEnd().Trim();
+    File.WriteAllText(outputPath, JsonSerializer.Serialize(new { assemblyPath, feed }));
+    Console.WriteLine(feed);
+    return;
+}
+if (args is ["--install-space", var installPath, var spaceOutput])
+{
+    var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(installPath))!);
+    var threshold = 1L << 30;
+    var rows = new[] { threshold - 1, threshold, threshold + 1 }.Select(bytes => new { bytes, reason = UpdateFeed.InstallDriveSpaceReason(drive.Name, bytes) }).ToArray();
+    if (rows[0].reason != "Free at least 1 GB on drive " + drive.Name.TrimEnd('\\', '/') + " and try again." || rows[1].reason is not null || rows[2].reason is not null)
+        throw new InvalidDataException("Install-space comparison failed");
+    File.WriteAllText(spaceOutput, JsonSerializer.Serialize(new { installPath, drive = drive.Name, availableFreeSpace = drive.AvailableFreeSpace, threshold, rows, realLowDisk = false }, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine("Install-drive threshold boundaries passed");
+    return;
+}
 if (args.Length < 4) throw new ArgumentException("manifest feed-url current-version output [installer]");
 var result = UpdateFeed.Verify(File.ReadAllBytes(args[0]), 200, new Uri(args[1]), args[2]);
 UpdateFileResult? file = null;

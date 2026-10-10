@@ -22,7 +22,7 @@ function New-GameTuneRestorePreview {
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
     $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
-    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+    $recorded = @(Get-RooIndustriesRestorableProcessControls $Snapshot (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
     $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
     $reason = if ($blocked) {

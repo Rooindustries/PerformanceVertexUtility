@@ -150,9 +150,10 @@ static class RetainedGpuChecks
             void Step(Action action){try{action();}catch{finished=false;throw;}}
             FixtureScope.Finish(
                 ()=>Step(()=>{foreach(var worker in workers){identities[worker].Stop();worker.Dispose();}}),
-                ()=>Step(()=>{if(launcher is not null){File.WriteAllText(Path.Combine(root,"stop-launcher"),"");if(!launcher.WaitForExit(15000))identities[launcher].Stop();launcher.Dispose();}}),
                 ()=>Step(()=>{foreach(var session in states){if(File.Exists(Path.Combine(session,"session.json"))){FixtureScope.AwaitRecovery(session,evidence);engine.Recover(session,State(session).Preview.OperationId);}}}),
-                ()=>Step(()=>{foreach(var identity in identities.Values)identity.Stop();}),
+                ()=>Step(()=>{if(launcher is not null){File.WriteAllText(Path.Combine(root,"stop-launcher"),"");if(!launcher.WaitForExit(15000))identities[launcher].Stop();launcher.Dispose();}}),
+                ()=>Step(()=>{foreach(var identity in identities.Values){identity.Stop();identity.Dispose();}}),
+                ()=>Step(()=>{foreach(var session in states){if(File.Exists(Path.Combine(session,"session.json")))engine.Recover(session,State(session).Preview.OperationId);}}),
                 ()=>{fixture.Cleanup(finished);},
                 ()=>{launcherCopy.Remove();},
                 ()=>{foreach(var identity in identities.Values)identity.Dispose();});

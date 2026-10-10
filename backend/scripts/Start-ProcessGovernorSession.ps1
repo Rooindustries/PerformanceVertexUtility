@@ -216,6 +216,7 @@ function Invoke-GovernorActiveRestore {
     $currentState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null
     $restoreChanges = @(Get-GovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
+    $restoreFailed = $false
     foreach ($change in $restoreChanges) {
         if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONFLICT' ([string]$change.blockedReason) 'warning' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $false 'Inspect the external process-control change before restoring it.' $null))|Out-Null
@@ -225,6 +226,7 @@ function Invoke-GovernorActiveRestore {
             Invoke-RooIndustriesProcessControlChange $candidate.process $change
             $appliedRestoreControls.Add($change) | Out-Null
         } catch {
+            $restoreFailed = $true
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONTROL_FAILED' $_.Exception.Message 'error' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $true 'Stop the session and retry restore if the process is still running.' $null)) | Out-Null
         }
     }
@@ -235,6 +237,7 @@ function Invoke-GovernorActiveRestore {
         $RestoredItems.Add($restoreItem) | Out-Null
         $PollRestoredItems.Add($restoreItem) | Out-Null
     }
+    if ($restoreFailed) { return $false }
     $ActiveRestraints.Remove($Key)
     $LastRestoreAt[$Key] = $Now
     return $true
@@ -538,6 +541,8 @@ try {
                             $appliedControls.Add($change) | Out-Null
                         } catch {
                             $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                        } finally {
+                            Write-RooIndustriesProcessGovernorJsonFile $backupManifest $backupPath
                         }
                     }
                     if ($appliedControls.Count -gt 0) {

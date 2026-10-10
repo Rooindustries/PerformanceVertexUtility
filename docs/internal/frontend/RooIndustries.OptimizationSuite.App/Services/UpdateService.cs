@@ -317,6 +317,8 @@ public sealed class UpdateService
         {
             Set(State with { Busy = true, Installing = true });
             if (await ActiveSettingsAsync()) { Status(Blocked); return; }
+            var installDrive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
+            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } spaceReason) { Status(spaceReason); return; }
             var dialog = new ContentDialog { XamlRoot = xamlRoot, Title = "Install version " + release.Version + " now?",
                 Content = "The app closes, installs the update and opens again. It takes about a minute. Your settings, saved rules and undo information are kept.",
                 PrimaryButtonText = "Install", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Close };
@@ -328,6 +330,7 @@ public sealed class UpdateService
             if (FileVersionInfo.GetVersionInfo(installer).ProductVersion?.TrimEnd(' ') != release.Version)
                 throw new InvalidDataException("The installer's product version does not match the signed release.");
             if (await ActiveSettingsAsync()) { Status(Blocked); return; }
+            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } finalSpaceReason) { Status(finalSpaceReason); return; }
             var root = Storage();
             var log = InstallLog(release.Version);
             OperationFiles.Write(Path.Combine(root, "pending-install.json"), new PendingUpdate(CurrentVersion, release.Version, DateTime.UtcNow, log));

@@ -64,6 +64,8 @@ public static class UpdateFeed
     public const int MaximumBodyBytes = 64 * 1024;
     public const long MinimumInstallerBytes = 1 << 20;
     public const long MaximumInstallerBytes = 1L << 30;
+    public static string? InstallDriveSpaceReason(string drive, long availableBytes) => availableBytes < (1L << 30)
+        ? "Free at least 1 GB on drive " + drive.TrimEnd('\\', '/') + " and try again." : null;
     private static readonly Lazy<IReadOnlyDictionary<string, string>> Keys = new(() =>
     {
         using var stream = typeof(UpdateFeed).Assembly.GetManifestResourceStream("Optimizer.Core.UpdateKeys.json")

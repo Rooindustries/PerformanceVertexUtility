@@ -18,6 +18,9 @@ Failure cases recorded before implementation:
 - Upgrades must preserve settings, rules, undo data and governor enabled/running state.
 - Update storage must deny non-administrator writes, links and untrusted paths; runtime settings cannot choose a feed or executable.
 - Cleanup must affect only this runner's frame, tasks, PIDs and tailnet port 8460.
+- A failed copy after InstallDelete can remove the old executable; silent setup must then open the same installer interactively so it can complete recovery. The copy-failure fixture creates a directory at the executable destination only in silent mode, after deletion and three copied files while the app executable is still missing. The ensuing file write fails. Its interactive recovery uses the same payload without that failure. A script exception alone was insufficient: Inno logged it and continued copying under the silent switches.
+- Install-drive free space must reject 1 GiB minus one byte and accept exactly 1 GiB. The probe records the real install drive and available bytes, then varies only the free-byte input to the same comparison used by InstallAsync. Filling a shared PC's system drive is avoided.
+- Publication Boolean switches must agree with the actual Vercel 59.3.0 parser: immutable installer defaults false/false; the manifest alone supplies bare allow-overwrite. The parser check evaluates the bundled parser locally and never uploads.
 
 The pure contract probe consumes real signed manifests and streamed installer files; the desktop cases exercise the installed release app and installer. Neither uses a production endpoint.
 
