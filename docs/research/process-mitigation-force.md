@@ -1,6 +1,6 @@
 # Process mitigation state and override restoration
 
-Checked on 2026-09-20 against Microsoft documentation and the signed ProcessMitigations module installed on `SERVI-WINDOWS-D`. This investigation used read-only SSH and local static inspection; it did not change mitigation, registry, service, or running-process configuration.
+Checked on 2026-09-20 against Microsoft documentation and the signed ProcessMitigations module installed on `the i5-14600K test PC`. This investigation used read-only SSH and local static inspection; it did not change mitigation, registry, service, or running-process configuration.
 
 `BottomUp` and `OverrideBottomUp` are independent values. For scalar commands, select `-Enable` or `-Disable` from the saved mitigation state and lowercase `-Force 'on'` or `-Force 'off'` from the saved override Boolean. `-Force 'notset'` preserves the existing override; it does not clear the flag or restore the mitigation to `NOTSET`. The installed implementation applies Force to selected entries in either list. Both the scalar and XML setters save unrelated groups; native per-group setters also impose state coupling. The final raw-slot contract below supports an existing exact registry transaction while preserving unselected bits. This layout is pinned to the inspected binaries, not a publicly documented Microsoft mitigation ABI. [Installed Microsoft implementation](#installed-implementation)
 

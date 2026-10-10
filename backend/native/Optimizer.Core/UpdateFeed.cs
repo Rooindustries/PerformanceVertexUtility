@@ -57,7 +57,8 @@ public sealed class SemanticVersion : IComparable<SemanticVersion>
 public enum UpdateFeedKind { Refused, Current, Available }
 public sealed record UpdateRelease(string Version, DateTimeOffset PublishedAtUtc, Uri InstallerUrl, long Size, string Sha256, string Notes);
 public sealed record UpdateFeedResult(UpdateFeedKind Kind, string Reason, UpdateRelease? Release = null);
-public sealed record UpdateFileResult(bool Verified, string Reason, long Bytes, string? Sha256 = null);
+public enum UpdateFileFailure { None, Mismatch, Canceled, Error }
+public sealed record UpdateFileResult(bool Verified, string Reason, long Bytes, string? Sha256 = null, UpdateFileFailure Failure = UpdateFileFailure.None);
 
 public static class UpdateFeed
 {
@@ -178,13 +179,13 @@ public static class UpdateFeed
                 if (output is not null) await output.WriteAsync(buffer.AsMemory(0, read), cancellation).ConfigureAwait(false);
             }
             var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-            if (total != release.Size) return new(false, "The installer size does not match the signed release.", total, actual);
+            if (total != release.Size) return new(false, "The installer size does not match the signed release.", total, actual, UpdateFileFailure.Mismatch);
             if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(actual), Convert.FromHexString(release.Sha256)))
-                return new(false, "The installer SHA-256 does not match the signed release.", total, actual);
+                return new(false, "The installer SHA-256 does not match the signed release.", total, actual, UpdateFileFailure.Mismatch);
             return new(true, "The installer matches the signed release.", total, actual);
         }
-        catch (OperationCanceledException) { return new(false, "Installer verification was canceled.", total); }
+        catch (OperationCanceledException) { return new(false, "Installer verification was canceled.", total, Failure: UpdateFileFailure.Canceled); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or ArgumentException or NotSupportedException)
-        { return new(false, "The installer could not be verified: " + error.Message, total); }
+        { return new(false, "The installer could not be verified: " + error.Message, total, Failure: UpdateFileFailure.Error); }
     }
 }

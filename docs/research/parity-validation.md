@@ -135,7 +135,7 @@ The following are proposed engineering gates, not vendor guarantees:
 
 ## Measured CPU contention result
 
-A run completed at **2026-09-15 19:14 UTC** on the i5-14600K/9070 XT test PC, Windows 11 build 26200. Ten paired blocks used randomized order with seed `16092026`; each condition ran for nine seconds. A separate earlier two-block pilot was excluded from these estimates.
+A run completed at **2026-09-15 19:14 UTC** on the i5-14600K/the i5-14600K test PC XT test PC, Windows 11 build 26200. Ten paired blocks used randomized order with seed `16092026`; each condition ran for nine seconds. A separate earlier two-block pilot was excluded from these estimates.
 
 The workload pinned two busy background threads and a periodic foreground worker to logical CPU 0. Every 20 ms, the foreground worker performed 500,000 dependent integer-mix iterations. Both fixture processes disabled dynamic priority boosts. The normal condition had no Roo Industries worker; the treatment used the real saved-rule host to lower only the background process from Normal to BelowNormal. This did not reserve the CPU against other software. The existing Ultimate Performance plan and Lasso configuration were left unchanged; Lasso process identities and binary hashes matched before and after the experiment.
 
@@ -177,7 +177,7 @@ Raw JSON SHA-256: `25b2c813a91aed0cd49964e45ac294ab0d7ccfc214a26a1f0827043b6494f
 
 ## Measured GPU contention result
 
-A run completed at **2026-09-15 20:49 UTC** on the RX 9070 XT, explicitly selected by vendor/device ID and bound to the same adapter LUID in both workload processes. Ten paired nine-second blocks used randomized order with seed `16092026`. The foreground submitted an offscreen Direct3D11 compute dispatch every 20 ms: 16,384 elements and 256 dependent integer-mix iterations. The background used 262,144 elements, 4,096 iterations and four dispatches per batch. Both CPU priorities stayed Normal, with dynamic boosts disabled. The treatment lowered only the background GPU priority from Normal (2) to BelowNormal (1) through the real saved-rule host.
+A run completed at **2026-09-15 20:49 UTC** on the RX the i5-14600K test PC XT, explicitly selected by vendor/device ID and bound to the same adapter LUID in both workload processes. Ten paired nine-second blocks used randomized order with seed `16092026`. The foreground submitted an offscreen Direct3D11 compute dispatch every 20 ms: 16,384 elements and 256 dependent integer-mix iterations. The background used 262,144 elements, 4,096 iterations and four dispatches per batch. Both CPU priorities stayed Normal, with dynamic boosts disabled. The treatment lowered only the background GPU priority from Normal (2) to BelowNormal (1) through the real saved-rule host.
 
 | Measurement | Result |
 |---|---|
@@ -197,7 +197,7 @@ Raw JSON SHA-256: `defb3304c617a549ec6553f450244fa70f087253f0f0f174b14524b0d81ff
 
 ## Stock-reference CPU comparison
 
-The final run completed on **2026-09-16 at 06:42 UTC** on the same 9070 XT/i5-14600K PC. Ten randomized blocks contained normal priority, Roo Industries and stock Process Lasso conditions, each lasting nine seconds with 450 foreground samples. Both controllers set only the disposable background process to BelowNormal. Their configured polling interval was 500 ms; Lasso used the current `Performance.UpdateSpeedCore` setting. The original governor service was temporarily stopped under an approved recovery guard, then restored with its startup mode, executable path and configuration hash unchanged. The existing Lasso GUI remained open in all conditions.
+The final run completed on **2026-09-16 at 06:42 UTC** on the same the i5-14600K test PC XT/i5-14600K PC. Ten randomized blocks contained normal priority, Roo Industries and stock Process Lasso conditions, each lasting nine seconds with 450 foreground samples. Both controllers set only the disposable background process to BelowNormal. Their configured polling interval was 500 ms; Lasso used the current `Performance.UpdateSpeedCore` setting. The original governor service was temporarily stopped under an approved recovery guard, then restored with its startup mode, executable path and configuration hash unchanged. The existing Lasso GUI remained open in all conditions.
 
 The reference was the publisher's signed **18.3.0.34** governor, SHA-256 `EA338D4C47F61BB3AA107A26DE3614D112F19DA9438291B3A8212F21BB01D495`. Its installer was extracted without installation. Private Windows-written INI files and unquoted short paths established working rule application; the benchmark does not alter the installed Lasso configuration. The publisher documents private configuration paths. The current engine key was also checked against the verified binary and the installed configuration; the older online INI example's `UpdateSpeed` key must not be treated as the current core setting. [Command-line reference](https://bitsum.com/apps/process-lasso/docs/reference/command-lines/), [INI reference](https://bitsum.com/apps/process-lasso/docs/reference/ini-config/).
 

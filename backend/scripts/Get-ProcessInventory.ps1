@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
 
 function Convert-ToUInt64 {
     param([object]$Value)
@@ -21,17 +22,7 @@ function Convert-ToHResultHex {
 
 function Get-ProcessExecutablePath {
     param([System.Diagnostics.Process]$Process)
-    try {
-        if (-not [string]::IsNullOrWhiteSpace([string]$Process.Path)) {
-            return [string]$Process.Path
-        }
-    } catch { }
-
-    try {
-        if ($null -ne $Process.MainModule -and -not [string]::IsNullOrWhiteSpace([string]$Process.MainModule.FileName)) {
-            return [string]$Process.MainModule.FileName
-        }
-    } catch { }
+    try { return (Get-RooIndustriesProcessQuerySnapshot $Process).executablePath } catch { }
 
     return $null
 }
@@ -41,12 +32,6 @@ function Get-ProcessInventoryName {
         [System.Diagnostics.Process]$Process,
         [string]$ExecutablePath
     )
-
-    try {
-        if ($null -ne $Process.MainModule -and -not [string]::IsNullOrWhiteSpace([string]$Process.MainModule.ModuleName)) {
-            return [string]$Process.MainModule.ModuleName
-        }
-    } catch { }
 
     if (-not [string]::IsNullOrWhiteSpace($ExecutablePath)) {
         $fileName = [System.IO.Path]::GetFileName($ExecutablePath)
@@ -171,7 +156,7 @@ foreach ($proc in $rawProcesses) {
     $priorityClass = $null
     try {
         $gp = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue
-        if ($null -ne $gp) { $priorityClass = [string]$gp.PriorityClass }
+        if ($null -ne $gp) { $priorityClass = (Get-RooIndustriesProcessQuerySnapshot $gp).priorityClass }
     } catch {
         $priorityClass = $null
     }

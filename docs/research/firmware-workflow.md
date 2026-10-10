@@ -29,7 +29,7 @@ The same command checks automatic acquisition against disposable nested archives
 
 `tools/scripts/Test-ToolLauncher.ps1` separately verifies catalog resolution, portable dependency extraction, archive path containment, atomic cache publication and launching a disposable executable.
 
-The approved read on the 9070XT's Gigabyte B760M DS3H WIFI6E DDR4 GEN5, AMI F4, returned a real BIOS export with SCEWIN 5.05.01.0002. Its unchanged bytes parse into 4,693 supported settings. The helper removed its driver services after export, and Secure Boot and Memory Integrity remained enabled. Actual NVRAM imports and post-restart hardware behavior still require a separately approved settings review; file fixtures and a successful read do not establish those outcomes.
+The approved read on the the i5-14600K test PCXT's Gigabyte B760M DS3H WIFI6E DDR4 GEN5, AMI F4, returned a real BIOS export with SCEWIN 5.05.01.0002. Its unchanged bytes parse into 4,693 supported settings. The helper removed its driver services after export, and Secure Boot and Memory Integrity remained enabled. Actual NVRAM imports and post-restart hardware behavior still require a separately approved settings review; file fixtures and a successful read do not establish those outcomes.
 
 ## References
 

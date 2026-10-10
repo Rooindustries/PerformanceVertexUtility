@@ -29,6 +29,7 @@ public sealed class UpdateService
     private const string Mismatch = "The download didn't match the signed release, so it was deleted. The app will try again later.";
     private readonly Uri? _feed;
     private readonly HttpClient _http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly SettingsStore _settings = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
     private DispatcherQueue? _dispatcher;
@@ -57,10 +58,14 @@ public sealed class UpdateService
 
     public bool AutomaticDownloads
     {
-        get => new SettingsStore().Get("downloadUpdatesAutomatically") != "0";
+        get => _settings.Get("downloadUpdatesAutomatically") != "0";
         set
         {
-            new SettingsStore().Set("downloadUpdatesAutomatically", value ? "1" : "0");
+            if (_settings.Set("downloadUpdatesAutomatically", value ? "1" : "0") is { } error)
+            {
+                Status("Couldn't save this setting: " + error);
+                return;
+            }
             Notify();
             if (value && State.CanDownload) _ = DownloadAsync();
         }
@@ -149,6 +154,18 @@ public sealed class UpdateService
                 Set(State with { Status = message, Banner = message, BannerKind = success ? "updated" : "failed" });
                 AppLog.Write("update", message);
                 File.Delete(pendingPath);
+                if (success)
+                {
+                    try
+                    {
+                        var installedFolder = Path.Combine(root, CurrentVersion);
+                        if (Directory.Exists(installedFolder)) Directory.Delete(installedFolder, true);
+                        foreach (var log in Directory.EnumerateFiles(root, "install-*.log").Select(path => new FileInfo(path))
+                            .OrderByDescending(file => file.LastWriteTimeUtc).ThenByDescending(file => file.Name, StringComparer.Ordinal).Skip(3))
+                            log.Delete();
+                    }
+                    catch (Exception error) { AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message); }
+                }
             }
             if (_feed is null) return;
             var candidates = Directory.EnumerateDirectories(root).Select(folder => new { Folder = folder, Name = Path.GetFileName(folder) })
@@ -165,7 +182,13 @@ public sealed class UpdateService
                 UpdateFileResult verified;
                 using (var input = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous))
                     verified = await Task.Run(() => UpdateFeed.VerifyInstallerAsync(input, release, _stop.Token));
-                if (!verified.Verified) { File.Delete(installer); AppLog.Write("update", verified.Reason); continue; }
+                if (!verified.Verified)
+                {
+                    if (verified.Failure == UpdateFileFailure.Canceled) _stop.Token.ThrowIfCancellationRequested();
+                    if (verified.Failure == UpdateFileFailure.Mismatch) File.Delete(installer);
+                    AppLog.Write("update", verified.Reason);
+                    continue;
+                }
                 _release = release; _envelope = bytes;
                 var failed = pending is not null && CurrentVersion != pending.ToVersion && pending.ToVersion == release.Version;
                 Set(State with { Ready = true, Notes = release.Notes, Status = failed ? State.Status : "Version " + release.Version + " is ready to install",
@@ -194,21 +217,17 @@ public sealed class UpdateService
                 Status("Couldn't check for updates. The update server returned HTTP " + (int)response.StatusCode + " instead of 200.");
                 return;
             }
-            byte[] bytes = [];
-            if (response.StatusCode == HttpStatusCode.OK)
+            if (response.Content.Headers.ContentLength > UpdateFeed.MaximumBodyBytes) throw new InvalidDataException("The update feed is larger than 64 KiB.");
+            using var input = await response.Content.ReadAsStreamAsync(deadline.Token);
+            using var output = new MemoryStream();
+            var buffer = new byte[8192];
+            while (output.Length <= UpdateFeed.MaximumBodyBytes)
             {
-                if (response.Content.Headers.ContentLength > UpdateFeed.MaximumBodyBytes) throw new InvalidDataException("The update feed is larger than 64 KiB.");
-                using var input = await response.Content.ReadAsStreamAsync(deadline.Token);
-                using var output = new MemoryStream();
-                var buffer = new byte[8192];
-                while (output.Length <= UpdateFeed.MaximumBodyBytes)
-                {
-                    var read = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, UpdateFeed.MaximumBodyBytes + 1 - output.Length)), deadline.Token);
-                    if (read == 0) break;
-                    await output.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
-                }
-                bytes = output.ToArray();
+                var read = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, UpdateFeed.MaximumBodyBytes + 1 - output.Length)), deadline.Token);
+                if (read == 0) break;
+                await output.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
             }
+            var bytes = output.ToArray();
             var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
@@ -247,28 +266,35 @@ public sealed class UpdateService
         throw new InvalidDataException("The update server redirected too many times.");
     }
 
+    private void DownloadFailed(string reason)
+    {
+        var message = "Couldn't download the update: " + reason.TrimEnd('.') + ". The app will try again later.";
+        Set(State with { Ready = false, CanDownload = true, Status = message, Banner = "", BannerKind = "" });
+        AppLog.Write("update", message);
+    }
+
     public async Task DownloadAsync()
     {
         if (!State.CanDownload || !await _gate.WaitAsync(0)) return;
         try { Set(State with { Busy = true }); await DownloadCoreAsync(); }
-        catch (OperationCanceledException) { }
-        catch (Exception error) { Status("Couldn't download the update. " + error.Message); }
+        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) DownloadFailed("The download timed out"); }
+        catch (Exception error) { DownloadFailed(error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
     }
 
     private async Task DownloadCoreAsync()
     {
         if (_release is not { } release || _envelope is null) return;
-        var folder = Folder(release);
-        Directory.CreateDirectory(folder);
-        Storage();
-        KeepVersion(release.Version);
-        using (var document = JsonDocument.Parse(_envelope)) OperationFiles.Write(Path.Combine(folder, "manifest.json"), document.RootElement);
-        var installer = Installer(release);
-        var partial = installer + ".partial";
-        Status("Downloading version " + release.Version + "...");
+        string? partial = null;
         try
         {
+            var folder = Folder(release);
+            Directory.CreateDirectory(folder);
+            KeepVersion(release.Version);
+            using (var document = JsonDocument.Parse(_envelope)) OperationFiles.Write(Path.Combine(folder, "manifest.json"), document.RootElement);
+            var installer = Installer(release);
+            partial = installer + ".partial";
+            Status("Downloading version " + release.Version + "...");
             File.Delete(partial);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             deadline.CancelAfter(TimeSpan.FromMinutes(20));
@@ -279,21 +305,38 @@ public sealed class UpdateService
             using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous))
             {
                 result = await Task.Run(() => UpdateFeed.VerifyInstallerAsync(input, release, deadline.Token, output));
-                await output.FlushAsync(deadline.Token);
-                output.Flush(true);
+                if (result.Verified)
+                {
+                    await output.FlushAsync(deadline.Token);
+                    output.Flush(true);
+                }
             }
             if (!result.Verified)
             {
                 File.Delete(partial);
-                Set(State with { Ready = false, CanDownload = true, Status = Mismatch, Banner = "", BannerKind = "" });
-                AppLog.Write("update", Mismatch + " " + result.Reason);
+                if (result.Failure == UpdateFileFailure.Mismatch)
+                {
+                    Set(State with { Ready = false, CanDownload = true, Status = Mismatch, Banner = "", BannerKind = "" });
+                    AppLog.Write("update", Mismatch + " " + result.Reason);
+                }
+                else if (result.Failure != UpdateFileFailure.Canceled || !_stop.IsCancellationRequested)
+                    DownloadFailed(result.Failure == UpdateFileFailure.Canceled ? "The download timed out" : result.Reason);
                 return;
             }
             File.Move(partial, installer, overwrite: true);
             Set(State with { Ready = true, CanDownload = false, Status = "Version " + release.Version + " is ready to install", Banner = "Version " + release.Version + " is ready to install", BannerKind = "ready" });
             AppLog.Write("update", State.Status);
         }
-        finally { if (File.Exists(partial)) File.Delete(partial); }
+        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) DownloadFailed("The download timed out"); }
+        catch (Exception error) { DownloadFailed(error.Message); }
+        finally
+        {
+            if (partial is not null)
+            {
+                try { File.Delete(partial); }
+                catch (Exception error) { AppLog.Write("update", "Couldn't remove the partial download: " + error.Message); }
+            }
+        }
     }
 
     private static async Task<bool> ActiveSettingsAsync()
@@ -306,8 +349,16 @@ public sealed class UpdateService
         if (game.Error is not null || game.Value is null) throw new InvalidDataException("Couldn't read the game priority session. Check Games first.");
         using var data = JsonDocument.Parse(game.Value);
         if (data.RootElement.GetProperty("active").GetBoolean()) return true;
-        var timer = await Task.Run(() => TimerControl.Read(new ControlAddress("timer", "system", "half-millisecond")));
-        return timer.Value.GetBoolean();
+        try
+        {
+            var timer = await Task.Run(() => TimerControl.Read(new ControlAddress("timer", "system", "half-millisecond")));
+            return timer.Value.GetBoolean();
+        }
+        catch (Exception error)
+        {
+            AppLog.Write("update", "Couldn't read the timer setting; treating it as stopped: " + error.Message);
+            return false;
+        }
     }
 
     public async Task InstallAsync(XamlRoot xamlRoot)

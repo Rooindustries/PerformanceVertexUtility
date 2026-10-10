@@ -37,6 +37,30 @@
           "CAPTURE_VOICE_PROTECTED"
         ],
         "defaultAction": "block"
+      },
+      {
+        "itemId": "protect-game-launchers",
+        "type": "process",
+        "names": [
+          "Battle.net.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "RiotClientServices.exe",
+          "EADesktop.exe",
+          "UbisoftConnect.exe",
+          "GalaxyClient.exe"
+        ],
+        "namePatterns": [
+          "*launcher*.exe"
+        ],
+        "processCategories": [
+          "launcher"
+        ],
+        "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+        "reasonCodes": [
+          "GAME_LAUNCHER_PROTECTED"
+        ],
+        "defaultAction": "block"
       }
     ],
     "candidateSelectors": [
@@ -70,20 +94,10 @@
         "risk": "low"
       },
       {
-        "ruleId": "govern-launchers-updaters",
+        "ruleId": "govern-updaters",
         "enabled": true,
         "match": {
-          "processNames": [
-            "Battle.net.exe",
-            "steam.exe",
-            "EpicGamesLauncher.exe",
-            "RiotClientServices.exe",
-            "EADesktop.exe",
-            "UbisoftConnect.exe",
-            "GalaxyClient.exe"
-          ],
           "namePatterns": [
-            "*launcher*.exe",
             "*updater*.exe",
             "*update*.exe"
           ],
@@ -95,9 +109,9 @@
             "TrustedInstaller.exe"
           ]
         },
-        "reason": "Launchers and updaters can be temporarily restrained when they create sustained CPU pressure.",
+        "reason": "Background updaters can be restrained when they create sustained CPU pressure.",
         "reasonCodes": [
-          "LAUNCHER_UPDATER_GOVERNOR_CANDIDATE"
+          "UPDATER_GOVERNOR_CANDIDATE"
         ],
         "risk": "low"
       },

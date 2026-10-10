@@ -32,7 +32,7 @@ function Get-RestoreCandidate {
     if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
     }
-    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $controlState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $Snapshot)
     $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null) $controlState.startTimeUtc
 
     return [pscustomobject]@{
@@ -270,7 +270,7 @@ try {
                     }
                 }
                 if ($appliedControls.Count -gt 0) {
-                    $afterControls = Get-RooIndustriesProcessControlState $processId $null
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
                     $changed.Add([pscustomobject]@{
                         processId = $processId
                         processName = Get-RooIndustriesPropertyValue $entry 'processName' ''

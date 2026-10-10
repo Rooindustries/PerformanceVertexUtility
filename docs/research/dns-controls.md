@@ -1,6 +1,6 @@
 # Windows DNS controls and recovery contract
 
-Research date: 2026-09-19. Scope: native DNS integration for the WinUtil provider choices. Private machine-readable contract: `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/winutil/dns-contract.json`. Windows probes targeted verified host `SERVI-WINDOWS-D`, build 26200, and performed reads only.
+Research date: 2026-09-19. Scope: native DNS integration for the WinUtil provider choices. Private machine-readable contract: `<private work folder>/four-tool-tweaks-20260919/winutil/dns-contract.json`. Windows probes targeted verified host `the i5-14600K test PC`, build 26200, and performed reads only.
 
 ## Recommended interface
 
@@ -60,6 +60,6 @@ Mullvad announced that its public encrypted DNS service ends **November 2, 2026*
 
 ## Read-only evidence and remaining verification
 
-On the 9070XT, Ethernet 3 has a DHCP-supplied IPv4 resolver while the native API returns an empty static `NameServer`. Version1 and version 3 getters succeeded for both active adapters; removed tunnel interfaces returned status 2. The DoH cmdlets were present and returned 12 existing global entries. No adapter had a nonempty static/profile override available to inspect. The exact observations and source hashes are saved privately beside `dns-contract.json`.
+On the the i5-14600K test PCXT, Ethernet 3 has a DHCP-supplied IPv4 resolver while the native API returns an empty static `NameServer`. Version1 and version 3 getters succeeded for both active adapters; removed tunnel interfaces returned status 2. The DoH cmdlets were present and returned 12 existing global entries. No adapter had a nonempty static/profile override available to inspect. The exact observations and source hashes are saved privately beside `dns-contract.json`.
 
 No network setting was changed. Static apply, independent IPv4/IPv6 preservation, exact absent-state restoration, pre-existing DoH override restoration and partial-failure rollback remain unexecuted. The contract supports implementing those paths; a controlled fixture or explicitly approved network test is still needed to verify writes.

@@ -102,7 +102,7 @@
                                                         <TextBlock Text="Review" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Command="{x:Bind ViewModel.ApplyProfileCommand}" Padding="12,8" AutomationProperties.Name="Apply" IsEnabled="{x:Bind ViewModel.CanRunProcessAction, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}">
+                                                <Button Command="{x:Bind ViewModel.ApplyProfileCommand}" Padding="12,8" AutomationProperties.Name="Apply" IsEnabled="{x:Bind ViewModel.CanApplyProcessProfile, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}">
                                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                                         <Image Width="14" Height="14" Source="ms-appx:///Assets/Icons/play.svg" AutomationProperties.AccessibilityView="Raw" />
                                                         <TextBlock Text="Apply" />

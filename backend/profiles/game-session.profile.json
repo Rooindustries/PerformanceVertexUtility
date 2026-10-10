@@ -80,6 +80,30 @@
         "stream-companion",
         "do-not-demote"
       ]
+    },
+    {
+      "itemId": "protect-game-launchers",
+      "type": "process",
+      "names": [
+        "Battle.net.exe",
+        "steam.exe",
+        "EpicGamesLauncher.exe",
+        "RiotClientServices.exe",
+        "EADesktop.exe",
+        "UbisoftConnect.exe",
+        "GalaxyClient.exe"
+      ],
+      "namePatterns": [
+        "*launcher*.exe"
+      ],
+      "processCategories": [
+        "launcher"
+      ],
+      "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+      "reasonCodes": [
+        "GAME_LAUNCHER_PROTECTED"
+      ],
+      "defaultAction": "block"
     }
   ],
   "protectedPreviewProcessNames": [
@@ -173,20 +197,10 @@
       }
     },
     {
-      "ruleId": "demote-launchers-updaters",
+      "ruleId": "demote-updaters",
       "enabled": true,
       "match": {
-        "processNames": [
-          "Battle.net.exe",
-          "steam.exe",
-          "EpicGamesLauncher.exe",
-          "RiotClientServices.exe",
-          "EADesktop.exe",
-          "UbisoftConnect.exe",
-          "GalaxyClient.exe"
-        ],
         "namePatterns": [
-          "*launcher*.exe",
           "*updater*.exe",
           "*update*.exe"
         ],
@@ -201,7 +215,7 @@
       "action": {
         "actionType": "setPriority",
         "priorityClass": "BelowNormal",
-        "reason": "Launchers and updaters should not compete with the game, OBS, or Discord once the match is running."
+        "reason": "Background updaters should not compete with the game, capture or voice apps."
       },
       "risk": "low",
       "rollback": {

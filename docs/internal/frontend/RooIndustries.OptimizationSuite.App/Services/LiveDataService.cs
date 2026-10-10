@@ -172,6 +172,8 @@ public sealed class LiveDataService
     {
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
+        if (File.Exists(ProcessRecoveryPath) || ProcessProfileRecovery is not null)
+            return new(null, "Restore the last change first");
         IDisposable gate;
         try { gate = await EnterGovernorGateAsync().ConfigureAwait(false); }
         catch (Exception error) { return new(null, error.Message); }

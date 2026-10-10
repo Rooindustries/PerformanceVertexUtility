@@ -47,7 +47,7 @@ For source updates, create a new review against the existing owned block and ret
 Run the private prototype with:
 
 ```text
-python3 /home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/winutil/hosts-prototype/test_hosts_prototype.py
+python3 <private work folder>/four-tool-tweaks-20260919/winutil/hosts-prototype/test_hosts_prototype.py
 ```
 
 **32 checks passed**, including the full 898-host payload, exact round trips, mixed encodings/newlines, missing final newline, additions before/after the block, edited unrelated comments, duplicate/conflicting records, malformed source, stale/tampered review, repeated apply/undo, changed markers, corrupt journal, injected failures before/after replacement and recovery after reopening the journal. File mode is preserved in the Linux fixtures. Symlinks, hard-link aliases and paths outside the private fixture root are rejected.
@@ -68,7 +68,7 @@ A DNS-cache refresh is a separate activation action after a verified hosts chang
 
 ## Windows native writer investigation
 
-A second private prototype ran on the verified 9070XT at **2026-09-19 18:06:31 UTC**, Windows `10.0.26200.0`, NTFS. It completed **23 assertions and two metadata observations, with zero failures**. Every target was a newly created temporary file. No system hosts file, registry, DNS cache or network setting was touched. Fixtures/staging were removed and a follow-up check found no owned process.
+A second private prototype ran on the verified the i5-14600K test PCXT at **2026-09-19 18:06:31 UTC**, Windows `10.0.26200.0`, NTFS. It completed **23 assertions and two metadata observations, with zero failures**. Every target was a newly created temporary file. No system hosts file, registry, DNS cache or network setting was touched. Fixtures/staging were removed and a follow-up check found no owned process.
 
 `ReplaceFileW` solves the particular reader-sharing problem, but it does **not** provide conditional replacement of the file identity inspected during preview. For the hosts ownership contract, prefer a held-handle in-place writer with a durable before/after journal. Keep sharing failures explicit instead of quietly switching to pathname replacement.
 
@@ -163,7 +163,7 @@ In-place writes are not atomic snapshots for concurrent readers. Suitably sharin
 
 Private evidence:
 
-`/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/hosts-writer-prototype/`
+`<private work folder>/four-tool-tweaks-20260919/hosts-writer-prototype/`
 
 - `PrototypeWriter.cs`, SHA-256 `5053643c1bc98de35dd5cb56eb2b3f057e80bf11b774a17155af2c2f260fe830`.
 - `run.ps1` and `run_remote.py`: fixture-only orchestration.
