@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
 [IO.Directory]::CreateDirectory($OutRoot)|Out-Null
-& $dotnet publish (Join-Path $Source 'tools\validation\ClientBoundary\ClientBoundary.csproj') -c Release -r win-x64 --self-contained false -o (Join-Path $OutRoot 'client-probe') *> (Join-Path $OutRoot 'client-probe-build.log')
+& $dotnet publish (Join-Path $Source 'tools\validation\ClientBoundary\ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -r win-x64 --self-contained false -o (Join-Path $OutRoot 'client-probe') *> (Join-Path $OutRoot 'client-probe-build.log')
 if($LASTEXITCODE){throw 'Review2 client service probe build failed'}
 $copy=Join-Path $OutRoot 'timer-app'
 Copy-Item -LiteralPath $Stage -Destination $copy -Recurse

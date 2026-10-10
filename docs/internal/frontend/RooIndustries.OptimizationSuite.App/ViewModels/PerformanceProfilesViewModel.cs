@@ -80,7 +80,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     public ObservableCollection<GameAppRow> Rows { get; } = new();
     public bool CanSelectPreset => !ActionBusy;
     public bool CanRunProcessAction => !ActionBusy && (ProcessPresetIndex == 0 || PlacementAvailable);
-    public bool CanApplyProcessProfile => CanRunProcessAction && !RestoreAvailable;
+    public bool CanApplyProcessProfile => CanRunProcessAction && !RestoreAvailable && !App.Live.ProcessProfileRestorePending;
     public bool CanRestoreProfile => !ActionBusy && RestoreAvailable;
     public bool CanCheckMatchTune => !ActionBusy;
     public bool CanStartMatchTune => !ActionBusy && HasGameRunning;
@@ -135,7 +135,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         _lastBackupGeneration = savedRecovery?.Generation;
         var wasAvailable = RestoreAvailable;
         RestoreAvailable = _lastBackupPath is not null;
-        if (!Quiet || wasAvailable != RestoreAvailable) RestoreHint = RestoreAvailable ? "Restore the last change first" : "Apply creates a restore point";
+        OnPropertyChanged(nameof(CanApplyProcessProfile));
+        if (!Quiet || wasAvailable != RestoreAvailable) RestoreHint = App.Live.ProcessProfileRestorePending ? "Restore the last change first" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 
         ApplyFilter();
@@ -298,9 +299,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 ActionDetail = error;
                 return;
             }
-            var status = ExtractString(result, "status") ?? "unknown";
             ActionDetail = SummarizeProcessAction(response.Value, "The restore result needs review.");
-            if (status == "success" && recovery.RestoreCompleted(response.Value) && response.RecoveryPath is null)
+            if (recovery.RestoreCompleted(response.Value) && response.RecoveryPath is null)
             {
                 ActionTitle = "Restore complete";
                 _lastBackupPath = null;

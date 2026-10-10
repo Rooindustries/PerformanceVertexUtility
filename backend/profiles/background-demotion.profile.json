@@ -17,7 +17,33 @@
     ]
   },
   "targetGames": [],
-  "protectedCompanions": [],
+  "protectedCompanions": [
+    {
+      "itemId": "protect-game-launchers",
+      "type": "process",
+      "names": [
+        "Battle.net.exe",
+        "steam.exe",
+        "EpicGamesLauncher.exe",
+        "RiotClientServices.exe",
+        "EADesktop.exe",
+        "UbisoftConnect.exe",
+        "GalaxyClient.exe",
+        "gamelaunchhelper.exe"
+      ],
+      "namePatterns": [
+        "*launcher*.exe"
+      ],
+      "processCategories": [
+        "launcher"
+      ],
+      "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+      "reasonCodes": [
+        "GAME_LAUNCHER_PROTECTED"
+      ],
+      "defaultAction": "block"
+    }
+  ],
   "protectedPreviewProcessNames": [
     "Tailscale.exe",
     "Wispr Flow.exe",
@@ -77,20 +103,11 @@
       }
     },
     {
-      "ruleId": "demote-launchers-updaters",
+      "ruleId": "demote-updaters",
       "enabled": true,
       "match": {
-        "processNames": [
-          "Battle.net.exe",
-          "steam.exe",
-          "EpicGamesLauncher.exe",
-          "RiotClientServices.exe",
-          "EADesktop.exe",
-          "UbisoftConnect.exe",
-          "GalaxyClient.exe"
-        ],
+        "processNames": [],
         "namePatterns": [
-          "*launcher*.exe",
           "*updater*.exe",
           "*update*.exe"
         ],
@@ -105,7 +122,7 @@
       "action": {
         "actionType": "setPriority",
         "priorityClass": "BelowNormal",
-        "reason": "Launchers and updaters should use lower priority while a game workload is active."
+        "reason": "Updaters should use lower priority while a game workload is active. Game launchers are left unchanged."
       },
       "risk": "low",
       "rollback": {

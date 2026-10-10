@@ -18,8 +18,9 @@ try {
  & "$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:$launcherExe (Join-Path $Source 'tools\validation\Background\LauncherFixture.cs')
  if($LASTEXITCODE){throw 'Launcher fixture compile failed'}
  Copy-Item $launcherExe (Join-Path $directory 'RooFixtureLauncher.exe')
+ Copy-Item $launcherExe (Join-Path $directory 'gamelaunchhelper.exe')
  $childPath=Join-Path $directory 'RooFixtureChild.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $childPath
- $launchers=@(foreach($name in 'steam','RooFixtureLauncher'){$arguments='"'+(Join-Path $directory ($name+'.signal'))+'" "'+$childPath+'"'+$(if($Mode -eq 'gpu-controls'){' --gpu'}else{''});$p=Start-Process (Join-Path $directory ($name+'.exe')) -ArgumentList $arguments -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitGpu $p;$p})
+ $launchers=@(foreach($name in 'steam','RooFixtureLauncher','gamelaunchhelper'){$arguments='"'+(Join-Path $directory ($name+'.signal'))+'" "'+$childPath+'"'+$(if($Mode -eq 'gpu-controls'){' --gpu'}else{''});$p=Start-Process (Join-Path $directory ($name+'.exe')) -ArgumentList $arguments -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitGpu $p;$p})
  $updater=Fixture 'RooFixtureUpdater';$web=Fixture 'RooFixtureWebHelper';$game=Fixture 'RooFixtureGame';$protected=Fixture 'MsMpEng';$fixtures=@($launchers)+@($updater,$web,$game,$protected)
  foreach($p in $fixtures){$p.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,5)}
  $originals=@($fixtures|ForEach-Object {Read $_});Save 'originals' $originals
@@ -57,6 +58,16 @@ try {
   $restore=Backend $scriptName @{BackupPath=$apply.backup.location;ConfirmApply=$true} ($flow+'-restore');foreach($p in $fixtures){Equal (Read $p) ($before|Where-Object pid -eq $p.Id)}
   Save ($flow+'-restored') @($fixtures|ForEach-Object {Read $_})
  }
+ . (Join-Path $Source 'backend\scripts\ProcessPolicy.Common.ps1')
+ $aligned=Get-Content -Raw (Join-Path $Source 'backend\profiles\persistent-policy.profile.json')|ConvertFrom-Json
+ $catalog=Get-Content -Raw (Join-Path $Source 'backend\profiles\protected-processes.json')|ConvertFrom-Json
+ foreach($launcher in $launchers){
+  $row=[pscustomobject]@{pid=$launcher.Id;name=($launcher.ProcessName+'.exe');category='backgroundApp';priorityClass='Normal';executablePath=$launcher.Path}
+  $entry=New-RooIndustriesProcessPolicyPreviewEntry $row $aligned $catalog;Save ('persistent-'+$launcher.ProcessName) $entry
+  if(-not$entry.blocked -or $entry.reason -notmatch 'Game launchers are left unchanged'){throw 'Persistent profile launcher protection is missing'}
+ }
+ $alignedPreview=Backend 'Preview-ProcessProfile' @{ProfilePath=(Join-Path $Source 'backend\profiles\background-demotion.profile.json')} 'background-demotion-preview'
+ foreach($launcher in $launchers){$entry=@($alignedPreview.preview|Where-Object processId -eq $launcher.Id)|Select-Object -First 1;if(-not$entry -or $entry.reason -notmatch 'Game launchers are left unchanged' -or @($entry.controlChanges|Where-Object {-not$_.blocked}).Count){throw 'Background demotion profile launcher protection is missing'}}
  if($Mode -ne 'placement'){
   $query=Fixture 'RooFixtureQueryOnly';[RooBackgroundOracle]::SetMemory($query,3);$null=$query.Handle;$dacl=[RooBackgroundOracle]::QueryOnly($query);$fresh=Get-Process -Id $query.Id;$debugPrior=[RooBackgroundOracle]::DebugPrivilege($false)
   $rights=@(foreach($access in @(0x1000,0x101000,0x200,0x1fffff)){@{access=$access;error=[RooBackgroundOracle]::OpenError($query,$access)}});Save 'query-only-rights' $rights

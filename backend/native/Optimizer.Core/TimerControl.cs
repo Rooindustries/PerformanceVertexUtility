@@ -116,9 +116,6 @@ public static class TimerControl
     }
     public static TweakControlRead Read(ControlAddress address)
     {
-#if GOVERNOR_TEST_HOOKS
-        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_TIMER_READ_FAILURE") == "1") throw new InvalidDataException("Fixture timer interval cannot be read.");
-#endif
         var roots = RootsFor(address); var state = State(roots);
         Check(NtQueryTimerResolution(out var coarsest, out var finest, out _), "NtQueryTimerResolution");
         if (finest > 5000 || coarsest < 5000) throw new InvalidDataException("This PC does not expose a 0.5 ms native timer interval.");

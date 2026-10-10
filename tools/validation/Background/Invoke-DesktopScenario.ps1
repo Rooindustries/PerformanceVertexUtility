@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[ValidateSet('priority','games','services','guides','background-ui')][string]$Scenario,[string]$ServiceRunningId='',[string]$ServiceProbe='')
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[ValidateSet('priority','games','services','guides','background-ui','recovery-ui','invalid-recovery-ui')][string]$Scenario,[string]$ServiceRunningId='',[string]$ServiceProbe='')
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
@@ -35,7 +35,7 @@ function Nav([string]$name){$e=WaitFor {@(All|Where-Object {$_.Current.Name -eq 
 function FreshCombo([string]$id,[string]$name){@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $(if($id){$_.Current.AutomationId -eq $id}else{$_.Current.Name -eq $name})})|Select-Object -First 1}
 function Click($element){$r=$element.Current.BoundingRectangle;if($r.Width -le 0 -or $r.Height -le 0){throw 'UI element has no clickable bounds'};[RooBackgroundUi]::SetCursorPos([int]($r.X+$r.Width/2),[int]($r.Y+$r.Height/2))|Out-Null;[RooBackgroundUi]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[RooBackgroundUi]::mouse_event(4,0,0,0,[UIntPtr]::Zero)}
 function Options($combo){$id=$combo.Current.AutomationId;$name=$combo.Current.Name;Save ('dropdown-'+($id -replace '\W','-')+'.json') @{id=$id;name=$name;enabled=$combo.Current.IsEnabled;patterns=@($combo.GetSupportedPatterns()|ForEach-Object {$_.ProgrammaticName})};try{$combo.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{};@(WaitFor {$fresh=FreshCombo $id $name;$fresh.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand();$items=@($fresh.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)));if($items.Count){$items}} 90 ('dropdown choices '+$id+' '+$name))}
-function Choose($combo,[string]$pattern){$id=$combo.Current.AutomationId;$name=$combo.Current.Name;$items=@(Options $combo);$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1;for($page=0;-not$item -and $page -lt 30;$page++){$fresh=FreshCombo $id $name;$scroll=@($fresh.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {try{$_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable}catch{$false}})|Select-Object -First 1;if(-not$scroll){break};$scroll.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Scroll([Windows.Automation.ScrollAmount]::NoAmount,[Windows.Automation.ScrollAmount]::LargeIncrement);Start-Sleep -Milliseconds 100;$items=@($fresh.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)));$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1};if(-not$item){Save 'missing-choice-tree.json' (Tree);throw ('Choice missing: '+$pattern)};$names=@($items|ForEach-Object {$_.Current.Name});$errorText=$null;try{$item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}catch{$errorText=$_.Exception.Message};Start-Sleep -Milliseconds 500;$combo=FreshCombo $id $name;try{$combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()}catch{};Save ('choice-'+($id -replace '\W','-')+'.json') @{pattern=$pattern;choices=$names;selectionCallError=$errorText}}
+function Choose($combo,[string]$pattern){$id=$combo.Current.AutomationId;$name=$combo.Current.Name;$items=@(Options $combo);$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1;for($page=0;-not$item -and $page -lt 30;$page++){$fresh=FreshCombo $id $name;$scroll=@($fresh.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {try{$_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable}catch{$false}})|Select-Object -First 1;if($scroll){$scroll.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Scroll([Windows.Automation.ScrollAmount]::NoAmount,[Windows.Automation.ScrollAmount]::LargeIncrement)}else{try{($items|Select-Object -Last 1).GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{break}};Start-Sleep -Milliseconds 100;$items=@($fresh.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)));$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1};if(-not$item){Save 'missing-choice-tree.json' (Tree);throw ('Choice missing: '+$pattern)};$names=@($items|ForEach-Object {$_.Current.Name});$errorText=$null;try{$item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}catch{$errorText=$_.Exception.Message};Start-Sleep -Milliseconds 500;$combo=FreshCombo $id $name;try{$combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()}catch{};Save ('choice-'+($id -replace '\W','-')+'.json') @{pattern=$pattern;choices=$names;selectionCallError=$errorText}}
 function ChooseId([string]$id,[string]$pattern){Choose (WaitFor {ById $id} 90 $id) $pattern}
 function Shot([string]$name){Save ($name+'-tree.json') (Tree);Save ($name+'-text.json') (Texts);$r=$window.Current.BoundingRectangle;$b=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$g=[Drawing.Graphics]::FromImage($b);try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$b.Size);$b.Save((Join-Path $directory ($name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$b.Dispose()}}
 function Fixture([string]$name){$path=Join-Path $directory ($name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));Save 'owned-fixtures.json' @($owned|ForEach-Object {$_.Identity});return $p}
@@ -44,7 +44,8 @@ function HostCall([string]$action,[hashtable]$fields){$install='C:\Program Files
 try {
  Assert-NoUnownedAppProcess
  if($Scenario -eq 'priority'){$target=Fixture 'RooFixturePriority';$job=[RooBackgroundOracle]::PinNormal($target);$denied=Fixture 'RooFixtureDenied'}
- if($Scenario -eq 'background-ui'){$backgroundFixture=Fixture 'RooFixtureWebHelperUi';$backgroundFixture.PriorityClass='Normal';[RooBackgroundOracle]::SetMemory($backgroundFixture,5)}
+ if($Scenario -in 'background-ui','recovery-ui','invalid-recovery-ui'){$backgroundFixture=Fixture 'RooFixtureWebHelperUi';$backgroundFixture.PriorityClass='Normal';[RooBackgroundOracle]::SetMemory($backgroundFixture,5)}
+ if($Scenario -eq 'recovery-ui'){$closedFixture=Fixture 'RooFixtureUpdaterClosedUi';$closedFixture.PriorityClass='Normal';[RooBackgroundOracle]::SetMemory($closedFixture,5)}
  if($Scenario -eq 'games'){$launcher=Fixture 'RooFixtureLauncher';$gamePath=Join-Path $directory 'RooFixtureGame.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $gamePath}
  $exe='C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
  $app=Start-Process $exe -PassThru;$receipt=New-OwnedProcess $app;Save 'owned-app.json' $receipt.Identity
@@ -105,7 +106,7 @@ try {
    $found=@($titles|Where-Object {ByName $_});Save 'guides.json' @{expected=$titles;found=$found};if($titles.Count -ne 7 -or $found.Count -ne 7){throw 'All seven guides are not exposed'}
    Activate (ByName $titles[0]);Start-Sleep 1;Shot 'guide-expanded'
   }
-  'background-ui' {
+  {$_ -in 'background-ui','recovery-ui'} {
    $recoveryPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'settings\process-profile-recovery.json'
    if(Test-Path $recoveryPath){throw 'An earlier process restore is pending; preserve it before the fixture'}
    $before=Read $backgroundFixture;Save 'before.json' $before
@@ -116,6 +117,18 @@ try {
    Activate (Button 'Apply');WaitFor {Test-Path $recoveryPath} 90 'lower recovery saved'|Out-Null;$profileRecoveryOwned=Get-Content -Raw $recoveryPath|ConvertFrom-Json
    WaitFor {-not(Button 'Apply').Current.IsEnabled -and @(Texts) -contains 'Restore the last change first'} 60 'pending Apply disabled'|Out-Null
    Save 'lower-after.json' (Read $backgroundFixture);Shot 'lower-pending'
+   if($Scenario -eq 'recovery-ui'){
+    $closedBefore=Read $closedFixture;Save 'closed-after-apply.json' $closedBefore
+    if($closedBefore.priorityClass -ne 'BelowNormal' -or $closedBefore.memoryPriority -ne 2){throw 'Closed fixture was not affected by Lower Apply'}
+    Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $closedFixture.Id}|Select-Object -First 1)
+    Activate (WaitFor {$button=ProcessButton 'Restore';if($button.Current.IsEnabled){$button}} 45 'Restore enabled')
+    WaitFor {-not(Test-Path $recoveryPath) -and (Button 'Apply').Current.IsEnabled} 90 'closed instance releases UI slot'|Out-Null
+    $restored=Read $backgroundFixture;Save 'live-restored.json' $restored
+    foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$before.$field -cne [string]$restored.$field){throw ('UI live restore differs: '+$field)}}
+    $text=@(Texts);if(-not($text -match 'Already closed or restarted:.*RooFixtureUpdaterClosedUi')){throw 'Restore did not name the closed app'}
+    Save 'apply-available.json' @{applyEnabled=(Button 'Apply').Current.IsEnabled;pointerExists=(Test-Path $recoveryPath);closedPid=$closedFixture.Id;closedExited=$closedFixture.HasExited;text=$text}
+    Shot 'closed-instance-restored';break
+   }
    Choose (ById 'BackgroundPriorityPreset') '*E-cores*';WaitFor {-not(Button 'Apply').Current.IsEnabled} 20 'placement Apply remains disabled'|Out-Null;Shot 'placement-pending'
    if($ServiceProbe){
     & (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe') ([IO.Path]::ChangeExtension($ServiceProbe,'.dll')) --review2-restore-pending (Join-Path $directory 'service-probe') (Split-Path $recoveryPath -Parent) *> (Join-Path $directory 'service-probe.log')
@@ -135,6 +148,19 @@ try {
    WaitFor {-not(Test-Path $recoveryPath) -and (Button 'Apply').Current.IsEnabled} 90 'placement restored'|Out-Null
    $restored=Read $backgroundFixture;Save 'placement-restored.json' $restored;foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$before.$field -cne [string]$restored.$field){throw ('UI placement restore differs: '+$field)}}
    Shot 'restored'
+  }
+  'invalid-recovery-ui' {
+   $recoveryPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'settings\process-profile-recovery.json'
+   if(Test-Path $recoveryPath){throw 'An earlier process restore is pending; preserve it before the fixture'}
+   [IO.File]::WriteAllText($recoveryPath,'{truncated recovery')
+   $before=(Get-FileHash $recoveryPath).Hash
+   $prior=@(Get-ChildItem (Split-Path $recoveryPath -Parent) -Filter 'process-profile-recovery.json.invalid-*'|ForEach-Object FullName)
+   Nav 'Games';InvokeId 'BackgroundTab'
+   WaitFor {-not(Test-Path $recoveryPath) -and (Button 'Apply').Current.IsEnabled} 90 'invalid pointer releases UI Apply'|Out-Null
+   $archive=@(Get-ChildItem (Split-Path $recoveryPath -Parent) -Filter 'process-profile-recovery.json.invalid-*'|Where-Object {$prior -notcontains $_.FullName})
+   if($archive.Count -ne 1 -or (Get-FileHash $archive[0].FullName).Hash -cne $before){throw 'Invalid pointer archive differs from original bytes'}
+   Save 'apply-available.json' @{applyEnabled=(Button 'Apply').Current.IsEnabled;pointerExists=(Test-Path $recoveryPath);archive=$archive[0].FullName;sha256=$before;bytesPreserved=$true}
+   Shot 'invalid-pointer-archived'
   }
   'services' {
    if(-not$ServiceRunningId){$ServiceRunningId='windows.4e3841a2d61ce3f9'}
