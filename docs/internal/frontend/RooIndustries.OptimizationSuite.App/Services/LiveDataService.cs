@@ -22,6 +22,7 @@ public sealed class LiveDataService
     private readonly BackendLocator _locator;
     private readonly string _recoveryDirectory;
     private readonly string _recoveryKey;
+    private int _processRecoverySetAside;
     private static readonly ConcurrentDictionary<string, ProcessProfileRecovery> VolatileProcessRecovery = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, NvidiaProfileRecovery> VolatileNvidiaRecovery = new(StringComparer.OrdinalIgnoreCase);
     private string ProcessRecoveryPath => Path.Combine(_recoveryDirectory, "process-profile-recovery.json");
@@ -29,6 +30,7 @@ public sealed class LiveDataService
     private string ProcessGenerationPath => Path.Combine(_recoveryDirectory, "process-profile-operation-generation.json");
     private string NvidiaOperationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation");
     private string NvidiaGenerationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation-generation.json");
+    public bool TakeProcessRecoverySetAsideNotice() => Interlocked.Exchange(ref _processRecoverySetAside, 0) != 0;
     public bool ProcessProfileRestorePending => File.Exists(ProcessRecoveryPath) || VolatileProcessRecovery.ContainsKey(_recoveryKey);
     public ProcessProfileRecovery? ProcessProfileRecovery
     {
@@ -67,6 +69,7 @@ public sealed class LiveDataService
             {
                 var archive = ProcessRecoveryPath + ".invalid-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ") + "-" + Guid.NewGuid().ToString("N");
                 File.Move(ProcessRecoveryPath, archive);
+                if (!validCurrent) Interlocked.Exchange(ref _processRecoverySetAside, 1);
                 AppLog.Write("backend", invalid + " Kept the old reference at " + archive);
             }
             if (current is not null && !validCurrent) VolatileProcessRecovery.TryRemove(_recoveryKey, out _);

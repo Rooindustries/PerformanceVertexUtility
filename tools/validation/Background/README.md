@@ -106,3 +106,13 @@ A loaded store must keep its known values if a later reload fails. GPU checks
 vary a mid-session release and subsequent re-restraint, checking the original
 GPU value independently after each restore. Manual update failures with automatic
 downloads off must invite another Download, without claiming a scheduled retry.
+
+Direction checks must catch Windows CPU enum values being mistaken for priority
+order, a low CPU value suppressing independently needed I/O or memory changes,
+and a fresh value becoming lower between preview and write. Idle / I/O VeryLow /
+memory 1 must remain untouched in Lower, Game priority demotion and Background
+limits, with no restore ownership for those controls. Game boosts only raise;
+placement and inverse restore may change either direction. Partial/failed restore
+text must name the remaining live apps and explain their failures. An archived
+invalid recovery reference must show a dismissible notice once on the Background
+apps card, without changing the preserved bytes or falsely freeing a valid slot.

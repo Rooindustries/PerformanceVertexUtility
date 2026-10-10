@@ -160,7 +160,15 @@ try {
    $archive=@(Get-ChildItem (Split-Path $recoveryPath -Parent) -Filter 'process-profile-recovery.json.invalid-*'|Where-Object {$prior -notcontains $_.FullName})
    if($archive.Count -ne 1 -or (Get-FileHash $archive[0].FullName).Hash -cne $before){throw 'Invalid pointer archive differs from original bytes'}
    Save 'apply-available.json' @{applyEnabled=(Button 'Apply').Current.IsEnabled;pointerExists=(Test-Path $recoveryPath);archive=$archive[0].FullName;sha256=$before;bytesPreserved=$true}
+   $message="An earlier restore point couldn't be used, so it was set aside. Apply is available again."
+   WaitFor {ByName $message} 20 'invalid restore notice'|Out-Null
    Shot 'invalid-pointer-archived'
+   $notice=ById 'ProcessRecoveryNotice';$close=$notice.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Button));Activate $close
+   WaitFor {-not(ByName $message)} 20 'notice dismissed'|Out-Null
+   Nav 'Home';WaitFor {@(Texts) -contains 'Start here'} 45 'Home'|Out-Null;Nav 'Games';InvokeId 'BackgroundTab';Start-Sleep 3
+   if(ByName $message){throw 'The archived-pointer notice repeated after dismissal'}
+   Save 'notice-once.json' @{message=$message;dismissed=$true;repeated=$false;applyEnabled=(Button 'Apply').Current.IsEnabled}
+   Shot 'notice-dismissed'
   }
   'services' {
    if(-not$ServiceRunningId){$ServiceRunningId='windows.4e3841a2d61ce3f9'}

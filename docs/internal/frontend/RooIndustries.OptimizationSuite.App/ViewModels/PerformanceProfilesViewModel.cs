@@ -78,6 +78,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private List<ProcessItem> _loadedProcesses = new();
     private string ProcessPreset => ProcessPresetIndex == 1 ? "placement" : "lower";
     public ObservableCollection<GameAppRow> Rows { get; } = new();
+    [ObservableProperty] private bool recoverySetAside;
     public bool CanSelectPreset => !ActionBusy;
     public bool CanRunProcessAction => !ActionBusy && (ProcessPresetIndex == 0 || PlacementAvailable);
     public bool CanApplyProcessProfile => CanRunProcessAction && !RestoreAvailable && !App.Live.ProcessProfileRestorePending;
@@ -136,6 +137,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         var wasAvailable = RestoreAvailable;
         RestoreAvailable = _lastBackupPath is not null;
         OnPropertyChanged(nameof(CanApplyProcessProfile));
+        if (!App.Live.ProcessProfileRestorePending && App.Live.TakeProcessRecoverySetAsideNotice()) RecoverySetAside = true;
         if (!Quiet || wasAvailable != RestoreAvailable) RestoreHint = App.Live.ProcessProfileRestorePending ? "Restore the last change first" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 

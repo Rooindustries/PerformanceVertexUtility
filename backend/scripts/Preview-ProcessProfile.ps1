@@ -55,6 +55,7 @@ function New-ProcessPreviewEntry {
     )
 
     $classification = [string](Get-RooIndustriesPropertyValue $Process 'classification' 'unknown')
+    $priorityDirection = if ($Preset -eq 'placement') { 'set' } elseif ($classification -eq 'gameTarget') { 'raise' } else { 'lower' }
     $ruleId = [string](Get-RooIndustriesPropertyValue $Process 'matchedRuleId' '')
     $reason = 'No process control change proposed.'
     $proposedAction = 'noChange'
@@ -158,7 +159,7 @@ function New-ProcessPreviewEntry {
                 $reason = "Priority class '$proposedPriority' is outside the allow-list."
             } elseif ($null -eq $currentPriority -or [string]::IsNullOrWhiteSpace([string]$currentPriority)) {
                 $reason = 'Current priority class could not be read, so no priority change is proposed.'
-            } elseif ([string]$currentPriority -ne [string]$proposedPriority) {
+            } elseif ([string]$currentPriority -ne [string]$proposedPriority -or $priorityDirection -ne 'set') {
                 $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $proposedPriority 'setPriority' $reason)) | Out-Null
             }
         }
@@ -178,7 +179,7 @@ function New-ProcessPreviewEntry {
                 $reason = "I/O priority '$proposedIoPriority' is outside the allow-list."
             } elseif ([string]::IsNullOrWhiteSpace([string]$currentIoPriority)) {
                 $reason = 'Current I/O priority could not be read, so no I/O priority change is proposed.'
-            } elseif ([string]$currentIoPriority -ne [string]$proposedIoPriority) {
+            } elseif ([string]$currentIoPriority -ne [string]$proposedIoPriority -or $priorityDirection -ne 'set') {
                 $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $proposedIoPriority 'setIoPriority' 'Set process I/O priority for the selected game profile.')) | Out-Null
             }
         }
@@ -193,7 +194,7 @@ function New-ProcessPreviewEntry {
                 $memoryChange.blocked = $true
                 $memoryChange.blockedReason = $memoryReason
                 $controlChanges.Add($memoryChange) | Out-Null
-            } elseif (-not (Test-RooIndustriesControlValueEqual 'memoryPriority' $currentMemoryPriority $proposedMemoryPriority)) {
+            } elseif (-not (Test-RooIndustriesControlValueEqual 'memoryPriority' $currentMemoryPriority $proposedMemoryPriority) -or $priorityDirection -ne 'set') {
                 $controlChanges.Add($memoryChange) | Out-Null
             }
         }
@@ -217,6 +218,18 @@ function New-ProcessPreviewEntry {
         $blocked = $true
         $rollbackSupported = $false
         $reason = 'Process is not safe to change from this profile pass.'
+    }
+
+    $directed = Select-RooIndustriesPriorityDirection @($controlChanges.ToArray()) $priorityDirection
+    $controlChanges.Clear()
+    foreach ($change in $directed.changes) { $controlChanges.Add($change) | Out-Null }
+    foreach ($skip in $directed.skippedControls) {
+        $reason += ' ' + $skip.reason
+        switch ($skip.control) {
+            'priorityClass' { $proposedPriority = $currentPriority }
+            'ioPriority' { $proposedIoPriority = $currentIoPriority }
+            'memoryPriority' { $proposedMemoryPriority = $currentMemoryPriority }
+        }
     }
 
     if ($blocked) {
@@ -271,6 +284,7 @@ function New-ProcessPreviewEntry {
         gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
+        skippedControls = $directed.skippedControls
         ruleId = $ruleId
         reason = $reason
         reasonCodes = @(Get-RooIndustriesPropertyArray $Process 'reasonCodes')
