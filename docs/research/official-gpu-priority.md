@@ -12,7 +12,7 @@ Arbitrary repeated launches, game updates, full-match behavior, performance gain
 
 | Component | Tested configuration |
 | --- | --- |
-| Machine | `SERVI-WINDOWS-D`; Intel i5-14600K; AMD RX 9070 XT |
+| Machine | `the i5-14600K test PC`; Intel i5-14600K; AMD RX the i5-14600K test PC XT |
 | Windows / SDK | Windows 11 Pro build 26200; installed SDK 10.0.26100.0 |
 | AMD driver | 32.0.31035.1003 |
 | Games | Fortnite 42.20; Marvel Rivals 1.1.3870120 |
@@ -76,7 +76,7 @@ The earlier managed Fortnite record, `fortnite-fastest-apply.jsonl`, binds PID *
 
 Earlier parent-process experiments verified class 3 on an EAC wrapper/service before Fortnite creation, and on an ordinary Rivals launcher before its access became restricted. Those parent values did not provide readable child-game GPU state. **GPU process-class inheritance remains unverified.** Microsoft's published CPU inheritance rules concern `CreateProcess`, `GetPriorityClass`, and CPU thread scheduling; they do not establish GPU-class inheritance. [CPU scheduling contract](https://learn.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities).
 
-The RX 9070 XT fixture separately accepted DXGI device-relative priority `0 → 1 → 7 → 0`, with successful getter/setter results, while its GPU process class stayed 2. CPU High priority, value 128, also left GPU process class 2. These checks demonstrate distinct control scopes.
+The RX the i5-14600K test PC XT fixture separately accepted DXGI device-relative priority `0 → 1 → 7 → 0`, with successful getter/setter results, while its GPU process class stayed 2. CPU High priority, value 128, also left GPU process class 2. These checks demonstrate distinct control scopes.
 
 ## Windows authority and required readback
 

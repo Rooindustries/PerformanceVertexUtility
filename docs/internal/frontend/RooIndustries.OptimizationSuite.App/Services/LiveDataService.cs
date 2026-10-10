@@ -22,6 +22,7 @@ public sealed class LiveDataService
     private readonly BackendLocator _locator;
     private readonly string _recoveryDirectory;
     private readonly string _recoveryKey;
+    private int _processRecoverySetAside;
     private static readonly ConcurrentDictionary<string, ProcessProfileRecovery> VolatileProcessRecovery = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, NvidiaProfileRecovery> VolatileNvidiaRecovery = new(StringComparer.OrdinalIgnoreCase);
     private string ProcessRecoveryPath => Path.Combine(_recoveryDirectory, "process-profile-recovery.json");
@@ -29,20 +30,51 @@ public sealed class LiveDataService
     private string ProcessGenerationPath => Path.Combine(_recoveryDirectory, "process-profile-operation-generation.json");
     private string NvidiaOperationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation");
     private string NvidiaGenerationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation-generation.json");
+    public bool TakeProcessRecoverySetAsideNotice() => Interlocked.Exchange(ref _processRecoverySetAside, 0) != 0;
+    public bool ProcessProfileRestorePending => File.Exists(ProcessRecoveryPath) || VolatileProcessRecovery.ContainsKey(_recoveryKey);
     public ProcessProfileRecovery? ProcessProfileRecovery
     {
         get
         {
-            var generation = ReadGeneration(ProcessGenerationPath);
-            if (VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current)
-                && current.Valid() && SameGeneration(current.Generation, generation)) return current;
-            try
+            using var operation = TryOperationLease(ProcessOperationPath, "process profile", out _);
+            try { return ReadProcessRecovery(discardInvalid: operation is not null); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                var recovery = RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath);
-                return recovery.Valid() && SameGeneration(recovery.Generation, generation) ? recovery : null;
+                AppLog.Write("backend", "The process recovery could not be read: " + error.Message);
+                return null;
             }
-            catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or UnauthorizedAccessException) { return null; }
         }
+    }
+
+    private ProcessProfileRecovery? ReadProcessRecovery(bool discardInvalid)
+    {
+        string? generation;
+        try { generation = RooIndustries.Optimizer.OperationFiles.Read<RecoveryOperationGeneration>(ProcessGenerationPath).Id; }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException or JsonException or InvalidDataException or InvalidOperationException) { generation = null; }
+        VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current);
+        var validCurrent = current is not null && current.ValidationError() is null && SameGeneration(current.Generation, generation);
+        ProcessProfileRecovery? saved = null;
+        string? invalid = null;
+        try
+        {
+            saved = RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath);
+            invalid = saved.ValidationError();
+            if (invalid is null && !SameGeneration(saved.Generation, generation)) invalid = "The process recovery belongs to an older operation generation.";
+        }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
+        catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException) { invalid = "The process recovery reference is invalid: " + error.Message; }
+        if (discardInvalid)
+        {
+            if (invalid is not null)
+            {
+                var archive = ProcessRecoveryPath + ".invalid-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ") + "-" + Guid.NewGuid().ToString("N");
+                File.Move(ProcessRecoveryPath, archive);
+                if (!validCurrent) Interlocked.Exchange(ref _processRecoverySetAside, 1);
+                AppLog.Write("backend", invalid + " Kept the old reference at " + archive);
+            }
+            if (current is not null && !validCurrent) VolatileProcessRecovery.TryRemove(_recoveryKey, out _);
+        }
+        return validCurrent ? current : invalid is null ? saved : null;
     }
     private sealed record ReviewedCleanupInput(string AppId, string Json, int Generation);
     private sealed record PreparedCleanupInputs(
@@ -172,6 +204,15 @@ public sealed class LiveDataService
     {
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
+        try
+        {
+            if (ReadProcessRecovery(discardInvalid: true) is not null || File.Exists(ProcessRecoveryPath))
+                return new(null, "Restore the last change first");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return new(null, "The last process recovery could not be checked: " + error.Message);
+        }
         IDisposable gate;
         try { gate = await EnterGovernorGateAsync().ConfigureAwait(false); }
         catch (Exception error) { return new(null, error.Message); }
@@ -217,7 +258,9 @@ public sealed class LiveDataService
         catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
-        var current = ProcessProfileRecovery;
+        ProcessProfileRecovery? current;
+        try { current = ReadProcessRecovery(discardInvalid: false); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return new(null, "The process recovery could not be read: " + error.Message); }
         if (!recovery.Valid() || current != recovery)
             return new(null, "The selected process recovery is no longer current.");
         if (!TryWriteGeneration(ProcessGenerationPath, recovery.Generation!, "process profile", out var generationError))
@@ -871,7 +914,7 @@ public sealed class LiveDataService
 
     private void ClearProcessRecovery(ProcessProfileRecovery recovery)
     {
-        if (ProcessProfileRecovery == recovery && File.Exists(ProcessRecoveryPath)) File.Delete(ProcessRecoveryPath);
+        if (ReadProcessRecovery(discardInvalid: false) == recovery && File.Exists(ProcessRecoveryPath)) File.Delete(ProcessRecoveryPath);
         if (File.Exists(ProcessGenerationPath)) File.Delete(ProcessGenerationPath);
         if (VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current) && current == recovery)
             VolatileProcessRecovery.TryRemove(_recoveryKey, out _);

@@ -27,8 +27,8 @@ Game priority additionally restores Realtime CPU. Independent token reads check
 that restoring High I/O leaves its temporary privilege at the original value.
 
 The desktop journey covers the merged Running process, Games, Windows tweaks,
-Memory guides and Background apps UI on SERVI-WINDOWS-D. The CCD preset is also
-checked on CS2-GEN4 without touching unrelated scheduled tasks. Test builds use
+Memory guides and Background apps UI on <COMPUTERNAME>. The CCD preset is also
+checked on <COMPUTERNAME> without touching unrelated scheduled tasks. Test builds use
 an empty or tailnet test update feed. No test sends bug reports or production
 requests. Processes, tasks, source frames and fixture changes are owned,
 recorded, restored and stopped.
@@ -37,10 +37,10 @@ Run from the repository worktree on Linux. Stage a fresh source frame after
 changing source or a check; its receipt binds the interactive task to that frame.
 
 ```sh
-python3 -I tools/validation/windows_ssh.py --host optimizer-9070 --expected-machine SERVI-WINDOWS-D upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' --include-frontend > artifacts/roo-20/background/9070-frame.json
-python3 -I tools/validation/Background/run_e2e.py --receipt artifacts/roo-20/background/9070-frame.json --scenario build
-python3 -I tools/validation/Background/run_e2e.py --receipt artifacts/roo-20/background/9070-frame.json --scenario install
-python3 -I tools/validation/Background/run_e2e.py --receipt artifacts/roo-20/background/9070-frame.json --scenario presets
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' --include-frontend > artifacts/roo-20/background/intel-frame.json
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario build --arguments '{"FeedUrl":"https://<feed-host>:8460/ota-e2e/beta.json"}'
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario install
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario presets
 ```
 
 Build-Merged.ps1 parses the PowerShell scripts, runs the synthetic topology cases,
@@ -67,8 +67,8 @@ python3 -I tools/validation/Background/summarize_memory.py artifacts/roo-20/memo
 ```
 
 ```sh
-python3 -I tools/validation/windows_ssh.py --host blackwell-lan --expected-machine CS2-GEN4 upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' > artifacts/roo-20/background/blackwell-frame.json
-python3 -I tools/validation/Background/run_e2e.py --machine blackwell --receipt artifacts/roo-20/background/blackwell-frame.json --scenario presets
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' > artifacts/roo-20/background/amd-frame.json
+python3 -I tools/validation/Background/run_e2e.py --machine amd --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/amd-frame.json --scenario presets
 ```
 
 Each driver writes JSON evidence, records owned PID/start-time identities, restores
@@ -91,3 +91,28 @@ proves the running-state read/apply path accepts the selection; it does not prov
 a running-to-stopped transition on a PC where that service cannot be started.
 The priority check captures both the immediate per-control results and the text
 three seconds later so polling cannot silently hide a display regression.
+
+Test configuration is required: pass SSH host and expected COMPUTERNAME, and pass `FeedUrl` to Build-Merged.ps1 (or set `ROO_TEST_UPDATE_FEED` in its Windows environment). The runner takes `--machine intel` or `--machine amd` only as an evidence label; it never chooses an SSH endpoint for you. Run `review2` for all launcher and query-only cases, or pass `--arguments '{"Mode":"placement"}'` on the AMD test PC for the placement launcher/child check. See [REVIEW2.md](REVIEW2.md) for the decisive controls.
+
+The recovery-slot checks vary a closed instance, all instances closed, a reused
+PID/start time, unreadable identity, a failed live control, and controls already
+restored. Closed instances must release the slot; unverifiable or unrestored live
+instances must retain it. Invalid pointer JSON, a missing/corrupt backup, and a
+generation mismatch must preserve the old pointer bytes beside the original
+path before another Apply. Locked/denied reads must not be treated as corrupt.
+The settings checks start with empty/truncated JSON, preserve the corrupt bytes,
+save theme/effects/simple-mode values, and reload them through a fresh store.
+A loaded store must keep its known values if a later reload fails. GPU checks
+vary a mid-session release and subsequent re-restraint, checking the original
+GPU value independently after each restore. Manual update failures with automatic
+downloads off must invite another Download, without claiming a scheduled retry.
+
+Direction checks must catch Windows CPU enum values being mistaken for priority
+order, a low CPU value suppressing independently needed I/O or memory changes,
+and a fresh value becoming lower between preview and write. Idle / I/O VeryLow /
+memory 1 must remain untouched in Lower, Game priority demotion and Background
+limits, with no restore ownership for those controls. Game boosts only raise;
+placement and inverse restore may change either direction. Partial/failed restore
+text must name the remaining live apps and explain their failures. An archived
+invalid recovery reference must show a dismissible notice once on the Background
+apps card, without changing the preserved bytes or falsely freeing a valid slot.

@@ -21,7 +21,8 @@ function Get-RestoreCandidate {
             process = $null
             currentPriorityClass = $null
             currentPath = $null
-            blockedReason = 'Process is no longer running.'
+            instanceEnded = $true
+            blockedReason = 'This app was already closed. Nothing remains to restore.'
         }
     }
 
@@ -32,17 +33,24 @@ function Get-RestoreCandidate {
     if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
     }
-    $controlState = Get-RooIndustriesProcessControlState $processId $null
-    $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null) $controlState.startTimeUtc
+    $controlState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $Snapshot)
+    $savedStart = Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null
+    $startMatches = Test-RooIndustriesProcessStartTime $savedStart $controlState.startTimeUtc
+    $savedTime = [datetime]::MinValue
+    $currentTime = [datetime]::MinValue
+    $knownStartMismatch = [datetime]::TryParse([string]$savedStart, [ref]$savedTime) -and [datetime]::TryParse([string]$controlState.startTimeUtc, [ref]$currentTime) -and -not $startMatches
+    $knownPathMismatch = -not $pathMatches -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)
+    $instanceEnded = -not $nameMatches -or $knownPathMismatch -or $knownStartMismatch
 
     return [pscustomobject]@{
         exists = $true
         matches = ($nameMatches -and $pathMatches -and $startMatches)
         process = $live
-        currentPriorityClass = [string]$live.PriorityClass
+        currentPriorityClass = $controlState.priorityClass
         currentControlState = $controlState
         currentPath = $currentPath
-        blockedReason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was restored.' } elseif ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the backup snapshot.' }
+        instanceEnded = $instanceEnded
+        blockedReason = if ($instanceEnded) { 'This app was already closed or restarted. Nothing remains to restore for the saved instance.' } elseif (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was restored.' } elseif ($nameMatches -and $pathMatches) { $null } else { 'Live process identity does not match the backup snapshot.' }
     }
 }
 
@@ -149,6 +157,7 @@ function New-RollbackPreviewEntry {
         controlChanges = @($controlChanges.ToArray())
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
+        instanceEnded = [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
         reasonCodes = if ($blocked) { @('ROLLBACK_SKIPPED') } else { @('ROLLBACK_PROCESS_CONTROLS_RESTORE') }
         classification = 'rollbackCandidate'
         blocked = $blocked
@@ -270,7 +279,7 @@ try {
                     }
                 }
                 if ($appliedControls.Count -gt 0) {
-                    $afterControls = Get-RooIndustriesProcessControlState $processId $null
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
                     $changed.Add([pscustomobject]@{
                         processId = $processId
                         processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -298,12 +307,38 @@ try {
         }
     }
 
+    $pending = New-Object System.Collections.Generic.List[object]
+    $alreadyClosed = New-Object System.Collections.Generic.List[object]
+    if ($ConfirmApply) {
+        foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
+            $candidate = Get-RestoreCandidate $snapshot
+            if ($candidate.instanceEnded) {
+                $alreadyClosed.Add((New-RestoreSkippedItem $snapshot $candidate.blockedReason @() 'alreadyClosed')) | Out-Null
+                continue
+            }
+            $remaining = New-RollbackPreviewEntry $snapshot $candidate
+            if ($remaining.blocked -or @(Get-RooIndustriesPreviewControlChanges $remaining).Count -gt 0) {
+                $pending.Add($remaining) | Out-Null
+            }
+        }
+    }
     $status = if ($ConfirmApply) { 'success' } else { 'preview' }
-    if ($ConfirmApply -and $changed.Count -eq 0 -and $skipped.Count -gt 0) { $status = 'failed' }
-    if ($ConfirmApply -and $changed.Count -gt 0 -and $skipped.Count -gt 0) { $status = 'partial' }
+    if ($ConfirmApply -and $pending.Count -gt 0) { $status = if ($changed.Count -gt 0) { 'partial' } else { 'failed' } }
 
     $summary = if ($ConfirmApply) {
-        "Rollback completed with $($changed.Count) restored process(es) and $($skipped.Count) skipped item(s)."
+        $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
+        $finishedCount = @(Get-RooIndustriesPropertyArray $backup 'snapshots').Count - $pending.Count - $alreadyClosed.Count
+        if ($status -eq 'success') {
+            "Restore completed for $finishedCount app(s)." + $closedText
+        } else {
+            $attention = ($pending | ForEach-Object {
+                $entry = $_
+                $failedReasons = @($skipped | Where-Object { $_.processId -eq $entry.processId } | ForEach-Object reason)
+                $details = if ($failedReasons.Count -gt 0) { $failedReasons -join '; ' } else { $entry.reason }
+                $entry.processName + ' (PID ' + $entry.processId + '): ' + $details
+            }) -join '; '
+            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $attention." + $closedText
+        }
     } else {
         "Rollback preview completed. No process control changes were applied."
     }
@@ -315,6 +350,10 @@ try {
         -ChangedItems @($changed.ToArray()) `
         -SkippedItems @($skipped.ToArray()) `
         -Artifacts @([pscustomobject]@{ type = 'processProfileBackup'; path = $resolvedBackupPath })
+
+    $result | Add-Member -NotePropertyName restorePendingCount -NotePropertyValue $pending.Count
+    $result | Add-Member -NotePropertyName pendingItems -NotePropertyValue @($pending.ToArray())
+    $result | Add-Member -NotePropertyName alreadyClosedItems -NotePropertyValue @($alreadyClosed.ToArray())
 
     $warnings = New-Object System.Collections.Generic.List[object]
     if (-not $ConfirmApply) {

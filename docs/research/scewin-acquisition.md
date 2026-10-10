@@ -27,7 +27,7 @@ Only these three files are needed from the final directory:
 
 The same directory also contains `BIOSData.db`, `BIOSData.txt`, and `SCEWIN.bat`. These are vendor-supplied data/scripts. They must not be treated as the current computer's backup or imported into its BIOS. Roo Industries must create its own original export.
 
-All three required files have an x64 PE machine type (`0x8664`). On the 9070XT machine, `Get-AuthenticodeSignature` returned **Valid** for all three, with hashes matching the table. SCEWIN's publisher is `AMI US HOLDINGS INC`, issued by COMODO RSA Extended Validation Code Signing CA. Both drivers' publisher is `American Megatrends, Inc.`, issued by DigiCert EV Code Signing CA (SHA2). This establishes signature validation on that Windows installation, not whether Memory Integrity permits loading those drivers or whether this firmware supports the helper.
+All three required files have an x64 PE machine type (`0x8664`). On the the i5-14600K test PCXT machine, `Get-AuthenticodeSignature` returned **Valid** for all three, with hashes matching the table. SCEWIN's publisher is `AMI US HOLDINGS INC`, issued by COMODO RSA Extended Validation Code Signing CA. Both drivers' publisher is `American Megatrends, Inc.`, issued by DigiCert EV Code Signing CA (SHA2). This establishes signature validation on that Windows installation, not whether Memory Integrity permits loading those drivers or whether this firmware supports the helper.
 
 ## Extraction tool
 

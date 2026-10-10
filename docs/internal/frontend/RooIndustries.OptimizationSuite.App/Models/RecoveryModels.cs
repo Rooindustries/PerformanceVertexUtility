@@ -11,7 +11,13 @@ public sealed record ProcessProfileRecovery(string Path, string Id, string? Gene
 {
     public bool Valid()
     {
-        if (string.IsNullOrWhiteSpace(Path) || string.IsNullOrWhiteSpace(Id) || !File.Exists(Path)) return false;
+        try { return ValidationError() is null; }
+        catch { return false; }
+    }
+
+    public string? ValidationError()
+    {
+        if (string.IsNullOrWhiteSpace(Path) || string.IsNullOrWhiteSpace(Id)) return "The recovery reference is incomplete.";
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(Path));
@@ -20,9 +26,12 @@ public sealed record ProcessProfileRecovery(string Path, string Id, string? Gene
                 && Text(root, "backupId") == Id
                 && !string.IsNullOrWhiteSpace(Text(root, "profileId"))
                 && Boolean(root, "dryRun") == false
-                && Count(root, "snapshots") is > 0;
+                && Count(root, "snapshots") is > 0 ? null : "The process backup does not match its recovery reference.";
         }
-        catch { return false; }
+        catch (FileNotFoundException) { return "The process backup is missing."; }
+        catch (DirectoryNotFoundException) { return "The process backup is missing."; }
+        catch (JsonException) { return "The process backup contains invalid JSON."; }
+        catch (ArgumentException) { return "The process backup path is invalid."; }
     }
 
     public bool RestoreCompleted(string? json)
@@ -37,6 +46,8 @@ public sealed record ProcessProfileRecovery(string Path, string Id, string? Gene
                 && Text(root, "status") == "success"
                 && Text(root, "result", "status") == "success"
                 && Count(root, "result", "changedItems") is not null
+                && (!root.GetProperty("result").TryGetProperty("restorePendingCount", out var pending)
+                    || pending.ValueKind == JsonValueKind.Number && pending.TryGetInt32(out var count) && count == 0)
                 && Text(root, "backup", "backupId") == Id
                 && SamePath(Text(root, "backup", "location"), Path)
                 && !BlockingErrors(root);

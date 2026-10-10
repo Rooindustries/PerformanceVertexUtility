@@ -4,6 +4,10 @@ using System.Reflection;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
+if (args is ["--recovery-slot", var recoveryAction, var recoveryOutput, var recoveryRepo, var slotDirectory]) { await RecoverySlotChecks.Run(recoveryAction, recoveryOutput, recoveryRepo, slotDirectory); return; }
+if (args is ["--settings-corruption", var settingsOutput]) { RecoverySlotChecks.Settings(settingsOutput); return; }
+if (args is ["--review2-services", var reviewOutput, var recoveryDirectory]) { await Review2Checks.Run(reviewOutput, recoveryDirectory); return; }
+if (args is ["--review2-restore-pending", var pendingOutput, var pendingDirectory]) { await Review2Checks.Run(pendingOutput, pendingDirectory, settings: false); return; }
 if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "Optimizer.Host.dll") { FakeHost.Run(hostAction); return; }
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }

@@ -15,15 +15,15 @@ function Governor($p,[string]$name){$v=Get-Content -Raw (Join-Path $Source 'back
 function StartGovernor($p,$profile,[string]$name){Save ($name+'-profile') $profile;return (Backend 'Start-ProcessGovernorSession' @{ProfilePath=(Join-Path $directory ($name+'-profile.json'));StateRoot=(Join-Path $directory ($name+'-state'));ConfirmApply=$true;MaxDurationSeconds=3;PollIntervalSeconds=1;SampleIntervalMilliseconds=250} ($name+'-start'))}
 try {
  foreach($flow in 'placement','game','governor'){
-  $p=Fixture ('RooFixtureUpdater'+$flow);$job=[RooBackgroundOracle]::PinPriority($p,0x4000);$jobs.Add($job)
+  $p=Fixture ('RooFixtureUpdater'+$flow);$pinned=if($flow -eq 'governor'){0x20}else{0x4000};$job=[RooBackgroundOracle]::PinPriority($p,$pinned);$jobs.Add($job)
   [RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,3)
   if($flow -eq 'placement'){[RooBackgroundOracle]::SetIo($p,1)}
-  $before=Read $p;Save ($flow+'-before') $before;if($before.priorityClass -ne 'BelowNormal'){throw 'BelowNormal job did not pin the decisive input'}
+  $before=Read $p;Save ($flow+'-before') $before;if($before.priorityClass -ne $(if($flow -eq 'governor'){'Normal'}else{'BelowNormal'})){throw 'The job did not pin the decisive input'}
   $profile=Profile $p $flow
   switch($flow){
    'placement' {Save 'placement-profile' $profile;$apply=Backend 'Apply-ProcessProfile' @{ProfilePath=(Join-Path $directory 'placement-profile.json');Preset='placement';StateRoot=(Join-Path $directory 'placement-state');ConfirmApply=$true} 'placement-apply';$backup=$apply.backup.location}
    'game' {$profile.foregroundGame.processNames=@($p.ProcessName+'.exe');$profile.targetGames=@([pscustomobject]@{gameId='fixture';processNames=@($p.ProcessName+'.exe')});$profile.rules=@();Save 'game-profile' $profile;$apply=Backend 'Start-GameTuneSession' @{ProfilePath=(Join-Path $directory 'game-profile.json');StateRoot=(Join-Path $directory 'game-state');ConfirmApply=$true;MaxDurationSeconds=2;PollIntervalSeconds=1} 'game-start';$backup=$apply.backup.location}
-   'governor' {$profile=Governor $p $flow;$profile.governor.restraint.priorityClass='Normal';$apply=StartGovernor $p $profile 'governor';$backup=$apply.backup.location}
+   'governor' {$profile=Governor $p $flow;$apply=StartGovernor $p $profile 'governor';$backup=$apply.backup.location}
   }
   Save ($flow+'-after') (Read $p)
   if(($apply|ConvertTo-Json -Depth 40 -Compress) -notmatch 'Windows kept a different value'){throw ($flow+' did not report readback failure')}

@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
-    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='0.11.0-beta', [string]$EvidenceName='', [switch]$ResumeCopyRecovery)
+    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
+    [string]$InstallerPath='', [string]$ExpectedVersion='0.11.0-beta', [string]$EvidenceName='', [switch]$ResumeCopyRecovery,[string]$FixtureExe='',[switch]$ManualRetry)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
@@ -19,7 +19,7 @@ public static class RooUpdateUi {
 '@
 [RooUpdateUi]::SetProcessDPIAware()|Out-Null
 $install='C:\Program Files\Roo Industries\Optimization Suite'
-$exe=Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'
+$exe=if($FixtureExe){$FixtureExe}else{Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'}
 $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $data=Get-RooIndustriesLocalDataRoot
 $updates=Join-Path $data 'updates'
@@ -27,7 +27,7 @@ $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT
 $utf8=[Text.UTF8Encoding]::new($false)
 $directory=Join-Path $OutRoot $(if($EvidenceName){$EvidenceName}else{$Scenario})
 [IO.Directory]::CreateDirectory($directory)|Out-Null
-$script:window=$null;$script:app=$null;$script:owned=$null
+$script:window=$null;$script:app=$null;$script:owned=$null;$settingsAttributes=$null;$settingsOriginal=$null;$settingsPath=Join-Path $data 'settings.json'
 $script:setupReceipts=[Collections.Generic.List[object]]::new()
 $events='RooIndustries_OTA_'+[Guid]::NewGuid().ToString('N')
 Register-WmiEvent -Class Win32_ProcessStartTrace -SourceIdentifier $events|Out-Null
@@ -135,10 +135,23 @@ try{
   }
   'cleanup' {Launch;Settings;Save 'final.json' (Readback);StopApp}
   default {
+   if($Scenario -eq 'timer-read-failure'){$timerLogPath=Join-Path $data 'logs\app.log';$timerLogLength=if(Test-Path $timerLogPath){[IO.File]::ReadAllText($timerLogPath).Length}else{0}}
    if(-not$ResumeCopyRecovery){Launch;Settings}
-   if($Scenario -in 'ready','scheduled-download'){
+   if($Scenario -in 'ready','scheduled-download','transport-error'){
     $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
     if([string]$toggle.Current.ToggleState -eq 'Off'){$toggle.Toggle()}
+   }
+   if($Scenario -eq 'manual-timeout'){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
+   if($ManualRetry){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
+   if($Scenario -eq 'settings-readonly'){
+    $settingsOriginal=[IO.File]::ReadAllBytes($settingsPath);$settingsAttributes=[IO.File]::GetAttributes($settingsPath)
+    [IO.File]::SetAttributes($settingsPath,($settingsAttributes -bor [IO.FileAttributes]::ReadOnly))
+    $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);$previous=[string]$toggle.Current.ToggleState;$toggle.Toggle()
+    WaitStatus "Couldn't save this setting: *" 15|Out-Null
+    WaitFor {[string](ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq $previous} 15 'toggle previous value'|Out-Null
+    if($script:app.HasExited -or [Convert]::ToBase64String([IO.File]::ReadAllBytes($settingsPath)) -cne [Convert]::ToBase64String($settingsOriginal)){throw 'Read-only setting crashed the app or changed its bytes'}
+    Save 'readonly.json' @{previousToggle=$previous;currentToggle=[string](ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState;pid=$script:app.Id;alive=(-not$script:app.HasExited);bytesUnchanged=$true};Shot 'readonly-error'
+    Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 40 'Home after settings error'|Out-Null;Settings
    }
    if($Scenario -eq 'manual-download'){
     $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}
@@ -148,7 +161,9 @@ try{
     $theme=ById 'ThemePicker';$theme.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Activate (WaitFor {ByName 'Roo Industries Blue'} 15 'blue theme');Start-Sleep 1;Attach;Settings
    }
-   if($Scenario -in @('feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready')){Click 'UpdateCheckButton'}
+   if($Scenario -in @('feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','transport-error','manual-timeout')){Click 'UpdateCheckButton'}
+   if($ManualRetry -and $Scenario -in 'transport-error','tampered','tampered-size'){WaitStatus 'Version 0.11.1-beta is available' 60|Out-Null;Click 'UpdateDownloadButton'}
+   $retryText=if($ManualRetry -or $Scenario -eq 'manual-timeout'){'Press Download to try again.'}else{'The app will try again later.'}
    switch($Scenario){
     'feed-down' {WaitStatus "Couldn't check for updates.*" 40|Out-Null;Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 40 'Home remains usable'|Out-Null;Settings}
     'slow-feed' {Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 5 'Home while feed waits'|Out-Null;Settings;WaitStatus "Couldn't check for updates. The request timed out." 30|Out-Null}
@@ -158,13 +173,20 @@ try{
     'wrong-channel' {WaitStatus "Couldn't verify the update. This release is for another update channel."|Out-Null}
     'same-version' {WaitStatus 'You have the latest version'|Out-Null}
     'older-version' {WaitStatus 'You have the latest version'|Out-Null}
-    {$_ -in 'tampered','tampered-size'} {WaitStatus "The download didn't match the signed release, so it was deleted. The app will try again later." 180|Out-Null;if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Rejected installer remains'}}
+    {$_ -in 'tampered','tampered-size'} {WaitStatus ("The download didn't match the signed release, so it was deleted. "+$retryText) 180|Out-Null;if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Rejected installer remains'}}
     'manual-download' {WaitStatus 'Version 0.11.1-beta is available'|Out-Null;if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Automatic-off downloaded an installer'};Shot 'available';Click 'UpdateDownloadButton';WaitStatus 'Version 0.11.1-beta is ready to install' 180|Out-Null;Preserved}
+    'transport-error' {WaitStatus ("Couldn't download the update: *. "+$retryText) 180|Out-Null;if((StatusText) -match "didn't match the signed release"){throw 'Transport error was called a signed-byte mismatch'};if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Transport failure left an installer/partial'};Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 40 'Home after download error'|Out-Null;Settings}
+    'manual-timeout' {WaitStatus 'Version 0.11.1-beta is available' 60|Out-Null;Click 'UpdateDownloadButton';WaitStatus 'Downloading version 0.11.1-beta...' 30|Out-Null;Shot 'downloading';Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 10 'Home during stalled download'|Out-Null;Settings;$started=[DateTime]::UtcNow;WaitStatus "Couldn't download the update: The download timed out. Press Download to try again." 1250|Out-Null;Save 'deadline.json' @{secondsAfterHome=([DateTime]::UtcNow-$started).TotalSeconds;realTimeoutMinutes=20;pid=$script:app.Id;alive=(-not$script:app.HasExited)};if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Timed-out download left bytes'}}
+    'timer-read-failure' {Click 'UpdateInstallButton';WaitFor {ByName 'Install version 0.11.1-beta now?'} 45 'confirmation despite timer read failure'|Out-Null;Shot 'timer-error-confirmation';Save 'confirmation-tree.json' @($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {@{name=$_.Current.Name;id=$_.Current.AutomationId;type=$_.Current.ControlType.ProgrammaticName;class=$_.Current.ClassName}});[RooUpdateUi]::SetForegroundWindow([IntPtr]::new($script:window.Current.NativeWindowHandle))|Out-Null;[Windows.Forms.SendKeys]::SendWait('{ESC}');WaitFor {(ById 'UpdateInstallButton').Current.IsEnabled} 20 'confirmation canceled';$timerLog=[IO.File]::ReadAllText($timerLogPath);$newTimerLog=if($timerLog.Length -ge $timerLogLength){$timerLog.Substring([int]$timerLogLength)}else{$timerLog};$timerWarning=@($newTimerLog -split "`n"|Where-Object {$_ -like '*[[]update] Couldn*read the timer setting; treating it as stopped: Fixture timer interval cannot be read.*'});if(-not$timerWarning.Count){throw 'The timer-read failure was not observed in the app log'};Save 'timer-read-failure.json' @{hook='Temporary Core fixture: TimerControl.Read throws unconditionally';fixtureExe=$exe;appAlive=(-not$script:app.HasExited);warning=$timerWarning};if(@(ProcessStarts|Where-Object {$_.image -like '*setup*'}).Count){throw 'Canceled timer-read fixture started an installer'}}
     'ready' {WaitStatus 'Version 0.11.1-beta is ready to install' 180|Out-Null;Preserved}
     'scheduled-download' {$started=[DateTime]::UtcNow;WaitStatus 'Version 0.11.1-beta is ready to install' 180|Out-Null;Save 'scheduled.json' @{checkButtonPressed=$false;secondsFromSettings=([DateTime]::UtcNow-$started).TotalSeconds};Preserved}
     'blocked' {Click 'UpdateInstallButton';WaitStatus "Stop your game session and turn off the timer setting first. The update can't install while they run."|Out-Null}
     'cancel' {Click 'UpdateInstallButton';WaitFor {ByName 'Not now'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Not now');WaitFor {(ById 'UpdateInstallButton').Current.IsEnabled} 20 'canceled'}
     {$_ -in 'install','failure','copy-failure'} {
+     if($Scenario -eq 'install'){
+      Save 'logs-before.json' @(Get-ChildItem $updates -Filter 'install-*.log'|Select-Object Name,Length,LastWriteTimeUtc)
+      foreach($i in 0..4){$path=Join-Path $updates ('install-review2-'+$i+'.log');[IO.File]::WriteAllText($path,'owned log retention fixture');[IO.File]::SetLastWriteTimeUtc($path,[DateTime]::UtcNow.AddMinutes(-10+$i))}
+     }
      $prior=0
      if(-not$ResumeCopyRecovery){$prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Install')
       WaitFor {if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null}
@@ -185,12 +207,12 @@ try{
       Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-Path $exe -PathType Leaf)}
      }
      $script:owned=$null;$script:app=$null;$script:window=$null;if($Scenario -eq 'copy-failure'){Launch}else{Attach};Settings
-     if($Scenario -in 'install','copy-failure'){WaitStatus 'Updated to version 0.11.1-beta' 90|Out-Null;if((Version) -ne '0.11.1-beta'){throw 'Installed version did not advance'}}else{WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne '0.11.0-beta'){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null}
+     if($Scenario -in 'install','copy-failure'){WaitStatus 'Updated to version 0.11.1-beta' 90|Out-Null;if((Version) -ne '0.11.1-beta'){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-Path (Join-Path $updates '0.11.1-beta')){throw 'Installed version cache was retained'};$logs=@(Get-ChildItem $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-Path (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne '0.11.0-beta'){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
    }
    Shot 'settings-banner'
-   if($Scenario -in @('feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready')){
+   if($Scenario -in @('feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready','transport-error','manual-timeout','settings-readonly','timer-read-failure')){
     if((Version) -ne '0.11.0-beta'){throw 'Refusal/download changed installed version'}
     if(@(ProcessStarts|Where-Object {$_.image -like '*-setup*'}).Count){throw 'Unexpected setup process'}
    }
@@ -199,4 +221,4 @@ try{
  Save 'result.json' (Readback)
  'Scenario '+$Scenario+' completed'
 }catch{Save 'failure.json' @{error=$_.Exception.ToString();texts=if($script:window){@(Texts)}else{@()};processStarts=@(ProcessStarts)};throw}
-finally{Save 'process-starts.json' @(ProcessStarts);Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue;Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event;foreach($receipt in @($script:setupReceipts|Select-Object -Last 10)) {Stop-OwnedProcess $receipt};StopApp}
+finally{if($settingsAttributes -ne $null){[IO.File]::SetAttributes($settingsPath,($settingsAttributes -band (-bnot [IO.FileAttributes]::ReadOnly)));[IO.File]::WriteAllBytes($settingsPath,$settingsOriginal);[IO.File]::SetAttributes($settingsPath,$settingsAttributes)};Save 'process-starts.json' @(ProcessStarts);Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue;Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event;foreach($receipt in @($script:setupReceipts|Select-Object -Last 10)) {Stop-OwnedProcess $receipt};StopApp}

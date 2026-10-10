@@ -9,44 +9,65 @@ public sealed class SettingsStore
 {
     private readonly string _filePath;
     private Dictionary<string, string> _values;
+    private bool _loaded;
 
     public SettingsStore()
     {
         var root = RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot;
         Directory.CreateDirectory(root);
         _filePath = Path.Combine(root, "settings.json");
-        _values = Load(_filePath);
+        _loaded = TryLoad(_filePath, out _values, out _, allowMissing: true);
     }
 
     public string? Get(string key) => _values.TryGetValue(key, out var value) ? value : null;
 
-    public void Set(string key, string value)
+    public string? Set(string key, string value)
     {
-        _values = Load(_filePath);
-        _values[key] = value;
         try
         {
-            File.WriteAllText(_filePath, JsonSerializer.Serialize(_values));
+            if (TryLoad(_filePath, out var latest, out var loadError, allowMissing: !_loaded))
+            {
+                _values = latest;
+                _loaded = true;
+            }
+            else if (!_loaded) return loadError;
+            var updated = new Dictionary<string, string>(_values) { [key] = value };
+            RooIndustries.Optimizer.OperationFiles.Write(_filePath, updated);
+            _values = updated;
+            return null;
         }
-        catch (IOException)
+        catch (Exception error)
         {
+            return error.Message;
         }
     }
 
-    private static Dictionary<string, string> Load(string path)
+    private static bool TryLoad(string path, out Dictionary<string, string> values, out string? error, bool allowMissing = false)
     {
+        values = new();
+        error = null;
         try
         {
-            if (File.Exists(path))
-            {
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
-                       ?? new Dictionary<string, string>();
-            }
+            values = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
+                ?? throw new JsonException("The settings file is empty.");
+            return true;
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (JsonException failure)
         {
+            try
+            {
+                var archive = path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ") + "-" + Guid.NewGuid().ToString("N");
+                File.Move(path, archive);
+                AppLog.Write("settings", "The settings file contained invalid JSON. Kept it at " + archive + ": " + failure.Message);
+                return allowMissing;
+            }
+            catch (Exception archiveError) { error = archiveError.Message; return false; }
         }
-
-        return new Dictionary<string, string>();
+        catch (FileNotFoundException failure) { error = failure.Message; return allowMissing; }
+        catch (Exception failure)
+        {
+            error = failure.Message;
+            return false;
+        }
     }
 }

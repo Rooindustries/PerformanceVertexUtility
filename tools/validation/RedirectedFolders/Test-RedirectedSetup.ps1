@@ -1,13 +1,14 @@
-param([string]$Repo,[string]$Scratch,[string]$Phase='after',[string[]]$Scenario=@())
+param([string]$Repo,[string]$Scratch,[string]$Phase='after',[string[]]$Scenario=@(),[string]$ExpectedMachine=$env:ROO_TEST_COMPUTER,[string]$IsccPath=$env:ROO_ISCC_EXE)
 $ErrorActionPreference='Stop';Import-Module Microsoft.PowerShell.Utility,Microsoft.PowerShell.Management
-if($env:COMPUTERNAME -ne 'CS2-GEN4'){throw 'Wrong machine'}
+if([string]::IsNullOrWhiteSpace($ExpectedMachine) -or [string]::IsNullOrWhiteSpace($IsccPath)){throw 'ExpectedMachine and IsccPath are required; pass arguments or set ROO_TEST_COMPUTER and ROO_ISCC_EXE.'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong machine'}
 if(-not(Test-Path -LiteralPath (Join-Path $Scratch 'fixture-owner.txt'))){throw 'Unowned scratch'}
 $acl=Get-Acl -LiteralPath $Scratch
 if(-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'The fixture scratch must have protected administrator ownership.'}
 foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544') -and ([int64]$rule.FileSystemRights -band 0x500D0156) -ne 0){throw 'The fixture scratch permits an untrusted writer.'}}
 if(@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.IdentityReference.Value -eq 'S-1-3-4' -and $_.AccessControlType -eq 'Allow'}).Count -eq 0){throw 'The fixture scratch must limit implicit owner rights.'}
 [Reflection.Assembly]::LoadFrom((Join-Path $Scratch 'FolderFixture.dll'))|Out-Null
-$iscc='C:\Users\serviroo\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
+$iscc=$IsccPath
 & $iscc /Q ('/DOutputDir='+$Scratch) (Join-Path $Repo 'tools\release\SetupProcess.Test.iss')
 if($LASTEXITCODE){throw 'Inno compile failed'}
 $rows=New-Object System.Collections.Generic.List[object]

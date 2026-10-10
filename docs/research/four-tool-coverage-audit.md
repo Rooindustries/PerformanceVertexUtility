@@ -4,7 +4,7 @@ Audit date: 2026-09-19. Scope: pinned O&O ShutUp10 and WPD controls, their auxil
 
 **The 632 fixed records do not establish complete four-tool coverage.** The compiler visits each source file's `records` array but does not consume O&O `linkedEffects`/`otherFeatures`, WPD `otherFeatures`, or several WPD `providerSemantics`. A passing fixed-count check therefore cannot detect these omissions. The development documentation correctly distinguishes catalog counts from executed behavior, but individual generated `implemented` labels still overstate some source bundles.
 
-Private actionable corrections: `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/coverage-audit/coverage-corrections.json`. Each correction is keyed by product, source ID and zero-based variant; input hashes identify the audited snapshot. It retains 486 source records' original constraints/evidence plus linked and dynamic features. No new proprietary implementation body is introduced.
+Private actionable corrections: `<private work folder>/four-tool-tweaks-20260919/coverage-audit/coverage-corrections.json`. Each correction is keyed by product, source ID and zero-based variant; input hashes identify the audited snapshot. It retains 486 source records' original constraints/evidence plus linked and dynamic features. No new proprietary implementation body is introduced.
 
 ## Snapshot and denominator
 

@@ -636,7 +636,7 @@ function New-RooIndustriesProcessPolicyPreviewEntry {
     $rule = $ruleMatch.rule
     $ruleId = if ($ruleMatch.matched) { [string](Get-RooIndustriesPropertyValue $rule 'ruleId' 'process-policy-rule') } else { 'process-policy-protected-skip' }
     $controls = if ($ruleMatch.matched) { Get-RooIndustriesProcessPolicyControls $rule } else { [pscustomobject]@{} }
-    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null)
+    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null) -ReadGpu:($ruleMatch.matched -and -not $protection.blocked -and -not [string]::IsNullOrWhiteSpace([string]$controls.gpuPriority))
     $controlState = [pscustomobject]@{
         priorityClass = $currentControls.priorityClass
         affinityMask = $currentControls.affinityMask

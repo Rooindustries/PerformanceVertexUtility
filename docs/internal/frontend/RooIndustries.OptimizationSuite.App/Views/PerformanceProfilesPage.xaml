@@ -88,6 +88,7 @@
                                     <Border CornerRadius="8" BorderThickness="1" Padding="14" Background="{StaticResource RooIndustriesSurfaceInputBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}">
                                         <StackPanel Spacing="12">
                                             <StackPanel Spacing="4">
+                                                <InfoBar x:Name="ProcessRecoveryNotice" AutomationProperties.AutomationId="ProcessRecoveryNotice" IsOpen="{x:Bind ViewModel.RecoverySetAside, Mode=TwoWay}" IsClosable="True" Severity="Informational" Message="An earlier restore point couldn't be used, so it was set aside. Apply is available again." />
                                                 <TextBlock Text="{x:Bind ViewModel.ActionTitle, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                                 <TextBlock Text="{x:Bind ViewModel.ActionDetail, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             </StackPanel>
@@ -102,7 +103,7 @@
                                                         <TextBlock Text="Review" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Command="{x:Bind ViewModel.ApplyProfileCommand}" Padding="12,8" AutomationProperties.Name="Apply" IsEnabled="{x:Bind ViewModel.CanRunProcessAction, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}">
+                                                <Button Command="{x:Bind ViewModel.ApplyProfileCommand}" Padding="12,8" AutomationProperties.Name="Apply" IsEnabled="{x:Bind ViewModel.CanApplyProcessProfile, Mode=OneWay}" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}">
                                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                                         <Image Width="14" Height="14" Source="ms-appx:///Assets/Icons/play.svg" AutomationProperties.AccessibilityView="Raw" />
                                                         <TextBlock Text="Apply" />

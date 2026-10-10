@@ -539,6 +539,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             "restored" => result.Changes.Any(change => change.Status == "leftAsSet") ? ProcessControlEngine.LeftAsSet : "Original controls restored.",
             "expired" => "The process exited; its instance controls have ended.",
             _ when restoring => "Some controls weren't restored. Another app changed them or Windows refused.",
+            "applied" when result.Preview.Blocked is { Count: > 0 } => "Done. Every control Windows allowed was changed and checked.",
             "applied" => "Done. Every control was changed and checked.",
             _ when result.Changes.Any(change => change.Error is null && change.Status is "applied" or "unchanged") => "Some controls didn't change. The others were applied.",
             _ => "The controls didn't change.",
@@ -553,7 +554,7 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private static string Outcome(ControlChange change, bool restoring) => Label(change.Name) + ": " + (
         change.Status == "leftAsSet" ? "left as another program set it"
-        : change.Error is not null ? (restoring ? "not restored. " : "not changed. ") + (change.ErrorKind == "denied" ? "Windows refused the change. Games with anti-cheat often block this." : change.Error)
+        : change.Error is not null ? (restoring ? "not restored. " : "not changed. ") + (change.ErrorKind == "denied" ? "Windows refused the change." : change.Error)
         : change.Status switch
         {
             "applied" => "set to " + Describe(change.Name, change.Desired),
@@ -565,7 +566,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private static bool IsBlocked(ProcessControlSnapshot snapshot, string name) => snapshot.Blocked?.ContainsKey(name) == true;
     private static string BlockedNotice(ProcessControlSnapshot snapshot)
         => snapshot.Blocked is { Count: > 0 } blocked
-            ? "This app doesn't let other apps change " + string.Join(", ", blocked.Keys.Select(ProcessControlBlockedException.Label)) + " while it runs. Games with anti-cheat often do this. To set a game's priority and CPU cores, use the Games tab and set it up before the game starts.\n"
+            ? "This app doesn't let other apps change " + string.Join(", ", blocked.Keys.Select(ProcessControlBlockedException.Label)) + " while it runs. If it's a game with anti-cheat, use the Games tab to set its priority and CPU cores before you start the game.\n"
             : "";
 
     [RelayCommand]

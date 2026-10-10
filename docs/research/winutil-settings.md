@@ -4,7 +4,7 @@ Research date: 2026-09-19. Pinned upstream commit: `fc60cbde09d669178bda1665be9c
 
 ## Complete inventory
 
-Private artifact: `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/winutil/controls.json`.
+Private artifact: `<private work folder>/four-tool-tweaks-20260919/winutil/controls.json`.
 
 | Coverage | Count |
 | --- | ---: |

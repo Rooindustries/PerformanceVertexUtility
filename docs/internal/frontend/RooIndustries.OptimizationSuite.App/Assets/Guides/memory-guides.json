@@ -47,7 +47,7 @@
       "steps": [
         "Close what you don't need before you start a game.",
         "For apps you keep open, use Games & processes > Background apps. It can lower their priority and memory priority, so Windows keeps your game's memory first when RAM runs low.",
-        "On Intel CPUs with E-cores, or AMD Ryzen CPUs with two CCDs, the Background apps preset can keep background apps at Normal priority and move them to the E-cores or the second CCD, away from your game.",
+        "On Intel CPUs with E-cores, or AMD Ryzen CPUs with two CCDs, the Background apps preset can keep background apps at Normal priority and move them to the E-cores or the second CCD. Your game can still use every core; only the background apps are limited.",
         "In your browser, turn on Memory Saver (Chrome) or Sleeping tabs (Edge) so idle tabs give memory back."
       ],
       "note": "Memory priority doesn't limit how much RAM an app can use. It decides whose memory Windows takes back first when RAM runs short."
