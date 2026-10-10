@@ -554,7 +554,7 @@ public partial class ProcessControlsViewModel : ObservableObject
 
     private static string Outcome(ControlChange change, bool restoring) => Label(change.Name) + ": " + (
         change.Status == "leftAsSet" ? "left as another program set it"
-        : change.Error is not null ? (restoring ? "not restored. " : "not changed. ") + (change.ErrorKind == "denied" ? "Windows refused the change. Games with anti-cheat often block this." : change.Error)
+        : change.Error is not null ? (restoring ? "not restored. " : "not changed. ") + (change.ErrorKind == "denied" ? "Windows refused the change." : change.Error)
         : change.Status switch
         {
             "applied" => "set to " + Describe(change.Name, change.Desired),

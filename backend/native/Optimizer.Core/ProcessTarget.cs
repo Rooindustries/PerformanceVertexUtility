@@ -155,7 +155,7 @@ public sealed class ProcessTarget : IDisposable
         return new(identity, Protection(), Topology(), ControlNames.ToDictionary(name => name, Read), blocked is { Count: > 0 } ? blocked : null);
     }
 
-    public const string WriteBlocked = "Windows doesn't let other apps change this while it runs. Games with anti-cheat often block this.";
+    public const string WriteBlocked = "Windows doesn't let other apps change this while it runs.";
 
     public static uint RequiredWriteAccess(string name) => name == "cpuSets" ? 0x2000u : 0x0200u;
 
