@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.Win32.SafeHandles;
@@ -28,6 +29,29 @@ public sealed class WindowsControlStore : IControlStore
             "scheduled-task" => TaskRead(address),
             _ => PowerShellControls.Read(address),
         };
+    }
+    private static readonly HashSet<string> NativeKinds = new(StringComparer.Ordinal)
+    {
+        "service", "mitigations", "windows-features", "hibernation", "file-acl", "file-ownership", "download-blocker", "hosts", "timer", "timer-startup", "power-plan", "scheduled-task",
+    };
+    public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadMany(IReadOnlyCollection<ControlAddress> addresses)
+    {
+        var all = addresses.Distinct().ToArray();
+        var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+        var scripted = new List<ControlAddress>();
+        foreach (var address in all.Where(address => !NativeKinds.Contains(address.Kind ?? "")))
+        {
+            try { address.Validate(); scripted.Add(address); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        var batch = scripted.Count == 0 ? null : Task.Factory.StartNew(() => PowerShellControls.ReadMany(scripted), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        foreach (var address in all.Where(address => NativeKinds.Contains(address.Kind ?? "")))
+        {
+            try { results[address] = (Read(address), null); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        if (batch is not null) foreach (var (address, result) in batch.GetAwaiter().GetResult()) results[address] = result;
+        return results;
     }
     public void Write(TweakControlRead before, JsonElement after)
     {
@@ -89,6 +113,7 @@ static class ServiceControls
         {
             Check(QueryServiceConfig(service, memory, needed, out _), "QueryServiceConfig");
             var config = Marshal.PtrToStructure<ServiceConfig>(memory);
+            var displayName = DisplayName(Marshal.PtrToStringUni(config.DisplayName), address.Target);
             var binding = OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(new { config.Type, Binary = Marshal.PtrToStringUni(config.Binary), Account = Marshal.PtrToStringUni(config.Account) }));
             JsonElement value;
             switch (address.Property)
@@ -98,21 +123,24 @@ static class ServiceControls
                     Check(QueryServiceConfig2(service, 3, memory, needed, out _), "QueryServiceConfig2(delayed start)");
                     value = ControlValues.From(Marshal.ReadInt32(memory) != 0); break;
                 case "running":
+                    if ((config.Type & 3) != 0) throw new InvalidDataException("This is a Windows driver. It cannot be started or stopped while Windows is running: " + address.Target);
                     Check(QueryServiceStatus(service, out var status), "QueryServiceStatus");
                     if (status.State is not (1 or 4)) throw new InvalidDataException("The service is transitioning. Try again after it settles: " + address.Target);
                     value = ControlValues.From(status.State == 4); break;
                 default: throw new InvalidDataException("Unknown service setting: " + address.Property);
             }
+            if (address.Property != "running" && !CanOpen(manager, address.Target, WriteAccess(address.Property, value)))
+                throw new InvalidDataException("Windows doesn't let administrators change the " + address.Property.Replace('-', ' ') + " of this service: " + address.Target);
             var allowed = address.Property == "startup" ? ((config.Type & 3) != 0 ? new uint[] { 0, 1, 2, 3, 4 } : new uint[] { 2, 3, 4 }).Select(ControlValues.From).ToArray() : null;
             if (allowed is not null && !allowed.Any(choice => ControlValues.Equal(choice, value))) throw new InvalidDataException("The service has a startup value that its service type cannot restore through Windows APIs.");
             return new(address, "service:" + address.Target.ToUpperInvariant() + ":" + address.Property, binding, value,
-                Marshal.PtrToStringUni(config.DisplayName) + ": " + address.Property.Replace('-', ' '), allowed);
+                displayName + ": " + address.Property.Replace('-', ' '), allowed);
         }
         finally { Marshal.FreeHGlobal(memory); }
     }
     public static void Write(ControlAddress address, JsonElement value)
     {
-        using var manager = Manager(); using var service = Open(manager, address.Target, 1 | 2 | 4 | 16 | 32);
+        using var manager = Manager(); using var service = Open(manager, address.Target, WriteAccess(address.Property, value));
         switch (address.Property)
         {
             case "startup":
@@ -144,6 +172,20 @@ static class ServiceControls
             default: throw new InvalidDataException("Unknown service setting.");
         }
     }
+    private static uint WriteAccess(string property, JsonElement value) => property switch
+    {
+        "startup" or "delayed-start" => 2,
+        "running" => 4 | (value.ValueKind == JsonValueKind.True ? 16u : 32u),
+        _ => throw new InvalidDataException("Unknown service setting."),
+    };
+    private static bool CanOpen(ServiceHandle manager, string name, uint access)
+    {
+        using var handle = OpenService(manager, name, access);
+        if (!handle.IsInvalid) return true;
+        var code = Marshal.GetLastWin32Error();
+        if (code == 5) return false;
+        throw new Win32Exception(code, "OpenService(" + name + ") failed (Win32 " + code + ").");
+    }
     private static ServiceHandle Manager()
     {
         var handle = OpenSCManager(null, null, 1); if (handle.IsInvalid) Error("OpenSCManager"); return handle;
@@ -162,6 +204,16 @@ static class ServiceControls
         public ServiceHandle() : base(true) { }
         protected override bool ReleaseHandle() => CloseServiceHandle(handle);
     }
+    internal static string DisplayName(string? display, string serviceName)
+    {
+        if (display is not null && display.StartsWith('@'))
+        {
+            var buffer = new StringBuilder(512);
+            display = SHLoadIndirectString(display, buffer, buffer.Capacity, IntPtr.Zero) == 0 ? buffer.ToString() : null;
+        }
+        return string.IsNullOrWhiteSpace(display) || !char.IsLetterOrDigit(display.Trim()[0]) ? serviceName : display.Trim();
+    }
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)] private static extern int SHLoadIndirectString(string source, StringBuilder output, int size, IntPtr reserved);
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ServiceHandle OpenSCManager(string? machine, string? database, uint access);
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ServiceHandle OpenService(ServiceHandle manager, string name, uint access);
     [DllImport("advapi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseServiceHandle(IntPtr service);

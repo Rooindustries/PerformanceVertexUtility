@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[switch]$SharedQueuePaths)
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[switch]$SharedQueuePaths,[ValidateSet('','RequestFiles')][string]$Scenario='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
@@ -7,14 +7,94 @@ $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $caseId=[Guid]::NewGuid().ToString('N')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-contract-'+$caseId)
 $hostDirectory=Join-Path $root 'host'
+$operations=Join-Path $root 'operations'
 $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
-$exclusionPath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+try {$null=Get-RooIndustriesLocalDataRoot -Protected}
+catch {throw ('This suite exercises the production removal queue, whose claims and cleanup exclusions live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
+$exclusionPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
 $exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
 $ownedExclusionHash=$null
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
+if($Scenario -eq 'RequestFiles'){
+    $caseRoot=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-host-request-files-'+[Guid]::NewGuid().ToString('N'))
+    $stdinOnly='Requests must be passed on standard input.'
+    $netNames=@(Get-ChildItem Env:|Where-Object {$_.Name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'}|ForEach-Object {[pscustomobject]@{name=$_.Name;value=$_.Value}})
+    foreach($item in $netNames){Remove-Item -LiteralPath ('Env:\'+$item.name)}
+    function Invoke-HostRaw([string]$Dll,[string]$HostAction,[string]$Argument,[string]$Body){
+        $ErrorActionPreference='Continue'
+        $output=@(if($Argument -eq '-'){$Body|& $DotNetPath $Dll $HostAction '-' 2>&1}else{& $DotNetPath $Dll $HostAction $Argument 2>&1})
+        $code=$LASTEXITCODE
+        $text=@($output|Where-Object {$_ -isnot [Management.Automation.ErrorRecord]}) -join "`n"
+        $diagnostics=@($output|Where-Object {$_ -is [Management.Automation.ErrorRecord]}|ForEach-Object {[string]$_}) -join "`n"
+        $parsed=$null
+        try {$parsed=$text|ConvertFrom-Json}catch{}
+        return [pscustomobject]@{exit=$code;status=$parsed.status;message=$parsed.error.message;text=$text;stderr=$diagnostics}
+    }
+    try {
+        [IO.Directory]::CreateDirectory($caseRoot)|Out-Null
+        $releaseHost=Join-Path $caseRoot 'release-host'
+        & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -p:RooIndustriesRelease=true -o $releaseHost|Out-Null
+        if($LASTEXITCODE -ne 0){throw 'Release optimizer host publish failed.'}
+        $dll=Join-Path $releaseHost 'Optimizer.Host.dll'
+        $applyActions=@('tweak-apply','tweak-restore','tweak-recover','process-apply','process-restore','cleanup-apply','cleanup-restore','cleanup-batch-apply','cleanup-batch-restore','cleanup-exclusions-save','rule-save','policy-stop','tweak-preview','tweak-catalog')
+        foreach($name in $applyActions){
+            $body=@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true}|ConvertTo-Json -Compress
+            $file=Join-Path $caseRoot ($name+'.json')
+            [IO.File]::WriteAllText($file,$body)
+            $viaFile=Invoke-HostRaw $dll $name $file ''
+            Assert ($viaFile.exit -ne 0 -and $viaFile.status -eq 'failed' -and $viaFile.message -ceq $stdinOnly) ('A release helper refuses a request file for '+$name)
+            $viaInput=Invoke-HostRaw $dll $name '-' $body
+            Assert ($viaInput.message -cne $stdinOnly) ('A release helper still reads the same request from standard input for '+$name)
+        }
+        $echoRoot=Join-Path $caseRoot 'echo-root'
+        [IO.Directory]::CreateDirectory((Join-Path $echoRoot 'backend\scripts'))|Out-Null
+        [IO.Directory]::CreateDirectory((Join-Path $echoRoot 'backend\bin\optimizer'))|Out-Null
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Invoke-WindowsTweakRequest.ps1') -Destination (Join-Path $echoRoot 'backend\scripts\Invoke-WindowsTweakRequest.ps1')
+        [IO.File]::WriteAllText((Join-Path $echoRoot 'backend\bin\optimizer\Optimizer.Host.dll'),'fixture')
+        [IO.File]::WriteAllText((Join-Path $echoRoot 'echo.cmd'),"@echo off`r`nmore > `"%~dp0stdin.txt`"`r`nexit /b 0`r`n")
+        $echoBody='{"schemaVersion":1,"profileId":"echo","selections":[{"settingId":"a","optionId":"b"}]}'
+        $echoFile=Join-Path $caseRoot 'echo-request.json'
+        [IO.File]::WriteAllText($echoFile,$echoBody)
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $echoRoot 'backend\scripts\Invoke-WindowsTweakRequest.ps1') -Action Preview -RequestPath $echoFile -DotNetPath (Join-Path $echoRoot 'echo.cmd')|Out-Null
+        $echoed=if(Test-Path -LiteralPath (Join-Path $echoRoot 'stdin.txt')){([IO.File]::ReadAllText((Join-Path $echoRoot 'stdin.txt'))).Trim()}else{''}
+        Assert ($echoed -ceq $echoBody) 'The tweak request script hands the Host the request text on standard input, not its bytes as numbers'
+        $policyRoot=Join-Path $caseRoot 'policy'
+        $policyFile=Join-Path $caseRoot 'worker-request.json'
+        [IO.File]::WriteAllText($policyFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;policyRoot=$policyRoot}|ConvertTo-Json -Compress))
+        $policy=Invoke-HostRaw $dll 'policy-run' $policyFile ''
+        Assert ($policy.exit -ne 0 -and $policy.message -clike '*protected rules folder*') 'A release helper still reads the scheduled governor request but only from its protected rules folder'
+        $watchFile=Join-Path $caseRoot 'watch-request.json'
+        [IO.File]::WriteAllText($watchFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;sessionRoot=$caseRoot;operationId='fixture'}|ConvertTo-Json -Compress))
+        $watch=Invoke-HostRaw $dll 'protected-session-watch' $watchFile ''
+        Assert ($watch.exit -ne 0 -and $watch.message -cne $stdinOnly) 'A release helper still reads a session request file but refuses it outside the protected recovery folder'
+        $runFile=Join-Path $caseRoot 'run-request.json'
+        [IO.File]::WriteAllText($runFile,(@{schemaVersion=1;repoRoot=$repoRoot;confirm=$true;sessionRoot=$caseRoot}|ConvertTo-Json -Compress))
+        $run=Invoke-HostRaw $dll 'protected-session-run' $runFile ''
+        Assert ($run.exit -ne 0 -and $run.message -cne $stdinOnly) 'A release helper still reads a session run file but refuses it outside the protected recovery folder'
+        $statusBody=(@{schemaVersion=1;repoRoot=$repoRoot}|ConvertTo-Json -Compress)
+        foreach($set in @(@{name='DOTNET_NOLOGO';value='1'},@{name='COMPlus_ROO_INDUSTRIES_UNKNOWN_KNOB';value='1'},@{name='dotnet_gcserver';value='1'},@{name='COREHOST_TRACE';value='1'},@{name='COR_ENABLE_PROFILING';value='1'},@{name='CORECLR_ENABLE_PROFILING';value='1'})){
+            [Environment]::SetEnvironmentVariable($set.name,$set.value,'Process')
+            try {$refused=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable($set.name,$null,'Process')}
+            Assert ($refused.exit -ne 0 -and $refused.message -like ('*will not run with these .NET settings in its environment: '+$set.name+'.*')) ('A release helper refuses '+$set.name+' even though no list names it')
+            if($set.name -ceq 'COREHOST_TRACE'){Assert ($refused.stderr -match 'Tracing enabled @') 'The trace refusal captures native host diagnostics without emitting PowerShell errors';Write-Output ('Captured COREHOST_TRACE stderr lines: '+@($refused.stderr -split "`n").Count)}
+        }
+        [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','0','Process')
+        try {$pinned=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
+        Assert ($pinned.message -notlike '*will not run with these*') 'A release helper accepts the diagnostics switch the launcher sets to 0'
+        [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','1','Process')
+        try {$onValue=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
+        Assert ($onValue.exit -ne 0 -and $onValue.message -like '*DOTNET_EnableDiagnostics*') 'A release helper refuses the diagnostics switch when it holds anything but 0'
+    } finally {
+        foreach($item in $netNames){[Environment]::SetEnvironmentVariable($item.name,$item.value,'Process')}
+        if(Test-Path -LiteralPath $caseRoot){Remove-Item -LiteralPath $caseRoot -Recurse -Force}
+    }
+    Assert (-not(Test-Path -LiteralPath $caseRoot)) 'The request file scenario removes its folder'
+    return
+}
 function Core([string]$CoreAction,[object]$Fields){
     $request=@{schemaVersion=1;repoRoot=$repoRoot}
     foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
@@ -28,8 +108,14 @@ function Core([string]$CoreAction,[object]$Fields){
 }
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    $rootSecurity=[Security.AccessControl.DirectorySecurity]::new()
+    $rootSecurity.SetAccessRuleProtection($true,$false)
+    foreach($sid in 'S-1-5-18','S-1-5-32-544',[Security.Principal.WindowsIdentity]::GetCurrent().User.Value){$rootSecurity.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+    ([IO.DirectoryInfo]::new($root)).SetAccessControl($rootSecurity)
     & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
+    $secured=@((@{schemaVersion=1;repoRoot=$repoRoot;operationsRoot=$operations;confirm=$true}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'operations-secure' '-') -join "`n"
+    if(($secured|ConvertFrom-Json).status -ne 'completed'){throw ('The fixture recovery folder could not be protected: '+$secured)}
     $remover=Join-Path $root 'RooIndustriesHostRemover.exe'
     Add-Type @'
 using System;
@@ -123,11 +209,20 @@ public class RooIndustriesHostRemover {
         }
         $batchPath=Join-Path $root 'batch-review.json'
         Core 'cleanup-batch-preview' @{cleanupOperations=@($reviews|ForEach-Object {$_.operation});outputPath=$batchPath}|Out-Null
-        $batchJournal=Join-Path $root 'batch-journal.json'
+        $batchJournal=Join-Path $operations 'batch-journal.json'
         $originalExclusions=Core 'cleanup-exclusions-status' @{}
         $protectedExclusions=@{paths=@($originalExclusions.exclusions.paths)+@((Join-Path $apps[0].install 'preferences.txt'));registry=@($originalExclusions.exclusions.registry)}
         $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$protectedExclusions;expectedRevision=$originalExclusions.revision;confirm=$true}
         $ownedExclusionHash=$savedExclusions.revision
+        $markerRoot=Join-Path $root 'poisoned-environment'
+        foreach($folder in @('profile','local','roaming','temp')){[IO.Directory]::CreateDirectory((Join-Path $markerRoot $folder))|Out-Null}
+        $poison=[ordered]@{USERPROFILE=(Join-Path $markerRoot 'profile');LOCALAPPDATA=(Join-Path $markerRoot 'local');APPDATA=(Join-Path $markerRoot 'roaming');TEMP=(Join-Path $markerRoot 'temp');TMP=(Join-Path $markerRoot 'temp');ComSpec=(Join-Path $markerRoot 'cmd.exe')}
+        $kept=@{};foreach($name in $poison.Keys){$kept[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
+        try {
+            foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$poison[$name],'Process')}
+            $poisonedStatus=Core 'cleanup-exclusions-status' @{}
+        } finally {foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$kept[$name],'Process')}}
+        Assert ($poisonedStatus.revision -eq $savedExclusions.revision -and @($poisonedStatus.exclusions.paths).Count -eq @($protectedExclusions.paths).Count) 'A Host started with USERPROFILE, LOCALAPPDATA, APPDATA, TEMP, TMP and ComSpec pointing at marker values reads the same app data folder as without them'
         $excluded=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath).Hash;journalPath=$batchJournal;confirm=$true}
         Assert ($excluded.status -eq 'needsReconciliation' -and $excluded.entries[0].error -like '*Excluded path:*') 'The public batch endpoint enforces exclusions added after review'
         foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert ((Test-Path (Join-Path $app.install 'preferences.txt')) -and $null -ne $key) 'Late exclusions preserve both applications before deletion'}finally{if($key){$key.Dispose()}}}
@@ -154,6 +249,8 @@ public class RooIndustriesHostRemover {
             if($null -eq $exclusionBefore){Remove-Item -LiteralPath $exclusionPath}else{[IO.File]::WriteAllBytes($exclusionPath,$exclusionBefore)}
         }
     } finally {
+        $markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots',$true)
+        if($markers){$markerName=Get-RooIndustriesDataRootMarkerName $operations;$markers.DeleteValue($markerName,$false);$markers.DeleteValue($markerName+'|protected-at',$false);$markers.Dispose()}
         foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
         foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
         $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()
@@ -162,3 +259,4 @@ public class RooIndustriesHostRemover {
 }
 Assert (-not(Test-Path -LiteralPath $root)) 'Host validation removes its registrations, receipts, binaries, journals and leftovers'
 if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -SharedQueuePaths}
+if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -Scenario RequestFiles}

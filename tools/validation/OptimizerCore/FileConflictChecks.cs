@@ -9,7 +9,7 @@ static class FileConflictChecks
 
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-file-conflicts-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("file-conflicts");
         Directory.CreateDirectory(root);
         var authority = new CleanupAuthority
         {

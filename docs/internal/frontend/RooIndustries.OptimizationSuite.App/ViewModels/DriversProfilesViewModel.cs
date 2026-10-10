@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
@@ -36,6 +37,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string? _gpuNote;
     [ObservableProperty] private string _nvidiaProfileId = "base-profile";
     [ObservableProperty] private string _nvidiaProfileName = "Base profile";
+    private bool _nvidiaActionShown;
+    private long _nvidiaActionGeneration = -1;
     [ObservableProperty] private string _nvidiaActionTitle = "NVIDIA profile";
     [ObservableProperty] private string _nvidiaActionDetail = "Check NVIDIA Profile Inspector, review the profile, and confirm the requirements below.";
     [ObservableProperty]
@@ -78,7 +81,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var hardware = await App.Live.GetDriverHardwareAsync(fresh: Fresh && !Quiet);
         if (hardware?.Machine is null)
         {
             ErrorMessage = "We couldn't read your hardware yet. Close and reopen to try again.";
@@ -111,25 +114,21 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         {
             NvidiaProfileId = string.IsNullOrWhiteSpace(firstProfile.ProfileId) ? "base-profile" : firstProfile.ProfileId!;
             NvidiaProfileName = string.IsNullOrWhiteSpace(firstProfile.Name) ? NvidiaProfileId : firstProfile.Name!;
-            NvidiaActionTitle = HasNvidia ? NvidiaProfileName + " is ready to review" : NvidiaProfileName + " is locked on this GPU";
-            NvidiaActionDetail = HasNvidia
-                ? "Preview the profile. Apply runs only after export, approval, and benchmark checks are selected."
-                : "This PC is not on NVIDIA graphics. Roo Industries can inspect the path, but apply stays locked.";
+            if (_nvidiaActionShown && !DataGeneration.IsCurrent(_nvidiaActionGeneration) && !DataGeneration.Changing) _nvidiaActionShown = false;
+            if (!_nvidiaActionShown)
+            {
+                NvidiaActionTitle = HasNvidia ? NvidiaProfileName + " is ready to review" : NvidiaProfileName + " is locked on this GPU";
+                NvidiaActionDetail = HasNvidia
+                    ? "Preview the profile. Apply runs only after export, approval, and benchmark checks are selected."
+                    : "This PC is not on NVIDIA graphics. Roo Industries can inspect the path, but apply stays locked.";
+            }
             _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
             OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
         }
 
-        var catalog = await Data.GetDriverRecommendationsAsync();
-        var pnps = Gpus.Select(g => g.PnpDeviceId).Where(p => !string.IsNullOrWhiteSpace(p)).Cast<string>().ToList();
-        var matched = (catalog.Recommendations ?? Enumerable.Empty<DriverRecommendation>())
-            .Where(r => r.HardwareMatches?.Any(m => pnps.Any(p => p.StartsWith(m, StringComparison.OrdinalIgnoreCase))) ?? false)
-            .ToList();
         Recommendations.Clear();
-        foreach (var r in matched) Recommendations.Add(r);
-        HasRecommendations = Recommendations.Count > 0;
-
+        HasRecommendations = false;
         ManualGateWarnings.Clear();
-        foreach (var w in catalog.ManualInstallGate?.Warnings ?? Enumerable.Empty<string>()) ManualGateWarnings.Add(w);
 
         if (!HasNvidia)
         {
@@ -147,7 +146,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             return;
         }
 
-        NvidiaBusy = true;
+        NvidiaBusy = true; _nvidiaActionShown = true;
         NvidiaActionTitle = "Checking NVIDIA Profile Inspector";
         NvidiaActionDetail = "Roo Industries is running the read-only tool check. It will not import a profile.";
         try
@@ -164,7 +163,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
         finally
         {
-            NvidiaBusy = false;
+            NvidiaBusy = false; _nvidiaActionGeneration = DataGeneration.Snapshot();
         }
     }
 
@@ -176,7 +175,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             return;
         }
 
-        NvidiaBusy = true;
+        NvidiaBusy = true; _nvidiaActionShown = true;
         NvidiaActionTitle = "Previewing " + NvidiaProfileName;
         NvidiaActionDetail = "Roo Industries is building the export and import plan without launching NVIDIA Profile Inspector.";
         try
@@ -193,7 +192,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
         finally
         {
-            NvidiaBusy = false;
+            NvidiaBusy = false; _nvidiaActionGeneration = DataGeneration.Snapshot();
         }
     }
 
@@ -205,7 +204,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             return;
         }
 
-        NvidiaBusy = true;
+        NvidiaBusy = true; _nvidiaActionShown = true;
         var realApplyRequested = NvidiaExportReviewed && NvidiaProfileApproved && NvidiaBenchmarkReady;
         NvidiaActionTitle = realApplyRequested ? "Applying " + NvidiaProfileName : "Checking apply approvals";
         NvidiaActionDetail = realApplyRequested
@@ -238,7 +237,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
         finally
         {
-            NvidiaBusy = false;
+            NvidiaBusy = false; _nvidiaActionGeneration = DataGeneration.Snapshot();
         }
     }
 
@@ -258,7 +257,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             return;
         }
 
-        NvidiaBusy = true;
+        NvidiaBusy = true; _nvidiaActionShown = true;
         NvidiaActionTitle = NvidiaProfileApproved ? "Restoring " + NvidiaProfileName : "Checking restore approvals";
         NvidiaActionDetail = NvidiaProfileApproved
             ? "Roo Industries will restore through NVIDIA Profile Inspector only if the rollback path and hardware checks pass."
@@ -285,7 +284,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
         finally
         {
-            NvidiaBusy = false;
+            NvidiaBusy = false; _nvidiaActionGeneration = DataGeneration.Snapshot();
         }
     }
 

@@ -11,7 +11,10 @@ using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null)
+{
+    public bool Stale { get; init; }
+}
 public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
 
 public sealed class LiveDataService
@@ -60,10 +63,15 @@ public sealed class LiveDataService
     }
 
     private static readonly JsonSerializerOptions JsonOptions = JsonTolerance.CreateOptions();
+    private readonly Lazy<OptimizerService> _operations;
 
-    public LiveDataService(BackendLocator locator, string? recoveryDirectory = null)
+    private readonly string? _operationsRoot;
+
+    public LiveDataService(BackendLocator locator, string? recoveryDirectory = null, string? operationsRoot = null)
     {
         _locator = locator;
+        _operationsRoot = operationsRoot;
+        _operations = new(() => new OptimizerService(locator, operationsRoot));
         _recoveryDirectory = recoveryDirectory ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings");
         _recoveryKey = Path.GetFullPath(_recoveryDirectory);
     }
@@ -74,27 +82,105 @@ public sealed class LiveDataService
 
     public bool ScriptsAvailable => ScriptsDirectory is not null && Directory.Exists(ScriptsDirectory);
 
-    public string? LastError { get; private set; }
+    private string? _lastError;
+    public string? LastError
+    {
+        get => _lastError;
+        private set
+        {
+            _lastError = value;
+            if (value is not (AppLog.Failed or AppLog.MissingFiles or AppLog.TimedOut)) AppLog.Write("backend", value);
+        }
+    }
     public string? RepoRoot => _locator.RepoRoot;
 
-    public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
-        => RunAsync<ProcessInventory>("Get-ProcessInventory.ps1", ct);
+    private readonly SharedReads _shared = new();
+    private static readonly TimeSpan LiveAge = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan HardwareAge = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ProcessSettle = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan AppsAge = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan StaleAge = TimeSpan.FromMinutes(5);
+    private static readonly AsyncLocal<BackgroundPriority?> Background = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, BackgroundPriority> _backgroundReads = new(StringComparer.Ordinal);
 
-    public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
-        => RunAsync<ProcessClassification>("Get-ProcessClassification.ps1", ct);
+    public async Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken ct = default)
+        => (await GetProcessInventoryResultAsync(ct)).Value;
+    public Task<LiveDataResult<ProcessInventory>> GetProcessInventoryResultAsync(CancellationToken ct = default, bool fresh = false)
+        => SharedResultAsync<ProcessInventory>("inventory", fresh ? TimeSpan.Zero : LiveAge, "Get-ProcessInventory.ps1", ct, inventory => inventory.Summary is not null && inventory.Processes is not null, settle: ProcessSettle);
 
-    public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct);
+    public async Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken ct = default)
+        => (await GetProcessClassificationResultAsync(ct)).Value;
+    public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken ct = default, bool fresh = false, bool allowStale = false, bool background = false)
+        => SharedResultAsync<ProcessClassification>("classification", fresh ? TimeSpan.Zero : allowStale ? StaleAge : LiveAge, "Get-ProcessClassification.ps1", ct, classification => classification.Processes is { Count: > 0 }, background: background, settle: ProcessSettle);
 
-    public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default)
+    private async Task<LiveDataResult<T>> SharedResultAsync<T>(string key, TimeSpan maxAge, string scriptFile, CancellationToken ct, Func<T, bool> complete, string extraArgs = "", bool background = false, TimeSpan settle = default) where T : class
+    {
+        if (ct.CanBeCanceled) return await RunResultAsync<T>(scriptFile, ct, extraArgs);
+        if (!background && _backgroundReads.TryGetValue(key, out var running)) running.Raise();
+        var priority = background ? new BackgroundPriority() : null;
+        if (priority is not null) _backgroundReads[key] = priority;
+        (LiveDataResult<T>? value, TimeSpan age) read;
+        try
+        {
+            read = await _shared.ReadAsync(key, maxAge, () => { Background.Value = priority; return RunResultAsync<T>(scriptFile, CancellationToken.None, extraArgs); },
+                result => result.Value is not null && result.Error is null && complete(result.Value), settle);
+        }
+        finally { if (priority is not null) _backgroundReads.TryRemove(new(key, priority)); }
+        var (value, age) = read;
+        var result = value ?? new LiveDataResult<T>(null, AppLog.Failed);
+        if (result.Error is not null) LastError = result.Error;
+        return age > LiveAge && result.Value is not null ? result with { Stale = true } : result;
+    }
+
+    public Task<LiveDataResult<string>> GetBackgroundPlacementResultAsync(CancellationToken ct = default)
+        => RunBackendScriptResultAsync("Get-BackgroundPlacement.ps1", ct);
+
+    public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken ct = default, string preset = "lower")
+        => RunBackendScriptResultAsync("Preview-ProcessProfile.ps1", ct, "-Preset " + preset);
+
+    private static Task<IDisposable> EnterGovernorGateAsync()
+    {
+        var entered = new TaskCompletionSource<IDisposable>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ManualResetEventSlim();
+        var owner = new Thread(() =>
+        {
+            IDisposable gate;
+            var clock = Stopwatch.StartNew();
+            while (true)
+            {
+                try { gate = RooIndustries.Optimizer.ProcessPolicyStore.Gate(); break; }
+                catch (UnauthorizedAccessException) when (clock.Elapsed < TimeSpan.FromSeconds(30)) { Thread.Sleep(100); }
+                catch (UnauthorizedAccessException) { entered.TrySetException(new TimeoutException("Another rule or game session change is still running. Try again in a moment.")); return; }
+                catch (Exception error) { entered.TrySetException(error); return; }
+            }
+            entered.TrySetResult(new GateRelease(release));
+            release.Wait();
+            gate.Dispose();
+            release.Dispose();
+        }) { IsBackground = true, Name = "Roo Industries governor gate" };
+        owner.Start();
+        return entered.Task;
+    }
+
+    private sealed class GateRelease(ManualResetEventSlim release) : IDisposable
+    {
+        private int _released;
+        public void Dispose() { if (Interlocked.Exchange(ref _released, 1) == 0) release.Set(); }
+    }
+
+    public async Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken ct = default, string preset = "lower")
     {
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
+        IDisposable gate;
+        try { gate = await EnterGovernorGateAsync().ConfigureAwait(false); }
+        catch (Exception error) { return new(null, error.Message); }
+        using var governorGate = gate;
         var previousGeneration = ReadGeneration(ProcessGenerationPath);
         var generation = Guid.NewGuid().ToString("N");
         if (!TryWriteGeneration(ProcessGenerationPath, generation, "process profile", out var generationError))
             return new(null, generationError);
-        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply").ConfigureAwait(false);
+        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply -Preset " + preset).ConfigureAwait(false);
         var recovery = ProcessProfileRecovery.FromApply(result.Value, generation);
         if (recovery is null)
         {
@@ -127,6 +213,8 @@ public sealed class LiveDataService
 
     public async Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken ct = default)
     {
+        try { await EarlierVersionConsent.RequireAsync(recovery.Path).ConfigureAwait(false); }
+        catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(ProcessOperationPath, "process profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
         var current = ProcessProfileRecovery;
@@ -221,8 +309,10 @@ public sealed class LiveDataService
     public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken ct = default)
         => RunAsync<ProcessGovernorSessionStatus>("Get-ProcessGovernorSessionStatus.ps1", ct);
 
-    public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default)
-        => RunAsync<DriverHardwareSummary>("Get-DriverHardwareSummary.ps1", ct);
+    public async Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken ct = default, bool fresh = false)
+        => (await GetDriverHardwareResultAsync(ct, fresh)).Value;
+    public Task<LiveDataResult<DriverHardwareSummary>> GetDriverHardwareResultAsync(CancellationToken ct = default, bool fresh = false)
+        => SharedResultAsync<DriverHardwareSummary>("hardware", fresh ? TimeSpan.Zero : HardwareAge, "Get-DriverHardwareSummary.ps1", ct, hardware => hardware.Machine is not null && hardware.Memory is not null && hardware.Cpu is not null && hardware.Gpus is { Count: > 0 });
 
     public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken ct = default)
         => RunBackendScriptResultAsync("Preview-NvidiaNipProfile.ps1", ct, "-ProfileId " + QuotePowerShell(profileId));
@@ -346,6 +436,8 @@ public sealed class LiveDataService
 
     public async Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken ct = default)
     {
+        try { await EarlierVersionConsent.RequireAsync(recovery.RollbackManifestPath).ConfigureAwait(false); }
+        catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
         var current = await ReadNvidiaProfileRecoveryAsync(recovery.ProfileId).ConfigureAwait(false);
@@ -415,8 +507,8 @@ public sealed class LiveDataService
             ct,
             "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply");
 
-    public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false)
-        => RunAsync<InstalledAppInventory>("Get-InstalledAppInventory.ps1", ct, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "");
+    public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken ct = default, bool includeAllAppxUsers = false, bool fresh = false, bool background = false)
+        => (await SharedResultAsync<InstalledAppInventory>("apps:" + includeAllAppxUsers, fresh ? TimeSpan.FromSeconds(2) : AppsAge, "Get-InstalledAppInventory.ps1", ct, apps => apps.Apps is { Count: > 0 } && apps.Complete != false, includeAllAppxUsers ? "-IncludeAllAppxUsers" : "", background)).Value;
 
     public Task<LiveDataResult<LeftoverScan>> GetLeftoverScanResultAsync(string appId, CancellationToken ct = default)
         => RunResultAsync<LeftoverScan>("Preview-LeftoverScan.ps1", ct, "-AppId " + QuotePowerShell(appId));
@@ -472,7 +564,7 @@ public sealed class LiveDataService
             var officialExecutable = ReadOfficialExecutable(inputs.OfficialPreviewPath);
             var runRoot = realCleanupApproved
                 ? Path.Combine(
-                    RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot,
+                    await _operations.Value.EnsureStorageAsync().ConfigureAwait(false),
                     "cleanup-runs",
                     Path.GetFileName(inputs.DirectoryPath))
                 : Path.Combine(inputs.DirectoryPath, "preview-run");
@@ -493,11 +585,13 @@ public sealed class LiveDataService
                 " -ExactTargetAllowlist " + QuotePowerShellArray(cleanupTargets) +
                 " -BackupRoot " + QuotePowerShell(Path.Combine(runRoot, "backup")) +
                 " -RollbackManifestPath " + QuotePowerShell(Path.Combine(runRoot, "rollback-manifest.json"));
+            if (_operationsRoot is not null) args += " -DataRoot " + QuotePowerShell(Path.GetDirectoryName(Path.GetFullPath(_operationsRoot))!);
 
             if (!string.IsNullOrWhiteSpace(officialExecutable))
             {
                 args += " -AllowedOfficialExecutablePath " + QuotePowerShell(officialExecutable);
                 args += " -OfficialRunnerWorkingDirectory " + QuotePowerShell(runRoot);
+                args += " -TimeoutSeconds 600";
             }
 
             if (officialUninstallCommandApproved)
@@ -537,11 +631,24 @@ public sealed class LiveDataService
         CancellationToken ct = default)
         => (await RequestUninstallCleanupApplyResultAsync(appId, officialUninstallCommandApproved, cleanupDeletionManifestApproved, realCleanupApproved, ct)).Value;
 
-    public Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
-        => RunBackendScriptResultAsync(
+    public async Task<LiveDataResult<string>> RestoreUninstallCleanupResultAsync(string rollbackManifestPath, CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs") + Path.DirectorySeparatorChar;
+        try
+        {
+            if (!Path.GetFullPath(rollbackManifestPath).StartsWith(runs, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(RooIndustries.Optimizer.OperationsFolder.EarlierBackup(rollbackManifestPath));
+            RooIndustries.Optimizer.PolicyRootSecurity.RequireWrittenAfterProtection(rollbackManifestPath, RooIndustries.Optimizer.OperationsFolder.EarlierBackup(rollbackManifestPath));
+        }
+        catch (InvalidDataException error)
+        {
+            LastError = error.Message;
+            return new(null, error.Message);
+        }
+        return await RunBackendScriptResultAsync(
             "Restore-UninstallCleanupExecution.ps1",
             ct,
-            "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply -AllowRealSystemExecution -UserApproved");
+            "-RollbackManifestPath " + QuotePowerShell(rollbackManifestPath) + " -ConfirmApply -AllowDisposableFixtureApply -AllowRealSystemExecution -UserApproved").ConfigureAwait(false);
+    }
     public async Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
         => (await RestoreUninstallCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
@@ -550,7 +657,8 @@ public sealed class LiveDataService
         var dir = ScriptsDirectory;
         if (dir is null)
         {
-            var error = "Repo root not resolved (RepoRoot=" + (RepoRoot ?? "null") + ")";
+            AppLog.Write("backend", "Repo root not resolved.");
+            var error = AppLog.MissingFiles;
             LastError = error;
             return new(null, error);
         }
@@ -558,7 +666,8 @@ public sealed class LiveDataService
         var scriptPath = Path.Combine(dir, scriptFile);
         if (!File.Exists(scriptPath))
         {
-            var error = "Script not found: " + scriptPath;
+            AppLog.Write("backend", "Script not found: " + scriptPath);
+            var error = AppLog.MissingFiles;
             LastError = error;
             return new(null, error);
         }
@@ -568,7 +677,8 @@ public sealed class LiveDataService
             var result = await RunScriptResultAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(result.Value))
             {
-                var error = result.Error ?? "Empty output from " + scriptFile;
+                if (result.Error is null) AppLog.Write("backend", "Empty output from " + scriptFile);
+                var error = result.Error ?? AppLog.Failed;
                 LastError = error;
                 return new(null, error);
             }
@@ -577,7 +687,8 @@ public sealed class LiveDataService
         }
         catch (Exception ex)
         {
-            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            AppLog.Write("backend", scriptFile + ": " + ex);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
@@ -608,13 +719,15 @@ public sealed class LiveDataService
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
             if (value is not null) return new(value, null);
-            var error = "No data returned from " + scriptFile;
+            AppLog.Write("backend", "No data returned from " + scriptFile);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
         catch (Exception ex)
         {
-            var error = scriptFile + ": " + ex.GetType().Name + ": " + ex.Message;
+            AppLog.Write("backend", scriptFile + ": " + ex);
+            var error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
@@ -629,13 +742,15 @@ public sealed class LiveDataService
         {
             var value = JsonSerializer.Deserialize<T>(text.Value, JsonOptions);
             if (value is not null) return new(value, null);
-            const string error = "The backend returned no operation data.";
+            AppLog.Write("backend", "The backend returned no operation data.");
+            const string error = AppLog.Failed;
             LastError = error;
             return new(null, error);
         }
         catch (Exception error)
         {
-            var message = error.GetType().Name + ": " + error.Message;
+            AppLog.Write("backend", error.ToString());
+            const string message = AppLog.Failed;
             LastError = message;
             return new(null, message);
         }
@@ -970,7 +1085,7 @@ public sealed class LiveDataService
             LastError = error;
             return new(null, error);
         }
-        var dir = Path.Combine(Path.GetTempPath(), "RooIndustriesOptimizationSuite", "cleanup-inputs", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-inputs-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var officialPath = Path.Combine(dir, "official-preview.json");
         var manifestPath = Path.Combine(dir, "cleanup-manifest.json");
@@ -1013,13 +1128,27 @@ public sealed class LiveDataService
 
     private async Task<LiveDataResult<string>> RunScriptResultAsync(string scriptPath, string extraArgs, CancellationToken ct)
     {
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
+        {
+            var result = await RunScriptCoreAsync(scriptPath, extraArgs, ct).ConfigureAwait(false);
+            outcome = result.Error is null ? "completed" : result.Error == AppLog.TimedOut ? "timed out" : "failed";
+            return result;
+        }
+        finally { AppLog.Timing(Path.GetFileName(scriptPath), elapsed, outcome); }
+    }
+
+    private async Task<LiveDataResult<string>> RunScriptCoreAsync(string scriptPath, string extraArgs, CancellationToken ct)
+    {
+        using var change = extraArgs.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var arguments =
-            $"-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";
+            $"-NoProfile -ExecutionPolicy Bypass -Command \"{RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude}[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";
 
         var psi = new ProcessStartInfo
         {
-            FileName = "powershell.exe",
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
             Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -1028,17 +1157,20 @@ public sealed class LiveDataService
             StandardOutputEncoding = Encoding.UTF8,
             WorkingDirectory = _locator.RepoRoot ?? Environment.CurrentDirectory,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(psi);
 
         using var process = new Process { StartInfo = psi };
         if (!process.Start())
         {
-            return new(null, "Could not start " + Path.GetFileName(scriptPath));
+            AppLog.Write("backend", "Could not start " + Path.GetFileName(scriptPath));
+            return new(null, AppLog.Failed);
         }
+        Background.Value?.Register(process);
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        if (BackendScriptPolicy.Timeout(scriptPath) is { } limit) timeout.CancelAfter(limit);
 
         try
         {
@@ -1046,32 +1178,36 @@ public sealed class LiveDataService
         }
         catch (OperationCanceledException)
         {
-            TryKill(process);
-            return new(null, "Timed out running " + Path.GetFileName(scriptPath));
+            TryKill(process, BackendScriptPolicy.StopWholeTree(scriptPath));
+            AppLog.Write("backend", "Timed out running " + Path.GetFileName(scriptPath));
+            return new(null, AppLog.TimedOut);
         }
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
-            var detail = string.IsNullOrWhiteSpace(stderr) ? "" : ": " + stderr.Trim();
-            return new(stdout, Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode + detail);
+            AppLog.Write("backend", Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode);
+            var plain = AppLog.Explain("backend", stderr, "");
+            var code = " (code " + process.ExitCode + ")";
+            return new(stdout, plain.Length == 0 ? "Something went wrong" + code + ". Details were saved to the app log (Settings, Open logs folder)." : plain + code);
         }
         if (string.IsNullOrWhiteSpace(stdout) && !string.IsNullOrWhiteSpace(stderr))
         {
-            return new(null, stderr.Trim());
+            AppLog.Write("backend", Path.GetFileName(scriptPath) + " wrote only errors.");
+            return new(null, AppLog.Explain("backend", stderr, AppLog.Failed));
         }
 
         return new(stdout, null);
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(Process process, bool entireTree = true)
     {
         try
         {
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill(entireProcessTree: entireTree);
             }
         }
         catch

@@ -61,6 +61,20 @@ def value_label(change):
     return 'Remove this override'
 
 
+def name_numbers(settings):
+    for setting in settings:
+        numbered = [(option, re.fullmatch(r'Value (-?\d+)(?: \(.*\))?', option['name'])) for option in setting['options']]
+        if not any(match for _, match in numbered):
+            continue
+        values = {option['changes'][0].get('dword') for option in setting['options'] if option['changes'] and option['changes'][0].get('dword') is not None}
+        switch = values <= {0, 1}
+        field = words(setting['options'][0]['changes'][0]['address'].get('valueName', '')) if setting['options'][0]['changes'] else setting['name']
+        for option, match in numbered:
+            if match:
+                number = int(match.group(1))
+                option['name'] = ('On (1)' if number else 'Off (0)') if switch else field + ': ' + str(number)
+
+
 def apply_availability(settings):
     alternatives = json.loads((ROOT / 'backend/catalogs/windows-setting-alternatives.json').read_text())
     ids = {setting['id'] for setting in settings}
@@ -95,6 +109,39 @@ def apply_availability(settings):
                 setting['minimumBuild'] = 10240
                 setting['maximumBuild'] = 26200
                 setting['editions'] = ['*']
+
+
+WINDOWS_REFUSED_SERVICES = {'wermgr', 'waasmedicsvc'}
+WINDOWS_REFUSED_TASK_FOLDERS = ('\\microsoft\\windows\\waasmedic\\', '\\microsoft\\windows\\updateorchestrator\\')
+
+
+def windows_refuses(change):
+    address = change['address']
+    if address.get('kind') == 'service':
+        return address['target'].casefold() in WINDOWS_REFUSED_SERVICES
+    if address.get('kind') == 'scheduled-task':
+        return address['target'].casefold().startswith(WINDOWS_REFUSED_TASK_FOLDERS)
+    return False
+
+
+def incompatible_rules():
+    return [{(item['settingId'], item['optionId']) for item in rule['selections']} for rule in json.loads((ROOT / 'backend/catalogs/incompatible-settings.json').read_text())['rules']]
+
+
+def combines_incompatible(selections):
+    chosen = {(item['settingId'], item['optionId']) for item in selections}
+    return any(rule <= chosen for rule in incompatible_rules())
+
+
+def mark_protected_services(settings):
+    protected = {name.casefold() for name in json.loads((ROOT / 'modules/tweak_manifest.json').read_text())['protected']['services']}
+    note = 'Windows, networking or connected devices depend on this service. Stopping or disabling it can break them until it is turned back on.'
+    for setting in settings:
+        targets = {control['address']['target'].casefold() for option in setting['options'] for control in option.get('controls', []) if control['address']['kind'] == 'service'}
+        if targets & protected:
+            setting['advanced'] = True
+            if note not in setting['description']:
+                setting['description'] = note + ' ' + setting['description']
 
 
 def native(kind, target, property, value):
@@ -312,7 +359,7 @@ def label(name):
 
 
 def words(name):
-    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name).replace('_', ' ').strip() or 'Default value'
+    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name.replace('HyperV', 'Hyper-V ')).replace('_', ' ').replace('  ', ' ').strip() or 'Default value'
 
 
 def category(record, change):
@@ -486,6 +533,8 @@ def compile_catalog():
                         covered['processRefresh'] = 'Restart Windows to close existing processes. Apply changes new-launch permissions; it does not force-stop processes.'
                 for effect in [item for effect in effects for item in expand(effect)]:
                     change = assignment(effect)
+                    if change is not None and windows_refuses(change):
+                        change = None
                     if change is None:
                         pending.append(effect)
                         continue
@@ -583,6 +632,8 @@ def compile_catalog():
                 if record['id'] == 'user-account-control':
                     covered['enableChoice'] = 'Enable standard Windows UAC values; use Restore for the captured original values.'
                 status = 'outside-supported-windows-range' if not gates else 'partial' if pending and choices else 'pending-executor' if pending else 'implemented' if choices else 'no-independent-change'
+                if status == 'implemented' and combines_incompatible(choices.values()):
+                    status = 'excluded-incompatible'
                 row = {'id': direction, 'status': status, 'selections': list(choices.values()), 'remainingEffects': pending, 'refreshInstructions': 'Sign out or restart Windows after applying.' if refresh_effects else None}
                 covered['options'].append(row)
                 if choices and status == 'implemented':
@@ -613,8 +664,43 @@ def compile_catalog():
                     hint = str(value['dword']) if value.get('dword') is not None else 'value ' + option['id'][-4:]
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
+    name_numbers(settings)
     apply_availability(settings)
+    mark_protected_services(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
+    rules = json.loads((ROOT / 'backend/catalogs/incompatible-settings.json').read_text())['rules']
+    by_id = {setting['id']: setting for setting in settings}
+    incompatible = []
+    for rule in rules:
+        selections = [{'settingId': item['settingId'], 'optionId': item['optionId']} for item in rule['selections']]
+        if len(selections) < 2 or len({item['settingId'] for item in selections}) != len(selections):
+            raise ValueError('An incompatible-settings rule needs two or more different settings')
+        for item in selections:
+            if item['optionId'] not in {option['id'] for option in by_id.get(item['settingId'], {}).get('options', [])}:
+                raise ValueError('An incompatible-settings rule names a setting or choice that is not in the catalog: ' + item['settingId'])
+        for item in selections:
+            others = ', '.join(by_id[other['settingId']]['name'] for other in selections if other is not item)
+            note = 'Roo Industries will not apply this together with ' + others + '. ' + rule['reason']
+            if note not in by_id[item['settingId']]['description']:
+                by_id[item['settingId']]['description'] = note + ' ' + by_id[item['settingId']]['description']
+        pairs = {(item['settingId'], item['optionId']) for item in selections}
+        catalog['presets'] = [preset for preset in catalog['presets'] if not pairs <= {(item['settingId'], item['optionId']) for item in preset['selections']}]
+        incompatible.append({'selections': selections, 'reason': rule['reason']})
+    if incompatible:
+        catalog['incompatible'] = incompatible
+    fps = ROOT / 'backend/catalogs/fps-preset.json'
+    if fps.exists():
+        source = json.loads(fps.read_text())
+        choices = {setting['id']: {option['id'] for option in setting['options']} for setting in settings}
+        selections = [{'settingId': item['settingId'], 'optionId': item['optionId']} for item in source['selections']]
+        if len({item['settingId'] for item in selections}) != len(selections):
+            raise ValueError('The FPS preset selects one setting more than once')
+        for item in selections:
+            if item['optionId'] not in choices.get(item['settingId'], ()):
+                raise ValueError('The FPS preset names a setting or choice that is not in the catalog: ' + item['settingId'])
+        if combines_incompatible(selections):
+            raise ValueError('The FPS preset combines settings that cannot be used together')
+        catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections, 'availableOnly': True})
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 
 

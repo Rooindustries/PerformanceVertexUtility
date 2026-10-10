@@ -4,7 +4,7 @@ static class CleanupBatchStateChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-state-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("cleanup-state");
         Directory.CreateDirectory(root);
         try
         {

@@ -16,9 +16,12 @@ public sealed record ToolTarget(string Action, string? Path, bool FromArchive);
 public sealed class ToolLauncherService
 {
     private readonly string _root;
-    public ToolLauncherService(string root) => _root = root;
+    private readonly string? _cacheRoot;
+    private readonly Func<string>? _requireProtected;
+    public ToolLauncherService(string root, string? cacheRoot = null, Func<string>? requireProtected = null) { _root = root; _cacheRoot = cacheRoot; _requireProtected = requireProtected; }
     private string Archive => Path.Combine(_root, "vendor", "Utilities.zip");
-    private static string Cache => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tools");
+    private string Cache => _cacheRoot ?? Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "tool-cache");
+    private string RequireProtected() => _requireProtected is { } fixture ? fixture() : RooIndustries.Optimizer.DataFolder.Require();
 
     public async Task<IReadOnlyList<ToolDefinition>> ReadAsync()
     {
@@ -36,10 +39,6 @@ public sealed class ToolLauncherService
                 var installed = Inside(parent, relative);
                 if (File.Exists(installed)) return new("Open", installed, false);
             }
-        var utilities = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UTILITIES_ROOT");
-        if (string.IsNullOrWhiteSpace(utilities)) utilities = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Utilities");
-        var bundled = Inside(utilities, tool.ArchivePath["Utilities/".Length..]);
-        if (File.Exists(bundled)) return new(tool.BundleAction == "install" ? "Install" : "Open", bundled, false);
         var extracted = Inside(Path.Combine(Cache, tool.Id), tool.ArchivePath);
         if (File.Exists(extracted) && File.Exists(Path.Combine(Cache, tool.Id, ".complete"))) return new(tool.BundleAction == "install" ? "Install" : "Open", extracted, false);
         if (File.Exists(Archive))
@@ -47,6 +46,10 @@ public sealed class ToolLauncherService
             using var zip = ZipFile.OpenRead(Archive);
             if (zip.GetEntry(tool.ArchivePath) is not null) return new(tool.BundleAction == "install" ? "Install" : "Open", null, true);
         }
+        var utilities = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UTILITIES_ROOT");
+        if (string.IsNullOrWhiteSpace(utilities)) utilities = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Utilities");
+        var bundled = Inside(utilities, tool.ArchivePath["Utilities/".Length..]);
+        if (File.Exists(bundled)) return new(tool.BundleAction == "install" ? "Install" : "Open", bundled, false);
         return new("Get", null, false);
     }
 
@@ -57,17 +60,57 @@ public sealed class ToolLauncherService
         {
             if (!Uri.TryCreate(tool.Website, UriKind.Absolute, out var uri) || uri.Scheme != "https")
                 throw new InvalidDataException("The official download address is invalid.");
-            using var browser = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(uri.AbsoluteUri);
             return "Opened the " + tool.Name + " download page.";
         }
         var path = target.FromArchive ? await Task.Run(() => Extract(tool)) : target.Path!;
-        using var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! });
+        using var process = Start(path);
         return target.Action == "Install" ? "Opened the " + tool.Name + " installer. Complete its setup, then refresh this list."
             : "Opened " + tool.Name + ".";
     }
 
+    private Process? Start(string path)
+    {
+        if (!RooIndustries.Optimizer.PolicyRootSecurity.Elevated() || AdministratorsOnly(path))
+        {
+            var start = new ProcessStartInfo(path) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(path)! };
+            RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
+            return Process.Start(start);
+        }
+        RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(path);
+        return null;
+    }
+
+    private bool AdministratorsOnly(string path)
+    {
+        var full = Path.GetFullPath(path);
+        foreach (var parent in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
+            if (!string.IsNullOrEmpty(parent) && Contained(parent, full)) return true;
+        if (!Contained(Cache, full)) return false;
+        try { RequireProtected(); return true; }
+        catch (Exception error) when (error is UnauthorizedAccessException or IOException) { return false; }
+    }
+
+    private static bool Contained(string parent, string full)
+    {
+        var root = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+        try
+        {
+            FileSystemInfo item = new FileInfo(full);
+            while (!string.Equals(item.FullName + Path.DirectorySeparatorChar, root, StringComparison.OrdinalIgnoreCase))
+            {
+                if (item.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
+                item = item is FileInfo file ? file.Directory! : ((DirectoryInfo)item).Parent!;
+            }
+            return true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     private string Extract(ToolDefinition tool)
     {
+        RequireProtected();
         var directory = Path.Combine(Cache, tool.Id);
         var target = Inside(directory, tool.ArchivePath);
         using var zip = ZipFile.OpenRead(Archive);

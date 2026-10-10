@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 function Invoke-SystemTool([string]$name,[string[]]$arguments){
-    $output=& (Join-Path $env:SystemRoot ('System32\'+$name)) @arguments 2>&1
+    $output=& (Join-Path ([Environment]::GetFolderPath('System')) $name) @arguments 2>&1
     if($LASTEXITCODE -ne 0){throw ($name+' exited '+$LASTEXITCODE+': '+($output -join ' '))}
     return ($output -join [Environment]::NewLine)
 }
@@ -123,7 +123,8 @@ function Read-Control($address){
         'dns-over-https' {
             if($address.property -ne 'configuration'){throw 'Unknown encrypted DNS control.'}
             $ip=([Net.IPAddress]::Parse($address.target)).ToString()
-            $entries=@(Get-DnsClientDohServerAddress|Where-Object {([Net.IPAddress]::Parse($_.ServerAddress)).ToString() -ceq $ip})
+            if($script:BatchDoh){if($null -eq $script:DohServers){$script:DohServers=@(Get-DnsClientDohServerAddress)};$servers=$script:DohServers}else{$servers=Get-DnsClientDohServerAddress}
+            $entries=@($servers|Where-Object {([Net.IPAddress]::Parse($_.ServerAddress)).ToString() -ceq $ip})
             if($entries.Count -gt 1){throw 'More than one encrypted DNS entry has this address.'}
             if($entries.Count -eq 1){$value=[ordered]@{template=[string]$entries[0].DohTemplate;allowFallback=[bool]$entries[0].AllowFallbackToUdp;autoUpgrade=[bool]$entries[0].AutoUpgrade}}
             $binding='dns-over-https:'+$ip
@@ -285,6 +286,14 @@ function Write-Control($address,$value){
 }
 try {
     $request=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ROO_INDUSTRIES_CONTROL_REQUEST))|ConvertFrom-Json
+    if($request.action -eq 'read-batch'){
+        $script:BatchDoh=$true;$index=0
+        foreach($item in @($request.addresses)){
+            $text=try{(Read-Control $item)|ConvertTo-Json -Compress -Depth 30}catch{@{error=$_.Exception.Message}|ConvertTo-Json -Compress}
+            [Console]::Out.WriteLine('ROO_INDUSTRIES_CONTROL '+$index+' '+$text);[Console]::Out.Flush();$index++
+        }
+        exit 0
+    }
     if($request.action -eq 'restore-points'){
         $points=@(Get-CimInstance -Namespace root/default -ClassName SystemRestore -ErrorAction Stop|ForEach-Object {
             [ordered]@{sequence=[uint32]$_.SequenceNumber;description=[string]$_.Description;createdAtUtc=[Management.ManagementDateTimeConverter]::ToDateTime([string]$_.CreationTime).ToUniversalTime().ToString('o')}

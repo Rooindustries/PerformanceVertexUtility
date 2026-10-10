@@ -100,7 +100,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [ObservableProperty] private bool _canRestoreCleanupAction;
 
     public bool CanScan => HasSelection && !ScanBusy;
-    public bool CanReviewRemoval => HasSelection && !ScanBusy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
+    private bool _removalRouteBlocked;
+    partial void OnRemovalRouteBlockedChanged(bool value) => RefreshActionState();
+    public bool CanReviewRemoval => HasSelection && !ScanBusy && !RemovalRouteBlocked;
     public bool CanBuildCleanupList => HasSelection && !ScanBusy && RemovalPathReviewed && LeftoverScanCompleted;
     public bool CanRunFinalCheck => HasSelection && !ScanBusy && CleanupPlanReady && RemoverPathApproved && CleanupListApproved;
     [ObservableProperty]
@@ -111,8 +115,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public bool CanRestoreCleanup => HasSelection && !ScanBusy && CleanupRestoreAvailable;
     public string ApplyApprovalSummary => !HasSelection
         ? "Pick an app first."
-        : !RemovalPathReviewed
-                ? "Start with the removal route."
+        : RemovalRouteBlocked
+            ? "Roo Industries can't run this app's remover. Use Remove apps to remove it."
+            : !RemovalPathReviewed
+                ? "Check the removal route first."
                 : !LeftoverScanCompleted
                     ? "Scan leftovers next."
                     : !CleanupPlanReady
@@ -134,12 +140,18 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     private readonly Dictionary<string, string> _cleanupRecoveryByApp = new(StringComparer.Ordinal);
     private string? _lastCleanupRollbackPath;
     private int _selectionGeneration;
+    private bool _listChanged;
     public ObservableCollection<InstalledApp> Apps { get; } = new();
     public ObservableCollection<LeftoverItem> Leftovers { get; } = new();
 
+    protected override bool RefreshOnRevisit => SelectedApp is null;
+    protected override bool HasUserWork => SelectedApp is not null;
+    protected override bool IsWorking => ScanBusy;
+
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetInstalledAppsAsync();
+        var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
+        if (Quiet && SelectedApp is not null) { KeepStale(); return; }
         var apps = inventory?.Apps;
         if (apps is null || apps.Count == 0)
         {
@@ -147,6 +159,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return;
         }
 
+        _listChanged = false;
         _allApps.Clear();
         _allApps.AddRange(apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
@@ -163,7 +176,20 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnHasSelectionChanged(bool value) => RefreshActionState();
     partial void OnSelectedProtectedChanged(bool value) => RefreshActionState();
-    partial void OnScanBusyChanged(bool value) => RefreshActionState();
+    partial void OnScanBusyChanged(bool value)
+    {
+        RefreshActionState();
+        if (value) { StartOwn(); return; }
+        if (!FinishOwn()) return;
+        _listChanged = true;
+        if (SelectedApp is null) ReloadChangedList();
+    }
+
+    private void ReloadChangedList()
+    {
+        if (_listChanged) { _listChanged = false; MarkStale(); }
+        _ = RefreshIfStaleAsync();
+    }
     partial void OnRemovalPathReviewedChanged(bool value) => RefreshActionState();
     partial void OnLeftoverScanCompletedChanged(bool value) => RefreshActionState();
     partial void OnCleanupPlanReadyChanged(bool value) => RefreshActionState();
@@ -174,8 +200,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     partial void OnSelectedAppChanged(InstalledApp? value)
     {
+        if (value is null) ReloadChangedList();
         _selectionGeneration++;
         ScanBusy = false;
+        RemovalRouteBlocked = false;
         App.Live.DiscardCleanupReview();
         FinalCheckPassed = false;
         Leftovers.Clear();
@@ -237,11 +265,18 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         RefreshActionState();
     }
 
+    private void BlockRemovalRoute()
+    {
+        PrimaryRemovalButtonLabel = "Use Remove apps";
+        RemovalPathReviewed = false;
+        RemovalRouteBlocked = true;
+    }
+
     [RelayCommand]
     private async Task PreviewRemovalAsync()
     {
         var app = SelectedApp;
-        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy)
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy || RemovalRouteBlocked)
         {
             return;
         }
@@ -282,10 +317,32 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(command.CommandLine) && !string.IsNullOrWhiteSpace(command.RawCommand))
+            {
+                SelectedHasOfficialRemover = false;
+                OfficialCommand = command.RawCommand;
+                OfficialPreviewState = command.CommandType == "appx-package-removal-preview"
+                    ? "Use Remove apps to remove this app."
+                    : "Couldn't check this path: its remover doesn't point to one exact file, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                BlockRemovalRoute();
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(command.CommandLine) && string.IsNullOrWhiteSpace(command.ExecutableSha256))
+            {
+                SelectedHasOfficialRemover = false;
+                OfficialCommand = command.CommandLine;
+                OfficialPreviewState = command.ExecutableState == "missing"
+                    ? "Couldn't check this path: the remover file is missing, so Roo Industries won't run it. Use Remove apps to remove this app."
+                    : "Couldn't check this path: the remover file can't be read, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                BlockRemovalRoute();
+                return;
+            }
+
             SelectedHasOfficialRemover = IsVendorRemover(command);
-            OfficialCommand = string.IsNullOrWhiteSpace(command.RawCommand)
-                ? "Roo Industries route. The cleanup run starts from app traces and leftovers."
-                : command.RawCommand;
+            OfficialCommand = !string.IsNullOrWhiteSpace(command.CommandLine)
+                ? command.CommandLine
+                : "Roo Industries route. The cleanup run starts from app traces and leftovers.";
             PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
             OfficialPreviewState = command.Blocked
                 ? "This route needs review, but it does not stop the cleanup plan."
@@ -571,11 +628,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 Contains(a.PublisherDisplay, query));
         }
 
-        Apps.Clear();
-        foreach (var a in source)
-        {
-            Apps.Add(a);
-        }
+        Apps.SyncWith(source);
     }
 
     private static bool Contains(string? haystack, string needle)
@@ -689,6 +742,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 return;
             }
 
+            if (status == "needs-reconciliation")
+            {
+                CleanupExecutionState = "App removal needs checking.";
+                CleanupExecutionDetail = "The app's remover was still running when the check ended. It was not stopped. Let it finish, then scan for leftovers again.";
+                FinalCheckPassed = false;
+                SetSelectedRecovery(expectedAppId);
+                return;
+            }
             if (status is "partial" or "failed")
             {
                 CleanupExecutionState = status == "partial" ? "Cleanup stopped partway through." : "Cleanup failed.";

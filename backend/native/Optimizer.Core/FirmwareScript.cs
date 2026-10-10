@@ -12,17 +12,26 @@ public sealed record FirmwareQuestion(string Id, string Name, string Help, strin
     public string DisplayValue(string value) => Options.FirstOrDefault(o => o.Value == value)?.Label ?? value;
 }
 
+public sealed record FirmwareExcludedQuestion(string Name, string Help, string Reason);
+
 public sealed class FirmwareScript
 {
     private static readonly Regex QuestionStart = new(@"(?m)^[ \t]*Setup Question[ \t]*=", RegexOptions.CultureInvariant);
+    private static readonly Regex LayoutName = new(@"^(?<prefix>[ \t]*(?://[ \t]*)?Setup Question[ \t]*=)(?<name>.*)$", RegexOptions.CultureInvariant);
+    private static readonly Regex LayoutValue = new(@"^(?<prefix>[ \t]*(?://[ \t]*)?Value[ \t]*=)", RegexOptions.CultureInvariant);
+    private static readonly Regex LayoutSelection = new(@"\*(?=\[[0-9A-Fa-f]+\])", RegexOptions.CultureInvariant);
     private static readonly Regex Choice = new(@"(?m)^(?<prefix>[ \t]*(?:Options[ \t]*=[ \t]*)?)(?<selected>\*)?\[(?<value>[0-9A-Fa-f]+)\](?<label>[^\r\n]*)", RegexOptions.CultureInvariant);
     private readonly Encoding _encoding;
     private readonly byte[] _preamble;
     private readonly string _header;
     private readonly Dictionary<string, QuestionSource> _sources = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _positions = new(StringComparer.Ordinal);
+    private readonly string _layout;
+    private readonly string _names;
     public string Text { get; }
     public string Crc { get; }
     public IReadOnlyList<FirmwareQuestion> Questions { get; }
+    public IReadOnlyList<FirmwareExcludedQuestion> ExcludedQuestions { get; }
 
     public FirmwareScript(byte[] bytes)
     {
@@ -41,8 +50,11 @@ public sealed class FirmwareScript
         var contexts = BuildContexts(Text, lines, questionLines);
         var headerLine = lines.FindIndex(line => IsContextStart(line.Body));
         var firstQuestion = starts.Count == 0 ? Text.Length : starts[0].Index;
-        _header = NativeHeader(Text[..(headerLine >= 0 ? lines[headerLine].Start : firstQuestion)], NewLine(Text));
+        var bodyStart = headerLine >= 0 ? lines[headerLine].Start : firstQuestion;
+        _header = NativeHeader(Text[..bodyStart], NewLine(Text));
+        (_layout, _names) = Layout(Text[bodyStart..]);
         var questions = new List<FirmwareQuestion>();
+        var excluded = new List<FirmwareExcludedQuestion>();
         for (var i = 0; i < starts.Count; i++)
         {
             var begin = starts[i].Index;
@@ -56,7 +68,11 @@ public sealed class FirmwareScript
             var token = Field(block, "Token");
             var offset = Field(block, "Offset");
             var widthText = Field(block, "Width");
-            if (name.Length == 0 || !Hex(token) || !Hex(offset) || !int.TryParse(widthText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var width) || width is < 1 or > 8) continue;
+            if (name.Length == 0 || !Hex(token) || !Hex(offset) || !int.TryParse(widthText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var width) || width is < 1 or > 8)
+            {
+                if (name.Length > 0) excluded.Add(new(name, Field(block, "Help String"), "This is text or a data block, not a single value SCEWIN can write."));
+                continue;
+            }
             var choices = Choice.Matches(block);
             var options = choices.Select(m => new FirmwareOption(m.Groups["value"].Value.ToUpperInvariant(), Clean(m.Groups["label"].Value))).ToArray();
             var selected = choices.Where(m => m.Groups["selected"].Success).ToArray();
@@ -67,15 +83,24 @@ public sealed class FirmwareScript
             { kind = "decimal"; current = Field(block, "Value").Trim('<', '>'); }
             else if (choices.Count == 0 && Hex(Field(block, "Value")))
             { kind = "hex"; current = Field(block, "Value").ToUpperInvariant(); }
-            else continue;
+            else
+            {
+                excluded.Add(new(name, Field(block, "Help String"), options.Length > 1 && selected.Length != 1 ? "The export does not show one selected value for this setting."
+                    : options.Length > 1 ? "Two of this setting's choices share the same value, so a choice cannot be written reliably."
+                    : "The export does not give this setting a value SCEWIN can write."));
+                continue;
+            }
             var id = OperationFiles.Hash(Encoding.UTF8.GetBytes(context.Public + "\n" + token.ToUpperInvariant() + ":" + offset.ToUpperInvariant() + ":" + name));
             questions.Add(new(id, name, Field(block, "Help String"), current, kind, width, options, context.Public, nativeBlock, storage.Guid, storage.Name));
-            if (!_sources.TryAdd(id, new QuestionSource(NormalizeLineEndings(context.Import, NewLine(Text)), nativeBlock)))
+            var location = string.Join("\n", context.Public, token.ToUpperInvariant(), offset.ToUpperInvariant(), width.ToString(CultureInfo.InvariantCulture), storage.Guid, storage.Name);
+            if (!_sources.TryAdd(id, new QuestionSource(NormalizeLineEndings(context.Import, NewLine(Text)), nativeBlock, location)))
                 throw new InvalidDataException("The export contains ambiguous duplicate settings. Use a board-specific SCEWIN package.");
+            _positions[id] = questions.Count - 1;
         }
         if (questions.Count == 0) throw new InvalidDataException("No editable choices or numeric settings were found in this BIOS export.");
         if (questions.Select(q => q.Id).Distinct().Count() != questions.Count) throw new InvalidDataException("The export contains ambiguous duplicate settings. Use a board-specific SCEWIN package.");
         Questions = questions;
+        ExcludedQuestions = excluded;
     }
 
     private static Dictionary<int, ContextSnapshot> BuildContexts(string text, IReadOnlyList<SourceLine> lines, HashSet<int> questionLines)
@@ -309,13 +334,49 @@ public sealed class FirmwareScript
 
     public bool SameValues(FirmwareScript other, IReadOnlyDictionary<string, string>? changes = null)
     {
-        if (Crc != other.Crc || Questions.Count != other.Questions.Count) return false;
-        return Questions.All(q => other.Questions.SingleOrDefault(o => o.Id == q.Id) is { } actual
+        if (!SameLayout(other) || Questions.Count != other.Questions.Count) return false;
+        return Questions.All(q => Counterpart(q, other) is { } actual
             && q.Kind == actual.Kind && q.Width == actual.Width && q.Options.SequenceEqual(actual.Options)
             && Validate(q, changes is not null && changes.TryGetValue(q.Id, out var value) ? value : q.Current) == other.Validate(actual, actual.Current));
     }
 
+    public bool SameLayout(FirmwareScript other)
+        => Crc == other.Crc || (_layout == other._layout && _names != other._names);
+
+    public FirmwareQuestion? Counterpart(FirmwareQuestion question, FirmwareScript other)
+    {
+        if (!_positions.TryGetValue(question.Id, out var index)) return null;
+        var candidate = Crc != other.Crc && SameLayout(other) ? (index < other.Questions.Count ? other.Questions[index] : null)
+            : other._positions.TryGetValue(question.Id, out var same) ? other.Questions[same] : null;
+        return candidate is not null && _sources[question.Id].Location == other._sources[candidate.Id].Location
+            && MaskNumbers(question.Name) == MaskNumbers(candidate.Name) && question.Kind == candidate.Kind
+            && question.Options.SequenceEqual(candidate.Options) ? candidate : null;
+    }
+
+    private static (string Layout, string Names) Layout(string body)
+    {
+        var layout = new StringBuilder();
+        var names = new StringBuilder();
+        foreach (var line in SplitLines(body))
+        {
+            var name = LayoutName.Match(line.Body);
+            if (name.Success)
+            {
+                names.Append(name.Groups["name"].Value).Append('\n');
+                layout.Append(name.Groups["prefix"].Value).Append(MaskNumbers(name.Groups["name"].Value)).Append('\n');
+                continue;
+            }
+            var value = LayoutValue.Match(line.Body);
+            layout.Append(value.Success ? value.Groups["prefix"].Value : LayoutSelection.Replace(line.Body, "")).Append('\n');
+        }
+        return (OperationFiles.Hash(Encoding.UTF8.GetBytes(layout.ToString())), OperationFiles.Hash(Encoding.UTF8.GetBytes(names.ToString())));
+    }
+
+    public static string NamePattern(string name) => MaskNumbers(name.Trim());
+
+    private static string MaskNumbers(string value) => Regex.Replace(value, @"[+-]?[0-9]+(?:\.[0-9]+)?", "#");
+
     private sealed record SourceLine(int Start, int End, string Body);
     private sealed record ContextSnapshot(string Public, string Import);
-    private sealed record QuestionSource(string Context, string Block);
+    private sealed record QuestionSource(string Context, string Block, string Location);
 }

@@ -8,7 +8,7 @@ static class ExclusionChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-exclusions-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("exclusions");
         var registryRoot = "Software\\RooIndustriesExclusionTests\\" + Guid.NewGuid().ToString("N");
         var source = Path.Combine(root, "Roo Industries Exclusion Example");
         var keyPath = registryRoot + "\\Roo Industries Exclusion Example";

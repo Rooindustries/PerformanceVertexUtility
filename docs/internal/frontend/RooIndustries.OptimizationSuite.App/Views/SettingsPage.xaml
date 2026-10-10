@@ -2,6 +2,7 @@
     <Grid Padding="{StaticResource RooIndustriesPageMargin}">
         <ScrollViewer x:Name="SettingsScroller">
             <StackPanel x:Name="SettingsContent" Spacing="18" MaxWidth="1600" HorizontalAlignment="Center">
+                <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                 <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
@@ -21,8 +22,28 @@
                     </Grid>
                 </Border>
                 <Border Style="{StaticResource PanelBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Updates" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock x:Name="UpdateStatusText" TextWrapping="Wrap" AutomationProperties.AutomationId="UpdateStatusText" />
+                        <TextBlock x:Name="UpdateNotesText" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="UpdateNotesText" />
+                        <ToggleSwitch x:Name="AutomaticUpdatesToggle" Header="Download updates automatically" Toggled="AutomaticUpdates_Toggled" AutomationProperties.AutomationId="AutomaticUpdatesToggle" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="UpdateCheckButton" Content="Check for updates" Click="UpdateCheck_Click" AutomationProperties.AutomationId="UpdateCheckButton" />
+                            <Button x:Name="UpdateDownloadButton" Content="Download" Click="UpdateDownload_Click" AutomationProperties.AutomationId="UpdateDownloadButton" />
+                            <Button x:Name="UpdateInstallButton" Content="Install update" Click="UpdateInstall_Click" AutomationProperties.AutomationId="UpdateInstallButton" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}">
                     <StackPanel Spacing="14">
                         <TextBlock Text="Appearance" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <views:AdaptivePanel MinColumnWidth="260" MaxColumns="2">
+                            <StackPanel Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="Simple mode" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                <TextBlock Text="Show only the essentials. Turn off to see every tool and detail." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch AutomationProperties.AutomationId="SimpleModeToggle" AutomationProperties.Name="Simple mode" VerticalAlignment="Center" IsOn="{x:Bind ViewModel.SimpleMode, Mode=TwoWay}" />
+                        </views:AdaptivePanel>
                         <views:AdaptivePanel MinColumnWidth="260" MaxColumns="2">
                             <StackPanel Spacing="5" VerticalAlignment="Center">
                                 <TextBlock Text="Theme" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
@@ -45,6 +66,11 @@
                         <TextBlock Text="{x:Bind ViewModel.ProductName, Mode=OneWay}" FontSize="16" LineHeight="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextDisplayBrush}" />
                         <TextBlock Text="{x:Bind ViewModel.VersionText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         <TextBlock Text="Roo Industries / rooindustries.com" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="This is a beta. If something goes wrong, use Report a bug in the menu." Margin="0,8,0,0" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.LogFolder}" IsTextSelectionEnabled="True" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="LogFolderPath" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                            <Button Content="Open logs folder" Click="OpenLogs_Click" AutomationProperties.AutomationId="OpenLogsFolder" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

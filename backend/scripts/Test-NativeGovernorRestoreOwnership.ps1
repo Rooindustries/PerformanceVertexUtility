@@ -35,15 +35,16 @@ try {
     $latestRestore=Read-Result (& $worker --restore $backup)
     $probe.Refresh()
     Assert ($latestRestore.status -eq 'completed' -and $probe.PriorityClass -eq 'High') 'Repeated native restraint cycles restore the latest captured original rather than a superseded cycle'
-    @{snapshots=@($snapshot)}|ConvertTo-Json -Depth 12|Set-Content $backup -Encoding UTF8
+    @{actionId='performance.governor.startSession';dryRun=$false;sessionId='native-restore-ownership';profileId='native-restore-ownership';snapshots=@($snapshot)}|ConvertTo-Json -Depth 12|Set-Content $backup -Encoding UTF8
+    $stateRoot=Join-Path $root 'state'
     $probe.PriorityClass='High'
-    $fallback=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -ConfirmApply)
+    $fallback=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -StateRoot $stateRoot -ConfirmApply)
     $probe.Refresh()
-    Assert ($probe.PriorityClass -eq 'High' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restore also preserves external and unowned controls'
+    Assert (@($fallback.preview).Count -eq 1 -and @($fallback.restoredItems).Count -eq 0 -and $probe.PriorityClass -eq 'High' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restore also preserves external and unowned controls'
     $probe.PriorityClass='BelowNormal'
-    $fallback=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -ConfirmApply)
+    $fallback=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -StateRoot $stateRoot -ConfirmApply)
     $probe.Refresh()
-    Assert ($probe.PriorityClass -eq 'Normal' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restores its recorded priority without overwriting unrelated affinity'
+    Assert ($fallback.status -eq 'completed' -and @($fallback.restoredItems).Count -eq 1 -and $probe.PriorityClass -eq 'Normal' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restores its recorded priority without overwriting unrelated affinity'
 } finally {
     if($null -ne $probe){if(-not $probe.HasExited){$probe.Kill()};if(-not $probe.WaitForExit(10000)){throw 'Native restore fixture did not exit'};$probe.Dispose()}
     if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}

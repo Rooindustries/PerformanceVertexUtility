@@ -147,7 +147,46 @@ public sealed class ProcessTarget : IDisposable
     }
 
     public ProcessControlSnapshot Snapshot()
-        => new(Identity(), Protection(), Topology(), ControlNames.ToDictionary(name => name, Read));
+    {
+        var identity = Identity();
+        Dictionary<string, string>? blocked;
+        try { blocked = BlockedControls(_pid, ControlNames); }
+        catch (Exception error) when (error is CpuFailure or NtFailure or InvalidOperationException) { blocked = null; }
+        return new(identity, Protection(), Topology(), ControlNames.ToDictionary(name => name, Read), blocked is { Count: > 0 } ? blocked : null);
+    }
+
+    public const string WriteBlocked = "Windows doesn't let other apps change this while it runs. Games with anti-cheat often block this.";
+
+    public static uint RequiredWriteAccess(string name) => name == "cpuSets" ? 0x2000u : 0x0200u;
+
+    public static Dictionary<string, string> BlockedControls(int processId, IEnumerable<string> controls)
+    {
+        var names = controls.Distinct(StringComparer.Ordinal).ToArray();
+        if (names.Any(name => !ControlNames.Contains(name))) throw new InvalidDataException("Unknown process control.");
+        var blocked = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var right in names.Select(RequiredWriteAccess).Distinct())
+        {
+            var access = 0x1000u | 0x100000u | right;
+            uint granted;
+            try
+            {
+                using var handle = CpuApi.OpenWithoutPrivileges(access, processId);
+                granted = GrantedAccess(handle, access);
+            }
+            catch (CpuFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5) { granted = 0; }
+            if ((granted & right) == 0)
+                foreach (var name in names.Where(name => RequiredWriteAccess(name) == right)) blocked[name] = WriteBlocked;
+        }
+        return blocked;
+    }
+
+    private static uint GrantedAccess(ProcessHandle handle, uint access)
+    {
+        var information = new byte[56];
+        var status = NtQueryObject(handle, 0, information, information.Length, out _);
+        if (status != 0) throw new NtFailure("NtQueryObject(ObjectBasicInformation)", status, access);
+        return BitConverter.ToUInt32(information, 4);
+    }
 
     public ControlRead Read(string name)
     {
@@ -214,7 +253,8 @@ public sealed class ProcessTarget : IDisposable
             case "ioPriority":
                 var io = value.GetInt32();
                 if (io is < 0 or > 3) throw new InvalidDataException("I/O priority is outside the supported range.");
-                CheckStatus(NtSetInformationProcess(_handle, 33, ref io, 4), "NtSetInformationProcess(ProcessIoPriority)");
+                using (io == 3 ? new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege") : null)
+                    CheckStatus(NtSetInformationProcess(_handle, 33, ref io, 4), "NtSetInformationProcess(ProcessIoPriority)");
                 break;
             case "gpuPriority":
                 var gpu = value.GetInt32();
@@ -313,7 +353,7 @@ public sealed class ProcessTarget : IDisposable
     private static uint PriorityValue(string name) => name switch { "Idle" => 0x40, "BelowNormal" => 0x4000, "Normal" => 0x20, "AboveNormal" => 0x8000, "High" => 0x80, "Realtime" => 0x100, _ => throw new InvalidDataException("Unknown CPU priority class.") };
     public void Dispose() { if (!_borrowed) _handle.Dispose(); }
 
-    private sealed class NtFailure(string api, int status, uint access) : Exception(api + " failed with NTSTATUS 0x" + unchecked((uint)status).ToString("X8"))
+    internal sealed class NtFailure(string api, int status, uint access) : Exception(api + " failed with NTSTATUS 0x" + unchecked((uint)status).ToString("X8"))
     {
         public string Api { get; } = api;
         public uint Code { get; } = unchecked((uint)status);
@@ -335,6 +375,7 @@ public sealed class ProcessTarget : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetProcessInformation(ProcessHandle process, int informationClass, ref uint value, uint size);
     [DllImport("kernel32.dll", EntryPoint = "GetProcessInformation", SetLastError = true)] private static extern bool GetPowerInformation(ProcessHandle process, int informationClass, ref NativePower value, uint size);
     [DllImport("kernel32.dll", EntryPoint = "SetProcessInformation", SetLastError = true)] private static extern bool SetPowerInformation(ProcessHandle process, int informationClass, ref NativePower value, uint size);
+    [DllImport("ntdll.dll")] private static extern int NtQueryObject(ProcessHandle handle, int informationClass, byte[] information, int length, out int returned);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(ProcessHandle process, int informationClass, ref int value, int size, IntPtr returned);
     [DllImport("ntdll.dll")] private static extern int NtSetInformationProcess(ProcessHandle process, int informationClass, ref int value, int size);
     [DllImport("gdi32.dll")] private static extern int D3DKMTGetProcessSchedulingPriorityClass(ProcessHandle process, out int value);

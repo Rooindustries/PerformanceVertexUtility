@@ -18,7 +18,7 @@ static class CatalogMatrixChecks
             var directory = Path.Combine(root, "matrix-" + total); Directory.CreateDirectory(directory);
             try
             {
-                var subset = catalog with { Settings = [definition], Presets = [] };
+                var subset = catalog with { Settings = [definition], Presets = [], Incompatible = null };
                 Exercise(directory, subset, [new(definition.Id, option.Id)]);
                 results.Add(new { setting = definition.Id, option = option.Id, result = "passed" });
             }
@@ -32,7 +32,8 @@ static class CatalogMatrixChecks
     }
     public static void Presets(string root, TweakCatalog catalog, string output)
     {
-        var results = new List<object>(); var failed = 0; var total = 0;
+        var results = new List<object>(); var failed = 0; var total = 0; var refused = 0;
+        var expectedRefusals = ControlPlanning.HiddenPresets.ToDictionary(id => id, _ => ControlPlanning.HypervisorTogether, StringComparer.Ordinal);
         foreach (var preset in catalog.Presets)
         {
             total++;
@@ -40,17 +41,19 @@ static class CatalogMatrixChecks
             try
             {
                 var definitions = preset.Selections.Select(selection => catalog.Resolve(selection).Definition).DistinctBy(item => item.Id).ToArray();
-                var subset = catalog with { Settings = definitions, Presets = [preset] };
+                var subset = catalog with { Settings = definitions, Presets = [preset], Incompatible = null };
                 Exercise(directory, subset, preset.Selections, preset);
-                results.Add(new { preset = preset.Id, choices = preset.Selections.Length, result = "passed" });
+                if (expectedRefusals.ContainsKey(preset.Id)) { failed++; results.Add(new { preset = preset.Id, result = "failed", error = "Applied although this preset must be refused." }); }
+                else results.Add(new { preset = preset.Id, choices = preset.Selections.Length, result = "passed" });
             }
+            catch (InvalidDataException error) when (expectedRefusals.TryGetValue(preset.Id, out var reason) && error.Message == reason) { refused++; results.Add(new { preset = preset.Id, result = "refused", error = error.Message }); }
             catch (Exception error) { failed++; results.Add(new { preset = preset.Id, result = "failed", error = error.Message }); }
             finally { Directory.Delete(directory, true); }
             if (total % 100 == 0) Console.WriteLine($"Catalog presets checked: {total}; failures: {failed}");
         }
-        OperationFiles.Write(output, new { presets = total, passed = total - failed, failed, results });
-        if (total != catalog.Presets.Length || failed != 0) throw new InvalidOperationException($"Preset matrix failed {failed} of {total} presets. See {output}");
-        Console.WriteLine($"PASS all {total} presets apply, share ownership, replay and restore in isolated file fixtures");
+        OperationFiles.Write(output, new { presets = total, passed = total - failed - refused, refused, failed, results });
+        if (total != catalog.Presets.Length || failed != 0 || refused != expectedRefusals.Count) throw new InvalidOperationException($"Preset matrix failed {failed} of {total} presets and refused {refused} of {expectedRefusals.Count} expected. See {output}");
+        Console.WriteLine($"PASS {total - refused} presets apply, share ownership, replay and restore in isolated file fixtures; {refused} presets hidden from the app are refused as expected");
     }
     private static bool Supported(TweakDefinition definition, TweakOption option, Context context)
     {

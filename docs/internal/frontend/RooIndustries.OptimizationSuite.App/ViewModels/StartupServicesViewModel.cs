@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
 
@@ -21,8 +20,10 @@ public partial class StartupServicesViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var classification = await App.Live.GetProcessClassificationAsync();
-        if (classification?.Processes is null) throw new InvalidOperationException(App.Live.LastError ?? "The background process list is unavailable.");
+        var read = await App.Live.GetProcessClassificationResultAsync(fresh: Fresh, allowStale: !Fresh);
+        if (read.Stale) RevalidateAfterLoad();
+        var classification = read.Value;
+        if (classification?.Processes is null) throw new InvalidOperationException(read.Error ?? "The background process list is unavailable.");
         var processes = classification.Processes;
 
         var background = processes
@@ -38,22 +39,15 @@ public partial class StartupServicesViewModel : PageViewModelBase
             ? "No background processes reported."
             : background.Count + " background processes are running.";
 
-        BackgroundRows.Clear();
-        foreach (var p in background.OrderByDescending(p => p.WorkingSetBytes).Take(8))
-        {
-            BackgroundRows.Add(new BackgroundRow(
-                string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
-                Naming.CategoryLabel(p.Category),
-                Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Excluded" : "Normal",
-                p.Protected ? "low" : "neutral"));
-        }
+        BackgroundRows.SyncWith(background.OrderByDescending(p => p.WorkingSetBytes).Take(8).Select(p => new BackgroundRow(
+            string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
+            Naming.CategoryLabel(p.Category),
+            Format.Bytes(p.WorkingSetBytes),
+            p.Protected ? "Excluded" : "Normal",
+            p.Protected ? "low" : "neutral")));
 
         IsEmpty = false;
     }
-
-    [RelayCommand]
-    private Task RetryAsync() => ReloadAsync();
 
 }
 

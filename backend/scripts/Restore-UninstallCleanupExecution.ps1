@@ -76,6 +76,7 @@ try {
             (New-CleanupRestoreGate 'confirm-restore' 'Confirmed restore requested' $true ([bool]$ConfirmApply) 'Restore remains preview-only until -ConfirmApply is supplied.' $null),
             (New-CleanupRestoreGate 'real-system-restore-flag' 'Real-system restore allowed' $true ([bool]$AllowRealSystemExecution) 'Restoring real cleanup targets requires the real-system restore flag.' $null),
             (New-CleanupRestoreGate 'explicit-user-approval' 'Explicit restore approval captured' $true ([bool]$UserApproved) 'Restoring real cleanup targets requires explicit user approval.' $null),
+            (New-CleanupRestoreGate 'written-after-protection' 'Backup was made after the data folder was protected' $true (Test-RooIndustriesWrittenAfterProtection $manifestPath) ("This backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at "+(Split-Path $manifestPath -Parent)+'.') $null),
             (New-CleanupRestoreGate 'approved-restore-paths' 'Restore uses approved targets and backup storage' $true ($invalidBackups.Count -eq 0) 'Targets must match the saved allowlist; backups must stay inside the saved root without reparse paths.' $null),
             (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count }))
         )

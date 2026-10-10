@@ -6,6 +6,7 @@ $work=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-tweak-routes-'+[guid
 $wrapper=Join-Path $PSScriptRoot 'Invoke-WindowsTweaks.ps1'
 $router=Join-Path $PSScriptRoot 'Invoke-RooIndustriesCapability.ps1'
 $capability='system-optimizations.windows-settings'
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 function Assert([bool]$condition,[string]$name){if(-not $condition){throw $name};Write-Host ('PASS '+$name)}
 function Read-Json($lines){($lines -join [Environment]::NewLine)|ConvertFrom-Json}
 function Save($path,$value){[IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))}
@@ -14,7 +15,9 @@ try {
     $null=& $wrapper -Action CreateFixture -FixturePath $fixture -ConfirmApply -DotNetPath $DotNetPath
     $catalog=Read-Json (& $router -CapabilityId $capability -Action preview)
     $expectedCatalog=Get-Content -LiteralPath (Join-Path $root 'backend/catalogs/windows-tweaks.json') -Raw|ConvertFrom-Json
-    Assert ($catalog.status -eq 'completed' -and $catalog.evidence.data.catalog.settings.Count -eq $expectedCatalog.settings.Count) 'Capability preview exposes the executable catalog'
+    $customStore=Join-Path (Get-RooIndustriesLocalDataRoot) 'settings\custom-windows-settings.json'
+    $customCount=if(Test-Path -LiteralPath $customStore){@((Get-Content -LiteralPath $customStore -Raw|ConvertFrom-Json).entries).Count}else{0}
+    Assert ($catalog.status -eq 'completed' -and $catalog.evidence.data.catalog.settings.Count -eq ($expectedCatalog.settings.Count+$customCount)) 'Capability preview exposes the executable catalog plus the PC custom settings'
     $preview=Join-Path $work 'preview.json';$request=Join-Path $work 'request.json'
     Save $request @{schemaVersion=1;repoRoot=$root;fixturePath=$fixture;profileId='route-test';presetId='explorer-details';outputPath=$preview}
     $planned=Read-Json (& $router -CapabilityId $capability -Action preview -RequestPath $request)

@@ -1,9 +1,12 @@
 import copy
 import json
+import re
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+
+NEVER_IN_FPS_PRESET = {'windows.6ae403065279ea14'}
 
 def check(root):
     failures = []
@@ -50,11 +53,50 @@ def check(root):
         failures.append('Linked effects and additional source features must remain in the coverage inventory.')
     settings_by_id = {item['id']: item for item in settings}
     preset_ids = {item['id'] for item in catalog['presets']}
+    fps_source = root / 'backend/catalogs/fps-preset.json'
+    fps = next((item for item in catalog['presets'] if item['id'] == 'fps-boost'), None)
+    if fps_source.exists() != (fps is not None):
+        failures.append('The fps-boost preset must exist exactly when backend/catalogs/fps-preset.json does.')
+    if fps is not None:
+        measured = json.loads(fps_source.read_text())['selections']
+        if [(item['settingId'], item['optionId']) for item in measured] != [(item['settingId'], item['optionId']) for item in fps['selections']]:
+            failures.append('The fps-boost preset must list exactly the measured winners.')
+        if any(item['settingId'] in NEVER_IN_FPS_PRESET for item in measured):
+            failures.append('The fps-boost preset includes a setting that must never ship in it (it breaks the PC after a reboot).')
+        for item in measured:
+            option_ids = {option['id'] for option in settings_by_id.get(item['settingId'], {}).get('options', [])}
+            if item['optionId'] not in option_ids or not item.get('evidence'):
+                failures.append('An FPS preset choice needs a real catalog option and benchmark evidence: ' + item['settingId'])
     for feature in coverage['features']:
         if feature['status'] == 'shared-settings' and (not feature.get('settings') or any(identifier not in settings_by_id for identifier in feature['settings'])):
             failures.append('A shared source feature must reference real setting resources: ' + feature['id'])
         if feature['status'] == 'shared-preset' and feature.get('implementation') not in preset_ids:
             failures.append('A grouped source feature must reference a real preset: ' + feature['id'])
+    failures.extend(label_failures(root, catalog))
+    return failures
+
+
+def label_failures(root, catalog):
+    presentation = json.loads((root / 'docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json').read_text())
+    unreadable, numbered, sections = [], [], {}
+    for setting in catalog['settings']:
+        entry = presentation.get(setting['id'], {})
+        name = (entry.get('name') or setting['name']).strip()
+        if not re.match(r'^(?:[A-Za-z0-9]|"[A-Za-z0-9])', name):
+            unreadable.append(setting['id'] + ' ' + repr(name))
+        for option in setting['options']:
+            label = (entry.get('choices') or {}).get(option['id'], option['name'])
+            if re.fullmatch(r'Value -?\d+(?: \(.*\))?', label):
+                numbered.append(setting['id'] + ' ' + label)
+        sections.setdefault((entry.get('section', 'windows'), name.casefold()), []).append(setting['id'])
+    duplicates = [key[1] + ' in ' + key[0] + ': ' + ', '.join(members) for key, members in sections.items() if len(members) > 1]
+    failures = []
+    if unreadable:
+        failures.append(str(len(unreadable)) + ' setting names are empty or start with punctuation: ' + '; '.join(unreadable[:5]))
+    if numbered:
+        failures.append(str(len(numbered)) + ' choices are labelled only as a bare value number: ' + '; '.join(numbered[:5]))
+    if duplicates:
+        failures.append(str(len(duplicates)) + ' setting names repeat within a section: ' + '; '.join(duplicates[:5]))
     return failures
 
 

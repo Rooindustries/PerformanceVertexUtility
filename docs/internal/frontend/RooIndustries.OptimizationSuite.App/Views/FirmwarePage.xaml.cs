@@ -1,13 +1,13 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.Optimizer;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
@@ -16,6 +16,7 @@ public sealed partial class FirmwarePage : Page
     public FirmwareViewModel ViewModel { get; } = new();
     public FirmwarePage()
     {
+        FirmwareViewModel.WriteTestsPath = App.CatalogsDirectory is { } catalogs ? Path.Combine(catalogs, "firmware-write-tests.json") : null;
         InitializeComponent();
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
@@ -25,9 +26,7 @@ public sealed partial class FirmwarePage : Page
         if (ViewModel.Busy || App.MainWindow is null) return;
         try
         {
-            var picker = new FolderPicker();
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+            var picker = new FolderPicker(App.MainWindow.AppWindow.Id);
             var folder = await picker.PickSingleFolderAsync();
             if (folder is null) return;
             var package = await Task.Run(() => ScewinProvider.Inspect(folder.Path));
@@ -44,7 +43,17 @@ public sealed partial class FirmwarePage : Page
     private void CancelSetup(object sender, RoutedEventArgs e) => ViewModel.CancelSetup();
     private async void Review(object sender, RoutedEventArgs e) => await ViewModel.ReviewAsync();
     private void Edit(object sender, RoutedEventArgs e) => ViewModel.EditAgain();
-    private async void Apply(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();
+    private async void Apply(object sender, RoutedEventArgs e)
+    {
+        if (!ViewModel.CanApply) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "Write these BIOS settings?",
+            Content = new TextBlock { Text = "A wrong BIOS setting can stop this PC from starting. If that happens, reset the BIOS to its defaults.\n\nIf this PC uses BitLocker or Device Encryption, find your recovery key before you restart. Windows can ask for it after a BIOS change.", TextWrapping = TextWrapping.Wrap, MaxWidth = 550 },
+            PrimaryButtonText = ViewModel.ApplyLabel, CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && ViewModel.CanApply) await ViewModel.ApplyAsync();
+    }
     private async void Verify(object sender, RoutedEventArgs e) => await ViewModel.VerifyAsync();
     private async void Undo(object sender, RoutedEventArgs e) => await ViewModel.UndoAsync();
     private async void OpenSettings(object sender, RoutedEventArgs e) => await ViewModel.OpenSettingsAsync();
@@ -55,22 +64,22 @@ public sealed partial class FirmwarePage : Page
     private void OpenFiles(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SessionDirectory is not { } directory) return;
-        try { Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); }
+        try { RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(directory); }
         catch (Exception ex) { ViewModel.Message = ex.Message; }
     }
+    private bool _restarting;
     private async void Restart(object sender, RoutedEventArgs e)
     {
-        if (!ViewModel.CanRestart) return;
+        if (_restarting || !ViewModel.CanRestart) return;
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Restart this PC now?", Content = "Save your work first. Windows will restart immediately. Reopen this BIOS session afterward to verify the settings.", PrimaryButtonText = "Restart now", CloseButtonText = "Later", DefaultButton = ContentDialogButton.Close };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         try
         {
             await ViewModel.VerifyAsync();
-            if (!ViewModel.CanRestart) return;
-            var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "shutdown.exe")) { UseShellExecute = false, CreateNoWindow = true };
-            start.ArgumentList.Add("/r"); start.ArgumentList.Add("/t"); start.ArgumentList.Add("0");
-            Process.Start(start);
+            if (_restarting || !ViewModel.CanRestart) return;
+            _restarting = true;
+            await Task.Run(() => SystemRestart.Restart((command, error) => AppLog.Write("firmware-restart", Path.GetFileName(command.FileName) + " boot target skipped: " + error.Message)));
         }
-        catch (Exception ex) { ViewModel.Message = ex.Message; }
+        catch (Exception ex) { _restarting = false; ViewModel.Message = ex.Message; }
     }
 }

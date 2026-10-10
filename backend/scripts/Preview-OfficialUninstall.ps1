@@ -32,9 +32,9 @@ function Get-OfficialCommandPreview {
         }
         $commandType = 'msi-uninstall-string'
         $msiexec = Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
-        $rawCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /norestart'
-        $quietCommand = '"'+$msiexec+'" /x '+$productCode.ToString('B')+' /qn /norestart'
-        $metadata = [pscustomobject]@{ productCode=$productCode.ToString('B'); exitCodePolicy='windows-installer'; automaticRestartAllowed=$false }
+        $rawCommand = '"'+$msiexec+'" '+(Get-RooIndustriesMsiUninstallArguments $productCode)
+        $quietCommand = '"'+$msiexec+'" '+(Get-RooIndustriesMsiUninstallArguments $productCode -Quiet)
+        $metadata = [pscustomobject]@{ productCode=$productCode.ToString('B').ToUpperInvariant(); exitCodePolicy='windows-installer'; automaticRestartAllowed=$false }
     } elseif (-not [string]::IsNullOrWhiteSpace([string]$uninstallString)) {
         $commandType = 'registry-uninstall-string'
     } elseif ($sourceType -eq 'appx') {
@@ -59,8 +59,11 @@ function Get-OfficialCommandPreview {
         }
     }
 
-    $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand
-    $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand
+    $parsed = Resolve-RooIndustriesUninstallCommandLine $rawCommand
+    if ($null -eq $parsed) { $parsed = Split-RooIndustriesUninstallCommandLine $rawCommand }
+    $parsedQuiet = Resolve-RooIndustriesUninstallCommandLine $quietCommand
+    if ($null -eq $parsedQuiet) { $parsedQuiet = Split-RooIndustriesUninstallCommandLine $quietCommand }
+    $executableFacts = Get-RooIndustriesUninstallExecutableFacts ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null))
     $blocked = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'blockByDefault' $false)
     $protected = [bool](Get-RooIndustriesUninstallPropertyValue $Classification 'protected' $false)
     $warnings = New-Object System.Collections.Generic.List[object]
@@ -81,7 +84,10 @@ function Get-OfficialCommandPreview {
         primaryClassification = [string](Get-RooIndustriesUninstallPropertyValue $Classification 'primaryClassification' '')
         commandType = $commandType
         rawCommand = $rawCommand
+        commandLine = Get-RooIndustriesReviewedUninstallCommandLine ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null)) ([string](Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null))
         executable = Get-RooIndustriesUninstallPropertyValue $parsed 'executable' $null
+        executableSha256 = $executableFacts.sha256
+        executableState = $executableFacts.state
         arguments = Get-RooIndustriesUninstallPropertyValue $parsed 'arguments' $null
         quietRawCommand = $quietCommand
         quietExecutable = Get-RooIndustriesUninstallPropertyValue $parsedQuiet 'executable' $null

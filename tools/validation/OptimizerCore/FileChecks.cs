@@ -5,7 +5,7 @@ static class FileChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-file-core-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("file-core");
         var source = Path.Combine(root, "Application files");
         var operations = Path.Combine(root, "Operations");
         Directory.CreateDirectory(Path.Combine(source, "Settings"));

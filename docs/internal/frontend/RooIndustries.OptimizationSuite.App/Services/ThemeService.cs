@@ -11,6 +11,7 @@ public sealed class ThemeService
 {
     private const string ThemeKey = "themeId";
     private const string EffectsKey = "reducedEffects";
+    private const string SimpleModeKey = "simpleMode";
     private const string ProbeBrushKey = "RooIndustriesCanvasBrush";
     private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
     private const string StylesProbeKey = "PanelBorderStyle";
@@ -26,6 +27,8 @@ public sealed class ThemeService
 
     public event Action? ThemeChanged;
     public event Action? EffectsChanged;
+    public event Action? SimpleModeChanged;
+    public bool SimpleMode { get; private set; } = true;
 
     public ThemeService(SettingsStore settings)
     {
@@ -39,10 +42,23 @@ public sealed class ThemeService
         var option = Options.FirstOrDefault(o => o.Id == stored) ?? BlackoutGold;
         CurrentThemeId = option.Id;
         ReducedEffects = _settings.Get(EffectsKey) == "1";
+        SimpleMode = _settings.Get(SimpleModeKey) != "0";
         if (option.Id != BlackoutGold.Id)
         {
             SwapDictionary(option);
         }
+    }
+
+    public void SetSimpleMode(bool simple)
+    {
+        if (simple == SimpleMode)
+        {
+            return;
+        }
+
+        SimpleMode = simple;
+        _settings.Set(SimpleModeKey, simple ? "1" : "0");
+        SimpleModeChanged?.Invoke();
     }
 
     public void SetReducedEffects(bool reduced)

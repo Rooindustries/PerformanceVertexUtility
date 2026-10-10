@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using RooIndustries.Optimizer;
 
@@ -21,7 +22,7 @@ public sealed partial class OptimizerService
 {
     public async Task<GameSessionReview> PreviewGameSessionAsync(int launcherId, string gamePath, Dictionary<string, JsonElement> controls, bool acceptLauncherScope)
     {
-        var directory = NewOperationDirectory("game-session");
+        var directory = await NewOperationDirectoryAsync("game-session");
         var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<ProtectedSessionPreview>("protected-session-preview", new()
         {
@@ -37,7 +38,7 @@ public sealed partial class OptimizerService
         if (!string.Equals(Hash(review.PreviewPath), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed game settings changed. Preview them again.");
         var status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash));
         if (status.State?.Preview.OperationId != review.Plan.OperationId || status.HostRunning != true)
-            throw new InvalidDataException("The backend did not start the reviewed game session. Inspect its recovery state before retrying.");
+            throw new InvalidDataException("The game session did not start. Check Undo changes before trying again.");
         return status;
     }
 
@@ -50,15 +51,16 @@ public sealed partial class OptimizerService
     public async Task<GameSessionEntry[]> ReadGameSessionsAsync()
     {
         if (!Directory.Exists(_storage)) return [];
-        var entries = new List<GameSessionEntry>();
-        foreach (var directory in Directory.EnumerateDirectories(_storage, "game-session-*").OrderByDescending(Directory.GetLastWriteTimeUtc))
+        var roots = Directory.EnumerateDirectories(_storage, "game-session-*").OrderByDescending(Directory.GetLastWriteTimeUtc)
+            .Select(directory => Path.Combine(directory, "session")).Where(Directory.Exists).ToArray();
+        using var slots = new SemaphoreSlim(4);
+        return await Task.WhenAll(roots.Select(async root =>
         {
-            var root = Path.Combine(directory, "session");
-            if (!Directory.Exists(root)) continue;
-            try { entries.Add(new(root, await ReadGameSessionAsync(root))); }
-            catch (Exception error) { entries.Add(new(root, new(null, null, error.Message))); }
-        }
-        return entries.ToArray();
+            await slots.WaitAsync().ConfigureAwait(false);
+            try { return new GameSessionEntry(root, await ReadGameSessionAsync(root).ConfigureAwait(false)); }
+            catch (Exception error) { return new GameSessionEntry(root, new(null, null, error.Message)); }
+            finally { slots.Release(); }
+        }));
     }
 
     public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot)
@@ -73,12 +75,13 @@ public sealed partial class OptimizerService
     private async Task<ProtectedSessionStatus> GameSessionActionAsync(string action, string sessionRoot, string arguments = "")
     {
         ValidateGameSessionRoot(sessionRoot);
+        if (action is "Stop" or "Recover" && await EarlierVersionConsent.RequireAsync(Path.Combine(sessionRoot, "session.json"))) arguments += " -AcceptEarlierVersion";
         var result = await RunAsync<GameSessionOperation>("Invoke-ProtectedGameSession.ps1",
             "-Action " + action + " -SessionRoot " + Quote(sessionRoot) + arguments + " -ConfirmApply", waitForRemoval: true);
         var operation = RequireData(result);
         if (result.Status != "completed" || operation.Worker is null || string.IsNullOrWhiteSpace(operation.SessionRoot) ||
             !string.Equals(Path.GetFullPath(operation.SessionRoot), Path.GetFullPath(sessionRoot), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The backend returned a different or incomplete game session.");
+            throw new InvalidDataException("The game session could not be confirmed. Check Undo changes before trying again.");
         return operation.Worker;
     }
 

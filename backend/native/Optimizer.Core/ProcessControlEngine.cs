@@ -3,6 +3,8 @@ using System.Text.Json;
 
 namespace RooIndustries.Optimizer;
 
+public sealed class InstanceBusyException() : IOException("Another operation controls this process instance.");
+
 public sealed class ProcessControlEngine
 {
     private readonly Func<RunningProcess, bool> _excluded;
@@ -19,7 +21,7 @@ public sealed class ProcessControlEngine
 
     public ProcessControlPreview Preview(int processId, Dictionary<string, JsonElement> desired, CpuSelection? cpuSelection = null)
     {
-        using var target = Open(processId, readControls: desired.Keys);
+        using var target = Open(processId);
         var identity = target.Identity();
         if (_excluded(identity)) throw new InvalidOperationException("This application is excluded by the protection policy.");
         target.RequireUnprotected();
@@ -31,6 +33,9 @@ public sealed class ProcessControlEngine
             desired.Add("cpuSets", JsonSerializer.SerializeToElement(cpuSelection.Resolve(topology)));
         }
         ValidateNames(desired.Keys);
+        var blocked = _retained is null ? ProcessTarget.BlockedControls(processId, desired.Keys) : new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in blocked.Keys) desired.Remove(name);
+        if (desired.Count == 0) throw new ProcessControlBlockedException(blocked.Keys);
         var original = new Dictionary<string, ControlRead>(StringComparer.Ordinal);
         foreach (var pair in desired)
         {
@@ -44,6 +49,7 @@ public sealed class ProcessControlEngine
         {
             SchemaVersion = 1, OperationId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(),
             Identity = identity, Original = original, Desired = desired, TopologyHash = CpuSelection.Fingerprint(topology),
+            Blocked = blocked.Count == 0 ? null : blocked,
         };
     }
 
@@ -55,6 +61,9 @@ public sealed class ProcessControlEngine
         preview.Owner.Verify();
         using var lease = OperationFiles.Lock(journalPath);
         using var instanceLease = InstanceLease(preview.Identity);
+#if GOVERNOR_TEST_HOOKS
+        if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_APPLY_PAUSE_MS"), out var applyPause) && applyPause > 0) Thread.Sleep(Math.Min(applyPause, 10000));
+#endif
         if (File.Exists(journalPath))
         {
             var existing = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -62,19 +71,26 @@ public sealed class ProcessControlEngine
                 throw new InvalidDataException("This journal belongs to a different reviewed operation.");
             ValidateJournal(existing);
             if (existing.Status is "restored" or "expired") return existing;
+            if (existing.Status == "applying") return Resume(preview, existing, journalPath);
             var before = JsonSerializer.Serialize(existing, OperationFiles.Json);
-            using var observedTarget = Open(preview.Identity.ProcessId);
+            using var observedTarget = Open(preview.Identity.ProcessId, readControls: existing.Changes.Select(change => change.Name));
             preview.Identity.Verify(observedTarget.Identity());
             existing.Status = "applied";
             foreach (var change in existing.Changes)
             {
-                if (change.Status is "pending" or "restoreIntent" or "restored") { existing.Status = "needsReconciliation"; continue; }
+                if (change.Status is "pending" or "restoreIntent" or "restored" or "leftAsSet") { existing.Status = "needsReconciliation"; continue; }
                 var observation = observedTarget.Read(change.Name);
+                if (change.Error is not null && observation.Known && ProcessTarget.Equivalent(change.Name, observation.Require(), change.Original))
+                {
+                    existing.Status = "needsReconciliation";
+                    change.Observed = observation.Value;
+                    continue;
+                }
                 try
                 {
                     if (!ProcessTarget.Equivalent(change.Name, observation.Require(), change.Desired)) throw new InvalidOperationException("Another controller changed this field; the saved policy is suspended.");
                     if (change.Status == "applyIntent") change.Status = "applied";
-                    change.Error = null;
+                    change.Error = null; change.ErrorKind = null;
                 }
                 catch (Exception error) { existing.Status = "needsReconciliation"; change.Error = error.Message; }
                 change.Observed = observation.Value;
@@ -100,36 +116,106 @@ public sealed class ProcessControlEngine
             }).ToList(),
         };
         Save(journalPath, journal);
+        return Execute(target, journal, journalPath);
+    }
+
+    private ProcessControlJournal Resume(ProcessControlPreview preview, ProcessControlJournal journal, string journalPath)
+    {
+        using var target = Open(preview.Identity.ProcessId, preview.Desired.Keys);
+        preview.Identity.Verify(target.Identity());
+        if (_excluded(preview.Identity)) throw new InvalidOperationException("This application is now excluded by the protection policy.");
+        target.RequireUnprotected();
+        if (preview.TopologyHash != CpuSelection.Fingerprint(target.Topology())) throw new InvalidDataException("Topology changed after preview.");
+        return Execute(target, journal, journalPath);
+    }
+
+    private static ProcessControlJournal Execute(ProcessTarget target, ProcessControlJournal journal, string journalPath)
+    {
+        var failed = false;
         foreach (var change in journal.Changes)
         {
             try
             {
                 var current = target.Read(change.Name).Require();
+                if (change.Status is "unchanged" or "applied")
+                {
+                    change.Observed = current;
+                    if (!ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another controller changed this field; the saved policy is suspended.");
+                    continue;
+                }
+                if (change.Status == "applyIntent" && ProcessTarget.Equivalent(change.Name, current, change.Desired)) { Succeeded(change, "applied", current); Save(journalPath, journal); continue; }
                 if (!ProcessTarget.Equivalent(change.Name, change.Original, current)) throw new InvalidOperationException("A concurrent change replaced the reviewed original.");
-                if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { change.Status = "unchanged"; change.Observed = current; Save(journalPath, journal); continue; }
+                if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { Succeeded(change, "unchanged", current); Save(journalPath, journal); continue; }
                 change.Status = "applyIntent";
                 Save(journalPath, journal);
                 target.Write(change.Name, change.Desired);
                 var after = target.Read(change.Name).Require();
                 change.Observed = after;
                 if (!ProcessTarget.Equivalent(change.Name, after, change.Desired)) throw new InvalidOperationException("Windows readback differs from the requested value.");
-                change.Status = "applied";
+                Succeeded(change, "applied", after);
                 Save(journalPath, journal);
             }
             catch (Exception error)
             {
                 change.Error = error.Message;
+                change.ErrorKind = ProcessFailures.Denied(error) ? "denied" : null;
+                failed = true;
+                Save(journalPath, journal);
+            }
+        }
+        journal.Status = failed ? "needsReconciliation" : "applied";
+        Save(journalPath, journal);
+        return journal;
+    }
+
+    private static void Succeeded(ControlChange change, string status, JsonElement observed)
+    {
+        change.Status = status; change.Observed = observed; change.Error = null; change.ErrorKind = null;
+    }
+
+    public ProcessControlJournal Reassert(string journalPath, out bool wrote)
+    {
+        wrote = false;
+        using var lease = OperationFiles.Lock(journalPath);
+        var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
+        ValidateJournal(journal);
+        if (journal.Status is not ("applied" or "needsReconciliation") || journal.Changes.Any(change => change.Status is not ("applied" or "unchanged" or "applyIntent"))) return journal;
+        using var instanceLease = InstanceLease(journal.Preview.Identity);
+        using var target = Open(journal.Preview.Identity.ProcessId, journal.Changes.Select(change => change.Name));
+        journal.Preview.Identity.Verify(target.Identity());
+        if (_excluded(journal.Preview.Identity)) throw new InvalidOperationException("This application is now excluded by the protection policy.");
+        target.RequireUnprotected();
+        foreach (var change in journal.Changes)
+        {
+            var current = target.Read(change.Name).Require();
+            change.Observed = current;
+            if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { if (change.Status == "applyIntent") change.Status = "applied"; change.Error = null; change.ErrorKind = null; continue; }
+            change.Status = "applyIntent";
+            Save(journalPath, journal);
+            target.Write(change.Name, change.Desired);
+            wrote = true;
+            var after = target.Read(change.Name).Require();
+            change.Observed = after;
+            if (!ProcessTarget.Equivalent(change.Name, after, change.Desired))
+            {
+                change.Error = "Windows readback differs from the requested value.";
                 journal.Status = "needsReconciliation";
                 Save(journalPath, journal);
                 return journal;
             }
+            change.Status = "applied";
+            change.Error = null; change.ErrorKind = null;
         }
         journal.Status = "applied";
         Save(journalPath, journal);
         return journal;
     }
 
-    public ProcessControlJournal Restore(string journalPath)
+    public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false);
+
+    internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished);
+
+    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished)
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -167,25 +253,54 @@ public sealed class ProcessControlEngine
                 try
                 {
                     var current = target.Read(change.Name).Require();
-                    if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; Save(journalPath, journal); continue; }
-                    if (!ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
+                    if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; change.ErrorKind = null; Save(journalPath, journal); continue; }
+                    if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)))
+                    {
+                        LeaveAsSet(change, current);
+                        Save(journalPath, journal);
+                        continue;
+                    }
+                    if (!overwrite && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
-                    if (!ProcessTarget.Equivalent(change.Name, target.Read(change.Name).Require(), change.Desired)) throw new InvalidOperationException("The field changed before restoration.");
+                    if (!overwrite)
+                    {
+                        var beforeWrite = target.Read(change.Name).Require();
+                        if (!ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
+                        {
+                            if (!governor) throw new InvalidOperationException("The field changed before restoration.");
+                            LeaveAsSet(change, beforeWrite);
+                            Save(journalPath, journal);
+                            continue;
+                        }
+                    }
                     target.Write(change.Name, change.Original);
                     var after = target.Read(change.Name).Require();
                     change.Observed = after;
                     if (!ProcessTarget.Equivalent(change.Name, after, change.Original)) throw new InvalidOperationException("Restoration readback did not match the saved original.");
                     change.Status = "restored";
-                    change.Error = null;
+                    change.Error = null; change.ErrorKind = null;
                 }
-                catch (Exception error) { change.Error = error.Message; conflicts = true; }
+                catch (Exception error) { change.Error = error.Message; change.ErrorKind = ProcessFailures.Denied(error) ? "denied" : null; conflicts = true; }
                 Save(journalPath, journal);
+#if GOVERNOR_TEST_HOOKS
+                if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
+#endif
             }
             journal.Status = conflicts ? "needsReconciliation" : "restored";
             Save(journalPath, journal);
         }
         return journal;
+    }
+
+    public const string LeftAsSet = "Left as another program set it.";
+
+    private static void LeaveAsSet(ControlChange change, JsonElement current)
+    {
+        change.Status = "leftAsSet";
+        change.Observed = current;
+        change.ErrorKind = "leftAsSet";
+        change.Error = LeftAsSet;
     }
 
     private static bool IsAttempted(ControlChange change) => change.Status is "applyIntent" or "applied" or "restoreIntent";
@@ -203,7 +318,8 @@ public sealed class ProcessControlEngine
             throw new InvalidDataException("The process recovery journal is incomplete.");
         foreach (var change in journal.Changes)
         {
-            if (change.Status is not ("pending" or "unchanged" or "applyIntent" or "applied" or "restoreIntent" or "restored") ||
+            if (change.Status is not ("pending" or "unchanged" or "applyIntent" or "applied" or "restoreIntent" or "restored" or "leftAsSet") ||
+                change.Status == "leftAsSet" && (change.ErrorKind != "leftAsSet" || change.Error != LeftAsSet || change.Observed is null) ||
                 !journal.Preview.Desired.TryGetValue(change.Name, out var desired) ||
                 !ProcessTarget.Equivalent(change.Name, desired, change.Desired) ||
                 !ProcessTarget.Equivalent(change.Name, journal.Preview.Original[change.Name].Require(), change.Original))
@@ -259,7 +375,7 @@ public sealed class ProcessControlEngine
         var mutex = new Mutex(false, BrandCompatibility.ProcessMutexPrefix + identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc);
         bool held;
         try { held = mutex.WaitOne(0); } catch (AbandonedMutexException) { held = true; }
-        if (!held) { mutex.Dispose(); throw new IOException("Another operation controls this process instance."); }
+        if (!held) { mutex.Dispose(); throw new InstanceBusyException(); }
         return new MutexLease(mutex);
     }
 

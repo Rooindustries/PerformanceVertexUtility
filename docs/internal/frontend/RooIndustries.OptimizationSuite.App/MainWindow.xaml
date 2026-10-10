@@ -38,7 +38,7 @@
                         <TextBlock Text="ROO INDUSTRIES" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="13" FontWeight="SemiBold" CharacterSpacing="80"
                                    Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                        <TextBlock Text="Optimization Suite" FontFamily="{StaticResource RooIndustriesFontFamily}"
+                        <TextBlock Text="Optimization Suite Beta" FontFamily="{StaticResource RooIndustriesFontFamily}"
                                    FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>
@@ -46,65 +46,80 @@
 
             <NavigationView.MenuItems>
                 <NavigationViewItemHeader Content="YOUR PC" />
-                <NavigationViewItem Content="Overview" Tag="dashboard" IsSelected="True">
+                <NavigationViewItem Content="Home" Tag="dashboard" IsSelected="True">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/home.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Games &amp; processes" Tag="profiles">
+                <NavigationViewItem Content="Games" Tag="profiles">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/game.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Installed apps" Tag="uninstall">
+                <NavigationViewItem Content="Remove apps" Tag="uninstall">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/apps.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItemHeader Content="SYSTEM" />
-                <NavigationViewItem Content="Startup &amp; services" Tag="startup">
+                <NavigationViewItemHeader Content="SPEED UP" />
+                <NavigationViewItem x:Name="NavStartup" Content="Startup &amp; services" Tag="startup">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/startup.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Drivers &amp; GPU" Tag="drivers">
+                <NavigationViewItem Content="Graphics drivers" Tag="drivers">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/gpu.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Memory" Tag="memory">
+                <NavigationViewItem x:Name="NavMemory" Content="Memory" Tag="memory">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/memory.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Windows settings" Tag="windows">
+                <NavigationViewItem Content="Windows tweaks" Tag="windows">
                     <NavigationViewItem.Icon><ImageIcon Source="ms-appx:///Assets/Icons/windows.svg" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Timer &amp; cache" Tag="monitoring">
+                <NavigationViewItem x:Name="NavTimer" Content="Timer &amp; cache" Tag="monitoring">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/timer.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItemHeader Content="UTILITIES" />
+                <NavigationViewItemHeader Content="MORE" />
                 <NavigationViewItem Content="Tools" Tag="tools">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/tools.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Backups &amp; history" Tag="restore">
+                <NavigationViewItem Content="Undo changes" Tag="restore">
                     <NavigationViewItem.Icon>
                         <ImageIcon Source="ms-appx:///Assets/Icons/history.svg" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Content="Report a bug" Tag="bug" AutomationProperties.AutomationId="NavReportBug">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEBE8;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <Rectangle Grid.Row="0" Height="1" VerticalAlignment="Top" Fill="{StaticResource RooIndustriesTopHairlineBrush}" />
-                <Frame x:Name="ContentFrame" Grid.Row="1" />
+                <InfoBar x:Name="UpdateBanner" Grid.Row="0" IsOpen="False" IsClosable="False" Severity="Informational" AutomationProperties.AutomationId="UpdateBanner">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="UpdateBannerInstall" Content="Install now" Click="UpdateInstall_Click" AutomationProperties.AutomationId="UpdateBannerInstall" />
+                        <Button Content="Later" Click="UpdateLater_Click" AutomationProperties.AutomationId="UpdateLaterButton" />
+                    </StackPanel>
+                </InfoBar>
+                <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Top" Fill="{StaticResource RooIndustriesTopHairlineBrush}" />
+                <Frame x:Name="ContentFrame" Grid.Row="2" />
             </Grid>
         </NavigationView>
     </Grid>

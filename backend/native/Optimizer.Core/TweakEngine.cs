@@ -9,38 +9,107 @@ public sealed class TweakEngine
     private readonly ITweakStore _store;
     public TweakEngine(TweakCatalog catalog, ITweakStore store) { catalog.Validate(); _catalog = catalog; _store = store; }
 
-    public TweakInspection Detect()
+    public const string FeaturesPending = "Checking Windows features\u2026";
+    public const string FeaturesTimedOut = "Windows did not answer within 60 seconds. Select Refresh to check again.";
+    public TimeSpan FeatureTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public static bool IsTransient(string error) => error == FeaturesTimedOut || error == FeaturesPending || error.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+        || error.Contains("control helper exited", StringComparison.Ordinal) || error.Contains("changed while being read", StringComparison.Ordinal) || error.Contains("service is transitioning", StringComparison.Ordinal);
+    public static bool HasTransientErrors(TweakInspection inspection) => inspection.Settings.Any(setting => setting.Error is { } error && IsTransient(error));
+    public TweakInspection Detect(Action<TweakInspection>? partial = null)
     {
         var state = State();
-        var controlCache = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
-        TweakControlRead InspectControl(ControlAddress address)
+        var requirementErrors = _catalog.Settings.Select(definition =>
         {
-            if (!controlCache.TryGetValue(address, out var cached))
-            {
-                try { var read = _store.ReadControl(address); read.Validate(); cached = (read, null); }
-                catch (Exception error) { cached = (null, error); }
-                controlCache.Add(address, cached);
-            }
-            return cached.Read ?? throw new InvalidDataException(cached.Error!.Message, cached.Error);
-        }
-        return new(_store.Context, _catalog.Version, state, _catalog.Settings.Select(definition =>
+            try { foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement); return null; }
+            catch (Exception error) { return error; }
+        }).ToArray();
+        var addresses = _catalog.Settings.Where((_, index) => requirementErrors[index] is null).SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
+        var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
+        var fast = addresses.Except(slow).ToArray();
+        var fastRead = _store.ReadControlsAsync(fast);
+        var slowRead = slow.Length == 0 ? null : _store.ReadControlsAsync(slow);
+        var slowDeadline = slowRead is null ? null : Task.Delay(FeatureTimeout);
+        var prepared = _catalog.Settings.Select((definition, index) =>
         {
             try
             {
                 var supported = Supported(definition);
-                foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement);
+                if (requirementErrors[index] is { } failed) throw failed;
                 var resolvedOptions = definition.Options.Select(option => option with { Changes = option.Changes.SelectMany(_store.Resolve).ToArray() }).ToArray();
                 var readings = resolvedOptions.SelectMany(option => option.Changes).Select(change => change.Address).Distinct().ToDictionary(address => address, Read);
-                var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
-                var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
-                if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
-                var matches = resolvedOptions.Where(option => option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
-                var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
-                supported &= available.Length > 0;
-                return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());
+                return (Definition: definition, Supported: supported, Options: resolvedOptions, Readings: readings, Error: (Exception?)null);
             }
-            catch (Exception error) { return new TweakSettingStatus(definition.Id, definition.Name, false, [], [], error.Message); }
-        }).ToArray());
+            catch (Exception error) { return (Definition: definition, Supported: false, Options: Array.Empty<TweakOption>(), Readings: new Dictionary<RegistryAddress, TweakRead>(), Error: error); }
+        }).ToArray();
+        static Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> Collect(Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>? read, ControlAddress[] addresses)
+        {
+            var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+            Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>? answered = null;
+            Exception? faulted = null;
+            if (read is not null)
+                try { answered = read.GetAwaiter().GetResult(); }
+                catch (Exception error) { faulted = error; }
+            foreach (var address in addresses)
+                results[address] = answered is not null && answered.TryGetValue(address, out var found) ? found : (null, faulted ?? new InvalidDataException("Windows returned no answer for this setting."));
+            return results;
+        }
+        TweakInspection Inspect(Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> prefetched)
+        {
+            var controlCache = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+            TweakControlRead InspectControl(ControlAddress address)
+            {
+                if (!controlCache.TryGetValue(address, out var cached))
+                {
+                    try
+                    {
+                        var (read, failure) = prefetched.TryGetValue(address, out var found) ? found : (null, new InvalidDataException("Windows returned no answer for this setting."));
+                        if (failure is not null) throw failure;
+                        read!.Validate(); cached = (read, null);
+                    }
+                    catch (Exception error) { cached = (null, error); }
+                    controlCache.Add(address, cached);
+                }
+                return cached.Read ?? throw new InvalidDataException(cached.Error!.Message, cached.Error);
+            }
+            return new(_store.Context, _catalog.Version, state, prepared.Select(entry =>
+            {
+                var (definition, supported, resolvedOptions, readings, failure) = entry;
+                try
+                {
+                    if (failure is not null) throw failure;
+                    var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
+                    var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
+                    if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
+                    var matches = resolvedOptions.Where(option => option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
+                    var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
+                    supported &= available.Length > 0;
+                    return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());
+                }
+                catch (Exception error) { return new TweakSettingStatus(definition.Id, definition.Name, false, [], [], error.Message); }
+            }).ToArray());
+        }
+        var fastDeadline = Task.Delay(ReadTimeout);
+        Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> prefetched;
+        if (Task.WhenAny(fastRead, fastDeadline).GetAwaiter().GetResult() != fastRead)
+        {
+            _ = fastRead.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            prefetched = fast.ToDictionary(address => address, address => ((TweakControlRead?)null, (Exception?)new TimeoutException(FeaturesTimedOut)));
+        }
+        else prefetched = Collect(fastRead, fast);
+        if (partial is not null && slowRead is { IsCompleted: false } && fast.All(prefetched.ContainsKey))
+        {
+            var pending = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>(prefetched);
+            foreach (var address in slow) pending[address] = (null, new InvalidDataException(FeaturesPending));
+            partial(Inspect(pending));
+        }
+        if (slowRead is not null && Task.WhenAny(slowRead, slowDeadline!).GetAwaiter().GetResult() != slowRead)
+        {
+            _ = slowRead.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            foreach (var address in slow) prefetched[address] = (null, new TimeoutException(FeaturesTimedOut));
+        }
+        else foreach (var (address, result) in Collect(slowRead, slow)) prefetched[address] = result;
+        return Inspect(prefetched);
     }
 
     public TweakPlan Preview(string profileId, TweakSelection[] selections)
@@ -54,6 +123,7 @@ public sealed class TweakEngine
         if (preset.AvailableOnly)
         {
             var available = Detect().Settings.ToDictionary(setting => setting.Id);
+            if (choices.Any(choice => available[choice.SettingId].Error == FeaturesTimedOut)) throw new TimeoutException(FeaturesTimedOut);
             choices = choices.Where(choice => available[choice.SettingId].Supported && available[choice.SettingId].AvailableChoices?.Contains(choice.OptionId) == true).ToArray();
             if (choices.Length == 0) throw new InvalidDataException("None of this preset's settings are available on this PC.");
         }
@@ -107,7 +177,7 @@ public sealed class TweakEngine
                 var (definition, option) = _catalog.Resolve(selection);
                 if (!Supported(definition) || !Supported(option)) throw new InvalidDataException(definition.Name + " is not supported on this Windows build or edition.");
                 foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement);
-                foreach (var control in option.Controls ?? []) { var observed = _store.ReadControl(control.Address); observed.Validate(); if (!observed.Allows(control.Value)) throw new InvalidDataException("This Windows control does not support that value: " + control.Address.Target); controlClaims.Add(new(definition.Id, option.Id, observed, observed.Expand(control.Value), control.Patch)); }
+                foreach (var control in option.Controls ?? []) { var observed = ReadControl(control.Address); observed.Validate(); if (!observed.Allows(control.Value)) throw new InvalidDataException("This Windows control does not support that value: " + control.Address.Target); controlClaims.Add(new(definition.Id, option.Id, observed, observed.Expand(control.Value), control.Patch)); }
                 foreach (var change in option.Changes.SelectMany(_store.Resolve)) claims.Add(new(definition.Id, option.Id, Capture(change.Address), Desired(change), change.Token, change.Bits));
             }
             foreach (var claim in claims) affected.Add(claim.Target.Id);
@@ -122,29 +192,79 @@ public sealed class TweakEngine
         var held = (state?.Held ?? []).ToDictionary(item => item.Original.Id, StringComparer.Ordinal);
         var next = new List<TweakHeldValue>();
         var changes = new List<TweakMutation>();
+        var left = new List<string>();
         foreach (var id in held.Keys.Concat(wanted.Keys).Distinct().Order(StringComparer.Ordinal))
         {
             held.TryGetValue(id, out var original);
             wanted.TryGetValue(id, out var desired);
             if (!affected.Contains(id)) { next.Add(original!); continue; }
-            var observed = Capture((desired?.First().Target ?? original!.Original).Address);
-            if (observed.Id != id) throw new InvalidDataException("A registry target now resolves to a different resource.");
             var oldClaims = (state?.Profiles ?? []).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == id).ToArray();
-            var after = TweakComposition.Resolve(observed, original, oldClaims, desired ?? []);
+            var asks = (desired ?? []).Any(claim => !oldClaims.Any(old => ReferenceEquals(old, claim)));
+            TweakRead observed; TweakResolution after;
+            try
+            {
+                observed = Capture((desired?.First().Target ?? original!.Original).Address);
+                if (observed.Id != id) throw new InvalidDataException("A registry target now resolves to a different resource.");
+                after = TweakComposition.Resolve(observed, original, oldClaims, desired ?? []);
+            }
+            catch (Exception error) when (!asks && original is not null && error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException))
+            {
+                left.AddRange(oldClaims.Where(claim => desired?.Any(kept => ReferenceEquals(kept, claim)) != true).Select(claim => claim.SettingId));
+                if (desired is not null) next.Add(original);
+                continue;
+            }
+            left.AddRange(after.LeftAsChanged ?? []);
             if (!TweakRead.SameValue(observed.Value, after.Value)) changes.Add(new(observed, after.Value));
-            if (desired is not null) next.Add(new(original?.Original ?? observed, after.Value, after.RestoreValue, after.Composed));
+            if (desired is not null) next.Add(new(original?.Original ?? observed, after.Applied ?? after.Value, after.RestoreValue, after.Composed));
         }
+        var controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, ReadControl);
+        if (selections.Length > 0) CheckIncompatible(state, changes, next, profiles, controls, Capture);
         return new()
         {
             SchemaVersion = 1, OperationId = operationId, CreatedAtUtc = created, Context = _store.Context, CatalogHash = _catalog.Digest,
             BeforeRevision = state?.Revision, AfterRevision = revision, ProfileId = profileId, Selections = selections,
             Expected = reads.Values.OrderBy(read => read.Id, StringComparer.Ordinal).ToArray(), Changes = changes.ToArray(),
-            Profiles = profiles.OrderBy(profile => profile.Id, StringComparer.Ordinal).ToArray(), Held = next.ToArray(), Controls = ControlPlanning.Plan(state, profiles.ToArray(), profileId, _store.ReadControl),
+            Profiles = profiles.OrderBy(profile => profile.Id, StringComparer.Ordinal).ToArray(), Held = next.ToArray(), Controls = controls,
+            LeftAsChanged = left.Concat(controls.LeftAsChanged ?? []).Distinct().Order(StringComparer.Ordinal).ToArray(),
             DataLoss = selections.Length > 0 ? profiles.Single(profile => profile.Id == profileId).DataLoss ?? []
                 : state?.Profiles.SingleOrDefault(profile => profile.Id == profileId)?.DataLoss is { Length: > 0 } ? ["Restore returns the saved settings. Data deleted by the earlier changes cannot be restored."] : [],
         };
     }
 
+    private void CheckIncompatible(TweakState? state, List<TweakMutation> changes, List<TweakHeldValue> held, List<TweakProfile> profiles, ControlPlan controls, Func<RegistryAddress, TweakRead> capture)
+    {
+        foreach (var rule in _catalog.Incompatible ?? [])
+        {
+            var options = rule.Selections.Select(_catalog.Resolve).ToArray();
+            var halves = options.Select(item => (item.Definition, item.Option, Changes: item.Option.Changes.SelectMany(_store.Resolve).ToArray())).ToArray();
+            var addresses = halves.SelectMany(half => half.Changes).Select(change => Local(change.Address)).ToHashSet();
+            var controlAddresses = options.SelectMany(item => item.Option.Controls ?? []).Select(control => control.Address).ToHashSet();
+            string[] Owned(IEnumerable<TweakProfile> list) => list.SelectMany(profile => profile.Claims).Where(claim => addresses.Contains(claim.Target.Address))
+                .Select(claim => claim.SettingId + "/" + claim.OptionId + "/" + claim.Target.Id).Order(StringComparer.Ordinal).ToArray();
+            var touched = changes.Any(change => addresses.Contains(change.Before.Address)) || controls.Changes.Any(change => controlAddresses.Contains(change.Before.Address)) ||
+                !Owned(state?.Profiles ?? []).SequenceEqual(Owned(profiles));
+            if (!touched) continue;
+            var reads = halves.SelectMany(half => half.Changes).Select(change => capture(change.Address)).DistinctBy(read => read.Id).ToDictionary(read => read.Id, StringComparer.Ordinal);
+            RegistryValueData? Baseline(string id) => (state?.Held ?? []).Concat(held).FirstOrDefault(item => item.Original.Id == id) is { } owned ? owned.Composed ? owned.RestoreValue : owned.Original.Value : reads[id].Value;
+            var planned = reads.Keys.ToDictionary(id => id, id => changes.FirstOrDefault(change => change.Before.Id == id) is { } mutation ? mutation.After : reads[id].Value, StringComparer.Ordinal);
+            var original = reads.Keys.ToDictionary(id => id, Baseline, StringComparer.Ordinal);
+            var states = new List<Dictionary<string, RegistryValueData?>> { planned };
+            foreach (var profile in profiles.Where(profile => profile.Claims.Any(claim => reads.ContainsKey(claim.Target.Id))))
+                states.Add(reads.Keys.ToDictionary(id => id, id => profile.Claims.Any(claim => claim.Target.Id == id) && !profiles.Any(other => other != profile && other.Claims.Any(claim => claim.Target.Id == id)) ? original[id] : planned[id], StringComparer.Ordinal));
+            bool ControlsEffective((TweakDefinition Definition, TweakOption Option, TweakAssignment[] Changes) half) => (half.Option.Controls ?? []).All(control =>
+            {
+                var read = ReadControl(control.Address); read.Validate();
+                var value = controls.Changes.FirstOrDefault(item => item.Before.Id == read.Id) is { } mutation ? mutation.After : read.Value;
+                return ControlComposition.Matches(new(half.Definition.Id, half.Option.Id, read, read.Expand(control.Value, allowPending: true), control.Patch), value);
+            });
+            bool Effective((TweakDefinition Definition, TweakOption Option, TweakAssignment[] Changes) half, Dictionary<string, RegistryValueData?> values) =>
+                (half.Changes.Length > 0 || half.Option.Controls is { Length: > 0 }) && ControlsEffective(half) &&
+                half.Changes.All(change => { var read = capture(change.Address); return TweakComposition.Matches(new(half.Definition.Id, half.Option.Id, read, Desired(change), change.Token, change.Bits), values[read.Id]); });
+            bool Original(Dictionary<string, RegistryValueData?> values) => values.All(item => TweakRead.SameValue(item.Value, original[item.Key]));
+            if (states.Any(values => halves.All(half => Effective(half, values)) && !Original(values)))
+                throw new InvalidDataException(string.Join(" and ", options.Select(item => item.Definition.Name)) + " cannot be used together. " + rule.Reason);
+        }
+    }
     private bool Supported(TweakDefinition definition) => _store.Context.WindowsBuild >= definition.MinimumBuild && _store.Context.WindowsBuild <= definition.MaximumBuild &&
         (definition.Editions.Contains("*") || definition.Editions.Contains(_store.Context.Edition, StringComparer.OrdinalIgnoreCase));
     private bool Supported(TweakOption option) => (option.ValidUntilUtc is null || DateTime.UtcNow < option.ValidUntilUtc.Value) && (option.Availability is null || option.Availability.Any(gate =>
@@ -155,7 +275,21 @@ public sealed class TweakEngine
         try { _store.CheckRequirement(requirement); return true; }
         catch (Exception error) when (error is InvalidDataException or IOException or System.ComponentModel.Win32Exception) { return false; }
     }
-    private TweakRead Read(RegistryAddress address) { address = address with { KeyPath = address.KeyPath.Replace("{user-sid}", _store.Context.Owner.UserSid, StringComparison.OrdinalIgnoreCase) }; var result = _store.Read(address); result.Validate(); return result; }
+    private RegistryAddress Local(RegistryAddress address) => address with { KeyPath = address.KeyPath.Replace("{user-sid}", _store.Context.Owner.UserSid, StringComparison.OrdinalIgnoreCase) };
+    private TweakControlRead ReadControl(ControlAddress address)
+    {
+        var read = Task.Factory.StartNew(() => _store.ReadControl(address), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        bool answered;
+        try { answered = read.Wait(ReadTimeout); }
+        catch (AggregateException) { answered = true; }
+        if (!answered)
+        {
+            _ = read.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            throw new TimeoutException(FeaturesTimedOut);
+        }
+        return read.GetAwaiter().GetResult();
+    }
+    private TweakRead Read(RegistryAddress address) { var result = _store.Read(Local(address)); result.Validate(); return result; }
     private static RegistryValueData? Desired(TweakAssignment change) => change.Dword is { } value ? new(change.Address.ValueName!, 4, BitConverter.GetBytes(value)) : change.Value;
     private TweakState? State()
     {

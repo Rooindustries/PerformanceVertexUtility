@@ -12,7 +12,10 @@ using RooIndustries.Optimizer;
 namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
-public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
+public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
+    bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
+public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
+    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 
@@ -25,7 +28,7 @@ public sealed partial class OptimizerService
 
     public async Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
     {
-        var directory = NewOperationDirectory("process");
+        var directory = await NewOperationDirectoryAsync("process");
         var path = Path.Combine(directory, "preview.json");
         var preview = await RunCoreAsync<ProcessControlPreview>("process-preview", new()
         {
@@ -36,22 +39,50 @@ public sealed partial class OptimizerService
 
     public async Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
     {
-        Remember("process", review.JournalPath);
+        await RememberAsync("process", review.JournalPath);
         return await RunCoreAsync<ProcessControlJournal>("process-apply", new()
         {
-            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["confirm"] = true,
+            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true,
         });
     }
 
     public async Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
     {
-        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["confirm"] = true });
+        var accept = await EarlierVersionConsent.RequireAsync(journalPath);
+        var result = await RunCoreAsync<ProcessControlJournal>("process-restore", new() { ["journalPath"] = journalPath, ["policyRoot"] = PolicyRoot, ["confirm"] = true, ["acceptEarlierVersion"] = accept });
         if (result.Status is "restored" or "expired" && FindLastJournal("process") == journalPath) Forget("process");
         return result;
     }
 
+    public Task<JsonElement> SecureDataFolderAsync(Action<string>? progress = null)
+        => RunHostAsync<JsonElement>("data-secure", new() { ["confirm"] = true, ["progress"] = true }, default, TimeSpan.FromMinutes(10), bytes => progress?.Invoke(Describe(bytes)), idle: true);
+
+    private static string Describe(ReadOnlyMemory<byte> partial)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(partial);
+            var data = document.RootElement.GetProperty("data");
+            var phase = data.GetProperty("phase").GetString();
+            var files = data.GetProperty("files").GetInt64();
+            var megabytes = data.GetProperty("bytes").GetInt64() / (1024 * 1024);
+            return phase switch
+            {
+                "waiting" => "Another Roo Industries window is preparing the saved settings. Waiting for it to finish.",
+                "finishing" or "switching" => "Finishing up (" + files.ToString("N0") + " files)",
+                "merging" => "Merging changes made while this was running",
+                _ => "Copied " + files.ToString("N0") + " files (" + megabytes.ToString("N0") + " MB)",
+            };
+        }
+        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException) { return ""; }
+    }
+
     public Task<SavedProcessRule[]> ReadRulesAsync() => RunCoreAsync<SavedProcessRule[]>("rules-list", new() { ["policyRoot"] = PolicyRoot });
     public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.Run(() => new ProcessPolicyStore(PolicyRoot).Status());
+    public Task<GovernorSnapshot> ReadGovernorAsync() => Task.Run(() => GovernorProbe.Read(PolicyRoot, _locator.RepoRoot));
+    public TimeSpan GovernorTimeout { get; set; } = TimeSpan.FromMinutes(3);
+    public Task<PolicyHostState> RetryGovernorRestoreAsync()
+        => RunCoreAsync<PolicyHostState>("policy-run", new() { ["policyRoot"] = PolicyRoot, ["durationSeconds"] = 0, ["confirm"] = true }, timeout: GovernorTimeout);
     public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule)
         => RunCoreAsync<SavedProcessRule>("rule-save", new() { ["policyRoot"] = PolicyRoot, ["rule"] = rule, ["confirm"] = true });
     public Task<JsonElement> DeleteRuleAsync(string ruleId)
@@ -59,11 +90,15 @@ public sealed partial class OptimizerService
 
     public async Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
     {
-        string[] allowed = ["Status", "Start", "Stop", "EnableLogon", "DisableLogon", "Remove"];
+        string[] allowed = ["Status", "Sync", "Pause", "Resume", "Remove"];
         if (Array.IndexOf(allowed, action) < 0) throw new ArgumentException("Unknown policy worker action.", nameof(action));
-        var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
-            "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), waitForRemoval: true);
-        return RequireData(result);
+        try
+        {
+            var result = await RunAsync<PolicyWorkerRegistration>("Invoke-ProcessPolicyWorker.ps1",
+                "-Action " + action + " -PolicyRoot " + Quote(PolicyRoot) + (action == "Status" ? "" : " -ConfirmApply"), limit: GovernorTimeout);
+            return RequireData(result);
+        }
+        finally { GovernorProbe.ForgetTask(); }
     }
 
     public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken)
@@ -71,7 +106,8 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation)
     {
-        var directory = NewOperationDirectory("cleanup");
+        await EarlierVersionConsent.RequireAsync(queueJournalPath);
+        var directory = await NewOperationDirectoryAsync("cleanup");
         var path = Path.Combine(directory, "preview.json");
         await RunCoreAsync<ApplicationCleanupPreview>("cleanup-preview", new()
         {
@@ -83,7 +119,7 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupBatchReview> PreviewCleanupBatchAsync(CleanupPart[] applications)
     {
-        var directory = NewOperationDirectory("cleanup-batch");
+        var directory = await NewOperationDirectoryAsync("cleanup-batch");
         var path = Path.Combine(directory, "preview.json");
         var plan = await RunCoreAsync<CleanupBatchPreview>("cleanup-batch-preview", new() { ["cleanupOperations"] = applications, ["outputPath"] = path });
         return new(plan, path, Hash(path), Path.Combine(directory, "journal.json"));
@@ -91,9 +127,10 @@ public sealed partial class OptimizerService
 
     public async Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress)
     {
+        var accept = await EarlierVersionConsent.RequireAsync(review.JournalPath);
         var operation = RunCoreAsync<CleanupBatchJournal>("cleanup-batch-apply", new()
         {
-            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["cancellationId"] = cancellationId, ["confirm"] = true,
+            ["previewPath"] = review.PreviewPath, ["reviewHash"] = review.Hash, ["journalPath"] = review.JournalPath, ["cancellationId"] = cancellationId, ["confirm"] = true, ["acceptEarlierVersion"] = accept,
         });
         Exception? observationError = null;
         while (!operation.IsCompleted)
@@ -140,51 +177,118 @@ public sealed partial class OptimizerService
         return result.ToArray();
     }
 
-    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default)
+    private static readonly AsyncLocal<BackgroundPriority?> HostPriority = new();
+    public TimeSpan HostReadTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
+    private async Task<T> RunCoreAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken = default, TimeSpan? timeout = null, Action<ReadOnlyMemory<byte>>? partial = null)
     {
-        var root = _locator.RepoRoot ?? throw new InvalidOperationException("The backend folder is unavailable.");
-        var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
-        if (!File.Exists(host)) throw new FileNotFoundException("Build the optimizer helper with backend/scripts/Build-OptimizerHost.ps1 before using process rules and deep cleanup.", host);
-        var dotnet = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_DOTNET_EXE");
-        if (string.IsNullOrWhiteSpace(dotnet))
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
         {
+            var result = await RunHostAsync<T>(action, request, cancellationToken, timeout, partial).ConfigureAwait(false);
+            outcome = "completed";
+            return result;
+        }
+        catch (TimeoutException) { outcome = "timed out"; throw; }
+        catch (OperationCanceledException) { outcome = "cancelled"; throw; }
+        finally { AppLog.Timing(action, elapsed, outcome); }
+    }
+
+    private async Task<T> RunHostAsync<T>(string action, Dictionary<string, object?> request, CancellationToken cancellationToken, TimeSpan? timeout, Action<ReadOnlyMemory<byte>>? partial, bool idle = false)
+    {
+        var confirmed = request.TryGetValue("confirm", out var confirm) && confirm is true;
+        if (!confirmed || action is "process-apply" or "process-restore" or "rule-save" or "rule-delete" or "cleanup-batch-cancel" or "tweak-custom-import")
+            timeout ??= HostReadTimeout;
+        if (confirmed && action is not ("operations-secure" or "data-secure")) await EnsureStorageAsync().ConfigureAwait(false);
+        using var change = confirmed ? DataGeneration.BeginChange() : null;
+        var root = _locator.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles);
+        var host = Path.Combine(root, "backend", "bin", "optimizer", "Optimizer.Host.dll");
+        if (!File.Exists(host))
+        {
+            AppLog.Write("helper", "Missing " + host);
+            throw new FileNotFoundException(AppLog.MissingFiles, host);
+        }
+        var dotnet = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_DOTNET_EXE");
+        var hostDirectory = Path.GetDirectoryName(host)!;
+        var bundled = string.IsNullOrWhiteSpace(dotnet) && File.Exists(Path.Combine(hostDirectory, "hostpolicy.dll"));
+        if (bundled) dotnet = Path.Combine(hostDirectory, "Optimizer.Host.exe");
+        else if (string.IsNullOrWhiteSpace(dotnet))
+        {
+            if (RooIndustries.Optimizer.RuntimeEnvironment.Release)
+            {
+                AppLog.Write("helper", "Missing " + Path.Combine(hostDirectory, "hostpolicy.dll"));
+                throw new FileNotFoundException(AppLog.MissingFiles, host);
+            }
             var userRuntime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet.exe");
             dotnet = File.Exists(userRuntime) ? userRuntime : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
         }
-        if (!File.Exists(dotnet)) throw new FileNotFoundException("The optimizer helper requires the .NET 8 Windows x64 runtime.", dotnet);
-        Directory.CreateDirectory(_storage);
-        var path = Path.Combine(_storage, "request-" + Guid.NewGuid().ToString("N") + ".json");
+        if (!File.Exists(dotnet))
+        {
+            AppLog.Write("helper", "Missing " + dotnet);
+            throw new FileNotFoundException(bundled ? "Some app files are missing. Reinstall the app." : "This app needs the Microsoft .NET 8 Desktop Runtime. Install it from Microsoft, then reopen the app.", dotnet);
+        }
         request["schemaVersion"] = 1;
         request["repoRoot"] = root;
-        OperationFiles.Write(path, request);
-        try
+        var payload = JsonSerializer.SerializeToUtf8Bytes(request, OperationFiles.Json);
+        var start = new ProcessStartInfo(dotnet)
         {
-            var start = new ProcessStartInfo(dotnet)
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
+        };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
+        if (!RooIndustries.Optimizer.RuntimeEnvironment.Release) start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
+        foreach (var argument in bundled ? new[] { action, "-" } : new[] { host, action, "-" }) start.ArgumentList.Add(argument);
+        using var process = await Task.Run(() => Process.Start(start)).ConfigureAwait(false) ?? throw new InvalidOperationException("The optimizer helper did not start.");
+        HostPriority.Value?.Register(process);
+        using var stop = new CancellationTokenSource();
+        using var abandon = new CancellationTokenSource();
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeout is { } duration) limit.CancelAfter(duration);
+        Action<ReadOnlyMemory<byte>>? observe = partial;
+        if (idle && timeout is { } window && partial is not null)
+            observe = bytes =>
             {
-                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = root,
+                try { limit.CancelAfter(window); } catch (ObjectDisposedException) { }
+                partial(bytes);
             };
-            start.Environment["ROO_INDUSTRIES_UI_EXE"] = Environment.ProcessPath;
-            foreach (var argument in new[] { host, action, path }) start.ArgumentList.Add(argument);
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("The optimizer helper did not start.");
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = process.StandardError.ReadToEndAsync();
-            try { await process.WaitForExitAsync(cancellationToken); }
-            catch (OperationCanceledException)
-            {
-                if (!process.HasExited) process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync();
-                throw;
-            }
-            var text = await output;
-            var stderr = await errors;
-            if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("Optimizer helper exit " + process.ExitCode + ": " + stderr);
-            using var document = JsonDocument.Parse(text);
-            var result = document.RootElement;
-            if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
-                throw new InvalidOperationException(result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : "The optimizer helper failed.");
-            return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
+        var output = HostOutput.ReadAsync(process.StandardOutput.BaseStream, observe, () => stop.IsCancellationRequested, abandon.Token);
+        var errors = process.StandardError.ReadToEndAsync();
+        var written = HostOutput.TryWriteRequestAsync(process.StandardInput.BaseStream, payload, CancellationToken.None);
+        try { await process.WaitForExitAsync(limit.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException)
+        {
+            stop.Cancel();
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            _ = output.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            _ = written.ContinueWith(task => task.Exception, TaskScheduler.Default);
+            if (cancellationToken.IsCancellationRequested) throw;
+            AppLog.Write("helper", action + " timed out.");
+            throw new TimeoutException(AppLog.TimedOut);
         }
-        finally { File.Delete(path); }
+        if (!await written.ConfigureAwait(false)) AppLog.Write("helper", action + " exited before reading its request.");
+        if (await Task.WhenAny(output, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false) != output)
+        {
+            AppLog.Write("helper", action + " output stayed open after the helper exited.");
+            abandon.Cancel();
+        }
+        var text = await output.ConfigureAwait(false);
+        var stderr = await Task.WhenAny(errors, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false) == errors ? await errors.ConfigureAwait(false) : "";
+        if (text.Span.Trim(" \t\r\n"u8).IsEmpty)
+        {
+            AppLog.Write("helper", action + " exited with code " + process.ExitCode);
+            throw new InvalidOperationException(AppLog.Explain("helper", stderr, AppLog.Failed));
+        }
+        using var document = JsonDocument.Parse(text);
+        var result = document.RootElement;
+        if (process.ExitCode != 0 || result.GetProperty("status").GetString() != "completed")
+        {
+            var message = result.TryGetProperty("error", out var error) ? error.GetProperty("message").GetString() : null;
+            AppLog.Write("helper", action + " failed: " + (message ?? Encoding.UTF8.GetString(text.Span)));
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? AppLog.Failed : message);
+        }
+        return result.GetProperty("data").Deserialize<T>(OperationFiles.Json) ?? throw new InvalidDataException("The optimizer helper returned no operation data.");
     }
+
 }

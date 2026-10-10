@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using RooIndustries.Optimizer;
 using RooIndustries.OptimizationSuite.Models;
 
 namespace RooIndustries.OptimizationSuite.Services;
@@ -15,6 +16,8 @@ public sealed partial class OptimizerService
 {
     private readonly BackendLocator _locator;
     private readonly string _storage;
+    private readonly SemaphoreSlim _storageGate = new(1, 1);
+    private PolicyRootLease? _storageLease;
     private static readonly JsonSerializerOptions Json = JsonTolerance.CreateOptions();
 
     public OptimizerService(BackendLocator locator, string? storageDirectory = null)
@@ -28,7 +31,7 @@ public sealed partial class OptimizerService
 
     public async Task<CpuSetReview> PreviewCpuSetsAsync(int processId, uint[] ids, bool resetDefault)
     {
-        var directory = NewOperationDirectory("cpu");
+        var directory = await NewOperationDirectoryAsync("cpu");
         var preview = Path.Combine(directory, "preview.json");
         var request = new { schemaVersion = 1, targetProcessId = processId, cpuSetIds = ids, resetDefault, outputPath = preview };
         var result = await RequestAsync<CpuSetPlan>("CpuSets", "Preview", request, directory);
@@ -37,7 +40,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<CpuSetJournal>> ApplyCpuSetsAsync(CpuSetReview review)
     {
-        Remember("cpu", review.JournalPath);
+        await RememberAsync("cpu", review.JournalPath);
         return await RequestAsync<CpuSetJournal>("CpuSets", "Apply", new
         {
             schemaVersion = 1, inputPath = review.PreviewPath, reviewSha256 = review.Hash, journalPath = review.JournalPath,
@@ -46,6 +49,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<CpuSetJournal>> RestoreCpuSetsAsync(string journal)
     {
+        await EarlierVersionConsent.RequireAsync(journal);
         var result = await RunAsync<CpuSetJournal>("Invoke-ProcessCpuSets.ps1", "-Action Restore -JournalPath " + Quote(journal) + " -ConfirmApply");
         if (result.Status == "restored") Forget("cpu");
         return result;
@@ -70,7 +74,7 @@ public sealed partial class OptimizerService
 
     public async Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false)
     {
-        var directory = NewOperationDirectory("removal");
+        var directory = await NewOperationDirectoryAsync("removal");
         var preview = Path.Combine(directory, "preview.json");
         var result = await RequestAsync<BulkRemovalPlan>("BulkUninstall", "Preview", new { schemaVersion = 1, appIds, includeAllAppxUsers, outputPath = preview }, directory);
         return new BulkRemovalReview(RequireData(result), preview, Hash(preview), Path.Combine(directory, "journal.json"));
@@ -78,7 +82,9 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress)
     {
-        Remember("removal", review.JournalPath);
+        if (PolicyRootSecurity.SavedBeforeProtection(review.JournalPath))
+            throw new EarlierVersionException("This removal list was saved by an older version of the app, before its data folder was protected, so it cannot be resumed. Choose the apps again to start a new removal.");
+        await RememberAsync("removal", review.JournalPath);
         var operation = RequestAsync<BulkRemovalJournal>("BulkUninstall", "Apply", new
         {
             schemaVersion = 1, inputPath = review.PreviewPath, reviewSha256 = review.Hash,
@@ -98,17 +104,32 @@ public sealed partial class OptimizerService
         return result;
     }
 
-    public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal)
-        => RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Cancel -JournalPath " + Quote(journal) + " -ConfirmApply");
+    public async Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal)
+    {
+        await EarlierVersionConsent.RequireAsync(journal);
+        return await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Cancel -JournalPath " + Quote(journal) + " -ConfirmApply");
+    }
 
-    public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal)
-        => RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Reconcile -JournalPath " + Quote(journal) + " -ConfirmApply");
+    public async Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal)
+    {
+        await EarlierVersionConsent.RequireAsync(journal);
+        return await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Reconcile -JournalPath " + Quote(journal) + " -ConfirmApply");
+    }
+
+    public async Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal)
+    {
+        await EarlierVersionConsent.RequireAsync(journal);
+        var result = await RunAsync<BulkRemovalJournal>("Invoke-BulkUninstall.ps1", "-Action Dismiss -JournalPath " + Quote(journal) + " -ConfirmApply");
+        if (string.Equals(FindLastJournal("removal"), journal, StringComparison.OrdinalIgnoreCase)) Forget("removal");
+        return result;
+    }
 
     public async Task<BulkRemovalSession?> ReadLastRemovalAsync()
     {
         var journal = FindLastJournal("removal");
         if (journal is null) return null;
         var state = await ReadJournalAsync<BulkRemovalJournal>(journal) ?? throw new InvalidDataException("Saved removal state is empty.");
+        if (state.Status == "dismissed") { Forget("removal"); return null; }
         var preview = Path.Combine(Path.GetDirectoryName(journal)!, "preview.json");
         return new BulkRemovalSession(new BulkRemovalReview(state.Plan, preview, Hash(preview), journal), state);
     }
@@ -118,7 +139,8 @@ public sealed partial class OptimizerService
 
     public async Task<RemovalCleanupReview> PreviewRemovedFilesAsync(string journal, string appId, string[] itemIds)
     {
-        var path = Path.Combine(NewOperationDirectory("files"), "review.json");
+        await EarlierVersionConsent.RequireAsync(journal);
+        var path = Path.Combine(await NewOperationDirectoryAsync("files"), "review.json");
         var args = "-Action Preview -QueueJournalPath " + Quote(journal) + " -AppId " + Quote(appId)
             + " -ItemId @(" + string.Join(",", itemIds.Select(Quote)) + ") -OutputPath " + Quote(path);
         var result = await RunAsync<RemovalCleanupPlan>("Invoke-RemovalLeftovers.ps1", args);
@@ -127,7 +149,7 @@ public sealed partial class OptimizerService
 
     public async Task<OptimizerResult<FileCleanupResult>> ApplyRemovedFilesAsync(RemovalCleanupReview review, bool reviewed)
     {
-        WritePointer(Path.Combine(_storage, "files-active.json"), JsonSerializer.Serialize(review));
+        WritePointer(Path.Combine(await EnsureStorageAsync(), "files-active.json"), JsonSerializer.Serialize(review));
         return await RunAsync<FileCleanupResult>("Invoke-RemovalLeftovers.ps1", CleanupArguments("Apply", review) + (reviewed ? " -ManualReviewApproved" : ""), waitForRemoval: true);
     }
 
@@ -164,14 +186,31 @@ public sealed partial class OptimizerService
         return await JsonSerializer.DeserializeAsync<T>(stream, Json);
     }
 
-    private string NewOperationDirectory(string kind)
+    private async Task<string> NewOperationDirectoryAsync(string kind)
     {
-        var path = Path.Combine(_storage, kind + "-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(await EnsureStorageAsync().ConfigureAwait(false), kind + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
 
-    private void Remember(string kind, string journal) => WritePointer(Path.Combine(_storage, kind + "-active.txt"), journal);
+    public async Task<string> EnsureStorageAsync()
+    {
+        if (Volatile.Read(ref _storageLease) is { Moved: false }) return _storage;
+        await _storageGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_storageLease is { Moved: false }) return _storage;
+            if (!PolicyRootSecurity.Elevated()) throw new UnauthorizedAccessException(OperationsFolder.NotAdministrator);
+            await RunHostAsync<JsonElement>("operations-secure", new() { ["operationsRoot"] = _storage, ["confirm"] = true, ["progress"] = true }, default, TimeSpan.FromMinutes(5), _ => { }, idle: true).ConfigureAwait(false);
+            var lease = OperationsFolder.Lease(_storage);
+            _storageLease?.Dispose();
+            Volatile.Write(ref _storageLease, lease);
+            return _storage;
+        }
+        finally { _storageGate.Release(); }
+    }
+
+    private async Task RememberAsync(string kind, string journal) => WritePointer(Path.Combine(await EnsureStorageAsync().ConfigureAwait(false), kind + "-active.txt"), journal);
     private static void WritePointer(string path, string value)
     {
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -199,35 +238,68 @@ public sealed partial class OptimizerService
         finally { File.Delete(path); }
     }
 
-    private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false)
+    private async Task<OptimizerResult<T>> RunAsync<T>(string script, string arguments, CancellationToken cancellationToken = default, bool waitForRemoval = false, TimeSpan? limit = null)
     {
-        var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException("The backend folder is unavailable."), script);
-        var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
+        var elapsed = Stopwatch.StartNew();
+        var outcome = "failed";
+        try
+        {
+            var result = await RunScriptAsync<T>(script, arguments, cancellationToken, waitForRemoval, limit).ConfigureAwait(false);
+            outcome = "completed";
+            return result;
+        }
+        catch (TimeoutException) { outcome = "timed out"; throw; }
+        finally { AppLog.Timing(script, elapsed, outcome); }
+    }
+
+    private async Task<OptimizerResult<T>> RunScriptAsync<T>(string script, string arguments, CancellationToken cancellationToken, bool waitForRemoval, TimeSpan? limit = null)
+    {
+        var confirmed = arguments.Contains("-ConfirmApply", StringComparison.Ordinal);
+        if (confirmed) await EnsureStorageAsync().ConfigureAwait(false);
+        using var change = confirmed ? DataGeneration.BeginChange() : null;
+        var scriptPath = Path.Combine(_locator.ScriptsDirectory ?? throw new InvalidOperationException(AppLog.MissingFiles), script);
+        var command = RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(scriptPath) + " " + arguments;
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
             WorkingDirectory = _locator.RepoRoot!,
         };
+        RooIndustries.Optimizer.RuntimeEnvironment.Apply(start);
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(argument);
         using var process = new Process { StartInfo = start };
-        if (!process.Start()) throw new InvalidOperationException("The backend process did not start.");
+        if (!process.Start())
+        {
+            AppLog.Write("backend", script + " did not start.");
+            throw new InvalidOperationException(AppLog.Failed);
+        }
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (!waitForRemoval) timeout.CancelAfter(TimeSpan.FromSeconds(45));
-        try { await process.WaitForExitAsync(timeout.Token); }
-        catch (OperationCanceledException) when (!waitForRemoval)
+        var bounded = limit is not null || !waitForRemoval;
+        if (bounded) timeout.CancelAfter(limit ?? TimeSpan.FromSeconds(45));
+        try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (bounded)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
-            throw new TimeoutException("The backend did not respond. Check the saved operation before retrying.");
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            AppLog.Write("backend", script + " timed out.");
+            throw new TimeoutException(AppLog.TimedOut);
         }
-        var text = await output;
-        var stderr = await error;
-        if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr) ? "The backend returned no response." : stderr.Trim());
+        var text = await output.ConfigureAwait(false);
+        var stderr = await error.ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            AppLog.Write("backend", script + " returned no response.");
+            throw new InvalidOperationException(AppLog.Explain("backend", stderr, AppLog.Failed));
+        }
         var result = JsonSerializer.Deserialize<OptimizerResult<T>>(text, Json) ?? throw new InvalidDataException("The backend response could not be read.");
-        if (result.Status == "failed") throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Select(issue => issue.Message)));
+        if (result.Status == "failed")
+        {
+            var message = string.Join(Environment.NewLine, result.Errors.Select(issue => issue.Message).Where(value => !string.IsNullOrWhiteSpace(value)));
+            AppLog.Write("backend", script + " failed: " + message);
+            throw new InvalidOperationException(message.Length == 0 ? AppLog.Failed : message);
+        }
         return result;
     }
 }

@@ -20,14 +20,23 @@ namespace RooIndustries.Optimization.ProcessOutput
         private readonly Task outTask, errorTask;
         private readonly int limit;
 
-        public Capture(Process process, int characterLimit)
+        public Capture(Stream stdout, Stream stderr, int characterLimit)
+            : this(new StreamReader(stdout, ConsoleEncoding()), new StreamReader(stderr, ConsoleEncoding()), characterLimit) { }
+
+        private Capture(StreamReader stdout, StreamReader stderr, int characterLimit)
         {
             if (characterLimit < 1) throw new ArgumentOutOfRangeException("characterLimit");
             limit = characterLimit;
-            output = process.StandardOutput;
-            error = process.StandardError;
+            output = stdout;
+            error = stderr;
             outTask = Pump(output, outBuffer);
             errorTask = Pump(error, errorBuffer);
+        }
+
+        private static Encoding ConsoleEncoding()
+        {
+            try { return Console.OutputEncoding; }
+            catch (IOException) { return Encoding.Default; }
         }
 
         private async Task Pump(StreamReader reader, Buffer buffer)

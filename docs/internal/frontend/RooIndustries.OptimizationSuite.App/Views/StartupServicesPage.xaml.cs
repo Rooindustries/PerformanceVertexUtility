@@ -3,13 +3,15 @@ using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class StartupServicesPage : Page
+public sealed partial class StartupServicesPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public StartupServicesViewModel ViewModel { get; } = new();
 
     public StartupServicesPage()
     {
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
     private void OpenAutoruns(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

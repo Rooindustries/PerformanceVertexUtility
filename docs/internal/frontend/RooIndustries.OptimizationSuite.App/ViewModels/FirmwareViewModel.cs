@@ -15,6 +15,7 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 
 public partial class FirmwareViewModel : ObservableObject
 {
+    public static string? WriteTestsPath { get; set; }
     public static string Root => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
     private string? _packageDirectory;
     private string? _sessionDirectory;
@@ -32,8 +33,9 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string _stage = "setup";
     [ObservableProperty] private string _resultStatus = "";
     [ObservableProperty] private int _changedCount;
-    public ObservableCollection<FirmwareSettingRow> Settings { get; } = new();
-    public ObservableCollection<FirmwareSettingRow> TestedUnchangedSettings { get; } = new();
+    [ObservableProperty] private ObservableCollection<FirmwareSettingRow> _settings = new();
+    [ObservableProperty] private ObservableCollection<FirmwareSettingRow> _experimentalSettings = new();
+    [ObservableProperty] private bool _allowExperimentalEdits;
     public ObservableCollection<FirmwareChange> Changes { get; } = new();
     public ObservableCollection<FirmwareHistoryRow> History { get; } = new();
     public bool IsSetup => Stage == "setup";
@@ -61,8 +63,13 @@ public partial class FirmwareViewModel : ObservableObject
     public string StepText => Stage switch { "setup" => "1  Set up  ·  2  Edit  ·  3  Review  ·  4  Restart", "edit" => "2  Edit settings", "review" => "3  Review changes", _ => "4  Verify and restart" };
     public string HistoryHelp => History.Count == 0 ? "No saved sessions yet. Load settings to create the first export." : "Reopen a session to verify after restart or review an undo.";
     public string ApplyLabel => "Apply " + Changes.Count + (Changes.Count == 1 ? " change" : " changes");
-    public bool HasTestedUnchangedSettings => TestedUnchangedSettings.Count > 0;
-    public string TestedUnchangedSummary => "Did not change (" + TestedUnchangedSettings.Count + (TestedUnchangedSettings.Count == 1 ? " setting)" : " settings)");
+    public bool HasExperimentalSettings => ExperimentalSettings.Count > 0;
+    public string ExperimentalSummary => "Experimental (" + ExperimentalSettings.Count + (ExperimentalSettings.Count == 1 ? " setting)" : " settings)");
+    partial void OnAllowExperimentalEditsChanged(bool value)
+    {
+        foreach (var row in _all) row.CanEdit = !row.IsReadOnly && (value || !IsExperimentalRow(row));
+        _reviewHash = null;
+    }
     partial void OnBusyChanged(bool value) { RefreshActions(); OnPropertyChanged(nameof(ResultHeadline)); }
     partial void OnStageChanged(string value)
     {
@@ -87,16 +94,20 @@ public partial class FirmwareViewModel : ObservableObject
         Bios = stamp.Success && DateTime.TryParse(stamp.Groups["date"].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var released)
             ? identity.Bios[..stamp.Index] + " · " + released.ToString("d MMM yyyy", CultureInfo.CurrentCulture) : identity.Bios;
         var config = Path.Combine(Root, "workspace.json");
-        if (File.Exists(config))
+        var workspace = await Task.Run(() =>
         {
+            if (!File.Exists(config)) return ((string Directory, FirmwarePackage Package)?)null;
             var saved = OperationFiles.Read<FirmwareWorkspace>(config);
             _ = new ScewinProvider(saved.PackageDirectory).PackageFingerprint;
-            var package = OperationFiles.Read<FirmwarePackage>(Path.Combine(saved.PackageDirectory, "package.json"));
-            _packageDirectory = saved.PackageDirectory;
-            PackageText = PackageStatus(package);
+            return (saved.PackageDirectory, OperationFiles.Read<FirmwarePackage>(Path.Combine(saved.PackageDirectory, "package.json")));
+        });
+        if (workspace is { } found)
+        {
+            _packageDirectory = found.Directory;
+            PackageText = PackageStatus(found.Package);
             RefreshActions();
         }
-        LoadHistory();
+        await LoadHistoryAsync();
     });
 
     public async Task SetUpAsync(string directory, FirmwarePackage reviewed) => await RunAsync(async () =>
@@ -136,9 +147,10 @@ public partial class FirmwareViewModel : ObservableObject
         Message = "Reading BIOS settings and saving the original export…";
         var workflow = Workflow();
         _sessionDirectory = await Task.Run(workflow.Load);
-        await LoadEditorAsync(workflow.Read(_sessionDirectory));
+        var session = _sessionDirectory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(session)));
         Message = "Choose only the settings you want to change. The original export is saved.";
-        LoadHistory();
+        await LoadHistoryAsync();
     });
     public void CancelSetup() => _setupCancellation?.Cancel();
     private static string PackageStatus(FirmwarePackage package) => (package.Version == "Not specified" ? "SCEWIN" : "SCEWIN " + package.Version) + " · Ready to load settings";
@@ -154,6 +166,9 @@ public partial class FirmwareViewModel : ObservableObject
             row.PropertyChanged += SettingChanged;
             _all.Add(row);
         }
+        foreach (var skipped in script.ExcludedQuestions) _all.Add(FirmwareSettingRow.ReadOnly(skipped));
+        ApplyWriteTests(_all, await Task.Run(() => ReadWriteTests(_sessionDirectory)));
+        AllowExperimentalEdits = false;
         ChangedCount = 0; Stage = "edit"; ResultStatus = ""; Search = ""; ChangedOnly = false; Filter();
         await LoadVerificationAsync(script, _sessionDirectory);
     }
@@ -164,6 +179,7 @@ public partial class FirmwareViewModel : ObservableObject
         ChangedCount = _all.Count(r => r.Changed);
         foreach (var row in _all)
         {
+            if (row.IsExperimental) continue;
             if (row.Changed)
                 row.SetVerification("Not tested", "This selected value has not been tested.", false);
             else if (_verificationMatches.TryGetValue(row.Question.Id, out var match))
@@ -173,16 +189,61 @@ public partial class FirmwareViewModel : ObservableObject
     }
     private void Filter()
     {
-        Settings.Clear();
-        TestedUnchangedSettings.Clear();
+        var settings = new List<FirmwareSettingRow>();
+        var experimental = new List<FirmwareSettingRow>();
         foreach (var row in _all.Where(row => MatchesFilter(row, Search, ChangedOnly)))
         {
-            if (ShouldCollapse(row)) TestedUnchangedSettings.Add(row);
-            else Settings.Add(row);
+            row.CanEdit = !row.IsReadOnly && (AllowExperimentalEdits || !IsExperimentalRow(row));
+            if (IsExperimentalRow(row)) experimental.Add(row);
+            else settings.Add(row);
         }
-        OnPropertyChanged(nameof(HasTestedUnchangedSettings));
-        OnPropertyChanged(nameof(TestedUnchangedSummary));
+        Settings = new(settings);
+        ExperimentalSettings = new(experimental);
+        OnPropertyChanged(nameof(HasExperimentalSettings));
+        OnPropertyChanged(nameof(ExperimentalSummary));
     }
+    private static FirmwareWriteTestMatch? ReadWriteTests(string? sessionDirectory)
+    {
+        try
+        {
+            if (WriteTestsPath is null || sessionDirectory is null || !File.Exists(WriteTestsPath)) return null;
+            var session = OperationFiles.Read<FirmwareSession>(Path.Combine(sessionDirectory, "session.json"));
+            return FirmwareWriteTests.Read(WriteTestsPath).For(session.Identity);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException) { return null; }
+    }
+    public static void ApplyWriteTests(IEnumerable<FirmwareSettingRow> rows, FirmwareWriteTestMatch? tests)
+    {
+        if (tests is null) return;
+        var all = rows.ToArray();
+        var unique = all.GroupBy(row => FirmwareScript.NamePattern(row.Name), StringComparer.Ordinal).Where(group => group.Count() == 1).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var row in all)
+        {
+            if (row.IsReadOnly) continue;
+            var pattern = FirmwareScript.NamePattern(row.Name);
+            if (!tests.ById.TryGetValue(row.Question.Id, out var result) && !tests.ByName.TryGetValue(row.Name.Trim(), out result)
+                && !(tests.ByNamePattern is { } drifting && pattern != row.Name.Trim() && unique.Contains(pattern) && drifting.TryGetValue(pattern, out result))) continue;
+            var where = tests.SameBoard ? "on this motherboard and BIOS version" : "on the motherboards tested so far (" + tests.Source + "); this motherboard has not been tested";
+            var (status, reason) = result.Outcome switch
+            {
+                FirmwareWriteOutcomes.SideEffects => ("Changes other settings", "Changing this also changed or hid " + result.AffectedCount + " other " + (result.AffectedCount == 1 ? "setting" : "settings") + " " + where + ": " + string.Join(", ", result.Affects ?? []) + (result.AffectedCount > (result.Affects?.Length ?? 0) ? " and more." : ".")),
+                FirmwareWriteOutcomes.Risky => ("Too risky to test", "This was not tested because a wrong value could lock the PC, clear security keys or damage the firmware."),
+                FirmwareWriteOutcomes.Protected => ("Can't be changed here", "This motherboard locks this setting behind its BIOS password, so SCEWIN cannot write it."),
+                FirmwareWriteOutcomes.Rejected => ("Can't be changed here", "SCEWIN refused a test value for this setting " + where + "."),
+                _ => ("Did not change", "A test value was accepted but the BIOS kept the old value " + where + "."),
+            };
+            row.SetVerification(status, reason, false);
+            row.IsExperimental = true;
+        }
+    }
+    public static bool IsExperimentalRow(FirmwareSettingRow row) => row.IsExperimental || ShouldCollapse(row);
+    public static (FirmwareSettingRow[] Normal, FirmwareSettingRow[] Experimental) Split(IEnumerable<FirmwareSettingRow> rows)
+    {
+        var all = rows.ToArray();
+        return (all.Where(row => !IsExperimentalRow(row)).ToArray(), all.Where(IsExperimentalRow).ToArray());
+    }
+    public static Dictionary<string, string> ReviewSelections(IEnumerable<FirmwareSettingRow> rows, Func<FirmwareSettingRow, bool> changed, bool allowExperimental)
+        => rows.Where(row => !row.IsReadOnly && (allowExperimental || !row.IsExperimental) && changed(row)).ToDictionary(row => row.Question.Id, row => row.Selection);
     public static bool MatchesFilter(FirmwareSettingRow row, string search, bool changedOnly)
         => (!changedOnly || row.Changed) && (row.Name + " " + row.Help).Contains(search.Trim(), StringComparison.OrdinalIgnoreCase);
     public static bool ShouldCollapse(FirmwareSettingRow row) => row.IsTestedUnchanged && !row.Changed;
@@ -192,7 +253,7 @@ public partial class FirmwareViewModel : ObservableObject
         if (_sessionDirectory is null) return;
         var workflow = Workflow();
         var script = workflow.Read(_sessionDirectory);
-        var selected = _all.Where(r => script.Validate(r.Question, r.Selection) != script.Validate(r.Question, r.Question.Current)).ToDictionary(r => r.Question.Id, r => r.Selection);
+        var selected = ReviewSelections(_all, r => script.Validate(r.Question, r.Selection) != script.Validate(r.Question, r.Question.Current), AllowExperimentalEdits);
         _reviewHash = await Task.Run(() => workflow.Review(_sessionDirectory, selected));
         ShowReview();
     });
@@ -210,32 +271,33 @@ public partial class FirmwareViewModel : ObservableObject
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
         Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
         var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
-        ShowResult(journal); LoadHistory();
+        ShowResult(journal); await LoadHistoryAsync();
     });
     public async Task VerifyAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
         ResultStatus = "";
         Message = "Reading the current BIOS values…";
-        ShowResult(await Task.Run(() => Workflow().Verify(_sessionDirectory))); LoadHistory();
+        ShowResult(await Task.Run(() => Workflow().Verify(_sessionDirectory))); await LoadHistoryAsync();
     });
     public async Task UndoAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
         var workflow = Workflow();
-        _sessionDirectory = await Task.Run(() => workflow.ReviewUndo(_sessionDirectory));
-        await LoadEditorAsync(workflow.Read(_sessionDirectory));
+        var directory = await Task.Run(() => workflow.ReviewUndo(_sessionDirectory));
+        _sessionDirectory = directory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(directory)));
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));
         var review = OperationFiles.Read<FirmwareReview>(Path.Combine(_sessionDirectory, "review.json"), _reviewHash);
         foreach (var change in review.Changes) _all.Single(r => r.Question.Id == change.Id).Selection = change.After;
         _reviewHash = OperationFiles.HashFile(Path.Combine(_sessionDirectory, "review.json"));
-        ShowReview(); LoadHistory();
+        ShowReview(); await LoadHistoryAsync();
     });
     public async Task OpenHistoryAsync(FirmwareHistoryRow row) => await RunAsync(async () =>
     {
         _sessionDirectory = row.Directory;
         var workflow = Workflow();
-        var script = workflow.Read(_sessionDirectory);
+        var script = await Task.Run(() => workflow.Read(row.Directory));
         var journal = Path.Combine(_sessionDirectory, "journal.json");
         if (File.Exists(journal)) ShowResult(OperationFiles.Read<FirmwareJournal>(journal));
         else { await LoadEditorAsync(script); Message = "Loaded the saved export. Current settings will be checked again before import."; }
@@ -249,7 +311,8 @@ public partial class FirmwareViewModel : ObservableObject
     public async Task OpenSettingsAsync() => await RunAsync(async () =>
     {
         if (_sessionDirectory is null) return;
-        await LoadEditorAsync(Workflow().Read(_sessionDirectory));
+        var workflow = Workflow(); var directory = _sessionDirectory;
+        await LoadEditorAsync(await Task.Run(() => workflow.Read(directory)));
         Message = "Choose only the settings you want to change. Tested settings that did not change are retained in the collapsed menu.";
     });
     private async Task LoadVerificationAsync(FirmwareScript script, string? sessionDirectory)
@@ -277,7 +340,7 @@ public partial class FirmwareViewModel : ObservableObject
         {
             var trial = match.Trial;
             var binding = trial.Binding;
-            var question = script.Questions.SingleOrDefault(item => item.Id == binding.QuestionId);
+            var question = script.Questions.SingleOrDefault(item => item.Id == (match.CurrentQuestionId.Length > 0 ? match.CurrentQuestionId : binding.QuestionId));
             if (question is null || trial.BaselineValue == trial.TestValue || script.Validate(question, question.Current) != trial.BaselineValue) continue;
             _verificationMatches[question.Id] = match;
         }
@@ -294,6 +357,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         var description = DescribeVerification(match, row.Question);
         row.SetVerification(description.Status, description.Reason, description.CanCollapse && !row.Changed);
+        row.IsExperimental = description.Experimental;
     }
     public static FirmwareVerificationPresentation DescribeVerification(FirmwareVerificationMatch match, FirmwareQuestion question)
     {
@@ -308,7 +372,9 @@ public partial class FirmwareViewModel : ObservableObject
             FirmwareTrialStatuses.ActualBehaviorVerified when trial.ConfirmedUnchanged => new("Did not change", "Tested " + value + "; no behavior change was observed and the original value was restored.", true),
             FirmwareTrialStatuses.ActualBehaviorVerified when trial.EffectVerified => new("Effect verified", "Tested " + value + ". " + (string.IsNullOrWhiteSpace(behavior?.Output) ? "The observed effect was recorded." : behavior.Output), false),
             FirmwareTrialStatuses.ActualBehaviorVerified => new("Not tested", "The behavior evidence was incomplete or inconclusive.", false),
+            FirmwareTrialStatuses.UnchangedImmediately when trial.RestorationComplete => new("Did not change", "Tested " + value + "; SCEWIN accepted it but the BIOS kept the old value.", false, true),
             FirmwareTrialStatuses.UnchangedImmediately => new("Not tested", "Tested " + value + "; the value did not change before restart, so testing is incomplete.", false),
+            FirmwareTrialStatuses.WriteRejected when trial.RestorationComplete => new("Can't be changed here", "SCEWIN could not write tested value " + value + " on this motherboard.", false, true),
             FirmwareTrialStatuses.WriteRejected => new("Not tested", "The write for tested value " + value + " was rejected.", false),
             FirmwareTrialStatuses.Inconclusive => new("Not tested", "The test for value " + value + " was inconclusive.", false),
             _ => new("Not tested", "This setting has not been tested.", false)
@@ -321,23 +387,30 @@ public partial class FirmwareViewModel : ObservableObject
         FirmwareVerificationMatchStatuses.DifferentBios => "This test belongs to a different BIOS.",
         FirmwareVerificationMatchStatuses.DifferentPackage => "This test belongs to a different SCEWIN package.",
         FirmwareVerificationMatchStatuses.DifferentProfile => "The current BIOS settings profile differs from the tested baseline.",
+        FirmwareVerificationMatchStatuses.Unavailable => "This test's saved BIOS export is missing or unreadable, so it can't be matched.",
         _ => "The current BIOS context could not be matched to this test."
     };
-    private void LoadHistory()
+    private async Task LoadHistoryAsync()
     {
         History.Clear();
-        var sessions = Path.Combine(Root, "sessions");
-        if (!Directory.Exists(sessions)) { OnPropertyChanged(nameof(HistoryHelp)); return; }
-        foreach (var directory in Directory.GetDirectories(sessions).OrderByDescending(Directory.GetCreationTimeUtc))
+        var rows = await Task.Run(() =>
         {
-            var sessionFile = Path.Combine(directory, "session.json");
-            if (!File.Exists(sessionFile)) continue;
-            var session = OperationFiles.Read<FirmwareSession>(sessionFile);
-            var journalFile = Path.Combine(directory, "journal.json");
-            var journal = File.Exists(journalFile) ? OperationFiles.Read<FirmwareJournal>(journalFile) : null;
-            var state = journal?.Status switch { "restartRequired" => "Restart pending", "applied" => "Verified after restart", "importing" => "Import interrupted", "needsAttention" => "Needs verification", _ => "Original export" };
-            History.Add(new(directory, session.CreatedAt.ToLocalTime().ToString("g") + " · " + state));
-        }
+            var found = new List<FirmwareHistoryRow>();
+            var sessions = Path.Combine(Root, "sessions");
+            if (!Directory.Exists(sessions)) return found;
+            foreach (var directory in Directory.GetDirectories(sessions).OrderByDescending(Directory.GetCreationTimeUtc))
+            {
+                var sessionFile = Path.Combine(directory, "session.json");
+                if (!File.Exists(sessionFile)) continue;
+                var session = OperationFiles.Read<FirmwareSession>(sessionFile);
+                var journalFile = Path.Combine(directory, "journal.json");
+                var journal = File.Exists(journalFile) ? OperationFiles.Read<FirmwareJournal>(journalFile) : null;
+                var state = journal?.Status switch { "restartRequired" => "Restart pending", "applied" => "Verified after restart", "importing" => "Import interrupted", "needsAttention" => "Needs verification", _ => "Original export" };
+                found.Add(new(directory, session.CreatedAt.ToLocalTime().ToString("g") + " · " + state));
+            }
+            return found;
+        });
+        foreach (var row in rows) History.Add(row);
         OnPropertyChanged(nameof(HistoryHelp));
     }
     private async Task RunAsync(Func<Task> operation)
@@ -352,7 +425,7 @@ public partial class FirmwareViewModel : ObservableObject
 }
 public sealed record FirmwareWorkspace(string PackageDirectory);
 public sealed record FirmwareHistoryRow(string Directory, string Label);
-public sealed record FirmwareVerificationPresentation(string Status, string Reason, bool CanCollapse);
+public sealed record FirmwareVerificationPresentation(string Status, string Reason, bool CanCollapse, bool Experimental = false);
 
 public partial class FirmwareSettingRow : ObservableObject
 {
@@ -374,8 +447,18 @@ public partial class FirmwareSettingRow : ObservableObject
     [ObservableProperty] private string _verificationStatus = "Not tested";
     [ObservableProperty] private string _verificationReason = "This setting has not been tested.";
     [ObservableProperty] private bool _isTestedUnchanged;
+    [ObservableProperty] private bool _isExperimental;
+    [ObservableProperty] private bool _canEdit = true;
+    public bool IsReadOnly { get; private init; }
     [ObservableProperty] private string _selection;
     public FirmwareSettingRow(FirmwareQuestion question) { Question = question; _selection = question.Current; }
+    public static FirmwareSettingRow ReadOnly(FirmwareExcludedQuestion skipped)
+    {
+        var row = new FirmwareSettingRow(new FirmwareQuestion("excluded:" + skipped.Name, skipped.Name, skipped.Help, "Not available", "hex", 1, [], "", "")) { IsReadOnly = true };
+        row.SetVerification("Can't be changed here", skipped.Reason, false);
+        row.IsExperimental = true; row.CanEdit = false;
+        return row;
+    }
     public void SetVerification(string status, string reason, bool testedUnchanged)
     {
         VerificationStatus = status;

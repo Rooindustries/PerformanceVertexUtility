@@ -24,6 +24,20 @@ public sealed class RegistryTweakStore : ITweakStore
     }
     public TweakAssignment[] Resolve(TweakAssignment assignment) => RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, TweakHardwareValues.InstalledMemoryKiB), RegistrySelections.Children, Read, RegistrySelections.PrimaryInterfaces);
     public TweakControlRead ReadControl(ControlAddress address) => new WindowsControlStore().Read(address);
+    public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses) => new WindowsControlStore().ReadMany(addresses);
+    public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses)
+    {
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_FEATURE_HANG") is { Length: > 0 } flag && File.Exists(flag) && addresses.Any(address => address.Kind == "windows-features"))
+        {
+            var hold = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "PING.EXE"), "-n 400 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true };
+            RuntimeEnvironment.Apply(hold);
+            using var holder = System.Diagnostics.Process.Start(hold);
+            return new TaskCompletionSource<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>>().Task;
+        }
+#endif
+        return Task.Factory.StartNew(() => ReadControls(addresses), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
     public void CheckRequirement(string requirement)
     {
         if (requirement != "office") { TweakProducts.Check(requirement); return; }
@@ -106,10 +120,11 @@ public sealed class RegistryTweakStore : ITweakStore
             var state = Decode(RegistryNative.ReadTweak(_stateAddress).Value);
             if (journal.Phase == "awaiting-restart" && state?.History.Any(item => item.OperationId == journal.Plan.OperationId) == true)
             {
+                if (SameBoot(journal.Boot)) throw new InvalidDataException(RestartAgain);
                 foreach (var change in journal.Plan.Controls!.Changes)
                 {
                     var observed = ReadControl(change.Before.Address);
-                    if (observed.RestartPending) throw new InvalidDataException("Restart Windows to finish the feature changes, then check them again.");
+                    if (observed.RestartPending) throw new InvalidDataException(RestartAgain);
                     if (observed.Id != change.Before.Id || observed.Binding != change.Before.Binding ||
                         (change.Fields is null ? !ControlValues.Equal(observed.Value, change.After) : change.Fields.Any(field => !ControlValues.Equal(observed.Value.GetProperty(field), change.After.GetProperty(field)))))
                         throw new InvalidDataException("Windows feature state does not match the accepted changes after restart.");
@@ -119,7 +134,7 @@ public sealed class RegistryTweakStore : ITweakStore
             using var transaction = RegistryTransaction.Begin();
             if (state is not null)
             {
-                state.Notices = state.Notices.Where(note => note != "Restart Windows to finish the feature changes, then check restart completion in Windows settings.").ToArray();
+                state.Notices = state.Notices.Where(note => note != RestartNotice && note != "Restart Windows to finish the feature changes, then check restart completion in Windows settings.").ToArray();
                 var saved = RegistryNative.ReadTweak(_stateAddress, transaction);
                 RegistryNative.SetTweak(_stateAddress, saved.NativeKey, new("State", 3, TweakEngine.SerializeState(state)), transaction);
             }
@@ -128,6 +143,36 @@ public sealed class RegistryTweakStore : ITweakStore
             transaction.Commit(); return true;
         }
         finally { guard.ReleaseMutex(); }
+    }
+    public const string RestartNotice = "Restart Windows (choose Restart, not Shut down) to finish the feature changes, then check restart completion in Windows settings.";
+    public const string RestartAgain = "Windows hasn't restarted since the feature changes. Choose Restart, not Shut down, then check them again. With Fast Startup on, Shut down keeps the same session.";
+    public static string? CurrentBoot()
+    {
+        try
+        {
+            using var guard = new Mutex(false, @"Global\RooIndustriesBootMarker");
+            bool owned;
+            try { owned = guard.WaitOne(TimeSpan.FromSeconds(10)); } catch (AbandonedMutexException) { owned = true; }
+            if (!owned) return null;
+            try
+            {
+                using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+                using var product = machine.CreateSubKey(@"SOFTWARE\RooIndustriesOptimizationSuite", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryOptions.None);
+                using var marker = product.CreateSubKey("BootMarker", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryOptions.Volatile);
+                if (marker.GetValue("Id") is string existing && Guid.TryParseExact(existing, "N", out _)) return "boot:" + existing;
+                var id = Guid.NewGuid().ToString("N");
+                marker.SetValue("Id", id, RegistryValueKind.String);
+                return "boot:" + id;
+            }
+            finally { guard.ReleaseMutex(); }
+        }
+        catch (Exception error) when (error is UnauthorizedAccessException or System.Security.SecurityException or IOException or ApplicationException) { return null; }
+    }
+    public static bool SameBoot(string? recorded, string? current = null)
+    {
+        if (recorded is null) return false;
+        var now = current ?? CurrentBoot();
+        return now is null || string.Equals(recorded, now, StringComparison.Ordinal);
     }
     private TweakState? Decode(RegistryValueData? value)
     {
@@ -148,12 +193,13 @@ public sealed class RegistryTweakStore : ITweakStore
             if (plan.Context != Context || ReadState()?.Revision != plan.BeforeRevision) throw new InvalidDataException("Settings changed after review.");
             foreach (var expected in plan.Expected)
                 if (!Read(expected.Address).Same(expected)) throw new InvalidDataException("A registry setting changed after review.");
+            var boot = CurrentBoot();
             var journal = new ControlJournal(plan, reviewHash, 0);
             WritePending(journal);
             try
             {
                 var pending = ControlExecution.Apply(plan.Controls, new WindowsControlStore(), attempted => { journal = journal with { Attempted = attempted }; WritePending(journal); });
-                if (pending) { journal = journal with { Phase = "awaiting-restart" }; WritePending(journal); }
+                if (pending) { journal = journal with { Phase = "awaiting-restart", Boot = boot }; WritePending(journal); }
                 return CommitRegistry(plan, reviewHash, pending);
             }
             catch (Exception failure)
@@ -185,21 +231,25 @@ public sealed class RegistryTweakStore : ITweakStore
         foreach (var key in created.OrderByDescending(item => item.NativeKey.Length).ToArray())
         {
             if (next.Held.Any(item => TweakRead.IsInside(item.Original.NativeKey, key.NativeKey))) continue;
-            if (!RegistryNative.RemoveTweakKey(key, transaction)) notices.Add("Kept registry key with other data or changed permissions: " + key.Address.KeyPath);
+            bool removed;
+            try { removed = RegistryNative.RemoveTweakKey(key, transaction); }
+            catch (Exception error) when (error is InvalidDataException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { removed = false; }
+            if (!removed) notices.Add("Kept registry key with other data or changed permissions: " + key.Address.KeyPath);
             created.Remove(key);
         }
-        if (restartPending) notices.Add("Restart Windows to finish the feature changes, then check restart completion in Windows settings.");
+        if (restartPending) notices.Add(RestartNotice);
         next.CreatedKeys = created.ToArray(); next.Notices = notices.ToArray();
         RegistryNative.SetTweak(_stateAddress, saved.NativeKey, new("State", 3, TweakEngine.SerializeState(next)), transaction);
         foreach (var change in plan.Changes)
             if (!TweakRead.SameValue(RegistryNative.ReadTweak(change.Before.Address, transaction).Value, change.After)) throw new InvalidOperationException("Registry readback differs from the reviewed value.");
-        foreach (var expected in plan.Controls?.Expected ?? [])
+        foreach (var expected in plan.Controls?.Owned ?? [])
         {
             var observed = ReadControl(expected.Address);
             var desired = plan.Controls!.Changes.SingleOrDefault(change => change.Before.Id == expected.Id)?.After ?? expected.Value;
             if (observed.Id != expected.Id || observed.Binding != expected.Binding || !ControlValues.Equal(observed.Value, desired))
                 throw new InvalidDataException("A Windows control changed before recovery state was committed.");
         }
+        plan.Controls?.CheckReleased(ReadControl);
         var pending = RegistryNative.ReadTweak(PendingAddress, transaction);
         if (!restartPending && pending.Value is not null) RegistryNative.SetTweak(PendingAddress, pending.NativeKey, null, transaction);
         transaction.Commit();

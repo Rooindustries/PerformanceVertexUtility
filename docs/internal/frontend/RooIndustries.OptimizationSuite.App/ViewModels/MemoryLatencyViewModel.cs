@@ -21,11 +21,23 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     public ObservableCollection<StatusLine> SensorRows { get; } = new();
     public ObservableCollection<DiagnosticRow> DiagnosticRows { get; } = new();
 
+    [ObservableProperty]
+    private string _topMemoryNote = "";
+
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync();
-        var classification = await App.Live.GetProcessClassificationAsync();
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var inventoryRead = App.Live.GetProcessInventoryResultAsync();
+        var classificationRead = App.Live.GetProcessClassificationResultAsync(fresh: Fresh, allowStale: !Fresh);
+        var hardwareRead = App.Live.GetDriverHardwareAsync();
+        var inventoryResult = await inventoryRead;
+        var inventory = inventoryResult.Value;
+        var classificationResult = await classificationRead;
+        var classification = classificationResult.Value;
+        if (inventory is null && classification is null)
+            throw new InvalidOperationException(inventoryResult.Error ?? classificationResult.Error ?? "Memory information could not be read.");
+        if (classificationResult.Stale) RevalidateAfterLoad();
+        TopMemoryNote = classification is null ? "Memory by process is unavailable. " + (classificationResult.Error ?? "") : "";
+        var hardware = await hardwareRead;
         TelemetrySnapshot? telemetry = null;
 
         BuildMemory(inventory?.Summary, hardware?.Memory?.TotalPhysicalBytes);

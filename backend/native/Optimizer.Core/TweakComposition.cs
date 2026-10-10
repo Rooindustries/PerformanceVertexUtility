@@ -40,7 +40,7 @@ public static class TweakTokens
     }
 }
 
-public sealed record TweakResolution(RegistryValueData? Value, RegistryValueData? RestoreValue, bool Composed);
+public sealed record TweakResolution(RegistryValueData? Value, RegistryValueData? RestoreValue, bool Composed, string[]? LeftAsChanged = null, RegistryValueData? Applied = null);
 
 public static class TweakComposition
 {
@@ -82,23 +82,74 @@ public static class TweakComposition
         }
         return new(name, 4, BitConverter.GetBytes(number));
     }
+    private static bool Shares(TweakClaim claim, TweakClaim other) => claim.Token is { } token ? other.Token is { } field && token.Name.Equals(field.Name, StringComparison.OrdinalIgnoreCase)
+        : claim.Bits is { } bits ? other.Bits is { } mask && (bits.Mask & mask.Mask) != 0 : Whole(other);
+    private static TweakClaim[] Within(IEnumerable<TweakClaim> claims, TweakClaim[] owners)
+    {
+        var owned = owners.Where(owner => owner.Bits is not null).Aggregate(0u, (mask, owner) => mask | owner.Bits!.Mask);
+        return claims.Where(claim => !Whole(claim) && (claim.Token is null || owners.Any(owner => Shares(claim, owner))))
+            .Select(claim => claim.Bits is { } bits ? claim with { Bits = bits with { Mask = bits.Mask & owned, Value = bits.Value & owned } } : claim)
+            .Where(claim => claim.Bits is null || claim.Bits.Mask != 0).ToArray();
+    }
+    private static RegistryValueData? Tidy(RegistryValueData? value, RegistryValueData? baseline, TweakClaim[] claims) =>
+        baseline is null && claims.Length > 0 && claims.All(claim => claim.Bits is not null) && value is { Type: 4, Bytes.Length: 4 } && BitConverter.ToUInt32(value.Bytes) == claims[0].Bits!.AbsentDefault ? null : value;
+    private static TweakClaim[] Unowned(IEnumerable<TweakClaim> claims, TweakClaim[] owners)
+    {
+        var owned = owners.Where(owner => owner.Bits is not null).Aggregate(0u, (mask, owner) => mask | owner.Bits!.Mask);
+        return claims.Where(claim => !Whole(claim) && (claim.Token is null || !owners.Any(owner => Shares(claim, owner))))
+            .Select(claim => claim.Bits is { } bits ? claim with { Bits = bits with { Mask = bits.Mask & ~owned, Value = bits.Value & ~owned } } : claim)
+            .Where(claim => claim.Bits is null || claim.Bits.Mask != 0).ToArray();
+    }
+    private static bool Owned(TweakClaim claim, RegistryValueData? observed)
+    {
+        try { return Matches(claim, observed); } catch (InvalidDataException) { return false; }
+    }
+    private static bool AtBaseline(TweakClaim claim, RegistryValueData? observed, RegistryValueData? baseline)
+    {
+        try
+        {
+            return claim.Token is { } token ? TweakTokens.Get(observed, token.Name) == TweakTokens.Get(baseline, token.Name) : claim.Bits is { } bits
+                ? (Number(observed, bits.AbsentDefault) & bits.Mask) == (Number(baseline, bits.AbsentDefault) & bits.Mask) : TweakRead.SameValue(observed, baseline);
+        }
+        catch (InvalidDataException) { return false; }
+    }
     public static TweakResolution Resolve(TweakRead observed, TweakHeldValue? original, TweakClaim[] before, TweakClaim[] after)
     {
         Check(after);
+        var name = observed.Address.ValueName!;
         var baseline = original is null ? observed.Value : original.Composed ? original.RestoreValue : original.Original.Value;
         var restored = observed.Value;
-        if (original is not null)
+        if (original is not null && before.Any(claim => !Owned(claim, observed.Value)))
         {
-            if (before.Any(claim => !Matches(claim, observed.Value))) throw new InvalidDataException("A setting was changed outside this profile: " + observed.Address.KeyPath + " / " + observed.Address.ValueName);
-            restored = TweakRead.SameValue(observed.Value, original.Applied) || before.Any(Whole) ? baseline
-                : SetFields(observed.Value, observed.Address.ValueName!, before, baseline, true);
+            var released = before.Where(claim => !after.Any(kept => ReferenceEquals(kept, claim))).ToArray();
+            var requested = after.Where(claim => !before.Any(old => ReferenceEquals(old, claim))).ToArray();
+            var lostKept = after.Where(claim => before.Any(old => ReferenceEquals(old, claim))).Where(claim => !Owned(claim, observed.Value)).ToArray();
+            var lost = released.Where(claim => !Owned(claim, observed.Value)).ToArray();
+            var left = lost.Where(claim => !AtBaseline(claim, observed.Value, baseline) && !requested.Any(item => Whole(item) || Shares(claim, item) || item.SettingId == claim.SettingId))
+                .Select(claim => claim.SettingId).Distinct().Order(StringComparer.Ordinal).ToArray();
+            restored = SetFields(observed.Value, name, Unowned(released.Where(claim => !lost.Contains(claim, ReferenceEqualityComparer.Instance)), after), baseline, true);
+            var applied = SetFields(original.Applied, name, Unowned(released, after), baseline, true);
+            if (requested.Length == 0)
+            {
+                return new(after.Length == 0 && released.Any(claim => Owned(claim, observed.Value)) ? Tidy(restored, baseline, before) : restored, original.RestoreValue, original.Composed, left, applied);
+            }
+            if (after.Any(Whole))
+            {
+                if (before.Length > 0 && before.All(claim => !Whole(claim))) throw new InvalidDataException("Restore the field-level settings before replacing their entire value.");
+                return new(after[0].Desired, null, false, left);
+            }
+            var value = SetFields(restored, name, requested, restored, false);
+            return new(value, Tidy(SetFields(restored, name, Within(after, before), baseline, true), baseline, after), true, left, SetFields(value, name, lostKept, value, false));
         }
-        if (after.Length == 0) return new(restored, null, false);
+        if (original is not null)
+            restored = TweakRead.SameValue(observed.Value, original.Applied) || before.Any(Whole) ? baseline
+                : SetFields(observed.Value, name, before, baseline, true);
+        if (after.Length == 0) return new(original is not null ? Tidy(restored, baseline, before) : restored, null, false);
         if (after.Any(Whole))
         {
             if (before.Length > 0 && before.All(claim => !Whole(claim))) throw new InvalidDataException("Restore the field-level settings before replacing their entire value.");
             return new(after[0].Desired, null, false);
         }
-        return new(SetFields(restored, observed.Address.ValueName!, after, restored, false), restored, true);
+        return new(SetFields(restored, name, after, restored, false), restored, true);
     }
 }

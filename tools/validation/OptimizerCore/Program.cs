@@ -5,9 +5,15 @@ using RooIndustries.Optimizer;
 
 try
 {
+if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
+if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
 if (args is ["--probe"] or ["--probe-ready"]) { if (args[0] == "--probe-ready") Console.WriteLine("ready"); Thread.Sleep(TimeSpan.FromMinutes(3)); return; }
+var continueOnFailure = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_SCENARIO_CONTINUE") == "1";
+var failures = 0;
+AppDomain.CurrentDomain.ProcessExit += (_, _) => { if (failures > 0) Environment.ExitCode = 1; };
 void Check(bool condition, string message)
 {
+    if (!condition && continueOnFailure) { failures++; Console.WriteLine("FAIL " + message); return; }
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine("PASS " + message);
 }
@@ -23,17 +29,28 @@ if (args is ["--firmware"]) { FirmwareChecks.Run(Check); return; }
 if (args is ["--firmware-native", var evidenceRoot]) { FirmwareScriptNativeChecks.Run(Check, evidenceRoot); return; }
 if (args is ["--firmware-verification"]) { FirmwareVerificationChecks.Run(Check); return; }
 if (args is ["--firmware-authority"]) { FirmwareEvidenceAuthorityChecks.Run(Check); return; }
-if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); return; }
+if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
+if (args is ["--child-env", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(Check, childScenario, childMode, null); return; }
+if (args is ["--child-env", var fixtureScenario, var fixtureMode, var fixtureDirectory]) { await ChildEnvironmentChecks.Run(Check, fixtureScenario, fixtureMode, fixtureDirectory); return; }
+if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); return; }
+if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
-if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); return; }
-if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); return; }
+if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }
+if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
+if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ordinal) || args is ["--timer-worker-fake", ..]) { DataRootChild.Run(args); return; }
+if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
+if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args is ["--batch-state"]) { CleanupBatchStateChecks.Run(Check); return; }
-if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
+var processOnly = args is ["--process-controls"];
+if (args.Length != 0 && !processOnly) throw new ArgumentException("Unknown validation area.");
+if (!processOnly)
+{
 BrandCompatibilityChecks.Run(Check);
+DataFolderChecks.Run(Check, []);
 using (var self = Process.GetCurrentProcess())
 {
     for (var index = 0; index < 64; index++) OperationOwner.Current();
@@ -50,6 +67,7 @@ using (var self = Process.GetCurrentProcess())
     }
     finally { GC.EndNoGCRegion(); }
     Check(after <= before + 8, $"Repeated ownership queries release native handles without waiting for GC ({before} to {after})");
+}
 }
 void Reject(Action operation, string message)
 {
@@ -163,6 +181,33 @@ try
     OperationFiles.Write(highPath, highPreview);
     Check(engine.Apply(highPath, OperationFiles.HashFile(highPath), highJournal).Status == "applied" && Oracle.Io(probe.Handle) == 3, "The current Windows token can apply and independently read High I/O priority");
     Check(engine.Restore(highJournal).Status == "restored" && Oracle.Io(probe.Handle) == ioBefore, "High I/O priority restores through the same native control path");
+    foreach (var (name, value, label) in new[] { ("cpuPriority", Value("Realtime"), "Realtime CPU priority"), ("gpuPriority", Value(5), "Realtime GPU priority") })
+    {
+        var realtimePath = Path.Combine(root, name + "-realtime-review.json");
+        var realtimeJournal = Path.Combine(root, name + "-realtime-journal.json");
+        OperationFiles.Write(realtimePath, engine.Preview(probe.Id, new() { [name] = value }));
+        var realtime = engine.Apply(realtimePath, OperationFiles.HashFile(realtimePath), realtimeJournal);
+        probe.Refresh();
+        var observed = name == "cpuPriority" ? probe.PriorityClass == ProcessPriorityClass.RealTime : Oracle.Gpu(probe.Handle) == 5;
+        if (realtime.Status != "applied") Console.WriteLine(JsonSerializer.Serialize(realtime, OperationFiles.Json));
+        Check(realtime.Status == "applied" && observed, "The current Windows token can apply and independently read " + label);
+        var realtimeRestore = engine.Restore(realtimeJournal);
+        probe.Refresh();
+        Check(realtimeRestore.Status == "restored" && probe.PriorityClass == priorityBefore && Oracle.Gpu(probe.Handle) == gpuBefore, label + " restores through the same native control path");
+        probe.Refresh();
+    }
+    var sameBefore = probe.PriorityClass;
+    var samePath = Path.Combine(root, "same-review.json");
+    var sameJournal = Path.Combine(root, "same-journal.json");
+    OperationFiles.Write(samePath, engine.Preview(probe.Id, new() { ["cpuPriority"] = Value(sameBefore.ToString()) }));
+    var same = engine.Apply(samePath, OperationFiles.HashFile(samePath), sameJournal);
+    Check(same.Status == "applied" && same.Changes.Single().Status == "unchanged", "A process already at its target value is recorded as unchanged");
+    probe.PriorityClass = sameBefore == ProcessPriorityClass.High ? ProcessPriorityClass.AboveNormal : ProcessPriorityClass.High;
+    var foreign = probe.PriorityClass;
+    engine.Restore(sameJournal);
+    probe.Refresh();
+    Check(probe.PriorityClass == foreign, "Restoring an unchanged field leaves a later outside value alone");
+    probe.PriorityClass = sameBefore;
     var malformed = Path.Combine(root, "duplicate.json");
     File.WriteAllText(malformed, "{\"kind\":\"windowsDefault\",\"kind\":\"logical\"}");
     Reject(() => OperationFiles.Read<CpuSelection>(malformed), "Duplicate JSON fields are rejected at the saved-operation boundary");
@@ -173,11 +218,16 @@ finally
     Directory.Delete(root, true);
 }
 Check(!Directory.Exists(root), "Core validation removes its process and operation files");
+if (processOnly) return;
 OperationFileChecks.Run(Check);
+ReplaceRaceChecks.Run(Check);
+ReplaceFaultChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
+RegistryRefusalChecks.Run(Check);
 FileChecks.Run(Check);
 FileConflictChecks.Run(Check);
+RefusalChecks.Run(Check);
 ProcessIdentityChecks.Run(Check);
 PolicyChecks.Run(Check);
 DiscoveryChecks.Run(Check);
@@ -185,6 +235,9 @@ ApplicationCleanupChecks.Run(Check);
 ExclusionChecks.Run(Check);
 CleanupBatchChecks.Run(Check);
 FirmwareChecks.Run(Check);
+PrivilegeChecks.Run(Check);
+ControlReadFaultChecks.Run(Check);
+foreach (var childScenarioName in ChildEnvironmentChecks.InProcess) await ChildEnvironmentChecks.Run(Check, childScenarioName, RooIndustries.Optimizer.RuntimeEnvironment.Release ? "release" : "dev", null);
 
 }
 catch (Exception error)

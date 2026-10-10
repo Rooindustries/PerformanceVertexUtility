@@ -200,6 +200,85 @@ static class FirmwareVerificationChecks
             var old = baseline with { CapturedAt = stale.StartedAt.AddSeconds(-1) };
             Reject(() => store.Record(stale.Id, stale.Binding, FirmwareTrialStatuses.UnchangedImmediately, old),
                 "Evidence captured before the trial is stale and cannot establish a result");
+
+            FirmwareVerificationBinding DriftTrialFiles(string name, string questionName, string before, string after, string beforeLabel, string afterLabel)
+            {
+                var directory = Path.Combine(root, name);
+                Directory.CreateDirectory(directory);
+                var originalPath = Path.Combine(directory, "original.txt");
+                File.WriteAllText(originalPath, FirmwareChecks.VcoreExport("0983808B", "1.079V"));
+                var original = new FirmwareScript(File.ReadAllBytes(originalPath));
+                var target = original.Questions.First(item => item.Name == questionName);
+                var driftSessionPath = Path.Combine(directory, "session.json");
+                OperationFiles.Write(driftSessionPath, session with { Id = name, BackupHash = OperationFiles.HashFile(originalPath) });
+                var driftChangesPath = Path.Combine(directory, "changes.txt");
+                File.WriteAllBytes(driftChangesPath, original.Changes(new Dictionary<string, string> { [target.Id] = after }));
+                var driftReviewPath = Path.Combine(directory, "review.json");
+                OperationFiles.Write(driftReviewPath, new FirmwareReview(OperationFiles.HashFile(driftSessionPath), OperationFiles.HashFile(driftChangesPath), [new FirmwareChange(target.Id, target.Name, before, after, beforeLabel, afterLabel)]));
+                OperationFiles.Write(Path.Combine(directory, "journal.json"), new FirmwareJournal(OperationFiles.HashFile(driftReviewPath), "restartRequired", "Native import completed", new FirmwareCommandResult(0, "native import completed", ""), now));
+                return FirmwareVerificationBinding.FromOriginalExport(OperationFiles.Read<FirmwareSession>(driftSessionPath), originalPath, target.Id, OperationFiles.HashFile(driftSessionPath));
+            }
+            string DriftFile(string name, string text) { var path = Path.Combine(root, name); File.WriteAllText(path, text); return path; }
+            FirmwareVerificationEvidence DriftEvidence(string phase, string value, string boot, string path, string method = "firmwareExport", string outcome = FirmwareBehaviorOutcomes.NotApplicable)
+                => Evidence(phase, method, outcome, value, boot, path, phase, now);
+
+            var modeBinding = DriftTrialFiles("drift-mode", "Vcore Voltage Mode", "00", "01", "Auto", "Adaptive Vcore");
+            var modeTrial = store.BeginTrial(modeBinding, "00", "01", trialStart);
+            store.Record(modeTrial.Id, modeBinding, FirmwareTrialStatuses.ValueStored,
+                DriftEvidence(FirmwareEvidencePhases.Review, "01", "boot-1", Path.Combine(root, "drift-mode", "review.json"), "review"),
+                DriftEvidence(FirmwareEvidencePhases.Write, "01", "boot-1", Path.Combine(root, "drift-mode", "journal.json"), "import"),
+                DriftEvidence(FirmwareEvidencePhases.Immediate, "01", "boot-1", DriftFile("drift-mode-immediate.txt", FirmwareChecks.VcoreExport("0983808B", "1.079V", mode: "01"))));
+            Reject(() => store.Record(modeTrial.Id, modeBinding, FirmwareTrialStatuses.PersistedAfterRestart,
+                DriftEvidence(FirmwareEvidencePhases.Restart, "01", "boot-2", DriftFile("drift-mode-checksum.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.079V", mode: "01")))),
+                "A restart readback with a changed HII checksum and no name drift is still rejected");
+            Reject(() => store.Record(modeTrial.Id, modeBinding, FirmwareTrialStatuses.PersistedAfterRestart,
+                DriftEvidence(FirmwareEvidencePhases.Restart, "01", "boot-2", DriftFile("drift-mode-reverted.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", mode: "00", twin: "1.078V")))),
+                "A restart readback whose value reverted is rejected even though only a name drifted");
+            Reject(() => store.Record(modeTrial.Id, modeBinding, FirmwareTrialStatuses.PersistedAfterRestart,
+                DriftEvidence(FirmwareEvidencePhases.Restart, "01", "boot-2", DriftFile("drift-mode-moved.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", mode: "01", offset: "1050", twin: "1.078V")))),
+                "A restart readback where a drifted question moved offset is rejected");
+            var modePersisted = store.Record(modeTrial.Id, modeBinding, FirmwareTrialStatuses.PersistedAfterRestart,
+                DriftEvidence(FirmwareEvidencePhases.Restart, "01", "boot-2", DriftFile("drift-mode-restart.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", mode: "01", twin: "1.078V"))));
+            check(modePersisted.Status == FirmwareTrialStatuses.PersistedAfterRestart, "A restart readback that differs only by live voltage names and HII checksum keeps the trial bound");
+
+            var vcoreBinding = DriftTrialFiles("drift-vcore", "Internal CPU Vcore 1.079V", "0", "5", "0", "5");
+            var vcoreTrial = store.BeginTrial(vcoreBinding, "0", "5", trialStart);
+            store.Record(vcoreTrial.Id, vcoreBinding, FirmwareTrialStatuses.UnchangedImmediately,
+                DriftEvidence(FirmwareEvidencePhases.Review, "5", "boot-1", Path.Combine(root, "drift-vcore", "review.json"), "review"),
+                DriftEvidence(FirmwareEvidencePhases.Write, "5", "boot-1", Path.Combine(root, "drift-vcore", "journal.json"), "import"),
+                DriftEvidence(FirmwareEvidencePhases.Immediate, "0", "boot-1", DriftFile("drift-vcore-immediate.txt", FirmwareChecks.VcoreExport("0983808B", "1.079V"))));
+            var driftedBaseline = DriftFile("drift-vcore-restart.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", twin: "1.078V"));
+            store.Record(vcoreTrial.Id, vcoreBinding, FirmwareTrialStatuses.ActualBehaviorVerified,
+                DriftEvidence(FirmwareEvidencePhases.Restart, "0", "boot-2", driftedBaseline),
+                DriftEvidence(FirmwareEvidencePhases.Behavior, "0", "boot-2", behaviorPath, "benchmark", FirmwareBehaviorOutcomes.Unchanged));
+            Reject(() => store.CompleteRestoration(vcoreTrial.Id, vcoreBinding, DriftEvidence(FirmwareEvidencePhases.Restoration, "0", "boot-2",
+                DriftFile("drift-vcore-restore-changed.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", mode: "01", twin: "1.078V")), "noInverse")),
+                "Restoration with a drifted name still rejects another setting left changed");
+            var vcoreRestored = store.CompleteRestoration(vcoreTrial.Id, vcoreBinding, DriftEvidence(FirmwareEvidencePhases.Restoration, "0", "boot-2",
+                DriftFile("drift-vcore-restore.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", twin: "1.078V")), "noInverse"));
+            check(vcoreRestored.Complete, "A trial on the drifting question completes restoration when every value matches the original after restart");
+            var driftIdentity = identity with { Boot = "boot-2" };
+            check(store.MatchesBaseline(vcoreTrial.Id, driftIdentity, "package-1", driftedBaseline),
+                "A current export that differs only by live voltage names matches the trial baseline");
+            check(!store.MatchesBaseline(vcoreTrial.Id, driftIdentity, "package-1", DriftFile("drift-current-changed.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.078V", value: "5", twin: "1.078V"))),
+                "A current export with a changed value on the drifted question does not match the trial baseline");
+            check(!store.MatchesBaseline(vcoreTrial.Id, driftIdentity, "package-1", DriftFile("drift-current-checksum.txt", FirmwareChecks.VcoreExport("91DA1C04", "1.079V"))),
+                "A current export with a changed HII checksum and no name drift does not match the trial baseline");
+            var driftedQuestion = new FirmwareScript(File.ReadAllBytes(driftedBaseline)).Questions.Single(item => item.Name == "Internal CPU Vcore 1.078V" && item.Text.Contains("Token =2A9B", StringComparison.Ordinal));
+            var driftMatch = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline).Single(item => item.Trial.Id == vcoreTrial.Id);
+            check(driftMatch.Matches && driftMatch.CurrentQuestionId == driftedQuestion.Id && driftMatch.CurrentQuestionId != vcoreBinding.QuestionId,
+                "A matched trial names the drifted question in the current export so the editor can show its result");
+            var original = store.Read(vcoreTrial.Id).Binding.OriginalExportPath;
+            var others = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline).Where(item => item.Trial.Id != vcoreTrial.Id && item.Trial.Binding.OriginalExportPath != original)
+                .Select(item => (item.Trial.Id, item.CurrentStatus)).ToArray();
+            File.Move(original, original + ".moved");
+            IReadOnlyList<FirmwareVerificationMatch>? isolated = null; string failure = "";
+            try { isolated = store.ReadMatchingTrials(driftIdentity, "package-1", driftedBaseline); }
+            catch (Exception error) { failure = error.GetType().Name + ": " + error.Message; }
+            finally { File.Move(original + ".moved", original); }
+            check(isolated is not null && others.Length > 0 && isolated.SingleOrDefault(item => item.Trial.Id == vcoreTrial.Id)?.CurrentStatus is null or FirmwareVerificationMatchStatuses.Unavailable
+                && others.All(other => isolated.SingleOrDefault(item => item.Trial.Id == other.Id)?.CurrentStatus == other.CurrentStatus),
+                "A trial whose saved export is missing is shown as unavailable while every other trial keeps its result " + failure);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
         check(!Directory.Exists(root), "Firmware verification fixtures remove all evidence and state");

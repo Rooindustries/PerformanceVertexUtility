@@ -76,7 +76,7 @@ public class FileTweakStore : ITweakStore
         }
         return RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, () => fixture.InstalledMemoryKiB ?? throw new InvalidDataException("Fixture physical memory is missing."), name => "\"" + (fixture.MenuExecutable ?? throw new InvalidDataException("Fixture menu executable is missing.")) + "\" " + name), Children, address => Read(fixture, address), () => fixture.PrimaryInterfaces);
     }
-    public TweakControlRead ReadControl(ControlAddress address) => Load().Controls.GetValueOrDefault(address.Key) ?? throw new InvalidDataException("Fixture control is unavailable: " + address.Target);
+    public TweakControlRead ReadControl(ControlAddress address) => Load().Controls.GetValueOrDefault(address.Key) ?? throw new FileNotFoundException("Fixture control is unavailable: " + address.Target);
     private static string Native(TweakContext context, RegistryAddress address, string path) =>
         (address.Hive == "CurrentUser" ? "\\REGISTRY\\USER\\" + context.Owner.UserSid : address.Hive == "Users" ? "\\REGISTRY\\USER" : "\\REGISTRY\\MACHINE") + "\\" +
         (address.View == "Registry32" && address.Hive == "LocalMachine" ? path.Replace("Software\\", "Software\\WOW6432Node\\", StringComparison.OrdinalIgnoreCase) : path);
@@ -103,8 +103,9 @@ public class FileTweakStore : ITweakStore
         if (fixture.State?.Revision != plan.BeforeRevision || fixture.Context != plan.Context) throw new InvalidDataException("The fixture changed after review.");
         foreach (var expected in plan.Expected)
             if (!Read(fixture, expected.Address).Same(expected)) throw new InvalidDataException("A fixture setting changed after review.");
-        foreach (var expected in plan.Controls?.Expected ?? [])
+        foreach (var expected in plan.Controls?.Owned ?? [])
             if (!fixture.Controls.TryGetValue(expected.Address.Key, out var current) || !current.Same(expected)) throw new InvalidDataException("A fixture control changed after review.");
+        plan.Controls?.CheckReleased(address => fixture.Controls.GetValueOrDefault(address.Key) ?? new(address, "", "", default));
         foreach (var change in plan.Controls?.Changes ?? [])
             { fixture.Controls[change.Before.Address.Key] = change.Before with { Value = change.After }; fixture.Writes++; }
         var next = TweakEngine.NextState(plan, reviewHash, fixture.State);
