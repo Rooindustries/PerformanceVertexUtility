@@ -3,13 +3,15 @@ using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class MonitoringPage : Page
+public sealed partial class MonitoringPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public MonitoringViewModel ViewModel { get; } = new();
 
     public MonitoringPage()
     {
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) =>
         {
             ResizeContent();

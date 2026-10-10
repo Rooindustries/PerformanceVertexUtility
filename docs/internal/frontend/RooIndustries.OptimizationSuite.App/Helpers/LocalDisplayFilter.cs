@@ -78,9 +78,7 @@ public sealed class LocalDisplayFilter
     {
         try
         {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RooIndustriesOptimizationSuite", "private-display-exclusions.json");
+            var path = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "private-display-exclusions.json");
             if (!File.Exists(path)) return Empty();
 
             var json = File.ReadAllText(path);

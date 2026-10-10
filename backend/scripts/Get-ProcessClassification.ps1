@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
+. (Join-Path $PSScriptRoot 'BackgroundPlacement.Common.ps1')
 
 try {
     $defaultProfilePath = Join-Path $PSScriptRoot '..\profiles\game-session.profile.json'
@@ -31,7 +32,12 @@ try {
     $classified = New-Object System.Collections.Generic.List[object]
     foreach ($proc in @(Get-RooIndustriesPropertyArray $inventory 'processes')) {
         $info = Get-RooIndustriesProcessClassificationInfo $proc $profile $protectedCatalog $TargetGameProcessName
-        $classified.Add([pscustomobject]@{
+        $memoryState = $null
+        try {
+            $memoryProcess = Get-Process -Id ([int]$proc.pid) -ErrorAction Stop
+            $memoryState = Get-RooIndustriesProcessMemoryPriority $memoryProcess
+        } catch { $memoryState = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $_.Exception.Message } }
+        $classifiedProcess = [pscustomobject]@{
             pid = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
             name = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
             displayName = Get-RooIndustriesPropertyValue $proc 'displayName' $null
@@ -51,6 +57,10 @@ try {
             protected = [bool]$info.protected
             sessionId = Get-RooIndustriesPropertyValue $proc 'sessionId' $null
             priorityClass = Get-RooIndustriesPropertyValue $proc 'priorityClass' $null
+            memoryPriority = $memoryState.value
+            memoryPriorityName = $memoryState.name
+            memoryPriorityAvailable = $memoryState.available
+            memoryPriorityStatus = [string]$memoryState.status
             cpuPercent = Get-RooIndustriesPropertyValue $proc 'cpuPercent' $null
             workingSetBytes = [uint64](Get-RooIndustriesPropertyValue $proc 'workingSetBytes' 0)
             privateBytes = Get-RooIndustriesPropertyValue $proc 'privateBytes' $null
@@ -59,7 +69,9 @@ try {
             isForegroundCandidate = [bool](Get-RooIndustriesPropertyValue $proc 'isForegroundCandidate' $false)
             canChangePriority = [bool]$info.canChangePriority
             risk = $info.risk
-        }) | Out-Null
+        }
+        $classifiedProcess | Add-Member -NotePropertyName backgroundPlacementEligible -NotePropertyValue (Test-RooIndustriesBackgroundPlacementCandidate $classifiedProcess $profile $protectedCatalog $TargetGameProcessName)
+        $classified.Add($classifiedProcess) | Out-Null
     }
 
     $processArray = @($classified.ToArray())

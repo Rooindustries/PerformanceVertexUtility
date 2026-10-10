@@ -1,15 +1,18 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class DriversProfilesPage : Page
+public sealed partial class DriversProfilesPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public DriversProfilesViewModel ViewModel { get; } = new();
 
     public DriversProfilesPage()
     {
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) =>
         {
             ResizeContent();
@@ -20,4 +23,5 @@ public sealed partial class DriversProfilesPage : Page
     }
 
     private void ResizeContent() => ResponsiveContentSizer.Apply(this, DriversContent);
+    private async void Refresh_Click(object sender, RoutedEventArgs e) => await ViewModel.ReloadAsync();
 }

@@ -26,7 +26,25 @@ function Write-RooIndustriesOperationJson {
 
 function Read-RooIndustriesOperationJson {
     param([Parameter(Mandatory=$true)][string]$Path, [string]$ExpectedSha256 = '')
-    $bytes = [IO.File]::ReadAllBytes([IO.Path]::GetFullPath($Path))
+    $full = [IO.Path]::GetFullPath($Path)
+    $bytes = $null
+    for ($attempt = 0; $null -eq $bytes; $attempt++) {
+        try {
+            $stream = [IO.FileStream]::new($full, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try { $buffer = [IO.MemoryStream]::new(); $stream.CopyTo($buffer); $bytes = $buffer.ToArray() } finally { $stream.Dispose() }
+        }
+        catch {
+            $failure = $_.Exception
+            if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+            if ($attempt -ge 40) { throw }
+            if ($failure -is [IO.FileNotFoundException]) {
+                $pending = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($full)) -Filter ([IO.Path]::GetFileName($full) + '.*.tmp') -File -ErrorAction SilentlyContinue | Where-Object { ([DateTime]::UtcNow - $_.LastWriteTimeUtc).TotalSeconds -lt 5 })
+                if ($attempt -ge 2 -and $pending.Count -eq 0) { throw }
+                Start-Sleep -Milliseconds 5
+            } elseif ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32) { Start-Sleep -Milliseconds 25 }
+            else { throw }
+        }
+    }
     $hash = [Security.Cryptography.SHA256]::Create()
     try { $digest = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() } finally { $hash.Dispose() }
     if ($ExpectedSha256 -and $digest -ne $ExpectedSha256) { throw 'Reviewed input bytes changed; create and review a fresh preview.' }

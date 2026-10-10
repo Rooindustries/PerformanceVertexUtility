@@ -8,20 +8,50 @@ try
 {
     if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
     if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
+    RuntimeEnvironment.RequireClean();
+    RuntimeEnvironment.Establish();
     if (args.Length < 2) throw new ArgumentException("Provide an action and request JSON path.");
     var action = args[0];
-    var request = OperationFiles.Read<HostRequest>(args[1]);
+    var fromInput = args[1] == "-";
+    if (!fromInput && RuntimeEnvironment.Release && action is not ("policy-run" or "protected-session-run" or "protected-session-watch"))
+        throw new InvalidDataException("Requests must be passed on standard input.");
+    using var requestLease = !fromInput && action is "protected-session-run" or "protected-session-watch" ? OperationsFolder.LeaseContaining(args[1]) : null;
+    var requestBytes = fromInput ? ReadInput() : File.ReadAllBytes(args[1]);
+    var request = OperationFiles.Deserialize<HostRequest>(requestBytes);
+    if (!fromInput && (action is "rule-save" or "rule-delete" or "policy-pause" or "policy-secure" or "policy-adopt" or "policy-stop" or "operations-secure" or "data-secure" || action == "policy-run" && request.DurationSeconds is not null))
+        throw new InvalidDataException("Governor and recovery-folder requests must be passed on standard input.");
     if (args.Length > 2 && !string.Equals(Path.GetFullPath(request.RepoRoot), Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Request repository differs from the selected application backend.");
     if (request.SchemaVersion != 1) throw new InvalidDataException("Unsupported optimizer request version.");
+    if (request.Progress == true && action is "data-secure" or "operations-secure" or "policy-secure")
+    {
+        var progressOptions = new JsonSerializerOptions(OperationFiles.Json) { WriteIndented = false };
+        PolicyRootSecurity.Progress += progress =>
+        {
+            lock (Console.Out) { Console.Out.WriteLine("ROO_INDUSTRIES_PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = progress }, progressOptions)); Console.Out.Flush(); }
+        };
+    }
     var catalog = OperationFiles.Read<JsonElement>(Path.Combine(request.RepoRoot, "backend", "profiles", "protected-processes.json"));
     var names = catalog.GetProperty("protectedProcesses").EnumerateArray().SelectMany(item => item.GetProperty("names").EnumerateArray())
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
     bool Excluded(RunningProcess process) => names.Any(pattern => pattern.IsMatch(Path.GetFileName(process.ExecutablePath)));
+    void RequireEarlierReceipts()
+    {
+        if (request.FixturePath is not null) return;
+        var downloads = Path.Combine(OperationsFolder.DefaultRoot, "download-blockers");
+        foreach (var receipt in new[] { Path.Combine(OperationsFolder.DefaultRoot, "ultimate-plan.json") }.Concat(Directory.Exists(downloads) ? Directory.EnumerateFiles(downloads, "*.json") : []))
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(receipt, request.AcceptEarlierVersion == true);
+    }
     var engine = new ProcessControlEngine(Excluded);
     object data;
     switch (action)
     {
+        case "timer-refresh-installed":
+            RequireConfirmation(request);
+            data = new { message = TimerStartupControl.RefreshInstalled() }; break;
+        case "timer-remove-installed":
+            RequireConfirmation(request);
+            data = new { messages = TimerStartupControl.RemoveInstalled() }; break;
         case "tweak-catalog":
             var tweakCatalog = ReadTweakCatalog(request.RepoRoot);
             data = new { catalog = tweakCatalog, hash = tweakCatalog.Digest };
@@ -53,10 +83,16 @@ try
             break;
         case "tweak-recover":
             RequireConfirmation(request);
+            RequireEarlierReceipts();
             data = new { recovered = new RegistryTweakStore().Recover(Require(request.ReviewHash, "recovery review hash")) };
             break;
         case "tweak-status":
-            data = Tweaks(request).Detect();
+            var partialOptions = new JsonSerializerOptions(OperationFiles.Json) { WriteIndented = false };
+            data = Tweaks(request).Detect(request.PartialStatus == true ? inspection =>
+            {
+                Console.Out.WriteLine("ROO_INDUSTRIES_PARTIAL " + JsonSerializer.Serialize(new { schemaVersion = 1, status = "partial", data = inspection }, partialOptions));
+                Console.Out.Flush();
+            } : null);
             break;
         case "tweak-preview":
             if (request.Selections is not null && request.PresetId is not null) throw new InvalidDataException("Provide selections or a preset, not both.");
@@ -72,14 +108,23 @@ try
             var tweakHash = Require(request.ReviewHash, "review hash");
             if (action == "tweak-restore" && OperationFiles.Read<TweakPlan>(tweakPreview, tweakHash).Selections.Length != 0)
                 throw new InvalidDataException("Restore requires a reviewed empty selection for the profile.");
+            if (action == "tweak-restore") RequireEarlierReceipts();
             var tweakApplied = Tweaks(request).Apply(tweakPreview, tweakHash, request.AcceptDataLoss == true);
             if (action == "tweak-restore" && request.FixturePath is null) CustomTweaks.PruneOwnership(tweakApplied.State);
             data = tweakApplied;
             break;
         case "protected-session-preview":
             if (request.Controls is not null && request.ControlsPath is not null) throw new InvalidDataException("Provide inline controls or a controls file, not both.");
-            data = new ProtectedSessions(Excluded).Preview(request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required."),
-                Require(request.GamePath, "game executable"), request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file")), request.AcceptLauncherScope == true);
+            var sessionControls = request.Controls ?? OperationFiles.Read<Dictionary<string, JsonElement>>(Require(request.ControlsPath, "controls file"));
+            var sessionLauncher = request.ProcessId ?? throw new InvalidDataException("Launcher process ID is required.");
+            var governor = new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.RootFor(request.OutputPath));
+            governor.RequireUnownedLaunch(Path.GetFullPath(Require(request.GamePath, "game executable")), sessionControls.Keys);
+            try { using var launcherProcess = new ProcessTarget(sessionLauncher); governor.RequireUnowned(launcherProcess.Identity(), sessionControls.Keys); }
+            catch (Exception error) when (error is ProcessEndedException || error is RooIndustries.Optimization.CpuSets.NativeFailure { Api: "OpenProcess", NativeErrorCode: 87 })
+            {
+                throw new InvalidOperationException(ProtectedSessions.LauncherClosed);
+            }
+            data = new ProtectedSessions(Excluded).Preview(sessionLauncher, Require(request.GamePath, "game executable"), sessionControls, request.AcceptLauncherScope == true);
             OperationFiles.Write(Require(request.OutputPath, "output path"), (ProtectedSessionPreview)data);
             break;
         case "protected-session-check":
@@ -87,6 +132,7 @@ try
             break;
         case "protected-session-run":
             RequireConfirmation(request);
+            using (OperationsFolder.LeaseContaining(Require(request.SessionRoot, "session directory")))
             using (var cancellation = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
@@ -106,11 +152,13 @@ try
             break;
         case "protected-session-recover":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Path.Combine(Require(request.SessionRoot, "session directory"), "session.json"), request.AcceptEarlierVersion == true);
             data = new ProtectedSessions(Excluded).Recover(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
             break;
         case "protected-session-watch":
             RequireConfirmation(request);
-            new ProtectedSessions(Excluded).Watch(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
+            using (OperationsFolder.LeaseContaining(Require(request.SessionRoot, "session directory")))
+                new ProtectedSessions(Excluded).Watch(Require(request.SessionRoot, "session directory"), Require(request.OperationId, "session identity"));
             data = new { recovered = true };
             break;
         case "process-status":
@@ -122,10 +170,18 @@ try
             break;
         case "process-apply":
             RequireConfirmation(request);
-            data = engine.Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
+            var reviewed = OperationFiles.Read<ProcessControlPreview>(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"));
+            using (ProcessPolicyStore.Gate())
+            {
+                new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnowned(reviewed.Identity, reviewed.Desired.Keys);
+                data = engine.Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"));
+            }
             break;
         case "process-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Require(request.JournalPath, "journal path"), request.AcceptEarlierVersion == true);
+            var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
+            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
             data = engine.Restore(Require(request.JournalPath, "journal path"));
             break;
         case "rules-list":
@@ -135,7 +191,7 @@ try
             RequireConfirmation(request);
             var store = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root"));
             var rule = request.Rule ?? throw new InvalidDataException("A rule is required.");
-            store.Save(rule);
+            store.Save(rule, Require(request.RepoRoot, "repository root"));
             data = store.ReadRules().Single(pair => pair.Rule.RuleId == rule.RuleId).Rule;
             break;
         case "rule-delete":
@@ -148,8 +204,14 @@ try
             using (var cancellation = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
-                data = new ProcessPolicyHost(new(Require(request.PolicyRoot, "policy root")), Excluded).Run(cancellation.Token,
-                    request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null);
+                var policyRoot = Path.GetFullPath(Require(request.PolicyRoot, "policy root"));
+                var resident = request.DurationSeconds is null;
+                if (resident && !string.Equals(Path.GetDirectoryName(Path.GetFullPath(args[1])), policyRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The governor request must be stored in its protected rules folder.");
+                if (resident) ProcessPolicyAdoption.Adopt(policyRoot);
+                data = new ProcessPolicyHost(new(policyRoot), Excluded).Run(cancellation.Token,
+                    request.DurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null,
+                    () => { if (resident && !File.ReadAllBytes(args[1]).AsSpan().SequenceEqual(requestBytes)) throw new InvalidDataException("The governor request changed before its rules folder was locked."); });
             }
             break;
         case "policy-stop":
@@ -159,6 +221,34 @@ try
             break;
         case "policy-status":
             data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Status();
+            break;
+        case "policy-summary":
+            data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).Summary();
+            break;
+        case "policy-secure":
+            RequireConfirmation(request);
+            var securedRoot = Require(request.PolicyRoot, "policy root");
+            if (request.UserSid is null) DataFolder.EnsureFor(securedRoot);
+            data = new { migrated = PolicyRootSecurity.Secure(securedRoot, request.UserSid), report = PolicyRootSecurity.LastReport };
+            if (request.UserSid is null) ProcessPolicyAdoption.Adopt(securedRoot);
+            break;
+        case "policy-adopt":
+            RequireConfirmation(request);
+            data = new { adopted = ProcessPolicyAdoption.Adopt(Require(request.PolicyRoot, "policy root")) };
+            break;
+        case "operations-secure":
+            RequireConfirmation(request);
+            var operationsRoot = Require(request.OperationsRoot, "recovery folder");
+            data = new { migrated = OperationsFolder.Secure(operationsRoot), root = OperationsFolder.Ensure(operationsRoot), report = PolicyRootSecurity.LastReport };
+            break;
+        case "data-secure":
+            RequireConfirmation(request);
+            data = new { root = DataFolder.Ensure(), report = PolicyRootSecurity.LastReport };
+            break;
+        case "policy-pause":
+            RequireConfirmation(request);
+            new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).SetPaused(request.Paused ?? throw new InvalidDataException("Choose whether the governor is paused."), Require(request.RepoRoot, "repository root"));
+            data = new { paused = request.Paused };
             break;
         case "cleanup-authority": data = Authority(request); break;
         case "cleanup-exclusions-status":
@@ -189,6 +279,7 @@ try
             break;
         case "cleanup-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireWrittenAfterProtection(Require(request.JournalPath, "journal path"), OperationsFolder.EarlierBackup(request.JournalPath!));
             data = Cleanup(request).Restore(Require(request.JournalPath, "journal path"));
             break;
         case "cleanup-batch-preview":
@@ -196,6 +287,7 @@ try
             break;
         case "cleanup-batch-apply":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireConfirmedEarlierVersion(Require(request.JournalPath, "journal path"), request.AcceptEarlierVersion == true);
             data = Batch(request).Apply(Require(request.PreviewPath, "preview path"), Require(request.ReviewHash, "review hash"), Require(request.JournalPath, "journal path"), request.CancellationId);
             break;
         case "cleanup-batch-cancel":
@@ -204,6 +296,7 @@ try
             break;
         case "cleanup-batch-restore":
             RequireConfirmation(request);
+            PolicyRootSecurity.RequireWrittenAfterProtection(Require(request.JournalPath, "journal path"), OperationsFolder.EarlierBackup(request.JournalPath!));
             data = Batch(request).Restore(Require(request.JournalPath, "journal path"), request.RestoreAppIds);
             break;
         default: throw new InvalidDataException("Unknown optimizer action.");
@@ -238,10 +331,20 @@ static void StartProtectedWatch(string repoRoot, string root, string operationId
     var path = Path.Combine(root, "watch-request.json");
     OperationFiles.Write(path, new { schemaVersion = 1, repoRoot, sessionRoot = root, operationId, confirm = true });
     var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+    RuntimeEnvironment.Apply(start);
     if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
         start.ArgumentList.Add(System.Reflection.Assembly.GetEntryAssembly()!.Location);
     start.ArgumentList.Add("protected-session-watch"); start.ArgumentList.Add(path);
     using var watcher = Process.Start(start) ?? throw new InvalidOperationException("The recovery watcher did not start.");
+}
+
+static byte[] ReadInput()
+{
+    using var input = Console.OpenStandardInput();
+    using var buffer = new MemoryStream();
+    input.CopyTo(buffer);
+    var bytes = buffer.ToArray();
+    return bytes is [0xEF, 0xBB, 0xBF, ..] ? bytes[3..] : bytes;
 }
 
 static string Require(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new InvalidDataException("Missing " + name + ".") : value;
@@ -292,7 +395,7 @@ static CleanupApplication Application(JsonElement app)
 static JsonElement RunScript(string repoRoot, string script, string[] arguments)
 {
     static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
-    var command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
+    var command = RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
     if (arguments.Length % 2 != 0) throw new InvalidDataException("Provider parameters must be name/value pairs.");
     for (var index = 0; index < arguments.Length; index += 2)
     {
@@ -304,6 +407,7 @@ static JsonElement RunScript(string repoRoot, string script, string[] arguments)
         UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
         StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
     };
+    RuntimeEnvironment.Apply(start);
     foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(arg);
     using var process = Process.Start(start) ?? throw new InvalidOperationException("The Windows provider did not start.");
     var output = process.StandardOutput.ReadToEndAsync();
@@ -324,6 +428,7 @@ sealed record HostRequest
     public string? CustomSettingsPath { get; init; }
     public string? SelectedFilePath { get; init; }
     public bool? AllowFreshRestorePoint { get; init; }
+    public bool? PartialStatus { get; init; }
     public string? ProfileId { get; init; }
     public string? PresetId { get; init; }
     public TweakSelection[]? Selections { get; init; }
@@ -342,10 +447,15 @@ sealed record HostRequest
     public string? JournalPath { get; init; }
     public bool? Confirm { get; init; }
     public bool? AcceptDataLoss { get; init; }
+    public bool? AcceptEarlierVersion { get; init; }
+    public bool? Progress { get; init; }
     public string? PolicyRoot { get; init; }
+    public string? OperationsRoot { get; init; }
     public SavedProcessRule? Rule { get; init; }
     public string? RuleId { get; init; }
     public double? DurationSeconds { get; init; }
+    public bool? Paused { get; init; }
+    public string? UserSid { get; init; }
     public string? QueueJournalPath { get; init; }
     public string? AppId { get; init; }
     public string[]? ItemIds { get; init; }

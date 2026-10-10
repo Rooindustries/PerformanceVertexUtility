@@ -13,7 +13,7 @@ public static class FileAccessControl
         if (address.Kind == "file-ownership" && address.Target.StartsWith("selected:", StringComparison.Ordinal)) return FileLease.NormalizePath(address.Target[9..]);
         return address.Target switch
         {
-            "store-search" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalState\store.db"),
+            "store-search" => Path.Combine(RuntimeEnvironment.LocalAppData, @"Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalState\store.db"),
             "razer-downloads" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"Installer\Razer"),
             "logitech-downloads" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LogiDownloadAssistant"),
             "telemetry-consent" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wsqmcons.exe"),
@@ -44,7 +44,7 @@ public static class FileAccessControl
     {
         var path = Target(address);
         if (new DriveInfo(Path.GetPathRoot(path)!).DriveFormat != "NTFS") throw new InvalidDataException("File permission controls currently require NTFS.");
-        using var privileges = new FilePolicyPrivileges();
+        using var privileges = PrivilegeScope.FilePolicy();
         using var lease = FileLease.OpenPolicy(path);
         return Snapshot(address, lease);
     }
@@ -81,7 +81,7 @@ public static class FileAccessControl
         foreach (var field in ownership ? new[] { "group", "flags" } : new[] { "owner", "group", "flags" })
             if (!ControlValues.Equal(before.Value.GetProperty(field), desired.GetProperty(field))) throw new InvalidDataException("File permission controls cannot change the owner, group or inheritance flags.");
         var acl = new RawAcl(Convert.FromBase64String(desired.GetProperty("dacl").GetString()!), 0);
-        using var privileges = new FilePolicyPrivileges();
+        using var privileges = PrivilegeScope.FilePolicy();
         using var lease = FileLease.OpenPolicy(Target(before.Address), writable: true, owner: ownership);
         if (!Snapshot(before.Address, lease).Same(before)) throw new InvalidDataException("The file or its permissions changed after review.");
         if (ownership && !ControlValues.Equal(before.Value.GetProperty("owner"), desired.GetProperty("owner")))

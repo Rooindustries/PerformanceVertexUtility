@@ -51,11 +51,6 @@
       "itemId": "registry:hklcu-overwolf",
       "target": "HKCU\\Software\\Overwolf",
       "reason": "Left out until you approve the cleanup."
-    },
-    {
-      "itemId": "runtime:vc-redist",
-      "target": "HKLM\\Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-      "reason": "Shared runtime. Leave it alone unless you approve a dedicated runtime cleanup."
     }
   ],
   "rollback": {
@@ -95,7 +90,7 @@
   },
   "summary": {
     "itemCount": 2,
-    "excludedCount": 2,
+    "excludedCount": 1,
     "lowRiskCount": 2,
     "mediumRiskCount": 0,
     "highRiskCount": 0,

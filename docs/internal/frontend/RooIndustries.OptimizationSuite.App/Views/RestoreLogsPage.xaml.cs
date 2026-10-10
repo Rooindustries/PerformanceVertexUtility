@@ -3,13 +3,15 @@ using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
 
-public sealed partial class RestoreLogsPage : Page
+public sealed partial class RestoreLogsPage : Page, IRevalidatingPage
 {
+    public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
     public RestoreLogsViewModel ViewModel { get; } = new();
 
     public RestoreLogsPage()
     {
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
     private void OpenWindowsSettings(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

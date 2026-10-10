@@ -52,5 +52,84 @@ static class DiscoveryChecks
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Discovery validation leaves no file or registry fixtures");
+        ProductBoundaries(check);
+        UncRoaming(check);
+    }
+
+    private static void UncRoaming(Action<bool, string> check)
+    {
+        var roaming = @"\\127.0.0.1\RooIndustriesRoamingFixture-" + Guid.NewGuid().ToString("N");
+        var app = new CleanupApplication { AppId = "fixture:unc", DisplayName = "Roo Industries UNC fixture", Publisher = null, InstallLocation = null, PackageFamilyName = null };
+        var before = Environment.GetEnvironmentVariable("APPDATA");
+        var scan = new LeftoverDiscovery(app, []).Scan(CancellationToken.None, [roaming], []);
+        Console.WriteLine("MEASURE uncScan " + System.Text.Json.JsonSerializer.Serialize(scan, OperationFiles.Json));
+        check(!scan.Complete && scan.Candidates.Length == 0 && scan.Errors.SequenceEqual([roaming + ": not scanned because this folder is not on a local fixed drive."]), "A UNC roaming scope is reported as not scanned before elevated enumeration");
+        check(Environment.GetEnvironmentVariable("APPDATA") == before, "Skipping elevated roaming discovery leaves the child's APPDATA unchanged");
+    }
+
+    private static void ProductBoundaries(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-names-" + Guid.NewGuid().ToString("N"));
+        var registryRoot = "Software\\RooIndustriesDiscoveryTests\\" + Guid.NewGuid().ToString("N");
+        using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        foreach (var name in new[] { "Notepad++", "Notepad", "7Zip", "ATT Connect" }) Directory.CreateDirectory(Path.Combine(root, name));
+        try
+        {
+            foreach (var path in new[] { "Notepad++", "Notepad", "Microsoft\\Notepad", "Microsoft\\Edge", "Policies\\Notepad++", "Edge", "Tools\\Microsoft", "7-Zip", "ATT Connect", "Policies\\Notepad", "Classes\\Folder", "Folder" })
+                hive.CreateSubKey(registryRoot + "\\" + path).Dispose();
+            RegistryAddress[] scopes = [new("CurrentUser", "Registry64", registryRoot, "key", null), new("CurrentUser", "Registry32", registryRoot, "key", null)];
+            CleanupApplication Product(string id, string name, string? publisher, string? family = null) => new() { AppId = id, DisplayName = name, Publisher = publisher, InstallLocation = null, PackageFamilyName = family };
+            var windowsNotepad = Product("appx:notepad", "Notepad", "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US", "Microsoft.WindowsNotepad_8wekyb3d8bbwe");
+            var notepadPlus = Product("registry:notepad++", "Notepad++ (64-bit x64)", "Notepad++ Team");
+            LeftoverCandidate[] Scan(CleanupApplication app, params CleanupApplication[] peers) => new LeftoverDiscovery(app, peers).Scan(CancellationToken.None, [root], scopes).Candidates;
+            string[] Keys(IEnumerable<LeftoverCandidate> items) => items.Where(item => item.Kind == "registryKey").Select(item => item.Registry!.KeyPath[(registryRoot.Length + 1)..]).Order().ToArray();
+            string[] Folders(IEnumerable<LeftoverCandidate> items) => items.Where(item => item.Kind == "folder" && item.Target.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase)).Select(item => Path.GetFileName(item.Target)).Order().ToArray();
+            var plus = Scan(notepadPlus, windowsNotepad);
+            check(Keys(plus).SequenceEqual(["Notepad++"]) && Folders(plus).SequenceEqual(["Notepad++"]),
+                "Notepad++ matches only its own key and folder, never Notepad or Microsoft\\Notepad: " + string.Join(", ", Keys(plus).Concat(Folders(plus))));
+            check(plus.All(item => item.SharedOwners.Count == 0), "Windows Notepad is not recorded as a co-owner of Notepad++ leftovers");
+            var notepad = Scan(windowsNotepad, notepadPlus);
+            check(Keys(notepad).SequenceEqual(["Notepad"]) && Folders(notepad).SequenceEqual(["Notepad"]),
+                "A Microsoft-published Notepad is never offered the shared Microsoft key and never matches Notepad++: " + string.Join(", ", Keys(notepad).Concat(Folders(notepad))));
+            var microsoftEdge = Scan(Product("registry:microsoft-edge", "Edge", "Microsoft Corporation"));
+            check(Keys(microsoftEdge).SequenceEqual(["Edge"]), "A Microsoft-published desktop app is never offered keys under a Microsoft root: " + string.Join(", ", Keys(microsoftEdge)));
+            var microsoftData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "RooIndustriesDiscovery" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(microsoftData);
+            try
+            {
+                using (var progIds = hive.CreateSubKey(registryRoot + "\\ProgIds")) progIds.SetValue("Open", "\"" + Path.Combine(microsoftData, "app.exe") + "\" \"%1\"");
+                var installed = new LeftoverDiscovery(Product("registry:microsoft-data", "Roo Industries Microsoft Data", "Roo Industries") with { InstallLocation = microsoftData }, []).Scan(CancellationToken.None, [root], scopes).Candidates;
+                check(!installed.Any(item => item.Target.StartsWith(microsoftData, StringComparison.OrdinalIgnoreCase)), "An install location under a Microsoft-owned folder is never offered as a leftover: " + string.Join(", ", installed.Select(item => item.Target)));
+                check(!installed.Any(item => item.Kind == "registryValue"), "Registry values pointing into a Microsoft-owned install location are never offered: " + string.Join(", ", installed.Select(item => item.Target)));
+            }
+            finally { Directory.Delete(microsoftData, true); }
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var drive = Path.GetPathRoot(local)!;
+            string[] owned = [Path.Combine(local, "Packages", "Microsoft.GamingApp_8wekyb3d8bbwe", "LocalState"), Path.Combine(local, "Packages", "Microsoft.Windows.Photos_cw5n1h2txyewy"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ModifiableWindowsApps", "Game"), Path.Combine(drive, "XboxGames", "Game"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Microsoft", "CryptnetUrlCache")];
+            check(owned.All(LeftoverDiscovery.MicrosoftOwnedPath), "Microsoft package data, ModifiableWindowsApps, XboxGames and LocalLow\\Microsoft are Windows-owned: " + string.Join(", ", owned.Where(path => !LeftoverDiscovery.MicrosoftOwnedPath(path))));
+            check(!LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(local, "Packages", "Vendor.App_abcdefghjk123")) && !LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(drive, "Games", "XboxGames")), "Third-party package data and similarly named folders elsewhere stay eligible");
+            var edge = Scan(Product("registry:edge", "Edge", "Edge Labs"));
+            check(Keys(edge).SequenceEqual(["Edge"]), "A short third-party name never offers the Microsoft key it shares: " + string.Join(", ", Keys(edge)));
+            var folder = Scan(Product("registry:folder", "Folder", "Folder Tools"));
+            check(Keys(folder).SequenceEqual(["Folder"]), "A Windows-owned class key is never offered even when its name matches: " + string.Join(", ", Keys(folder)));
+            var tools = Scan(Product("registry:tools", "Tools", "Tool Makers")).Single(item => item.Kind == "registryKey");
+            check(tools.SharedOwners.Contains("Windows"), "A matched key holding a Microsoft subtree stays shared with Windows and cannot be selected");
+            var zip = Scan(Product("registry:7zip", "7-Zip 24.08 (x64)", "Igor Pavlov"));
+            check(Keys(zip).SequenceEqual(["7-Zip"]) && Folders(zip).SequenceEqual(["7Zip"]), "Separator punctuation still matches the same product: " + string.Join(", ", Keys(zip).Concat(Folders(zip))));
+            var att = Scan(Product("registry:att", "AT&T Connect", "AT&T"));
+            check(att.Length == 0, "An ampersand is significant, so AT&T Connect does not match ATT Connect: " + string.Join(", ", att.Select(item => item.Target)));
+            var sharp = Scan(Product("registry:sharp", "Notepad#", "Sharp Tools"));
+            check(sharp.Length == 0, "A hash is significant, so Notepad# does not match Notepad: " + string.Join(", ", sharp.Select(item => item.Target)));
+        }
+        finally
+        {
+            hive.DeleteSubKeyTree(registryRoot, false);
+            using (var parent = hive.OpenSubKey("Software\\RooIndustriesDiscoveryTests"))
+                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesDiscoveryTests", false);
+            Directory.Delete(root, true);
+        }
+        check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Product-boundary validation leaves no file or registry fixtures");
     }
 }

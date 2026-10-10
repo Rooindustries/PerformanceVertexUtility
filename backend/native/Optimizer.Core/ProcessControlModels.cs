@@ -5,6 +5,23 @@ using System.Text.Json.Serialization;
 namespace RooIndustries.Optimizer;
 
 public sealed record ApiError(string Api, string CodeKind, long Code, string Access, string Message);
+
+public sealed class ControlReadException(ApiError error) : Exception(error.Message)
+{
+    public ApiError Error { get; } = error;
+}
+
+public static class ProcessFailures
+{
+    public static bool Denied(Exception error) => error switch
+    {
+        System.ComponentModel.Win32Exception win32 => win32.NativeErrorCode == 5,
+        UnauthorizedAccessException => true,
+        InvalidDataException { InnerException: ControlReadException read } => read.Error is { CodeKind: "win32", Code: 5 } or { CodeKind: "ntstatus", Code: 0xC0000022 },
+        ProcessTarget.NtFailure native => native.Code == 0xC0000022,
+        _ => false,
+    };
+}
 public sealed class ProcessEndedException() : InvalidOperationException("The target process has exited.");
 
 public sealed record ControlRead([property: JsonRequired] bool Known, [property: JsonRequired] JsonElement? Value, ApiError? Error)
@@ -15,7 +32,7 @@ public sealed record ControlRead([property: JsonRequired] bool Known, [property:
     public JsonElement Require()
     {
         if (!Known || Value is null || Value.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined || Error is not null)
-            throw new InvalidDataException(Error?.Message ?? "The original control state is unknown.");
+            throw new InvalidDataException(Error?.Message ?? "The original control state is unknown.", Error is null ? null : new ControlReadException(Error));
         return Value.Value;
     }
 }
@@ -45,7 +62,7 @@ public sealed record PowerThrottling([property: JsonRequired] uint ControlMask, 
 }
 
 public sealed record ProcessControlSnapshot(RunningProcess Identity, ControlRead Protection,
-    IReadOnlyList<LogicalCpu> Topology, IReadOnlyDictionary<string, ControlRead> Controls);
+    IReadOnlyList<LogicalCpu> Topology, IReadOnlyDictionary<string, ControlRead> Controls, IReadOnlyDictionary<string, string>? Blocked = null);
 
 public sealed record ProcessControlPreview
 {
@@ -56,6 +73,18 @@ public sealed record ProcessControlPreview
     public required Dictionary<string, ControlRead> Original { get; init; }
     public required Dictionary<string, JsonElement> Desired { get; init; }
     public required string TopologyHash { get; init; }
+    public Dictionary<string, string>? Blocked { get; init; }
+}
+
+public sealed class ProcessControlBlockedException(IEnumerable<string> controls)
+    : UnauthorizedAccessException("Windows doesn't let other apps change " + string.Join(", ", controls.Select(ProcessControlBlockedException.Label)) +
+        " for this app while it runs. Games with anti-cheat often block this. Use the Games tab to set it up before the game starts.")
+{
+    public static string Label(string name) => name switch
+    {
+        "cpuPriority" => "CPU priority", "affinity" => "CPU cores", "cpuSets" => "preferred CPU cores", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority",
+        "memoryPriority" => "memory priority", "executionQoS" => "power mode", "priorityBoost" => "priority boost", _ => name,
+    };
 }
 
 public sealed class ControlChange
@@ -66,6 +95,7 @@ public sealed class ControlChange
     public required string Status { get; set; }
     public JsonElement? Observed { get; set; }
     public string? Error { get; set; }
+    public string? ErrorKind { get; set; }
 }
 
 public sealed class ProcessControlJournal

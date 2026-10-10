@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
@@ -13,7 +14,22 @@ public sealed class BackendLocator
 
     public BackendLocator()
     {
+        ClearInstalledOverrides();
         RepoRoot = ResolveRepoRoot();
+    }
+
+    public static bool Installed => File.Exists(Path.Combine(AppContext.BaseDirectory, "hostpolicy.dll"));
+
+    private static void ClearInstalledOverrides()
+    {
+        if (!Installed) return;
+        foreach (var name in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(name => name.StartsWith(RooIndustries.Optimizer.BrandCompatibility.LegacyEnvironmentPrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
+        {
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (name.StartsWith("ROO_INDUSTRIES_TEST_", StringComparison.OrdinalIgnoreCase)) continue;
+#endif
+            Environment.SetEnvironmentVariable(name, null);
+        }
     }
 
     public bool SamplesAvailable => SamplesDirectory is not null && Directory.Exists(SamplesDirectory);

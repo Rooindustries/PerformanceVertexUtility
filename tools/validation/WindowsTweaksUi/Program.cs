@@ -56,16 +56,42 @@ if (args is ["--presentation", var presentationRepo])
     Console.WriteLine($"Completed {count} presentation checks.");
     return;
 }
+if (args is ["--freshness"])
+{
+    try { await FreshnessChecks.Run(root, Check); Console.WriteLine($"Completed {count} Windows settings UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 try
 {
+    AppliedStateChecks.Run(Check);
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
         ActionChecks.Run(catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
+        if (catalog.Presets.SingleOrDefault(preset => preset.Id == WindowsTweaksViewModel.FpsPresetId) is { } fpsPreset)
+        {
+            var shipped = new Fixture(Path.Combine(root, "shipped-fps-preset"), catalog) { Missing = false };
+            var shippedModel = await Load(shipped);
+            Check(shippedModel.HasFpsPreset, "The shipped catalog's FPS preset shows the preset button");
+            shippedModel.FilterPresets("FSOS-X Dash · Hyper-V"); var hyperV = shippedModel.Presets.Select(preset => preset.Id).ToArray();
+            shippedModel.FilterPresets("Virtualization-Based Security"); var vbs = shippedModel.Presets.Select(preset => preset.Id).ToArray();
+            Check(ControlPlanning.HiddenPresets.All(id => catalog.Presets.Any(preset => preset.Id == id)) && !hyperV.Concat(vbs).Any(ControlPlanning.HiddenPresets.Contains) && hyperV.Length > 0,
+                "Presets that always refuse to apply are hidden from the preset list while the rest stay: " + string.Join(", ", hyperV.Concat(vbs)));
+            shippedModel.FilterPresets("");
+            shippedModel.SelectFpsPresetCommand.Execute(null);
+            var queued = shippedModel.Rows.Where(row => row.Selected.Id.Length > 0).Select(row => (row.Id, row.Selected.Id)).OrderBy(item => item.Item1).ToArray();
+            var expected = fpsPreset.Selections.Select(item => (item.SettingId, item.OptionId)).OrderBy(item => item.Item1).ToArray();
+            Check(queued.SequenceEqual(expected) && shipped.Applies == 0, "The shipped FPS preset queues exactly its measured tweaks and applies nothing");
+        }
     }
     var fixture = new Fixture(Path.Combine(root, "missing")); var model = await Load(fixture);
     Check(model.Rows.Count == 1 && model.Rows[0].HasToggle && model.Rows[0].Choices.Length == 3, "Missing products retain every choice and an interactive toggle");
+    model.ShowAdvanced = false;
+    Check(model.Rows.Count == 0, "Simple mode hides a setting that cannot apply on this PC");
+    model.ShowAdvanced = true;
+    Check(model.Rows.Count == 1, "Advanced options show settings that cannot apply on this PC");
     model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null);
     Check(model.ApplyLabel == "Save choices" && !model.CanApply && fixture.Previews == 0, "A missing-product review offers saved choices with explicit confirmation and no Windows preview");
     model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
@@ -99,6 +125,18 @@ try
     Check(fixture.Windows.ReadState()?.Profiles.Length == 0 && fixture.Choices.Read().Profiles.Length == 2 && model.Status == "Windows settings restored; saved choices need attention",
         "A concurrent preference change remains intact after a completed Windows restore and is reported separately");
 
+    fixture = new Fixture(Path.Combine(root, "changed-by-windows")) { Missing = false }; model = await Load(fixture);
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    var enabled = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Enabled");
+    var windowsFile = Path.Combine(root, "changed-by-windows", "windows.json"); var changed = OperationFiles.Read<TweakFixture>(windowsFile);
+    changed.Keys[fixture.Windows.Read(enabled).NativeKey.ToUpperInvariant()].Values["ENABLED"] = new("Enabled", 4, BitConverter.GetBytes(5u));
+    OperationFiles.Write(windowsFile, changed); model = await Load(fixture);
+    await model.ReviewRestoreCommand.ExecuteAsync(null);
+    Check(model.Status == "Windows already changed these settings" && model.Detail.Contains("\n" + model.Rows.Single(row => row.Id == "setting").Name, StringComparison.Ordinal) && !model.Detail.Contains("\nsetting", StringComparison.Ordinal),
+        "Undo names a setting Windows changed afterwards by its shown name and says it stays as it is");
+    model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(fixture.Windows.ReadState()?.Profiles.Length == 0 && BitConverter.ToUInt32(fixture.Windows.Read(enabled).Value!.Bytes) == 5, "Undo finishes and keeps the value Windows set");
+
     fixture = new Fixture(Path.Combine(root, "unknown")) { FailRead = true };
     fixture.Choices.Save(fixture.Catalog, "my-settings", [new("setting", "on")], null); model = await Load(fixture);
     Check(model.Rows.Count == 1 && !model.CanRestore && model.Rows[0].Selected.Id == "on", "An unreadable Windows state preserves saved choices without claiming an empty restore state");
@@ -112,6 +150,26 @@ try
     var review = model.ReviewCommand.ExecuteAsync(null); model.Rows[0].Selected = model.Rows[0].Choices[0]; pause.SetResult(); await review;
     model.Approved = true;
     Check(!model.HasReview && !model.CanApply && fixture.Applies == 0, "Changing selection while a review is loading invalidates the old response");
+
+    fixture = new Fixture(Path.Combine(root, "partial-status")) { Missing = false };
+    App.Operations = fixture; model = new WindowsTweaksViewModel();
+    var statusHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); fixture.BeforeStatus = () => statusHold.Task;
+    var partialLoad = model.RefreshCommand.ExecuteAsync(null);
+    var fullStatus = fixture.Engine.Detect();
+    var pendingStatus = fullStatus with { Settings = fullStatus.Settings.Select(item => item with { Supported = false, Error = TweakEngine.FeaturesPending }).ToArray() };
+    fixture.RaisePartial(pendingStatus, DataGeneration.Current - 1);
+    Check(model.Busy && model.Rows[0].Current != "Checking…" && !model.Status.EndsWith("checking Windows features", StringComparison.Ordinal),
+        "A partial Windows status read before a change is never shown");
+    fixture.RaisePartial(pendingStatus, DataGeneration.Current);
+    var partialPreviews = fixture.Previews;
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+    Check(model.Busy && !model.CanReview && !model.CanApply && !model.HasReview && fixture.Previews == partialPreviews && fixture.Applies == 0 && model.Rows[0].Current == "Checking…" && model.Status.EndsWith("checking Windows features", StringComparison.Ordinal),
+        "A partial Windows status shows rows as checking and cannot be reviewed or applied");
+    statusHold.SetResult(); await partialLoad;
+    var loadedStatus = model.Status; var loadedCurrent = model.Rows[0].Current;
+    model.Rows[0].ToggleOn = true; await model.ReviewCommand.ExecuteAsync(null);
+    Check(!model.Busy && loadedCurrent != "Checking…" && !loadedStatus.Contains("checking", StringComparison.OrdinalIgnoreCase) && fixture.Previews == partialPreviews + 1 && model.HasReview,
+        "Review becomes available only after the full Windows status replaces the partial one");
 
     fixture = new Fixture(Path.Combine(root, "action-review")) { Missing = false }; model = await Load(fixture);
     var defaultPreviews = fixture.Previews; await model.ReviewCommand.ExecuteAsync(null);
@@ -147,6 +205,18 @@ try
     Check(model.Rows.Single().Selected.Id == "off" && !model.HasReview && !model.Approved && !model.CanApply && model.Status == "Profile loaded" && fixture.Applies == 0,
         "Loading a profile replaces a prior review, approval and ready status without applying settings");
 
+    fixture = new Fixture(Path.Combine(root, "no-fps-preset")) { Missing = false }; model = await Load(fixture);
+    model.SelectFpsPresetCommand.Execute(null);
+    Check(!model.HasFpsPreset && model.Rows.All(row => row.Selected.Id.Length == 0), "Without an FPS preset in the catalog the preset button is hidden and does nothing");
+    var fpsCatalog = TwoSettingCatalog() with { Presets = [new(WindowsTweaksViewModel.FpsPresetId, "Game FPS preset", [new("first", "on"), new("second", "off")])] };
+    fixture = new Fixture(Path.Combine(root, "fps-preset"), fpsCatalog) { Missing = false }; model = await Load(fixture);
+    Check(model.HasFpsPreset && model.Rows.All(row => row.Selected.Id.Length == 0) && fixture.Applies == 0, "A catalog with an FPS preset offers the preset button without selecting anything");
+    model.SelectFpsPresetCommand.Execute(null);
+    Check(model.Rows.Single(row => row.Id == "first").Selected.Id == "on" && model.Rows.Single(row => row.Id == "second").Selected.Id == "off" && !model.HasReview && !model.CanApply && fixture.Applies == 0 && fixture.Previews == 0,
+        "The FPS preset queues its tweaks for review and applies nothing on its own");
+    await model.ReviewCommand.ExecuteAsync(null);
+    Check(model.HasReview && !model.CanApply && fixture.Applies == 0, "The preset still needs the normal check and confirmation before anything is applied");
+
     fixture = new Fixture(Path.Combine(root, "partial-profile"), TwoSettingCatalog()) { Missing = false };
     model = await Load(fixture);
     foreach (var row in model.Rows) row.Selected = row.Choices.Single(choice => choice.Id == "on");
@@ -156,7 +226,8 @@ try
     var first = model.Rows.Single(row => row.Id == "first");
     var second = model.Rows.Single(row => row.Id == "second");
     first.Selected = first.Choices.Single(choice => choice.Id == "off");
-    second.ToggleOn = false;
+    second.Selected = second.Choices[0];
+    Check(second.ToggleOn && second.IsApplied && !second.HasPendingChange, "An applied setting with no queued choice still shows on");
     await model.ReviewCommand.ExecuteAsync(null);
     Check(fixture.LastPreviewSelections?.OrderBy(selection => selection.SettingId).SequenceEqual(new[]
         {
@@ -209,7 +280,13 @@ try
     model = await Load(fixture);
     Check(!model.HasPendingRecovery && model.CanEdit && model.CanRefresh && !model.CanReviewRecovery && model.Status == "1 settings",
         "A healthy no-pending state restores ordinary editing without exposing recovery review");
-    if (args is [var repo]) await SectionChecks.Run(root, Path.GetFullPath(repo), Check);
+    await HostOutputChecks.Run(Check);
+    await FreshnessChecks.Run(root, Check);
+    if (args is [var repo])
+    {
+        await SectionChecks.Run(root, Path.GetFullPath(repo), Check);
+        await ReviewLabelChecks.Run(root, Path.GetFullPath(repo), Check);
+    }
     Console.WriteLine($"Completed {count} Windows settings UI checks.");
 }
 finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

@@ -51,8 +51,10 @@ public partial class MonitoringViewModel : PageViewModelBase
 
     protected override async Task LoadCoreAsync()
     {
-        var inventory = await App.Live.GetProcessInventoryAsync();
-        var hardware = await App.Live.GetDriverHardwareAsync();
+        var inventoryRead = App.Live.GetProcessInventoryAsync();
+        var hardwareRead = App.Live.GetDriverHardwareAsync();
+        var inventory = await inventoryRead;
+        var hardware = await hardwareRead;
         var summary = inventory?.Summary;
         if (summary is null)
         {

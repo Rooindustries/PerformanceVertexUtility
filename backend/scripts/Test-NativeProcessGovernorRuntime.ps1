@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Validation.Common.ps1')
+Set-RooIndustriesValidationNormalPriority
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 . (Join-Path $PSScriptRoot 'ResidentSessionHost.Common.ps1')

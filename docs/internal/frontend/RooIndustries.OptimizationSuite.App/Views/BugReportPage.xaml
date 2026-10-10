@@ -1,0 +1,59 @@
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:views="using:RooIndustries.OptimizationSuite.Views" xmlns:vm="using:RooIndustries.OptimizationSuite.ViewModels" x:Class="RooIndustries.OptimizationSuite.Views.BugReportPage" NavigationCacheMode="Required">
+    <Grid Padding="{StaticResource RooIndustriesPageMargin}">
+        <ScrollViewer>
+            <StackPanel x:Name="ReportContent" Spacing="18" MaxWidth="1600" HorizontalAlignment="Center">
+                <Border Style="{StaticResource CommandHeaderBorderStyle}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xEBE8;" FontSize="28" VerticalAlignment="Top" Foreground="{StaticResource RooIndustriesAccentBrush}" AutomationProperties.AccessibilityView="Raw" />
+                        <StackPanel Grid.Column="1" Spacing="7">
+                            <TextBlock Text="Report a bug" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                            <TextBlock Text="Tell Roo Industries what went wrong. We filled in your PC details for you." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Your PC" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Change anything that looks wrong." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <ProgressRing IsActive="{x:Bind ViewModel.LoadingSpecs, Mode=OneWay}" Visibility="{x:Bind ViewModel.LoadingSpecs, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" Width="28" Height="28" HorizontalAlignment="Left" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Specs}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BugSpecField">
+                                    <TextBox Header="{x:Bind Label}" Text="{x:Bind Value, Mode=TwoWay}" Margin="0,0,0,10" TextWrapping="Wrap" AutomationProperties.Name="{x:Bind Label}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Your report" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBox Header="Discord or email (optional)" Text="{x:Bind ViewModel.Contact, Mode=TwoWay}" MaxLength="200" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="BugContact" />
+                        <TextBox Header="What went wrong? (required)" Text="{x:Bind ViewModel.Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="What did you click, what did you expect, and what happened instead?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" MaxLength="4000" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="BugDescription" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource PanelBorderStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Logs" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <Button Content="Attach logs" Click="Attach_Click" IsEnabled="{x:Bind ViewModel.CanAttach, Mode=OneWay}" AutomationProperties.AutomationId="BugAttachLogs" />
+                        <TextBlock Text="{x:Bind ViewModel.AttachmentText, Mode=OneWay}" TextWrapping="Wrap" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="BugAttachment" />
+                        <TextBlock Text="Required. We send your PC details above, your message, your Discord or email if you add one, and a zip with this app's logs and a short list of the changes it made. Your Windows user name and PC name are removed first." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </StackPanel>
+                </Border>
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Online reporting isn't set up in this build. Save the report to a file and send it to Roo Industries." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.OfflineOnly, Converter={StaticResource BoolToVisibility}}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Send report" Click="Send_Click" Style="{StaticResource AccentButtonStyle}" IsEnabled="{x:Bind ViewModel.CanSend, Mode=OneWay}" Visibility="{x:Bind ViewModel.OnlineAvailable, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="BugSend" />
+                        <Button Content="Save report to a file" Click="Save_Click" IsEnabled="{x:Bind ViewModel.CanSend, Mode=OneWay}" Visibility="{x:Bind ViewModel.ShowSave, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="BugSave" />
+                        <Button Content="Open folder" Click="OpenFolder_Click" Visibility="{x:Bind ViewModel.HasSavedReport, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="BugOpenFolder" />
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="BugStatus" AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

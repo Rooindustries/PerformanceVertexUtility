@@ -49,6 +49,11 @@ public partial class CpuSetsViewModel : ObservableObject
     partial void OnHasReviewChanged(bool value) => RefreshCommands();
     partial void OnRestoreAvailableChanged(bool value) => RefreshCommands();
     partial void OnUseWindowsDefaultChanged(bool value) { InvalidateReview(); RefreshCommands(); }
+    public void NoteChanged()
+    {
+        Status = "Settings changed elsewhere";
+        Detail = "Choose the application again, or clear it, to read its current CPU selection.";
+    }
     partial void OnSelectedProcessChanged(CpuProcessChoice? value)
     {
         InvalidateReview();
@@ -81,9 +86,11 @@ public partial class CpuSetsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => TryRefreshAsync();
+
+    public async Task<bool> TryRefreshAsync()
     {
-        if (Busy) return;
+        if (Busy) return false;
         Busy = true;
         try
         {
@@ -92,8 +99,9 @@ public partial class CpuSetsViewModel : ObservableObject
             Processes.Clear();
             foreach (var process in inventory.Processes.Where(p => p.Pid > 0 && p.Pid != Environment.ProcessId && p.Category != "windowsCore" && !p.Protected && !p.Blocked).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
                 Processes.Add(new CpuProcessChoice(process.Pid, process.Name ?? "Process"));
+            return true;
         }
-        catch (Exception error) { Status = "Couldn't refresh processes."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't refresh processes."; Detail = error.Message; return false; }
         finally { Busy = false; }
     }
 

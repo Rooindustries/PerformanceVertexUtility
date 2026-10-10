@@ -11,31 +11,28 @@ $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if($Action -eq 'Save' -and -not $ConfirmApply){throw 'Confirm the new cleanup exclusion list before saving it.'}
-if(-not $DotNetPath){
-    $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
-    $DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}
-}
-$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
+$hostDirectory=Join-Path $root 'backend\bin\optimizer'
+$hostArgs=@(Join-Path $hostDirectory 'Optimizer.Host.dll')
+if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $hostDirectory 'hostpolicy.dll'))){$DotNetPath=Join-Path $hostDirectory 'Optimizer.Host.exe';$hostArgs=@()}
+if(-not $DotNetPath){. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1');$DotNetPath=Get-RooIndustriesDevelopmentDotNet $hostDirectory}
 $hostDll=Join-Path $root 'backend\bin\optimizer\Optimizer.Host.dll'
 if(-not(Test-Path $hostDll)){throw 'Build the cleanup host with backend\scripts\Build-OptimizerHost.ps1 before using exclusions.'}
-$scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-cleanup-exclusions-'+[Guid]::NewGuid().ToString('N'))
-try {
-    $request=@{schemaVersion=1;repoRoot=$root}
-    $coreAction='cleanup-exclusions-'+$Action.ToLowerInvariant()
-    if($Action -eq 'Save'){
-        if(-not $InputPath){throw 'Provide a JSON file containing explicit paths and registry lists.'}
-        $request.exclusions=(Read-RooIndustriesOperationJson $InputPath).data
-        $request.expectedRevision=if($ExpectedRevision){$ExpectedRevision}else{$null}
-        $request.confirm=$true
-    }
-    if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
-    $path=Join-Path $scratch 'request.json'
-    Write-RooIndustriesOperationJson $request $path
-    $output=@(& $DotNetPath $hostDll $coreAction $path) -join "`n"
-    $code=$LASTEXITCODE
-    $result=$output|ConvertFrom-Json
-    if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
-    $output
-} finally {
-    if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}
+$request=@{schemaVersion=1;repoRoot=$root}
+$coreAction='cleanup-exclusions-'+$Action.ToLowerInvariant()
+if($Action -eq 'Save'){
+    if(-not $InputPath){throw 'Provide a JSON file containing explicit paths and registry lists.'}
+    $request.exclusions=(Read-RooIndustriesOperationJson $InputPath).data
+    $request.expectedRevision=if($ExpectedRevision){$ExpectedRevision}else{$null}
+    $request.confirm=$true
 }
+if($Action -eq 'Check'){$request.fileTargets=@($FileTarget)}
+$OutputEncoding=[Text.UTF8Encoding]::new($false)
+$previousRoot=[Environment]::GetEnvironmentVariable('DOTNET_ROOT','Process')
+try {
+    if($hostArgs.Count -gt 0){$env:DOTNET_ROOT=Split-Path $DotNetPath -Parent}
+    $output=@(($request|ConvertTo-Json -Depth 32)|& $DotNetPath @hostArgs $coreAction '-') -join "`n"
+    $code=$LASTEXITCODE
+} finally {if($hostArgs.Count -gt 0){[Environment]::SetEnvironmentVariable('DOTNET_ROOT',$previousRoot,'Process')}}
+$result=$output|ConvertFrom-Json
+if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
+$output

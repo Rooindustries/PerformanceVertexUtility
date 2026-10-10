@@ -5,7 +5,7 @@ static class CleanupBatchChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-batch-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("cleanup-batch");
         var registryRoot = "Software\\RooIndustriesCleanupBatchTests\\" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         var contexts = new Dictionary<string, CleanupContext>();
@@ -98,8 +98,15 @@ static class CleanupBatchChecks
                 OperationFiles.Write(journalPath, partial);
                 var rejected = false;
                 try { engineBatch.Apply(batchPath, hash, journalPath); }
-                catch (InvalidDataException error) { rejected = error.Message.Contains("missing its restoration evidence"); }
+                catch (InvalidDataException error) { rejected = error.Message.Contains("contradicts its restore state"); }
                 check(rejected, "A favorable partial status cannot override missing restoration evidence");
+                partial.RestoreStarted = true;
+                foreach (var entry in partial.Entries.Where(entry => entry.Status == "restored")) entry.Status = "applied";
+                OperationFiles.Write(journalPath, partial);
+                var unproven = false;
+                try { engineBatch.Apply(batchPath, hash, journalPath); }
+                catch (InvalidDataException error) { unproven = error.Message.Contains("missing its restoration evidence"); }
+                check(unproven, "A started partial restore without a restored application is rejected");
             }
             finally { File.WriteAllBytes(journalPath, partialBytes); }
             check(engineBatch.Apply(batchPath, hash, journalPath).Status == "partiallyRestored" && Directory.Exists(Path.Combine(root, "Roo Industries Batch One")),

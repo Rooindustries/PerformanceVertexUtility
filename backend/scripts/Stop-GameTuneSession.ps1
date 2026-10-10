@@ -20,7 +20,10 @@ function New-GameTuneRestorePreview {
     $originalPriority = [string](Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' '')
     $originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
+    $recorded = @(Get-RooIndustriesRestorableProcessControls $Snapshot (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+    $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
     $reason = if ($blocked) {
         [string]$Candidate.reason
@@ -29,16 +32,19 @@ function New-GameTuneRestorePreview {
     }
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (-not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority) -and [string]$Candidate.currentPriorityClass -ne $originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$Candidate.currentPriorityClass -ne $originalPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $Candidate.currentPriorityClass $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if ($null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [int64]$Candidate.currentAffinityMask -ne [int64]$originalAffinityMask) {
+        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [int64]$Candidate.currentAffinityMask -ne [int64]$originalAffinityMask) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $Candidate.currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority) -and [string]$Candidate.currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring) -and [string]$Candidate.currentIoPriority -ne [string]$originalIoPriority) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $Candidate.currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$Candidate.currentGpuPriority -ne [string]$originalGpuPriority) {
+        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority) -and [string]$Candidate.currentMemoryPriority -ne [string]$originalMemoryPriority) {
+            $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' $Candidate.currentMemoryPriority $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority.')) | Out-Null
+        }
+        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$Candidate.currentGpuPriority -ne [string]$originalGpuPriority) {
             if ([bool](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU priority.')) | Out-Null
             } else {
@@ -61,12 +67,15 @@ function New-GameTuneRestorePreview {
         processId = $processId
         processName = $processName
         executablePath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
+        processStartTimeUtc = Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null
         currentPriorityClass = $Candidate.currentPriorityClass
         proposedPriorityClass = if ($blocked) { $Candidate.currentPriorityClass } else { $originalPriority }
         currentAffinityMask = $Candidate.currentAffinityMask
         proposedAffinityMask = if ($blocked) { $Candidate.currentAffinityMask } else { $originalAffinityMask }
         currentIoPriority = $Candidate.currentIoPriority
+        currentMemoryPriority = $Candidate.currentMemoryPriority
         proposedIoPriority = if ($blocked) { $Candidate.currentIoPriority } else { $originalIoPriority }
+        proposedMemoryPriority = if ($blocked) { $Candidate.currentMemoryPriority } else { $originalMemoryPriority }
         currentGpuPriority = $Candidate.currentGpuPriority
         proposedGpuPriority = if ($blocked) { $Candidate.currentGpuPriority } else { $originalGpuPriority }
         gpuPriorityAvailable = Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false
@@ -88,6 +97,7 @@ function New-GameTuneRestorePreview {
             priorityClass = $Candidate.currentPriorityClass
             affinityMask = $Candidate.currentAffinityMask
             ioPriority = $Candidate.currentIoPriority
+            memoryPriority = $Candidate.currentMemoryPriority
             gpuPriority = $Candidate.currentGpuPriority
         }
         proposedState = [pscustomobject]@{
@@ -95,6 +105,7 @@ function New-GameTuneRestorePreview {
             priorityClass = if ($blocked) { $Candidate.currentPriorityClass } else { $originalPriority }
             affinityMask = if ($blocked) { $Candidate.currentAffinityMask } else { $originalAffinityMask }
             ioPriority = if ($blocked) { $Candidate.currentIoPriority } else { $originalIoPriority }
+            memoryPriority = if ($blocked) { $Candidate.currentMemoryPriority } else { $originalMemoryPriority }
             gpuPriority = if ($blocked) { $Candidate.currentGpuPriority } else { $originalGpuPriority }
             reason = $reason
         }
@@ -174,6 +185,7 @@ try {
             processId = Get-RooIndustriesPropertyValue $snapshot 'processId' 0
             processName = Get-RooIndustriesPropertyValue $snapshot 'processName' ''
             executablePath = Get-RooIndustriesPropertyValue $snapshot 'executablePath' $null
+            processStartTimeUtc = Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' $null
         }
         $candidate = Get-RooIndustriesGameTuneLiveProcessIdentity $candidateEntry
         $entry = New-GameTuneRestorePreview $snapshot $candidate
@@ -193,12 +205,13 @@ try {
                 continue
             }
             $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
-            if ($null -eq $live) {
+            $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $entry
+            $live = $identity.process
+            if (-not $identity.exists -or -not $identity.matches) {
                 $skip = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = 'Process exited before Game Tune restore.'
+                    reason = $identity.reason
                     skippedAtUtc = Get-RooIndustriesUtcStamp
                 }
                 $skipped.Add($skip) | Out-Null
@@ -226,6 +239,7 @@ try {
                     restoredPriorityClass = $afterControls.priorityClass
                     restoredAffinityMask = $afterControls.affinityMask
                     restoredIoPriority = $afterControls.ioPriority
+                    restoredMemoryPriority = $afterControls.memoryPriority
                     restoredGpuPriority = $afterControls.gpuPriority
                     restoredControls = @($appliedControls.ToArray())
                     ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''

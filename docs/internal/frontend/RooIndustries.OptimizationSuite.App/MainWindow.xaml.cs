@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -23,13 +25,14 @@ public sealed partial class MainWindow : Window
         ["monitoring"] = typeof(MonitoringPage),
         ["tools"] = typeof(ToolsDiagnosticsPage),
         ["restore"] = typeof(RestoreLogsPage),
+        ["bug"] = typeof(BugReportPage),
     };
 
     private string _currentTag;
     private bool _onSettings;
-    private readonly string _pendingTag;
-    private readonly bool _pendingSettings;
-    private readonly string? _ownershipPath;
+    private string _pendingTag;
+    private bool _pendingSettings;
+    private string? _ownershipPath;
 
     public MainWindow() : this("dashboard", false)
     {
@@ -38,7 +41,7 @@ public sealed partial class MainWindow : Window
     public MainWindow(string navTag, bool onSettings, string? ownershipPath = null)
     {
         InitializeComponent();
-        Title = "Roo Industries Optimization Suite";
+        Title = "Roo Industries Optimization Suite Beta";
         _pendingTag = navTag;
         _pendingSettings = onSettings;
         _currentTag = navTag;
@@ -47,16 +50,66 @@ public sealed partial class MainWindow : Window
         LogoImage.Source = BrandAssets.TryGetLogo();
         App.Theme.ThemeChanged += OnThemeChanged;
         App.Theme.EffectsChanged += ApplyEffects;
+        App.Theme.SimpleModeChanged += ApplySimpleMode;
+        DataGeneration.Settled += OnDataSettled;
+        App.Updates.Changed += OnUpdateChanged;
         Closed += OnWindowClosed;
+        MemoryRelief.Attach(this);
+        EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
+        ApplySimpleMode();
         Nav.Loaded += OnNavLoaded;
+        OnUpdateChanged();
+    }
+
+    private void OnUpdateChanged()
+    {
+        var state = App.Updates.State;
+        UpdateBanner.Title = state.Banner;
+        UpdateBanner.Message = state.Notes;
+        UpdateBanner.IsOpen = App.Updates.ShowBanner;
+        UpdateBanner.Severity = state.BannerKind == "failed" ? InfoBarSeverity.Warning : state.BannerKind == "updated" ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
+        UpdateBannerInstall.Content = state.BannerKind == "failed" ? "Try again" : "Install now";
+        UpdateBannerInstall.Visibility = state.Ready ? Visibility.Visible : Visibility.Collapsed;
+        UpdateBannerInstall.IsEnabled = !state.Busy;
+        ContentFrame.IsEnabled = !state.Installing;
+    }
+
+    private async void UpdateInstall_Click(object sender, RoutedEventArgs args) => await App.Updates.InstallAsync(Content.XamlRoot);
+    private void UpdateLater_Click(object sender, RoutedEventArgs args) => App.Updates.Later();
+
+    private Task<bool> AskEarlierVersionAsync(string text)
+    {
+        var answer = new TaskCompletionSource<bool>();
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                var dialog = new ContentDialog { XamlRoot = Content.XamlRoot, Title = "Saved by an older version", Content = text, PrimaryButtonText = "Continue", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                answer.TrySetResult(await dialog.ShowAsync() == ContentDialogResult.Primary);
+            }
+            catch (Exception error) { AppLog.Write("start", "The older version question could not be shown: " + error.Message); answer.TrySetResult(false); }
+        })) answer.TrySetResult(false);
+        return answer.Task;
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        if (EarlierVersionConsent.Ask?.Target == (object)this) EarlierVersionConsent.Ask = null;
+        MemoryRelief.Detach(this);
         App.Theme.ThemeChanged -= OnThemeChanged;
         App.Theme.EffectsChanged -= ApplyEffects;
+        App.Theme.SimpleModeChanged -= ApplySimpleMode;
+        DataGeneration.Settled -= OnDataSettled;
+        App.Updates.Changed -= OnUpdateChanged;
+        if (ReferenceEquals(App.MainWindow, this)) App.Updates.Stop();
     }
+
+    private void OnDataSettled() => DispatcherQueue.TryEnqueue(async () =>
+    {
+        try { if (ContentFrame.Content is IRevalidatingPage page) await page.RevalidateAsync(); }
+        catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
+    });
 
     private void ConfigureTitleBar()
     {
@@ -99,6 +152,12 @@ public sealed partial class MainWindow : Window
         return fallback;
     }
 
+    private void ApplySimpleMode()
+    {
+        var advanced = App.Theme.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var item in new[] { NavStartup, NavTimer }) item.Visibility = advanced;
+    }
+
     private void ApplyEffects()
     {
         RadialOverlay.Visibility = App.Theme.ReducedEffects ? Visibility.Collapsed : Visibility.Visible;
@@ -106,7 +165,7 @@ public sealed partial class MainWindow : Window
 
     public void SelectNav(string tag)
     {
-        foreach (var item in Nav.MenuItems)
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems))
         {
             if (item is NavigationViewItem { Tag: string itemTag } navItem && itemTag == tag)
             {
@@ -114,6 +173,13 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
+    }
+
+    public void OpenOwnershipReview(string path)
+    {
+        if (!Nav.IsLoaded) { _pendingTag = "windows"; _pendingSettings = false; _ownershipPath = path; return; }
+        SelectNav("windows");
+        if (ContentFrame.Content is WindowsTweaksPage page) _ = page.ShowOwnershipAsync(path, confirm: true);
     }
 
     public void OpenAppGroup(string group)
@@ -145,7 +211,7 @@ public sealed partial class MainWindow : Window
 
         var secondary = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
-        foreach (var item in Nav.MenuItems)
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems))
         {
             if (item is NavigationViewItem navItem)
             {

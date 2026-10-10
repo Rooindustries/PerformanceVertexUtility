@@ -50,14 +50,14 @@ public sealed class SampleDataService
         var dir = _locator.SamplesDirectory;
         if (dir is null)
         {
-            throw new SampleDataException(
-                "Backend sample directory could not be located. Set ROO_INDUSTRIES_BACKEND_ROOT to the repository root.");
+            throw new SampleDataException(AppLog.MissingFiles);
         }
 
         var path = Path.Combine(dir, sampleFileName);
         if (!File.Exists(path))
         {
-            throw new SampleDataException($"Sample file not found: {sampleFileName}");
+            AppLog.Write("data", "Missing " + path);
+            throw new SampleDataException(AppLog.MissingFiles);
         }
 
         try
@@ -77,14 +77,14 @@ public sealed class SampleDataService
         var dir = _locator.CatalogsDirectory;
         if (dir is null)
         {
-            throw new SampleDataException(
-                "Backend catalog directory could not be located. Set ROO_INDUSTRIES_BACKEND_ROOT to the repository root.");
+            throw new SampleDataException(AppLog.MissingFiles);
         }
 
         var path = Path.Combine(dir, catalogFileName);
         if (!File.Exists(path))
         {
-            throw new SampleDataException($"Catalog file not found: {catalogFileName}");
+            AppLog.Write("data", "Missing " + path);
+            throw new SampleDataException(AppLog.MissingFiles);
         }
 
         try

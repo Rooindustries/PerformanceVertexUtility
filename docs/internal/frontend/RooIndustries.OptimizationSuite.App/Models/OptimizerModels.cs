@@ -85,13 +85,12 @@ public sealed class BulkRemovalEntry
     public string ArgumentMode { get; set; } = "";
     public string RawArguments { get; set; } = "";
     public string[] Arguments { get; set; } = Array.Empty<string>();
+    public string CommandLine { get; set; } = "";
     public bool ReviewRequired { get; set; }
     public bool Protected { get; set; }
     public string ReviewLabel => Identity is { } identity && identity.TryGetProperty("kind", out var kind) && kind.GetString() == "appx" && identity.TryGetProperty("userSid", out var sid)
         ? DisplayName + " · " + (sid.GetString() == RooIndustries.Optimizer.OperationOwner.Current().UserSid ? "this Windows user" : sid.GetString()) : DisplayName;
-    public string Command => "Program: " + Executable + Environment.NewLine + (ArgumentMode == "raw"
-        ? "Arguments: " + RawArguments
-        : string.Join(Environment.NewLine, Arguments.Select((argument, index) => $"Argument {index + 1}: {argument}")));
+    public string Command => CommandLine;
 }
 
 public sealed class BulkRemovalEntryState
@@ -99,6 +98,7 @@ public sealed class BulkRemovalEntryState
     public string AppId { get; set; } = "";
     public string State { get; set; } = "pending";
     public bool RegistrationAbsent { get; set; }
+    public bool LaunchUnconfirmed { get; set; }
     public string? Error { get; set; }
 }
 

@@ -12,11 +12,14 @@
         </Border>
         <ScrollViewer x:Name="DriversScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel x:Name="DriversContent" Spacing="18" HorizontalAlignment="Center" MaxWidth="1600">
+                <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                 <Border Style="{StaticResource CommandHeaderBorderStyle}">
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBool}}" VerticalAlignment="Top" AutomationProperties.AutomationId="DriversRefresh" />
                         <Grid Grid.Column="0" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -25,7 +28,7 @@
                             <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/gpu.svg" Style="{StaticResource PageHeaderIconStyle}" />
                             <StackPanel Grid.Column="1" Spacing="7">
                                 <TextBlock Text="Drivers &amp; GPU" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                                <TextBlock Text="Hardware details, driver downloads, and NVIDIA profiles." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Hardware details and driver downloads." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
                     </Grid>
@@ -134,7 +137,7 @@
                         </ItemsRepeater>
                     </StackPanel>
                 </Border>
-                <Expander Header="NVIDIA profiles" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="NvidiaProfilesExpander">
+                <Expander x:Name="NvidiaProfilesSection" x:Load="False" Header="NVIDIA profiles" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="NvidiaProfilesExpander">
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="14">
                             <TextBlock Text="NVIDIA profile" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />

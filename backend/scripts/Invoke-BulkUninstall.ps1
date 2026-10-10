@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Apply','Status','Cancel','Reconcile')][string]$Action='Status',
+    [ValidateSet('Apply','Status','Cancel','Reconcile','Dismiss')][string]$Action='Status',
     [string]$InputPath='', [string]$ReviewSha256='',
     [Parameter(Mandatory=$true)][string]$JournalPath,
     [ValidateRange(1,86400)][int]$TimeoutSeconds=600,
@@ -14,7 +14,7 @@ $attemptsBefore=$null
 $outputSafe=$false
 try {
     Assert-RooIndustriesDistinctOperationPaths @($InputPath,$JournalPath,$OutputPath)
-    if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -in @([IO.Path]::GetFullPath($JournalPath)+'.cancel',[IO.Path]::GetFullPath($JournalPath)+'.lock')){throw 'OutputPath cannot replace queue control files.'}
+    if($OutputPath -and [IO.Path]::GetFullPath($OutputPath) -in @(([IO.Path]::GetFullPath($JournalPath)+'.cancel'),([IO.Path]::GetFullPath($JournalPath)+'.lock'))){throw 'OutputPath cannot replace queue control files.'}
     $outputSafe=$true
     $JournalPath=[IO.Path]::GetFullPath($JournalPath)
     $cancelPath=$JournalPath+'.cancel'
@@ -35,6 +35,28 @@ try {
     elseif($Action -eq 'Cancel') {
         if(-not $ConfirmApply){$result.status='preview';$result.data=$journal}
         else {Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$plan.queueId;requestedAtUtc=Get-RooIndustriesUtcStamp}) $cancelPath;$result.status='cancel-requested';$result.dryRun=$false;$result.data=$journal}
+    } elseif($Action -eq 'Dismiss') {
+        if(-not $ConfirmApply){$result.status='preview';$result.data=$journal}
+        else {
+            try {$lease=Lock-RooIndustriesOperation $JournalPath} catch {throw 'This removal is still running. Let it finish, then start over.'}
+            $journal=(Read-RooIndustriesOperationJson $JournalPath).data
+            if($journal.kind -ne 'bulk-uninstall-journal' -or $journal.plan.queueId -cne $plan.queueId){throw 'Journal belongs to a different reviewed queue.'}
+            foreach($state in @($journal.entries)) {
+                if(Test-RooIndustriesBulkInvocationLive $state.invocation){throw 'An app remover from this list is still running or can''t be checked. Let it finish, then start over.'}
+                if($state.state -notin @('reboot-required','restart-initiated')){continue}
+                try {$restarted=Test-RooIndustriesBulkRestartAfterInvocation $state.invocation}
+                catch {
+                    $stamp=[string]$state.updatedAtUtc;$restarted=$false
+                    if($stamp){$restarted=[datetime]::Parse((Get-RooIndustriesBulkBootTime),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime() -gt [datetime]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()}
+                }
+                if(-not $restarted){throw 'Restart Windows to finish this removal, then start over.'}
+            }
+            foreach($entry in @($plan.entries)){Remove-RooIndustriesBulkOwnedClaim $entry $plan $fixtureRoot}
+            $journal.status='dismissed'
+            $journal|Add-Member -NotePropertyName updatedAtUtc -NotePropertyValue (Get-RooIndustriesUtcStamp) -Force
+            Write-RooIndustriesOperationJson $journal $JournalPath
+            $result.status='dismissed';$result.dryRun=$false;$result.changed=$true;$result.data=$journal
+        }
     } elseif(-not $ConfirmApply) {$result.status='preview';$result.data=$plan}
     else {
         $lease=Lock-RooIndustriesOperation $JournalPath
@@ -42,6 +64,7 @@ try {
             $journal=(Read-RooIndustriesOperationJson $JournalPath).data
             if($journal.kind -ne 'bulk-uninstall-journal' -or $journal.plan.queueId -cne $plan.queueId -or
                 ($Action -eq 'Apply' -and $journal.reviewSha256 -ine $ReviewSha256)){throw 'Journal belongs to a different reviewed queue.'}
+            if($journal.status -eq 'dismissed'){throw 'This removal list was cleared. Choose the apps again to start a new removal.'}
             $plan=$journal.plan;Assert-RooIndustriesOperationOwner $plan.owner
         } elseif($Action -eq 'Apply') {
             $states=@($plan.entries|ForEach-Object {[pscustomobject]@{entryId=$_.entryId;appId=$_.appId;state='pending';attemptCount=0;invocation=$null;outcome=$null;error=$null;registrationAbsent=$false;updatedAtUtc=Get-RooIndustriesUtcStamp}})
@@ -64,10 +87,11 @@ try {
             if($state.state -in @('removed','already-absent') -and $state.registrationAbsent){continue}
             if($Action -eq 'Reconcile') {
                 if($state.attemptCount -eq 0){continue}
+                if($null -eq $state.invocation -and -not [bool](Get-RooIndustriesUninstallPropertyValue $state 'startFailed' $false)){$state|Add-Member -NotePropertyName launchUnconfirmed -NotePropertyValue $true -Force}
                 if($null -ne $state.outcome -and $state.outcome.rebootRequired -and $state.state -in @('reboot-required','restart-initiated')) {
                     if(-not(Test-RooIndustriesBulkRestartAfterInvocation $state.invocation)){continue}
                 }
-                if((Test-RooIndustriesBulkInvocationLive $state.invocation)){$state.state='needs-reconciliation';continue}
+                if((Test-RooIndustriesBulkInvocationLive $state.invocation)){$state.state='needs-reconciliation';$state.error='The remover is still running or can''t be checked. Let it finish, then check again.';continue}
                 if(-not(Test-RooIndustriesBulkAppPresent $entry.identity $fixtureRoot)){$state.state='removed';$state.registrationAbsent=$true;$state.error=$null;Remove-RooIndustriesBulkOwnedClaim $entry $plan $fixtureRoot}
                 else {$state.state='needs-reconciliation'}
                 continue

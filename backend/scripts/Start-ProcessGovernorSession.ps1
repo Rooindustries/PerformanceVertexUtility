@@ -79,7 +79,9 @@ function New-GovernorChangedItem {
         originalAffinityMask = Get-RooIndustriesPropertyValue $OriginalState 'affinityMask' $null
         appliedAffinityMask = Get-RooIndustriesPropertyValue $AppliedState 'affinityMask' $null
         originalIoPriority = Get-RooIndustriesPropertyValue $OriginalState 'ioPriority' $null
+        originalMemoryPriority = Get-RooIndustriesPropertyValue $OriginalState 'memoryPriority' $null
         appliedIoPriority = Get-RooIndustriesPropertyValue $AppliedState 'ioPriority' $null
+        appliedMemoryPriority = Get-RooIndustriesPropertyValue $AppliedState 'memoryPriority' $null
         originalGpuPriority = Get-RooIndustriesPropertyValue $OriginalState 'gpuPriority' $null
         appliedGpuPriority = Get-RooIndustriesPropertyValue $AppliedState 'gpuPriority' $null
         appliedControls = @(Get-RooIndustriesArray $AppliedControls)
@@ -110,7 +112,9 @@ function New-GovernorRestoredItem {
         originalAffinityMask = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
         restoredAffinityMask = Get-RooIndustriesPropertyValue $RestoredState 'affinityMask' $null
         originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+        originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
         restoredIoPriority = Get-RooIndustriesPropertyValue $RestoredState 'ioPriority' $null
+        restoredMemoryPriority = Get-RooIndustriesPropertyValue $RestoredState 'memoryPriority' $null
         originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
         restoredGpuPriority = Get-RooIndustriesPropertyValue $RestoredState 'gpuPriority' $null
         restoredControls = @(Get-RooIndustriesArray $RestoredControls)
@@ -130,6 +134,7 @@ function Get-GovernorRestoreChanges {
     $originalPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' $null
     $originalAffinity = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
     if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) -ne [string]$originalPriority) {
         $changes.Add((New-RooIndustriesControlChange 'priorityClass' (Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
@@ -139,6 +144,9 @@ function Get-GovernorRestoreChanges {
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
         $changes.Add((New-RooIndustriesControlChange 'ioPriority' (Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) -ne [string]$originalMemoryPriority) {
+        $changes.Add((New-RooIndustriesControlChange 'memoryPriority' (Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority after governor restraint.')) | Out-Null
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
         $changes.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
@@ -208,6 +216,7 @@ function Invoke-GovernorActiveRestore {
     $currentState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null
     $restoreChanges = @(Get-GovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
+    $restoreFailed = $false
     foreach ($change in $restoreChanges) {
         if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONFLICT' ([string]$change.blockedReason) 'warning' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $false 'Inspect the external process-control change before restoring it.' $null))|Out-Null
@@ -217,6 +226,7 @@ function Invoke-GovernorActiveRestore {
             Invoke-RooIndustriesProcessControlChange $candidate.process $change
             $appliedRestoreControls.Add($change) | Out-Null
         } catch {
+            $restoreFailed = $true
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONTROL_FAILED' $_.Exception.Message 'error' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $true 'Stop the session and retry restore if the process is still running.' $null)) | Out-Null
         }
     }
@@ -227,6 +237,7 @@ function Invoke-GovernorActiveRestore {
         $RestoredItems.Add($restoreItem) | Out-Null
         $PollRestoredItems.Add($restoreItem) | Out-Null
     }
+    if ($restoreFailed) { return $false }
     $ActiveRestraints.Remove($Key)
     $LastRestoreAt[$Key] = $Now
     return $true
@@ -394,202 +405,216 @@ try {
         $seenKeys = New-Object 'System.Collections.Generic.HashSet[string]'
         $pollPressureCandidateSeen = $false
 
-        foreach ($proc in @(Get-RooIndustriesPropertyArray $sample 'processes')) {
-            $processId = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
-            $processName = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
-            $key = Get-GovernorProcessKey $proc
-            $seenKeys.Add($key) | Out-Null
-            $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
-            $cpuPercent = [double](Get-RooIndustriesPropertyValue $proc 'cpuPercent' 0)
-            $pressureMet = ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0) -ge [double]$config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$config.perProcessCpuThresholdPercent)
-
-            if ($decision.blocked -and ($decision.candidateMatched -or $decision.profileProtected -or $decision.foregroundMatched)) {
-                $skipReason = ($decision.skipReasons -join ' ')
-                if ([string]::IsNullOrWhiteSpace($skipReason)) { $skipReason = 'Process is protected from governor restraint.' }
-                $skip = New-GovernorSkippedProcessItem $proc $decision $skipReason $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-                continue
-            }
-
-            if (-not $decision.candidateMatched) { continue }
-
-            $now = Get-Date
-            if ($pressureMet) {
-                $pollPressureCandidateSeen = $true
-                if (-not $overThresholdSince.ContainsKey($key)) {
-                    $sampleSeconds = [double](Get-RooIndustriesPropertyValue $sample 'sampleIntervalSeconds' 0)
-                    if ($sampleSeconds -lt 0) { $sampleSeconds = 0 }
-                    $overThresholdSince[$key] = $now.AddSeconds(-1 * $sampleSeconds)
-                }
-            } else {
-                if ($overThresholdSince.ContainsKey($key)) { $overThresholdSince.Remove($key) }
-            }
-            $sustainedSeconds = if ($overThresholdSince.ContainsKey($key)) { [math]::Max(0, ($now - [datetime]$overThresholdSince[$key]).TotalSeconds) } else { 0 }
-
-            if ($activeRestraints.ContainsKey($key)) {
-                Invoke-GovernorActiveRestore `
-                    -Key $key `
-                    -Active $activeRestraints[$key] `
-                    -Process $proc `
-                    -Config $config `
-                    -ActiveRestraints $activeRestraints `
-                    -LastRestoreAt $lastRestoreAt `
-                    -RestoredItems $restored `
-                    -PollRestoredItems $pollRestored `
-                    -Errors $errors `
-                    -PollIndex $pollIndex `
-                    -Reason 'Process CPU usage stayed below restore threshold after minimum restraint duration.' `
-                    -Now $now | Out-Null
-                continue
-            }
-
-            if (-not $pressureMet) { continue }
-            if ($sustainedSeconds -lt [double]$config.timeOverThresholdSeconds) { continue }
-            if ($lastRestoreAt.ContainsKey($key) -and (($now - [datetime]$lastRestoreAt[$key]).TotalSeconds -lt [double]$config.cooldownAfterRestoreSeconds)) {
-                $entry = New-RooIndustriesProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0)) 'cooldown' $sustainedSeconds
-                $skip = New-GovernorSkippedItem $entry 'Process is inside cooldown after a prior governor restore.' $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-                continue
-            }
-
-            $entryToApply = New-RooIndustriesProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0)) 'restrain' $sustainedSeconds
-            $entryChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entryToApply))
-            if ($entryChanges.Count -eq 0 -or [bool](Get-RooIndustriesPropertyValue $entryToApply 'blocked' $false)) {
-                $skip = New-GovernorSkippedItem $entryToApply (Get-RooIndustriesPropertyValue $entryToApply 'blockedReason' 'No process control change was needed for governor restraint.') $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-                continue
-            }
-            $pollWouldRestrain.Add($entryToApply) | Out-Null
-            $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entryToApply
-            if (-not $identity.exists -or -not $identity.matches) {
-                $skip = New-GovernorSkippedItem $entryToApply $identity.reason $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-                continue
-            }
-            $originalState = $identity.currentControlState
-            $livePlan = Get-RooIndustriesApplicableProcessControlChanges $entryChanges $originalState
-            foreach ($skippedControl in @(Get-RooIndustriesPropertyArray $livePlan 'skippedControls')) {
-                $skip = New-GovernorSkippedItem $entryToApply ([string](Get-RooIndustriesPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-            }
-            $entryChanges = @(Get-RooIndustriesPropertyArray $livePlan 'changes')
-            if ($entryChanges.Count -eq 0) {
-                continue
-            }
-            $snapshot = [pscustomobject]@{
-                processId = $processId
-                processName = $processName
-                executablePath = Get-RooIndustriesPropertyValue $entryToApply 'executablePath' $identity.currentPath
-                originalPriorityClass = $originalState.priorityClass
-                proposedPriorityClass = Get-RooIndustriesPropertyValue $entryToApply 'proposedPriorityClass' $null
-                originalAffinityMask = $originalState.affinityMask
-                proposedAffinityMask = Get-RooIndustriesPropertyValue $entryToApply 'proposedAffinityMask' $null
-                originalIoPriority = $originalState.ioPriority
-                proposedIoPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedIoPriority' $null
-                originalGpuPriority = $originalState.gpuPriority
-                proposedGpuPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedGpuPriority' $null
-                controlChanges = @($entryChanges)
-                processStartTimeUtc = $identity.processStartTimeUtc
-                capturedAtUtc = Get-RooIndustriesUtcStamp
-                profileId = $profileId
-                ruleId = [string](Get-RooIndustriesPropertyValue $entryToApply 'ruleId' '')
-                reason = [string](Get-RooIndustriesPropertyValue $entryToApply 'reason' '')
-                sessionId = $sessionId
-            }
-            # A new restraint cycle captures the user's current originals. An
-            # older cycle must not overwrite values changed between cycles.
-            for($index=$snapshots.Count-1;$index -ge 0;$index--) {
-                if([int](Get-RooIndustriesPropertyValue $snapshots[$index] 'processId' 0) -eq $processId){$snapshots.RemoveAt($index)}
-            }
-            $snapshots.Add($snapshot) | Out-Null
-            $backupManifest.snapshots = @($snapshots.ToArray())
-            Write-RooIndustriesProcessGovernorJsonFile $backupManifest $backupPath
-            $state.backupManifestPath = $backupPath
-            $state.restorable = $true
-            $state.activeRestraints = @($activeRestraints.Values)
-            Write-GovernorSessionState $state $sessionDirectory
-
-            $appliedControls = New-Object System.Collections.Generic.List[object]
-            $failedControls = New-Object System.Collections.Generic.List[string]
-            foreach ($change in $entryChanges) {
-                try {
-                    Invoke-RooIndustriesProcessControlChange $identity.process $change
-                    $appliedControls.Add($change) | Out-Null
-                } catch {
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
-                }
-            }
-            if ($appliedControls.Count -gt 0) {
-                $appliedState = Get-RooIndustriesProcessControlState $processId $null
-                $changedItem = New-GovernorChangedItem $entryToApply $originalState $appliedState @($appliedControls.ToArray()) $pollIndex $sustainedSeconds
-                $changed.Add($changedItem) | Out-Null
-                $pollChanged.Add($changedItem) | Out-Null
-                $activeRestraints[$key] = [pscustomobject]@{
-                    processId = $processId
-                    processName = $processName
-                    executablePath = Get-RooIndustriesPropertyValue $snapshot 'executablePath' $null
-                    ruleId = Get-RooIndustriesPropertyValue $snapshot 'ruleId' ''
-                    restrainedAtUtc = Get-RooIndustriesUtcStamp
-                    restrainedAtLocal = $now
-                    minimumUntilUtc = $now.AddSeconds([double]$config.minimumRestraintSeconds).ToUniversalTime().ToString('o')
-                    snapshot = $snapshot
-                }
-            }
-            if ($failedControls.Count -gt 0) {
-                $skip = New-GovernorSkippedItem $entryToApply ($failedControls -join '; ') $pollIndex
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-            }
+        $gate = Enter-RooIndustriesGovernorGate
+        if ($null -eq $gate) {
+            $warnings.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_BUSY' 'A rule change kept the governor busy, so this poll changed nothing.' 'warning' 'performance.governor' $sessionId $false 'The next poll tries again.' $null)) | Out-Null
         }
+        try {
+            if ($null -ne $gate) {
+                foreach ($proc in @(Get-RooIndustriesPropertyArray $sample 'processes')) {
+                    $processId = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
+                    $processName = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
+                    $key = Get-GovernorProcessKey $proc
+                    $seenKeys.Add($key) | Out-Null
+                    $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
+                    $cpuPercent = [double](Get-RooIndustriesPropertyValue $proc 'cpuPercent' 0)
+                    $pressureMet = ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0) -ge [double]$config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$config.perProcessCpuThresholdPercent)
 
-        foreach ($key in @($activeRestraints.Keys)) {
-            if (-not $seenKeys.Contains([string]$key)) {
-                $active = $activeRestraints[$key]
-                $skip = [pscustomobject]@{
-                    processId = Get-RooIndustriesPropertyValue $active 'processId' 0
-                    processName = Get-RooIndustriesPropertyValue $active 'processName' ''
-                    ruleId = Get-RooIndustriesPropertyValue $active 'ruleId' ''
-                    reason = 'Restrained process exited before restore was needed.'
+                    if ($decision.blocked -and ($decision.candidateMatched -or $decision.profileProtected -or $decision.foregroundMatched)) {
+                        $skipReason = ($decision.skipReasons -join ' ')
+                        if ([string]::IsNullOrWhiteSpace($skipReason)) { $skipReason = 'Process is protected from governor restraint.' }
+                        $skip = New-GovernorSkippedProcessItem $proc $decision $skipReason $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                        continue
+                    }
+
+                    if (-not $decision.candidateMatched) { continue }
+
+                    $now = Get-Date
+                    if ($pressureMet) {
+                        $pollPressureCandidateSeen = $true
+                        if (-not $overThresholdSince.ContainsKey($key)) {
+                            $sampleSeconds = [double](Get-RooIndustriesPropertyValue $sample 'sampleIntervalSeconds' 0)
+                            if ($sampleSeconds -lt 0) { $sampleSeconds = 0 }
+                            $overThresholdSince[$key] = $now.AddSeconds(-1 * $sampleSeconds)
+                        }
+                    } else {
+                        if ($overThresholdSince.ContainsKey($key)) { $overThresholdSince.Remove($key) }
+                    }
+                    $sustainedSeconds = if ($overThresholdSince.ContainsKey($key)) { [math]::Max(0, ($now - [datetime]$overThresholdSince[$key]).TotalSeconds) } else { 0 }
+
+                    if ($activeRestraints.ContainsKey($key)) {
+                        Invoke-GovernorActiveRestore `
+                            -Key $key `
+                            -Active $activeRestraints[$key] `
+                            -Process $proc `
+                            -Config $config `
+                            -ActiveRestraints $activeRestraints `
+                            -LastRestoreAt $lastRestoreAt `
+                            -RestoredItems $restored `
+                            -PollRestoredItems $pollRestored `
+                            -Errors $errors `
+                            -PollIndex $pollIndex `
+                            -Reason 'Process CPU usage stayed below restore threshold after minimum restraint duration.' `
+                            -Now $now | Out-Null
+                        continue
+                    }
+
+                    if (-not $pressureMet) { continue }
+                    if ($sustainedSeconds -lt [double]$config.timeOverThresholdSeconds) { continue }
+                    if ($lastRestoreAt.ContainsKey($key) -and (($now - [datetime]$lastRestoreAt[$key]).TotalSeconds -lt [double]$config.cooldownAfterRestoreSeconds)) {
+                        $entry = New-RooIndustriesProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0)) 'cooldown' $sustainedSeconds
+                        $skip = New-GovernorSkippedItem $entry 'Process is inside cooldown after a prior governor restore.' $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                        continue
+                    }
+
+                    $entryToApply = New-RooIndustriesProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0)) 'restrain' $sustainedSeconds
+                    $entryChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entryToApply))
+                    if ($entryChanges.Count -eq 0 -or [bool](Get-RooIndustriesPropertyValue $entryToApply 'blocked' $false)) {
+                        $skip = New-GovernorSkippedItem $entryToApply (Get-RooIndustriesPropertyValue $entryToApply 'blockedReason' 'No process control change was needed for governor restraint.') $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                        continue
+                    }
+                    $pollWouldRestrain.Add($entryToApply) | Out-Null
+                    $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entryToApply
+                    if (-not $identity.exists -or -not $identity.matches) {
+                        $skip = New-GovernorSkippedItem $entryToApply $identity.reason $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                        continue
+                    }
+                    $originalState = $identity.currentControlState
+                    $livePlan = Get-RooIndustriesApplicableProcessControlChanges $entryChanges $originalState
+                    foreach ($skippedControl in @(Get-RooIndustriesPropertyArray $livePlan 'skippedControls')) {
+                        $skip = New-GovernorSkippedItem $entryToApply ([string](Get-RooIndustriesPropertyValue $skippedControl 'reason' 'Process control was skipped.')) $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                    }
+                    $entryChanges = @(Get-RooIndustriesPropertyArray $livePlan 'changes')
+                    if ($entryChanges.Count -eq 0) {
+                        continue
+                    }
+                    $snapshot = [pscustomobject]@{
+                        processId = $processId
+                        processName = $processName
+                        executablePath = Get-RooIndustriesPropertyValue $entryToApply 'executablePath' $identity.currentPath
+                        originalPriorityClass = $originalState.priorityClass
+                        proposedPriorityClass = Get-RooIndustriesPropertyValue $entryToApply 'proposedPriorityClass' $null
+                        originalAffinityMask = $originalState.affinityMask
+                        proposedAffinityMask = Get-RooIndustriesPropertyValue $entryToApply 'proposedAffinityMask' $null
+                        originalIoPriority = $originalState.ioPriority
+                        originalMemoryPriority = $originalState.memoryPriority
+                        proposedIoPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedIoPriority' $null
+                        proposedMemoryPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedMemoryPriority' $null
+                        originalGpuPriority = $originalState.gpuPriority
+                        proposedGpuPriority = Get-RooIndustriesPropertyValue $entryToApply 'proposedGpuPriority' $null
+                        controlChanges = @($entryChanges)
+                        processStartTimeUtc = $identity.processStartTimeUtc
+                        capturedAtUtc = Get-RooIndustriesUtcStamp
+                        profileId = $profileId
+                        ruleId = [string](Get-RooIndustriesPropertyValue $entryToApply 'ruleId' '')
+                        reason = [string](Get-RooIndustriesPropertyValue $entryToApply 'reason' '')
+                        sessionId = $sessionId
+                    }
+                    # A new restraint cycle captures the user's current originals. An
+                    # older cycle must not overwrite values changed between cycles.
+                    for($index=$snapshots.Count-1;$index -ge 0;$index--) {
+                        if([int](Get-RooIndustriesPropertyValue $snapshots[$index] 'processId' 0) -eq $processId){$snapshots.RemoveAt($index)}
+                    }
+                    $snapshots.Add($snapshot) | Out-Null
+                    $backupManifest.snapshots = @($snapshots.ToArray())
+                    Write-RooIndustriesProcessGovernorJsonFile $backupManifest $backupPath
+                    $state.backupManifestPath = $backupPath
+                    $state.restorable = $true
+                    $state.activeRestraints = @($activeRestraints.Values)
+                    Write-GovernorSessionState $state $sessionDirectory
+
+                    $appliedControls = New-Object System.Collections.Generic.List[object]
+                    $failedControls = New-Object System.Collections.Generic.List[string]
+                    foreach ($change in $entryChanges) {
+                        try {
+                            Invoke-RooIndustriesProcessControlChange $identity.process $change
+                            $appliedControls.Add($change) | Out-Null
+                        } catch {
+                            $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                        } finally {
+                            Write-RooIndustriesProcessGovernorJsonFile $backupManifest $backupPath
+                        }
+                    }
+                    if ($appliedControls.Count -gt 0) {
+                        $appliedState = Get-RooIndustriesProcessControlState $processId $null
+                        $changedItem = New-GovernorChangedItem $entryToApply $originalState $appliedState @($appliedControls.ToArray()) $pollIndex $sustainedSeconds
+                        $changed.Add($changedItem) | Out-Null
+                        $pollChanged.Add($changedItem) | Out-Null
+                        $activeRestraints[$key] = [pscustomobject]@{
+                            processId = $processId
+                            processName = $processName
+                            executablePath = Get-RooIndustriesPropertyValue $snapshot 'executablePath' $null
+                            ruleId = Get-RooIndustriesPropertyValue $snapshot 'ruleId' ''
+                            restrainedAtUtc = Get-RooIndustriesUtcStamp
+                            restrainedAtLocal = $now
+                            minimumUntilUtc = $now.AddSeconds([double]$config.minimumRestraintSeconds).ToUniversalTime().ToString('o')
+                            snapshot = $snapshot
+                        }
+                    }
+                    if ($failedControls.Count -gt 0) {
+                        $skip = New-GovernorSkippedItem $entryToApply ($failedControls -join '; ') $pollIndex
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                    }
+                }
+
+                foreach ($key in @($activeRestraints.Keys)) {
+                    if (-not $seenKeys.Contains([string]$key)) {
+                        $active = $activeRestraints[$key]
+                        $skip = [pscustomobject]@{
+                            processId = Get-RooIndustriesPropertyValue $active 'processId' 0
+                            processName = Get-RooIndustriesPropertyValue $active 'processName' ''
+                            ruleId = Get-RooIndustriesPropertyValue $active 'ruleId' ''
+                            reason = 'Restrained process exited before restore was needed.'
+                            pollIndex = $pollIndex
+                            skippedAtUtc = Get-RooIndustriesUtcStamp
+                        }
+                        $skipped.Add($skip) | Out-Null
+                        $pollSkipped.Add($skip) | Out-Null
+                        $activeRestraints.Remove($key)
+                    }
+                }
+
+                $poll = [pscustomobject]@{
                     pollIndex = $pollIndex
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
+                    capturedAtUtc = $pollStartedAtUtc
+                    totalCpuPercent = Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0
+                    previewCount = $pollWouldRestrain.Count + $pollSkipped.Count
+                    wouldRestrainItems = @($pollWouldRestrain.ToArray())
+                    changedItems = @($pollChanged.ToArray())
+                    skippedItems = @($pollSkipped.ToArray())
+                    restoredItems = @($pollRestored.ToArray())
+                    activeRestraintCount = $activeRestraints.Count
                 }
-                $skipped.Add($skip) | Out-Null
-                $pollSkipped.Add($skip) | Out-Null
-                $activeRestraints.Remove($key)
+                $polls.Add($poll) | Out-Null
+                $logEntry = New-RooIndustriesLog "Process governor poll $pollIndex completed with $($pollChanged.Count) restraint(s), $($pollRestored.Count) restore(s), and $($pollSkipped.Count) skip(s)."
+                $logs.Add($logEntry) | Out-Null
+                Add-RooIndustriesProcessGovernorLogFileEntry $sessionDirectory $logEntry
+
+                $state.pollCount = $pollIndex
+                $state.changedItems = @($changed.ToArray())
+                $state.skippedItems = @($skipped.ToArray())
+                $state.restoredItems = @($restored.ToArray())
+                $state.activeRestraints = @($activeRestraints.Values)
+                $state.restorable = ($activeRestraints.Count -gt 0)
+                $state.warnings = @($warnings.ToArray())
+                $state.errors = @($errors.ToArray())
+                $state.logs = @($logs.ToArray())
+                Write-GovernorSessionState $state $sessionDirectory
             }
+        } finally {
+            Exit-RooIndustriesGovernorGate $gate
         }
-
-        $poll = [pscustomobject]@{
-            pollIndex = $pollIndex
-            capturedAtUtc = $pollStartedAtUtc
-            totalCpuPercent = Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0
-            previewCount = $pollWouldRestrain.Count + $pollSkipped.Count
-            wouldRestrainItems = @($pollWouldRestrain.ToArray())
-            changedItems = @($pollChanged.ToArray())
-            skippedItems = @($pollSkipped.ToArray())
-            restoredItems = @($pollRestored.ToArray())
-            activeRestraintCount = $activeRestraints.Count
-        }
-        $polls.Add($poll) | Out-Null
-        $logEntry = New-RooIndustriesLog "Process governor poll $pollIndex completed with $($pollChanged.Count) restraint(s), $($pollRestored.Count) restore(s), and $($pollSkipped.Count) skip(s)."
-        $logs.Add($logEntry) | Out-Null
-        Add-RooIndustriesProcessGovernorLogFileEntry $sessionDirectory $logEntry
-
-        $state.pollCount = $pollIndex
-        $state.changedItems = @($changed.ToArray())
-        $state.skippedItems = @($skipped.ToArray())
-        $state.restoredItems = @($restored.ToArray())
-        $state.activeRestraints = @($activeRestraints.Values)
-        $state.restorable = ($activeRestraints.Count -gt 0)
-        $state.warnings = @($warnings.ToArray())
-        $state.errors = @($errors.ToArray())
-        $state.logs = @($logs.ToArray())
-        Write-GovernorSessionState $state $sessionDirectory
 
         $elapsedAfterPoll = $stopwatch.Elapsed.TotalSeconds
         $allowFollowUpApplyPoll = ($pollPressureCandidateSeen -and $changed.Count -eq 0 -and $activeRestraints.Count -eq 0 -and $pollIndex -lt 2)

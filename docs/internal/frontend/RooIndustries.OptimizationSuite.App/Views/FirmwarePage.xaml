@@ -14,8 +14,8 @@
                     <TextBlock Text="{x:Bind VerificationReason, Mode=OneWay}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" FontSize="12" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{x:Bind Current}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                <ComboBox Grid.Column="2" ItemsSource="{x:Bind Options}" DisplayMemberPath="Label" SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" Visibility="{x:Bind IsChoice, Converter={StaticResource BoolToVisibility}}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}" />
-                <TextBox Grid.Column="2" Text="{x:Bind Selection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Header="{x:Bind NumberHint}" Visibility="{x:Bind IsNumeric, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="{x:Bind Name}" />
+                <ComboBox Grid.Column="2" ItemsSource="{x:Bind Options}" DisplayMemberPath="Label" SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" IsEnabled="{x:Bind CanEdit, Mode=OneWay}" Visibility="{x:Bind IsChoice, Converter={StaticResource BoolToVisibility}}" HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Bind Name}" />
+                <TextBox Grid.Column="2" Text="{x:Bind Selection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{x:Bind CanEdit, Mode=OneWay}" Header="{x:Bind NumberHint}" Visibility="{x:Bind IsNumeric, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="{x:Bind Name}" />
             </Grid>
         </DataTemplate>
     </Page.Resources>
@@ -107,9 +107,13 @@
                     <TextBlock Grid.Column="1" Text="Current" Style="{StaticResource PanelLabelTextBlockStyle}" />
                     <TextBlock Grid.Column="2" Text="New value" Style="{StaticResource PanelLabelTextBlockStyle}" />
                 </Grid>
-                <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Settings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
-                <Expander Grid.Row="3" Header="{x:Bind ViewModel.TestedUnchangedSummary, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasTestedUnchangedSettings, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                    <ListView ItemsSource="{x:Bind ViewModel.TestedUnchangedSettings}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" MaxHeight="300" />
+                <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Settings, Mode=OneWay}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
+                <Expander Grid.Row="3" Header="{x:Bind ViewModel.ExperimentalSummary, Mode=OneWay}" IsExpanded="False" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasExperimentalSettings, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="FirmwareExperimental">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="These settings were refused, did not change, change other settings as a side effect, or were too risky to test. They are kept out of the main list." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <CheckBox Content="Let me try these anyway" IsChecked="{x:Bind ViewModel.AllowExperimentalEdits, Mode=TwoWay}" AutomationProperties.AutomationId="FirmwareExperimentalOptIn" />
+                        <ListView MaxHeight="320" ItemsSource="{x:Bind ViewModel.ExperimentalSettings, Mode=OneWay}" ItemTemplate="{StaticResource FirmwareSettingTemplate}" SelectionMode="None" ItemContainerStyle="{StaticResource StretchListViewItemStyle}" />
+                    </StackPanel>
                 </Expander>
                 <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions>

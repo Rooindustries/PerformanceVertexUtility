@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $script:RooIndustriesUninstallProductName = 'Roo Industries Optimization Suite'
 
 function Get-RooIndustriesUninstallUtcStamp {
@@ -479,6 +480,41 @@ function Get-RooIndustriesAppClassification {
     }
 }
 
+function Get-RooIndustriesMsiUninstallArguments {
+    param([guid]$ProductCode,[switch]$Quiet)
+    $code = $ProductCode.ToString('B').ToUpperInvariant()
+    if ($Quiet) { return "/x $code /qn /norestart" }
+    return "/x $code /norestart"
+}
+
+function Get-RooIndustriesUninstallCommandLine {
+    param([string]$Executable, [string]$Arguments)
+    return '"' + $Executable + '"' + $(if ($Arguments) { ' ' + $Arguments } else { '' })
+}
+
+function Get-RooIndustriesReviewedUninstallCommandLine {
+    param([string]$Executable, [string]$Arguments)
+    try {
+        if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable)) { return $null }
+        return Get-RooIndustriesUninstallCommandLine ([IO.Path]::GetFullPath($Executable)) $Arguments
+    } catch { return $null }
+}
+
+function Get-RooIndustriesUninstallExecutableFacts {
+    param([string]$Executable)
+    try {
+        if ([string]::IsNullOrWhiteSpace($Executable) -or -not [IO.Path]::IsPathRooted($Executable)) { return [pscustomobject]@{ state = 'unresolved'; sha256 = $null } }
+        $full = [IO.Path]::GetFullPath($Executable)
+        if (-not [IO.File]::Exists($full)) { return [pscustomobject]@{ state = 'missing'; sha256 = $null } }
+        return [pscustomobject]@{ state = 'present'; sha256 = (Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() }
+    } catch { return [pscustomobject]@{ state = 'unreadable'; sha256 = $null } }
+}
+
+function Get-RooIndustriesReviewedUninstallExecutableHash {
+    param([string]$Executable)
+    return (Get-RooIndustriesUninstallExecutableFacts $Executable).sha256
+}
+
 function Split-RooIndustriesUninstallCommandLine {
     param([string]$CommandLine)
     if ([string]::IsNullOrWhiteSpace($CommandLine)) {
@@ -507,10 +543,39 @@ function Split-RooIndustriesUninstallCommandLine {
     }
 }
 
+function Resolve-RooIndustriesUninstallCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $null }
+    $trimmed = $CommandLine.Trim()
+    if ($trimmed.StartsWith('"')) {
+        $parsed = Split-RooIndustriesUninstallCommandLine $trimmed
+        $candidates = @([pscustomobject]@{ path = [string]$parsed.executable; arguments = [string]$parsed.arguments })
+    } else {
+        $candidates = @()
+        $index = 0
+        while ($index -le $trimmed.Length) {
+            $space = $trimmed.IndexOf(' ', $index)
+            if ($space -lt 0) { $space = $trimmed.Length }
+            $candidates += [pscustomobject]@{ path = $trimmed.Substring(0, $space); arguments = $trimmed.Substring($space).Trim() }
+            $index = $space + 1
+        }
+    }
+    foreach ($candidate in $candidates) {
+        $path = Expand-RooIndustriesUserVariables $candidate.path
+        try {
+            if ([IO.Path]::GetExtension($path) -eq '') { $path += '.exe' }
+            if ([IO.Path]::IsPathRooted($path) -and [IO.File]::Exists($path)) {
+                return [pscustomobject]@{ executable = [IO.Path]::GetFullPath($path); arguments = if ([string]::IsNullOrWhiteSpace($candidate.arguments)) { $null } else { $candidate.arguments } }
+            }
+        } catch [ArgumentException] { }
+    }
+    return $null
+}
+
 function Resolve-RooIndustriesEnvironmentPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-    return [Environment]::ExpandEnvironmentVariables($Path)
+    return Expand-RooIndustriesUserVariables $Path
 }
 
 function Test-RooIndustriesProtectedPath {
@@ -554,10 +619,14 @@ function New-RooIndustriesLeftoverItem {
     }
 }
 function Assert-RooIndustriesCleanupExclusions {
-    param([string[]]$Targets)
-    $policy=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RooIndustriesOptimizationSuite\cleanup-exclusions.json'
+    param([string[]]$Targets,[string]$DataRoot='')
     if(@($Targets).Count -eq 0){return}
+    if(-not $DataRoot){$DataRoot=Get-RooIndustriesLocalDataRoot -Protected}
+    $policy=Join-Path $DataRoot 'cleanup-exclusions.json'
     try {Get-Item -LiteralPath $policy -Force -ErrorAction Stop|Out-Null}
     catch [System.Management.Automation.ItemNotFoundException] {return}
+    $saved=$null
+    try {$saved=[IO.File]::ReadAllText($policy)|ConvertFrom-Json} catch {$saved=$null}
+    if($null -ne $saved -and $saved.schemaVersion -eq 1 -and $null -ne $saved.owner -and [string]$saved.owner.userSid -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -and [string]$saved.owner.machine -ieq $env:COMPUTERNAME -and $null -ne $saved.exclusions -and $null -ne $saved.exclusions.paths -and $null -ne $saved.exclusions.registry -and @($saved.exclusions.paths).Count -eq 0 -and @($saved.exclusions.registry).Count -eq 0){return}
     & (Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1') -Action Check -FileTarget $Targets|Out-Null
 }

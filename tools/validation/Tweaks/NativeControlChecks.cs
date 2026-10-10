@@ -76,6 +76,11 @@ static class NativeControlChecks
                 var plan = engine.Preview(profile, choices); var review = Path.Combine(files, plan.OperationId + ".json"); OperationFiles.Write(review, plan);
                 return engine.Apply(review, OperationFiles.HashFile(review)).State;
             }
+            var driverRefused = false;
+            try { native.Read(new ControlAddress("service", "NetBT", "running")); }
+            catch (InvalidDataException error) when (error.Message.Contains("Windows driver", StringComparison.Ordinal)) { driverRefused = true; }
+            check(driverRefused && native.Read(new ControlAddress("service", "NetBT", "startup")).Value.ValueKind == System.Text.Json.JsonValueKind.Number,
+                "A Windows driver's running state is refused before any change while its startup type stays readable");
             var originalStartup = native.Read(startup); var originalRunning = native.Read(running); var originalTask = native.Read(task); var originalFirewall = native.Read(firewall);
             check(originalStartup.Value.GetInt32() == 3 && !originalRunning.Value.GetBoolean() && !originalTask.Value.GetBoolean(), "Disposable service and task have independently observed initial states");
             Apply("service", new TweakSelection("automatic", "set"), new TweakSelection("run", "set"));
@@ -84,6 +89,17 @@ static class NativeControlChecks
             check(native.Read(startup).Value.GetInt32() == 4 && !native.Read(running).Value.GetBoolean(), "Native service stop occurs before disabling startup");
             Apply("service");
             check(native.Read(startup).Same(originalStartup) && native.Read(running).Same(originalRunning), "Native service restore returns its original configuration and running state");
+            Apply("flip", new TweakSelection("disabled", "set")); native.Write(native.Read(startup), ControlValues.From(2));
+            var flipPlan = engine.Preview("flip", []); native.Write(native.Read(startup), ControlValues.From(3));
+            store.Commit(flipPlan, "flip");
+            check(native.Read(startup).Value.GetInt32() == 3 && store.ReadState()!.Profiles.All(profile => profile.Id != "flip") && store.Recovery().Pending is null,
+                "The Windows store finishes an undo when a released service changes again during it");
+            Apply("flip", new TweakSelection("disabled", "set")); native.Write(native.Read(startup), ControlValues.From(2));
+            var retakePlan = engine.Preview("flip", []); native.Write(native.Read(startup), ControlValues.From(4));
+            reject(() => store.Commit(retakePlan, "flip-retake"), "The Windows store refuses an undo when a released service went back to the tweaked value");
+            check(store.Recovery().Pending is null && store.ReadState()!.Profiles.Any(profile => profile.Id == "flip"), "The refused undo keeps ownership and leaves no pending journal");
+            Apply("flip");
+            check(native.Read(startup).Same(originalStartup) && store.ReadState()!.Profiles.All(profile => profile.Id != "flip"), "The undo reviewed again restores the original service startup");
             Apply("task-one", new TweakSelection("task", "set")); Apply("task-two", new TweakSelection("task", "set")); Apply("task-one");
             check(native.Read(task).Value.GetBoolean(), "Task enabled state remains while a second profile owns it");
             Apply("task-two"); check(native.Read(task).Same(originalTask), "Task restoration retains the original definition and disabled state");

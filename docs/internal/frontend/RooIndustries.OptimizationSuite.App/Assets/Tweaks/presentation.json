@@ -1,36 +1,46 @@
 {
   "windows.e2c95b16cecfc711": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "AI search of browsing history (this user)"
   },
   "windows.ebf4b29b6f2d80a2": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "AI search of browsing history (all users)"
   },
   "windows.447cb476fb1e7015": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "AI-generated themes in Edge (all users)"
   },
   "windows.6195a41a25475f51": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "AI-generated themes in Edge (this user)"
   },
   "windows.48ec5642c5fc6917": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Address autofill in Edge (this user)"
   },
   "windows.a595bd2d751719e2": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Address autofill in Edge (all users)"
   },
   "windows.1e72211eb6d5298e": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Adobe subscription button in Edge (this user)"
   },
   "windows.f6ffcc0b282f5cce": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Adobe subscription button in Edge (all users)"
   },
   "windows.4dcb153f87654097": {
     "section": "privacy"
   },
   "windows.916d599f77a7d5a9": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Bing Chat links on new tabs (this user)"
   },
   "windows.da25caceaf15204e": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Bing Chat links on new tabs (all users)"
   },
   "windows.87e3c0d51161c726": {
     "section": "apps"
@@ -69,37 +79,47 @@
     "section": "apps"
   },
   "windows.2dc8cb3bbd80b67d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Browsing data for personalization (all users)"
   },
   "windows.7de1195d39166274": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Browsing data for personalization (this user)"
   },
   "windows.1946a0092224ebc5": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Built-in AI access for websites (this user)"
   },
   "windows.280e9078b7513c41": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Built-in AI access for websites (all users)"
   },
   "windows.f0f38d011623934f": {
     "section": "privacy"
   },
   "windows.095160b4a46684a9": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot Chat toolbar button (all users)"
   },
   "windows.fd89690969c8088a": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot Chat toolbar button (this user)"
   },
   "windows.866ba99f43849189": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot access to page content (this user)"
   },
   "windows.f5cc12ccd150df04": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot access to page content (all users)"
   },
   "windows.06eb0a1d9bc5c633": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot writing assistance in Edge (all users)"
   },
   "windows.9aa56478632ece24": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Copilot writing assistance in Edge (this user)"
   },
   "windows.aba86c73d2ecc9d9": {
     "section": "debloat"
@@ -108,133 +128,175 @@
     "section": "privacy"
   },
   "windows.040d310c77bf8525": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Default browser and search prompts (this user)"
   },
   "windows.83d280faf1b4c217": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Default browser and search prompts (all users)"
   },
   "windows.07accde5aed0d526": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Default top sites on new tabs (all users)"
   },
   "windows.e250acb00878bec0": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Default top sites on new tabs (this user)"
   },
   "windows.38251a8ec07d237c": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Do Not Track requests (all users)"
   },
   "windows.ce4c770ee541abcb": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Do Not Track requests (this user)"
   },
   "windows.1aba5d3678f141eb": {
     "section": "apps"
   },
   "windows.b550bb7319b8b418": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge Secure Network (built-in VPN) (this user)"
   },
   "windows.bab173e50c956331": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge Secure Network (built-in VPN) (all users)"
   },
   "windows.0e29582612b9ff5d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge SmartScreen (this user)"
   },
   "windows.3c49771ddf437bdd": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge SmartScreen (all users)"
   },
   "windows.c2dadf9417c22858": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge default-browser check (this user)"
   },
   "windows.fa9f9194bca27daa": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge default-browser check (all users)"
   },
   "windows.4852ffda155a5221": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Edge diagnostic data (all users)"
   },
   "windows.49d76828a1fab446": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Edge diagnostic data (this user)"
   },
   "windows.86de99f56a36d087": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge feature suggestions (all users)"
   },
   "windows.f381a35b70245c7e": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge feature suggestions (this user)"
   },
   "windows.073ad206c8b209ae": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge first-run welcome screen (this user)"
   },
   "windows.703f710379b17b7e": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge first-run welcome screen (all users)"
   },
   "windows.417b00812daaed24": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge page preloading (all users)"
   },
   "windows.99c2a1357cd857d7": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge page preloading (this user)"
   },
   "windows.286e378b3dc1b4a3": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge search bar (all users)"
   },
   "windows.e3ef244ee01b8fd7": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge search bar (this user)"
   },
   "windows.0648f5f8cc4a96ff": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge search suggestions (all users)"
   },
   "windows.7c16faecacd490a8": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge search suggestions (this user)"
   },
   "windows.1378c5006588dcdc": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge shopping assistance (this user)"
   },
   "windows.43b4a7d53fb76bec": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge shopping assistance (all users)"
   },
   "windows.838702eeefd284c1": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge sidebar (this user)"
   },
   "windows.f9e7f70de6e2a322": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge sidebar (all users)"
   },
   "windows.0e88a09019f278b2": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge sign-in (all users)"
   },
   "windows.213a1f1d224879a7": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge sign-in (this user)"
   },
   "windows.00c26b935df2a291": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge site information (all users)"
   },
   "windows.d5d8c22d547e8d7e": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge site information (this user)"
   },
   "windows.73ac466e780e740f": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge startup boost (all users)"
   },
   "windows.933cbdfc946536bc": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge startup boost (this user)"
   },
   "windows.05ee423e1b299c2d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge text prediction (this user)"
   },
   "windows.99ea59826b5ace8d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge text prediction (all users)"
   },
   "windows.58032136455749d2": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge tips and recommendations (this user)"
   },
   "windows.a0168cf74cef3bbb": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Edge tips and recommendations (all users)"
   },
   "windows.c075970f84ec328b": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge usage and crash reports (all users)"
   },
   "windows.ffb1454675fe0bab": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge usage and crash reports (this user)"
   },
   "windows.a425bad7d74aa454": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge visual search (all users)"
   },
   "windows.d690124dd0627ac2": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Edge visual search (this user)"
   },
   "windows.347167ceccbc6470": {
     "section": "privacy"
@@ -252,16 +314,20 @@
     "section": "apps"
   },
   "windows.356708314386d957": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Local AI model download in Edge (this user)"
   },
   "windows.6421eda76fe38b52": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Local AI model download in Edge (all users)"
   },
   "windows.355df69f0addd1b9": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Local history and favorites suggestions (this user)"
   },
   "windows.97e9968637a9d4c8": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Local history and favorites suggestions (all users)"
   },
   "windows.6479a5bd8e9e5d9a": {
     "section": "privacy"
@@ -301,10 +367,12 @@
     "section": "apps"
   },
   "windows.9ac78d838552487d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft Editor spell checking (this user)"
   },
   "windows.cae2c84b6fa9467a": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft Editor spell checking (all users)"
   },
   "windows.3da77fb1035a066a": {
     "section": "privacy"
@@ -316,16 +384,20 @@
     "section": "privacy"
   },
   "windows.89995b6f4fcb8188": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft Rewards in Edge (all users)"
   },
   "windows.b8495a424da102fa": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft Rewards in Edge (this user)"
   },
   "windows.192bb156ce56a609": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft content on new tabs (all users)"
   },
   "windows.aa70e8c8b4d290db": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Microsoft content on new tabs (this user)"
   },
   "windows.c7adec178e29f944": {
     "section": "privacy"
@@ -349,10 +421,12 @@
     "section": "privacy"
   },
   "windows.a42538e5963cd812": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Online help for browser errors (all users)"
   },
   "windows.e4584ea53ad4e467": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Online help for browser errors (this user)"
   },
   "windows.a0f0376664a7f854": {
     "section": "privacy"
@@ -367,25 +441,31 @@
     "section": "privacy"
   },
   "windows.8ad434232b2bc20b": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Payment autofill in Edge (this user)"
   },
   "windows.e31751e63b55a150": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Payment autofill in Edge (all users)"
   },
   "windows.2632d6968d10c632": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Saving passwords in Edge (this user)"
   },
   "windows.f98cc25908828a2b": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Saving passwords in Edge (all users)"
   },
   "windows.5f5dd02ad5d0a5ef": {
     "section": "debloat"
   },
   "windows.2bd0260dde33b8a2": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Sending feedback from Edge (this user)"
   },
   "windows.3430344b187dc5d0": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Sending feedback from Edge (all users)"
   },
   "windows.7a5a7438fd4441bd": {
     "section": "privacy"
@@ -397,10 +477,12 @@
     "section": "privacy"
   },
   "windows.67492e826e19151c": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Site information sent to Microsoft (all users)"
   },
   "windows.7c8b9bf95199812d": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Site information sent to Microsoft (this user)"
   },
   "windows.d20fac5871a0a634": {
     "section": "apps"
@@ -409,19 +491,24 @@
     "section": "apps"
   },
   "windows.3c421799a5643233": {
-    "section": "security"
+    "section": "security",
+    "name": "SmartScreen: Smart Screen Enabled (this user)"
   },
   "windows.83929f5248ff232b": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Suggestions for missing web pages (all users)"
   },
   "windows.c8b5e2ce7d99478a": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Suggestions for missing web pages (this user)"
   },
   "windows.504c0fc08dcf1b6c": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Tab organization suggestions (this user)"
   },
   "windows.7107ec0d810b827d": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Tab organization suggestions (all users)"
   },
   "windows.3be7901c508eaf73": {
     "section": "privacy"
@@ -439,34 +526,44 @@
     "section": "privacy"
   },
   "windows.715fdaa011d9d01b": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Web-to-browser sign-in (all users)"
   },
   "windows.792e7aa52c2c8f54": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Web-to-browser sign-in (this user)"
   },
   "windows.193cbbce6c82b9b6": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Website typo protection (this user)"
   },
   "windows.c64a4368b6d3a0f4": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Website typo protection (all users)"
   },
   "windows.76d8992215c6e9f8": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Websites checking saved payment methods (this user)"
   },
   "windows.93762bc523740601": {
-    "section": "apps"
+    "section": "apps",
+    "name": "Websites checking saved payment methods (all users)"
   },
   "windows.a48245dd81ad617c": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Work search suggestions in Edge (all users)"
   },
   "windows.cdaff9fcf17b4fc2": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Work search suggestions in Edge (this user)"
   },
   "windows.1a69d80726d2b2e9": {
-    "section": "windows"
+    "section": "windows",
+    "name": "\"Meet now\" in the task bar (this user)"
   },
   "windows.b7b2aa3504d6d901": {
-    "section": "windows"
+    "section": "windows",
+    "name": "\"Meet now\" in the task bar (all users)"
   },
   "windows.7bda9e5cfa89eefe": {
     "section": "windows"
@@ -478,43 +575,56 @@
     "section": "windows"
   },
   "windows.25ac47d176b5aaa7": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\CursorShadow"
   },
   "windows.415e5f2812d356e8": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\ControlAnimations"
   },
   "windows.73c0b56497d5ff67": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\SelectionFade"
   },
   "windows.7dfb60938b3f8d59": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\TooltipAnimation"
   },
   "windows.848ea9516f57bcaa": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\DWMAeroPeekEnabled"
   },
   "windows.8e461c826e188da2": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\MenuAnimation"
   },
   "windows.9f2a4b261c5e4738": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\DWMSaveThumbnailEnabled"
   },
   "windows.b76e23a133f51587": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\ComboBoxAnimation"
   },
   "windows.c761d5bf4014a520": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\AnimateMinMax"
   },
   "windows.db6e67a5039ae167": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\ListviewAlphaSelect"
   },
   "windows.edcd8bebaad068e7": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\TaskbarAnimations"
   },
   "windows.f775a7ba4180e003": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\ListBoxSmoothScrolling"
   },
   "windows.fdc66443254012ec": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Animations: Default Value · Default Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\\DropShadow"
   },
   "windows.f83fa56ccd83bc69": {
     "section": "windows"
@@ -552,6 +662,9 @@
   "windows.96b51b359cfc2ab5": {
     "section": "windows"
   },
+  "explorer.app-theme": {
+    "section": "windows"
+  },
   "windows.e8d47a9189180b1e": {
     "section": "windows"
   },
@@ -565,21 +678,31 @@
     "section": "windows"
   },
   "windows.a88c1cc25dcd38c3": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Extension of Windows search with Bing (this user) · Disable Search Box Suggestions"
   },
   "windows.fed8ea1980feb6e6": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Extension of Windows search with Bing (all users)"
   },
   "windows.d252a66306d764b3": {
     "section": "debloat"
   },
-  "windows.0b49273b328b977a": {
+  "explorer.file-extensions": {
     "section": "windows"
+  },
+  "windows.0b49273b328b977a": {
+    "section": "windows",
+    "name": "Hibernation & Sleep: Show Sleep Option · Show Sleep Option"
   },
   "windows.373d0bc9505f99f5": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Hibernation & Sleep: Show Sleep Option · whole value"
   },
   "windows.4bb03ab1a2d9e3f2": {
+    "section": "windows"
+  },
+  "explorer.hidden-files": {
     "section": "windows"
   },
   "windows.07df3877f89b977d": {
@@ -607,7 +730,8 @@
     "section": "windows"
   },
   "windows.8770c13a482bd972": {
-    "section": "security"
+    "section": "security",
+    "name": "SmartScreen: Smart Screen Enabled (all users)"
   },
   "windows.a327c0f376c71695": {
     "section": "devices"
@@ -622,6 +746,12 @@
     "section": "debloat"
   },
   "windows.13520c8b6440551c": {
+    "section": "windows"
+  },
+  "explorer.task-view": {
+    "section": "windows"
+  },
+  "explorer.taskbar-alignment": {
     "section": "windows"
   },
   "windows.a64761d842b05a5c": {
@@ -645,14 +775,19 @@
   "windows.665b3c1700d0d9f2": {
     "section": "windows"
   },
+  "explorer.system-theme": {
+    "section": "windows"
+  },
   "windows.82de3311ecbb8bfd": {
     "section": "devices"
   },
   "windows.df96c882a075e686": {
-    "section": "devices"
+    "section": "devices",
+    "name": "App access to USB devices (this user)"
   },
   "windows.f62996a1f8131f24": {
-    "section": "devices"
+    "section": "devices",
+    "name": "App access to USB devices (all users)"
   },
   "windows.390a641655997ac5": {
     "section": "devices"
@@ -673,10 +808,12 @@
     "section": "devices"
   },
   "windows.06855e52439422dc": {
-    "section": "devices"
+    "section": "devices",
+    "name": "App access to human interface devices (this user)"
   },
   "windows.d26d5feeed9c86a7": {
-    "section": "devices"
+    "section": "devices",
+    "name": "App access to human interface devices (all users)"
   },
   "windows.4f15b51618f19faa": {
     "section": "devices"
@@ -703,10 +840,12 @@
     "section": "devices"
   },
   "windows.09f86440438b2b8e": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Audio Enhancements · Fx Properties · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Capture"
   },
   "windows.aaa540980436f504": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Audio Enhancements · Fx Properties · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render"
   },
   "windows.7ef93bb6784cada0": {
     "section": "devices"
@@ -718,10 +857,12 @@
     "section": "devices"
   },
   "windows.1d01b65657d5e690": {
-    "section": "security"
+    "section": "security",
+    "name": "Core Isolation / Memory Integrity: Enabled · whole value"
   },
   "windows.a37f2d7904b12d56": {
-    "section": "security"
+    "section": "security",
+    "name": "Core Isolation / Memory Integrity: Enabled · Enabled"
   },
   "windows.4507a73b6ce058e6": {
     "section": "security"
@@ -760,31 +901,40 @@
     "section": "devices"
   },
   "windows.791468133ef9ae2a": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Num Lock on Startup: Initial Keyboard Indicators (this user)"
   },
   "windows.83d4b1b8f7a55f84": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Allow Idle Irp In D3 · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USB"
   },
   "windows.cbb760dab99a7a9b": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Allow Idle Irp In D3 · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USBSTOR"
   },
   "windows.12a2f7d075db4a7a": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Device Selective Suspended · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USB"
   },
   "windows.3ede215536675c06": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Device Selective Suspended · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USBSTOR"
   },
   "windows.dab45efcbee72768": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Enhanced Power Management Enabled · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USBSTOR"
   },
   "windows.f5b1784349813d36": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Enhanced Power Management Enabled · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USB"
   },
   "windows.c858b5629e74495c": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Selective Suspend Enabled · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USB"
   },
   "windows.ec9e19e8bc60c5bd": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Power Saving: Selective Suspend Enabled · Device Parameters · SYSTEM\\CurrentControlSet\\Enum\\USBSTOR"
   },
   "windows.58861121bb8b3ad6": {
     "section": "devices"
@@ -796,40 +946,50 @@
     "section": "devices"
   },
   "windows.c229fc7278c1db76": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Sticky Keys Shortcut: Flags · Flags · Control Panel\\Accessibility\\Keyboard Response"
   },
   "windows.d47c42ef436fb54a": {
     "section": "security"
   },
   "windows.ae43ec1ad4d18806": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Enable Virtualization Based Security · whole value"
   },
   "windows.ebcb7d7c938e041a": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Enable Virtualization Based Security · Enable Virtualization Based Security"
   },
   "windows.828d4b1f887bfaad": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Enabled · Enabled · SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\CredentialGuard"
   },
   "windows.bd24cb899aeebe80": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Enabled · Enabled · SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\SystemGuard"
   },
   "windows.fc77ad1ae7fd45fa": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Enabled · whole value"
   },
   "windows.1a312f189b5815d5": {
     "section": "security"
   },
   "windows.b10f431287eb9ff8": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Lsa Cfg Flags · whole value"
   },
   "windows.ebdd8782dfaaa8f9": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Lsa Cfg Flags · Lsa Cfg Flags · SYSTEM\\CurrentControlSet\\Control\\DeviceGuard"
   },
   "windows.22bf56124768d4a0": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Require Platform Security Features · Require Platform Security Features"
   },
   "windows.3d74ed5a692c3882": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Require Platform Security Features · whole value"
   },
   "windows.b048256362718da0": {
     "section": "devices"
@@ -920,7 +1080,7 @@
   },
   "windows.158f86e80c6bb50c": {
     "section": "network",
-    "name": "Cloudflare · encrypted DNS preference",
+    "name": "Cloudflare · encrypted DNS preference · 1.0.0.1",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -930,7 +1090,7 @@
   },
   "windows.1a839efafd8c930e": {
     "section": "network",
-    "name": "Quad9 · encrypted DNS preference",
+    "name": "Quad9 · encrypted DNS preference · 2620:fe::fe",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -940,7 +1100,7 @@
   },
   "windows.1ca6e8c2de3b2717": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 2a07:e340::3",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -950,7 +1110,7 @@
   },
   "windows.215e1751fdda8729": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference · 2606:4700:4700::1003",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -960,7 +1120,7 @@
   },
   "windows.22503661b22ef79c": {
     "section": "network",
-    "name": "Cloudflare · encrypted DNS preference",
+    "name": "Cloudflare · encrypted DNS preference · 1.1.1.1",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -970,7 +1130,7 @@
   },
   "windows.248afcb45c6e1e67": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted DNS preference",
+    "name": "Cloudflare Malware · encrypted DNS preference · 1.0.0.2",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -980,7 +1140,7 @@
   },
   "windows.24f1256dd07e6f81": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 2a07:e340::4",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -990,7 +1150,7 @@
   },
   "windows.25a291302287de00": {
     "section": "network",
-    "name": "Cloudflare · encrypted DNS preference",
+    "name": "Cloudflare · encrypted DNS preference · 2606:4700:4700::1111",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1000,7 +1160,7 @@
   },
   "windows.2a37d7e531746558": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference · 94.140.15.15",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1010,7 +1170,7 @@
   },
   "windows.2c1a511330be50a1": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference · 1.0.0.3",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1020,7 +1180,7 @@
   },
   "windows.2d0b0e41ee871158": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference · 2a10:50c0::ad1:ff",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1030,7 +1190,7 @@
   },
   "windows.31cb908d27059ec7": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference · 2a10:50c0::ad2:ff",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1040,7 +1200,7 @@
   },
   "windows.344def8a5b7e3f48": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 2a07:e340::5",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1050,7 +1210,7 @@
   },
   "windows.37c4bd79d9f63b13": {
     "section": "network",
-    "name": "Quad9 · encrypted DNS preference",
+    "name": "Quad9 · encrypted DNS preference · 2620:fe::9",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1060,7 +1220,7 @@
   },
   "windows.40d232ee0123e6c5": {
     "section": "network",
-    "name": "Google · encrypted DNS preference",
+    "name": "Google · encrypted DNS preference · 2001:4860:4860::8844",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1070,7 +1230,7 @@
   },
   "windows.463324a5bddd88c0": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference · 2606:4700:4700::1113",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1080,7 +1240,7 @@
   },
   "windows.49b62a3affe32668": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference · 2a10:50c0::bad2:ff",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1090,7 +1250,7 @@
   },
   "windows.4fe7155bb9a49ead": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted DNS preference",
+    "name": "Cloudflare Malware Adult · encrypted DNS preference · 1.1.1.3",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1100,7 +1260,7 @@
   },
   "windows.5903c56365108d3d": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 2a07:e340::2",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1110,7 +1270,7 @@
   },
   "windows.684319c89fa33d78": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference · 94.140.15.16",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1120,7 +1280,7 @@
   },
   "windows.78e5d0bb801de34e": {
     "section": "network",
-    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference · 2a07:e340::9",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1130,7 +1290,7 @@
   },
   "windows.842f4837ac8d39a1": {
     "section": "network",
-    "name": "Google · encrypted DNS preference",
+    "name": "Google · encrypted DNS preference · 8.8.8.8",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1140,7 +1300,7 @@
   },
   "windows.87b07ab1047f7280": {
     "section": "network",
-    "name": "Quad9 · encrypted DNS preference",
+    "name": "Quad9 · encrypted DNS preference · 9.9.9.9",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1150,7 +1310,7 @@
   },
   "windows.98aae842706b7bdd": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 194.242.2.6",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1160,7 +1320,7 @@
   },
   "windows.9c5eb77edcaf73dd": {
     "section": "network",
-    "name": "OpenDNS · encrypted DNS preference",
+    "name": "OpenDNS · encrypted DNS preference · 2620:119:53::53",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1170,7 +1330,7 @@
   },
   "windows.9d42abb75895f3ae": {
     "section": "network",
-    "name": "Cloudflare · encrypted DNS preference",
+    "name": "Cloudflare · encrypted DNS preference · 2606:4700:4700::1001",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1180,7 +1340,7 @@
   },
   "windows.b73db5e95eef4b10": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted DNS preference",
+    "name": "Cloudflare Malware · encrypted DNS preference · 1.1.1.2",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1190,7 +1350,7 @@
   },
   "windows.ba85a8c6ea45cdcf": {
     "section": "network",
-    "name": "Quad9 · encrypted DNS preference",
+    "name": "Quad9 · encrypted DNS preference · 149.112.112.112",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1200,7 +1360,7 @@
   },
   "windows.bbdb1de2585358ad": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 194.242.2.5",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1210,7 +1370,7 @@
   },
   "windows.c0401d02e66bc631": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted DNS preference",
+    "name": "Cloudflare Malware · encrypted DNS preference · 2606:4700:4700::1002",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1220,7 +1380,7 @@
   },
   "windows.c2a6666b00f67b23": {
     "section": "network",
-    "name": "Google · encrypted DNS preference",
+    "name": "Google · encrypted DNS preference · 8.8.4.4",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1230,7 +1390,7 @@
   },
   "windows.c39cb834d8df1274": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference · 94.140.14.15",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1240,7 +1400,7 @@
   },
   "windows.c8cbc6e8bdf58c0a": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 194.242.2.2",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1250,7 +1410,7 @@
   },
   "windows.cbce4f15de20a61d": {
     "section": "network",
-    "name": "Google · encrypted DNS preference",
+    "name": "Google · encrypted DNS preference · 2001:4860:4860::8888",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1260,7 +1420,7 @@
   },
   "windows.cc0e2308a780ed4d": {
     "section": "network",
-    "name": "OpenDNS · encrypted DNS preference",
+    "name": "OpenDNS · encrypted DNS preference · 208.67.220.220",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1270,7 +1430,7 @@
   },
   "windows.d22aa7500a23f60e": {
     "section": "network",
-    "name": "OpenDNS · encrypted DNS preference",
+    "name": "OpenDNS · encrypted DNS preference · 208.67.222.222",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1280,7 +1440,7 @@
   },
   "windows.e30d437c9a80e965": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 194.242.2.3",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1290,7 +1450,7 @@
   },
   "windows.e623580401553689": {
     "section": "network",
-    "name": "OpenDNS · encrypted DNS preference",
+    "name": "OpenDNS · encrypted DNS preference · 2620:119:35::35",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1300,7 +1460,7 @@
   },
   "windows.e941f52e02dabd5d": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 2a07:e340::6",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1310,7 +1470,7 @@
   },
   "windows.ec9900c4c0344603": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted DNS preference",
+    "name": "Cloudflare Malware · encrypted DNS preference · 2606:4700:4700::1112",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1320,7 +1480,7 @@
   },
   "windows.f203ba48f9d7283d": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted DNS preference · 2a10:50c0::bad1:ff",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1330,7 +1490,7 @@
   },
   "windows.f715cf49647720cf": {
     "section": "network",
-    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted DNS preference · 194.242.2.9",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1340,7 +1500,7 @@
   },
   "windows.fb5a32be2744c36e": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted DNS preference",
+    "name": "AdGuard Ads Trackers · encrypted DNS preference · 94.140.14.14",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1350,7 +1510,7 @@
   },
   "windows.fdea44489c23aab3": {
     "section": "network",
-    "name": "Mullvad shared · encrypted DNS preference",
+    "name": "Mullvad shared · encrypted DNS preference · 194.242.2.4",
     "description": "Prefer encrypted lookups when this provider is selected on the active connection.",
     "topic": "DNS",
     "choices": {
@@ -1384,7 +1544,7 @@
   },
   "windows.6e004d12fb8fbf31": {
     "section": "network",
-    "name": "Local computer discovery",
+    "name": "Local computer discovery · whole value · SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient",
     "description": "Find nearby computers by name. Some local sharing setups need this feature.",
     "topic": "Local network",
     "choices": {
@@ -1489,7 +1649,7 @@
   },
   "windows.545d278a6e57e1c7": {
     "section": "network",
-    "name": "Wi-Fi sharing preferences",
+    "name": "Wi-Fi sharing preferences · flags 0xffff0001",
     "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
     "topic": "Wireless",
     "choices": {
@@ -1499,7 +1659,7 @@
   },
   "windows.88fe51b11c7ae2aa": {
     "section": "network",
-    "name": "Wi-Fi sharing preferences",
+    "name": "Wi-Fi sharing preferences · whole value",
     "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
     "topic": "Wireless",
     "choices": {
@@ -1509,7 +1669,7 @@
   },
   "windows.09d74e279714979c": {
     "section": "network",
-    "name": "Wi-Fi sharing preferences",
+    "name": "Wi-Fi sharing preferences · flags 0xffff0040",
     "description": "Control legacy Wi-Fi sharing choices. These features are no longer part of current Windows versions.",
     "topic": "Wireless",
     "choices": {
@@ -1541,178 +1701,234 @@
     "section": "privacy"
   },
   "windows.974e4b8e98bab3ba": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "And reset Advertising ID and info (all users)"
   },
   "windows.f21513f9c6b27e2c": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "And reset Advertising ID and info (this user)"
   },
   "windows.90a8734c8441dceb": {
     "section": "privacy"
   },
   "windows.5b374fa461c8115d": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Bluetooth devices (this user)"
   },
   "windows.f739575b5d709a81": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Bluetooth devices (all users)"
   },
   "windows.258781a95f00fef3": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Wi-Fi Direct (this user)"
   },
   "windows.28f2c73ea3182c44": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Wi-Fi Direct (all users)"
   },
   "windows.2b7700a02bd0f1e9": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Wi-Fi information (all users)"
   },
   "windows.7e0390656aa852dc": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to Wi-Fi information (this user)"
   },
   "windows.882d304d8d3d810b": {
     "section": "privacy"
   },
   "windows.a86666cd548bdbbf": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to calendar (all users) · Value"
   },
   "windows.be67257ae643130f": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to calendar (all users) · Let Apps Access Calendar"
   },
   "windows.e91947068766d265": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to calendar (this user)"
   },
   "windows.1388ad1824605ce8": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to call history (this user)"
   },
   "windows.1d1c29f00646cf6d": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to call history (all users) · Let Apps Access Call History"
   },
   "windows.bc15bdfb263a052e": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to call history (all users) · Value"
   },
   "windows.34d030fa8c2a41a4": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to camera (this user)"
   },
   "windows.e6a205c984754fde": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to camera (all users)"
   },
   "windows.9fd456871e2a6e02": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to contacts (all users) · Value"
   },
   "windows.befaee1429ff3376": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to contacts (this user)"
   },
   "windows.e0b7a561e07c8967": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to contacts (all users) · Let Apps Access Contacts"
   },
   "windows.035280203d64209a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to custom sensors (all users)"
   },
   "windows.13a13cd8ecd16386": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to custom sensors (this user)"
   },
   "windows.2fb0385b4295b2dc": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to diagnostics information (all users)"
   },
   "windows.995311a9f76ae458": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to diagnostics information (this user)"
   },
   "windows.7d61ae3b0dd08423": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to documents (all users)"
   },
   "windows.e974c3ca0c5d2640": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to documents (this user)"
   },
   "windows.7cb1f23f79832cec": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to downloads folder (all users)"
   },
   "windows.974209c6dc073e5d": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to downloads folder (this user)"
   },
   "windows.a36483ebf2ff7361": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to email (this user)"
   },
   "windows.c32fa71867cd3b25": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to email (all users) · Value"
   },
   "windows.f141a691cb4d08a1": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to email (all users) · Let Apps Access Email"
   },
   "windows.a21af2181c4b3168": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to eye tracking (this user)"
   },
   "windows.bd054ad1ad462d0a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to eye tracking (all users)"
   },
   "windows.cd78f6be50d1e19c": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to images (this user)"
   },
   "windows.eba7ba7bb8b47db9": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to images (all users)"
   },
   "windows.5157394a57ead19a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to messages (all users)"
   },
   "windows.9225d4b19a3fb9cf": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to messages (this user)"
   },
   "windows.e1fbfcdb02022768": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to microphone (this user)"
   },
   "windows.f7838d4f7e2f97b5": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to microphone (all users)"
   },
   "windows.311ba785bce98904": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to movements (all users)"
   },
   "windows.a84f27fbe1b430c4": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to movements (this user)"
   },
   "windows.3f0b55801828c17a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to music libraries (this user)"
   },
   "windows.4dbfa039b86aaf69": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to music libraries (all users)"
   },
   "windows.1b18a1d3cfd3a04e": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to notifications (this user)"
   },
   "windows.61754ea435eb7d5a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to notifications (all users)"
   },
   "windows.1ee9cefaa1689f24": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to passkeys (this user)"
   },
   "windows.a738331fcc9143f2": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to passkeys (all users)"
   },
   "windows.b87d9bf9df965ca8": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to phone calls (this user)"
   },
   "windows.f8431b310e49272b": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to phone calls (all users)"
   },
   "windows.2fb02e6906a5b2d9": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to serial ports (all users)"
   },
   "windows.80a5ea8077ed1144": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to serial ports (this user)"
   },
   "windows.35d383864c1bd373": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to tasks (this user)"
   },
   "windows.6ef566663e3acd68": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to tasks (all users)"
   },
   "windows.10f837ef86cd962c": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to the file system (this user)"
   },
   "windows.bb3c289d7a69b6ca": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to the file system (all users)"
   },
   "windows.1d3040983902f499": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to the list of stored passkeys (this user)"
   },
   "windows.a4db61f6adf1892a": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to the list of stored passkeys (all users)"
   },
   "windows.5aab8224d9213b6e": {
     "section": "privacy"
@@ -1721,28 +1937,36 @@
     "section": "privacy"
   },
   "windows.bf32a1112970772b": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to user account information (all users)"
   },
   "windows.d258fcb06968c350": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to user account information (this user)"
   },
   "windows.310b4c2d58ab61b0": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to videos (this user)"
   },
   "windows.87ae359224f429b5": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to videos (all users)"
   },
   "windows.7e09e160bbb9ced1": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to wireless connections (all users)"
   },
   "windows.f2efbebda44dd519": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to wireless connections (this user)"
   },
   "windows.b3dc6f6bc38d4201": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to wireless technology (this user)"
   },
   "windows.e8d8a56a3614f4d5": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "App access to wireless technology (all users)"
   },
   "windows.7fa16c5ff56a179a": {
     "section": "privacy"
@@ -1796,16 +2020,20 @@
     "section": "privacy"
   },
   "windows.093ca1254e69a658": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Deny app access to generative AI: Value (this user) · Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\generativeAI"
   },
   "windows.1dc3a809fce73a89": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Deny app access to generative AI: Value (all users) · Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\generativeAI"
   },
   "windows.6ca888cb300456cc": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Deny app access to generative AI: Value (all users) · Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\systemAIModels"
   },
   "windows.76771b7c43e7cc3d": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Deny app access to generative AI: Value (this user) · Value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\systemAIModels"
   },
   "windows.a4929756b5111263": {
     "section": "privacy"
@@ -1889,10 +2117,12 @@
     "section": "privacy"
   },
   "privacy.tailored-experiences": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Personalized tips from diagnostic data · Disable Tailored Experiences With Diagnostic Data"
   },
   "windows.4f9aba2eae2173b8": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Personalized tips from diagnostic data · Tailored Experiences With Diagnostic Data Enabled"
   },
   "windows.9e7d9d9036a1bfcd": {
     "section": "privacy"
@@ -1958,16 +2188,20 @@
     "section": "privacy"
   },
   "windows.2243e2be8fa5675f": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "The ability for apps to take screenshots (this user)"
   },
   "windows.65afa8cb8707f3d5": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "The ability for apps to take screenshots (all users)"
   },
   "windows.b9857fd500cda45e": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "The ability for apps to take screenshots without borders (all users)"
   },
   "windows.fc114c63d38b67ea": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "The ability for apps to take screenshots without borders (this user)"
   },
   "windows.bdd1fe17695aecfa": {
     "section": "privacy"
@@ -2006,10 +2240,12 @@
     "section": "privacy"
   },
   "windows.7c879da8cd8b0870": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Windows Error Reporting · Disabled · SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting"
   },
   "windows.2569c61643c6be82": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Windows error reporting · Disabled · SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Error Reporting"
   },
   "windows.b8a8747c56c88065": {
     "section": "privacy"
@@ -2029,9 +2265,6 @@
   "windows.48528fe51a747f21": {
     "section": "services"
   },
-  "windows.aeaece32413afc65": {
-    "section": "services"
-  },
   "windows.c1ba6f2692812943": {
     "section": "services"
   },
@@ -2044,25 +2277,10 @@
   "windows.60ff8c3066d98975": {
     "section": "services"
   },
-  "windows.8d670bbb91fedfb8": {
-    "section": "services"
-  },
   "windows.8b30f1b439a11081": {
     "section": "services"
   },
   "windows.f764194de531cdaf": {
-    "section": "services"
-  },
-  "windows.b3af6ecb456108cb": {
-    "section": "services"
-  },
-  "windows.4a802560253ab454": {
-    "section": "services"
-  },
-  "windows.9214cfadb5f28219": {
-    "section": "services"
-  },
-  "windows.1fada349dd1f718f": {
     "section": "services"
   },
   "windows.f1edfabad5ece1fa": {
@@ -2102,34 +2320,44 @@
     "section": "security"
   },
   "windows.28146ee0c1c01a41": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Strict Handle: Enable"
   },
   "windows.425c7c122debad41": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Extension Point: Disable Extension Points"
   },
   "windows.4e370476ec7da1d5": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Aslr: Force Relocate Images"
   },
   "windows.4f67b523391fa90d": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Font Disable: Audit"
   },
   "windows.503faa10463becc1": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Dynamic Code: Audit"
   },
   "windows.8888baaf939cd57c": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Image Load: Audit Remote Image Loads"
   },
   "windows.ce1a1856ab034ce4": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Dep: Emulate Atl Thunks"
   },
   "windows.edfcc4d1ab758ab8": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Cfg: Suppress Exports"
   },
   "windows.f906140db3b12805": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Dynamic Code: Block Dynamic Code"
   },
   "windows.fb2a5a0a4f1642de": {
-    "section": "security"
+    "section": "security",
+    "name": "Other Security Mitigations · Image Load: Block Remote Image Loads"
   },
   "windows.a71ca3e5541cb544": {
     "section": "security"
@@ -2384,17 +2612,13 @@
   "windows.6a3f0125dea8d116": {
     "section": "services"
   },
-  "windows.f6e7858581751ba2": {
-    "section": "services"
-  },
-  "windows.505478578c02a1c3": {
-    "section": "services"
-  },
   "windows.428835245afe32a9": {
-    "section": "services"
+    "section": "services",
+    "name": "Windows Firewall service · Mps Svc · running"
   },
   "windows.f373a904cea14365": {
-    "section": "services"
+    "section": "services",
+    "name": "Windows Firewall service · Mps Svc · startup"
   },
   "windows.2119d80378e882fd": {
     "section": "services"
@@ -2543,9 +2767,6 @@
   "windows.f268a50eba858d47": {
     "section": "services"
   },
-  "windows.0e25c1c25c792d50": {
-    "section": "services"
-  },
   "windows.4d0285ad7fcb2077": {
     "section": "services"
   },
@@ -2571,22 +2792,28 @@
     "section": "windows"
   },
   "windows.13b6c0d8fb231462": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: Default value · whole value · Software\\Classes\\*\\shell\\RooIndustries.TakeOwnership\\command"
   },
   "windows.c26219e8cf004354": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: Default value · whole value · Software\\Classes\\Directory\\shell\\RooIndustries.TakeOwnership\\command"
   },
   "windows.7718959c45b75640": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: MUIVerb · whole value · Software\\Classes\\*\\shell\\RooIndustries.TakeOwnership"
   },
   "windows.77d255299fc9edf3": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: MUIVerb · whole value · Software\\Classes\\Directory\\shell\\RooIndustries.TakeOwnership"
   },
   "windows.153c5df229829507": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: Multi Select Model · whole value · Software\\Classes\\*\\shell\\RooIndustries.TakeOwnership"
   },
   "windows.26f25970a1d80ffb": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Add Take Ownership to Context menu: Multi Select Model · whole value · Software\\Classes\\Directory\\shell\\RooIndustries.TakeOwnership"
   },
   "windows.d5ece40cbef88271": {
     "section": "windows"
@@ -2628,10 +2855,12 @@
     "section": "debloat"
   },
   "windows.7fa910e0ec3eabf7": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Bluetooth: Value (this user)"
   },
   "windows.a6ed028872c1f39f": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Bluetooth: Value (all users)"
   },
   "windows.0c2df5b4c9887da8": {
     "section": "security"
@@ -2764,7 +2993,7 @@
   },
   "windows.1fc843db3914d26b": {
     "section": "network",
-    "name": "Cloudflare · encrypted lookups",
+    "name": "Cloudflare · encrypted lookups · 1.0.0.1",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2774,7 +3003,7 @@
   },
   "windows.8208c998c8a458d9": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted lookups",
+    "name": "Cloudflare Malware · encrypted lookups · 1.0.0.2",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2784,7 +3013,7 @@
   },
   "windows.6efa3ba9f5d46285": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "name": "Cloudflare Malware Adult · encrypted lookups · 1.0.0.3",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2794,7 +3023,7 @@
   },
   "windows.2c463a1ebb8644e1": {
     "section": "network",
-    "name": "Cloudflare · encrypted lookups",
+    "name": "Cloudflare · encrypted lookups · 1.1.1.1",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2804,7 +3033,7 @@
   },
   "windows.5403fd16255c7f6c": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted lookups",
+    "name": "Cloudflare Malware · encrypted lookups · 1.1.1.2",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2814,7 +3043,7 @@
   },
   "windows.96880beb0cda92c1": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "name": "Cloudflare Malware Adult · encrypted lookups · 1.1.1.3",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2824,7 +3053,7 @@
   },
   "windows.485ae250b9a25d16": {
     "section": "network",
-    "name": "Quad9 · encrypted lookups",
+    "name": "Quad9 · encrypted lookups · 149.112.112.112",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2834,7 +3063,7 @@
   },
   "windows.a50f765dc32d561a": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 194.242.2.2",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2844,7 +3073,7 @@
   },
   "windows.08a4a6d4d800eb57": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 194.242.2.3",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2854,7 +3083,7 @@
   },
   "windows.c35beb1398333f2b": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 194.242.2.4",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2864,7 +3093,7 @@
   },
   "windows.931dd6aaceafdc1a": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 194.242.2.5",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2874,7 +3103,7 @@
   },
   "windows.93058f0a01f36f9a": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 194.242.2.6",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2884,7 +3113,7 @@
   },
   "windows.9bb8bf75bde204d2": {
     "section": "network",
-    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups · 194.242.2.9",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2894,7 +3123,7 @@
   },
   "windows.e8bde2f9b55b5777": {
     "section": "network",
-    "name": "Google · encrypted lookups",
+    "name": "Google · encrypted lookups · 2001:4860:4860::8844",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2904,7 +3133,7 @@
   },
   "windows.55c7e34207106885": {
     "section": "network",
-    "name": "Google · encrypted lookups",
+    "name": "Google · encrypted lookups · 2001:4860:4860::8888",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2914,7 +3143,7 @@
   },
   "windows.050336cd659be06f": {
     "section": "network",
-    "name": "OpenDNS · encrypted lookups",
+    "name": "OpenDNS · encrypted lookups · 208.67.220.220",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2924,7 +3153,7 @@
   },
   "windows.7dedc17adcfa482f": {
     "section": "network",
-    "name": "OpenDNS · encrypted lookups",
+    "name": "OpenDNS · encrypted lookups · 208.67.222.222",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2934,7 +3163,7 @@
   },
   "windows.99fc768e912827aa": {
     "section": "network",
-    "name": "Cloudflare · encrypted lookups",
+    "name": "Cloudflare · encrypted lookups · 2606:4700:4700::1001",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2944,7 +3173,7 @@
   },
   "windows.2ce72222b2dad012": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted lookups",
+    "name": "Cloudflare Malware · encrypted lookups · 2606:4700:4700::1002",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2954,7 +3183,7 @@
   },
   "windows.70589e77b90d4eb4": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "name": "Cloudflare Malware Adult · encrypted lookups · 2606:4700:4700::1003",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2964,7 +3193,7 @@
   },
   "windows.3fb0eec8d707ecf1": {
     "section": "network",
-    "name": "Cloudflare · encrypted lookups",
+    "name": "Cloudflare · encrypted lookups · 2606:4700:4700::1111",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2974,7 +3203,7 @@
   },
   "windows.3ea9ab20682fc611": {
     "section": "network",
-    "name": "Cloudflare Malware · encrypted lookups",
+    "name": "Cloudflare Malware · encrypted lookups · 2606:4700:4700::1112",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2984,7 +3213,7 @@
   },
   "windows.7cd9da225aa6d256": {
     "section": "network",
-    "name": "Cloudflare Malware Adult · encrypted lookups",
+    "name": "Cloudflare Malware Adult · encrypted lookups · 2606:4700:4700::1113",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -2994,7 +3223,7 @@
   },
   "windows.14300e89d47a528f": {
     "section": "network",
-    "name": "OpenDNS · encrypted lookups",
+    "name": "OpenDNS · encrypted lookups · 2620:119:35::35",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3004,7 +3233,7 @@
   },
   "windows.907affb94edff3d7": {
     "section": "network",
-    "name": "OpenDNS · encrypted lookups",
+    "name": "OpenDNS · encrypted lookups · 2620:119:53::53",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3014,7 +3243,7 @@
   },
   "windows.be56eca0a275ca30": {
     "section": "network",
-    "name": "Quad9 · encrypted lookups",
+    "name": "Quad9 · encrypted lookups · 2620:fe::9",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3024,7 +3253,7 @@
   },
   "windows.a550397cede16b37": {
     "section": "network",
-    "name": "Quad9 · encrypted lookups",
+    "name": "Quad9 · encrypted lookups · 2620:fe::fe",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3034,7 +3263,7 @@
   },
   "windows.4da4ca6a0aa1ee63": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 2a07:e340::2",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3044,7 +3273,7 @@
   },
   "windows.ad1a26908324284c": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 2a07:e340::3",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3054,7 +3283,7 @@
   },
   "windows.3438f9c0e53303ac": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 2a07:e340::4",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3064,7 +3293,7 @@
   },
   "windows.a26031160d6083f5": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 2a07:e340::5",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3074,7 +3303,7 @@
   },
   "windows.2252872dffd46844": {
     "section": "network",
-    "name": "Mullvad shared · encrypted lookups",
+    "name": "Mullvad shared · encrypted lookups · 2a07:e340::6",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3084,7 +3313,7 @@
   },
   "windows.8f68d5e3c09064e0": {
     "section": "network",
-    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups",
+    "name": "Mullvad Ads Trackers Malware Adult Gambling Social · encrypted lookups · 2a07:e340::9",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3094,7 +3323,7 @@
   },
   "windows.dd35b0559d8af40a": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "name": "AdGuard Ads Trackers · encrypted lookups · 2a10:50c0::ad1:ff",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3104,7 +3333,7 @@
   },
   "windows.10d86e2d07c0b48b": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "name": "AdGuard Ads Trackers · encrypted lookups · 2a10:50c0::ad2:ff",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3114,7 +3343,7 @@
   },
   "windows.8ce68502e69f1a8f": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups · 2a10:50c0::bad1:ff",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3124,7 +3353,7 @@
   },
   "windows.1e405ac46a990dc9": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups · 2a10:50c0::bad2:ff",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3134,7 +3363,7 @@
   },
   "windows.1ae61e2b2036d4b2": {
     "section": "network",
-    "name": "Google · encrypted lookups",
+    "name": "Google · encrypted lookups · 8.8.4.4",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3144,7 +3373,7 @@
   },
   "windows.d0239e1369742570": {
     "section": "network",
-    "name": "Google · encrypted lookups",
+    "name": "Google · encrypted lookups · 8.8.8.8",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3154,7 +3383,7 @@
   },
   "windows.ec55a129b83d4bc9": {
     "section": "network",
-    "name": "Quad9 · encrypted lookups",
+    "name": "Quad9 · encrypted lookups · 9.9.9.9",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3164,7 +3393,7 @@
   },
   "windows.ea84378379563551": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "name": "AdGuard Ads Trackers · encrypted lookups · 94.140.14.14",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3174,7 +3403,7 @@
   },
   "windows.f4792732b2191a88": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups · 94.140.14.15",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3184,7 +3413,7 @@
   },
   "windows.c2fead60d93a1fe7": {
     "section": "network",
-    "name": "AdGuard Ads Trackers · encrypted lookups",
+    "name": "AdGuard Ads Trackers · encrypted lookups · 94.140.15.15",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3194,7 +3423,7 @@
   },
   "windows.4dff966b53312c40": {
     "section": "network",
-    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups",
+    "name": "AdGuard Ads Trackers Malware Adult · encrypted lookups · 94.140.15.16",
     "description": "Make encrypted lookups available for this provider. Select the provider separately to use it.",
     "topic": "DNS",
     "choices": {
@@ -3228,10 +3457,12 @@
     "summary": "Turning this off reduces network protection."
   },
   "windows.df796a6bd69f00d9": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Dynamic Lighting: Ambient Lighting Enabled (all users)"
   },
   "windows.ecde31c4d826f41e": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Dynamic Lighting: Ambient Lighting Enabled (this user)"
   },
   "windows.2a0ca22e7943f7cd": {
     "section": "windows"
@@ -3244,7 +3475,7 @@
   },
   "windows.15b4500b5894d602": {
     "section": "network",
-    "name": "Ethernet power saving",
+    "name": "Ethernet power saving · active network adapters",
     "description": "Reduce adapter power use when traffic is low. This can affect connection response.",
     "topic": "Adapter",
     "choices": {
@@ -3260,7 +3491,8 @@
     "section": "debloat"
   },
   "windows.3106cb450f300287": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Extension of Windows search with Bing (this user) · Bing Search Enabled"
   },
   "windows.2c7c4b59387c9e69": {
     "section": "windows"
@@ -3289,10 +3521,12 @@
     "section": "windows"
   },
   "windows.88eaa4f9f6eaf65c": {
-    "section": "windows"
+    "section": "windows",
+    "name": "File Explorer Home and Gallery - Disable: System.Is Pinned To Name Space Tree · System.Is Pinned To Name Space Tree · Software\\Classes\\CLSID\\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}"
   },
   "windows.f18928d6bc25be49": {
-    "section": "windows"
+    "section": "windows",
+    "name": "File Explorer Home and Gallery - Disable: System.Is Pinned To Name Space Tree · System.Is Pinned To Name Space Tree · Software\\Classes\\CLSID\\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}"
   },
   "windows.9e156c49a16c4ed9": {
     "section": "gaming"
@@ -3358,7 +3592,7 @@
   },
   "windows.06a9c4e83ddd7585": {
     "section": "network",
-    "name": "Local computer discovery",
+    "name": "Local computer discovery · whole value · SYSTEM\\CurrentControlSet\\Services\\Dnscache\\Parameters",
     "description": "Find nearby computers by name. Some local sharing setups need this feature.",
     "topic": "Local network",
     "choices": {
@@ -3404,10 +3638,12 @@
     "section": "windows"
   },
   "windows.1415c84f33814e2f": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Location: Value (this user)"
   },
   "windows.ff1910b572a794ab": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Location: Value (all users)"
   },
   "windows.389efb50bc4b96f7": {
     "section": "windows"
@@ -3463,10 +3699,12 @@
     "summary": "Balance network traffic with games and media."
   },
   "windows.04b6d7dda595eb7e": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "News and interests in the task bar · Enable Feeds"
   },
   "windows.1685f7eddddce555": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "News and interests in the task bar · Allow News And Interests"
   },
   "windows.681b49e3861a2c3a": {
     "section": "windows"
@@ -3488,7 +3726,7 @@
   },
   "windows.5236cfe23fdff9a2": {
     "section": "network",
-    "name": "Ethernet power saving",
+    "name": "Ethernet power saving · all network adapters",
     "description": "Reduce adapter power use when traffic is low. This can affect connection response.",
     "topic": "Adapter",
     "choices": {
@@ -3522,19 +3760,24 @@
     "section": "windows"
   },
   "windows.11243d7df1bc16e9": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Power Saving: Pn PCapabilities · device classes · SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e96b-e325-11ce-bfc1-08002be10318}"
   },
   "windows.11e21021c5b87f32": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Power Saving: Pn PCapabilities · device classes · SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e96f-e325-11ce-bfc1-08002be10318}"
   },
   "windows.531f68e7ec2c7d3f": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Power Saving: Pn PCapabilities · device classes · SYSTEM\\CurrentControlSet\\Control\\Class\\{745a17a0-74d3-11d0-b6fe-00a0c90f57da}"
   },
   "windows.84e71c6249426e01": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Power Saving: Pn PCapabilities · all network adapters"
   },
   "windows.889dcbbabc31d686": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Power Saving: Pn PCapabilities · device classes · SYSTEM\\CurrentControlSet\\Control\\Class\\{36fc9e60-c465-11cf-8056-444553540000}"
   },
   "windows.9f5d0c20d26e85b5": {
     "section": "windows"
@@ -3595,10 +3838,12 @@
     "section": "debloat"
   },
   "windows.7abdd021ee8986ee": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Recall snapshots (all users)"
   },
   "windows.83a4b4decc92792a": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "Recall snapshots (this user)"
   },
   "windows.415ba36c2179d998": {
     "section": "windows"
@@ -3619,22 +3864,28 @@
     "section": "windows"
   },
   "windows.5e360dcb6120e4a7": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: Default value · whole value · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.StartupOptions\\command"
   },
   "windows.b552e2ba24974f87": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: Default value · whole value · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.PowerOptions\\command"
   },
   "windows.6328d156158e222b": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: MUIVerb · MUIVerb · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.StartupOptions"
   },
   "windows.9ae9540102e581c2": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: MUIVerb · MUIVerb · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.PowerOptions"
   },
   "windows.66be056c99469aa0": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: Multi Select Model · Multi Select Model · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.PowerOptions"
   },
   "windows.75fdb214335c930b": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Safe Mode and Power Plans in the Desktop Menu: Multi Select Model · Multi Select Model · Software\\Classes\\DesktopBackground\\Shell\\RooIndustries.StartupOptions"
   },
   "windows.c42e43f48e34ee37": {
     "section": "windows"
@@ -3676,16 +3927,20 @@
     "section": "windows"
   },
   "windows.8c7a398b0e1a5c1d": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Sticky Keys Shortcut: Flags · Flags · Control Panel\\Accessibility\\StickyKeys"
   },
   "windows.b73eb3c11fcab9be": {
-    "section": "devices"
+    "section": "devices",
+    "name": "Sticky Keys Shortcut: Flags · Flags · Control Panel\\Accessibility\\ToggleKeys"
   },
   "windows.4f4a7db22a77ee0d": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Storage Sense: 01 · whole value"
   },
   "windows.bf0f086a2b33a080": {
-    "section": "windows"
+    "section": "windows",
+    "name": "Storage Sense: 01 · 01"
   },
   "windows.a04802fbe692cf4f": {
     "section": "windows"
@@ -3735,10 +3990,12 @@
     "section": "windows"
   },
   "windows.541bd8afc6cb07ff": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "The Windows Copilot (this user)"
   },
   "windows.9d3ad55111499035": {
-    "section": "debloat"
+    "section": "debloat",
+    "name": "The Windows Copilot (all users)"
   },
   "windows.79d29edbcebdf8a9": {
     "section": "windows"
@@ -3753,16 +4010,20 @@
     "section": "windows"
   },
   "windows.03ccdfd10dd6bbc6": {
-    "section": "security"
+    "section": "security",
+    "name": "User Account Control · Consent Prompt Behavior Admin"
   },
   "windows.53f9e4a99f6dcaac": {
-    "section": "security"
+    "section": "security",
+    "name": "User Account Control · Enable LUA"
   },
   "windows.bcf993da8ddf0da3": {
-    "section": "security"
+    "section": "security",
+    "name": "User Account Control · Prompt On Secure Desktop"
   },
   "windows.f6deda9293f22576": {
-    "section": "security"
+    "section": "security",
+    "name": "Virtualization-Based Security (VBS): Lsa Cfg Flags · Lsa Cfg Flags · SYSTEM\\CurrentControlSet\\Control\\Lsa"
   },
   "windows.209394b3339a463a": {
     "section": "security"
@@ -3786,10 +4047,12 @@
     "section": "privacy"
   },
   "windows.6691cc82d008cb17": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Windows Telemetry: Allow Telemetry · whole value · SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat"
   },
   "windows.94caf9dc9f3af63e": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Windows Telemetry: Allow Telemetry · whole value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection"
   },
   "windows.71fc02eeb7937865": {
     "section": "privacy"
@@ -3830,24 +4093,6 @@
   "windows.f70cb08b28f96d33": {
     "section": "gaming"
   },
-  "explorer.app-theme": {
-    "section": "windows"
-  },
-  "explorer.file-extensions": {
-    "section": "windows"
-  },
-  "explorer.hidden-files": {
-    "section": "windows"
-  },
-  "explorer.task-view": {
-    "section": "windows"
-  },
-  "explorer.taskbar-alignment": {
-    "section": "windows"
-  },
-  "explorer.system-theme": {
-    "section": "windows"
-  },
   "windows.72fcf05d8d3eb1d2": {
     "section": "updates"
   },
@@ -3883,7 +4128,7 @@
   },
   "windows.0704072cf44450b6": {
     "section": "network",
-    "name": "Share update downloads",
+    "name": "Share update downloads · whole value",
     "description": "Choose whether Windows shares update downloads with other PCs. Sharing can use upload bandwidth.",
     "topic": "Connection",
     "choices": {
@@ -3898,7 +4143,7 @@
   },
   "windows.8ae84d84732b8516": {
     "section": "network",
-    "name": "Share update downloads",
+    "name": "Share update downloads · DODownload Mode",
     "description": "Choose whether Windows shares update downloads with other PCs. Sharing can use upload bandwidth.",
     "topic": "Connection",
     "choices": {
@@ -3944,10 +4189,12 @@
     "section": "updates"
   },
   "windows.2a1931b173ebdd03": {
-    "section": "updates"
+    "section": "updates",
+    "name": "Windows Update: No AUAs Default Shutdown Option (this user)"
   },
   "windows.688e74d55d4d1c6a": {
-    "section": "updates"
+    "section": "updates",
+    "name": "Windows Update: No AUAs Default Shutdown Option (all users)"
   },
   "windows.e9532baa5070c199": {
     "section": "updates"
@@ -3980,10 +4227,12 @@
     "section": "updates"
   },
   "windows.530f71b023bac5c5": {
-    "section": "updates"
+    "section": "updates",
+    "name": "Windows Update: work Completed · whole value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Orchestrator\\UScheduler\\DevHomeUpdate"
   },
   "windows.f635b875351ae484": {
-    "section": "updates"
+    "section": "updates",
+    "name": "Windows Update: work Completed · whole value · SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Orchestrator\\UScheduler\\OutlookUpdate"
   },
   "windows.adc94ec3386b09e3": {
     "section": "updates"

@@ -12,6 +12,23 @@ static class SectionChecks
         App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null);
         check(model.Rows.Count == catalog.Settings.Length && model.Rows.Select(row => row.Id).Distinct().Count() == catalog.Settings.Length,
             "All catalog settings remain present exactly once in the all-tweaks view");
+        var page = File.ReadAllText(Path.Combine(repo, "docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/WindowsTweaksPage.xaml.cs"));
+        var constructorStart = page.IndexOf("public WindowsTweaksPage()", StringComparison.Ordinal);
+        var constructor = page[constructorStart..page.IndexOf("Loaded +=", constructorStart, StringComparison.Ordinal)];
+        check(model.SelectedSection?.Id == "all" && model.SectionTitle == "All tweaks" && !constructor.Contains("SelectedSection", StringComparison.Ordinal), "Windows tweaks opens on All tweaks and the page does not pick another section");
+        const string hypervisor = "windows.f621c6877f2af1d1";
+        model.Search = "Hypervisor"; var everywhere = model.Rows.Select(row => row.Id).ToArray();
+        check(everywhere.Contains(hypervisor), "Searching Hypervisor on first open finds the Security setting");
+        model.SelectedSection = model.Sections.Single(section => section.Id == "network"); model.Category = model.Categories.First(category => category != "All groups");
+        var group = model.Category; model.Search = "Hypervisor";
+        check(model.Rows.Select(row => row.Id).SequenceEqual(everywhere), "Search from Network with a group chosen still matches every section: " + string.Join(", ", model.Rows.Select(row => row.Id)));
+        model.Search = "  ";
+        check(model.Rows.Count > 0 && model.Rows.All(row => row.SectionId == "network" && row.Topic == group), "A search of only spaces keeps the chosen section and group");
+        model.Search = " Hypervisor ";
+        check(model.Rows.Select(row => row.Id).SequenceEqual(everywhere), "Search ignores surrounding spaces");
+        model.Search = "";
+        check(model.Rows.Count > 0 && model.Rows.All(row => row.SectionId == "network" && row.Topic == group), "Clearing search returns to the chosen section and group");
+        model.SelectedSection = model.Sections[0];
         var seen = new HashSet<string>(); var allOptions = new Dictionary<string, string[]>();
         foreach (var section in model.Sections.Skip(1))
         {
@@ -29,7 +46,7 @@ static class SectionChecks
         var network = model.Rows.Single(row => row.Id == "windows.06086057572c648a"); network.Selected = network.Choices[1];
         model.SelectedSection = model.Sections.Single(section => section.Id == "debloat");
         var debloat = model.Rows.First(row => row.Available && row.Definition.Options[0].Changes is { Length: > 0 }); debloat.Selected = debloat.Choices[1];
-        check(model.Sections.Single(section => section.Id == "network").SelectedCount == 1 && model.SelectedSection.SelectedCount == 1 && model.SelectionText == "2 selected",
+        check(model.Sections.Single(section => section.Id == "network").SelectedCount == 1 && model.SelectedSection.SelectedCount == 1 && model.SelectionText == "2 changes",
             "Selections survive navigation and category badges distinguish selection from applied state");
         await model.ReviewCommand.ExecuteAsync(null);
         check(model.HasReview && model.Changes.Count >= 2 && model.Changes.All(change => !change.Target.Contains('\\') && !change.Target.Contains("LocalMachine", StringComparison.Ordinal)),
@@ -37,7 +54,7 @@ static class SectionChecks
         model.Approved = true; model.SelectedSection = model.Sections.Single(section => section.Id == "network");
         check(model.CanApply && network.Selected.Id == network.Choices[1].Id, "Changing sections preserves an already reviewed selection");
         network.Selected = null!;
-        check(model.CanApply && network.Selected.Id == network.Choices[1].Id && model.SelectionText == "2 selected",
+        check(model.CanApply && network.Selected.Id == network.Choices[1].Id && model.SelectionText == "2 changes",
             "A recycled choice control cannot clear its selection or approval through a transient null binding");
         model.FindSetting("timer");
         check(model.SelectedSection.Id == "all" && model.Rows.Any(row => row.Name.Contains("timer", StringComparison.OrdinalIgnoreCase)),

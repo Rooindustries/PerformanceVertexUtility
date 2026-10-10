@@ -13,6 +13,29 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 
+if (args is ["bug-report-folder"]) { await BugReportChecks.OpenFolderAsync(Check); Console.WriteLine($"Completed {count} bug report folder checks."); return; }
+
+if (args is ["governor-actions"])
+{
+    await GovernorChecks.Scheduled(Check);
+    Console.WriteLine($"Completed {count} governor action checks.");
+    return;
+}
+
+if (args is ["governor-left-as-set"])
+{
+    await GovernorChecks.LeftAsSetAsync(Check);
+    Console.WriteLine($"Completed {count} governor ownership restore checks.");
+    return;
+}
+
+if (args is ["revisit"])
+{
+    await RevisitChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} app sweep UI checks.");
+    return;
+}
+
 ControlRead Read<T>(T value) => ControlRead.From(value);
 var error = new ApiError("fixture", "win32", 5, "read", "Controlled affinity read failure");
 Dictionary<string, ControlRead> Controls(ControlRead cpuSets, ControlRead affinity) => new()
@@ -57,6 +80,18 @@ void ReadyCleanup(UninstallCleanupViewModel model, InstalledApp app)
     model.RemoverPathApproved = true;
     model.CleanupListApproved = true;
 }
+
+if (args is ["governor-task", var taskRoot, var taskName, var registered, var enabled, var repeats, var installRoot])
+{
+    var task = RooIndustries.OptimizationSuite.Services.GovernorProbe.ReadTask(taskRoot, installRoot);
+    Console.WriteLine("Read " + JsonSerializer.Serialize(task));
+    Check(registered == "Unknown" ? task is null : task is not null && task.Name == taskName && task.Registered == bool.Parse(registered) && task.Enabled == bool.Parse(enabled) && task.RestartsEveryMinute == bool.Parse(repeats),
+        "Real scheduled task " + taskName + " reads registered=" + registered + " enabled=" + enabled + " oneMinuteRepeat=" + repeats);
+    return;
+}
+
+if (args is [] or ["governor"]) await GovernorChecks.RunAsync(Check);
+if (args is ["governor"]) { Console.WriteLine($"Completed {count} governor status checks."); return; }
 
 if (args is [] or ["process"])
 {
@@ -415,6 +450,13 @@ if (args is [] or ["history"])
     await history.InitializeAsync();
     Check(history.HistoryRows.Count == 1 && history.HistoryRows.Single().Action == "Restrained",
         "Dry-run filtering is independent for game and governor session history");
+
+    App.Live.GameStatusModel = new GameTuneSessionStatus { Status = "notFound", Restorable = false };
+    App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus { Status = "notFound", Restorable = false };
+    history = new RestoreLogsViewModel();
+    await history.InitializeAsync();
+    Check(history.RestoreRows.Take(2).Select(row => row.Value).SequenceEqual(new[] { "No session backup recorded", "No restraint backup recorded" }),
+        "A PC that never ran a session shows no backup instead of unavailable recovery status");
 }
 
 if (args is [] or ["responses"] or ["cleanup"] or ["race"])
@@ -679,6 +721,41 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("Controlled route failure", StringComparison.Ordinal),
         "A null removal-route response remains unavailable with its operation error");
 
+    const string reviewedLine = "\"C:\\Windows\\system32\\msiexec.exe\" /x {11111111-2222-3333-4444-555555555555} /norestart";
+    App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+    {
+        DryRun = true,
+        Commands = [new UninstallCommand { AppId = id, CommandType = "msi-uninstall-string", RawCommand = "MsiExec.exe /X{11111111-2222-3333-4444-555555555555}", CommandLine = reviewedLine, ExecutableSha256 = new string('a', 64) }],
+    });
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(cleanup.RemovalPathReviewed && cleanup.OfficialCommand == reviewedLine, "The removal review shows the exact command that runs, not the published uninstall string");
+    async Task CheckRoute(UninstallCommand command)
+    {
+        App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [command] });
+        cleanup.SelectedApp = appB;
+        cleanup.SelectedApp = appA;
+        command.AppId = appA.AppId;
+        await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    }
+    bool RouteBlocked() => !cleanup.RemovalPathReviewed && !cleanup.CanReviewRemovalAction && cleanup.PrimaryRemovalButtonLabel == "Use Remove apps"
+        && cleanup.ApplyApprovalSummary == "Roo Industries can't run this app's remover. Use Remove apps to remove it.";
+    const string goneLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S";
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "missing" });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal), "A remover whose file is missing is blocked and says the file is missing");
+    var routeCalls = 0;
+    App.Live.OfficialPreview = _ => { routeCalls++; return Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial()); };
+    await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
+    Check(routeCalls == 0 && RouteBlocked(), "A blocked route cannot be re-run from the same button");
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "unreadable" });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file can't be read", StringComparison.Ordinal), "A remover file that exists but can't be read says so instead of calling it missing");
+    await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal), "A vendor remover that cannot be resolved to one file is blocked and says why");
+    await CheckRoute(new UninstallCommand { CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null });
+    Check(RouteBlocked() && cleanup.OfficialPreviewState == "Use Remove apps to remove this app.", "A Store app in Leftover cleanup points to Remove apps instead of offering a removal that cannot run");
+    cleanup.SelectedApp = appB;
+    cleanup.SelectedApp = appA;
+    Check(cleanup.CanReviewRemovalAction && !cleanup.RemovalRouteBlocked, "Picking the app again unlocks the route check");
+
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial());
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(cleanup.RemovalPathReviewed, "A successful empty removal route remains a valid Roo Industries route");
@@ -905,5 +982,14 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     }
     finally { File.Delete(rollback); }
 }
+
+Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\Invoke-UninstallCleanupApplyPackage.ps1") is null
+    && !RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\invoke-uninstallcleanupapplypackage.ps1"),
+    "The Leftover cleanup remover script has no app-side time limit and a cancel never kills the uninstaller it started");
+Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1") == TimeSpan.FromSeconds(45) && RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1"),
+    "Other backend scripts keep the 45 second limit and stop their whole process tree");
+await BulkRemovalChecks.RunAsync(Check);
+await RevisitChecks.RunAsync(Check);
+await BugReportChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

@@ -57,6 +57,24 @@ static class RegistryTweakChecks
             Apply("atomic", [new("first", "one"), new("other", "one")]);
             Apply("atomic", []);
             check(Equals(Value("Enabled"), 91) && Value("Other") is null, "Native full apply and restore preserve an original value and an absent value together");
+
+            var restart = Preview("restart", [new("other", "one")]); engine.Apply(restart.Path, restart.Hash);
+            var boot = RegistryTweakStore.CurrentBoot();
+            check(boot is not null && RegistryTweakStore.SameBoot(boot), "Windows exposes a boot identifier for restart checks");
+            void AwaitRestart(string bootId)
+            {
+                using var key = hive.CreateSubKey(recovery.KeyPath);
+                key.SetValue("Pending", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new ControlJournal(restart.Plan with { Controls = new([], [], []) }, restart.Hash, 0, "awaiting-restart", bootId), OperationFiles.Json), RegistryValueKind.Binary);
+            }
+            AwaitRestart(boot!);
+            var sameBoot = "";
+            try { store.Recover(store.Recovery().PendingHash!); } catch (InvalidDataException error) { sameBoot = error.Message; }
+            check(sameBoot == RegistryTweakStore.RestartAgain && sameBoot.Contains("not Shut down", StringComparison.Ordinal),
+                "A restart check with the same boot marker, as after a Fast Startup shutdown, keeps the pending feature record and says to choose Restart: " + sameBoot);
+            check(store.Recovery().Pending is not null, "The pending feature record survives a same-boot restart check");
+            AwaitRestart("boot:" + Guid.NewGuid().ToString("N"));
+            check(store.Recover(store.Recovery().PendingHash!) && store.Recovery().Pending is null, "A restart check after a new boot closes the pending feature record");
+            Apply("restart", []);
         }
         finally
         {

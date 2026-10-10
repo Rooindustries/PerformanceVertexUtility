@@ -11,12 +11,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'BackendExecutor.Common.ps1')
 
 function Get-CscCompilerPath {
-    foreach ($cmd in @(Get-Command csc.exe -All -ErrorAction SilentlyContinue)) {
-        if ($cmd.Source -and (Test-Path -LiteralPath $cmd.Source -PathType Leaf)) { return $cmd.Source }
-    }
+    $windows = [Environment]::GetFolderPath('Windows')
     $candidates = @(
-        (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),
-        (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe')
+        (Join-Path $windows 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),
+        (Join-Path $windows 'Microsoft.NET\Framework\v4.0.30319\csc.exe')
     )
     foreach ($candidate in $candidates) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }

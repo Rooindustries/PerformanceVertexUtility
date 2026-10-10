@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import runpy
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 try:
@@ -46,8 +47,104 @@ def public_hygiene_text(relative: str, source: str):
     return json.dumps(catalog)
 
 
+def code_loading_failures(root: Path):
+    def quoted(text):
+        return re.findall(r"[\"']([A-Za-z0-9_()]+)[\"']", text)
+    def same(label, found, wanted, failures):
+        if len(found) != len(set(found)) or set(found) != set(wanted):
+            failures.append(f'{label}: differs from RuntimeEnvironment (missing {sorted(set(wanted) - set(found))}, extra {sorted(set(found) - set(wanted))})')
+    csharp = (root / 'backend/native/Optimizer.Core/RuntimeEnvironment.cs').read_text(encoding='utf-8-sig')
+    def array(label):
+        match = re.search(label + r'\s*=\s*\[(.*?)\];', csharp, re.S)
+        return quoted(match.group(1)) if match else []
+    def method(name):
+        match = re.search(r'public static void ' + name + r'\(\)\s*\{(.*?)\n    \}', csharp, re.S)
+        return match.group(1) if match else ''
+    prefixes = array('ClearPrefixes')
+    pinned = array('Pinned')
+    failures = []
+    if not prefixes or not pinned:
+        return ['backend/native/Optimizer.Core/RuntimeEnvironment.cs: ClearPrefixes or Pinned was not found']
+    development = array('DevelopmentCodeLoading') + array('DevelopmentClearOnly')
+    if not development or len(development) != len(set(development)):
+        failures.append('RuntimeEnvironment.cs: the development-only name list is missing or lists a name twice')
+    if any(not name.endswith('_') for name in prefixes):
+        failures.append('RuntimeEnvironment.cs: every clearing prefix must end in an underscore')
+    for name in ('Sanitize', 'RequireClean'):
+        if 'Prefixed()' not in method(name):
+            failures.append(f'RuntimeEnvironment.cs {name}: a release build must work by prefix (Prefixed()), not by a name list')
+    powershell = (root / 'backend/scripts/BrandCompatibility.Common.ps1').read_text(encoding='utf-8-sig')
+    def ps(label):
+        match = re.search(r'\$script:' + label + r'=@\((.*?)\)\r?\n', powershell, re.S)
+        return quoted(match.group(1)) if match else []
+    same('PowerShell RooIndustriesClearedPrefixes', ps('RooIndustriesClearedPrefixes'), prefixes, failures)
+    same('PowerShell RooIndustriesPinnedVariables (pinned to 0)', ps('RooIndustriesPinnedVariables'), pinned, failures)
+    if 'RooIndustriesCodeLoadingVariables' in powershell:
+        failures.append('BrandCompatibility.Common.ps1 still defines a code-loading name list; use RooIndustriesClearedPrefixes')
+    launcher = (root / 'backend/scripts/Start-RooIndustriesHelper.cmd').read_text(encoding='utf-8')
+    lines = [line.rstrip('\r') for line in launcher.split('\n')]
+    loops = re.findall(r'for %%p in \(([^)]*)\) do', launcher)
+    if len(loops) < 3:
+        failures.append('Start-RooIndustriesHelper.cmd: expected the prefix loop in the listing, the clear pass and the final check')
+    for loop in loops:
+        same('Start-RooIndustriesHelper.cmd prefix loop', loop.split(), prefixes, failures)
+    same('Start-RooIndustriesHelper.cmd (pinned to 0)', re.findall(r'(?m)^set ([A-Za-z0-9_()]+)=0\r?$', launcher), pinned, failures)
+    for name in re.findall(r'(?m)^set ([A-Za-z0-9_()]+)=\r?$', launcher):
+        if name != 'RANDOM':
+            failures.append(f'Start-RooIndustriesHelper.cmd clears {name} by name; the launcher must clear by prefix')
+    if re.search(r"(?i)for /f[^\n]*in \([`']", launcher):
+        failures.append('Start-RooIndustriesHelper.cmd enumerates with for /f over a command, which starts a second command interpreter')
+    checks = re.findall(r'if not errorlevel 1 exit /b (\d+)', launcher)
+    if len(checks) != 1 or checks[0] == '87':
+        failures.append('Start-RooIndustriesHelper.cmd needs exactly one final check that exits with its own code (not 87) when a prefixed variable is left')
+    final = next((index for index, line in enumerate(lines) if 'exit /b ' + (checks[0] if checks else '-') in line), len(lines))
+    helper = next((index for index, line in enumerate(lines) if '"%P1%"' in line), len(lines))
+    internal = {'@echo', 'setlocal', 'set', 'call', 'for', 'if', 'exit', 'goto', 'del', '(for'}
+    subroutine = lines[next((index for index, line in enumerate(lines) if line.startswith(':clear')), len(lines)):]
+    for line in lines[:final + 1] + subroutine:
+        word = line.split(' ')[0].lower() if line.strip() else ''
+        if word and not word.startswith(':') and word not in internal:
+            failures.append(f'Start-RooIndustriesHelper.cmd runs {word} before the variables are cleared: {line.strip()}')
+    if final > helper:
+        failures.append('Start-RooIndustriesHelper.cmd starts the helper before the final check')
+    installer = (root / 'tools/release/SetupProcess.iss').read_text(encoding='utf-8-sig')
+    procedure = re.search(r'procedure ClearCodeLoading;.*?\nend;', installer, re.S)
+    body = procedure.group(0) if procedure else ''
+    prefix_block = re.search(r'Prefixes := \[(.*?)\];', installer, re.S)
+    same('SetupProcess.iss HasClearedPrefix', quoted(prefix_block.group(1)) if prefix_block else [], prefixes, failures)
+    arrays = re.findall(r'Names := \[(.*?)\];', body, re.S)
+    same('SetupProcess.iss ClearCodeLoading (pinned to 0)', quoted(arrays[0]) if arrays else [], pinned, failures)
+    if len(arrays) != 1 or 'PrefixedNames' not in body:
+        failures.append('SetupProcess.iss ClearCodeLoading must clear by PrefixedNames and keep only the pinned list')
+    return failures
+
+
+def code_loading_negative_controls(root: Path):
+    sources = {
+        'backend/native/Optimizer.Core/RuntimeEnvironment.cs': (lambda text: text.replace('Release ? Prefixed() :', 'Release ? DevelopmentCodeLoading :', 1), 'Sanitize by a list'),
+        'backend/scripts/BrandCompatibility.Common.ps1': (lambda text: text.replace("$script:RooIndustriesClearedPrefixes=", "$script:RooIndustriesCodeLoadingVariables=@('DOTNET_GCName')\n$script:RooIndustriesClearedPrefixes=", 1), 'PowerShell name list'),
+        'backend/scripts/Start-RooIndustriesHelper.cmd': (lambda text: text.replace('set DOTNET_EnableDiagnostics=0\r\n', 'set DOTNET_GCName=\r\nset DOTNET_EnableDiagnostics=0\r\n', 1), 'launcher name list'),
+        'tools/release/SetupProcess.iss': (lambda text: text.replace('Names := PrefixedNames;', "Names := ['DOTNET_GCName'];", 1), 'installer name list'),
+    }
+    results = {}
+    for relative, (mutate, label) in sources.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            for needed in sources:
+                target = temporary / needed
+                target.parent.mkdir(parents=True, exist_ok=True)
+                text = (root / needed).read_bytes().decode('utf-8')
+                target.write_bytes((mutate(text) if needed == relative else text).encode('utf-8'))
+            results[label] = bool(code_loading_failures(temporary))
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
+    failures.extend(code_loading_failures(root))
+    for label, rejected in code_loading_negative_controls(root).items():
+        if not rejected:
+            failures.append(f'Negative control failed: a {label} passed the clearing check')
     failures.extend(runpy.run_path(str(Path(__file__).with_name('check_windows_tweaks.py')))['check'](root))
     if not contracts_only:
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))

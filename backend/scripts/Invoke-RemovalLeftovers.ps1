@@ -23,7 +23,7 @@ try {
     if(Test-RooIndustriesBulkAppPresent $entry.identity ([string]$queue.plan.fixtureRoot)){throw 'The app registration is present again. Review the current installation instead.'}
     if($Action -in @('Scan','Preview')) {
         if($null -eq $entry.appSnapshot){throw 'This older queue has no saved app metadata for a post-removal scan.'}
-        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-leftover-discovery-'+[guid]::NewGuid().ToString('N'))
+        $scratch=Join-Path (Split-Path ([IO.Path]::GetFullPath($QueueJournalPath)) -Parent) ('leftover-discovery-'+[guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($scratch)|Out-Null
         $inventoryPath=Join-Path $scratch 'inventory.json';$scanPath=Join-Path $scratch 'scan.json'
         Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($entry.appSnapshot)} $inventoryPath
@@ -61,6 +61,7 @@ try {
                 ExecutorMode=if($ConfirmApply){'Real'}else{'Preview'}}
             $applied=(& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1') @args)|ConvertFrom-Json
         } else {
+            if($ConfirmApply -and -not (Test-RooIndustriesWrittenAfterProtection ([string]$data.rollbackPath))){throw ("This backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at "+(Split-Path ([string]$data.rollbackPath) -Parent)+'.')}
             $applied=(& (Join-Path $PSScriptRoot 'Restore-UninstallCleanupExecution.ps1') -RollbackManifestPath $data.rollbackPath -ConfirmApply:$ConfirmApply -AllowRealSystemExecution:$ConfirmApply -UserApproved:$ConfirmApply)|ConvertFrom-Json
         }
         $result.status=$applied.status;$result.dryRun=$applied.dryRun;$result.data=$applied

@@ -13,6 +13,9 @@ public sealed record LaunchPrioritySnapshot
 
 public sealed class LaunchPriorities
 {
+    public static readonly string[] CpuPriorities = ["Idle", "BelowNormal", "Normal", "AboveNormal", "High"];
+    public const int MaxIoPriority = 2;
+
     private const string Root = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
     private readonly string _image;
     private readonly Dictionary<string, int> _values;
@@ -26,7 +29,7 @@ public sealed class LaunchPriorities
         { "Idle" => 1, "Normal" => 2, "High" => 3, "BelowNormal" => 5, "AboveNormal" => 6, _ => throw new InvalidDataException("This launch policy does not support real-time CPU priority.") });
         if (controls.TryGetValue("ioPriority", out var io))
         {
-            var value = io.GetInt32(); if (value is < 0 or > 2) throw new InvalidDataException("Launch-time I/O priority supports Very Low, Low and Normal.");
+            var value = io.GetInt32(); if (value is < 0 or > MaxIoPriority) throw new InvalidDataException("Launch-time I/O priority supports Very Low, Low and Normal.");
             _values.Add("IoPriority", value);
         }
         if (controls.TryGetValue("memoryPriority", out var memory))

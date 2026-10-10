@@ -2,6 +2,7 @@ param(
     [string[]]$TestName = @(),
     [string]$ResultsRoot = '',
     [switch]$BuildFrontend,
+    [switch]$ParseOnly,
     [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE
 )
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,10 @@ function Get-ValidationTempPaths {
     }
     return @($paths | Sort-Object -Unique)
 }
+$baselineProcess = [Diagnostics.Process]::GetCurrentProcess()
+$baselineProcess.PriorityClass = [Diagnostics.ProcessPriorityClass]::Normal
+Set-RooIndustriesProcessIoPriority $baselineProcess 'Normal'
+$baselineProcess.Dispose()
 $tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
 $testScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
@@ -25,12 +30,15 @@ if ($TestName.Count -gt 0) {
     $testScripts = @($testScripts | Where-Object { $_.Name -in $TestName })
 }
 $parseErrors = @()
+$parsedFiles = 0
 foreach ($file in @((Get-ChildItem (Join-Path $repoRoot 'backend') -Filter '*.ps1' -Recurse -File),(Get-ChildItem (Join-Path $repoRoot 'tools') -Filter '*.ps1' -Recurse -File),(Get-Item (Join-Path $repoRoot 'LeanClientOptimizer.ps1'))) | ForEach-Object { $_ }) {
+    $parsedFiles++
     $tokens = $null; $errors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
     $parseErrors += @($errors)
 }
 if ($parseErrors.Count -gt 0) { $parseErrors | Format-List; throw 'PowerShell parser validation failed.' }
+if ($ParseOnly) { 'PowerShell parser validation passed for ' + $parsedFiles + ' files.'; return }
 foreach ($test in $testScripts) {
     $log = Join-Path $ResultsRoot ($test.BaseName + '.stdout.log')
     $errorLog = Join-Path $ResultsRoot ($test.BaseName + '.stderr.log')

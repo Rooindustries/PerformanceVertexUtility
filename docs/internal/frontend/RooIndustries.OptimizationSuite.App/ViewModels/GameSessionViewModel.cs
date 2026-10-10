@@ -24,9 +24,17 @@ public partial class GameSessionSetting : ObservableObject
     {
         Name = name;
         Options = new[] { new ControlOption("Keep current", null) }.Concat(ProcessControlsViewModel.Options(name)
-            .Where(option => name != "gpuPriority" || option.Value?.GetInt32() != 5)).ToArray();
+            .Where(option => LaunchSupported(name, option.Value))).ToArray();
         _selected = Options[0];
     }
+
+    internal static bool LaunchSupported(string name, JsonElement? value) => value is not { } chosen || name switch
+    {
+        "cpuPriority" => LaunchPriorities.CpuPriorities.Contains(chosen.GetString()),
+        "ioPriority" => chosen.GetInt32() <= LaunchPriorities.MaxIoPriority,
+        "gpuPriority" => chosen.GetInt32() != 5,
+        _ => true,
+    };
 }
 
 public sealed record GameCoreChoice(string Label, AffinityState Affinity)
@@ -84,6 +92,11 @@ public partial class GameSessionViewModel : ObservableObject
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
     partial void OnAffinityMaskChanged(string value) => Invalidate();
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
+    public void NoteChanged()
+    {
+        Status = "Settings changed elsewhere";
+        Detail = "Choose the launcher again, or clear it, to read its current values.";
+    }
     partial void OnSelectedLauncherChanged(CpuProcessChoice? value)
     {
         if (_sessionRoot is not null) return;
@@ -124,9 +137,11 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => TryRefreshAsync();
+
+    public async Task<bool> TryRefreshAsync()
     {
-        if (Busy) return;
+        if (Busy) return false;
         Busy = true;
         try
         {
@@ -142,8 +157,9 @@ public partial class GameSessionViewModel : ObservableObject
                 foreach (var process in inventory.Processes.Where(process => process.Pid > 0 && process.Pid != Environment.ProcessId && !process.Protected && !process.Blocked && process.Category != "windowsCore").OrderBy(process => process.Name, StringComparer.OrdinalIgnoreCase))
                     Launchers.Add(new(process.Pid, process.Name ?? "Application"));
             }
+            return true;
         }
-        catch (Exception error) { Status = "Couldn't refresh game sessions."; Detail = error.Message; }
+        catch (Exception error) { Status = "Couldn't refresh game sessions."; Detail = error.Message; return false; }
         finally { Busy = false; }
     }
 
@@ -171,10 +187,14 @@ public partial class GameSessionViewModel : ObservableObject
         {
             var snapshot = await App.Operations.ReadProcessControlsAsync(choice.Id);
             if (version != _version || _sessionRoot is not null) return;
+            if (!string.IsNullOrWhiteSpace(GamePath) && string.Equals(Path.GetFileName(snapshot.Identity.ExecutablePath), Path.GetFileName(GamePath.Trim()), StringComparison.OrdinalIgnoreCase))
+            {
+                Status = "That's the game, not its launcher."; Detail = ProtectedSessions.LauncherIsGame; return;
+            }
             LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!);
             _launcher = snapshot; Status = "Choose priorities and CPU cores, then review your changes."; Detail = "";
         }
-        catch (Exception error) { if (version == _version) { Status = "Couldn't read this launcher."; Detail = error.Message; } }
+        catch (Exception error) { if (version == _version) { Status = "Couldn't read this launcher."; Detail = Closed(error) ? ProtectedSessions.LauncherClosed : error.Message; } }
         finally { if (version == _version) NotifyState(); }
     }
 
@@ -195,6 +215,9 @@ public partial class GameSessionViewModel : ObservableObject
         catch (Exception error) { if (version == _version) Detail = error.Message; }
         finally { if (version == _version) NotifyState(); }
     }
+
+    private static bool Closed(Exception error)
+        => error is ProcessEndedException || error.Message.Contains("OpenProcess failed with Win32 87", StringComparison.Ordinal) || error.Message == "The target process has exited.";
 
     private void LoadCores(ProcessControlSnapshot snapshot, AffinityState original)
     {
@@ -232,7 +255,7 @@ public partial class GameSessionViewModel : ObservableObject
                 "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename.";
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
-        catch (Exception error) { _review = null; ReviewSummary = ""; Status = "Couldn't prepare this session."; Detail = error.Message; }
+        catch (Exception error) { _review = null; ReviewSummary = ""; Status = "Couldn't prepare this session."; Detail = Closed(error) ? ProtectedSessions.LauncherClosed : error.Message; }
         finally { Busy = false; }
     }
 

@@ -93,6 +93,14 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             journal.Status = "needsReconciliation";
             var active = journal.Entries.FirstOrDefault(entry => entry.Status is "deleteIntent" or "pending") ?? journal.Entries.First();
             active.Error = error.Message;
+            if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp"))
+                foreach (var entry in journal.Entries)
+                {
+                    try { File.Delete(entry.BackupPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    if (File.Exists(entry.BackupPath)) continue;
+                    entry.BackupHash = null;
+                    entry.Status = "pending";
+                }
             Save(journalPath, journal);
         }
         finally { foreach (var source in held.Values) source.Dispose(); }
@@ -104,6 +112,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         using var lease = OperationFiles.Lock(journalPath);
         var journal = ReadJournal(journalPath);
         currentAuthority().Verify(journal.Preview.AppId, journal.Preview.ProviderIdentityHash);
+        if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp")) return journal;
         var conflicts = false;
         var createdDirectories = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in journal.Entries.Where(entry => entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
@@ -304,15 +313,14 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     internal static bool IsProtectedPath(string path)
     {
-        var protectedRoots = new[] { Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.LocalApplicationData,
-            Environment.SpecialFolder.ApplicationData, Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.ProgramFiles,
+        var protectedRoots = new[] { Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.ProgramFiles,
             Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.CommonProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86,
             Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.MyDocuments, Environment.SpecialFolder.StartMenu,
             Environment.SpecialFolder.Programs, Environment.SpecialFolder.Startup, Environment.SpecialFolder.CommonStartMenu,
             Environment.SpecialFolder.CommonPrograms, Environment.SpecialFolder.CommonStartup }
             .Select(Environment.GetFolderPath).Where(root => !string.IsNullOrWhiteSpace(root)).ToList();
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), Path.GetDirectoryName(local)!, Path.Combine(local, "Packages")]);
+        var local = RuntimeEnvironment.LocalAppData;
+        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), RuntimeEnvironment.UserTemp, local, RuntimeEnvironment.RoamingAppData, Path.GetDirectoryName(local)!, Path.Combine(local, "Packages")]);
         if (protectedRoots.Contains(path, StringComparer.OrdinalIgnoreCase) || Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         return Within(path, Path.Combine(programFiles, "WindowsApps")) || Within(path, Path.Combine(Path.GetPathRoot(path)!, "WindowsApps"));

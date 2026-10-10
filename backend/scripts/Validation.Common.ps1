@@ -13,3 +13,10 @@ function Stop-RooIndustriesValidationProcess {
     if (-not $Process.HasExited) { $Process.Kill() }
     Wait-RooIndustriesValidationProcess $Process 5
 }
+
+function Set-RooIndustriesValidationNormalPriority {
+    $current = [System.Diagnostics.Process]::GetCurrentProcess()
+    $current.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::Normal
+    Set-RooIndustriesProcessIoPriority $current 'Normal'
+    $current.Dispose()
+}

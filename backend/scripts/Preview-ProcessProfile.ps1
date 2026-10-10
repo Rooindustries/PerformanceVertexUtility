@@ -1,11 +1,13 @@
 param(
     [string]$ProfilePath = '',
     [string]$TargetGameProcessName = '',
+    [ValidateSet('lower', 'placement')][string]$Preset = 'lower',
     [string]$OutputPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
+. (Join-Path $PSScriptRoot 'BackgroundPlacement.Common.ps1')
 
 function Get-ProfileSafeRuleById {
     param(
@@ -48,7 +50,8 @@ function New-ProcessPreviewEntry {
     param(
         [object]$Process,
         [object]$Profile,
-        [object]$ProtectedCatalog
+        [object]$ProtectedCatalog,
+        [object]$Placement
     )
 
     $classification = [string](Get-RooIndustriesPropertyValue $Process 'classification' 'unknown')
@@ -58,6 +61,7 @@ function New-ProcessPreviewEntry {
     $proposedPriority = Get-RooIndustriesPropertyValue $Process 'priorityClass' $null
     $proposedAffinityMask = $null
     $proposedIoPriority = $null
+    $proposedMemoryPriority = $null
     $proposedGpuPriority = $null
     $rollbackSupported = $false
     $risk = [string](Get-RooIndustriesPropertyValue $Process 'risk' 'low')
@@ -66,11 +70,22 @@ function New-ProcessPreviewEntry {
     $confidence = 'medium'
     $actionSource = $null
 
-    if ($classification -eq 'gameTarget') {
+    if ($Preset -eq 'placement') {
+        if ($Placement.available -and (Test-RooIndustriesBackgroundPlacementCandidate $Process $Profile $ProtectedCatalog $TargetGameProcessName)) {
+            $ruleId = 'place-background-apps'
+            $actionSource = [pscustomobject]@{ priorityClass = 'Normal'; ioPriority = 'Normal'; memoryPriority = 5 }
+            $proposedPriority = 'Normal'
+            $reason = $Placement.label
+            $rollbackSupported = $true
+        } else {
+            $reason = if (-not $Placement.available) { $Placement.reason } else { 'This app is excluded from background placement.' }
+        }
+    } elseif ($classification -eq 'gameTarget') {
         $foregroundGame = Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null
         $ruleId = [string](Get-RooIndustriesPropertyValue $foregroundGame 'ruleId' 'boost-foreground-game')
         $actionSource = $foregroundGame
         $proposedPriority = [string](Get-RooIndustriesPropertyValue $foregroundGame 'priorityClass' 'AboveNormal')
+        $proposedMemoryPriority = 5
         $reason = [string](Get-RooIndustriesPropertyValue $foregroundGame 'reason' 'Foreground game boost for frame-time stability.')
         $rollbackSupported = $true
         $risk = 'medium'
@@ -79,6 +94,7 @@ function New-ProcessPreviewEntry {
         $action = Get-RooIndustriesPropertyValue $rule 'action' $null
         $actionSource = $action
         $proposedPriority = [string](Get-RooIndustriesPropertyValue $action 'priorityClass' 'BelowNormal')
+        $proposedMemoryPriority = 2
         $reason = [string](Get-RooIndustriesPropertyValue $action 'reason' 'Background priority demotion candidate.')
         $rollbackSupported = $true
         $risk = [string](Get-RooIndustriesPropertyValue $rule 'risk' 'low')
@@ -103,6 +119,7 @@ function New-ProcessPreviewEntry {
     if ($actionSource) {
         $proposedAffinityMask = Get-RooIndustriesPropertyValue $actionSource 'affinityMask' (Get-RooIndustriesPropertyValue $actionSource 'processorAffinityMask' $null)
         $proposedIoPriority = Get-RooIndustriesPropertyValue $actionSource 'ioPriority' $null
+        $proposedMemoryPriority = Get-RooIndustriesPropertyValue $actionSource 'memoryPriority' $proposedMemoryPriority
         $proposedGpuPriority = Get-RooIndustriesPropertyValue $actionSource 'gpuPriority' $null
     }
 
@@ -112,9 +129,27 @@ function New-ProcessPreviewEntry {
     $currentPriority = $currentControls.priorityClass
     $currentAffinityMask = $currentControls.affinityMask
     $currentIoPriority = $currentControls.ioPriority
+    $currentMemoryPriority = $currentControls.memoryPriority
     $currentGpuPriority = $currentControls.gpuPriority
     $controlChanges = New-Object System.Collections.Generic.List[object]
     $canChange = [bool](Get-RooIndustriesPropertyValue $Process 'canChangePriority' $false)
+    if ($Preset -eq 'placement' -and $actionSource) {
+        if (-not (Test-RooIndustriesPriorityAllowed ([string]$currentPriority) -Restoring) -or
+            -not (Test-RooIndustriesIoPriorityAllowed ([string]$currentIoPriority) -Restoring)) {
+            $actionSource = $null
+            $reason = 'The original priorities could not be read and restored, so this app is excluded.'
+        }
+        $processPlacement = if ($null -ne $currentControls.systemAffinityMask) {
+            [pscustomobject]@{ mask = ([long]$Placement.mask -band [long]$currentControls.systemAffinityMask) }
+        } else { $null }
+        if ($actionSource -and ($null -eq $processPlacement -or $processPlacement.mask -eq 0)) {
+            $actionSource = $null
+            $reason = "The background CPUs are outside this app's system affinity mask."
+        } elseif ($actionSource) {
+            $proposedAffinityMask = $processPlacement.mask
+            $canChange = $true
+        }
+    }
 
     if ($actionSource -and -not $protected -and -not $blocked -and $canChange) {
         if (-not [string]::IsNullOrWhiteSpace([string]$proposedPriority)) {
@@ -144,6 +179,21 @@ function New-ProcessPreviewEntry {
                 $reason = 'Current I/O priority could not be read, so no I/O priority change is proposed.'
             } elseif ([string]$currentIoPriority -ne [string]$proposedIoPriority) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $proposedIoPriority 'setIoPriority' 'Set process I/O priority for the selected game profile.')) | Out-Null
+            }
+        }
+
+        if ($null -ne $proposedMemoryPriority) {
+            $memoryChange = New-RooIndustriesControlChange 'memoryPriority' $currentMemoryPriority $proposedMemoryPriority 'setMemoryPriority' 'Set process memory priority for the selected profile.'
+            $memoryReason = Get-RooIndustriesControlChangeValidationReason $memoryChange $currentControls
+            if ($null -ne $currentControls.process -and (Test-RooIndustriesGovernorOwnsControl $currentControls.process 'memoryPriority')) {
+                $memoryReason = $script:RooIndustriesGovernorManaged
+            }
+            if ($memoryReason) {
+                $memoryChange.blocked = $true
+                $memoryChange.blockedReason = $memoryReason
+                $controlChanges.Add($memoryChange) | Out-Null
+            } elseif (-not (Test-RooIndustriesControlValueEqual 'memoryPriority' $currentMemoryPriority $proposedMemoryPriority)) {
+                $controlChanges.Add($memoryChange) | Out-Null
             }
         }
 
@@ -179,6 +229,7 @@ function New-ProcessPreviewEntry {
                 'priorityClass' { $proposedPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedPriority }
                 'affinityMask' { $proposedAffinityMask = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedAffinityMask }
                 'ioPriority' { $proposedIoPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedIoPriority }
+                'memoryPriority' { $proposedMemoryPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedMemoryPriority }
                 'gpuPriority' { $proposedGpuPriority = Get-RooIndustriesPropertyValue $change 'proposedValue' $proposedGpuPriority }
             }
         }
@@ -186,6 +237,7 @@ function New-ProcessPreviewEntry {
         $proposedPriority = $currentPriority
         $proposedAffinityMask = $currentAffinityMask
         $proposedIoPriority = $currentIoPriority
+        $proposedMemoryPriority = $currentMemoryPriority
         $proposedGpuPriority = $currentGpuPriority
         $rollbackSupported = $false
     }
@@ -201,12 +253,17 @@ function New-ProcessPreviewEntry {
         processId = $processId
         processName = $processName
         executablePath = Get-RooIndustriesPropertyValue $Process 'executablePath' $null
+        processStartTimeUtc = $currentControls.startTimeUtc
         currentPriorityClass = $currentPriority
         proposedPriorityClass = $proposedPriority
         currentAffinityMask = $currentAffinityMask
         proposedAffinityMask = $proposedAffinityMask
         currentIoPriority = $currentIoPriority
+        currentMemoryPriority = $currentMemoryPriority
         proposedIoPriority = $proposedIoPriority
+        proposedMemoryPriority = $proposedMemoryPriority
+        memoryPriorityAvailable = Get-RooIndustriesPropertyValue $currentControls 'memoryPriorityAvailable' $false
+        memoryPriorityStatus = Get-RooIndustriesPropertyValue $currentControls 'memoryPriorityStatus' $null
         currentGpuPriority = $currentGpuPriority
         proposedGpuPriority = $proposedGpuPriority
         gpuPriorityAvailable = Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityAvailable' $false
@@ -228,6 +285,7 @@ function New-ProcessPreviewEntry {
             priorityClass = $currentPriority
             affinityMask = $currentAffinityMask
             ioPriority = $currentIoPriority
+            memoryPriority = $currentMemoryPriority
             gpuPriority = $currentGpuPriority
             workingSetBytes = Get-RooIndustriesPropertyValue $Process 'workingSetBytes' 0
             privateBytes = Get-RooIndustriesPropertyValue $Process 'privateBytes' $null
@@ -239,6 +297,7 @@ function New-ProcessPreviewEntry {
             priorityClass = $proposedPriority
             affinityMask = $proposedAffinityMask
             ioPriority = $proposedIoPriority
+            memoryPriority = $proposedMemoryPriority
             gpuPriority = $proposedGpuPriority
             reason = $reason
         }
@@ -252,6 +311,7 @@ function New-ProcessPreviewEntry {
                 restorePriorityClass = $currentPriority
                 restoreAffinityMask = $currentAffinityMask
                 restoreIoPriority = $currentIoPriority
+                restoreMemoryPriority = $currentMemoryPriority
                 restoreGpuPriority = $currentGpuPriority
                 captureOriginalState = $true
             }
@@ -278,13 +338,14 @@ try {
         $classificationArgs['TargetGameProcessName'] = $TargetGameProcessName
     }
     $classification = & (Join-Path $PSScriptRoot 'Get-ProcessClassification.ps1') @classificationArgs | ConvertFrom-Json
+    $placement = if ($Preset -eq 'placement') { Read-RooIndustriesBackgroundPlacement } else { $null }
 
     $preview = New-Object System.Collections.Generic.List[object]
     foreach ($proc in @(Get-RooIndustriesPropertyArray $classification 'processes')) {
         $className = [string](Get-RooIndustriesPropertyValue $proc 'classification' 'unknown')
         $include = ([bool](Get-RooIndustriesPropertyValue $proc 'sessionProfileMatched' $false)) -or ($className -in @('gameTarget', 'demotionCandidate', 'protectedCompanion'))
         if (-not $include) { continue }
-        $preview.Add((New-ProcessPreviewEntry $proc $profile $protectedCatalog)) | Out-Null
+        $preview.Add((New-ProcessPreviewEntry $proc $profile $protectedCatalog $placement)) | Out-Null
     }
 
     $warnings = New-Object System.Collections.Generic.List[object]

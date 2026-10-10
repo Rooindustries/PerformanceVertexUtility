@@ -1,0 +1,5056 @@
+{
+ "schemaVersion": 2,
+ "boards": [
+  {
+   "board": "ASUSTeK COMPUTER INC. ROG CROSSHAIR X870E APEX Rev 1.xx",
+   "bios": "American Megatrends Inc. 2402 2026-07-13T00:00:00.0000000Z",
+   "crc": "0B7F918F",
+   "tested": 1305,
+   "experimental": {
+    "004877F5AA3CB08460B140EF3D96E5D4AB90E5AF4A67C4A9A87E3177CAAB1CC7": {
+     "name": "Initial SPL value for FAR",
+     "outcome": "risky"
+    },
+    "00E77EE9E8511CB376685C72BB138CC9810A44730CAF974DA08585D5D10BEA65": {
+     "name": "PCIe Port 9",
+     "outcome": "protected"
+    },
+    "0186CEF943E9D1A08490D5455E253FB18CC9A1FC3A5027FB67F6A86B9EAE74E4": {
+     "name": "Dram ODT impedance RTT_PARK P0",
+     "outcome": "protected"
+    },
+    "01C82D809A7FBC04C7A7372098256079F7618A9FE320122DB1A4E27D904182F9": {
+     "name": "Audio IOs",
+     "outcome": "protected"
+    },
+    "01D19DE41ACBAE4C181C49AA2941E5B97673A388ADAD24CF041B6423671F848F": {
+     "name": "SOC GPU D3",
+     "outcome": "protected"
+    },
+    "02073B6F7DBF6EC7DCFE9B577234A7960CC38A0549526A46A05AE86E4D1E38E1": {
+     "name": "Special Display Features",
+     "outcome": "protected"
+    },
+    "0260E279C09D00BAF0F009AB394FF99F308335CCCB40B237087F2B38A8C2CB86": {
+     "name": "PSPP Policy",
+     "outcome": "protected"
+    },
+    "02D114CA38E5D55F7B1FFBC6F1B9EBE0F76C5BD3285D7711C9C8A988AAEB9E05": {
+     "name": "System Temperature Tracking",
+     "outcome": "protected"
+    },
+    "03252500021C829FD8604CB79FD6A26035DF35EACE0964E4AC50D5A6BBDAF6C8": {
+     "name": "USB2 Port 9",
+     "outcome": "protected"
+    },
+    "03733CA5B29943104AA407C3747CF37F5FE21B7B33CA32816ECD644544A7997E": {
+     "name": "Device Sleep for AHCI Port 1",
+     "outcome": "protected"
+    },
+    "038707F285EB1BD7F7FBE810EF5F7560772A9EA44251D7AA3D131050A531034B": {
+     "name": "PPT",
+     "outcome": "protected"
+    },
+    "03AE044264535A1F115C04DF306A08FE8C9DBBF480F0DD527BDD504C4EB8896C": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "043E61EAE09B71F60AB9C30442949D0CA56FC7FA7B441498EA575E6F2FA2D3FD": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "0446A9435686C8D598BFB749A26DC3E7DD9BE8B10F4F0A33C870C9202764DEDF": {
+     "name": "Trdwr",
+     "outcome": "protected"
+    },
+    "0465E8DBF605B727228802ABF42AF6663544AD7851BC58FEFF6EE36AEFB36FC1": {
+     "name": "TDP Control",
+     "outcome": "protected"
+    },
+    "0496AF8BB68A2797E840F125F5B5055B3991D3334C698EA5C4125C499B3811F0": {
+     "name": "USB2 Port 5",
+     "outcome": "protected"
+    },
+    "0551B38851632129B334AD79337CFDC23A5BD5E5EEE320B6CA9822BCAC60BCBB": {
+     "name": "I3C/I2C 2 Enable",
+     "outcome": "protected"
+    },
+    "0579FB2556FC032CA294AEA545D5AA41566A58C4FA12DA6AADB6244CB68EA163": {
+     "name": "PCIe Port 0 Lane Reversal",
+     "outcome": "protected"
+    },
+    "059D1433CE509B93214EFF9E2C18DAD6DD03E9EC96926B84029F6996369F2FB6": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "06239FB3F2DA0C2CA8BB89931E8739FFC928FB457531C4694240D6CBB493583B": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "063330BAABDB904585A136AC2625FA83C2531C5DFE07CCD00F54F63165F43A76": {
+     "name": "High Temperature",
+     "outcome": "protected"
+    },
+    "06F89B5A8416D368ED73A5D0563BDC10440E2E7433E4CBD660C8B03CFB955E08": {
+     "name": "GPP0 SSC control",
+     "outcome": "protected"
+    },
+    "07205CFE92D6CCE76B97337A4F6E6DE764DB69DA089F468083CF7304D48CC325": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "07251ECF25D0AA5CA237D5EEAF951503572BAF1861EC54EBDEFE61711F97DA98": {
+     "name": "Device Sleep for AHCI Port 0",
+     "outcome": "protected"
+    },
+    "075EEBEB51F049621E0C07FDCE0500F75F456C7E5EA676060D13228F2D487CE8": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "079F959E683F8782E65DF0D4841246930CDFDB0BADF5606D8C21A0EB67C5BADC": {
+     "name": "Processor DQ drive strengths Pull Down P2",
+     "outcome": "protected"
+    },
+    "08447117F3C7013CD8544DCC8A02F2E845EB1F73D9A9D41108A50BD9E7BC0D12": {
+     "name": "Device Sleep for AHCI Port 1",
+     "outcome": "protected"
+    },
+    "08803CE89575D21BB37E53A4378B3DD8D37033F684744B3688537FE29225FD53": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "08D64EFF0EE114BDE4B96DFDF6F8B6B08F30533D0F5859183C41D7E9986851DA": {
+     "name": "PCIe Port 2",
+     "outcome": "protected"
+    },
+    "08F30EB7DAAA39DC3278F73538746E72AE4D77CF10E852DAB91AF117561FC2F7": {
+     "name": "STAPM Boost",
+     "outcome": "protected"
+    },
+    "0999A7A396B429253BE71B71A4A0DB903D354C2F534E6979F32DE691E1D2F352": {
+     "name": "STAPM Control",
+     "outcome": "protected"
+    },
+    "09E8D05E395C09D729194A50BE87CF1EEA4AE6EFD5E41443998D556C59EE99B1": {
+     "name": "PROM21 Chipset Specific Features",
+     "outcome": "protected"
+    },
+    "0A0EFA3264044D82ABD83C243A46959234A85EC073E3F327A818B4B8812FF445": {
+     "name": "MCA FruText",
+     "outcome": "protected"
+    },
+    "0A3FE6494ED5B85A4DA0FB41DA3DF2AE3658AFF53D7889A61E7872D82C533F79": {
+     "name": "Write Drift Adjustment P3",
+     "outcome": "protected"
+    },
+    "0A42DCB45D5F4AD3DB9B589CA65578BF30F7992425A8A828DED39133FD655AAC": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "0A5471E2711D663DD4204AE0D5EE6E9472BA1423DC83CABB25E56DA056677F2A": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "0AB3796AF2B4711FE12B32DF67DD3BB9F5FE2B611C1F4992AF880BC4D5EC4486": {
+     "name": "Trfc2",
+     "outcome": "protected"
+    },
+    "0B67BB5B6FAE1273860FE76E6B4E0E4F85811DE0D05E6D642C00AB780100727C": {
+     "name": "TrrdS Ctrl",
+     "outcome": "protected"
+    },
+    "0C13F24EFA221CEB7AA5A917C9AAE0721CF287A6B3B246F5F69D8065FF7116C6": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "0C19A76747B4935B43088E6DF7070690D714DA93507AC21BB8C4A427BED38895": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "0C26381AE4D42798218E7447A74AFA8249BBD5ABC1ACFB55AFCBEDCAD60120F9": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "0C764B624AF51D5C40AA9E0D52939CDABDBBC76ABAB3AB4075841D0FA8B12C7A": {
+     "name": "S3 PCIe Save Restore Mode",
+     "outcome": "protected"
+    },
+    "0C7ABA15C6751BA1AF42CB67B0C934C79585C1FE59745DD36CE0C698B9A4CE8A": {
+     "name": "Processor ODT Impedance Pull Down P1",
+     "outcome": "protected"
+    },
+    "0C9E2C60C23207610C97A7ADECE42E0236042F7616CA935D669F9A3D64486C74": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "0CE1F183268250C85BF40E3F34EE9FA4A84BD8C2E369EF8224E5AAB5310E83AD": {
+     "name": "Discharge Timing",
+     "outcome": "protected"
+    },
+    "0D000985F8A4696BE4FF5FD863666863EC9FA41E86F40E3F7D37196003E54EBE": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "0D12AAC87DCCC1550683B4046D7DE3253F9A6304FD3DB035156AAF6CCF9EB698": {
+     "name": "PSP error injection support",
+     "outcome": "protected"
+    },
+    "0D507AB0B4D0F0CE5CE2AED0700CA250132906E0E139474C404CEF58C013ABF5": {
+     "name": "Ac Loss Control",
+     "outcome": "protected"
+    },
+    "0E0C7D1A655C28788E656C6F55FC23CAED94C3A042552637CA5EC5FDAF596EEE": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "0E83DCE94198046B365CA66AECA2AAFB3B492A83C57A20518A8B4B122CAB8666": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "0F26E334C34E5BE1A9E48F101177DFA628093C684324B23A572350BEB42689C2": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "0F34A3AD3AE72F763B3A250F5218B68052ED11D1C7730528B2B3A0096A4FA88F": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "0FABB72E8595AAFB65769401B1CDDF470E4F2D0B2737AFD853C5FC9487AD57A6": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "0FC167C96A84F4F272F20BAB653F2A5A3B7B3C3C7DAC3BB0802A4687FE392926": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "0FF3E6E76BD4920F33D0BB8F2D39736953A0CABE706E0063B92788CE5AA5175E": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "101A87BB9FA2B3CEF96190BAF25762CD399BFF16BA5C1ABF4BE2123BF7FD8047": {
+     "name": "PCIe Port 0 Lane Reversal",
+     "outcome": "protected"
+    },
+    "10595A6F6F354B067695C700306D6DD287F66893CCC8496B0CE5FCB3BA1A725E": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "10E1D43A6F11E3552C5EDFA42D20A44AEE0FD7E986EBD20A0EC5C0FCC5337C1B": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "10FBE5DFBDD04B70CAA04B2F7FB2345A324A44D116BC13626983B70700900F90": {
+     "name": "USB2 Port 3",
+     "outcome": "protected"
+    },
+    "11009909E43720A8D26271D5F05973F77144A1D710C2B32E557BF2D1E59F9C7C": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "1102CC2FBA27F492438392B34BA93C0A17DCDC8510D182383AD5EA3589C01591": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "11413732510D0F6E297A1129F7648B59448B2122C6FA2E46CFA3B0F7376FD37B": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "1156ABE95732E1CC517159B340C8DA2EC3E52069D20108A6D1756DA50879322E": {
+     "name": "USB4/TBT Boot Delay Timing",
+     "outcome": "protected"
+    },
+    "11BBA4AF0AFC4AA2026A95E930E3FD7A058EAF7588FA0116D448037C1FC419B0": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1245C0C609213833612BF9FCE34E73B2690C67DF1D2FD74F0CD2B8123236033F": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "128FBAF3C6CB573570965B51D81A4292246B63C485B04978F8EB269CF4D09D53": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "1339E90232215F007C70519B916C651524BF88D4A471709005662046A761781C": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "139584C10C550B83FC9F91E1DB9198EAB692EE6578FFACE1BBDBC2A00E68C1F9": {
+     "name": "Slow PPT Limit",
+     "outcome": "protected"
+    },
+    "13B0A5FD5DFBB8C4B534B049B8DB20DD39069DF7BAD2A74967395C85C5D91F8A": {
+     "name": "MACO-PWR Timing   (us)",
+     "outcome": "protected"
+    },
+    "13E9F00B5A8AEAD852FD7A2836C6870ADED1C667F9C9E05BB8535DFA1EF7DB20": {
+     "name": "TwtrL Ctrl",
+     "outcome": "protected"
+    },
+    "14591C42E2C9D2254441E4307A1023F9B521311F15696C60F595969442490ABC": {
+     "name": "PCIe Port 5 Target Speed",
+     "outcome": "protected"
+    },
+    "15BF885A488FDE99B373AD2CB11700DF4EA69189567871049F1F80D86081225B": {
+     "name": "TCR for Wireless Manageability",
+     "outcome": "protected"
+    },
+    "1610677913CD6593C7B398B203B74BA9A9846FEB6B3F5B83F679F4B87CD83DAC": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "161397A691E6E0E6A3782FA598CA96420236ADC167A7FE05322A48E06883004D": {
+     "name": "PCIe Port 6 Lane Reversal",
+     "outcome": "protected"
+    },
+    "16D15A9032A789A8BFB52FA823C887541C83E3B73DC7C197F8A4F50334CF2EE1": {
+     "name": "Dual PROM21 port number/disable",
+     "outcome": "protected"
+    },
+    "175E32E6D1AF40F47FBECCE5683F089B3B30AFE9D4561DE12740818E394B90D1": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "18279DFCD31DBCC40866CAADDC2EDF650201C8F6BA853327781E0DF1E2163BAA": {
+     "name": "Adjust DP3 Caps",
+     "outcome": "protected"
+    },
+    "182862835F0A831606030E0CE829D2902E8857ACFD6D40D8187EBB157744A4ED": {
+     "name": "SATA Port 3",
+     "outcome": "protected"
+    },
+    "18A6388B79C536BF60BCC1506A555E4AA3616704D4427515A49ADD2597F2499C": {
+     "name": "PCIe Port 3 Target Speed",
+     "outcome": "protected"
+    },
+    "196166B0B332FCDDCBFE446D1C5C04D2F3F192E5A904E89BDCEB11100B9FF709": {
+     "name": "PCIe Port 8 Target Speed",
+     "outcome": "protected"
+    },
+    "1984FED2811E25F8043BDE495FEAE56A0C6004A38BA88340F3800B81169A662C": {
+     "name": "ACPI SRAT L3 Cache As NUMA Domain",
+     "outcome": "protected"
+    },
+    "19A185ABE6AF775E9E722E90F51015773DA1DB6C7A8AEC39F708B40159C68147": {
+     "name": "ECO Mode",
+     "outcome": "protected"
+    },
+    "19ADB3F935C56DD7890728AEB4198FA547914A69B70BBA18AFE90BED33360E64": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "19AF782144B337BE77648863CAA68EAFD94DD44F01C1BCD968297AB8D352E98B": {
+     "name": "FAR Switch",
+     "outcome": "risky"
+    },
+    "19D7146EDC9BA4B672D227ADED228F4D712B5B3F5D0DA80E97BA40E72ADA9A45": {
+     "name": "Dram DQ drive strengths Pull Up P0",
+     "outcome": "protected"
+    },
+    "19E178E8C76FB435C9F0D1E1190A5D7C45DE0329C6D85B06650F5180EA897791": {
+     "name": "USB2 Port 5",
+     "outcome": "protected"
+    },
+    "1A0457AEA10F867B11A357B544B7C7216D2815D26E4A5B93930C2F9B25EDE4C7": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "1A21BB00B71B9062492EA8EF417795CB9AA59456D00B94C9AB2C84099B372384": {
+     "name": "SATA Port 2",
+     "outcome": "protected"
+    },
+    "1ACAB7069700B591541F323650C4A24F4B614EDE8C00B806325135FA760443E9": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1B55ADD19349F4BF5DE8EBF4C3B5F10C71776F5C025FDC69C767A98A21ABA71A": {
+     "name": "ECC",
+     "outcome": "protected"
+    },
+    "1B56E0E45AF8BC22A36AE5C307D245B8DA11753751C9F349FF6509AFF66FD887": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1B78EE87DF86BAFEEC324743B9259040051BBE1F8D1688A4F00210FBFDE9814B": {
+     "name": "CS ODT GroupB",
+     "outcome": "protected"
+    },
+    "1B802BB0B521E0F234FB71A971E2072474419C5C89E3E1ADB0EFF44724CC8DAF": {
+     "name": "SVM Enable",
+     "outcome": "protected"
+    },
+    "1B860D0210B626519845DEFF305DD84E99C2967C13CA794F0598F908DB8FAA62": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1B8ED7E10EC5B9E9141C66CD61FB6FAAD453C0E476850C325E7A6D3B37A56D44": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "1BE7FA419BDBB7D78B9E1AD58F5A0F86363CFA102CFEF134A01ECC4E7A8E8BBA": {
+     "name": "PCIe loopback Mode",
+     "outcome": "protected"
+    },
+    "1BED178486AFAD21AEB472112D4D9257CC41795C1E61167327A7D1BB323DAAAF": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1C26D01B3B72428EF9B5F1F2FF2FE4C98A7483FE2AD1D44B340D33B532E87A35": {
+     "name": "Processor ODT Impedance Pull Up P2",
+     "outcome": "protected"
+    },
+    "1C86A139C3E5247C79370C0421D443C482B6B032C8D88103E472FE1027185148": {
+     "name": "STT_ALPHA_APU",
+     "outcome": "protected"
+    },
+    "1CB76F8D7AF509B0263D59487AFAB0351D257237AE0AAC35AB8BAD5FA4C77F23": {
+     "name": "Power Supply Idle Control",
+     "outcome": "protected"
+    },
+    "1D2EC22BBAAB3EB2DB2F01144D0A9A30C04A386AA527D4CCC62351A6C0CE06BF": {
+     "name": "DP3 - J1502",
+     "outcome": "protected"
+    },
+    "1E4D28405A40A47C06A89FD6DD2CAF6A95B9AEC928866FBD6F72EB084080A29E": {
+     "name": "STT_M5",
+     "outcome": "protected"
+    },
+    "1E78F7A1F5DCBF74AE18BE9CACCF806DD9BC64A17973E05774E972F2548A156A": {
+     "name": "XHCI Port1 Speed",
+     "outcome": "protected"
+    },
+    "1E879AA34D7C4C68AC815BB79A92B6759B2A36EBB69080C2E93CBAFEB5335DDD": {
+     "name": "Non-Eval Discrete GPU Support",
+     "outcome": "protected"
+    },
+    "1EC67D10088410CCF0D7AF1D41C76930D6698E341B8991A28E761AD97F4DD400": {
+     "name": "STAPM Boost Override",
+     "outcome": "protected"
+    },
+    "1EF2DE825BD359EEB610F72CE9CB7E21CA930982BBE7AA7A55754B1E95766825": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "1F0B8FCA17334762BD5330E6AE61065E0165BBAEA4A382638988B272444B9289": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "200D98FBF284FF53276D0956F2300078E487E747F5ED7E98B2670300EB0ED670": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "205229A8CC64C7AC8A431569A26B2252479BDA667E2621636C0FBD83EDBEFC55": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "20BCFE5C87BC3531E7B4C36CE8F022F79BDF4D952932E590C7CBA65FF94758E2": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "213F18BABE347AD3729344C74DD5480C93566D76260B1D2779DFBA0B4D8C816A": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "214628E7709DA7DFD8F5DAF093407ADFBE464B19543F8F055599D4C9CF6ECDB2": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "217F3138D82D62C6DF5DE01BA5BDBCD8C8F7EF2614395726DC55CBD8700B2114": {
+     "name": "RST-MACO Timing   (ms)",
+     "outcome": "protected"
+    },
+    "218877475A75CD56AF710C37F398602FF8C7F8FA845E69E4E49053FC50767417": {
+     "name": "SATA Mode",
+     "outcome": "protected"
+    },
+    "21A809882998BF328B84D4DAA21E8D056CB8AD432DC576E8DEAA474438926650": {
+     "name": "Power Button Override",
+     "outcome": "protected"
+    },
+    "21C22BA887637617E43455E9B89D9089D08BC31392FCF28DB3717F5152C688AD": {
+     "name": "USB3 Port 5",
+     "outcome": "protected"
+    },
+    "21C8615ACCED7359CADF5023EE0A1EF8BEF852A1F633700297E2055ED67D1BBC": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "21EFF53368DB158D5F2E5E686FFD00D487932A542511524F715F898CEA113CC0": {
+     "name": "PCIe Port 10",
+     "outcome": "protected"
+    },
+    "2224096A95648116F5AF5565D5F210C75F00AD89C13CD99C4ECC06751996BADB": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "22274A309187C5926A743DEF803BB67EABFFB2F34559C16912D5A216149C5178": {
+     "name": "USB4 (ASM4242 Controller) Support",
+     "outcome": "protected"
+    },
+    "223BC75E2ADEB56278463CF9A82B44846898EF0BE3FE3029A2FE22E701AEF6EA": {
+     "name": "External CLK Control",
+     "outcome": "protected"
+    },
+    "2286F859432DC770B8FA896A6A42B9D0C1AD99EFAD3A53768F7C8B18512FFCDA": {
+     "name": "Read Drift Adjustment P0",
+     "outcome": "protected"
+    },
+    "2297CB0CD94336AD7A0D7970BEAD220CF308B83C232809016FF8ABE595FA5733": {
+     "name": "SoundWire Beep Tone Amplitude",
+     "outcome": "protected"
+    },
+    "2299A1DCC3E9B8A2BAA52EA4ABA8F5CFC956A9D04187FC707C2028EA258AC37E": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "22E710A3785C6D478E9F6EE16AE81E2EDB6339F026D91B2D1C8ADB667AFD44F1": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "2413F1895481E7CD6C1FC4C0F938290FD37552E55505D145AAA7DC7AE2CA5EA4": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "24512398C86F3F9034DB3248F15855F66DCC5798D3EAA0928319389C53641230": {
+     "name": "SATA Port 1",
+     "outcome": "protected"
+    },
+    "247E93E695999575442C2F367314EC7AC2A9F2637A7C1B12455083B4BDDABA2C": {
+     "name": "TX2D Voltage Step Size (2^n)",
+     "outcome": "protected"
+    },
+    "24895B2171FBD79DC0680C3B6EC037B2332C134621C5EAB967395442F0CCCDE9": {
+     "name": "Pattern Length",
+     "outcome": "protected"
+    },
+    "24AFB68E97E6E5DAD5BF078604586239FD2BF7984F83E9533DD0068E36A74949": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "24B03CAA9D880996A340202425335D2C9985A47686BA44D77BA6088F15FE00B4": {
+     "name": "PCIe Power Management Features",
+     "outcome": "protected"
+    },
+    "24D324F8A7A15057D90A53E2FC26FC6D023EF24C609042A9741F3A26277EE735": {
+     "name": "PCIe SSID SVID Overwrite",
+     "outcome": "protected"
+    },
+    "24EF02E558716D5D84EEE6C3872DF1F303E0ABA93BA494548AE6DA3650EFFF15": {
+     "name": "Dram ODT impedance DQS_RTT_PARK P2",
+     "outcome": "protected"
+    },
+    "25373AFDFDF58512F1C717ACD88344C8DE7BFBB02C70726DAB07BC36F481708E": {
+     "name": "PPT Control",
+     "outcome": "protected"
+    },
+    "25E0E1F24D4B55C24C1ADC5F59945B403D71A1FA324597DC2C4A5F165889FD27": {
+     "name": "PCIe Port 6 Lane Reversal",
+     "outcome": "protected"
+    },
+    "26135626E030017FB2BA20864B8CD144A030FFB89B7F0532D7BEEDD877BB6826": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "261DF393DABA2246A79F3335CFA19B764929A94DA8D58221A83888A8D3461A8A": {
+     "name": "BankSwapMode",
+     "outcome": "protected"
+    },
+    "26EEA73FDC153D4D1F38E1519F1D371E0668225F850A7313BCBE9B2D65E14E8E": {
+     "name": "NewRecordOffset",
+     "outcome": "protected"
+    },
+    "270CEF9E25F688C247DD48FA288B85E596EA8BED5CF049B0093321620AE02B51": {
+     "name": "Processor ODT Impedance Pull Down P2",
+     "outcome": "protected"
+    },
+    "276F8C2BA9AB8B519088B43D8E775AAF23E1A23049B6B16CBC0081400A68D26B": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "279324AE82AAB9780897F3049E234D4C1C979F2356C474C3E47B30B1893D14F4": {
+     "name": "Dram ODT impedance RTT_PARK P1",
+     "outcome": "protected"
+    },
+    "27B1B5A735C5F3F9CE264B472EF911A9C58A8437CF3B45084B51F161652786E1": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "27FCC1DBE5BBE316C186687683E2C9C9A0404BE6F682D36FD585810181DD4918": {
+     "name": "USB2 Port 8",
+     "outcome": "protected"
+    },
+    "2866034EA0DFE503AD01618B8AAABA42D4D7BDFF725F1D9E38BF6C9157A6195F": {
+     "name": "M.2 NVME Tpvperl",
+     "outcome": "protected"
+    },
+    "28E0E63265F83749917CCE3D32424993D4D71C62C37082EFB3F9F8F9213F118F": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "28EB78E994B6528593F02A39D11B5730C7B8ACDD0C88FE86BF224999CD038D21": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "293984D4955CFFAB86FE80AC1B971CCA05635619B20B654F65FA0E5C2E78DA83": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "2970A966823A6714354819242382FFB9D0772D821B595C4F52D021BDAED57D75": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "298C574511977272BC65576326380E0D089CF53072CF63223F0195D3C95DDEAB": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "29CE12B722191CD92BC56F26E2DB2A41F4FD3B0C02688FEB7B5A8D7D633A1767": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "29DD04323D8D513D20F9E5CB3C9DCD6C1220856F7998EDE00D51C9FAA5010D4E": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "29F2DA7156996CAA010BBA83691A3FF4BDE748088940D0E65AD14C2D0A410117": {
+     "name": "Dram ODT Impedance RTT_NOM_WR P3",
+     "outcome": "protected"
+    },
+    "29F65E007D2885B9A8906C1B98AE0E11E72B6DD4CD4A5CE1847A480CD58C6496": {
+     "name": "Pattern Select",
+     "outcome": "protected"
+    },
+    "2A407DAED1D33FDBFE6192BEE3B696DA825458AB8A404B1EC0B1070B7DE92BB8": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "2A450A6ABBE5B2EBFBB4C33ECBF81DD335D39F0B389FD56D359279D54CC18064": {
+     "name": "Aggressor Channel",
+     "outcome": "protected"
+    },
+    "2A4A3BD6456B232160DBBFB43C7AF2B79C9CEE7C92C3AE67B747A25F4D1911C3": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "2B069F4AAFF137FE196F2915F5BCB2C2CABA6E9E783665245C002FA96565CF09": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "2B0B156689FBD92D07397841B17DAC8BA14AE9AB11219CD4AB1EBFB0379B0311": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "2B471232FB3EEE77871F2D284CBE9E6BC4FDCC8D66B12E94AC509DE817C0BFB5": {
+     "name": "SEV Control",
+     "outcome": "protected"
+    },
+    "2BAA9713C01332775CB770F1119C36B507F01F1FCAEDAB8BD86690993ACDE73F": {
+     "name": "L1 Burst Prefetch Mode",
+     "outcome": "protected"
+    },
+    "2C23A2E61FBA7FFD4499AC2E1DFCDEA0AE9DC5DF92F91926C355B68D1831180E": {
+     "name": "ABL PMU message Control",
+     "outcome": "protected"
+    },
+    "2C2D1E5857180147E1B54AA8DDDB7E06BFC73440EDD567A03708F3F1E96FCE33": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "2C7A6ABB7981DA9DE64B5F59588610AE3A6E0F78C3C707F1F3F8DE9E7D75BC15": {
+     "name": "USB2 Port 1",
+     "outcome": "protected"
+    },
+    "2D0930433CDED5A3E46ACCA126486CC63A98DC264117EFF262AEF29E96E11E1A": {
+     "name": "USB2 Port 10",
+     "outcome": "protected"
+    },
+    "2D0CCA2F3CFE080CEBBBE8948BB428EB741A254C0289EBF451D99044AF6023FC": {
+     "name": "Dram DQ drive strengths Pull Down P1",
+     "outcome": "protected"
+    },
+    "2D7955A949D85CDCA6E610BD20AED983A8C3B7B0F7CDC245DAAB7C9EFA0CD19E": {
+     "name": "SecureBio Camera Support",
+     "outcome": "protected"
+    },
+    "2D87C7652CEF6045208347517EB322FA5D17C60D46B5EACCCD8513F689365DEF": {
+     "name": "Retimer margining support",
+     "outcome": "protected"
+    },
+    "2DB231458C86E46029E18CEC6321511C0F07DD445685E98309A0008B45E783DE": {
+     "name": "Write Drift Adjustment",
+     "outcome": "protected"
+    },
+    "2DF132144DA06A8FBCBD6E2B27E40A3A43288CD942689A2D78536982E3FB3C3A": {
+     "name": "Processor DQ drive strengths Pull Up P3",
+     "outcome": "protected"
+    },
+    "2E0CD771157D3833770EC230535FBEF64AB9E9F27F0B8999BD2F532F0E7BF9A9": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "2E1AC204DA349E5C02F71DFB313A2D54348532E6A3CE353E12F819945E2F65C9": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "2E25BA8180C4C3153B764A99617DB8EA62ACA7B90E32B336B7AC8DD284321AB8": {
+     "name": "PCIe Port 5",
+     "outcome": "protected"
+    },
+    "2E50E1E91ED3519EE35432CCA05D873D0F468E518D236DC264B62EB0A0C0FC49": {
+     "name": "Tcl Ctrl",
+     "outcome": "protected"
+    },
+    "2E7B42E019EDB83D211C00D207D3F251AA4FB6058BB7532864882B3B2C9FF5F3": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "2E89C2D158143B951AB001FC04130616CC59EEBC6BF40E56B15D74F6D8C76BE6": {
+     "name": "TrdrdSd Ctrl",
+     "outcome": "protected"
+    },
+    "2E987A32FF3423E626E939669F7284B8E8FB9E3850B0307D7A56AA2FEB1B06F1": {
+     "name": "USB2 Port 7",
+     "outcome": "protected"
+    },
+    "2EA3723F6036DC7DD6C25C1E3C447D140A59A2F93E57C43035D22341D3D14DB9": {
+     "name": "PSP RPMC Switch",
+     "outcome": "protected"
+    },
+    "2EB751F38D436EB4D0772205D6D83A1B8BA5AB6ADC0E0CB1A056E3ECC6B2C3A1": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "2F35544ADB133CBAAE995DFA5502295CDD25AC80C2842E02A451302078153280": {
+     "name": "Corrector Branch Predictor",
+     "outcome": "protected"
+    },
+    "2F6FB352C6CBB6DFBE66B55B5A0E800A00DCEE5F51B2EDF7B8D10DEDF919BD4F": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "2FAEC09AB098BCDE0ED1B19E4B5FF34C6725B30489398DDA4289A615B4166D00": {
+     "name": "SOC Azalia D3",
+     "outcome": "protected"
+    },
+    "3090C1E7C95B797E9F8292308BC4C4115F98EE2FFAFD9031C72BCC4A1DBD701E": {
+     "name": "PCIe Port 0",
+     "outcome": "protected"
+    },
+    "3098C93D8FE18DEC6A3E68020C337397E12AF72C459EE2D7818355ADC9723ACD": {
+     "name": "Sustained PowerLimit",
+     "outcome": "protected"
+    },
+    "315AEB399089AB883694253575692846574ADC0BD72596085EAC8DB19EF7C39A": {
+     "name": "USB2 Port 1",
+     "outcome": "protected"
+    },
+    "3208F919FA09D3B7C6874960635636BB9475C11F9BD7AAC94A2AA4C62D109675": {
+     "name": "RedirectForReturnDis",
+     "outcome": "protected"
+    },
+    "320C29805FEC5F2ABB2868BE9B52396A8C218E1666CF35906E1043962E3D7A07": {
+     "name": "Dram ODT impedance RTT_NOM_RD P2",
+     "outcome": "protected"
+    },
+    "32E605E7BA2D608456819946200ACBCC70FF17D2F30BD536A04D145425130253": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "330B97BAE78726DB0BF3F59F2383C16E171887B702831D92D2469DD753BC67BD": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "33C532B257E88D5CFAC2FBCF2D0E2AE58B65CA2BDFC98C8DF5E6077B8528E8A2": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "33ECC02D5EC7851DD9013278090609C779454126F6D90265EA2C012F327BF20B": {
+     "name": "Gen1 Preshoot Enable",
+     "outcome": "protected"
+    },
+    "3424223BDFCD8B041B43BDF4C9A1490104FC36BC88CFCBD076D92A6952A23A2D": {
+     "name": "Active Memory Timing Settings",
+     "outcome": "protected"
+    },
+    "3448792985BD5BD96B096F8C83543F4647D69021682A42DF4CE0018D5F09FB6F": {
+     "name": "SoundWire Beep Amplitude Address",
+     "outcome": "protected"
+    },
+    "34966118FBF2BF68A56A9B439261869539BF8C141BBC94FA2129FC9EDC3AB3DD": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "34996FDF2C93B760EC589C1DF428892172D3E7AB070B714B9F449A8049D5F789": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "34D4F148B34A36E703BA2782E0888FE40C81E44014990E5EFB4E8F1A512CFF90": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "352184DA3CF8F1F4E3E3899250A4E525F3417259424C44FDC602D0B2CEFC062C": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "3525EEF7377554FED8CD0321F1A120962B0614D1CFDC5E933FEA9E733166AEB9": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "35356BE140858CDC487D9A7B8AC26004B67B32F2C1BAEDE7637CF6432B8D03AB": {
+     "name": "Pattern Length Select",
+     "outcome": "protected"
+    },
+    "354F8833F497D8AE9CE3CA6C057621EC881D801080BDD05D772F80F65100DDB0": {
+     "name": "TwtrS Ctrl",
+     "outcome": "protected"
+    },
+    "3563A33CE16B135CE6918097B46FE9BE6A4F3BB2D2E1D8E6DA7D420350849842": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "35831345744D6E414E1F4C6C36C2CBD345DF3450D188D35AC1EE5438EE11CB70": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "35B4072D3477F98074CB5925AB26AF068A42135E4AEC3B0F3852C0A3DFA8D40E": {
+     "name": "DP1 Display Caps",
+     "outcome": "protected"
+    },
+    "36261A9D44B3799B0DF9BC8231911A107CFBC76E25D71A9251A9EE9D77138B98": {
+     "name": "Dram ODT impedance RTT_WR P2",
+     "outcome": "protected"
+    },
+    "362F17FBD7535343CFDB8DEB6C12AE78A903FD766D823E777A9F180757987948": {
+     "name": "AMD Variable Protection",
+     "outcome": "protected"
+    },
+    "364E25893E7BD71154A595B726B5DA67FC421CD8FB13B2361544F48E47D66A7C": {
+     "name": "Trtp",
+     "outcome": "protected"
+    },
+    "366AF87041B00C0C198E66DD6AD32B4EAF2BD9FDE865A983D22C137210F6CC2C": {
+     "name": "RX DFE Taps",
+     "outcome": "protected"
+    },
+    "369D5DE46D7DA1EA5489F41EBA0163B2CC614B6AC9D6934A819EAF6025F291A3": {
+     "name": "DRTM Support",
+     "outcome": "protected"
+    },
+    "36E122CDAFB98DCAC0FC9A3BB2B935F56BB936C92B0D0EAEE17142A5D0CD939E": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "372F3FE156D8CF59B6A64609F61FFF53D37F30ECB517B49EC3B6C70DA3F8FFF9": {
+     "name": "Enable Program SI values",
+     "outcome": "protected"
+    },
+    "374F342D441702CE63FE3E6AEE92D2F8C8E94AA6AEB2E6E4412999305A2A303F": {
+     "name": "Trc",
+     "outcome": "protected"
+    },
+    "37B838AB22A6CC85FD16E2269B3A037D2E49ABB544DDFDA4AB85D5BBC1206939": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "382B245F5AB328FD95CEC9290ACA0A09714DFAD6B2310981CECB43BB970A7B49": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "389A0325509C6C4BA8102512CB8E7104D3FCF8A742477CB1A30C8A6EEF81AD07": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "38BE12BC07D17990A4AC68989F0456F140D5970E5BB9CA1241C695A286074ECD": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "38DB12A48236C768CA6C5C03FB130FDF94EFC7E7C1029E231154B3611FF30BA8": {
+     "name": "Internal PCIe GPP 2 D3",
+     "outcome": "protected"
+    },
+    "38DCE664317A8E00C8021B202943D80CD9398643A61DD1CA25AC3F62B9A3EDD6": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "3915D4A745E9FF0EA9F3037F220563EF1F08159E378143AE0F595FD2F95D249C": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "394E97DEC59E671FE4332BCCFA6A99F1263DA44339C62720EE681AE69DD67A22": {
+     "name": "USB2 Port 2",
+     "outcome": "protected"
+    },
+    "3964B4D4780E113045203BFC8C5475E8081638A1F577817A81ACA58D703418D3": {
+     "name": "TrdrdSc",
+     "outcome": "protected"
+    },
+    "39861D61CBCBBE463169C0DD5201E8DF6337E3FD7DD84E1F011A83DCCF45A123": {
+     "name": "VDDP Voltage Control",
+     "outcome": "protected"
+    },
+    "39E27FACA37374BFAAF46D0D52AB60E4FF51DE1B45299DB805F594F93809817D": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "3A639A4E6C111348BE9006C96C4D099FAC16F94CB65C9F5503F7B764150ECC9D": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "3A70DD9DC77CC0276B1EAFE228FECE817DB46BEFF87170E7264A2B72D757CA4C": {
+     "name": "PCIe Port 8 Lane Reversal",
+     "outcome": "protected"
+    },
+    "3A7DF5A5DC05B0C6DEB61B85C6C7294326029A2B9DE004AD46CC3145CEF7FF39": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "3A9BF5355359EFB7167A3947F02AFADBC75C7852706082508B9271F38B7EBAD2": {
+     "name": "Tras",
+     "outcome": "protected"
+    },
+    "3ACAB3E2D7B32CFE7561F32E000C83ADCF12FB70799043FC24DCF20AAA37A279": {
+     "name": "Processor ODT Impedance Pull Down P0",
+     "outcome": "protected"
+    },
+    "3AEC45605E310A3A51E501355BB8BFE60F7966A7AFD001B3B8B0AECF43765C08": {
+     "name": "Enable Program SI values",
+     "outcome": "protected"
+    },
+    "3BACC2B3F48E35C9E427A641A113B1F5E43449B48AE044484F5FAFFBED777A59": {
+     "name": "Persistence mode for legacy endpoints",
+     "outcome": "protected"
+    },
+    "3BEEC3B9A193AAA3295C1C65C553077A817231FDA79DEBB6687A261D2A7301D8": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "3C01F625060915854082CF6C5C11673854E57F170E6B26A14CC89D75F3C50AD5": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "3C03D98002F79B2BF7A5B4DE8272FDA927F995F61831A0556918654B025DA4CA": {
+     "name": "TrfcSb Ctrl",
+     "outcome": "protected"
+    },
+    "3C70814500E21975F7A8571CA94C923F540CFC6E5849BE3B4FC3DCFB36BD0015": {
+     "name": "ABL Console Out Boot Mode Select",
+     "outcome": "protected"
+    },
+    "3C8223118D3CF44E138F5E1458D8A4A29B5C33365F1F91C520DA01E9EFB21EFF": {
+     "name": "USB2 Port 3",
+     "outcome": "protected"
+    },
+    "3CD2448F83CA94F4B488FB4B36BE00416809FF030C243415DCDA962DE2C1DDAF": {
+     "name": "PCIe Port 4",
+     "outcome": "protected"
+    },
+    "3D9203A2F8685A0A56E7A9A877223431B8D7E1A02F37D28B0F60B39E2D84F7CD": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "3E1C2D058B7AC74D10228062C102B682C3571B0E55D0C5370821400E8834305F": {
+     "name": "High Pwm",
+     "outcome": "protected"
+    },
+    "3E234874B27446BD27D3FFA6779AFB5254141F437EC9DCC4235A8D5D931F8133": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "3E3AA9D03119C086E6E9C0542B44FB5F87D344CD72EB97992866D85D3DF234B2": {
+     "name": "Core Watchdog Timer Interval",
+     "outcome": "protected"
+    },
+    "3E674E7AC237ED8F079AD1E14116EEBA8A61790A6F8A9C397E12AB2609AF6515": {
+     "name": "Processor CA drive strengths",
+     "outcome": "protected"
+    },
+    "3E7A0C3F8B1C38A785DFF13BD69A1C7D4CB32E041B6EDD643BF7EADA66A8819E": {
+     "name": "DFE Read Training",
+     "outcome": "protected"
+    },
+    "3EA4300D041E6B61663F419A57496CFD448D693D537882498A7A4B1DC55C48C3": {
+     "name": "STT Control",
+     "outcome": "protected"
+    },
+    "3EC8D4FA57BB20D1FD3305A79A4126B287D32D15A04810395B51D04A76E0E6BB": {
+     "name": "Processor ODT Impedance Pull Up P3",
+     "outcome": "protected"
+    },
+    "3ED7E45C886255C752269765B4A0A24D4731E834E2E209A4688214850B9D206F": {
+     "name": "Dram ODT impedance DQS_RTT_PARK P1",
+     "outcome": "protected"
+    },
+    "3F00E2BF731360CFAA9798F4FFF0B39A7BA3BD8CC64157E274064F4AABFB1713": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "3F03B318067FE80D296C685187130F87885A7FD987679ED3BF336F5F0C406F46": {
+     "name": "I3C 3 Mode",
+     "outcome": "protected"
+    },
+    "3F0D7CDB2093E92E1408503F6C8718B3C961E20B9D35BD2DE419B1A9BB2F7E5F": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "3F1E6F92DBA69236B71F9751A3B956BBF0FBE68BA26C3920A8C58143E1CF6C2D": {
+     "name": "USB2 Port 8",
+     "outcome": "protected"
+    },
+    "3F6A8964E1A24B3B0D89685CB2E80AD8ADF331F615F49DF2C58852F413A2DEFF": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "400FAF9234912C54FDA01F692B5FE52F4AC10D7AD82096D2BA72A48914F4EB9F": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "4056D128BFAB586B5F5926A4B53A3C2E3557720F94FA10E28B4A6BB358F6BBED": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "40B5D717659A52429E82CF5069FBC1716A54555D9AD62773BB5BEBC52045E5BE": {
+     "name": "USB2 Port 3",
+     "outcome": "protected"
+    },
+    "41069AFB7A72DD56AFCAE8D8BC5181C6954BE0B432AA8042BA894F4DE095AC79": {
+     "name": "PCIe Port 10 Target Speed",
+     "outcome": "protected"
+    },
+    "4169995B0F53CAB353817F7E373647AADE8443E8A3AC5212B665C8E4E1BC47EF": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "417810BF34A6C9A1BE2F2C69377E65279BDA75BBC3CA11DEED05B12AE661C7C4": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "420D35DA0456037F932F1D877929675C3B6B963CE72E801A7A0DB88173488384": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "42A52CAAF2C3DB9AF9AF59636E404291639F7F58833135DDD392401FBB18CD91": {
+     "name": "GFXOFF",
+     "outcome": "protected"
+    },
+    "42FDF307E40842D77668EFE3478677BCB4C8CBDC814930587A625BA68B75B187": {
+     "name": "PCIe Port 1",
+     "outcome": "protected"
+    },
+    "430DBD98178B0C32DF5DAB413A9DF6641B98AAF9A499E7A200034D704AC32CD1": {
+     "name": "Memory interleaving",
+     "outcome": "protected"
+    },
+    "430EB3957796FAFCCAA7AC9C0B4897F9D180D193B4CE1A9D27F3E291B7862955": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "431F6ABCBD336A0B2A70A20991AC3ED9A8DF82A42182D6255C6DF0D94872ED16": {
+     "name": "MBIST Aggressors",
+     "outcome": "protected"
+    },
+    "43345A888595989847A63BF50390F79BCA8A06CA2F56909CF5E194BC96DB355A": {
+     "name": "Address Hash CS",
+     "outcome": "protected"
+    },
+    "433E0E68EEC2C47084E219EB6A66768B4B159041CD1D4DC3DCFDF614AA4E517D": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "4340DC05B6911C7B9FD0AA05D6E30AD6999B876C6BC14A3B645156E22A6A2AB1": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "43582CC7C5971921DE4C45010642572BD42BACBE0EF58E5E86B543C397212D3E": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "435B5C784056EC5979B26883FB2BC826F768B176FF2E77EE17E6C552F0E616FF": {
+     "name": "PCIe Port 10",
+     "outcome": "protected"
+    },
+    "43644520101258434319BF40024E118C451C96ABC8BF39763B90FAB26C7977F4": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "437E5BCEFE88C7D36EBDCCC9B88241DEFFCAED85352B3D8A1DC033F24EC84D34": {
+     "name": "USB2 Port 0",
+     "outcome": "protected"
+    },
+    "4391D1561AC2024F0A34145D2BEE89BB247CD71168C7E68571376E054A4B6E44": {
+     "name": "Processor DQ drive strengths Pull Up P0",
+     "outcome": "protected"
+    },
+    "43A2A9849871DE951A61F644F695B581286B791D119FDB6767FAD7266996ACC7": {
+     "name": "PCIe Port 2 Lane Reversal",
+     "outcome": "protected"
+    },
+    "43C7AF7C5EA6861FA0AD308100B14B61ED3D0B1C30CFB4FCB093E722D2B63A13": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "43D4964B2D4DE4FC30252D3EFD0704A72AC6D15AC8120117EBE0171EE394CB1F": {
+     "name": "HFP Enable",
+     "outcome": "protected"
+    },
+    "44CDB14C640063DAFB7ECE6B9A9C1A94FC3D57F3AF3E04F7185C0BAA9CE00D57": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "4543E4D28885277A73DFDA0FBF12A5D0737ECF240B25422C3F03AE43F466996E": {
+     "name": "Dram DQ drive strengths Pull Down P0",
+     "outcome": "protected"
+    },
+    "454A4197377C0639DB8F943079006D19175E69F9EC84A76184362529915903E4": {
+     "name": "Internal USB4 PCIe Tunneling D3",
+     "outcome": "protected"
+    },
+    "455622C022EF249B343017425D58BEBF0BF3E538AE25F1B4B8AF2324DB3B0205": {
+     "name": "L2 Stream HW Prefetcher",
+     "outcome": "protected"
+    },
+    "4584A40DBB7D2EFF769D3B0E480FE20B052FCB8358EBC2233F4FE2BC22EAEF9A": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "4679ECE2CB52B215D1309F996B7DED7A75EA63CBA9F85CF41369AE27A64529D8": {
+     "name": "Dram ODT impedance RTT_NOM_RD P0",
+     "outcome": "protected"
+    },
+    "467B929716011BF1A4A758634197700E14584AA1FC1B3C4F508ED343DCDED21D": {
+     "name": "USB2 Port 4",
+     "outcome": "protected"
+    },
+    "46FD8F44A1368DB48E2B756B9E8E8E5E45E1A7201C9FFDD3C4B048F71FBCA410": {
+     "name": "Clock Power Management(CLKREQ#)",
+     "outcome": "protected"
+    },
+    "47A18757F6E2750CEFEFFAF6A0A8528213AB989707403356D01BBD4ACB3323F7": {
+     "name": "PCIe Port 1 Target Speed",
+     "outcome": "protected"
+    },
+    "47AD1A5274D1EFB91591958575274D83DF57B2D4501BFF57B29660F87EB0093A": {
+     "name": "Trtp Ctrl",
+     "outcome": "protected"
+    },
+    "47C0D61D2856D74585C03E859E2C4FF86869D1DF8B9A4C239B84EEAC78C8091B": {
+     "name": "USB3 Port 4",
+     "outcome": "protected"
+    },
+    "4844EF5E426BAC256CE36C6B1F850260D4F37DAE24F2C816DFEEA142E591D9D5": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "4849AB23130723B58DD5AB6B5FB13205324214D6B72C3ED838E68BD585EB1F7D": {
+     "name": "RAA Refresh Decrement Multiplier",
+     "outcome": "protected"
+    },
+    "486E8DAAE8CBAC7F12A202EBA2BA2C286531841341628C0E555629369AC8C0A7": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "48866E50A2639BB36C4D9B101F42CE7313DDD17439EA5B0BFE41E5DE1FA4D2B1": {
+     "name": "CA ODT GroupB",
+     "outcome": "protected"
+    },
+    "48DC92440470345ACDA7E03E7B96A10079D68FC4AD5799EB45BC7A7C89AE9DF7": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "48EBE5CE9B6CAF1EEA558C3AB5C85F4F21DAFD48EE8C8140C0E2C9C0C1BF79C3": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "48F49D0F39407487C659C776D191B74B4D6C535E532A16ACD27DB66D393887F0": {
+     "name": "Primary Video Adaptor",
+     "outcome": "protected"
+    },
+    "4992F6832574934FD7720B4E49070080BC6DB0AD28B6C9A62ED74771DAD3FC79": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "49A1F0CD814EEB08A2848E02441F394E96CB7AC4072FC7B153A8D8480EC15652": {
+     "name": "STT_ERROR_RATE_COEFF",
+     "outcome": "protected"
+    },
+    "4B976D72F8A9BDCDF3B8E054DD7F9F17265848C8097D43BBEBF295A46FFC8FFD": {
+     "name": "PCIe Port 3",
+     "outcome": "protected"
+    },
+    "4BA47392E1B2A5DBCDA8CC60BD085301F1433C9E8C28736463E287D8E564D15E": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "4C8FB5134044C808BD3F963374E8247F6EA18BB0312082D77392EA9779194974": {
+     "name": "USB2 Port 11",
+     "outcome": "protected"
+    },
+    "4C91435655469C7E511F7BC2648B7D4832BE4F13968FA3091FCA904CB8D57A28": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "4D352E4C5C33D9AC5AFB2C9F1D1AC3E1DB909FB69DBF2196A6A83828D16E231B": {
+     "name": "D3Cold Support",
+     "outcome": "protected"
+    },
+    "4E003E3FA21613787CBFD56CF73A6D851E017253E297CED07F681C8121D0620B": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "4EDBB271E99821CCA2B70E3426E3D1741E78B73EF7477C01E4032C29C9EB64A7": {
+     "name": "PCIe Port 11 Target Speed",
+     "outcome": "protected"
+    },
+    "4EE8D32D44DB0BF5FDAA6EF7233C931033012F9240C3C9F15BF453B8B3D69B8D": {
+     "name": "SOC ACP D3",
+     "outcome": "protected"
+    },
+    "4F46C9C19F6FE140AA1D32A11531229DE9E9122ABB85A3B3500F197C2CB54387": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "4F537B169202EF34E9EF270273E0963194BA5526403C108E0941CC4883173753": {
+     "name": "NPU Deep Sleep Enable",
+     "outcome": "protected"
+    },
+    "4F57746437AA8335842DC0FD499860CCC26C0A19E40F6982D5E39322A217E3D9": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "4F7A0F3CC959E18F3E1CE557382E8709F469B1A2059A2AFD539B2B30D67AD5EC": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "4FADDC857F550C03EA9A8EB72655A95932124BDF02FC677F60465DAD66F34CE3": {
+     "name": "ACPI Power Button Method Support",
+     "outcome": "protected"
+    },
+    "501C2426205A7C7386E787CC7DBAA06E287A0CC349C88E446E4798C3930DC0B1": {
+     "name": "Adjust USB4 Bridge Resource",
+     "outcome": "protected"
+    },
+    "5022E91BE094D2DEE570529F7B7CB0CEC5CC4CB7DC2E74BFDC2E755C62077636": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "505A8AD77B7810859DD8CEA30B96E83870842BD65F677786ECBA6E7CE0300241": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "518D1EBAE1AC751ADD4D56C119A82088CA5C5BEDFADEBB8EA4DD123EC34E9B19": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "51CED781033068F5F87F13CC83BC0B9F1580E7507C4976DD0FCDF0AE9C9BA5D3": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "51E5F758B3A5DD61FA7A73A264CC3D13702DD16CB440D0B5E94BC5D379701D6F": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "52CF0D83B82F8CE8FA8C74A0DB1E3488C4B95BC027019A60471210D5D29475DB": {
+     "name": "FCH Spread Spectrum",
+     "outcome": "protected"
+    },
+    "530574CB2A22232D84C36226098AE0B1F0B1AA88F0FABFAEFC8DCF65341E9526": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "534364AE3668E393260CD73F825FBA141DB941B99A5958770984006504EBFDEE": {
+     "name": "PCIe Port 2",
+     "outcome": "protected"
+    },
+    "5367E73C05F559B9675F46DF3A5E9663A12AADBA9A1E1302A5307ED814C3A41F": {
+     "name": "dGPU Only Mode",
+     "outcome": "protected"
+    },
+    "5375A418BBB2B5A2E953D29A0EE1CFB376070071F26ACA4F5E53417263735A65": {
+     "name": "NVIDIA DGPU Power Enable",
+     "outcome": "protected"
+    },
+    "53935D981D2BC2129E9B5B0337BFD39C5F05E809048FB59F5B3AEE4784D63D0F": {
+     "name": "Gen1 Emphasis Enable",
+     "outcome": "protected"
+    },
+    "5395D9EAF24EE8EBAB0BF901F4302FE77386F2F0847F69BF589E0869DBAB2FF9": {
+     "name": "Enhanced REP MOVSB/STOSB",
+     "outcome": "protected"
+    },
+    "539E7CECA1E053A8D9CBB74EDB976806580BB7932C4962A536420F1EB5412CA4": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "53B43E3AA24FD793C329ACD25B1A04A8123596AE388F46FE9F4B7215090270BF": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "53DD31E1D1DDA9C956EF0C7CECE10A9AA66B1A97F320C6CD2C9520F54F9BF803": {
+     "name": "USB0 2.0 Port 1",
+     "outcome": "protected"
+    },
+    "53E4CC90A0107CBF089649CA07B988F64437CE9EDB10586144DF0A7658BDD677": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "544BFBB7EA5E9D365985BF1934B72F104C849BBC5232FF6F0A1DC3A8292EF588": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "54670DAF1539F7FAB508D4D6301AA701B5860B30F7E00C12752E06D4610C638B": {
+     "name": "Processor ODT Impedance Pull Up P1",
+     "outcome": "protected"
+    },
+    "54EA53A0684CA2CD252387210943DC496115FB4710C2DA04B2287EE52CB4922F": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "551109DA18BFBC4BE97006398E217EADF5BF4519B1393559D216B362B1274E34": {
+     "name": "USB2 Port 6",
+     "outcome": "protected"
+    },
+    "5511AA3B5EC3E9135D24CBF48F4B2C4F72AE05A9559389060E362ABFCE18AD64": {
+     "name": "USB2 Port 10",
+     "outcome": "protected"
+    },
+    "5524CA0151A0D602D8E45E488954855466DAF0BDD0BB56184B18B48240EBB23A": {
+     "name": "Core Performance Boost",
+     "outcome": "protected"
+    },
+    "553CA59AB7E40388FB7BAD1AD2B1D6DB556812689D4C371269F88DF9CA9045E5": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "56342C6401D1D532B209E8A15786D855B29EA231CD7582243AE94C7653F4C13A": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "56389D3EB1D0C34FA733F9A3349FBCF96B884938F29B02DA01C3B1DACDA526D0": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "56D9C61B3E2B60104AF5549CADEE217792633D35C1D760A83A777D2B2984BDCE": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "56F8E787A61B318660F20FD78466E55E5C48EB0201A629B85248D966AD28DCDB": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "5782A3FC896FE0915FD37A8B3B614310A5023248BE7CF04BD5E567B2E898BAE2": {
+     "name": "PCIe Prefetchable MMIO (GB)",
+     "outcome": "protected"
+    },
+    "57E397FF41D9659A16A65210BAFDBEC389AF34B0DDAD520460CC557706976E4C": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "57E87DA25124139961536A88CB1112E1D0F3A58D86EA8DB9978A0BE3C9587B11": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "589A9FCC4855C5FE705842376A02D0055A64C1AAEF64C3AC1939259032648E8F": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "58A9D6CEDF412A625D611032B36EA6DF9ABDBA8A1D65C40B012C16A910D7B896": {
+     "name": "XHCI Port0 Speed",
+     "outcome": "protected"
+    },
+    "58C02D8FA298B64436E9545ECFDA63CC5CCA1B41A57C896784FE5990C43B5889": {
+     "name": "Medium Temperature",
+     "outcome": "protected"
+    },
+    "58FE537584C9C5F806FA83599AC00D4AA3948221FDF78C59E984C3341B8A5E8D": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "59132D058620A9DFD9A3ABE05BB27F08996355C7C7E19F76C5887843949E5AAC": {
+     "name": "Fan Control",
+     "outcome": "protected"
+    },
+    "594F7969A01997CA81D52A14B3018D61B3FEFCAB5BBB0A3422B0D93103CDD0AC": {
+     "name": "Location of private memory regions",
+     "outcome": "protected"
+    },
+    "5962652A59FAF136C793FAAA2815E19A33502BA97BEC7C9E3F40F235A9C14912": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "59A69FD5FBE565F9566FC590A26474E57D67D7C741B78E4C7FB2378599B62610": {
+     "name": "SATA Port 2",
+     "outcome": "protected"
+    },
+    "5A044A07547FD6EEF7CABE90BD0DACC81391B68DFD32F173570511CD8BD66077": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "5A1CDBCFED29789A8DB83381F2F883CBC6B4ADE5DCDA134C68C993C34C145311": {
+     "name": "USB2 Port 1",
+     "outcome": "protected"
+    },
+    "5A35BEA1282838AF12B1899105B33CCC00AAB5810D00C7CFFD03CBA8F48AC7B5": {
+     "name": "TX2D_DFE",
+     "outcome": "protected"
+    },
+    "5ABE7EF3E5821D5F0464D6E2166209B2AF53A612956A70883A8DA86720D698ED": {
+     "name": "I3C 0 Mode",
+     "outcome": "protected"
+    },
+    "5C6488FB695E3C6DC00B30894131ECB2EB4BE9ADA01D988BEB86FA1D86F9F5A5": {
+     "name": "TrdrdDd",
+     "outcome": "protected"
+    },
+    "5C8E6754CF2457FA28244391B3527D44CFC9D8B0EC305AAA7496F2BBB7E2A2F5": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "5CAC3923B5DC050CC7E4E848DF6EFD474C23F971949D93977406D6304A835A84": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "5D2F2E3548346FABFC4D248020474949565E94FD785ACC43C94EF526EF70DED0": {
+     "name": "FWCM Handoff",
+     "outcome": "protected"
+    },
+    "5D81728A6B83FC90C2E07E881679BC0A6F99145E861E23C76902B7EADEDDE7AD": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "5DC1425157332A30FEB6AC2839B96907AFBF273078A9389E10D9F6968D6F4890": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "5DD5763FB50921021D18C4A5466982299DB4D3E7BEFE2F12B52CAA035FBDDF47": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "5E25E3D4AA2702293F8840C879DCFF20E900BB7D099EB4250CC4B240FDB7126D": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "5E2A930709B5FFDCCA82A5D02CFCF0AADD71E711D65598BCD7C4A151AAE312EC": {
+     "name": "Dram ODT impedance DQS_RTT_PARK P0",
+     "outcome": "protected"
+    },
+    "5EE0D5E50C1DAC9189024BAE2438E69542754A8787A6C66F73496C960B5C8AB5": {
+     "name": "PAUSE Delay",
+     "outcome": "protected"
+    },
+    "5F3B3B2601B1F634162A8322BA619D695D2B84074B1D67B49305C9D4D6F0A1F1": {
+     "name": "I3C/I2C 0 Enable",
+     "outcome": "protected"
+    },
+    "5FDF643927CD21DDC047CEA9BADE0C9FF84F06E6B8C1E5D53401466E5E6EFFF4": {
+     "name": "Power Down Enable",
+     "outcome": "protected"
+    },
+    "6003B6E7CD854AC4511116C9AC04A137938F06B3E975D13715744C876C9F7A19": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "6149084A0ED027A80BEE4629B64307AB79EAAF5001529AA47FCE386C10EE656A": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "614AA1C2E49773E5709F89D7054ECB3CF17DAA0213B22254B496BDFBACE146BB": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "6172BDE8CC0B6238FE0F79D92D722B45B1C9D58246D66221BFA70721FEE8EE9C": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "6173F91A09FF5A43149C22D917F3DF083A8FCB8CF63EA2F6434EF207C729D45F": {
+     "name": "Streaming Stores Control",
+     "outcome": "protected"
+    },
+    "61BFA25332510956EC95F9B84EC7C84F996FF8A3D6DF4B8443FD1FC3D9144537": {
+     "name": "Processor DQ drive strengths Pull Up P2",
+     "outcome": "protected"
+    },
+    "61D518E8F4974119A5D5CEDFB1DFE1F583CCD994E3EF82C3D821E84085A220E2": {
+     "name": "Dram ODT Impedance RTT_NOM_WR P1",
+     "outcome": "protected"
+    },
+    "62129E9CD91C624A7E351DF57B16CF49455CC6502D3C2A35FCCE40E813B9BAA4": {
+     "name": "Thermal Control",
+     "outcome": "protected"
+    },
+    "6244C07A28C38639A8BEE6BBBF866564C0E10DBFFBEC053D402D1DCACE0AEF55": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "62AE433817B9637061C9049DB22BD4E8F2FDA344D924B54AB3D7D2D649202043": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "62C8ED7091493220F707FBF60BD3509F66FF2993E0E30CCF038AB2F9D21B853B": {
+     "name": "PROM21 Chipset Revision",
+     "outcome": "protected"
+    },
+    "62D8CF7E269109FD85449B40C0320EFFFA2B4645EC5C2BBC9CE2021400F881E6": {
+     "name": "CA ODT GroupA",
+     "outcome": "protected"
+    },
+    "63089F4A8B3F677F2460DF7629110E8689E25C0CD0C73E7CCBE1A4914C20C448": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "6316B67AC8E948D42A395F3D7F47DCA89AE3C50239C80DB7B72AEE27E946851A": {
+     "name": "USB3 Gen Select",
+     "outcome": "protected"
+    },
+    "641498A393B0B7CF3C142DA35E4F6A246F47ACE389B3403D6659BBAD5746FC90": {
+     "name": "USB2 Port 0",
+     "outcome": "protected"
+    },
+    "642403A2516AB1944DC1341B1E05BB2C750E4FA23CDF178279B3F59F5C13CAD9": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "6473B728F501AD8967B6AE0A1A7014168CEF39E443A84EE47BE993BF03DF1368": {
+     "name": "Delay After PCIe Reset",
+     "outcome": "protected"
+    },
+    "64DBF87DB8C9DB28051B7A39C716D14521A8BEB22F32E670E606E197C720ED60": {
+     "name": "PCIe Non-Prefetchable MMIO (MB)",
+     "outcome": "protected"
+    },
+    "64EC20FA1BBF5F68D6326E8957A27F925E1C2547321AEABC9E8AD21D0B682649": {
+     "name": "ACP CLock Gating",
+     "outcome": "protected"
+    },
+    "6503CB32334DA2C9054A1F7393D5163DCE88D79923A0DB82B12F489251E0D9A3": {
+     "name": "SOC USB2.0 D3",
+     "outcome": "protected"
+    },
+    "6558287964924B6786ECF0822F76A987A91DE0F138B717B7A23587B52333CDEC": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "656BBDB86E8282B10C9E6B0D1BFF2BB79D6248E8FD241BE3D80E25D29236163C": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "663023AF9E48C41737E9CFC903561F347E5F03289059B4F15C04A010EF17747C": {
+     "name": "USB2 Port 6",
+     "outcome": "protected"
+    },
+    "663CA4DEA5399E0CBFE6A0BC4A7706E1298F8A38A357AF62A7CCE489BFF741BE": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "668242EE44D73349531560EA2EC6874D43A0D09827EB52CA9F297D1528848924": {
+     "name": "I3C/I2C 1 Enable",
+     "outcome": "protected"
+    },
+    "6689A54ADC5D96104672CFE22E02C04F64CC771AF732BE4F16FEB29252EA3E4E": {
+     "name": "Read Drift Adjustment P1",
+     "outcome": "protected"
+    },
+    "6731FD3923B5547D007C2C42F14AB3D277D69EA910D303E5840DD7120B22D134": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "6776CE59232CD0D2FACC39289A83DDEBB9C5E268F5244B15F8F80626DD2CCDBD": {
+     "name": "Device Sleep for AHCI Port 3",
+     "outcome": "protected"
+    },
+    "682CDA01E09CEA0B0860B14B5AC4702B53E6D423E24A918260026566E305AE15": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "6852EB252798298D0CABCB0596CFE3A8548398286181C60379CCBD95091FA789": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "68CEB7F2675761F013DF8433FD118094501EF040EC0F2112CE5C8D4C011EF20A": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "68D41EF113A40541510B6E0E74EBB7329EAFDED946DE68CCEDCFE020CEF6DB6B": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "6917BC080CAD44C69F287BB3888E67B05AD57B2A2689DC4B6B8E60E0D194841A": {
+     "name": "SEV-ES ASID Space Limit",
+     "outcome": "protected"
+    },
+    "691F952A54DA41847A1B9B6523E236E4D8C84732FE10B3859CA0DB4FF4A2A254": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "6944CE73F68D0CBB56B04A2F347F66E9B8792DC196BC869903FD3AEF5C73F17F": {
+     "name": "DP1 - J1500",
+     "outcome": "protected"
+    },
+    "69CE6CAC7F3CEB190539EF40922E205FFCD9F693C374CD7BB11AEB542B172BE1": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "69DF52E17DA8C646B2AF525C6026A35AF3100A6A3E5770628A81A135E9E981BD": {
+     "name": "ABL Console Out Control",
+     "outcome": "protected"
+    },
+    "6AC736F7B7E07BB3810A58E0F2CE8E471170E53DA8B8357F6B637C8610A16906": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "6B158A7F7FF1D11A57C1573E9C54FA5CC3130D91FD2FBFFCA87E894E7192F9CD": {
+     "name": "PCIe Port 10 Lane Reversal",
+     "outcome": "protected"
+    },
+    "6B4D6C1A03C9A1E1B292FF67480BB1F6FFE74CC9697E2E55071D153D21DA82B8": {
+     "name": "Mixed DIMM config extended NUMA domain",
+     "outcome": "protected"
+    },
+    "6B5EFE9A522F281DBD9FF70ADADE522A51887ABB1575D06DFAF3EF20A4FA3D17": {
+     "name": "USB2 Port 5",
+     "outcome": "protected"
+    },
+    "6B7F1C956425B18DA83B0723EE12F0E8AC6F44503AC42DE8041C92A2CD449546": {
+     "name": "USB3 Port 4",
+     "outcome": "protected"
+    },
+    "6BB7BE4BC55FAC4E5C31EB7F595C9AC654CF33A0CD95304F45B6513B336044D0": {
+     "name": "Amount of Memory to Cover",
+     "outcome": "protected"
+    },
+    "6BD78D2C842F4E9FEF2011376C63973585E1A98B048544679BEC821DFD30C547": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "6BEB41250E1E8B8252A6182011D8214CA6299EC115CD91026E25CDFB15653C19": {
+     "name": "PCIe Bus Number",
+     "outcome": "protected"
+    },
+    "6C092B05428C9BFF2A5827020CB02CBAA561BF5DFFD4E5E8BC43E3730DC64285": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "6C0C776E57989D9D6B0CA52AFD024E16F3FA4BCC54CF9AA743F50084618FF5AF": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "6C4B26B81953852CDDE9CDB9840F794DFCF36E2F086AB39690D248BECC5ACEA3": {
+     "name": "Infinity Fabric Frequency and Dividers",
+     "outcome": "protected"
+    },
+    "6C8BD8BCEE169A978C3C81BEF001BA64E4DFA73B63421FF5AFDA81420CC1D37C": {
+     "name": "USB2 Port 7",
+     "outcome": "protected"
+    },
+    "6C8DFF226F1DD2FF2129116E35160EDEFAF38AF7E9B332096EDD09C87731D339": {
+     "name": "CPPC Dynamic Preferred Cores",
+     "outcome": "protected"
+    },
+    "6CAA81F072144224883614105DA9F6CE17FF7E65030F1D0BE3753C80BB184AC0": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "6D53CEB9C52A0C5119B89A646B2C78F040F43B8DBA0BE3D60D513BA5E033A7AF": {
+     "name": "USB0 2.0 Port 0",
+     "outcome": "protected"
+    },
+    "6D66E2D0B1D8FE4EFF9041CF91F18C0F8C3CE0F56F013CBBD37971BB7EEDA828": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "6DDCB5B4D9003F9FF56166E01A30B3E125E29E8C73DB7DA9189CEB6818A97E79": {
+     "name": "Pro Part attribute control",
+     "outcome": "protected"
+    },
+    "6E19B3D0DC9C4CDBD8CBC8B5244E4C35E37FDE86175D0857FFBE8FF64CF3BC3E": {
+     "name": "Disable Memory Error Injection",
+     "outcome": "protected"
+    },
+    "6E847682D907F6C67642F1F82F576ED7F1D9654168185FB4428E2D0AA9D973EF": {
+     "name": "TrdrdDd Ctrl",
+     "outcome": "protected"
+    },
+    "6EB576FB457D6ABC6DBB59FF13A84EBD159DFCBEA5ECD54387801ECD33CBABD6": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "6F1BAF6E4386A4530382485BD34C30E24FF9C0D609743E04C37FF9E6DC8DC03B": {
+     "name": "Temperature Hysteresis",
+     "outcome": "protected"
+    },
+    "6F3EC275F305251FE6DB8A9754B73E26330E534FDA8E602AAE7C9D9E3C88FD6B": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "6F62D0EEA644C32C798AACB82284294329CC3C14B4538FFA6AC3D3E33B85CF11": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "6FAE5A5953AAD00BA33A6F84FD42B908725C7E88EDBEBEF837A6AD52AFF3E2DA": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "6FCE78284DB08229A813F2A3AAF6140C9389FA3B87F1A5B4C136385618A0760D": {
+     "name": "Write Drift Adjustment P0",
+     "outcome": "protected"
+    },
+    "704D8F4CF4A596F713A89FEA3B541F25868F4BCDF4E7D1CFB4DAD7BFA28C70DE": {
+     "name": "USB2 Port 2",
+     "outcome": "protected"
+    },
+    "706C5824667B399C1708F6239C47FE5EACFCE7DFF6C88B7A40721993E946A657": {
+     "name": "SMM Isolation Support",
+     "outcome": "protected"
+    },
+    "70C3A7FEA718131812CE08E4389F27219045AF006A0BF0E44E72EDF806B5A549": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "711276A5DF060E2A87DAE99A077826DC948B5ED6B4E7354524A21986BA8BC693": {
+     "name": "REP-MOV/STOS Streaming",
+     "outcome": "protected"
+    },
+    "71AF49F88E85AA2E646403ADCBFEBEFB501267B5E64A2EF855A132B5895632F3": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "72320DF311A74A00A1C83738F1BC577D67A1EF6DBD8B260D9A72BBA4D262AED0": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "727D5B944E94360F9946D91AA8E1007954E24BBE37AA1371BBB3D08AE7630E89": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "72C4B2714F18FC67D756E1EF3BCC3914DC6634CC08C24A2DBEA8A48E70E4E79E": {
+     "name": "USB2 Port 4",
+     "outcome": "protected"
+    },
+    "72CE995E036F0FAAA7916A9974AF3AD068DF8C35390DCEF8D57BC058B0BF04B2": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "72F7A84D2666E0DE56327FA2A970F22F735701408C2A59897C95FBC7C1A5873E": {
+     "name": "HID Spi Read Mode",
+     "outcome": "protected"
+    },
+    "733D337FF8A1493EEAA446AEDA64D8B2289F230D75BC18A80F67B51775E94597": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "73C2E33E0E7E7F7BF5AD1173AE2B9AE100BC72138185F8851C60DBBCE6DAAA9F": {
+     "name": "PCIe Port 7",
+     "outcome": "protected"
+    },
+    "73F828FC2D156ABFD10D8EB349CED4B6CD6BA7C0069F7EA278DE6FF80DFD3565": {
+     "name": "Low Temperature",
+     "outcome": "protected"
+    },
+    "74070CADF184339C7420D226C3724AAE17FD7DBE0282E1CEF0194ABE83958C9A": {
+     "name": "PM L1 SS",
+     "outcome": "protected"
+    },
+    "745A58AB23BF40FD313024E8DFF89F58675B4101C4929BE2469446AC54975C85": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "74B18F93F70CE63FE63F72788FD1E2AA27DAB24933B26EF9B5CEA187FFA9E6D6": {
+     "name": "Memory Target Speed",
+     "outcome": "protected"
+    },
+    "74BD99FFF00D8366B962AA6B6738328A47847F3A5698476920BD4D7090F5C10F": {
+     "name": "DP0 Display Caps",
+     "outcome": "protected"
+    },
+    "74D2A5B9A34574865A85ECFCF915C7B80353738FBBBE4D7E09734822D324C6DE": {
+     "name": "Verify PEI GOP",
+     "outcome": "protected"
+    },
+    "7520E1B273FB2A3092B1D92C98E008BFC04BB70778590E975DF41D7618861A9C": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "7555385D0B1BF4A32E74C67C3DC66B3300CF2F8B87DE8630BCD8EA34FDFA0D4D": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "755657CD84BC876B27721A82A1E5B9F09ECD5D6CE53E2B54435D1738C815628F": {
+     "name": "PCIe Port 7",
+     "outcome": "protected"
+    },
+    "75B9B5BBAF9B545D094DC52A3DF28BE31EF3A29BF13E59AB14A03B43F27C5215": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "75BE725FA9481A13E3DF3A4BA94BCB0419C52D6F215BA7A84C94FE7A0670F4D7": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "762636FC80E10A27EBE9AABA5D923E2DFB041F405664A0F3C5824BCF48A83402": {
+     "name": "PCIe Port 11",
+     "outcome": "protected"
+    },
+    "7650DD6A76211B067975BB384DFB91D886CBC79E71E498DA0B8DF85E74934D65": {
+     "name": "Number of Beeps",
+     "outcome": "protected"
+    },
+    "76D3CFE21246D33D213896E334B90D12C953D763E6001D20C386928688A967E9": {
+     "name": "PCIe Port 4 Target Speed",
+     "outcome": "protected"
+    },
+    "76E00664AB9CA42512B6E00B85A40B7DC87A009EFABF7E21540418D04533FF45": {
+     "name": "SOC USB3.1 for USB4 D3",
+     "outcome": "protected"
+    },
+    "76F4E3CCB33FDA6672A127E25809D3557F83605A987F08B73E2381A368F1C8D1": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "7713751F9127C45CEF272A6B010B637A3ECD6EB6AE05EFCEB7970D8F24F4CA11": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "7748DDF612E7F99DE9EFEC8A0C37EC93BDC667708E32F83AEA3048A316A413CB": {
+     "name": "Processor DQ drive strengths Pull Up P1",
+     "outcome": "protected"
+    },
+    "7786E33B80F3581D7AA50C108AEF846C57CD485F25D1033B6FB2824CA25F8F68": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "778A6AB264F9FB719DFD621EC9D46581F1943816FACB4231B93324CE5D5A69FE": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "77B43CB41F165450891F7ABA209EB3F3CC146AE0AF7D43D14B4B3E78002B2B33": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "7844A72C0F16B1557F66041284F1CCFE17905C2E3A2E39BC2CD09D3E8A648EAE": {
+     "name": "USB2 Port 9",
+     "outcome": "protected"
+    },
+    "78A52811977FD15D30BA052F6FF7DFA6EA3C49ECD16C87E1E10874C84530B3A7": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "78F5D8B2AD8F921661E620507C6B3ECB632B9B1BF25186302B41F81FEE719CDC": {
+     "name": "RX2D Delay Step Size (2^n)",
+     "outcome": "protected"
+    },
+    "7912CAE5EF81AB7E4CEADAE96CC936D35C9BC3DB630B0E813A0DF16BBC39E990": {
+     "name": "Gen1 Squelch Level",
+     "outcome": "protected"
+    },
+    "7933EBD82AF7DB8990835C089AC8F27B515F53E58E906EBAB3A5F120315342F4": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "794483F7398AA84B05ED70DBBEC35CECB44966DE22AE0F5566A760ED565F6989": {
+     "name": "Core Count Control",
+     "outcome": "protected"
+    },
+    "797DFA381F4A687C34C7A0E49C96C1C0D6E74E8C7226FDC81C179AE2E6A44DED": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "79B376B6523F2005BF0C610343BD107A0FE82EA3CDDDB4CD43808A50DC357ECB": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "79D48150DC2E6026D7A09D99FC025200670FB7532D10BA999A934F2AA27385A0": {
+     "name": "USB2 2.0 Port 0",
+     "outcome": "protected"
+    },
+    "7A61A823F110C8D4F626DE28E96F2D0C1A616E25AA9461AB148AEA2D7746C567": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "7A8916D4156B7DDAC6F6112BA8AC958AB3A060BAA9664F9C34051E581B50B674": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "7AAC277FD4D776E14A97D26A261A9AB46768D6BDC349A4C63C72722C3ED371E0": {
+     "name": "PPT Control",
+     "outcome": "protected"
+    },
+    "7B46DE068219E7CA69E19ED3011F8B0387395E496C8F7B6EECAD62C99AF79D04": {
+     "name": "Read Drift Adjustment",
+     "outcome": "protected"
+    },
+    "7B4808AE57D6DAC6166041278CB40E14C3EA1DE524C3E4FD734F172241EE44BF": {
+     "name": "SoundWire Beep SampleDriver Phase Select",
+     "outcome": "protected"
+    },
+    "7B674A264B2029F7CED965C4318B9F0517AA5C03A7D7DDF0C7A3E95B0AF7C3B6": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "7BD9EB146687F31342D0806909838070D0FFE0DC37921692C37B220CB4B5BFD3": {
+     "name": "USB2 Port 4",
+     "outcome": "protected"
+    },
+    "7BE304A1E0E55195A061C7A7297D04ADAFFA8DFBB2D4C367877E0927C0E8A463": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "7C038C0CF0F9BC8930E08361AA064C9EA440EFB94F502B788502D1512300AC17": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "7C5F5AD8C72D1B9E4D1B9F2BE5F1BDDB84085D410AEEDB0CC0D0B6C745C97C20": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "7C65B06744FC4EE124967C111CBB667AC4C321FB6A917E46DFB5DCC9F3EA1FC8": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "7D76CD73FA9371C7C1084FE86DDBD15935F53CF0CAFD4A9ACBBDB3B0C8FCDEEA": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "7D945C486EE59E11DB59E9F2ED73B704A193A9580BCC8609786F7DDAED6F0DD2": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "7DB22F1438B4111FA295AACDC04930E3F6E98529D6698D2A1041DFAC911EE50F": {
+     "name": "SOC USB3.1 D3",
+     "outcome": "protected"
+    },
+    "7DC1FCC4093E08EA540B6EF9DFDA47E81EE91040AB552F889C001FE1EA3F3F6F": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "7E9E3BABDBAEDC542342D74F4DEB12CEEF2FC72929783DB83008F61A5A508031": {
+     "name": "Tcl",
+     "outcome": "protected"
+    },
+    "7EC114C0DEA9782B627126BD13A074AE3E40B3723947B2F35A1BEF288B0C8DE4": {
+     "name": "PCIe Port 1 Target Speed",
+     "outcome": "protected"
+    },
+    "7F118A24F2B18EF77570EB79211268A64C7F9EE9E6EF13B364F152B982C87A8E": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "7F14B91CC464B89D59F2F7C0C08ABDC43F3E0BC453A28CCDE96814F9C8E6C745": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "7F1AA2CC54DE09BAC19D6E5917E990F5C93A25187CD61403C0FB034ACC48580B": {
+     "name": "PCIe Port 11 Target Speed",
+     "outcome": "protected"
+    },
+    "7F244106D4514F460EB3D353DD9CCEA38ED2CC3DF2C8BA3E97F76C4478C41B0D": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "800B53EC9811724C7AAAC6D00A07936A4BB36654637B871103AD87FD1354C6B8": {
+     "name": "Dram ODT impedance RTT_WR P3",
+     "outcome": "protected"
+    },
+    "801FBFCA027B004D392B7ACC4A2B45B3EEE1917809CE962AC43ABB71C65D6DC5": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "8041D9FC87E4ABC0BC02DD57EB9C99C518905C6ADF11AD5CAD3730A908CB45C5": {
+     "name": "SATA Mode",
+     "outcome": "protected"
+    },
+    "8049D907527B4587654765AB49C6A07DCF227F173CF86D2DF2C232A4FAFBB049": {
+     "name": "SPL value in the SPL table",
+     "outcome": "risky"
+    },
+    "808310644B6C61A2EFA409709791E32FC57AF2350E09596AB9862681C0949B1A": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "8100197D51A6B11845B6F027B4EA38033DA725D0FBCA362E105DA541D9DB51AE": {
+     "name": "SyncFifo Mode Override",
+     "outcome": "protected"
+    },
+    "8156B12A20C56F79860A20F01ACE73DBD07D200FE0E0CC7B128C8D669A41F37D": {
+     "name": "USB3 Port 5",
+     "outcome": "protected"
+    },
+    "81C308C147A56289A71E714A0ED08683D19591BDCFB091D615AE17A200C88C1E": {
+     "name": "RX2D_TrainOpt",
+     "outcome": "protected"
+    },
+    "81C7A3EBBBBA6A2829BF4EA618180C68D731B6A6A874F61C6056AEDB4DAA08E3": {
+     "name": "iGPU Configuration",
+     "outcome": "protected"
+    },
+    "81F0EFA0B40D2258E5F02AA791ED1EFE92DB44F3F8FE9BE00FD6C469AC2A97E2": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "82F1C248BD9A5987D6FF6FA693D311F3C962F7FC98DC3B4A3BF16E09545C6DD1": {
+     "name": "AVX512",
+     "outcome": "protected"
+    },
+    "834FD6CF9A2840D7F5C546AEDABBB112AD36D0B1B382D6A9EAA5724DB66CB1FE": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "83EBD3EB515E3915247883D9C1A12E0744C1E759EED0E28E524A3380858C19E9": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "84248EC9D11B4C316540DF67D4D673E119D5C0B4E86051281CBE833FBC93F659": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "844D3EF5EDD3DDF43ACBE81B46B46F6BC2FC3EC19E1DA4E2E133A58B81735663": {
+     "name": "TwtrS",
+     "outcome": "protected"
+    },
+    "84D57F95658437399D0AC5452A66DBBC442094BF5A1DF27B14E0C26A0BB0524C": {
+     "name": "USB3 Port 5",
+     "outcome": "protected"
+    },
+    "84F8AD33893C9FB454B1A6305990FEFE29C44CEEFF8C9A532900209D6D255035": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "8542E4DABEEB4F97AB1DACB4394AD732C75E2712AB8DCAAA2688E79F78704A1E": {
+     "name": "SATA Port 1",
+     "outcome": "protected"
+    },
+    "858358E4982DBF98A178722B8BEFFB49A523AEDABB8B5A7F14781486249D652A": {
+     "name": "ACPI _CST C1 Declaration",
+     "outcome": "protected"
+    },
+    "85E5C7B180ECF8CA50FA9E9D24DD0FF595459C20E8B1F0CFA97392B6F10BB258": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "85FFBF49F62B8484758B73156EA4666D12B9E43269F71F6714D58E66674EC243": {
+     "name": "PROCHOT Control",
+     "outcome": "protected"
+    },
+    "861FA9330BCDD023BF25BFC0D99148C3D3842C62FC82CC0182730EE15EBC9A6D": {
+     "name": "Processor CS drive strengths",
+     "outcome": "protected"
+    },
+    "86502DB42777988A6A5DABFD969B968A9E1E151447834DF076392F7FFFA3F6E8": {
+     "name": "Device Sleep for AHCI Port 2",
+     "outcome": "protected"
+    },
+    "870F4F1A980BE35F8E227D2FA809D16046D7A965098AC26DFB2DF5952337F1E1": {
+     "name": "Discrete GPU Hotplug Mode",
+     "outcome": "protected"
+    },
+    "8732A41F188F034445DCFB341B9D2E6CB09C4DEDA06F769AEDCDF8D865266BE8": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "87EF4B3DC1F65F64B6CEB4B65A9E8A59B3136BF1427BE6C06EA63F1E2053C27B": {
+     "name": "Trp",
+     "outcome": "protected"
+    },
+    "87F872C99E802A12CA7F057CBE30488CC5C3085F559B38238DB6063CADCAB157": {
+     "name": "USB4 Non-Prefetch MMIO align",
+     "outcome": "protected"
+    },
+    "88234BCC47E6F967658DDCA8D5951F554F4B895300D4FD51D8E0D22C76FEC7E5": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "890737B4A356518D1FF5AB8E7FFA20B1AF6E537A85634637CBFC6A6A3E8EC0FF": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "891F52AE74FAF00A6114A699B59D990D6AC4E6AE5302C2E1006B67536F920991": {
+     "name": "Debug Print In ASL",
+     "outcome": "protected"
+    },
+    "893B04BE32496DA7CFE366CA4EE7F23B9A04ECBF3D4421A138C4B31B27D21A3A": {
+     "name": "USB2 Port 7",
+     "outcome": "protected"
+    },
+    "8945EC3ABB93CEFCA9463869E9B7B1386664FE751008AC836BDB02C3021A6F77": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "89820E471EDD2EBF8B64A51297F2CBC8E65F5106DFEA193C714FAA6A7CBB3604": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "89B965930CA68165B6D534B0A71159B1FE66D21E186C10361174C157C700DCEE": {
+     "name": "STT_M4",
+     "outcome": "protected"
+    },
+    "89BB2171C324C9A3FCFA6862170F20240DCE124112837A41827F71D1E3349EFF": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "89F678172E5CA762CCFF9BF09E6AB45428D61DCE837F9EAE08DB0DC13A805CEC": {
+     "name": "Platform First Error Handling",
+     "outcome": "protected"
+    },
+    "8A64DFF4F7670C420E5BACE2F902293E937C7F0035819988FD7FF000C5B66C29": {
+     "name": "PCIe Port 11",
+     "outcome": "protected"
+    },
+    "8A79B8E45D305C46271D94E34F4EB7B8D54D5CC0E1711C5E934C462FD92E2D1C": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "8A89DC08F10FEDE3F65C0BC0B7E448B4ADBCCB2307DAEDA5CE83EE557ADF9C98": {
+     "name": "USB2 Port 6",
+     "outcome": "protected"
+    },
+    "8AD08D53F343B8DC8930E45AC9B84FDDFD15B93E41810A8AF9C3D30EDC73D2FD": {
+     "name": "TrdrdScL",
+     "outcome": "protected"
+    },
+    "8AE15881517F65A9B5F2BCCAB89C5E67D626A6679A47D51FA5B263650D44058D": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "8AE83348C3AEDCAD5688B29B3F690D48526D1E0E25210544F98B32BCA890AFA8": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "8AF7A37518C37EC30F6F87BAA780FA50EF81F041E10AB72620763DF83DD1CC81": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "8BA32A99516A0CA81BE670DA6853CBDE8483B88E18E3F50571EF4600F3B3AC81": {
+     "name": "Discrete GPU HPD Circuitry",
+     "outcome": "protected"
+    },
+    "8BC60F89C6524D4CC89A793912455203773AA7D94584BC038D9F2D5D5BB07E19": {
+     "name": "SATA Port 3",
+     "outcome": "protected"
+    },
+    "8BFFE0313241FF41153699A9F0A2E04016FDD2C5925F7979F2F2850CB30DF5F5": {
+     "name": "PCIe Port 5",
+     "outcome": "protected"
+    },
+    "8C12241CAA8E660E88FB066682C128D6A9583725F9C20EFE240C6961AFF695E3": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "8C2523CE48DA5DF4B982EDFA8E2D86974AAF3AC857E3BA0C58438852B4E50797": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "8C4C459012E2A17F29F9F957CA9D4394D3E2FF961F1B8BDF3E1507DFA4463AEC": {
+     "name": "Twr Ctrl",
+     "outcome": "protected"
+    },
+    "8C64586D33D06E1266B3872D3F0CEE9AD254272C660BCDE434453FF700DA46FB": {
+     "name": "USB1 3.1 Port 0",
+     "outcome": "protected"
+    },
+    "8C81251BAED6F2E937AB7E460967ED920C2EDB062005892D9E9137E1606DD74A": {
+     "name": "SATA Port 0",
+     "outcome": "protected"
+    },
+    "8CCA13B8DE2729B33D086F9CF27086104F68C14020FA172C7744208FC5FECEDC": {
+     "name": "TDP",
+     "outcome": "protected"
+    },
+    "8DB6C1DB7FA85E2A3D33B8785E80E92A2AE870DAB312F976842A89880ACC27E4": {
+     "name": "Dram ODT Impedance RTT_NOM_WR P2",
+     "outcome": "protected"
+    },
+    "8DDD959A7548F9D3D18A22C13438C3EADF9A79EB59EF57F2261D1A8B2C6E830C": {
+     "name": "Dram DQ drive strengths Pull Up P3",
+     "outcome": "protected"
+    },
+    "8E2E1A72C6B04545B3B52839256A707FFC6DAF28683B1F97124F92ABD31400AC": {
+     "name": "USB2 Port 4",
+     "outcome": "protected"
+    },
+    "8E358EF746445473B9B4403F9B1E6C07AC2DB4E8A55796A1ED7C0766C6E81D61": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "8E65F51BD0A7A24AE3AC6AE878EB490754CACEDE005C585873E09AD3FCEB09EE": {
+     "name": "S3/Modern Standby Support",
+     "outcome": "protected"
+    },
+    "8E97DD62BCF19CB6B10931156AF5421AC96FD77576ED4C65C0CC9883267BA3B6": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "8EFDB8C6FE202B8EA4C8F86047214638B23F0CC49A187B55BF986213A5F65CCA": {
+     "name": "DF Cstates",
+     "outcome": "protected"
+    },
+    "8F4C02AA0D07A98C9A7B27EEE8AA309CF2104F08B0CD8A713CEC6A5D718B59FC": {
+     "name": "NVME D3Cold",
+     "outcome": "protected"
+    },
+    "8F5010BB9241B771CB14FA2293EDE173A0100C6390E130310942C236E8158F79": {
+     "name": "Trdwr Ctrl",
+     "outcome": "protected"
+    },
+    "8F644F6AEF6997B65DC2210A38E9B5CCCC7C8D26F3EC971EF0E147FEEFCFC5ED": {
+     "name": "PCIe/GFX Lanes Configuration",
+     "outcome": "protected"
+    },
+    "8F8F9249F94F47F8ACB1A9B9D3BE22DAF907CEBF3EB4FCB93231F2308715203B": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "8F9A96434D95A4890A339A7B5282F5E649617C1FB82E07F3D4825494C10337BA": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "8F9B9A93B1EB0F830564280B3BBCA0C0B05234044D8445FB9C8BE16321360F85": {
+     "name": "TrrdS",
+     "outcome": "protected"
+    },
+    "8FCE322B07C588F2E0BD2B197997F59A51E8CE09E7A73DD20D4D10E07087C427": {
+     "name": "NB Azalia",
+     "outcome": "protected"
+    },
+    "9001065AC2A6FB50830D4C66DCA978ECC2A815EBE0E778D5C75673BA2559BEC9": {
+     "name": "USB2 Port 8",
+     "outcome": "protected"
+    },
+    "90B5BDA8025541BBC2826D0D43C3A5B1E52D40F33AD3BB2A75CF019AEC20F196": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "91164DE6395C7EF116AD10A350EDFFF76E970B01822BD0F0BF19745966FBA141": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "911E7B3E8FC71851170DF994D4FB2E5A91233FE51EF7A9BD192FF2D2C83BC59D": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "91835DCDCCCFBA6AAE60F59BDB11CD2A8D4883DFEA307733FF871F0F4B33CFCD": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "9191850EF246123E1521854477B2E4AA9D4ACDA28FE9A65341ED29BF3D57EC9E": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "91A9DE743690E1AD3D69ED1D3CDFF262CBE8A51E19CFF3842E4A7D830B489A21": {
+     "name": "Processor DQ drive strengths Pull Down P3",
+     "outcome": "protected"
+    },
+    "924BEAC9B925C48E4F502AE785A7B4512934477814AB25324F21E781FE25FBBF": {
+     "name": "USB2 Port 11",
+     "outcome": "protected"
+    },
+    "92559AE29CEE687BB679D052B51E08966E35FBC3F7D50CC60DFA597B29AF37A4": {
+     "name": "Core Watchdog Timer Severity",
+     "outcome": "protected"
+    },
+    "92A62E0936B34741F4354BA04228D12AA00DA98C4E9D3552D708E602F0A2A245": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "92AE95C98D4CEC69AB8F5CA2A2784B34F3BE3E163ACAEDE1F8DB8A070CC0EFC0": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "937DC4E29C283873952122B9AD805C9B89CBCB9DA32D4A8D07E56FD4CD66E9BE": {
+     "name": "TDC_VDDCR_VDD",
+     "outcome": "protected"
+    },
+    "938292009A78A0962232FD9DED65B14C0CECD7BF8280F06EC5C8A84D35106E3D": {
+     "name": "Kernel DMA Protection Indicator",
+     "outcome": "protected"
+    },
+    "943458432391D5A22AAD269671FA27F5969FEB36F188D92750A962AF17A964EE": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "94430C3E2A6EE73B5F0736ABCE9F3555C3A6C3F667540AE3E59D2AE9274DE451": {
+     "name": "PCIe Port 0 Target Speed",
+     "outcome": "protected"
+    },
+    "94955BB5D1064FCD04EA5A819765FD10DCF6A949455CABBD4A96738709C5AE6D": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "94B1511EF6C7CB0C88AB663867399AD29366AC83638F735E72CCF9C63345E893": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9513B9F1F7B93DE3FAFBD1C5A35C6D2E911436EDDBD4E82635B06DE24D300935": {
+     "name": "PCIe Port 6",
+     "outcome": "protected"
+    },
+    "95554EA419CDBD44739AACE3E368BC3DE7E16A519D850ACC97032B56B054E8EA": {
+     "name": "Write Drift Adjustment P1",
+     "outcome": "protected"
+    },
+    "9576825EA2EAD37173895936C162BD70DF5296B43E2D441D502479059FCEB930": {
+     "name": "TX2D Voltage Step size Multiplier",
+     "outcome": "protected"
+    },
+    "95A48EDAB89D640D6E05600608EA53718C68DEBB8016893ABCBB499BD9A7BB4D": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "95B687994F1A4C27E54B4392888BF97641E33C4EC30A4AEB17E7DF929F246802": {
+     "name": "Internal PCIe GPP 0 D3",
+     "outcome": "protected"
+    },
+    "963B7BDD7C9FBD1BCBFCC1EFBACF5F396669DC34BA122035B63A7809B0069A95": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "964644F517961128EC4BEDCBE58D7A08D67363694A111B84FE49E90628BC91AF": {
+     "name": "STT_M3",
+     "outcome": "protected"
+    },
+    "966C9941D8C3A2383818C5739AB6DE91BC41BC0309B4FAC5656CFF3440DBE0E8": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "967B6D826C9003DF69EA7F81DE9FA416687DA76892D30A6AEF18D854918EF9CE": {
+     "name": "Twrrd Ctrl",
+     "outcome": "protected"
+    },
+    "970D060154020B05282B55208A99FF07CD930468FE6F1908FE0BCA6D6D780539": {
+     "name": "USB1 3.1 Port 1",
+     "outcome": "protected"
+    },
+    "97384B8B7D88E5943AD6ADD12AA929DEC983EC537B8D32E5FBB4BD825CEE8179": {
+     "name": "USB3 Port 5",
+     "outcome": "protected"
+    },
+    "973D068DE5B89021EC88EEB18347BC5FFA0D9B244265BC89530412A6217DC742": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "974044CE1A1BCAB1D5A53DA3B8923C029802B30BD1743210573DFB16D8322ED4": {
+     "name": "Refresh Management",
+     "outcome": "protected"
+    },
+    "975C676840AD8E2F811D9FCB344E7CD2DD82E3DB0D9961DA2512D0634732BE6C": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "9779C88538D5ABF8A65A687FE297B8CB3B4408CBE2EDAF5D9BB73260868A0F4F": {
+     "name": "HID Spi Speed",
+     "outcome": "protected"
+    },
+    "97FFD9BD410D9A435B7CC28C7C1EB22B0E5DAED7FCAB2CA6DF8C5D7019DE8421": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "98116C070D0FCE59484053B9F68BADA6DC626FC195AFB78FA51012197E83EC66": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "988EF616BD179A0B83ED4B5D5BACD1C041C09C08D3939EB8D0D3EAEF37526300": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "99723CC152B10BECBA8BB8B4808E970804993FD5382C6795A5E74B8119C6232F": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9978272098D876D7B0A9525877F715CC42813413F2794F6E5367A28DE3648376": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "999AF5264A0E014722940724224A63BEC2AB287929368B9C11940A2CCDF5AF92": {
+     "name": "Codec Settings",
+     "outcome": "protected"
+    },
+    "9A221A4EA32222199C39BB78DF1BDA3596EAF304D5819DCA0591672DB4BE4987": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "9A227E8AC6BB310F2073E00B34856807C769FB7F122F972F4DA36502F6DAD6F6": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9A2AE431807FDD98E9E3F3F71F6ABA93048245578C6857F7F03ACABF207F588A": {
+     "name": "PCIe Port 9 Target Speed",
+     "outcome": "protected"
+    },
+    "9A8F99A5837A8E180AC2F8612D2CFD84A808974BD196CFCD59405A4525C14FBA": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "9A9D8B6E7E212F1168FAE1B9A5F3173904191D11599B9B4C341DAA69860303BE": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "9AACA361DAEA5FBE5848E532B5A2F60EC6C30C777E7F44044E9161EBDB316D67": {
+     "name": "Discrete GPU BOMACO Support",
+     "outcome": "protected"
+    },
+    "9AB84A9E987C9F72B3E55E6AFB2E89069042B5383F990BFE8FC75ADB1F6C17E7": {
+     "name": "PCIe Port 6 Target Speed",
+     "outcome": "protected"
+    },
+    "9B8E9FA1D9CEDDCA062F47E09F91BFF77E86304AB111D6301DC551E9A1FB291A": {
+     "name": "APU Only sPPT Limit",
+     "outcome": "protected"
+    },
+    "9BEFF270D041643B7C8BDDA3F49E4D89DB5F6A5C7612079C226523A84260C79D": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9C224B5D8D1D0D6C91B2F6E767F81BA2811828E6A012A74553D6B947D3D39BC1": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "9D56680578E2871F9F0186FA58A42696CB1E8F0C9EF7F05CDBF71A2A7817AF24": {
+     "name": "Fan Table Control",
+     "outcome": "protected"
+    },
+    "9D699FCEF872E578694D3B98E46F6F89F1D1C96458F20052FD2A2BEEAA0339C9": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "9DFC91B125F0890A52386397F633F66F357F7C5240D2F0D5F59458234211DE06": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "9E5D5E9E4D967A9D869C1A43AA31D27D0C33DFCDA6D23DF7839CCDEED4424ACE": {
+     "name": "Opcache Control",
+     "outcome": "protected"
+    },
+    "9E683A3BDCCCBBED0E0758C617A221E8D82656ED3DC6FF7293CC58F9F5A8780C": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9E6D036A6BDD10C3BB8CF4A00CBE54C6EF9B685952D4FD22C9255BB32004F80C": {
+     "name": "Beep Duration",
+     "outcome": "protected"
+    },
+    "9EC1C3B1DBD5E98A8814172BCA0FB7AB885E1197493D98B4A1DF3EF6145D8F5E": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "9F417F993DC4D5EA88C91688B13DF63F0632A9CF02BF751C6AD75F87090854B2": {
+     "name": "PCIe Port 8",
+     "outcome": "protected"
+    },
+    "9F642784338BA41401BA692407F6034F52BECEBF200D8438739E72A2C939493A": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "9F6FADE44595790BC6D505D10C27962506D171476517BF051CDE865C5EBC12A5": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "9FC8AF10556B21FF9C3ACCF233F29B8A6244E5A8495EDE181E487E30A280D8D8": {
+     "name": "USB4 Non-Prefetch Memory Reserved",
+     "outcome": "protected"
+    },
+    "9FDC956CD4341BF140896DCF061ABAA3051C1275B7A5668778AB88A8812F3C05": {
+     "name": "USB3 Gen Select",
+     "outcome": "protected"
+    },
+    "A02C2532A39C38493BBDC7CAFE783668B345DE85651D54BA58E5DC32DE0BA727": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "A04884ABE8ED244DD2F44D1B560AEB91E697E241A09CA15BD816C5512725C206": {
+     "name": "STT_ERROR_COEFF",
+     "outcome": "protected"
+    },
+    "A05AD433A9D45B6EC72664C0C08C120D6C9D24D8995DE3B398C36BD838710039": {
+     "name": "TrrdL",
+     "outcome": "protected"
+    },
+    "A0A1866D28BA632E46E7F1B24ABC5F6F11888F35178D3CEDDCDDF075D363A67E": {
+     "name": "Modern Standby Type",
+     "outcome": "protected"
+    },
+    "A0B19E605ACE1B7970B8C270463E6CB9BE71C3C4F3FF0ED5857FD3FCC978EE27": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A0D86F8D5A40DC603011F49C656C272479C10718A8BB00E83FF3710481D82583": {
+     "name": "SOC HD Audio D3",
+     "outcome": "protected"
+    },
+    "A0EC17B6FEC1B7841C3436878D275AE972AF35CC7BF18C4B1034E6C17BC89C6D": {
+     "name": "SPL value in the CPU fuse",
+     "outcome": "risky"
+    },
+    "A1334730DFAF8AD6C271C9BA63F2D97A798A22FCB27EEC5A4F6E1859E27C867F": {
+     "name": "SoundWire Beep Tone Frequency",
+     "outcome": "protected"
+    },
+    "A15A1F0C2D35D242EBFEDA1737CE27B023BC85B36BC1107C91039D2EF0D24438": {
+     "name": "NVMe RAID mode",
+     "outcome": "protected"
+    },
+    "A17A6D3C729B7CB58AB6116639B8D16E609EE6FF0D5DD940BF75BF177D668CBD": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "A1BA54D8A21EEBAA827DDAEA9D0231A40BF8DF98DDD3FD16F23E4AD5F5C17993": {
+     "name": "STT_MIN_POWER_LIMIT",
+     "outcome": "protected"
+    },
+    "A1F98BA6D819AB8FFE025A8562E8E3EF67BCC05208D75AAE6DDFE968CB13EC00": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "A1FEB47E3133B10C5FE41D666251C52B9DAC07B660AD92336518771233C37C94": {
+     "name": "CK ODT GroupA",
+     "outcome": "protected"
+    },
+    "A23DA191E69BE8177D71E437BCCB1D214C5274592219DD6442211DE4108FF435": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A25EC318D29FA6D6DF778D4803FEE3EB2B5494B433BAF9BC2AAB753A008F803B": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A2913D4C7B866C75B48358E7FC0FCA83D9D2A881EDC25AFDD84658F88E2ECA9F": {
+     "name": "USB0 3.1 Port 0",
+     "outcome": "protected"
+    },
+    "A2C373A851712DC76F2D150A898FFC60350299F5715468DB6C95540ABCDE0D14": {
+     "name": "Memory interleaving size",
+     "outcome": "protected"
+    },
+    "A30AD100A055C0512DFF452C6F5E1232EFAA08F215BFE5D20CA58F9A052B0F54": {
+     "name": "Discrete GPU _DSM Function B",
+     "outcome": "protected"
+    },
+    "A38E8DCCC09AD28B3F045A14BEDA24E67CF0FC7E45AFD5CC86CD31AA9A79C838": {
+     "name": "MONITOR and MWAIT disable",
+     "outcome": "protected"
+    },
+    "A431153880923342FD30E414275C0C3A406C16E33CCF1F44AC40B8BBC09A68AE": {
+     "name": "DRAM PDA Enumerate ID Programming Mode",
+     "outcome": "protected"
+    },
+    "A4359146A767C9B01A5C0FFB3B9701FE1F079BEB22132E5D7372714DCC374C14": {
+     "name": "PCIe Port 0 Target Speed",
+     "outcome": "protected"
+    },
+    "A48C5A9A38724FC9D4FF01532D17669AF8717A147EC71E3DE73F39F2E992B464": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "A48EBF8DDA690759D97D7DD0F56A09EDB70D6EE795D663168E0B6566AB0782BC": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "A4993DF8687ABCE5F1185D29381D58E737E8C957B6D40BFAF91C71EDB77A2035": {
+     "name": "DDR Training Runtime Reduction",
+     "outcome": "protected"
+    },
+    "A4A039FA48B7963D4FAAB9CE2FBA295EB62970A6B4423C9BDBA1332C5753D557": {
+     "name": "MBIST Per Bit Slave Die Reporting",
+     "outcome": "protected"
+    },
+    "A4A0A283561565EBAC9A35E8A82F913E944331D8E9D8846F9632A130F90027FC": {
+     "name": "AIM-T Support",
+     "outcome": "protected"
+    },
+    "A4D3B93587B12EB78A94ADEDE93CB92C1A662D4351A59DC336629C93860609BA": {
+     "name": "PCIe Port 3 Target Speed",
+     "outcome": "protected"
+    },
+    "A4EBF3D7FD84475E45BB3B9A81A37C513CBCBFE0F51C4EEC5BAB3848B88B881B": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "A513F245D39A109E8CE0D83ECBBDC10FB567EA706D64B278A55C059F18910F0A": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A51843110B527E040E1512E0E73874FD65656190CE3C2C3ACA52CCF9D826B26F": {
+     "name": "TwrwrSc",
+     "outcome": "protected"
+    },
+    "A518ECC44F62714E29D54B8C10DE5835FF833CD92EC6F6F069E5268FD051F6D3": {
+     "name": "KVM for Wireless Manageability",
+     "outcome": "protected"
+    },
+    "A5545D248D6041312322C60733C72426966BA0962E48B2EA180D3B07BB9AE234": {
+     "name": "USB2 Port 5",
+     "outcome": "protected"
+    },
+    "A5589E3B6FBDA48289EAA9ACAB454A33B350FFF60759C127FB5E8F8D4A40DAC6": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A56FBF655C1C20C1102F1B3754CFA3FF5D5AD7033370BBA0779899A21FE51DC2": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "A5A9BDDE12A63CC02DB707952E06977FCDCEB59FE0A8D5007CF965F93292A2A1": {
+     "name": "Adjust DP0 Caps",
+     "outcome": "protected"
+    },
+    "A5AC5DD2D70B78C429B88B4E0AD96C5C71F154570B784ED602D4FBB9EBA62A56": {
+     "name": "HID Spi Speed7 N",
+     "outcome": "protected"
+    },
+    "A5C5EC51C78387B5063D7DBB1DC9EAF6A2DA7D68C66D7D53A48AE5B1B645C0F9": {
+     "name": "TwrwrSd",
+     "outcome": "protected"
+    },
+    "A5E9CE557864812CEDAAEE9C71F2CC060221AD9B092A5653399EE324835C0A5D": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "A5EAFC28CA3535F61DA4570275CC57F4D283F98D341C1FDD3616685525905AC4": {
+     "name": "Tx Burst Length",
+     "outcome": "protected"
+    },
+    "A6531F7E1B98A70E117AA862B51F6F27E1F127EF0C4A16F4B88B9633D0A92601": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "A6F3F7BD39DAEED306643076182BAC4827C604A9AACDA005245831AC0D99AD89": {
+     "name": "USB2 controller enable",
+     "outcome": "protected"
+    },
+    "A6FEEA42D146443DDE05FD532CADE0D59A1345C371941FA0F94555371BE17F95": {
+     "name": "Reconfig Rebalance Resources by OS",
+     "outcome": "protected"
+    },
+    "A6FF4647CC3B6735BE7783EA9DDCBC72FC150DDA36E10D2401107E8DCB6FDC7E": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "A75713E15315EC22FA5DB7222F2D4356A564530E20505B8BC9D295243D766D2F": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "A76FB4CDC18377B3B6BC4E2855B2205E71398C74285D01B3CB979D5AEBA2EA4B": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "A773CE2E6EC2487ABFAF67F64A64A7ECF3560484498588446F4D47E6DE34D475": {
+     "name": "STT_SKIN_TEMPERATURE_LIMIT_APU",
+     "outcome": "protected"
+    },
+    "A7D93926423C9E6D4658B259BD436CA24219968F8F2FE62899D12817297C45EB": {
+     "name": "Pwm Frequency",
+     "outcome": "protected"
+    },
+    "A7E044CFAAB4FB4D8C4213B1DD5E0DCD4E1FDBD1037296EE328D7D3F79C5F5A5": {
+     "name": "TX DFE Taps",
+     "outcome": "protected"
+    },
+    "A8221554DE0D3D74A437D6F7B85A39442F9E71CF4A04D442EDF9B02F4B9E513E": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "A8650CC0BF4C7B03D7EC5AB24F8F529EE06343F085A6A84029BC619DDEBAA5D3": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "A896A91EA381C6087FB81C08043B43D6FFA2ED8F3C1957F7DBBAF406CA9EB608": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "A8A49E27D1B6FAFB7395E8D43679BA5C36EE8C80799EF3016853572FE98D9036": {
+     "name": "RX2D Voltage Step Size (2^n)",
+     "outcome": "protected"
+    },
+    "A8F8DC1447DCB0A5083EF69B93528301BCE8D0A3CED48BF2A185C29960CC56F1": {
+     "name": "GPP1 CCLK Base Frequency",
+     "outcome": "protected"
+    },
+    "A9A4426039E1FFEB51FC6CD880A0052544530DFCDF0515F6325400CD47C4975C": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "A9FF4AE38EFFB90C3A9E7A22E1E75664824947E2FD8213594A981DBDE05F9E0A": {
+     "name": "FAR enforcement state",
+     "outcome": "risky"
+    },
+    "AA7F3214BF09444F4DD53E52F32AD2DE5B20949A5E85F076398F204A1CC34418": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "AADDBCF817B696D30198CD72E878EFDE6C72CDB6A3AD03382B88B2ECAB53BDFD": {
+     "name": "STT_C_HS2",
+     "outcome": "protected"
+    },
+    "AAF548A39A3EFD11EB8B1E808359E7C2C1D9EB99B626A81681C14E8DE951641C": {
+     "name": "Tskin Time Constant",
+     "outcome": "protected"
+    },
+    "AB09257070EB74212348DFE1ECAD8220CFF64D9B0D1E3A820F819C0F700C681E": {
+     "name": "GPP0 CCLK/PCIe Base Frequency",
+     "outcome": "protected"
+    },
+    "AB64A6377C0DB909867E95B063D8B3B45FD0426E644D834674388A42D21D2739": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "AB88C95318C07E2D72B0B3B9DC5A0895852ECBBD5760E8C2E63733336631C93B": {
+     "name": "Pluton Attribute Control",
+     "outcome": "protected"
+    },
+    "AC0367B743B0F9D2E769499A91F8C6361D7BF0E3064F3CED1D640D9A04FA8E99": {
+     "name": "Dram DQ drive strengths Pull Down P3",
+     "outcome": "protected"
+    },
+    "AC22226E2BBD9B6DB6B52A6ED6FD552475BC7439CF995FB8ED7EBA2220B3F26C": {
+     "name": "HDMI 3.0G Tx Slew Control Value",
+     "outcome": "protected"
+    },
+    "AC45325774E13BA926378E477B2697FB6EF1D09E2F33E8303854FAFA82CE180E": {
+     "name": "USB2 Port 6",
+     "outcome": "protected"
+    },
+    "ACA3766A533EA893213772153A8DC45C3F6DB42DDA33F5E1A23CEEEC5FB73475": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "ACFF4ABB010783C6E18A9C73AB3FAE2DF52484E6A6AD28C7AB59922E105501D3": {
+     "name": "WIFI IM Enable",
+     "outcome": "protected"
+    },
+    "AD0520BBCB74DCA7D6797DC337A0A4CEE0D81BCD2A809389400CAB86287B4CE6": {
+     "name": "SMU and PSP Debug Mode",
+     "outcome": "protected"
+    },
+    "AD4DFEC5C35BE260078FA1C107528ED1F38D28AB50B2B1DE852C43E5A6CCAE70": {
+     "name": "L1 Stream HW Prefetcher",
+     "outcome": "protected"
+    },
+    "AD726F1B70235FE9DE2AB2BBDBAA23270497697CD20A1D697955CA946CFB3D70": {
+     "name": "SmartShift Enable",
+     "outcome": "protected"
+    },
+    "AD7BF1A0C302832D40AFE6F0EA7B8DD198F4664D2F5C28E6329CBC74215043C9": {
+     "name": "TwrwrDd",
+     "outcome": "protected"
+    },
+    "AD8062863A4BB320F5B1E46CDF50592101692529C459C0393A46A4BA77C20B18": {
+     "name": "TwrwrScL",
+     "outcome": "protected"
+    },
+    "AD8BDA529A9A91AB2A0B63D756E0BC897528DB9C9C6B51BDA05133E395925AEF": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "ADB05DA892FD764BA9800DC09AD34E0DA9E12F9F47C9D203E016D930CA2F6092": {
+     "name": "Latency Under Load (LUL)",
+     "outcome": "protected"
+    },
+    "AE459FD327E69AF98388C7246FBC9DDC70C6F9F87E8923CA9943ADC3F64C372E": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "AE87B323DE63F72995199E9CE3021F7AFAF629004E2EBE208215391D14C5DE44": {
+     "name": "Twr",
+     "outcome": "protected"
+    },
+    "AEBE3F682B3D531AE73BF23E9A533B669D44614E08F0AAE12CB67D8BCDA01ED8": {
+     "name": "Dram ODT impedance RTT_WR P1",
+     "outcome": "protected"
+    },
+    "AEECBA034C34C5C18B4CC4256EF5CC05F25507A8F2BD648210DD9043D0A89950": {
+     "name": "Opcache grayout flag",
+     "outcome": "protected"
+    },
+    "AF23D8E83E408243ECDBB89D0EFAC481C0304A484379BE475B455C62FDFED2C8": {
+     "name": "TrdrdScL Ctrl",
+     "outcome": "protected"
+    },
+    "AF2AEF5CCA2F83673B3E56FEBA39A4B337AB8C57C8E72498B1A55BB3F55B2968": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "AF74FB0547242ECC19E1332CD4369DC467F58BF5FAA38A0A811B2EF6686CC33B": {
+     "name": "App Compatibility Database",
+     "outcome": "protected"
+    },
+    "AF95655983E43DEF04D34A11FBC2AE441D3545061719AF3E158628C84C5ABE9B": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "AFFD3D7CDB96C688C10C009B5E5B97E3219FCBFF7DCE0C1044DB762D95C1D6D2": {
+     "name": "Trfc1",
+     "outcome": "protected"
+    },
+    "B01AB8522AB97B447A8A0562C7B7C6CE7467DEDAD6D4120EBAC69AC65B325169": {
+     "name": "RAA Maximum Management Threshold",
+     "outcome": "protected"
+    },
+    "B05E2C124AFE16A418DC85AA180861991C41F6A82AABFC96D9BB9A902282AE0D": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "B08501B36173D2A75B15E2B3253B7F64C06BD836E3091EA1676BF851C6B45C49": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "B09C0DC5CD2840054DEF5F3EAD890603E3B9FC76A2DF75E3856AD6ECBF09A130": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "B0A11B0B7491E44664D6612B781D57E63B1496BA5A26A5981BC82E2D7939E9F7": {
+     "name": "ESPI ABL Init",
+     "outcome": "protected"
+    },
+    "B0FC9C8DB5647341A97D820ECAA8B98DD4B9CC18619A3100391A24D1763AB011": {
+     "name": "Device Sleep for AHCI Port 0",
+     "outcome": "protected"
+    },
+    "B164008CB25F7E7ADF227FBB3C26FD4197FB45DB9930351A4667E02D12AFEFBA": {
+     "name": "PCIe Slot Present Check",
+     "outcome": "protected"
+    },
+    "B18D7A0799EC3206EDF1F8DE665E31FAA1BDBBE022ED907E80D0A47A9CD493D2": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "B27FDFD1C76BD4080CE09A1687B5E6DBF03E9804A3A196D7FA58A6A3B4A430C3": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "B2DEEC014E9DD035C09DD33D7A8BFAE688F186510EF1919665E43980FADD558B": {
+     "name": "SoundWire Controller Select",
+     "outcome": "protected"
+    },
+    "B33330684B022451BBC61761DB58146F73C3937B2C3EB24574F2B83339907760": {
+     "name": "PCIe Port 5 Target Speed",
+     "outcome": "protected"
+    },
+    "B3466200CA35505B1DD1553689E5FD6D7BAA9F9D32540D90A12F1CCDFA20B93C": {
+     "name": "USB4 PCIE FPB Support",
+     "outcome": "protected"
+    },
+    "B36157AAEC4F5642B75C670E3608B78FD5F0689A46650F07657D349164AA74AF": {
+     "name": "Rx Burst Length",
+     "outcome": "protected"
+    },
+    "B3ED1FE59ABD18488F50DE2CA2980DE6B0E452A1CCB44497640F954AFBA6C737": {
+     "name": "Core Count SW_SCI_GPE_ID",
+     "outcome": "protected"
+    },
+    "B411521F14548749C9042DE5E3F74B81E3811D9F070F5675F8EE87735C659312": {
+     "name": "L1 Stride Prefetcher",
+     "outcome": "protected"
+    },
+    "B436451379F3122D7377C9DC5128696D37E383F297FE4B617510CD4C35CFCA83": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "B44B17CFB5C8CB32EF55989EC6D8159F4DD49A62CDF6453CCD30EBA97B3FE442": {
+     "name": "Maximum Frequency",
+     "outcome": "rejected"
+    },
+    "B45D790A74825513202F75A7F37A8F4A85640FCC6602F60AEAF8C3838F8D7ABD": {
+     "name": "Discrete GPU's VGA SSID/SVID",
+     "outcome": "protected"
+    },
+    "B46939AE332093341FD87C519CB33B47AC81450462E05B2E911F0D4516973424": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "B49749E71723AEC6B5393D28FC08FE7762FC1040236F493F53E15965D32AD321": {
+     "name": "USB4 IO Reserved (KB)",
+     "outcome": "protected"
+    },
+    "B4E08E29A27715D40E6F209ECD83EF7D5823F9747677C001BCCB8D1479745A2A": {
+     "name": "Gen2 Emphasis Level",
+     "outcome": "protected"
+    },
+    "B569F505CA249B66873B3CB0974CA645945CF887BC5C416DBCCAB12F0DF168BD": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "B56C935C797705A19D05869A719D7A9CDCA73A4809D24CA760AE3EDE39011FDC": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "B5C3C1EC926AAEDA98BBD59B318154FE43738BBEB442C7A86B8C28AEBFBFB201": {
+     "name": "TwrwrDd Ctrl",
+     "outcome": "protected"
+    },
+    "B6197A58A39DC4F8D99BB7E79AFE6974C682B952101DC29922D0E0B590CF49A4": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "B61DD3CF36E50126CC142E1B7E5DE2E863E4C3F89E340B29895B01F718B0868A": {
+     "name": "PCIe ARI Support",
+     "outcome": "protected"
+    },
+    "B64564283AE5088E6BD567AFA96F4371C6A70CAC6C30353632F5A1F79159A706": {
+     "name": "EDC_VDDCR_VDD",
+     "outcome": "protected"
+    },
+    "B7E0BE1C4445777730DAEF101EEDF44DA2B30B80688E4DFDE8F80ECDEA92594B": {
+     "name": "USB0 controller enable",
+     "outcome": "protected"
+    },
+    "B80F2689FCF09868B70D1462F291F0BB7BBF063DBF85A1F33910E9A774852895": {
+     "name": "PCIe Port 7 Target Speed",
+     "outcome": "protected"
+    },
+    "B8380C50B01DFA00F3E30F2928A61CD5D8D0CE54615CC9F6176BD3C8C3119008": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "B8388DFC3D9C022C85D4D6B4700B0443BB608774BFA325BB3F00323874F13008": {
+     "name": "Tfaw",
+     "outcome": "protected"
+    },
+    "B868E6CBC0C2CD35ECBCE6D793DDDB6BDF30388F9E5A83B3CC9AB0C64CCC1950": {
+     "name": "USB1 controller enable",
+     "outcome": "protected"
+    },
+    "B889F14134CDBB360E47808A3FBFF608097F75C9E42773AAF953CC0898F4DF51": {
+     "name": "USB4 ACPI _DEP Support",
+     "outcome": "protected"
+    },
+    "B8AEB7A2B49C7415DE0D69C59B1CBAC6F23A09BF111F9D407A30BA1D9A434A38": {
+     "name": "I3C/I2C 3 Enable",
+     "outcome": "protected"
+    },
+    "B9785C207F04EFEDEF5B2034B72E78D49A03E4B1E8E17CA234DC341AC07EE4AF": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "B9AABD94BF8363387D6BFFE4B51DBED919AB543D7ACB041853C5F64722C2F26E": {
+     "name": "Processor CK drive strengths",
+     "outcome": "protected"
+    },
+    "BA69BD520C4EBD446F5D69DEC3CAC8B128F92183DD89611C2200B7B4F5CA1545": {
+     "name": "Freeze DF module queues on error",
+     "outcome": "protected"
+    },
+    "BABF7DABAB782D41265DBC3FF9DBB130C055CD1312667273C35BEA719FB0C516": {
+     "name": "PROCHOT Deassertion Ramp Time",
+     "outcome": "protected"
+    },
+    "BADEA7ACB75A1600F265075754F561DFD99C199BDBE46146B0A6DC44B901F4F0": {
+     "name": "Trc Ctrl",
+     "outcome": "protected"
+    },
+    "BB31D9B89AEDD9675749E3657D103619D13930DD7C273456EE4420C4EBD27213": {
+     "name": "Device Sleep for AHCI Port 3",
+     "outcome": "protected"
+    },
+    "BB884F87692ACA2D3E08244DD89A3826256527CF49CAD9663547879A368CD310": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "BB9C170EF5AB87B50EEC53942C6D389D35B70B4D5D46377D77A0BC9A8E7BF4A5": {
+     "name": "Dram DQ drive strengths Pull Down P2",
+     "outcome": "protected"
+    },
+    "BBCA536C7FDC2097BBBEDEDEDBCA1485692E1B65289BD9F793D37DA0D1919D17": {
+     "name": "Dram ODT impedance RTT_WR P0",
+     "outcome": "protected"
+    },
+    "BBCF4C957B55815B4121F993B8C947580EBC068BC4E73D9495E882CDFBF05AE9": {
+     "name": "MITT/WITT Selection",
+     "outcome": "protected"
+    },
+    "BC0016F1CFB5412033A0157C498C9783EEB4C54E8F66E4610954EE1049F36F4B": {
+     "name": "Dram ODT impedance RTT_PARK P2",
+     "outcome": "protected"
+    },
+    "BC0491522487DE2AA15791194C3EC6F0098FAF382316AC10FCCA98BEDD3F0CAE": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "BC067C0FBC654705B8006AF54838A6BBC8895D92E5E9A8A037DD6A592B2D05E5": {
+     "name": "TX2D_TrainOpt",
+     "outcome": "protected"
+    },
+    "BC0EBC850FDCBA317018642C7208CEB2344F5110C16C2EEB6BC109C1EDB6D790": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "BC1C1F94D61D3449A0B22F3A5183E9565F0CA06E2DA6579E21E616DA6CCF83EF": {
+     "name": "SoundWire Beep Control Address",
+     "outcome": "protected"
+    },
+    "BCB8B4C816093D9DD37812094E0B06114B73EA6DF36C0C35EB194D445DB328D8": {
+     "name": "Action on BIST Failure",
+     "outcome": "protected"
+    },
+    "BCC7A0C8D40902933A5A663A355615CCB14B1A252617347DD29ADC52C860637B": {
+     "name": "Tras Ctrl",
+     "outcome": "protected"
+    },
+    "BD310604C9011DBC7FCC684BA50FF8DD59262849CF7146D386B36B2ECB76AA93": {
+     "name": "USB1 2.0 Port 1",
+     "outcome": "protected"
+    },
+    "BD50ECB95991888F4A4E2A46F86674464F888A21F8D855DD830553F5401DA218": {
+     "name": "Gen3 Emphasis Level",
+     "outcome": "protected"
+    },
+    "BD5FAE21FDD0B87EBA41BCC1A91138FF79E72BDBDC06799513B0E6E693B887AB": {
+     "name": "USB1 2.0 Port 0",
+     "outcome": "protected"
+    },
+    "BD6D556C1BD501116F19F0E901A1181BD3F802D151E39FC48B81D52316534687": {
+     "name": "Processor DQ drive strengths Pull Down P0",
+     "outcome": "protected"
+    },
+    "BD6FA49C5327EEB2AD1E078E71F4151E581A9B5F132B28B3B8A4413583F32D6A": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "BD90A6BD53E4F0206AE4957A330E6346A4E3A7F174B8BC2101467C453E81B959": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "BDC9569E24AA39A5CDC3AE5DA9EE99CB73AB7A88C8C04CE8F48E7AC79008BFBC": {
+     "name": "USB2 Port 9",
+     "outcome": "protected"
+    },
+    "BE8BC886AA3D3F91B61590635A672AAF91505E25285B6D871D1272FC05E34C1D": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "BE9F881326B965159BD2EB41E724E327803852438CC725C6E9A62C35B5EDFB9E": {
+     "name": "TrdrdSd",
+     "outcome": "protected"
+    },
+    "BF124DAE54C4359F7CB110C036B0D45E345815393FFB3B5073F880E8D7A2850E": {
+     "name": "Dram ODT impedance RTT_PARK P3",
+     "outcome": "protected"
+    },
+    "BF1994866AA1971CAA0EDCA6B782DF12EE40B9662A092529CD6ADF2BB7D24C7B": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "BF46674E68D7E1A6753EBA2917572A610B3BBC43DDDB3B0724871D0514C4AA63": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "BF78C6172A619590981D1B87A379776F6B1E7C90D407ACF6A6F592E416E9DB32": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "BFF17151D3BD5FBAB5921A256AB574B154DEE6361707B0927B966BDF39E399B7": {
+     "name": "Native USB4",
+     "outcome": "protected"
+    },
+    "BFF2F89BB689CFB07DCBE8D0B687B5A4D4124437788361F83A065D686817FC0C": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "C06B6F4E0A19FD73562F8317DFD8BB8A59165DCF8815F66BB36CB65FCB271993": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "C20B88662993AFF5A5B285F912BA9C7DE46E80D6945FDC5534A3B182D72FF969": {
+     "name": "Combo CBS",
+     "outcome": "protected"
+    },
+    "C2124C49A1F11BBBA71EB08D94C3F07A5245E89DC990183A42EBE079FCE3502D": {
+     "name": "Tfaw Ctrl",
+     "outcome": "protected"
+    },
+    "C236D3AECF94434AD2354A5CF1E0BC4135C48E9B6387C5255BD95E4976C70CAD": {
+     "name": "PPIN Opt-in",
+     "outcome": "protected"
+    },
+    "C27F52EF200F6A029785D460C51EE90E18C6EF21F8559C487F7B041D6B0EAF20": {
+     "name": "Medium Pwm",
+     "outcome": "protected"
+    },
+    "C27F5C3AB609EE0AE6B65FF848C657C9D944882E8AE9E4802002D374692EA8C8": {
+     "name": "Dram ODT Impedance RTT_NOM_WR P0",
+     "outcome": "protected"
+    },
+    "C304D67D88740349C175175AD81123C6E658F99756E5BD48FFA890BF48371EAB": {
+     "name": "HID Spi Speed6 N",
+     "outcome": "protected"
+    },
+    "C31D09C0ACCE97A151F87EA5086966911F8D3382C387BFDF6BA351EB8D1E6950": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "C32743761A2110FF4402CA2E3959E7DEADF21E8609EF739B63624CD10371941B": {
+     "name": "Local APIC Mode",
+     "outcome": "protected"
+    },
+    "C32B022F5FE4A1E10744501689263235E870306A99C528B5511422DABE72426B": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "C32C1DE9E412014045BDF154186D764E93FB861906A44CC51FF6470EA69260C4": {
+     "name": "TrdrdSc Ctrl",
+     "outcome": "protected"
+    },
+    "C33E8E61663D5D25489F4707333873E64CE0FAA9813244F8EEB963FB2C541A86": {
+     "name": "Gen1 Squelch Level",
+     "outcome": "protected"
+    },
+    "C3898461EEE500E64F489F404016C4EFD6738DB8398A82A5ACADC9C4A88EC7D2": {
+     "name": "Gen1 Swing",
+     "outcome": "protected"
+    },
+    "C3ADB5B8CAC42E8BFD1A4C5D9C39CC712735EE96A0162037B0A25A2892DA116D": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "C3EE95C1DD44E4E1CEA19ACE268815483523E653B39A71CB0DA874F4253E1387": {
+     "name": "MCA error thresh count",
+     "outcome": "protected"
+    },
+    "C43E97261BAA3D9E91AACB2FB8F9D53C9CBB7C80815BC78C4D606536641099E3": {
+     "name": "TrrdL Ctrl",
+     "outcome": "protected"
+    },
+    "C4524D4F85CF1B2595DFEF5E0228C3242899E0B57335A4963CBE9E0360EE0681": {
+     "name": "PCIe Port 8",
+     "outcome": "protected"
+    },
+    "C46DADE3971C220B9FB665F10431FEB851BE1725A7CFD4457385949FE285F174": {
+     "name": "STT_SKIN_TEMPERATURE_LIMIT_HS2",
+     "outcome": "protected"
+    },
+    "C48BC25B6AF8CD9A4F4EB26004216DC256577C3027F939CFE19304C96A8735EB": {
+     "name": "Trusted Platform Module",
+     "outcome": "protected"
+    },
+    "C492DD930366F66F1313439C23393990822669E316CE36A933605A33B9FBDF0E": {
+     "name": "TwrwrScL Ctrl",
+     "outcome": "protected"
+    },
+    "C4CF9F27AE942B85C8B994DAB40D300FB1D847AFB4872735FFAD37FDDD170937": {
+     "name": "L2 Up/Down Prefetcher",
+     "outcome": "protected"
+    },
+    "C4D7CBDA2D6E0EB689F35040922EA6D0DFBCF2784D1719EDBE91901C211E0BCF": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "C4EC617A0AAB7F5DCC7910C6728BF517252FDBB2855D4C86F847470547860AE4": {
+     "name": "TX2D Delay Step Size Multiplier",
+     "outcome": "protected"
+    },
+    "C5032D18BC6F26536B2BD05E9D466EEF91316C45F95FAC4F8DE0EF2B832026B2": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "C52EE84C77838587C038BFBA74755CF1531F74739671A79B3757C94FE7D35DBF": {
+     "name": "SVM Lock",
+     "outcome": "protected"
+    },
+    "C5482C2F87EEC812AFC6263E14E6FCD0FF52ACB02BE14BDDF455A3D0871D70D7": {
+     "name": "PCIe Port 8 Lane Reversal",
+     "outcome": "protected"
+    },
+    "C549F1C4DA843EB82F6A497CAC5B21F63AEB70F33A1D5B94C6B817CC0706F1F6": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "C594EF05D837CAF9C5DFDEF6C528D6B8560C601A38182C68514C0B9959D7DB6E": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "C5CA4F617EB0D564AFCFB5757D1F062DF9592201B305FD82BC53C90B44AF61D8": {
+     "name": "UMA Frame buffer Size",
+     "outcome": "protected"
+    },
+    "C5FA877A4127B3A17AAE1F53FEB70AE07F0D581DC5523E2378872F1A8E5D2DF1": {
+     "name": "EDC Control",
+     "outcome": "protected"
+    },
+    "C63307CEB1383FAD4C0125AB6F8CA0460B1A073A4E6C5D9523D897F40EB4944E": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "C676C75D088AB15C05F3B1984DC824F336F0B285C70C1ADC74081AD7CE6F3323": {
+     "name": "SATA Port 0",
+     "outcome": "protected"
+    },
+    "C7003DBCB536A8EFCD27EE63FFDD45982B2DF50A2E73EA8FED35ACA3C7E9EFF3": {
+     "name": "SCPC attribute control",
+     "outcome": "protected"
+    },
+    "C73F532E591E889DF3C33E8AE8E0F1BE23CD7801AB8A972759C3B2FB1973CB08": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "C7467FFF3A1EA2CAEFCF4850A07ABC51055269BC8F4D289C2E0B2FC250D88A9B": {
+     "name": "SOC USB4 PCIe Endpoint D3",
+     "outcome": "protected"
+    },
+    "C76E933713B32043E1B8319BD8848B61533CB26068175363B1A2F1C497DD11A6": {
+     "name": "M.2 NVME Trst-cfg",
+     "outcome": "protected"
+    },
+    "C777E91ABA9CCBD89BA8DFF16D24C7B2E23CE18742CA5436CAF23B8E3AB5A576": {
+     "name": "Wireless LAN Country Code",
+     "outcome": "protected"
+    },
+    "C7F2B8F3BC7A2A8371BB7E5A48F65ECF45CBE13E464B3E20FF83EE747D9E5E92": {
+     "name": "Read Drift Adjustment P2",
+     "outcome": "protected"
+    },
+    "C843851B99330E6215714CE0A2896E6C697F100CC9E8D6A0C38E20EA5072DB6D": {
+     "name": "Gen2 Swing",
+     "outcome": "protected"
+    },
+    "C8934608525F49A0929F7275B92B587020054700CC4986FCDC65363B145B1E1F": {
+     "name": "Trfc2 Ctrl",
+     "outcome": "protected"
+    },
+    "C8BB59A9BEA0301CFD9B183B7FC3D5AA3B06BE3FEB7AA29A51C03959228A4C79": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "C8DABBBC6598A32BDB26CF40489213A80F6192D047989C1DE4891159E7C370F2": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "C9062244271FD5ADB3291418A1F8A4762945CEBCBBAA4799DA7AFB3713791336": {
+     "name": "Discrete GPU's AUDIO SSID/SVID",
+     "outcome": "protected"
+    },
+    "C9088C38F9DF0E51E28FBF7553CCFBD70FF0D35023F850EF9B9E39F0011B2DB5": {
+     "name": "Gen2 Cp16 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "C967BA56EE67C3DA8F6EC5821627F4396542D0CB837B258F705FD31746A1AF45": {
+     "name": "CK ODT GroupB",
+     "outcome": "protected"
+    },
+    "C97FD782F449F1A6179070A68A456264E3BAA6C67C60CF1FE6F127743E05B66C": {
+     "name": "SmartShift Control",
+     "outcome": "protected"
+    },
+    "C981BACE922F8E5222EF1BDDFF797C34EB3F899E9D4CE1D55A358F7035E5A767": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "C99EEC3768C2E07C16638E08665AD2B2BF3160EAD065B1FA97A82A6A5DA400B4": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "C9A7785DE8001FF7835F0B9F9FD641BE6189A6B380ABF2C214486B841A9AA5D9": {
+     "name": "TwtrL",
+     "outcome": "protected"
+    },
+    "C9D49432C82F6BD11B8F2CD7BF06401BDD10784F722A4C2526DF06DF564CBB81": {
+     "name": "DP3 Display Caps",
+     "outcome": "protected"
+    },
+    "CA47B528D92B3C8DA2EA568D6D66EBE3ECAE8EC6603A56F43D2BF1B62DAED729": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "CA76EAD4CFD8291D89BBBDE57E94D4AA0291856FCEDE09DE147D8D90E39EAB56": {
+     "name": "Processor DQ drive strengths Pull Down P1",
+     "outcome": "protected"
+    },
+    "CA8F173716E2CA4EF401581B91492B7C553572CDF1B6E387E13AAFD90760E447": {
+     "name": "USB4 Prefetch Memory Reserved",
+     "outcome": "protected"
+    },
+    "CAE7D0CA0DBFB22E2DB6BB930C6B34668931BE098A65C3A5B9917F6949528CFA": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "CAFC4FF4D4817D63D860AB7E603C16FBF9FA2130E8E25DC51EAFDCE0B0C3AE48": {
+     "name": "SecureBio Support",
+     "outcome": "protected"
+    },
+    "CB286184E591CC4FCF61D9EB6FD6C66B6CC99C24E04D739AD42D6F66B02DA3E1": {
+     "name": "STT_M1",
+     "outcome": "protected"
+    },
+    "CB2DF254EC5492A34BEE2FC27B8D24DD77F39A612A03785AFD63A1D85EF28213": {
+     "name": "USB4 Bus Reserved",
+     "outcome": "protected"
+    },
+    "CB7E7845682EA99D0C1156E11F4EC53B2E21A85064CB86ED0EB8AC9AED078E36": {
+     "name": "PCIe Port 10 Lane Reversal",
+     "outcome": "protected"
+    },
+    "CB8BC8B4CE52B6F6DFCFF433DB3C06A8CA038782E990C009658D0B89BC7C6CE5": {
+     "name": "UMA Version",
+     "outcome": "protected"
+    },
+    "CBFE2E2F10CF1823BF1929F6B3CA89D6BB69723A94BDE6F0B33E2B7A560B9680": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level",
+     "outcome": "protected"
+    },
+    "CDB10E4B43F13BFD1CBB2F840A5AA5D918CBCFAAE79333C7012D16B3429E0CC4": {
+     "name": "VDDIO_MEM_S3 Voltage Control",
+     "outcome": "protected"
+    },
+    "CDC02BEB2EE713D0162797B68F57CE80AD7FC0E559D99A17A2F0C4965664EE8F": {
+     "name": "DP2 Display Caps",
+     "outcome": "protected"
+    },
+    "CDE6C5FF4F7A1559BEEA55C58360CAF0EA66C7664AB7AFA82894845A071890C8": {
+     "name": "Secured-core Auto enablement",
+     "outcome": "protected"
+    },
+    "CE59364C849483FA41DA27224F71BA6D0803231CD4CFCDD454EA4FBA06F5AE1E": {
+     "name": "USB2 Port 2",
+     "outcome": "protected"
+    },
+    "CE5979A3D8F290D70BD7CA66EEAAF6156716E97C3882128517ADEE98FB8813B9": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "CE844B209C0D130298F307A8FA4DC3E19507274DBC75BC7B8037B089684BC263": {
+     "name": "TrfcSb",
+     "outcome": "protected"
+    },
+    "CEE9190D7B0450F4A50410D84717214D3129D9E3A9C5E07C3DB09D4AF22C926E": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "CF28036C6DC97D6BE9605FB1B5417A2EB1CB35D95D016C1DD3FE65E9134C129C": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "CF2ABD4445022A95F6ED5F21B8A756631210A2351B1BF7A84A5850094748A5DD": {
+     "name": "PCIe Port 4 Lane Reversal",
+     "outcome": "protected"
+    },
+    "CF5F6564DA1F79DE9B44E82AE761675047990D85B78D765569B37C1BBB3E4D17": {
+     "name": "L1 Region Prefetcher",
+     "outcome": "protected"
+    },
+    "CFD9A053B7C9B0B7440C7CF026BB76BA5B4ADA840A82FCFC227688EB2CC22230": {
+     "name": "SMT Control",
+     "outcome": "protected"
+    },
+    "D004F7867B69B0E934E3DE9553C125E545FBE39109E90DF138AECBAEA221C2C9": {
+     "name": "SOC USB4 D3",
+     "outcome": "protected"
+    },
+    "D0055215ECF18F844EE0D8399F8A794B145E44C2E79A2C271EFB9D59E0557A88": {
+     "name": "USB2 Port 0",
+     "outcome": "protected"
+    },
+    "D011506C66699828B5164C4DA7592B744CACB74AAED82EFBBFBABC429C5416CF": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "D026F44A1C28FE65A8D8F131D08038CE917DC98B896DF34430F21C00AF67DDE8": {
+     "name": "GPP1 SSC control",
+     "outcome": "protected"
+    },
+    "D03804F8A14343801524340A36C56F02847EA542028FE5B6983378AFE371307D": {
+     "name": "Wireless Manageability",
+     "outcome": "protected"
+    },
+    "D05BFDAC51D692CA595C9C138DC4852D54DBB80917D2432271F3BE08F6EEA45E": {
+     "name": "PCIe All Port ECRC",
+     "outcome": "protected"
+    },
+    "D06288FDCC11CF51C46EAEDCD5C5252E6C01A2C3A662D14620FF4DA0F808BE52": {
+     "name": "Discrete GPU D3Cold HPD Support",
+     "outcome": "protected"
+    },
+    "D093BD6F0E9A42C55C34BD886E415C6B62738967E9B746251D82A2D289C70D4D": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "D145274E82FD634794DC379B3008E46B306D365E59045BB75CFE0BCC05BFB3C5": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "D14CBED96DD427E975FBBF51F49DAFDA2D598D4AACFC8CCA43613BF1021B002E": {
+     "name": "TX2D Delay Step Size (2^n)",
+     "outcome": "protected"
+    },
+    "D15379A2E4B16B02501A9686975B41037027AA4852F23DAE6C817DEA0C1CB5EC": {
+     "name": "PCIe Port 4 Target Speed",
+     "outcome": "protected"
+    },
+    "D172A3613AA6246018A7A57160F8498A66CEED6616CB3AA00E6676B6AAD27024": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "D19E23B1CFF5D4BB3195D64146C75858156369E98004D771BA699DE490F64076": {
+     "name": "Address Hash Subchannel",
+     "outcome": "protected"
+    },
+    "D1B6FCB83899F4ED8962C57FF05467CD6B515A43A6A0DE5EB0D14B7288293085": {
+     "name": "Fan polarity",
+     "outcome": "protected"
+    },
+    "D1EB9870D7E119DE2759251680A95464C20F0CE662074EEF51B981DBFD2B301A": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "D25AC364F8AD6D25E28A2076A01E89A46706A6B5BF1E0407FCA5B56578D82A47": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "D2C3472DBBEA409D0B4FD6BA3B47AAF0C0B124196FEDAA071B223D5957CE4CCE": {
+     "name": "Address Hash Bank",
+     "outcome": "protected"
+    },
+    "D2DF2D42FE9A9E7418A1827B4DC584BDF22F4E01A677D958FE7119417FE6EFC2": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "D2ED9E74F268F274A444FB2E833ADBD10AEF97980D70D4485FBE530AC64CB66D": {
+     "name": "USB3 Port 4",
+     "outcome": "protected"
+    },
+    "D3A3646CCF8D064E20313D211690E50CA09715BB3E12D94ABC40744ED1C1F1B2": {
+     "name": "TjMax",
+     "outcome": "protected"
+    },
+    "D3A458C5D488E787D73CBA9FD4153490A7686DDA48F4AC94A648954159DEB839": {
+     "name": "SoundWire Speaker Part Id",
+     "outcome": "protected"
+    },
+    "D3DA50C1BBCF34867BDBBB5768DF5ADB69DE51479F1125D6C838733597DACC84": {
+     "name": "MBIST Enable",
+     "outcome": "protected"
+    },
+    "D43451DD90AB45B12C03C204222CC5C4766C7A37C25935A069234D7ABE6E3098": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "D436950960A417F8D02A001C060872E3B113E31CABA4A5AF8AF7F7B4C77D6E50": {
+     "name": "Processor ODT Impedance Pull Down P3",
+     "outcome": "protected"
+    },
+    "D45DC9E0912BD4C9A6A8FC85DBCCDD08E15DDB44A40A08DF2FD6917EDC052CB5": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "D45E05D6187D45964366442208327003BBF507AA322CB540944BA4FC5FCD97C6": {
+     "name": "MCA error thresh enable",
+     "outcome": "protected"
+    },
+    "D4BE38F0A0A8F194F089CFB2F56520B8A2D586D2B3F308C804D7F5CEA1B6CEA8": {
+     "name": "USB port disablement phase",
+     "outcome": "protected"
+    },
+    "D4F8A876146DDED6D426DB3FC8BEC05B58B917E598BF688E0371974583A1865B": {
+     "name": "Dram ODT impedance DQS_RTT_PARK P3",
+     "outcome": "protected"
+    },
+    "D5339EF1E3C8F7CC45F1630AFAC318179E7408B2C60158A5C94DE29C2BB3B73D": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "D54182D8FFC8F829D6B7CCB37C4E90BC5D2F74057B8B21CCA35CCA1A436E80CA": {
+     "name": "Write Drift Adjustment P2",
+     "outcome": "protected"
+    },
+    "D5A2E06D9147EF94DDCB069E12C0D6F7EF38F9E97654C4E3F4EED5B92B607934": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "D5A77456F813CC44767C7C8008AA59C729673C118D6155674E6CB184828F141D": {
+     "name": "Gen3 Swing",
+     "outcome": "protected"
+    },
+    "D5AE84563F9543C3B1F7BE15A2533DE235A7A5C80CE72C1E291D92255EB5ADAB": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "D5C7BC98CA27369B0E9B43EC119C10C3C9EF15BEFB15C10394D67D0232AF0B84": {
+     "name": "USB2 Port 0",
+     "outcome": "protected"
+    },
+    "D5DA0B9EB97ABB3A44A1C8B596A215BB272AC64E83BC9ADEDB3CAC1428624D00": {
+     "name": "Gen2 Cp13 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "D5FD91954F1701C76FB265F2275F62FE6AA64C94B5699A41C8513A2C46ED2463": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "D6A13ED60C417C84587F498F61475F3AA954A4BBD02A6A1B8F6CF9453B45F283": {
+     "name": "STT_C_APU",
+     "outcome": "protected"
+    },
+    "D6D56430B5FF849139AD80BFF6868C8CED903845070780B8152149AEB7C8FD4A": {
+     "name": "USB3 Port 1",
+     "outcome": "protected"
+    },
+    "D6F19C30AADC39CD09B21DA58D8CB5CD7C59B34A0877BD0553E50E66985CFD92": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "D7119A06C6210B31B2CB8E1F91EC573461EE128F78CED90D937DCCF26265BDE7": {
+     "name": "I3C 2 Mode",
+     "outcome": "protected"
+    },
+    "D7C40490381184616EAC61BDE8CAD1391A7675B38B4E39F5EE5C87482CFAA2DE": {
+     "name": "HDMI 3.0G Tx SLEW",
+     "outcome": "protected"
+    },
+    "D7CF53D6E0C78B13743372BE35944A9FB153670731770AE0C1AC374A23FDCD79": {
+     "name": "PCIe Port 0",
+     "outcome": "protected"
+    },
+    "D81E8C9F12BE7F9E0C7523EAE330BB8777278850C801A915B235AC8D076359C4": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "D83185EEDB816AE9320DBC0007B10B964329A2F59470A3D59971E793F212E0A5": {
+     "name": "USB0 3.1 Port 1",
+     "outcome": "protected"
+    },
+    "D8672E14FF9373D7A4E94A49C16A4414634F9C07097603F3C98C331DC979568D": {
+     "name": "Gen1 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "DA02D942868EA09C0EF1A5F97BE69C03899A90E1097E8DE99BB06580057255D3": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "DA1AA8E96470155664082708CECADA6BD0B6B4A36E3D28C6FF0C6E68B09816DD": {
+     "name": "RX2D_DFE",
+     "outcome": "protected"
+    },
+    "DA699B8E8C63A06E617D93B19E20D8152B5EA283CEF88BFA8300DFB93B462932": {
+     "name": "Processor ODT Impedance Pull Up P0",
+     "outcome": "protected"
+    },
+    "DA75DF24AA01D9E4141AF998B1739CE4DE6BD8E2705E78401F24569B7AE98ACC": {
+     "name": "STT_M2",
+     "outcome": "protected"
+    },
+    "DA83208BB2FDA5108F13B3BFC8A4B51DCA8A16F2893ED5388E07D776AEBAE475": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "DA8942650986D79E714D08A5AC14555406E39FDA668699EA589EBE626A3A5069": {
+     "name": "PCIe Port 2 Lane Reversal",
+     "outcome": "protected"
+    },
+    "DA8E394DC4A968535FEA4BF927989B9FD4D25BCAAFC193D184F02B97EDC50DC2": {
+     "name": "VDDIO_MEM_S3 Voltage",
+     "outcome": "protected"
+    },
+    "DAA666F833BB935B79F9FA25071D12F27A4B0AE75305DC27B101926C71288E43": {
+     "name": "PME Turn Off Support",
+     "outcome": "protected"
+    },
+    "DACE4608940929889FE2471E098BC54E82EA6D71DBE3C895CC19C61FFDDF40B1": {
+     "name": "USB2 Port 8",
+     "outcome": "protected"
+    },
+    "DAF42F63B79DE65AEFC80EEB5C4FDBF288A0210F16F12FD96C37178495F638D6": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "DB246471E5D488DF3862BA8E7B5B2A1B2AB335EB401CF02EC33BAAB439E4A2C3": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "DB46870A425EC12ED20BBE1EF4AEBB282C3D3F817EFFD33F83B0864A68EE4DCE": {
+     "name": "STT_ALPHA_HS2",
+     "outcome": "protected"
+    },
+    "DB81903C0F83BBB25C0D959B3D57C9252694D51722D856E844A433A594CD777C": {
+     "name": "PCIe Port 4",
+     "outcome": "protected"
+    },
+    "DBD41A4445901C3CC4A687320054BBACE0721601F1CCEF6F1479046E70BA776A": {
+     "name": "Adjust DP1 Caps",
+     "outcome": "protected"
+    },
+    "DC214D5D8F9918BC4175A2610E11208B98D6BCF073A18C9D685740F356C3F46F": {
+     "name": "USB2 Port 1",
+     "outcome": "protected"
+    },
+    "DC423FA5CB548C0B7651A9942BFB33AC8F6BE5E84538DEEB2F95902D598F5849": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "DC48713A2DD826838DC135684D8AAAF9BD7C8156CF39B9A2DEFE4B68F6BB2986": {
+     "name": "TSME",
+     "outcome": "protected"
+    },
+    "DC6B822CE986584A99715F46FE432B067D02BBC6A9680B930A853BFF5BB0B686": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "DC6C1CEF40A9F5537F7630FF90CA81515CAE22F05064770542BA1C0432791D41": {
+     "name": "Gen1 Swing",
+     "outcome": "rejected"
+    },
+    "DC7389BC58446E938E4326F9C2A3E392B788762045F4FC776536013DC716115F": {
+     "name": "Global C-state Control",
+     "outcome": "protected"
+    },
+    "DC7D2D6B796DA45DCF7AEE504511989BDC6B0E94C764C4154031240FEE6C6CF0": {
+     "name": "PWROFF-RST Timing (ms)",
+     "outcome": "protected"
+    },
+    "DC930174F37BD71AFBFDA300A0EA12D29BC08368894883A7F8A0FF6008DA4164": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "DCC3D84017296D78E1601370BCFE373EB792A54FCCDC85CC1F46F3D7D7D361E2": {
+     "name": "USB3 Port 3",
+     "outcome": "protected"
+    },
+    "DD4EBC60F3A7DC4597A9BE3C04B158F09FFFAFB4AFBE4C45FE3B39073B47695B": {
+     "name": "Dram ODT impedance RTT_NOM_RD P3",
+     "outcome": "protected"
+    },
+    "DD974C9803F454D97BCAA53A8B5DFB8C5242B3DB8CD72575DEAF59F697CC70FF": {
+     "name": "CPU Speculative Store Modes",
+     "outcome": "protected"
+    },
+    "DDBD27BAF953536BCB5A8B5035259B0C32D03E611F55E9EADE299451E8B5CA99": {
+     "name": "PCIe Port 2 Target Speed",
+     "outcome": "protected"
+    },
+    "DE22B36B4D8BF6571DE3F3C15D35FBDFAE927313B198A7FA9B91E37948C7CE34": {
+     "name": "Microsoft Security Levels",
+     "outcome": "risky"
+    },
+    "DE260042739E4A1DF47BDC2EE8D82A7F375C6CA3CD71EAAE3972CCAD697DF0A0": {
+     "name": "Gen2 Cp16 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "DE4B7063D292C6438D89E6D92FE55F9A49C6663CF89B21F7BFC9C799509460C9": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "DE81DB327AF7D7FF3A1288AA40F982C34FC3C6C150A77F54A7D3CA7D0DC7D0D4": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "DEBD5EE3F318D5A989C910A38A0F4297D42B6AB5ABDDCBD21E1E1B06F7EC00B8": {
+     "name": "Low Pwm",
+     "outcome": "protected"
+    },
+    "DEEBAC3E4005EFA45CBDB8A5219D01D00771BBE819D21F2EDB7A3C096AF980F2": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "DEF7C4BF9856FE1494D0D452074D26A04A647D9A763008FC51103E8683A55397": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "DF033878AE311C9E2F50FD8A5F8FE0E0F0A6D998451D2025280731C5B266ED04": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "DF862129D09E1D8E7775158553122DC316EA390DD08C3D2E41EA5CC86BC29430": {
+     "name": "Advanced Error Reporting (AER)",
+     "outcome": "protected"
+    },
+    "DFE9BD8751CC915B82D386CE7658E6AC12749C2738BDE09BFD320D3EA460D232": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "DFFDA168443B8170AC1AC47B81F7F3120038D2EEBAAEF61AF13BEC8DF02B4FE7": {
+     "name": "Gen2 Cp14 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "E008581AD6FBC9F5E40E7584D40FC337A29EAB6E5D586C19FE2179E793CB91D2": {
+     "name": "USB2 Port 7",
+     "outcome": "protected"
+    },
+    "E0BEFCA0A00B319258EC46FF759D4AAFFF9AB132F44CE0802A939A78B5FD7951": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "E0F725030FAC1B5BD8F55EFA86FD910CC861154E9DDDEBDEE4D9E65503DDEB13": {
+     "name": "Core Watchdog Timer Enable",
+     "outcome": "protected"
+    },
+    "E1151A20CD6C9E973FDE114C7687AB4CAE7B2266A19CB16047811AA447B77C19": {
+     "name": "PWRON-RST Timing  (ms)",
+     "outcome": "protected"
+    },
+    "E199B1C6516BFB65E9E66B9AC21344956FC86C16EF3F8D4B1105C9AA1B5A9C49": {
+     "name": "Trcd",
+     "outcome": "protected"
+    },
+    "E1BF1C28CAB99DB255212CB2DC5A11538736B810F20458366DDB3FB1334554D7": {
+     "name": "Disable DF sync flood propagation",
+     "outcome": "protected"
+    },
+    "E2898CFABCB460ADA5AE712A4737F5BD00101E994BA97AB1B8263F6DBFD5ABED": {
+     "name": "Data Scramble",
+     "outcome": "protected"
+    },
+    "E29AC3D044B6BBDA60B5C1CB2011963516CE290F357A63575C0F315447A63EDB": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "E2F1AC7976FD39080CF1CFA0472D625FEF5FD41547CB9D800B78AC90B24AF6B4": {
+     "name": "Processor Aggregator Device",
+     "outcome": "protected"
+    },
+    "E300556C50990F2B4E956D5ED5A8EC7250D9BDF53888F9ADFD6E416A4B8E6328": {
+     "name": "TDC Control",
+     "outcome": "protected"
+    },
+    "E3182071ABB8F108793724A8D89E17B0653C877EA690F066165BBDBC97C9CE03": {
+     "name": "USB Sideband Audio",
+     "outcome": "protected"
+    },
+    "E39DFDD2CABD9E9679F2480BAD9734B41280F406BFE1F823C0ED128FA7B841F6": {
+     "name": "USB Type-C Security",
+     "outcome": "protected"
+    },
+    "E3E87021191A7F089DA60B816B5DF638322E05DF37D69E4BDC0951CAC51852C2": {
+     "name": "STT_PCB_SENSOR_COUNT",
+     "outcome": "protected"
+    },
+    "E49B0B2400455D829E74F0EFA0089B6564492B0C74BE98F44384F064676F1683": {
+     "name": "DP2 - J1501",
+     "outcome": "protected"
+    },
+    "E577728A7BAA2E4825DBA6620B86065368B64DB3E5D70BF69EC1A525167E4898": {
+     "name": "TwrwrSc Ctrl",
+     "outcome": "protected"
+    },
+    "E58E2C09A93D4FB77D983009E4D2E50A33B2D103485DDBABF5DD085A5474A911": {
+     "name": "Discrete GPU _DSM Function A",
+     "outcome": "protected"
+    },
+    "E592636007ABBE8D07CC0F4BFDCE6256ED5BAAB676398B794A20439D119FF807": {
+     "name": "Read Drift Adjustment P3",
+     "outcome": "protected"
+    },
+    "E5A02775A5F12BB73EA164089D4F912C6E998A8A12FA614D7035A7FD0682C840": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "E6EE57C34BADAFBF0747C4991BC798351C5D8B1F635CA7FB43BE2FCE9A7F56FB": {
+     "name": "Termination",
+     "outcome": "protected"
+    },
+    "E733C8E4822C6B7E3183A8F0D1D6B73CCF14A4B1F4CAE3172648840A02709EC0": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "E75A512334354D63E9E8274DA27C8206E7CC098BC746E7AD3E84132DE2C9413F": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "E78FC61A16F3ABDB4A65FA0CCBDF44F78FB6255EF096A710277A70250E9D9B1B": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "E7DBA949F439A54EEDAF3F6593E120618D797AC59D31A46518168450F964B9B5": {
+     "name": "USB2 Port 2",
+     "outcome": "protected"
+    },
+    "E825B5ACC1F75889A8F15802ECFD8FFB4933B4B7551B21DE13136DFEBD75AD52": {
+     "name": "Log Transparent Errors",
+     "outcome": "protected"
+    },
+    "E827B9DFF9279AF93BFBDB99D66D7E58BF296FAD18A1A83B636B06D0161EF276": {
+     "name": "CS ODT GroupA",
+     "outcome": "protected"
+    },
+    "E8468571441B9F23D8CF13BFFE4AB4BB55EA7A768CDFCD865ADBEDFE9100F693": {
+     "name": "SMEE",
+     "outcome": "protected"
+    },
+    "E8490BA1711873C35FFE5CB2A1527E62647A83A50E4EAAAAFF612AE73F3FDEE7": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "E85D2F0D2C1116EC1584E6A1F2A8E0CBFC462A57EDD411065A81CFAF97309D26": {
+     "name": "Dram DQ drive strengths Pull Up P2",
+     "outcome": "protected"
+    },
+    "E8876F2B1FEADAE6A6767CCFA534880E229AFAA3BC37C2809005EB41B60128E8": {
+     "name": "PCIe Port 4 Lane Reversal",
+     "outcome": "protected"
+    },
+    "E8CAE881B9F4C4582713D45973C1213EA2E5CCE77E1284DF7995100269894F74": {
+     "name": "Gen2 Cp13 Emphasis Level",
+     "outcome": "protected"
+    },
+    "E8F7BE385C24E249912A6C84A55ACE967561478C74B2AFBC554348D155CCF471": {
+     "name": "Chipselect Interleaving",
+     "outcome": "protected"
+    },
+    "E9146FA3E7E63BB676C82C4E1E12F29CBF45845691343D355111A94B1E614829": {
+     "name": "ESPI Enable",
+     "outcome": "protected"
+    },
+    "E931B0F3BBB2A2E936CE6A477F988BCFAB516623777587A201BD04C3AFFE7269": {
+     "name": "VDPP Voltage",
+     "outcome": "protected"
+    },
+    "EA8071494FEA707432DD48838F2DFE64C0B0174D29F6B88F8A086351898D7934": {
+     "name": "Discrete GPU's SSID/SVID",
+     "outcome": "protected"
+    },
+    "EACC819400C22E9A03A2C12DE4E272AD5DDC5374D8ABCC42E26C7409345A1489": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "EAFE2C30891A37359812434F99C43B5C780908136E5548DD72E3385093EA63E8": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "EB872222E31ABC64B93EA885275F7C12610F1BFFEE344D10B833996CF6559F90": {
+     "name": "Trfc1 Ctrl",
+     "outcome": "protected"
+    },
+    "EC3CEB5AF7B8E5BFA625F6A1F9EDD11B7A13938B355310B44EC123BE37E7BF31": {
+     "name": "Gen2 Swing",
+     "outcome": "rejected"
+    },
+    "EC4996897A7A43051B6B5DBA704986182FAD5934A8BCBBAB435AD31CF6B68082": {
+     "name": "Slow PPT Time Constant",
+     "outcome": "protected"
+    },
+    "ECE1DCD4BF2DE724019D1088B602AFE8BA91F3294DAA72780484D9ADCBAB3123": {
+     "name": "RAA Initial Management Threshold",
+     "outcome": "protected"
+    },
+    "ED126442FBE2C9E17DD753FBF532E9F365ADD864BC00EDEA25D8B905BACBC9D3": {
+     "name": "Slew Rate",
+     "outcome": "protected"
+    },
+    "ED41FF7F51A0FBA77C21F11F551FEDA1EFEA9B001BCAF77418ED173FA4F76AF9": {
+     "name": "ACPI D3 Support",
+     "outcome": "protected"
+    },
+    "ED7215D2E5574020E6E3B483E59AECB157916BED017C267B5868C56946E10EAA": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "EDCFEAE65274E518323F75B0DA01F9B23CBCBC3A9FFF963336D28807884F7BF6": {
+     "name": "Memory P-state",
+     "outcome": "protected"
+    },
+    "EDEB79DCD9A6141D2BF1809015CC2BA8F10325AED4A61A5DD8BA1E6E65DAEE4F": {
+     "name": "TwrwrSd Ctrl",
+     "outcome": "protected"
+    },
+    "EE15761E0E3C93F4D1228608FD2050E0B862A747BFBF1E5A0664670581CA6470": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "EE1C56521BA370F75CCB93632F59C2DE491FEFAD3A453F21849B230E7179456E": {
+     "name": "D3Cold Force Gen1",
+     "outcome": "protected"
+    },
+    "EE523C4668F20BDA79E71E5827BD4C21D3F9567A44CD88CFD5C7D76B0A6A0222": {
+     "name": "Driving Current",
+     "outcome": "protected"
+    },
+    "EEA8DA13E92690FF1E3066F59333A5CEA76A30019C2CA25B04C79E8DAEA1AA5B": {
+     "name": "Critical Temperature",
+     "outcome": "protected"
+    },
+    "EEE2253D1962BA6E57543B8C595BB0D7F3EBBCB8BCA4F73E3688C84A3CC11425": {
+     "name": "PCIe Port 10 Target Speed",
+     "outcome": "protected"
+    },
+    "EF0F2B10F5B5A0FF566D5208F91A7E551499CCE62650B85BBA1C42618470E096": {
+     "name": "PCIe Port 8 Target Speed",
+     "outcome": "protected"
+    },
+    "EF25517A380A1A168A0ABD1F5A30ADA92C7E13D11AE12BAA055E62791885367A": {
+     "name": "Gen1 Preshoot Level",
+     "outcome": "protected"
+    },
+    "EF5EC48762D62692E049BA24F05419B520239FAC05631D393CBFB29F0EE29326": {
+     "name": "Gen2 Cp16 Preshoot Level",
+     "outcome": "protected"
+    },
+    "EF726E5AA63672FE00BA0A47DDA55CCD1B50058082BA5D69CD712381D2E9CDD7": {
+     "name": "ACP Power Gating",
+     "outcome": "protected"
+    },
+    "EF7B015243B4736B253F0D430E0580AA76F9573383A6D24EAC7A706993B493B0": {
+     "name": "USB2 Port 3",
+     "outcome": "protected"
+    },
+    "EFB78B01BE304409B0D5F6EC37A39A001C53D78066D589869360FB393A00FB75": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "EFF590289FA0B4531E20475483528B7D32B48D79E6CE7D81E80DA9DB414199E7": {
+     "name": "Twrrd",
+     "outcome": "protected"
+    },
+    "F055883653216B426B5B4B838D81F12A47784053BC0FAAFCB9F89B849714F700": {
+     "name": "SNP Memory (RMP Table) Coverage",
+     "outcome": "protected"
+    },
+    "F088CD0AC90DDC25157E378FD72631FFCAC4CEB1776F3D8F575D335D3487DF90": {
+     "name": "PCIe Port 6",
+     "outcome": "protected"
+    },
+    "F0A1398105A58520078C01DCADAAB914A227BE0B98B6CED78CF4E9F435BC675C": {
+     "name": "PCIe Port 9 Target Speed",
+     "outcome": "protected"
+    },
+    "F0D351F0707A46B69E23243AFFDF005B80D91D0322E2D74C2FDE316BA0564A1D": {
+     "name": "Adjust DP2 Caps",
+     "outcome": "protected"
+    },
+    "F1391DF03CA2E7C1B24D3501C17186E61DEC40FEB91F79B252E76FAEEE705A8E": {
+     "name": "Beep Pause Time",
+     "outcome": "protected"
+    },
+    "F1546A1254BDD47764ED3CF0A0577B2E691AD638AFCB36BF4B78B34A63408C3F": {
+     "name": "IOMMU",
+     "outcome": "protected"
+    },
+    "F1B2329435A293F06AFA42B03156C680C4028DE8678B33B5FEA61DDC8EB8E386": {
+     "name": "HID Enable",
+     "outcome": "protected"
+    },
+    "F1B4597825892A39DDEF694AED132CFE82F3A58D089C37CC615D1813CFDEAE2C": {
+     "name": "PCIe ARI Enumeration",
+     "outcome": "protected"
+    },
+    "F1B723F7D73E8E0E5C3731CC16FF03F3582922E5F1320A51BFA96777D961A829": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "F226EC18607D40F10573850853D8584F09A10CE13FE5C2213410286090813525": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "F232A4F2401B010CCF9DD4FAE87A6CED0988A778822C6D6A9B3DB0B1869E125E": {
+     "name": "MBIST Test Mode",
+     "outcome": "protected"
+    },
+    "F235E77B657C3C1EC02CFAAF39C385076A315C7DD3C864474E073218FCF235EB": {
+     "name": "Memory Context Restore",
+     "outcome": "protected"
+    },
+    "F2C393D5D1AD8A0DA5541EB1B09341FC383431DFB6FBC6782B97A73EA7AAE598": {
+     "name": "Gen2 Cp0/Cp9 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "F2D0A8EFAAC9DFDF81E7D660C9A14A3B15584E2516AD53502A926F4C29673012": {
+     "name": "System Configuration",
+     "outcome": "protected"
+    },
+    "F2D45B3817C005891E7D8CCF5924FFEE7D7A89AB5BB2AE8803A9CA291BE48785": {
+     "name": "USB3 Port 4",
+     "outcome": "protected"
+    },
+    "F2D8FCF0A7824461D65289A10E1876B5C36392F6F190D28F9012A83122036153": {
+     "name": "Dram DQ drive strengths Pull Up P1",
+     "outcome": "protected"
+    },
+    "F2DFB682CF7C29469CC8D2E362C290D133C311894B2453C34B1FBDC639D1F40C": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "F368ED670182CBE0B1C8DC4653EF2CA7A8B69348FD65729DB84C0B8E838D4352": {
+     "name": "Trp Ctrl",
+     "outcome": "protected"
+    },
+    "F398B883E46B66728EABB487E11DAB963B4BAFDF5A02A36DDC14440D47A285C2": {
+     "name": "Gen2 Cp16 Emphasis Level",
+     "outcome": "protected"
+    },
+    "F4FC989065F4D54888B7837D053C67080871DA33C7A3AF57BF95C8BAFB2768C3": {
+     "name": "I3C 1 Mode",
+     "outcome": "protected"
+    },
+    "F52143AB8D4D3EEB2CE6203CFC980AA8CF0E5E4BA97B69F67C46D0DB62B510D0": {
+     "name": "KVM for Wired Manageability",
+     "outcome": "protected"
+    },
+    "F578631BA72C4860C8BA2327298097FA771F872EE9E4E211307520700D1EA9EC": {
+     "name": "Gen1 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "F585A34A85E39A420D00F7CD3A4E8A993C88D895CB9B66F4D7018A03BFD88792": {
+     "name": "Gen2 Cp15 Emphasis Level",
+     "outcome": "protected"
+    },
+    "F64B14175BE1A2A3FB6A9E1334A93592A5E5A13E266CE90BF8F64BAF008E1277": {
+     "name": "Gen2 Cp13 Preshoot Level",
+     "outcome": "protected"
+    },
+    "F6B2DF55079EBFE2F619C4307DE9981FBA01B6B5F4F0647E3D58192AC7FC43B2": {
+     "name": "Dram ODT impedance RTT_NOM_RD P1",
+     "outcome": "protected"
+    },
+    "F6C691E7EE01E2727361866D5388E324A78E9FEAAB1B4B55A89BBD9A58939F58": {
+     "name": "Gen2 Cp15 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "F6DAEF69D0B22893166FCD17CE2E383DC6E3CA6AB0687BA09A62AF0E48D82F4C": {
+     "name": "Gen2 Cp15 Preshoot Level",
+     "outcome": "protected"
+    },
+    "F70FAADC4D6D973B9F0DA1F6B6B4DD66D4E39F2A5F9AFC58C1E6F24B917F3E08": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "F74849F4A0EDFB94D973E6C9E1F3606E6A284369CBC14E2F06815D8C1ECFCC71": {
+     "name": "Trcd Ctrl",
+     "outcome": "protected"
+    },
+    "F77611909BB8729BAE05FDF695A570C5A5819A2FC225574B939C26E95A2390C9": {
+     "name": "Gen2 Cp0/Cp9 Emphasis Level",
+     "outcome": "protected"
+    },
+    "F7EFBFBF34A8A643224F4D78A076CDFB1D857D6097264D3B15E41EF0DFCC0C51": {
+     "name": "Pluton Support",
+     "outcome": "protected"
+    },
+    "F8D4576FD9EB799C61850EED91DA009E2FCD7AC1AAC029BFAD8D524F7C8802EA": {
+     "name": "Secondary PROM21 Chipset Specific Features",
+     "outcome": "protected"
+    },
+    "F91BEE8F582D24499D69586792AA17A1B71857C189AAD4C961CEA0EBA19F4040": {
+     "name": "USB3 Port 2",
+     "outcome": "protected"
+    },
+    "F92CD308BF2DCF95FC2EB62B8514E6756204CE58963C183D3792F5D6B092A76F": {
+     "name": "PCIe Port 7 Target Speed",
+     "outcome": "protected"
+    },
+    "F96799FE3035371288F350E6BC0ABCD39D27A6CD24B8ACF3378B5A305F7F2379": {
+     "name": "Device Sleep for AHCI Port 2",
+     "outcome": "protected"
+    },
+    "F9D1F0EE4FB0914884203638B4F4636817C46B46C2AED4AA3231800FA64A4CBE": {
+     "name": "Gen2 Cp14 Preshoot Level",
+     "outcome": "protected"
+    },
+    "FADFFC364E6A8D665A19E0779BD300F18248D476BB9DFE7A0A6E248B9C196CF4": {
+     "name": "Discrete GPU's USB Port",
+     "outcome": "protected"
+    },
+    "FB213687250B07F7C5D064B9C7E111C3EE431538948B69C75A6B25917DFE4F2B": {
+     "name": "USB2 Port 9",
+     "outcome": "protected"
+    },
+    "FB8B218C11BA9CE450C7AF5774127F6A4B0FE6DC1EBA19466D24520A04395F80": {
+     "name": "Fast PPT Limit",
+     "outcome": "protected"
+    },
+    "FB8D14E7CD857F401826CA658C21ACA517512C7ED8CDF5C9E0C23875255F31C8": {
+     "name": "Gen2 Cp14 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "FBB44A2D7411D2373B360338951B8A7D925DCF896BC4E64142CD5464E65F670E": {
+     "name": "STT_M6",
+     "outcome": "protected"
+    },
+    "FC0226D5083B05ACAE7FCC9148B954CA87EE4EBA95B198F35658B6E7894B5D1F": {
+     "name": "Fast Short REP MOVSB (FSRM)",
+     "outcome": "protected"
+    },
+    "FC2DB0A96D61385991E73D2D83FF19F0BE2C7E9065032A879E5FBA241346F239": {
+     "name": "DP0 - NOVA",
+     "outcome": "protected"
+    },
+    "FCB8DAFB1B1410354D17EDF7A14A95E14C2EAC6F4512B0071BABD25AF10AD030": {
+     "name": "PCIe Port 9",
+     "outcome": "protected"
+    },
+    "FCE9AB5A3D3DEABB20171F024849C88E4A41890F1BB6853890D945056582286E": {
+     "name": "Gen2 Cp15 Emphasis Level Enable",
+     "outcome": "protected"
+    },
+    "FD0D74E8120A8270D25957E6824535EA7B28DC6805A2B4FB23485E346CEBEC59": {
+     "name": "USB3 Port 0",
+     "outcome": "protected"
+    },
+    "FD5805C9A0D454C83FEAC2FEEA59BA280FB0D77B70CA03509DF4FAB1DA47F401": {
+     "name": "UCSI Support",
+     "outcome": "protected"
+    },
+    "FDCF6E2E220BA0C61753E5B95A682A07BC0BE452E1B0B8F79589E180F58B1D3F": {
+     "name": "PCIe Port 2 Target Speed",
+     "outcome": "protected"
+    },
+    "FE2D5459486FC3EF57CD176D8E3742FFBD9DDB4BD4EFDF8C2D8B20A9CAEDC732": {
+     "name": "Gen2 Cp13 Preshoot Level Enable",
+     "outcome": "protected"
+    },
+    "FE5E44BABFAA004E5EE2A02FD36AFD3840FBEF9C930A820EFA089CABA672D9EC": {
+     "name": "Unused GPP Clocks Off",
+     "outcome": "protected"
+    },
+    "FE6D2BDC926164D5B95746500AF8D687F8722A739323B0B86F5A178B14CC235D": {
+     "name": "USB4 Prefetch MMIO align",
+     "outcome": "protected"
+    },
+    "FE90FC9608097CB445D771719FD63AC72314E16697BCE9DD5790FE6A28C04752": {
+     "name": "DRAM map inversion",
+     "outcome": "protected"
+    },
+    "FEBB6F6243BD4596D7C1B37FFF8EF75F39C49AE19CC7B59037161B61DC3DA245": {
+     "name": "PCIe Port 3",
+     "outcome": "protected"
+    },
+    "FF126384E4230E25EA493D5E8889DFAD787FA5E7EDE7E053712D11852434D4AD": {
+     "name": "GPU Host Translation Cache",
+     "outcome": "protected"
+    },
+    "FF2DD96CD6E60A8F81683A7381CDCCEF7B7B32BB43516D931151239026C5513D": {
+     "name": "Gen2 Cp14 Emphasis Level",
+     "outcome": "protected"
+    },
+    "FF33C75C0D7D14A3E6516AB77F3AFB11D9796DAA0B84BC275B154B0B1C11EF63": {
+     "name": "Pre-boot DMA Protection",
+     "outcome": "protected"
+    },
+    "FF5B9C7B4EEF15AA402F93DF504D2B29B62AF98B2B5738893453EE870AF0B09F": {
+     "name": "Disable DF to external downstream IP Sync Flood Propagation",
+     "outcome": "protected"
+    },
+    "FF7BE71FB4476EB4676D0C374426D4185F948954CEE9D04B6C8063EB2FA6AEAA": {
+     "name": "PCIe Port 6 Target Speed",
+     "outcome": "protected"
+    },
+    "FFAE1E1C515752715E2E33BCD87CE922E2B5914860B1D9D9B31BC24FEA9E0CDB": {
+     "name": "Gen1 Emphasis Level",
+     "outcome": "protected"
+    },
+    "FFB0D5867601DA29FA82164A6AC64C958C74E74D4F2F3D81AC380C244257209B": {
+     "name": "PCIe Port 1",
+     "outcome": "protected"
+    }
+   }
+  },
+  {
+   "board": "Gigabyte Technology Co., Ltd. B760M DS3H WIFI6E DDR4 GEN5 x.x",
+   "bios": "American Megatrends International, LLC. F4 2025-12-02T00:00:00.0000000Z",
+   "crc": "0983808B",
+   "tested": 4673,
+   "experimental": {
+    "01AFE2AF5DCB41748BA6569B268150647C13E2478336D389530B5166D4BAE7E2": {
+     "name": "IA IMON Slope",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "042EF9CB783FD34B93F9C187D18C3835D5EF5ABB75D25ECE1E2E918A670D27D4": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "04D830FEED47270EFBDFA24FDD38412C763FFCF265BBAA9695147E059F224C2B": {
+     "name": "GP_2",
+     "outcome": "rejected"
+    },
+    "07663FF6734DBA275241DCB432C5436EB057ACC8AD3EFCBEEA930C24C35F8E8C": {
+     "name": "Wake From Thunderbolt(TM) Devices",
+     "outcome": "rejected"
+    },
+    "0A82102ACCD9A385E396A524EAACE94E987D0B0AEF8D06C500DA6A4855BB914B": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "1187A00A45D97AEA71589F3FC7648C80D18A584C1C8EE667DC8AA93345873C67": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "11C502557A0B6234C9A4EE4D3CE37B1A65290B099EB1150CAC15EDE190421E32": {
+     "name": "GP_1",
+     "outcome": "rejected"
+    },
+    "13A147E42C65294DF0F9A96A119375B3E0F4B52D7582652A8AD9CB79BCA6F6EE": {
+     "name": "IA PS4 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "151CFDF3D411F4688AF91B1DB2A2CC772AF74D3F479B57D3DC08B05AABED3347": {
+     "name": "Firmware Flash Device",
+     "outcome": "risky"
+    },
+    "181AD67117F76F9A63200D1BB44B5469905951A75C54AF93F8B51C371B534677": {
+     "name": "GT VR Config Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "1B19117F8105782F653FFACCC87473D82BEB0559A68E1C3A6A0DC2B350F8B8E9": {
+     "name": "Full Screen LOGO Show",
+     "outcome": "rejected"
+    },
+    "1C41BC6ABD43C91BB205E32C99A90DB3D757A5241B83183385C4D9C31977EC3A": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "1C806012B741E851FBEF269592DAE7A9A372D5118D11A9C52E5DF64E86DE625F": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "1D25E9BBCF4C0EE334AB271714CDB3B284A48A5DC48E51BEEB83823CE9F1DBAF": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "1F2A38FE82547F6EE06156665C2F6F8F6DB1A71133C5F802CFD13CD3C6AC851B": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "217CFC92A87780DC4DE437250B7AB98F153A58CA59A03CB913388006C5DBC1D1": {
+     "name": "Alternate Fast Init Tdispatch",
+     "outcome": "unchanged"
+    },
+    "22C492DACE5B2785F5E43381C0976D889B77B2A1A6F78885AF465A5F22A1C727": {
+     "name": "Me FW Image Re-Flash",
+     "outcome": "risky"
+    },
+    "255CFEB4ED35063854181B7AF24E96EA39BB743E153660EF37D87EC7A3FCD55C": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "2593EBB1B3E8892201749B0E2B1792DF99A305317C0C5B73CF26EFAFDA22C9E3": {
+     "name": "GT IMON Slope",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "259E4FE5B9800FE13AA0A90FF2107811FCE71E932AF9D1A507EA5FAD571769BF": {
+     "name": "TPM CLEAR",
+     "outcome": "risky"
+    },
+    "25FD6A5ACA51ABF433FE8ED430122A5409A212B3EA7AA68E90A2F8B813F8FCF8": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "26B21A796C67E9F86BEB2D1FA82ACD0390D9B841624AF1E17F33CA0D1D13B5E0": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "27DC71B60A40B7C5731FC8A705E1B4ADEF9501BAE29732C5B519009405DE6809": {
+     "name": "Active Trip Point 0 Fan Speed",
+     "outcome": "rejected"
+    },
+    "2850E9A2BCFCA7F5AD61A31BE88135CDF2FF7A5FD6DA357CDE56FC675D2652D2": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "2974D7E5C32D8B87537746D29E80663E0DFC49B9EF86FEC6DD38755A9936217C": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "299020BA55DF380FDEE79A339025C905875C3A4F70BF92AD68371682CE764595": {
+     "name": "IA AC Loadline 100",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "2A90E968E3B672B740469F05A388AECB7501806631A13257B14CC38C160A3B6E": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "2CF28A413E69D2B2214C1E4FF4ECC000E9D3B973CA8E7528E25EA80297D42D9F": {
+     "name": "I2C2",
+     "outcome": "rejected"
+    },
+    "2E3F21FFDA1A2F90EF6553DC4044BCB5B5FBBC8B7C0E633A53121EBFBC3CA8D9": {
+     "name": "Intel Platform Trust Technology (PTT)",
+     "outcome": "side-effects",
+     "affects": [
+      "TPM 1.2 Deactivate"
+     ],
+     "affectedCount": 1
+    },
+    "2F38051C1F885FECF799B4C214CA00BA32A5F9AED64A0D8577786E1333C61CB5": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "2FE2812872B26B64C86E2B8EF228B6F13FC39E391469520A113D724EE342367D": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "3036A97AF0C3A99A19271EC2B00493DFE4CE363D631775B1FAB96107AA1F9AA0": {
+     "name": "SA IMON Offset",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "318EE6E7228454913C0359B59B0E13D96F887E9EC1B84457999CC09F5A439A10": {
+     "name": "GP_0",
+     "outcome": "rejected"
+    },
+    "32E41857607683DD4E36C38B2E2177D01D4F61AB45BCC4372A4E26CCAB1D42A3": {
+     "name": "NMode",
+     "outcome": "rejected"
+    },
+    "35A92A9CC1EB5D7D86DAA4C36794202BF78C847CFD6081B4E65C07FD08042B6C": {
+     "name": "SA PS3 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "384CBF997FF33980137651D7D54FBDB96EE25D437B9EB3AF30574F4355E2D66E": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "3AEAF34169D83E50580C1A8D97B242B6DD5AF03D5BF10551E77E7A77D3B2555F": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "3C842B21BEA0429CCBF8A394898AC12A2C1B953E75242264548F135F00C36950": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "3CFEE9D760353F11264730ECCDC895D69F216562F6B2E85577C3839B7A0C7F26": {
+     "name": "SA IMON Slope",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "3E9F95C784C62A950B86285F2638AD64F86571F7E9EEAB5640B79BC669FAA1B6": {
+     "name": "CPU Energy Read",
+     "outcome": "rejected"
+    },
+    "4222F2B75F9552F338D6FA40BFBA107BC27C45C0AF733038CDBC493CE776FEE2": {
+     "name": "WWAN",
+     "outcome": "unchanged"
+    },
+    "42D1EB380DB490CCF31455CE932B797FE4F8B15B54E3EE94EFD3CB06D94A6C5D": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "43637763906A2D1304518A12B69652B4944E7209BE050FF28938A6B61F6F7975": {
+     "name": "Unconfigure CSME",
+     "outcome": "risky"
+    },
+    "43C938380905D33AC844D9527CC7E1024ABFA3BCF25DE3AA53B4671CFFD5E33A": {
+     "name": "Security Option",
+     "outcome": "risky"
+    },
+    "45476C8D14F7AFEE1CF34709DCE5061651267338771F0519E8E351F742F78FA8": {
+     "name": "SA PS Current Threshold3",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "47AD59575C017037448C1151C0CBEC8E5CC05F49BDA9649354A17388915AC3C6": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "4CE23658CAFC65CF894EA2758E22FD7C5CD440ECB94785A835A8AD7177AB2E4C": {
+     "name": "Security Device Support",
+     "outcome": "side-effects",
+     "affects": [
+      "TPM State",
+      "Pending operation",
+      "Device Select",
+      "SHA-1 PCR Bank",
+      "SHA256 PCR Bank",
+      "SHA384 PCR Bank",
+      "SHA512 PCR Bank",
+      "SM3_256 PCR Bank"
+     ],
+     "affectedCount": 14
+    },
+    "4D20FD89CA07F8F2DBA22B27DF7ECCD00D0999551F033FEBD708ABA891A51358": {
+     "name": "Physical Presence Spec Version",
+     "outcome": "risky"
+    },
+    "4D5C190387538EF899FCCC59A2BD92D4A3D01E7B934D434E1D7AD87D52C81708": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "4E06F14F0DAF5362FCD80E7BE80F816FA7A9519FC7999D7D149A6AB0340F5811": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "519A39C1AC22E9C3C829B0E17992A8B5C8D8F62F5D536839028E17E001EB0D01": {
+     "name": "SA DC Loadline",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "55F2E223955437A634A5200D701D32C5B12E3C7AD22C2BFCA1BFDB783FBAA955": {
+     "name": "GT PS Current Threshold3",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "571C05E7C9AC4A32F68034807F6A5237B0391BD50DB54F085130C1006354F642": {
+     "name": "Enable Hibernation",
+     "outcome": "rejected"
+    },
+    "574D711BECCE95CF32B9A763966242850755A63FB4CD47D7E249858A6A577499": {
+     "name": "GT PS Current Threshold1",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "5A2DE15CEFB8827A4C0F9D7191C1E5F30C15A8CD9CC09FA16184DBA7D855F07C": {
+     "name": "IA IMON Offset",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "5A4734B9F70F65A4E57DCD347F7F61FA6C1C7253C44287B6A2DD3A56D96319F9": {
+     "name": "Memory Ref Clock",
+     "outcome": "side-effects",
+     "affects": [
+      "Gear Mode",
+      "Memory Boot Mode",
+      "SA GV",
+      "Dynamic Memory Boost",
+      "Realtime Memory Frequency",
+      "Dynamic Memory Performance Boost",
+      "DDR5 Auto Booster",
+      "High Bandwidth"
+     ],
+     "affectedCount": 22
+    },
+    "5EBDDD70E02929FB2E208103C37136A1C44A901E4F443A21F22BED3C887F264A": {
+     "name": "Strong Weak Leaker",
+     "outcome": "rejected"
+    },
+    "5FD5B915F369D833D38476A84E518E4F11817D5E200F0A44106E8E7F65667317": {
+     "name": "IA PS Current Threshold1",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "628FEA4B1B686B6A6A637FF4CCAE516A4873339448E0F0FFF3D17446FC69AD26": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "62EA40AA61691E437C3141CD0168A934847951B01B643C6486CA8FD117E03B85": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "63562738A48633E0B8C39444C2D38AAA89C88C845E6FFDD26EFC6491A74ACE04": {
+     "name": "Firmware Configuration",
+     "outcome": "risky"
+    },
+    "63C0475382F9750717FBAA23478BA699DD16F3A410B57B61336FCF93113E8151": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "6473F46B658EB02A95ACDE153B05594E969F1EED8183CBD78CD882495B64C2D9": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "657A633594714D9B372DBE244C96A6DFBFB32DC610000A78942A1CBF5886A95F": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "66289FD0EF07F158419E6B036A8A846ACF9CE4720E251217483291A89C18CA00": {
+     "name": "GT PS4 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "6630BFA7DA6F6E906960DA5E34A6A18A391064EE12E114AF0471F84C02060019": {
+     "name": "SA PS Current Threshold2",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "674613BB364973CD78990AA8C4A962F1471800F341E1DAB7FE237932D63ECB6D": {
+     "name": "Extreme Memory Profile(X.M.P.)",
+     "outcome": "side-effects",
+     "affects": [
+      "Gear Mode",
+      "Memory Boot Mode",
+      "SA GV",
+      "Dynamic Memory Boost",
+      "Realtime Memory Frequency",
+      "Dynamic Memory Performance Boost",
+      "DDR5 Auto Booster",
+      "High Bandwidth"
+     ],
+     "affectedCount": 22
+    },
+    "67DF430A10AA2626BB03091452E63677BBD5F26DA19AEF40725B6244547E42EF": {
+     "name": "SA PS4 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "689579694ACD82263B6C92603C6D3831A28D0856932DDA19319E326517607DF8": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "69B05AF1E74FC67290FC3C16A919E55FE3F4B4F024201BC2DE08FF594C23AB15": {
+     "name": "Graphics Turbo IMON Current",
+     "outcome": "rejected"
+    },
+    "6D934B19CFC7F80AC20149DBB730D16896D598ACE7290B4C949307D50AAEAC2F": {
+     "name": "Number of Sensor Entries",
+     "outcome": "rejected"
+    },
+    "6DC77EF62505F55CF5D4C3F55048A3E8BC3EBF7423DE87D3E639D294AC735566": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "6DF5B1813E939C8E95858E6A1E0248E9F4E36BBC2A0E8F2911E42EE5D1FDBEDB": {
+     "name": "Unconfigure ME",
+     "outcome": "risky"
+    },
+    "6E54C4A29716CA35A8696601D9ED6536FABC4BB2F0A9BB249FD3323A5EF5761D": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "7021A324ACFCD8BB400E976F01BD39AD3562C00E161C6E758E15BD23A6273EAF": {
+     "name": "IA VR Config Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "70407914A34287029D8ACCFCE0065218D04B39924C8CB533CDFFCB8C5BAE463F": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "70ACB52ED42681BB9CE329D08F7F69A300F5ADBDE1E2B1B8B34B530253987D77": {
+     "name": "Device password support",
+     "outcome": "risky"
+    },
+    "756554D76126C8C89B33D0C1296600ECCA8B978203DAE87BB3CADE16731AA0E9": {
+     "name": "UART0 Controller",
+     "outcome": "unchanged"
+    },
+    "7657750349646C05738A38504A98623EBE8E194CB89B1EADA78C538D90DE7315": {
+     "name": "Memory Timing Mode",
+     "outcome": "side-effects",
+     "affects": [
+      "CAS Latency 15 15 15",
+      "tRCD 15 15 15",
+      "tRP 15 15 15",
+      "tRAS 36 36 36",
+      "tRC 50 - -",
+      "tWR 16 16 16",
+      "tCWL 14 14 14",
+      "tRRD_S 4 4 4"
+     ],
+     "affectedCount": 126
+    },
+    "7A6D9FE95A1D833B003C4B7138D857D765432D2109EAFB7EAC38E365B391E713": {
+     "name": "HECI Timeouts",
+     "outcome": "rejected"
+    },
+    "7CF892AA3E1C7D2D753D38204CF90E6CF2E4C5ADD69183885E7A5B38E59AE195": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "7E61FA99580D2BA939D3740775F110674B52C142B819BB5715BA1AAE2751C2E4": {
+     "name": "CPU Temp Read",
+     "outcome": "rejected"
+    },
+    "7EBD82DF83767AF4188A753695E0E9FA3959E0F37B068E5A73F519E0673A4759": {
+     "name": "GP_4",
+     "outcome": "rejected"
+    },
+    "802947CCCED2DFB54794B9AAAAC07838B2E07412E2A188A64E813F0C932D3EAB": {
+     "name": "GT IMON Offset",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "8222219B3DC64E4A13FB3B0A4AD29DB032E8CA357F7C102071B9A85F29A011D0": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "8498D9E5C189926CD45EBEFBEB13FF5453137476A35A14E8C3C1F7F9DC051BBE": {
+     "name": "SA VR Current Limit",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "853CC4E9EA15B42BF1A4E839F13D53C2B9BF9E93B3CFF10C72665FD92654AB51": {
+     "name": "SA VR Config Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "86F1A45BF5DA785F787038006B97EAD6F2F8FBF3B675C4E59F670BA52FCF4894": {
+     "name": "CPU Frequency 3.50GHz",
+     "outcome": "rejected"
+    },
+    "8D30438F293D885961CB8BFF55449FCEEAFF05292138319BFEAAC6D45D83AF83": {
+     "name": "FW Update",
+     "outcome": "risky"
+    },
+    "8DD9B75F0E0C3F0EFDF174E3C64C25FC7E19A0CAB4EA937AE2F996DB8DF15372": {
+     "name": "Bluetooth Sideband",
+     "outcome": "rejected"
+    },
+    "8E9AE15ED6F372F43572A8D32A825F003692DD803DB8AB79FB0AA7773216DB48": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "90C14F726EF0CC6691B4E4074335F91EB00A8105FD563AA266FC61C911C17598": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "92313077FE841A041A1FBFEC5436DE3846CF910AC30E8DC0476E1CA76054A5DF": {
+     "name": "IMON Prefix",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "94429E83E87687BC6C17D9983B53C6B3D2AA26A1041306DA3C12BCBB7123A851": {
+     "name": "PTID Support",
+     "outcome": "rejected"
+    },
+    "947074D88CBFC1938C5D06DC8477AA010E5ECEAE70EDEA404B209DF6A3ECEB8E": {
+     "name": "Number of USB Devices",
+     "outcome": "rejected"
+    },
+    "962891815BFB941D60F260097721D2307C5C4F0C3C716A90FD7C8BFC5A6EF4FE": {
+     "name": "Audio Controller",
+     "outcome": "side-effects",
+     "affects": [
+      "Audio DSP",
+      "Audio DSP Compliance Mode",
+      "HDA Link",
+      "DMIC #0",
+      "Dmic Clock Source Select",
+      "DMIC #1",
+      "SSP #0",
+      "SSP #1"
+     ],
+     "affectedCount": 18
+    },
+    "96C18582999EFFAF4CECDFFAD1DC87E72324927100CC949244090D28DC2698A5": {
+     "name": "GP_3",
+     "outcome": "rejected"
+    },
+    "9748D52CF14A4FF653C872FE3787C027DE02EC419C2FBB7C01F42E207354FB33": {
+     "name": "Power On By Keyboard",
+     "outcome": "risky"
+    },
+    "97C2BB973766CA58EE25618568D63B252742DD9E29207D0BD4B1E701CB399DF3": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "9873886E2A592DE0140F1291BDDD8DBB4A934C895360843DCFF5AA9F3168044F": {
+     "name": "I2C1",
+     "outcome": "rejected"
+    },
+    "9BF37208B2242FED740159DEFF68071206047322714FF175102997591F3E19E5": {
+     "name": "IA PS3 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "9CE0A43C1AC196BFC94AE8BB85BE6E3AF7B5F18E64135AD717E7B5F63AF6124F": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "9D590927849388EC83CDE48D399AE8C4253D5B29A1D38C0FE789B69D6F59B6A2": {
+     "name": "TVB Temperature Threshold 1 (degrees C)",
+     "outcome": "rejected"
+    },
+    "9E42AE7FF98DACE2F934967A4B7F3805A3422212B64970B6E710F0406AFCA041": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "9E8520F6574470151A8F343BCDB40A449C14A488A669CE44B3E73A0FFF1E7EFE": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "9EBE5A95CEB70CA8A29A9C72ADC6A217BC667425E2EC7C88AB78CD7ABB6DCBFF": {
+     "name": "IA PS Current Threshold3",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "A193D54DD142982FFCC9042A0B84A31A4FBCA54037F4A0A72F62E49AC53A1AB6": {
+     "name": "KT Device",
+     "outcome": "rejected"
+    },
+    "A3A88E8B1731D38764DE0D77D75135E3F047E6A43DA8B03973D0A9F19C5474C5": {
+     "name": "Flash Protection Range Registers (FPRR)",
+     "outcome": "risky"
+    },
+    "A441B5F809BB6AE29748094E69C0FDF552AB347A2F4C40668431E5F5AD9E757C": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "A6A50A0E5364B2DC8A0F778F7DCB11CCCC08B419B61EB037CD93EE4E3BE39A3F": {
+     "name": "Pending operation",
+     "outcome": "risky"
+    },
+    "A853C2756E099D4CE22E79022866AC93E52A3F37F07C8C464FAD025B05A4C641": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "A973A131DC16A17CDB2D19049004D68CAB175EB3AB65E2CA3B76B992D0320CDE": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "A9972B8695D7AB092DE941FBBA743377FA0EF2CFA0CFC2818D7633F6AF94E8BA": {
+     "name": "IA DC Loadline 100",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "AA246FA093E6ABE3D633F489C8B6EEC6992759A468C1F746940535C12F1CAABC": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "AD5FC17EFE7DCA728B9F80B77879CCB41221D3E3E787189A5E2D22881775820D": {
+     "name": "Memory Boot Mode",
+     "outcome": "side-effects",
+     "affects": [
+      "CAS Latency 15 15 15",
+      "tRCD 15 15 15",
+      "tRP 15 15 15",
+      "tRAS 36 36 36",
+      "tRC 50 - -",
+      "tWR 16 16 16",
+      "tCWL 14 14 14",
+      "tRRD_S 4 4 4"
+     ],
+     "affectedCount": 56
+    },
+    "AFF216FCCC52964DE046F733B42B64D60FCE64CCA52FE8898D97830CBBBEECE3": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "B0407871A0A232C355E514B9F1CC75F701D0E7F4193F346B62CB9D8D5399D997": {
+     "name": "BT Intel A2DP",
+     "outcome": "rejected"
+    },
+    "B2C9108CD764503ECD7FA589653AD0F43489864392C05A032D41EBD3CD6F22DC": {
+     "name": "Automatic HW-Enforced Anti-Rollback SVN",
+     "outcome": "risky"
+    },
+    "B4DEADC280DBDA4F9581445446E3F4B006C3594BC72ED978846F5A727462A8CA": {
+     "name": "Ring Frequency 4.70GHz",
+     "outcome": "rejected"
+    },
+    "B51F80A8CFC9595AE32ECD1BCB7DF00EF2C7DA7611BFE71A32F4275B63B3293A": {
+     "name": "SATA Controller(s)",
+     "outcome": "side-effects",
+     "affects": [
+      "SATA Test Mode",
+      "Port 0",
+      "Hot Plug",
+      "External",
+      "Mechanical Presence Switch",
+      "Spin Up Device",
+      "SATA Device Type",
+      "Topology"
+     ],
+     "affectedCount": 73
+    },
+    "B72E1870990EDDE32752B8612B566EA20715A2B67E2C7DD77FB9FDAB1E4E1CC2": {
+     "name": "ME Unconfig on RTC Clear",
+     "outcome": "risky"
+    },
+    "B8C0AFE5FE87871A234773158A3F2EC205FCA2A35F48101E0389F2CDBB0A4B92": {
+     "name": "Legacy Game Compatibility Mode",
+     "outcome": "side-effects",
+     "affects": [
+      "Scan Matrix Keyboard Support"
+     ],
+     "affectedCount": 1
+    },
+    "BA17667961941FA231EA121D0AABFB3264AEAB80FB3982F0D8701B3C138E59BE": {
+     "name": "Secure Boot",
+     "outcome": "risky"
+    },
+    "BD5176A6EC23757059B97B744B351B106C08F5E95DCECC9F00FDC52C5493CBA6": {
+     "name": "SA PS Current Threshold1",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "C1065C409B6DD8D8D963832D63DA0D644B2069824D74BC2B529C409663694415": {
+     "name": "IA PS Current Threshold2",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "C10F9F500135DDB1C0198BCEA1672DC14AC63597C200AAF505E76EE8FA498ADA": {
+     "name": "BIOS Lock",
+     "outcome": "risky"
+    },
+    "C1470F686DD6CC1657990F6F52790C5B4163E93D9357A60409AA1796B66ED85E": {
+     "name": "Secure Boot Mode",
+     "outcome": "unchanged"
+    },
+    "C27E11DB2B0889C0B6C75B4BE1446F57946F1BA14D588DAA44FB77C6A1C731A8": {
+     "name": "Legacy UART",
+     "outcome": "rejected"
+    },
+    "C520735AE9F497DD2A6B54F048EFEE3F140AC23809AC590F514BD54B8C09E00C": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "C740E31955D2EC865335F4347B9A34D487E72957A6714D15315C28F3845CF18F": {
+     "name": "IA IMON Prefix",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "CA09C38F53064205834A2B6DDC59D888A442FD8472B91A7CFCC8427E1ADE941C": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "CAB37C78FB4A1C6863E75802412C5F3AE2F270809EF4604DD1F46D8675D8E176": {
+     "name": "GT IMON Prefix",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "CB7B1C3FDFD3587EB27C5B34BDC2CC865857748D0C0E6C006716AB714E41A78F": {
+     "name": "GP_6",
+     "outcome": "rejected"
+    },
+    "CD038394CDE29B081EF931F2E3BCF4FF6BC3C24EF4B98179F364B8714B530686": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "CDC68A5DC42A678FF838E6CB39F918E3C46DFFAC9C9B52F616561C926391B456": {
+     "name": "Memory Frequency(MHz) 2133MHz",
+     "outcome": "rejected"
+    },
+    "CF4FF73740024EEA3732904FBD0A9C27304191F4DC417600560459271EA7E79D": {
+     "name": "IA VR Current Limit",
+     "outcome": "side-effects",
+     "affects": [
+      "Core VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "CF7A2011011600142A78C4B13E853B2768C734F88E0DA61A542A3CEF57C1DB41": {
+     "name": "Performance CPU Clock Ratio 35",
+     "outcome": "side-effects",
+     "affects": [
+      "PowerLimit_SMI",
+      "Temperature High_SMI",
+      "Temperature Low_SMI",
+      "SA PLL Frequency Override",
+      "CPU PLL Selection",
+      "Filter PLL Level",
+      "AVX Settings",
+      "AVX"
+     ],
+     "affectedCount": 137
+    },
+    "D30CF15CF0204E00561E539F9C6D7A5E446F821093F14A7211A4101FA6168670": {
+     "name": "GT DC Loadline",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "D5CD2453A5257905C9BF6FBD62C5B075739C3F6494FDB2D6F19B5553715C4D91": {
+     "name": "Alternate Fast Init Tdispatch",
+     "outcome": "unchanged"
+    },
+    "DB264544A3735C44371A80F8757AED58E2EA42C4F9EFC5E87C39498C021150C8": {
+     "name": "Temperature Interval",
+     "outcome": "rejected"
+    },
+    "DB4243D2F48B603564BF05DEB3B29D2B4291EC555D9AC51BDFC9E5777DCFB550": {
+     "name": "I2C0",
+     "outcome": "rejected"
+    },
+    "DD9FE0634CFD7F6C56FA7D139022C9FD2C63B80349498277996A07264CF75C44": {
+     "name": "GT VR Current Limit",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "DFA279F577D10014312E57CF398903F8D2C632349B02BB6F0C2BD7C96A66D7B5": {
+     "name": "GT PS3 Enable",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "DFB5D0290DC3F96010DEEE1BED09A3BA59D5C632F0DA716FC82E3352051C1073": {
+     "name": "PCH Temp Read",
+     "outcome": "rejected"
+    },
+    "E19610DDE99C2CBE9E2F7CC4F0F7383F57288D9E83335A73FEC8B28553F83DA0": {
+     "name": "BT Intel HFP",
+     "outcome": "rejected"
+    },
+    "E3F06B4879D49CB1EF57C15ACF359F42C498E9FFB760A4BCA28168E7893AF63B": {
+     "name": "WoV (Wake on Voice)",
+     "outcome": "rejected"
+    },
+    "E4CF2D6A4BD80BFE77184AE6A0842550DB76235DFC94D2E02B419DC375B4E525": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "E4F538097B9D2E62ACF1FA73DFEB4D8CB32AA372A11DEF49E35F35F2AECD3AF5": {
+     "name": "DM Value",
+     "outcome": "rejected"
+    },
+    "E66DB992587F20DA65A20F5BCF5A54CFA905D2B032BF2E9A6B3AF597B2E83D6F": {
+     "name": "SA AC Loadline",
+     "outcome": "side-effects",
+     "affects": [
+      "SA VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "E9375836800DD65A53BFE7E0C824A21850D4FCB93AA152BAA44287BACF582507": {
+     "name": "Set HW-Enforced Anti-Rollback for Current SVN",
+     "outcome": "risky"
+    },
+    "EA3CD77DC8067DA1A7292E3DC5CC93FF99802C282132C20C9327D203C1DB49E6": {
+     "name": "ACPI D3Cold Support",
+     "outcome": "side-effects",
+     "affects": [
+      "D3 Setting for Storage"
+     ],
+     "affectedCount": 1
+    },
+    "EB5DF61EB96CADB409A8804F6F91AF9AE5AFD1D136986D0C88F3AC75798A4B5A": {
+     "name": "GT AC Loadline",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    },
+    "EFC5ED11128183E885111EA752921B84E70C4C265D111AFC3BED0E1042835AF5": {
+     "name": "Active Value",
+     "outcome": "rejected"
+    },
+    "F2B030ACC1DFB53603D5CB1AD834427F4CBC12CF5D2CC9C863A0C05A74104527": {
+     "name": "Erase All",
+     "outcome": "risky"
+    },
+    "F59C775D017EFAA972732D50C56C2DF14C3EE03BEDF395C45A58E145B9049DF2": {
+     "name": "System Memory Multiplier 2133",
+     "outcome": "side-effects",
+     "affects": [
+      "Gear Mode",
+      "Memory Boot Mode",
+      "SA GV",
+      "Dynamic Memory Boost",
+      "Realtime Memory Frequency",
+      "Dynamic Memory Performance Boost",
+      "DDR5 Auto Booster",
+      "High Bandwidth"
+     ],
+     "affectedCount": 22
+    },
+    "F792C4CB2EEE04837C97789C57727E19A12CB29F4E838016857E3B0845816D7C": {
+     "name": "GP_5",
+     "outcome": "rejected"
+    },
+    "F7B7DC8E889B63A9D014F3D4FFCAE52E79964ABE85E44F1B047D41150BBB4745": {
+     "name": "Factory Key Provision",
+     "outcome": "risky"
+    },
+    "FF9CEF6741EFFE55969920FDD9673FD20B320E0EABDDCD623F60767125BF252B": {
+     "name": "GT PS Current Threshold2",
+     "outcome": "side-effects",
+     "affects": [
+      "GT VR Fast Vmode",
+      "Fast Vmode Itrip ICC Limit"
+     ],
+     "affectedCount": 2
+    }
+   }
+  }
+ ]
+}

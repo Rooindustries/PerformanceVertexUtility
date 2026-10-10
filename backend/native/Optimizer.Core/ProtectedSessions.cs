@@ -71,6 +71,10 @@ public sealed class ProtectedSessions
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
 
+    public const string LauncherClosed = "The launcher you picked has closed. Open it again, press Refresh and choose it under Launcher.";
+    public const string LauncherIsGame = "Choose the launcher that starts the game, such as Steam or Battle.net, not the game itself.";
+    public static string GameRunning(string gamePath) => "Close " + Path.GetFileName(gamePath) + " first. Set up the session while the game is closed, press Start, then start the game from its launcher.";
+
     public ProtectedSessionPreview Preview(int launcherId, string gamePath, Dictionary<string, JsonElement> desired, bool acceptLauncherScope)
     {
         if (!acceptLauncherScope) throw new InvalidDataException("Review the scope: job limits and launcher defaults also affect other new launcher descendants.");
@@ -81,8 +85,18 @@ public sealed class ProtectedSessions
             throw new InvalidDataException("Select supported protected-session controls.");
         foreach (var pair in desired) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
         if (desired.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5) throw new InvalidDataException("Real-time GPU priority is not supported by this session.");
-        using var launcher = new ProcessTarget(launcherId);
-        var identity = launcher.Identity();
+        ProcessTarget launcher;
+        try { launcher = new ProcessTarget(launcherId); }
+        catch (Exception error) when (error is ProcessEndedException || error is RooIndustries.Optimization.CpuSets.NativeFailure { Api: "OpenProcess", NativeErrorCode: 87 })
+        {
+            throw new InvalidOperationException(LauncherClosed);
+        }
+        using var launcherTarget = launcher;
+        RunningProcess identity;
+        try { identity = launcher.Identity(); }
+        catch (ProcessEndedException) { throw new InvalidOperationException(LauncherClosed); }
+        if (string.Equals(Path.GetFileName(identity.ExecutablePath), Path.GetFileName(gamePath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(LauncherIsGame);
         if (_excluded(identity) || _excluded(new(launcherId, identity.CreationTimeFileTimeUtc, gamePath))) throw new InvalidOperationException("An application is excluded by the protection policy.");
         launcher.RequireUnprotected();
         if (launcher.UserSid() != OperationOwner.Current().UserSid) throw new InvalidOperationException("The launcher belongs to another Windows user.");
@@ -91,7 +105,7 @@ public sealed class ProtectedSessions
         var originalAffinity = launcher.Read("affinity").Require().Deserialize<AffinityState>(OperationFiles.Json)!;
         var affinity = desired.TryGetValue("affinity", out var mask) ? mask.Deserialize<AffinityState>(OperationFiles.Json)! : originalAffinity;
         ValidateAffinity(affinity, originalAffinity);
-        if (Processes(gamePath).Length != 0) throw new InvalidOperationException("Close the game before arming its launch session.");
+        if (Processes(gamePath).Length != 0) throw new InvalidOperationException(GameRunning(gamePath));
         var launcherDesired = desired.Where(pair => pair.Key is "ioPriority" or "memoryPriority").ToDictionary(pair => pair.Key, pair => pair.Value);
         var launch = new LaunchPriorities(gamePath, desired);
         return new()
@@ -134,7 +148,19 @@ public sealed class ProtectedSessions
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
-        using var launcherLease = OperationFiles.Lock(Path.Combine(Path.GetTempPath(), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
+        var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
+        using var gate = ProcessPolicyStore.Gate();
+        governor.RequireUnownedLaunch(plan.GamePath, plan.Controls.Keys);
+        governor.RequireUnowned(plan.Launcher.ExecutablePath, plan.Controls.Keys);
+#if GOVERNOR_TEST_HOOKS
+        var gatePauseFile = Path.Combine(root, "gate-pause.request");
+        if (File.Exists(gatePauseFile) && int.TryParse(File.ReadAllText(gatePauseFile), out var gatePause) && gatePause > 0)
+        {
+            File.WriteAllText(Path.Combine(root, "gate-paused"), "");
+            Thread.Sleep(Math.Min(gatePause, 10000));
+        }
+#endif
+        using var launcherLease = OperationFiles.Lock(Path.Combine(OperationsFolder.ContainingRoot(root), BrandCompatibility.LauncherLeasePrefix + plan.Launcher.ProcessId + "-" + plan.Launcher.CreationTimeFileTimeUtc));
         using var imageLease = ImageMutex(plan.GamePath);
         AcquireImage(imageLease, recovering: false);
         try
@@ -157,6 +183,7 @@ public sealed class ProtectedSessions
                 LauncherJournal = null, Games = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow,
             };
             Save(root, state);
+            gate.Dispose();
             ProcessJob? job = null;
             LaunchGpuHandles? gpuHandles = null;
             try

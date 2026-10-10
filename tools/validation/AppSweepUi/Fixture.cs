@@ -9,6 +9,8 @@ namespace RooIndustries.OptimizationSuite
         public static Services.FakeLiveDataService Live { get; } = new();
         public static Services.FakeOptimizerService Operations { get; } = new();
         public static Services.SampleDataService Data { get; } = new();
+        public static Services.BugReportService BugReports { get; set; } = null!;
+        public static string VersionText => "0.10.0-beta fixture";
     }
 }
 
@@ -17,11 +19,15 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed class SampleDataService
     {
         public Task<DriverRecommendationCatalog> GetDriverRecommendationsAsync() => Task.FromResult(new DriverRecommendationCatalog());
-        public Task<NvidiaProfileCatalog> GetNvidiaProfilesAsync() => Task.FromResult(new NvidiaProfileCatalog());
+        public NvidiaProfileCatalog NvidiaProfiles { get; set; } = new();
+        public Task<NvidiaProfileCatalog> GetNvidiaProfilesAsync() => Task.FromResult(NvidiaProfiles);
     }
     public sealed record ProcessControlReview(ProcessControlPreview Plan, string PreviewPath, string Hash, string JournalPath);
-    public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool RunAtLogon, PolicyWorkerStatus Worker);
-    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null);
+    public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
+        bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
+    public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
+        GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null);
+    public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
     public static class LiveDataService
@@ -31,6 +37,7 @@ namespace RooIndustries.OptimizationSuite.Services
 
     public sealed class FakeLiveDataService
     {
+        public Task<LiveDataResult<string>> RunBackendScriptResultAsync(string script) => Task.FromResult(new LiveDataResult<string>("{}", null));
         public ProcessInventory? Inventory { get; set; }
         public ProcessClassification? Classification { get; set; }
         public GameTuneSessionStatus? GameStatusModel { get; set; }
@@ -82,6 +89,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<string, Task<string?>> CleanupRestore { get; set; } = _ => Task.FromResult<string?>(null);
         public Task<ProcessInventory?> GetProcessInventoryAsync(CancellationToken cancellationToken = default) => Task.FromResult(Inventory);
         public Task<ProcessClassification?> GetProcessClassificationAsync(CancellationToken cancellationToken = default) => Task.FromResult(Classification);
+        public Task<LiveDataResult<ProcessClassification>> GetProcessClassificationResultAsync(CancellationToken cancellationToken = default, bool fresh = false, bool allowStale = false, bool background = false)
+            => Task.FromResult(new LiveDataResult<ProcessClassification>(Classification, Classification?.Processes is null ? LastError : null));
         public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameStatusModel);
         public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
@@ -119,7 +128,7 @@ namespace RooIndustries.OptimizationSuite.Services
         }
         public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(GovernorStatusText, GovernorStatusError ?? (GovernorStatusText is null ? LastError : null)));
-        public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default) => Task.FromResult(DriverHardware);
+        public Task<DriverHardwareSummary?> GetDriverHardwareAsync(CancellationToken cancellationToken = default, bool fresh = false) => Task.FromResult(DriverHardware);
         public Task<LiveDataResult<string>> ProbeNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, OperationError ?? (NvidiaProbeText is null ? LastError : null)));
         public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
@@ -142,7 +151,15 @@ namespace RooIndustries.OptimizationSuite.Services
             => Task.FromResult(new LiveDataResult<string>(ShaderText, OperationError ?? (ShaderText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RestoreShaderCacheCleanupResultAsync(string rollbackManifestPath, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(ShaderRestoreText, OperationError ?? (ShaderRestoreText is null ? LastError : null)));
-        public Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false) => Task.FromResult(InstalledApps);
+        public Func<Task>? BeforeInstalledApps { get; set; }
+        public Func<Task>? AfterInstalledApps { get; set; }
+        public async Task<InstalledAppInventory?> GetInstalledAppsAsync(CancellationToken cancellationToken = default, bool includeAllAppxUsers = false, bool fresh = false)
+        {
+            if (BeforeInstalledApps is { } hold) await hold();
+            var apps = InstalledApps;
+            if (AfterInstalledApps is { } after) await after();
+            return apps;
+        }
         public Task<OfficialUninstallPreview?> GetOfficialUninstallPreviewAsync(string appId, CancellationToken cancellationToken = default) => OfficialPreview(appId);
         public async Task<LiveDataResult<OfficialUninstallPreview>> GetOfficialUninstallPreviewResultAsync(string appId, CancellationToken cancellationToken = default)
         {
@@ -183,26 +200,61 @@ namespace RooIndustries.OptimizationSuite.Services
         public void DiscardCleanupReview() => LastCleanupRollbackPath = null;
     }
 
+    public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
+    public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
+
     public sealed class FakeOptimizerService
     {
+        public BulkRemovalSession? LastRemoval { get; set; }
+        public (string Path, BulkRemovalJournal State)[] RemovalHistory { get; set; } = [];
+        public Func<string, Task<OptimizerResult<BulkRemovalJournal>>> DismissRemoval { get; set; } = _ => throw new InvalidOperationException("Unexpected dismiss call.");
+        public Func<string, Task<OptimizerResult<BulkRemovalJournal>>> ReconcileRemoval { get; set; } = _ => throw new InvalidOperationException("Unexpected reconcile call.");
+        public List<string> Dismissed { get; } = new();
+        public Task<BulkRemovalSession?> ReadLastRemovalAsync() => Task.FromResult(LastRemoval);
+        public Task<(string Path, BulkRemovalJournal State)[]> ReadRemovalHistoryAsync() => Task.FromResult(RemovalHistory);
+        public Task<CleanupBatchSession[]> ReadCleanupHistoryAsync() => Task.FromResult(Array.Empty<CleanupBatchSession>());
+        public Task<RemovalCleanupReview?> ReadLastFileCleanupAsync() => Task.FromResult<RemovalCleanupReview?>(null);
+        public Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal) { Dismissed.Add(journal); return DismissRemoval(journal); }
+        public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal) => ReconcileRemoval(journal);
+        public Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false) => throw new InvalidOperationException("Unexpected removal preview call.");
+        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress) => throw new InvalidOperationException("Unexpected removal call.");
+        public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal) => throw new InvalidOperationException("Unexpected cancel call.");
+        public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken) => throw new InvalidOperationException("Unexpected leftover scan.");
+        public Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation) => throw new InvalidOperationException("Unexpected cleanup preview.");
+        public Task<CleanupBatchReview> PreviewCleanupBatchAsync(CleanupPart[] applications) => throw new InvalidOperationException("Unexpected cleanup batch preview.");
+        public Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress) => throw new InvalidOperationException("Unexpected cleanup apply.");
+        public Task<CleanupBatchCancellation> CancelCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup cancel.");
+        public Task<CleanupBatchJournal> RestoreCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup restore.");
+        public Task<OptimizerResult<FileCleanupResult>> RestoreRemovedFilesAsync(RemovalCleanupReview review) => throw new InvalidOperationException("Unexpected file restore.");
         public ProcessControlSnapshot? ProcessSnapshot { get; set; }
         public GameSessionEntry[] GameSessions { get; set; } = [];
         public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);
         public string? FindLastJournal(string kind) => null;
         public Task<ProcessControlSnapshot> ReadProcessControlsAsync(int processId)
             => Task.FromResult(ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
+        public Func<Dictionary<string, JsonElement>, ProcessControlReview>? Review { get; set; }
         public Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
-            => throw new InvalidOperationException("Unexpected preview call.");
+            => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");
         public Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
             => throw new InvalidOperationException("Unexpected apply call.");
         public Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
             => throw new InvalidOperationException("Unexpected restore call.");
         public Task<SavedProcessRule[]> ReadRulesAsync() => Task.FromResult(Array.Empty<SavedProcessRule>());
         public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.FromResult(new PolicyWorkerStatus(null, false, null));
-        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) => Task.FromResult(rule);
-        public Task<JsonElement> DeleteRuleAsync(string ruleId) => Task.FromResult(JsonSerializer.SerializeToElement(new { }));
+        public Action<SavedProcessRule>? RuleSaved { get; set; }
+        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) { RuleSaved?.Invoke(rule); return Task.FromResult(rule); }
+        public List<string> DeletedRules { get; } = new();
+        public Action<string>? RuleDeleted { get; set; }
+        public Task<JsonElement> DeleteRuleAsync(string ruleId) { DeletedRules.Add(ruleId); RuleDeleted?.Invoke(ruleId); return Task.FromResult(JsonSerializer.SerializeToElement(new { })); }
+        public Exception? PolicyWorkerError { get; set; }
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
-            => Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, new PolicyWorkerStatus(null, false, null)));
+            => PolicyWorkerError is { } failure ? Task.FromException<PolicyWorkerRegistration>(failure) : Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
+        public GovernorSnapshot Governor { get; set; } = new(new PolicySummary(false, "missing", false, 0, 0, null), new PolicyWorkerStatus(null, false, null), [], new());
+        public Exception? GovernorError { get; set; }
+        public Task<GovernorSnapshot> ReadGovernorAsync() => GovernorError is { } error ? Task.FromException<GovernorSnapshot>(error) : Task.FromResult(Governor);
+        public Func<Task<PolicyHostState>> RetryRestore { get; set; } = () => throw new InvalidOperationException("Unexpected governor restore retry.");
+        public int RetryCalls { get; private set; }
+        public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
         public Task<TweakRecovery> ReadWindowsRecoveryAsync() => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
     }

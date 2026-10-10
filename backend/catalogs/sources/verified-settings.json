@@ -499,7 +499,7 @@
     {
       "id": "explorer.file-extensions",
       "name": "File extensions",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Show or hide extensions for known file types. Existing Explorer windows may need to be reopened.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
@@ -568,7 +568,7 @@
     {
       "id": "explorer.hidden-files",
       "name": "Hidden files",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Show hidden files. This does not expose protected operating-system files.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
@@ -637,7 +637,7 @@
     {
       "id": "explorer.app-theme",
       "name": "App color mode",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Color preference for applications and Windows surfaces that support it.",
       "minimumBuild": 14393,
       "maximumBuild": 26200,
@@ -711,7 +711,7 @@
     {
       "id": "explorer.system-theme",
       "name": "Windows color mode",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Color preference for applications and Windows surfaces that support it.",
       "minimumBuild": 14393,
       "maximumBuild": 26200,
@@ -785,7 +785,7 @@
     {
       "id": "explorer.task-view",
       "name": "Task View button",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Show or hide the Task View button on the taskbar.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
@@ -854,7 +854,7 @@
     {
       "id": "explorer.taskbar-alignment",
       "name": "Taskbar alignment",
-      "category": "Windows & Explorer",
+      "category": "Desktop and File Explorer",
       "description": "Align Windows 11 taskbar icons to the left or center.",
       "minimumBuild": 22000,
       "maximumBuild": 26200,

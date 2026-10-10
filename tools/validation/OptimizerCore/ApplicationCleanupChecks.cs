@@ -5,7 +5,7 @@ static class ApplicationCleanupChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-application-cleanup-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("application-cleanup");
         var registryRoot = "Software\\RooIndustriesApplicationCleanupTests\\" + Guid.NewGuid().ToString("N");
         var registryPath = registryRoot + "\\Roo Industries Composite Example";
         var source = Path.Combine(root, "Roo Industries Composite Example");

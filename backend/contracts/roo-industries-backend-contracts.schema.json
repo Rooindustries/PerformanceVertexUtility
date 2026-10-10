@@ -3995,6 +3995,21 @@
             "null"
           ]
         },
+        "commandLine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executableSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executableState": {
+          "type": "string"
+        },
         "executable": {
           "type": [
             "string",
@@ -6076,6 +6091,7 @@
         "argumentMode",
         "arguments",
         "rawArguments",
+        "commandLine",
         "workingDirectory",
         "exitCodePolicy",
         "protected",
@@ -6120,6 +6136,9 @@
           }
         },
         "rawArguments": {
+          "type": "string"
+        },
+        "commandLine": {
           "type": "string"
         },
         "workingDirectory": {
@@ -6813,6 +6832,45 @@
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/windowsTweakDefinition"
+          }
+        },
+        "incompatible": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "selections",
+              "reason"
+            ],
+            "properties": {
+              "selections": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "settingId",
+                    "optionId"
+                  ],
+                  "properties": {
+                    "settingId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "optionId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         },
         "presets": {

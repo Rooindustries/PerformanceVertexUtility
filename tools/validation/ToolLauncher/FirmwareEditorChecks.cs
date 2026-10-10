@@ -62,6 +62,99 @@ public static class FirmwareEditorChecks
         check(inconclusivePresentation.Status == "Not tested", "Inconclusive behavior stays untested");
         check(numericPresentation.Reason.Contains("9", StringComparison.Ordinal), "Numeric test values are displayed");
         check(!stalePresentation.CanCollapse, "Stale trials stay in the normal list");
+
+        FirmwareSettingRow Described(string id, FirmwareVerificationTrial? trial, string matchStatus = FirmwareVerificationMatchStatuses.Matched)
+        {
+            var target = new FirmwareSettingRow(question with { Id = id });
+            if (trial is null) return target;
+            var description = FirmwareViewModel.DescribeVerification(new FirmwareVerificationMatch(trial, matchStatus), question);
+            target.SetVerification(description.Status, description.Reason, description.CanCollapse);
+            target.IsExperimental = description.Experimental;
+            return target;
+        }
+        var rejected = Described("rejected", incomplete with { Status = FirmwareTrialStatuses.WriteRejected, RestorationComplete = true });
+        var rejectedUnrestored = Described("rejected-unrestored", incomplete with { Status = FirmwareTrialStatuses.WriteRejected });
+        var unchangedNow = Described("unchanged", incomplete with { RestorationComplete = true });
+        var confirmedUnchanged = Described("confirmed", completed);
+        var stored = Described("stored", completed with { Status = FirmwareTrialStatuses.ValueStored });
+        var untested = Described("untested", null);
+        var otherBoard = Described("other-board", incomplete with { Status = FirmwareTrialStatuses.WriteRejected, RestorationComplete = true }, FirmwareVerificationMatchStatuses.DifferentBoard);
+        var skipped = FirmwareSettingRow.ReadOnly(new FirmwareExcludedQuestion("Custom HID", "Device text", "This is text or a data block, not a single value SCEWIN can write."));
+        check(rejected.IsExperimental && rejected.VerificationStatus == "Can't be changed here" && unchangedNow.IsExperimental && unchangedNow.VerificationStatus == "Did not change",
+            "Rejected writes and values that did not change are marked experimental in plain words");
+        check(!rejectedUnrestored.IsExperimental && !otherBoard.IsExperimental && !stored.IsExperimental && !untested.IsExperimental,
+            "Unfinished tests, another motherboard's tests, stored values and untested settings stay out of Experimental");
+        rejected.SelectedOption = rejected.Options[1];
+        unchangedNow.SelectedOption = unchangedNow.Options[1];
+        var rows = new[] { rejected, rejectedUnrestored, unchangedNow, confirmedUnchanged, stored, untested, otherBoard, skipped };
+        var (normal, experimental) = FirmwareViewModel.Split(rows);
+        check(rejected.Changed && rejected.IsExperimental && experimental.Contains(rejected) && experimental.Contains(unchangedNow) && experimental.Contains(confirmedUnchanged) && experimental.Contains(skipped)
+            && !normal.Any(row => row.IsExperimental || row.IsReadOnly || FirmwareViewModel.ShouldCollapse(row)) && normal.Length == 4,
+            "Settings SCEWIN cannot apply never appear in the normal list, even after they are edited");
+        stored.SelectedOption = stored.Options[1];
+        var withoutOptIn = FirmwareViewModel.ReviewSelections(rows, row => row.Changed, false);
+        var withOptIn = FirmwareViewModel.ReviewSelections(rows, row => row.Changed, true);
+        check(withoutOptIn.Keys.SequenceEqual(["stored"]) && withOptIn.Keys.Order().SequenceEqual(["rejected", "stored", "unchanged"]) && !withOptIn.ContainsKey(skipped.Question.Id),
+            "Experimental edits reach review only after opting in and read-only settings never do");
+
+        var writeTests = Path.Combine(Path.GetTempPath(), "roo-industries-write-tests-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(writeTests, """
+                {"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":5,"experimental":{
+                  "locked":{"name":"Locked mode","outcome":"protected"},
+                  "kept":{"name":"Kept mode","outcome":"unchanged"},
+                  "linked":{"name":"Linked mode","outcome":"side-effects","affects":["Gear Mode","Memory Ref Clock"],"affectedCount":22},
+                  "fuse":{"name":"Fuse mode","outcome":"risky"},
+                  "refused":{"name":"Refused mode","outcome":"rejected"}}}]}
+                """);
+            var catalog = FirmwareWriteTests.Read(writeTests);
+            var identity = new FirmwareIdentity("pc", "board", "bios", "boot");
+            FirmwareSettingRow Named(string id, string name) => new(question with { Id = id, Name = name });
+            var locked = Named("locked", "Locked mode"); var kept = Named("kept", "Kept mode"); var linked = Named("linked", "Linked mode"); var fuse = Named("fuse", "Fuse mode"); var fine = Named("fine", "Fine mode");
+            FirmwareViewModel.ApplyWriteTests([locked, kept, linked, fuse, fine], catalog.For(identity));
+            check(locked.IsExperimental && locked.VerificationReason.Contains("BIOS password", StringComparison.Ordinal) && kept.IsExperimental && kept.VerificationStatus == "Did not change" && !fine.IsExperimental,
+                "Shipped write test results move only the listed settings of the matching motherboard into Experimental");
+            check(linked.IsExperimental && linked.VerificationStatus == "Changes other settings" && linked.VerificationReason.Contains("22 other settings", StringComparison.Ordinal) && linked.VerificationReason.Contains("Gear Mode", StringComparison.Ordinal)
+                && fuse.IsExperimental && fuse.VerificationStatus == "Too risky to test",
+                "Settings that change other settings say so and name them, and settings too risky to test are experimental");
+            var sameBoardOtherId = Named("other-id", "Locked mode");
+            FirmwareViewModel.ApplyWriteTests([sameBoardOtherId], catalog.For(identity));
+            check(!sameBoardOtherId.IsExperimental, "On a tested motherboard only exact setting identities count, not names");
+            File.WriteAllText(writeTests, """
+                {"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":4,"experimental":{
+                  "frequency":{"name":"CPU Frequency 3.50GHz","outcome":"rejected"},
+                  "gp2":{"name":"GP_2","outcome":"rejected"},
+                  "gp1":{"name":"GP_1","outcome":"rejected"}}}]}
+                """);
+            var drifted = Named("frequency-after-bclk-change", "CPU Frequency 3.60GHz");
+            var gpOther = Named("gp-9", "GP_9"); var gpTwin = Named("gp-8", "GP_8");
+            var plain = Named("other-id", "Locked mode");
+            FirmwareViewModel.ApplyWriteTests([drifted, gpOther, gpTwin, plain], FirmwareWriteTests.Read(writeTests).For(identity));
+            check(drifted.IsExperimental && drifted.VerificationStatus == "Can't be changed here",
+                "On a tested motherboard a setting whose name shows a changed reading keeps its test result");
+            check(!gpOther.IsExperimental && !gpTwin.IsExperimental && !plain.IsExperimental,
+                "Numbered settings that share a name pattern and names without numbers still need their exact identity");
+            var untestedBoard = identity with { Board = "other board", Bios = "other bios" };
+            var byNameLinked = Named("x1", "linked MODE"); var byNameRefused = Named("x2", "Refused mode"); var byNameFuse = Named("x3", "Fuse mode"); var byNameKept = Named("x4", "Kept mode"); var byNameLocked = Named("x5", "Locked mode"); var byNameFine = Named("x6", "Fine mode");
+            FirmwareViewModel.ApplyWriteTests([byNameLinked, byNameRefused, byNameFuse, byNameKept, byNameLocked, byNameFine], catalog.For(untestedBoard));
+            check(byNameLinked.IsExperimental && byNameRefused.IsExperimental && byNameFuse.IsExperimental && byNameKept.IsExperimental && byNameRefused.VerificationReason.Contains("has not been tested", StringComparison.Ordinal),
+                "An untested motherboard falls back to the tested boards' results by setting name and says so");
+            check(!byNameLocked.IsExperimental && !byNameFine.IsExperimental, "A tested board's password lock and its working settings do not carry over to another motherboard");
+            File.WriteAllText(writeTests, """{"schemaVersion":2,"boards":[{"board":"board","bios":"bios","crc":"A1B2C3D4","tested":1,"experimental":{"locked":{"name":"Locked mode","outcome":"stored"}}}]}""");
+            var invalid = false; try { FirmwareWriteTests.Read(writeTests); } catch (InvalidDataException) { invalid = true; }
+            check(invalid, "A write test catalog with an unknown outcome is rejected");
+        }
+        finally { File.Delete(writeTests); }
+
+        var mixed = new FirmwareScript(Encoding.Latin1.GetBytes(Export("00", "2026-09-20T10:00:00Z")
+            + "\nSetup Question = Camera name\nHelp String = Text field\nToken =11\nOffset =30\nWidth =1E\nValue =00\n"
+            + "\nSetup Question = Shared values\nToken =12\nOffset =40\nWidth =01\nOptions =*[00]Auto\n         [00]Also auto\n"
+            + "\nSetup Question = Nothing selected\nToken =13\nOffset =41\nWidth =01\nOptions =[00]Off\n         [01]On\n"
+            + "\nSetup Question = Empty value\nToken =14\nOffset =42\nWidth =01\nValue =\n"));
+        check(mixed.Questions.Count == 1 && mixed.ExcludedQuestions.Select(item => item.Name).SequenceEqual(["Camera name", "Shared values", "Nothing selected", "Empty value"])
+            && mixed.ExcludedQuestions.All(item => item.Reason.Length > 0),
+            "Settings the export cannot express as one writable value are reported separately with a reason");
     }
 
     private static string Export(string selected, string stamp)

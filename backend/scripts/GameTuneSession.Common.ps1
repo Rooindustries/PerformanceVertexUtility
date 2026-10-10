@@ -29,7 +29,7 @@ function Write-RooIndustriesGameTuneJsonFile {
         [string]$Path
     )
     Ensure-RooIndustriesDirectory (Split-Path $Path -Parent)
-    ($Value | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $Path -Encoding UTF8
+    Write-RooIndustriesOperationJson $Value $Path
 }
 
 function Add-RooIndustriesGameTuneLogFileEntry {
@@ -110,9 +110,10 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
         }
     }
 
-    $matches = ($nameMatches -and $pathMatches)
-    $reason = if ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }
     $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null) $controlState.startTimeUtc
+    $matches = ($nameMatches -and $pathMatches -and $startMatches)
+    $reason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was changed or restored.' } elseif ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }
     return [pscustomobject]@{
         exists = $true
         matches = $matches
@@ -121,6 +122,7 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
         currentControlState = $controlState
         currentAffinityMask = $controlState.affinityMask
         currentIoPriority = $controlState.ioPriority
+        currentMemoryPriority = $controlState.memoryPriority
         currentGpuPriority = $controlState.gpuPriority
         processStartTimeUtc = $controlState.startTimeUtc
         currentPath = $currentPath
@@ -139,19 +141,24 @@ function Test-RooIndustriesGameTuneEntryAllowed {
     }
     foreach ($change in $changes) {
         if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+            if ([string](Get-RooIndustriesPropertyValue $change 'control' '') -eq 'memoryPriority') { continue }
             return [pscustomobject]@{ allowed = $false; reason = [string](Get-RooIndustriesPropertyValue $change 'blockedReason' 'A requested process control is blocked.') }
         }
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
         $value = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
+        $action = [string](Get-RooIndustriesPropertyValue $change 'action' '')
         switch ($control) {
             'priorityClass' {
-                if (-not (Test-RooIndustriesPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "Priority class '$value' is outside the allow-list." } }
+                if (-not (Test-RooIndustriesPriorityAllowed ([string]$value) -Restoring:($action -eq 'restorePriority'))) { return [pscustomobject]@{ allowed = $false; reason = "Priority class '$value' is outside the allow-list." } }
             }
             'affinityMask' {
                 if (-not (Test-RooIndustriesAffinityMaskAllowed $value)) { return [pscustomobject]@{ allowed = $false; reason = "Affinity mask '$value' is invalid." } }
             }
             'ioPriority' {
-                if (-not (Test-RooIndustriesIoPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "I/O priority '$value' is outside the allow-list." } }
+                if (-not (Test-RooIndustriesIoPriorityAllowed ([string]$value) -Restoring:($action -eq 'restoreIoPriority'))) { return [pscustomobject]@{ allowed = $false; reason = "I/O priority '$value' is outside the allow-list." } }
+            }
+            'memoryPriority' {
+                if (-not (Test-RooIndustriesMemoryPriorityAllowed $value)) { return [pscustomobject]@{ allowed = $false; reason = "Memory priority '$value' is outside the allow-list." } }
             }
             'gpuPriority' {
                 if (-not (Test-RooIndustriesGpuPriorityAllowed ([string]$value))) { return [pscustomobject]@{ allowed = $false; reason = "GPU priority '$value' is outside the allow-list." } }
@@ -181,7 +188,9 @@ function New-RooIndustriesGameTuneChangedItem {
         originalAffinityMask = Get-RooIndustriesPropertyValue $OriginalState 'affinityMask' $null
         appliedAffinityMask = Get-RooIndustriesPropertyValue $AppliedState 'affinityMask' $null
         originalIoPriority = Get-RooIndustriesPropertyValue $OriginalState 'ioPriority' $null
+        originalMemoryPriority = Get-RooIndustriesPropertyValue $OriginalState 'memoryPriority' $null
         appliedIoPriority = Get-RooIndustriesPropertyValue $AppliedState 'ioPriority' $null
+        appliedMemoryPriority = Get-RooIndustriesPropertyValue $AppliedState 'memoryPriority' $null
         originalGpuPriority = Get-RooIndustriesPropertyValue $OriginalState 'gpuPriority' $null
         appliedGpuPriority = Get-RooIndustriesPropertyValue $AppliedState 'gpuPriority' $null
         appliedControls = @(Get-RooIndustriesArray $AppliedControls)
@@ -204,6 +213,7 @@ function New-RooIndustriesGameTuneSkippedItem {
         proposedPriorityClass = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedPriorityClass' $null
         proposedAffinityMask = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedAffinityMask' $null
         proposedIoPriority = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedIoPriority' $null
+        proposedMemoryPriority = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedMemoryPriority' $null
         proposedGpuPriority = Get-RooIndustriesPropertyValue $PreviewEntry 'proposedGpuPriority' $null
         controlChanges = @(Get-RooIndustriesPreviewControlChanges $PreviewEntry)
         ruleId = Get-RooIndustriesPropertyValue $PreviewEntry 'ruleId' $null
@@ -227,6 +237,7 @@ function New-RooIndustriesGameTuneBackupMetadata {
                 priorityClass = Get-RooIndustriesPropertyValue $snap 'originalPriorityClass' $null
                 affinityMask = Get-RooIndustriesPropertyValue $snap 'originalAffinityMask' $null
                 ioPriority = Get-RooIndustriesPropertyValue $snap 'originalIoPriority' $null
+                memoryPriority = Get-RooIndustriesPropertyValue $snap 'originalMemoryPriority' $null
                 gpuPriority = Get-RooIndustriesPropertyValue $snap 'originalGpuPriority' $null
                 executablePath = Get-RooIndustriesPropertyValue $snap 'executablePath' $null
             }
