@@ -474,7 +474,7 @@ try {
                     $entryToApply = New-RooIndustriesProcessGovernorPreviewEntry $proc $profile $protectedCatalog $foregroundPid $config ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0)) 'restrain' $sustainedSeconds
                     $entryChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entryToApply))
                     if ($entryChanges.Count -eq 0 -or [bool](Get-RooIndustriesPropertyValue $entryToApply 'blocked' $false)) {
-                        $skip = New-GovernorSkippedItem $entryToApply (Get-RooIndustriesPropertyValue $entryToApply 'blockedReason' 'No process control change was needed for governor restraint.') $pollIndex
+                        $skip = New-GovernorSkippedItem $entryToApply (Get-RooIndustriesPropertyValue $entryToApply 'blockedReason' (Get-RooIndustriesPropertyValue $entryToApply 'reason' 'No process control change was needed for governor restraint.')) $pollIndex
                         $skipped.Add($skip) | Out-Null
                         $pollSkipped.Add($skip) | Out-Null
                         continue

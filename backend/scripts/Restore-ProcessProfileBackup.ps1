@@ -327,7 +327,18 @@ try {
 
     $summary = if ($ConfirmApply) {
         $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
-        "Restore completed with $($changed.Count) restored app(s) and $($pending.Count) app(s) still needing attention." + $closedText
+        $finishedCount = @(Get-RooIndustriesPropertyArray $backup 'snapshots').Count - $pending.Count - $alreadyClosed.Count
+        if ($status -eq 'success') {
+            "Restore completed for $finishedCount app(s)." + $closedText
+        } else {
+            $attention = ($pending | ForEach-Object {
+                $entry = $_
+                $failedReasons = @($skipped | Where-Object { $_.processId -eq $entry.processId } | ForEach-Object reason)
+                $details = if ($failedReasons.Count -gt 0) { $failedReasons -join '; ' } else { $entry.reason }
+                $entry.processName + ' (PID ' + $entry.processId + '): ' + $details
+            }) -join '; '
+            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $attention." + $closedText
+        }
     } else {
         "Rollback preview completed. No process control changes were applied."
     }

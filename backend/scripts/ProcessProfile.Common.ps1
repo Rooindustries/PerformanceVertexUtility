@@ -961,6 +961,49 @@ function Test-RooIndustriesControlValueEqual {
     return [string]$Left -eq [string]$Right
 }
 
+function Get-RooIndustriesPriorityRank {
+    param([string]$Control, [object]$Value)
+    switch ($Control) {
+        'priorityClass' { $order = @{ Idle = 0; BelowNormal = 1; Normal = 2; AboveNormal = 3; High = 4; RealTime = 5 }; return $order[[string]$Value] }
+        'ioPriority' { return Convert-RooIndustriesIoPriorityToValue ([string]$Value) -Restoring }
+        'memoryPriority' { if (Test-RooIndustriesMemoryPriorityAllowed $Value) { return [int]$Value }; return $null }
+        default { return $null }
+    }
+}
+
+function Get-RooIndustriesPriorityDirectionReason {
+    param([object]$Change, [object]$CurrentValue)
+    $direction = [string](Get-RooIndustriesPropertyValue $Change 'priorityDirection' '')
+    if ($direction -notin 'lower', 'raise') { return $null }
+    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
+    $current = Get-RooIndustriesPriorityRank $control $CurrentValue
+    $target = Get-RooIndustriesPriorityRank $control (Get-RooIndustriesPropertyValue $Change 'proposedValue' $null)
+    $label = switch ($control) { 'priorityClass' { 'CPU priority' }; 'ioPriority' { 'I/O priority' }; 'memoryPriority' { 'Memory priority' } }
+    if ($null -eq $current -or $null -eq $target) { return "$label could not be compared safely, so it was left unchanged." }
+    if ($direction -eq 'lower' -and $current -le $target) { return "$label is already lower or at the requested value; it was left unchanged." }
+    if ($direction -eq 'raise' -and $current -ge $target) { return "$label is already higher or at the requested value; it was left unchanged." }
+    return $null
+}
+
+function Select-RooIndustriesPriorityDirection {
+    param([object[]]$Changes, [ValidateSet('set','lower','raise')][string]$Direction)
+    $selected = New-Object System.Collections.Generic.List[object]
+    $skipped = New-Object System.Collections.Generic.List[object]
+    foreach ($change in $Changes) {
+        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        if ($Direction -ne 'set' -and $control -in 'priorityClass','ioPriority','memoryPriority' -and -not [bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+            $change | Add-Member -NotePropertyName priorityDirection -NotePropertyValue $Direction -Force
+            $reason = Get-RooIndustriesPriorityDirectionReason $change (Get-RooIndustriesPropertyValue $change 'currentValue' $null)
+            if ($reason) {
+                $skipped.Add([pscustomobject]@{control=$control;currentValue=$change.currentValue;proposedValue=$change.proposedValue;reason=$reason;category='no-change'}) | Out-Null
+                continue
+            }
+        }
+        $selected.Add($change) | Out-Null
+    }
+    return [pscustomobject]@{changes=@($selected.ToArray());skippedControls=@($skipped.ToArray())}
+}
+
 function Get-RooIndustriesControlChangeValidationReason {
     param(
         [object]$Change,
@@ -1025,6 +1068,11 @@ function Get-RooIndustriesApplicableProcessControlChanges {
 
         $currentValue = Get-RooIndustriesControlStateValue $CurrentState $control
         $proposedValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
+        $directionReason = Get-RooIndustriesPriorityDirectionReason $change $currentValue
+        if ($directionReason) {
+            $skipped.Add([pscustomobject]@{ control = $control; reason = $directionReason; currentValue = $currentValue; proposedValue = $proposedValue; category = 'no-change' }) | Out-Null
+            continue
+        }
         if (Test-RooIndustriesControlValueEqual $control $currentValue $proposedValue) {
             $skipped.Add([pscustomobject]@{ control = $control; reason = "Process already has requested $control value."; currentValue = $currentValue; proposedValue = $proposedValue; category = 'no-change' }) | Out-Null
             continue
@@ -1074,6 +1122,10 @@ function Invoke-RooIndustriesProcessControlChange {
     try {
         if (Test-RooIndustriesGovernorOwnsControl $Process $control) { throw $script:RooIndustriesGovernorManaged }
         if ($action -like 'restore*' -and -not (Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesProcessControlReadback $Process $control) (Get-RooIndustriesPropertyValue $Change 'currentValue' $null))) { throw 'The control changed externally; its current value was preserved.' }
+        if ([string](Get-RooIndustriesPropertyValue $Change 'priorityDirection' '') -in 'lower','raise') {
+            $directionReason = Get-RooIndustriesPriorityDirectionReason $Change (Get-RooIndustriesProcessControlReadback $Process $control)
+            if ($directionReason) { throw $directionReason }
+        }
         switch ($control) {
             'priorityClass' {
                 $priority = [string]$value
