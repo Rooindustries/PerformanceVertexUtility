@@ -1,8 +1,8 @@
 # Reversible file access controls
 
-A native deny-ACE transaction is viable for the tested NTFS fixtures. **26 checks passed on the verified 9070XT**, including byte-exact DACL restoration, unchanged owner/control flags, existing-rule preservation, drift/replacement rejection, and reparse-point rejection. These checks establish the file-access primitive; they do not establish that changing an ACL permanently disables a real vendor installer or Microsoft Store behavior.
+A native deny-ACE transaction is viable for the tested NTFS fixtures. **26 checks passed on the verified the i5-14600K test PCXT**, including byte-exact DACL restoration, unchanged owner/control flags, existing-rule preservation, drift/replacement rejection, and reparse-point rejection. These checks establish the file-access primitive; they do not establish that changing an ACL permanently disables a real vendor installer or Microsoft Store behavior.
 
-The prototype ran at **2026-09-19 17:25:59 UTC**, on `SERVI-WINDOWS-D`, Windows build `10.0.26200.0`, NTFS. It used only newly created paths beneath a uniquely named temporary directory. Actual Store, Razer, Logitech, system and user targets were untouched. No registry, service, task or network configuration was changed. The final fixture tree and staging directory were removed, and a subsequent process check found no owned prototype process.
+The prototype ran at **2026-09-19 17:25:59 UTC**, on `the i5-14600K test PC`, Windows build `10.0.26200.0`, NTFS. It used only newly created paths beneath a uniquely named temporary directory. Actual Store, Razer, Logitech, system and user targets were untouched. No registry, service, task or network configuration was changed. The final fixture tree and staging directory were removed, and a subsequent process check found no owned prototype process.
 
 ## Pinned source behavior
 
@@ -60,7 +60,7 @@ For an independently implemented download-folder control, the tested `0x00000116
 
 ## Target-specific privilege finding
 
-The initial access probe used `FILE_FLAG_BACKUP_SEMANTICS`. The 9070XT SSH process token had both `SeBackupPrivilege` and `SeRestorePrivilege` enabled, so that probe could still open the denied fixture. The incorrect assumption was that it represented an ordinary application open. The failed attempt is retained as evidence; the corrected ordinary-file probe removed backup intent and produced the expected access-denied result.
+The initial access probe used `FILE_FLAG_BACKUP_SEMANTICS`. The the i5-14600K test PCXT SSH process token had both `SeBackupPrivilege` and `SeRestorePrivilege` enabled, so that probe could still open the denied fixture. The incorrect assumption was that it represented an ordinary application open. The failed attempt is retained as evidence; the corrected ordinary-file probe removed backup intent and produced the expected access-denied result.
 
 Microsoft explicitly documents the backup/restore privilege path that can override ordinary file ACL checking. The descriptor read/write helper may need this path for recovery, but the effective-access test must use the intended caller's ordinary access semantics. An administrative backup-style open is not proof that the deny ACE failed, and an ordinary denied open is not proof that a privileged installer cannot bypass it. [File backup access](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights), [privilege inspection](https://learn.microsoft.com/en-us/windows/win32/secauthz/privileges).
 
@@ -88,7 +88,7 @@ A deny ACE does not revoke already granted open handles. A non-inheriting parent
 
 Private prototype and evidence directory:
 
-`/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/acl-prototype/`
+`<private work folder>/four-tool-tweaks-20260919/acl-prototype/`
 
 - `PrototypeAcl.cs`: throwaway native/.NET prototype, SHA-256 `33e5226ffc517253360b68be491866d395f5c0a1a9783402d544bb08af4ccbbe`.
 - `run.ps1`: controlled fixture sequence, including the two wrong-undo counterexamples.

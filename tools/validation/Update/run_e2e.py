@@ -10,15 +10,16 @@ import subprocess
 import sys
 import time
 from urllib.request import urlopen
+from urllib.parse import urlsplit, urljoin
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = ROOT / "artifacts/roo-20/ota"
-HOST = "optimizer-9070"
-MACHINE = "SERVI-WINDOWS-D"
-FEED = "https://roo-devbox.tail9fe6d9.ts.net:8460/ota-e2e/beta.json"
-KEY = Path("/home/serviroo/.config/roo-industries/update-signing/roo-update-signing-p256.pem")
+HOST = None
+MACHINE = None
+FEED = None
+KEY = None
 spec = importlib.util.spec_from_file_location("windows_ssh", ROOT / "tools/validation/windows_ssh.py")
 windows = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows)
@@ -103,7 +104,7 @@ def contracts(receipt, builds, pc_out, installer, valid):
                                ("wrong-channel", "channel", "stable"), ("bad-version", "version", "0.11"),
                                ("bad-publication", "publishedAtUtc", "yesterday")]:
         add(name, dict(payload, **{field: value}), 0, True)
-    for name, field, value in [("http-installer", "url", "http://roo-devbox.tail9fe6d9.ts.net:8460/setup.exe"),
+    for name, field, value in [("http-installer", "url", urljoin(FEED, "setup.exe").replace("https:", "http:", 1)),
                                ("different-host", "url", "https://example.com/setup.exe"), ("undersized", "size", 1048575),
                                ("oversized-installer", "size", 1073741825), ("bad-hash", "sha256", "g" * 64),
                                ("short-hash", "sha256", "a" * 63)]:
@@ -135,17 +136,34 @@ def contracts(receipt, builds, pc_out, installer, valid):
 
 
 def main():
-    global OUT
+    global OUT, HOST, MACHINE, FEED, KEY
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts"])
+    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
+    parser.add_argument("--host", default=os.environ.get("ROO_TEST_SSH_HOST"))
+    parser.add_argument("--expected-machine", default=os.environ.get("ROO_TEST_COMPUTER"))
+    parser.add_argument("--feed-url", default=os.environ.get("ROO_TEST_UPDATE_FEED"))
+    parser.add_argument("--signing-key", type=Path, default=os.environ.get("ROO_UPDATE_SIGNING_KEY"))
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--fixture-exe")
+    parser.add_argument("--manual-retry", action="store_true")
+    parser.add_argument("--transport-fault", choices=["http-error", "disconnect"], default="disconnect")
     parser.add_argument("--build-root")
     parser.add_argument("--evidence-root")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-contracts", action="store_true")
     parser.add_argument("--from-scenario", help="Resume the all-scenarios journey at a named scenario using its retained baseline")
     args = parser.parse_args()
+    missing = [name for name in ("host", "expected_machine", "feed_url", "signing_key") if not getattr(args, name)]
+    if missing:
+        parser.error("Required test configuration is missing: " + ", ".join("--" + name.replace("_", "-") for name in missing) + ". Supply arguments or the corresponding ROO_TEST_* / ROO_UPDATE_SIGNING_KEY environment variables.")
+    HOST, MACHINE, FEED, KEY = args.host, args.expected_machine, args.feed_url, args.signing_key
+    parsed_feed = urlsplit(FEED)
+    if parsed_feed.scheme != "https" or not parsed_feed.hostname or parsed_feed.port != 8460 or not parsed_feed.path.endswith("/beta.json") or parsed_feed.query or parsed_feed.fragment or ".." in parsed_feed.path.split("/"):
+        parser.error("--feed-url must be an HTTPS test feed on port 8460 ending in /beta.json, without a query, fragment or traversal")
+    if not KEY.is_file():
+        parser.error("--signing-key does not exist on this Linux machine")
+
     if args.out_dir:
         OUT = args.out_dir.resolve()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -171,12 +189,12 @@ def main():
     a = OUT / "builds/A/RooIndustries-OptimizationSuite-0.11.0-beta-setup.exe"
     b = OUT / "builds/B/RooIndustries-OptimizationSuite-0.11.1-beta-setup.exe"
     http_root = OUT / "http-root"
-    feed_file = http_root / "ota-e2e/beta.json"
+    feed_file = http_root / parsed_feed.path.lstrip("/")
     feed_file.parent.mkdir(parents=True, exist_ok=True)
-    installer_file = http_root / "ota-e2e/b/baseline" / b.name
+    installer_file = feed_file.parent / "b/baseline" / b.name
     installer_file.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(b, installer_file)
-    url = "https://roo-devbox.tail9fe6d9.ts.net:8460/ota-e2e/b/baseline/" + b.name
+    url = urljoin(FEED, "b/baseline/" + b.name)
     valid = OUT / "newer.json"
     expected_hash = json.loads(base64.b64decode(json.loads(valid.read_text())["payload"]))["installer"]["sha256"] if valid.exists() else None
     import hashlib
@@ -203,11 +221,11 @@ def main():
     server = None
     log = None
     serving = False
-    def start_server(slow=False):
+    def start_server(fault=None):
         nonlocal server, log
         if server is None:
             log = (OUT / "http-server.log").open("a")
-            args = [sys.executable, "-I", ROOT / "tools/validation/Update/serve_fixture.py", "--directory", str(http_root)] if slow else [sys.executable, "-m", "http.server", "13684", "--bind", "127.0.0.1", "--directory", str(http_root)]
+            args = [sys.executable, "-I", ROOT / "tools/validation/Update/serve_fixture.py", "--directory", str(http_root), "--feed-path", parsed_feed.path, "--fault", fault] if fault else [sys.executable, "-m", "http.server", "13684", "--bind", "127.0.0.1", "--directory", str(http_root)]
             server = subprocess.Popen(args, stdout=log, stderr=log)
             for attempt in range(40):
                 if server.poll() is not None:
@@ -217,7 +235,7 @@ def main():
                         break
                 except OSError:
                     time.sleep(0.1)
-            (OUT / "owned-server.json").write_text(json.dumps({"pid": server.pid, "host": "linux-dev-box", "port": 13684, "httpsPort": 8460}))
+            (OUT / "owned-server.json").write_text(json.dumps({"pid": server.pid, "host": socket.gethostname(), "port": 13684, "httpsPort": 8460}))
     def stop_server():
         nonlocal server, log
         if server:
@@ -229,11 +247,17 @@ def main():
             log = None
     def scenario(name, installer=None, evidence_name=None):
         fields = {"Source": source, "OutRoot": pc_out, "Scenario": name}
+        if args.manual_retry:
+            fields["ManualRetry"] = True
         if installer:
             fields["InstallerPath"] = installer
         if evidence_name:
             fields["EvidenceName"] = evidence_name
-        interactive(receipt, "tools/validation/Update/Invoke-UpdateScenario.ps1", fields, name.replace("-", "_"), 12)
+        if name == "timer-read-failure":
+            if not args.fixture_exe:
+                raise RuntimeError("timer-read-failure requires --fixture-exe from the hook-only app copy")
+            fields["FixtureExe"] = args.fixture_exe
+        interactive(receipt, "tools/validation/Update/Invoke-UpdateScenario.ps1", fields, name.replace("-", "_"), 24 if name == "manual-timeout" else 12)
     def fixture(action):
         interactive(receipt, "tools/validation/Update/Invoke-UpdateFixture.ps1", {"Source": source, "OutRoot": pc_out, "Action": action}, action.replace("-", "_"), 8)
     try:
@@ -249,18 +273,18 @@ def main():
         if args.from_scenario:
             sequence = sequence[sequence.index(args.from_scenario):]
         for name in sequence:
-            if name in ("seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download"):
+            if name in ("seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "transport-error", "manual-timeout"):
                 fixture("reset-download")
             if name == "feed-down":
                 stop_server()
-            elif name == "slow-feed":
+            elif name in ("slow-feed", "transport-error", "manual-timeout"):
                 stop_server()
-                start_server(slow=True)
+                start_server(fault={"slow-feed": "slow-feed", "transport-error": args.transport_fault, "manual-timeout": "stall-installer"}[name])
             else:
                 if name == "malformed-feed":
                     stop_server()
                 start_server()
-            if name in ("seed", "manual-install", "same-version", "cleanup"):
+            if name in ("seed", "manual-install", "same-version", "cleanup", "settings-readonly"):
                 shutil.copyfile(OUT / "same.json", feed_file)
             elif name == "older-version":
                 shutil.copyfile(OUT / "older.json", feed_file)
@@ -341,7 +365,7 @@ def main():
                 if relative.is_absolute() or ".." in relative.parts:
                     raise RuntimeError("Unexpected evidence archive path")
                 target = OUT / "pc-artifacts/ota" / relative
-                if not entry.is_dir():
+                if not entry.is_dir() and not entry.filename.endswith(("/", "\\")):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.read(entry))
 

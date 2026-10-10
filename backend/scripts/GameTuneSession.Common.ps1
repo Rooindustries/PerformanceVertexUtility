@@ -110,7 +110,7 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
         }
     }
 
-    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $controlState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $PreviewEntry)
     $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null) $controlState.startTimeUtc
     $matches = ($nameMatches -and $pathMatches -and $startMatches)
     $reason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was changed or restored.' } elseif ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }

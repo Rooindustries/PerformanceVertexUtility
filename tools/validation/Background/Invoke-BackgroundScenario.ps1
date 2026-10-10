@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[ValidateSet('presets','placement-origins','game-memory','limits-memory','identity','memory-controls')][string]$Scenario='presets',[string]$BackendSource='')
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[ValidateSet('presets','placement-origins','game-memory','limits-memory','identity','memory-controls','direction')][string]$Scenario='presets',[string]$BackendSource='')
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 . (Join-Path $Source 'backend\scripts\ProcessProfile.Common.ps1')
@@ -44,6 +44,62 @@ try {
     $restored=ReadAll;Save ($preset+'-restored.json') $restored
     foreach($p in $fixtures){Equal (Read $p) ($before|Where-Object pid -eq $p.Id)}
     foreach($p in @($updater,$web)){$o=$originals|Where-Object pid -eq $p.Id;$p.PriorityClass=$o.priorityClass;[RooBackgroundOracle]::SetIo($p,$o.ioPriority);[RooBackgroundOracle]::SetMemory($p,$o.memoryPriority)}
+   }
+  }
+  'direction' {
+   $profile.rules[0].action['ioPriority']='Low'
+   $profile.foregroundGame|Add-Member -NotePropertyName ioPriority -NotePropertyValue 'Normal' -Force
+   [IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 30),$utf8)
+   foreach($flow in 'lower','game','limits','mixed','boost','placement'){
+    foreach($p in $fixtures){$p.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,5);$p.ProcessorAffinity=[IntPtr]$originals[0].affinityMask}
+    $updater.PriorityClass='Idle';[RooBackgroundOracle]::SetIo($updater,0);[RooBackgroundOracle]::SetMemory($updater,1)
+    $game.PriorityClass='High';[RooBackgroundOracle]::SetIo($game,3)
+    if($flow -eq 'mixed'){[RooBackgroundOracle]::SetIo($updater,2);[RooBackgroundOracle]::SetMemory($updater,5)}
+    if($flow -eq 'boost'){$game.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($game,0);[RooBackgroundOracle]::SetMemory($game,2)}
+    $before=ReadAll;Save ($flow+'-before.json') $before
+    if($flow -eq 'limits'){
+     $governor=Get-Content -Raw (Join-Path $Source 'backend\profiles\probalance-governor.profile.json')|ConvertFrom-Json
+     $governor.profileId='roo20-direction';$governor.protectedCatalogPath=$profile.protectedCatalogPath
+     $governor.governor.candidateSelectors=@([pscustomobject]@{ruleId='fixture';enabled=$true;match=@{processNames=@('RooFixtureUpdater.exe','RooFixtureWebHelper.exe')}})
+     $thresholds=$governor.governor.thresholds;$thresholds.totalCpuPressureThresholdPercent=0;$thresholds.perProcessCpuThresholdPercent=0;$thresholds.timeOverThresholdSeconds=0;$thresholds.minimumRestraintSeconds=60
+     $governorPath=Join-Path $directory 'governor-profile.json';[IO.File]::WriteAllText($governorPath,($governor|ConvertTo-Json -Depth 30),$utf8)
+     $preview=Backend 'Preview-ProcessGovernor' @{ProfilePath=$governorPath;SampleIntervalMilliseconds=250}
+     $apply=Backend 'Start-ProcessGovernorSession' @{ProfilePath=$governorPath;StateRoot=$state;ConfirmApply=$true;MaxDurationSeconds=3;PollIntervalSeconds=1;SampleIntervalMilliseconds=250}
+    }else{
+     $preset=if($flow -eq 'placement'){'placement'}else{'lower'}
+     $preview=Backend 'Preview-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset}
+     if($flow -eq 'game'){$apply=Backend 'Start-GameTuneSession' @{ProfilePath=$profilePath;StateRoot=$state;ConfirmApply=$true;MaxDurationSeconds=2;PollIntervalSeconds=1}}
+     else{$apply=Backend 'Apply-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset;StateRoot=$state;ConfirmApply=$true}}
+    }
+    Save ($flow+'-preview.json') $preview;Save ($flow+'-apply.json') $apply;Save ($flow+'-after.json') (ReadAll)
+    $low=Read $updater;$gameAfter=Read $game
+    if($flow -eq 'placement'){
+     if($low.priorityClass -ne 'Normal' -or $low.ioPriority -ne 2 -or $low.memoryPriority -ne 5 -or $low.affinityMask -ne $placement.mask){throw 'Placement stopped setting Normal in both directions'}
+    }else{
+     $entry=@($preview.preview|Where-Object processId -eq $updater.Id)|Select-Object -First 1
+     if(-not$entry -or $entry.reason -notmatch 'already lower' -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count){throw 'Lower CPU was proposed or its reason missing'}
+     if($flow -eq 'mixed'){if($low.priorityClass -ne 'Idle' -or $low.ioPriority -ne 1 -or $low.memoryPriority -ne 2){throw 'One lower field suppressed other lowering controls'}}
+     else{Equal $low ($before|Where-Object pid -eq $updater.Id);if(@($entry.controlChanges).Count){throw 'Already-lower fixture owns controls'}}
+     if($flow -eq 'boost'){if($gameAfter.priorityClass -ne 'AboveNormal' -or $gameAfter.ioPriority -ne 2 -or $gameAfter.memoryPriority -ne 5){throw 'Game boost did not raise low values'}}
+     else{Equal $gameAfter ($before|Where-Object pid -eq $game.Id)}
+     $higher=Read $web;if($higher.priorityClass -ne 'BelowNormal' -or $higher.ioPriority -ne 1 -or $higher.memoryPriority -ne 2){throw 'Positive lowering control did not lower'}
+     $backup=Get-Content -Raw $apply.backup.location|ConvertFrom-Json
+     if($flow -ne 'mixed' -and @($backup.snapshots|Where-Object processId -eq $updater.Id).Count){throw 'Already-lower fixture has a restore snapshot'}
+     if($flow -eq 'mixed' -and @($backup.snapshots|Where-Object processId -eq $updater.Id|ForEach-Object controlChanges|Where-Object control -eq 'priorityClass').Count){throw 'Unchanged Idle CPU acquired restore ownership'}
+    }
+    if($flow -eq 'game'){$restore=Backend 'Stop-GameTuneSession' @{SessionPath=$apply.sessionPath;BackupPath=$apply.backup.location;ConfirmApply=$true}}
+    elseif($flow -eq 'limits'){$restore=Backend 'Stop-ProcessGovernorSession' @{BackupPath=$apply.backup.location;ConfirmApply=$true}}
+    else{$restore=Backend 'Restore-ProcessProfileBackup' @{BackupPath=$apply.backup.location;ConfirmApply=$true}}
+    Save ($flow+'-restore.json') $restore;Save ($flow+'-restored.json') (ReadAll);foreach($p in $fixtures){Equal (Read $p) ($before|Where-Object pid -eq $p.Id)}
+   }
+   $updater.PriorityClass='Idle';[RooBackgroundOracle]::SetIo($updater,0);[RooBackgroundOracle]::SetMemory($updater,1)
+   foreach($control in 'priorityClass','ioPriority','memoryPriority'){
+    $target=switch($control){'priorityClass'{'BelowNormal'};'ioPriority'{'Low'};'memoryPriority'{2}}
+    $change=New-RooIndustriesControlChange $control 'Normal' $target 'setPriority' 'Captured before the external lowering.'
+    $change|Add-Member -NotePropertyName priorityDirection -NotePropertyValue 'lower'
+    $errorText=$null;try{Invoke-RooIndustriesProcessControlChange $updater $change}catch{$errorText=$_.Exception.Message}
+    if(-not$errorText -or $errorText -notmatch 'already lower' -or $change.outcome -ne 'failed'){throw 'Fresh write did not refuse an externally lowered value'}
+    Save ('fresh-'+$control+'.json') @{change=$change;error=$errorText;readback=(Read $updater)}
    }
   }
   'placement-origins' {

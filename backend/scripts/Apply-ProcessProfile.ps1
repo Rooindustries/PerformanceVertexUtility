@@ -35,7 +35,7 @@ function Get-LiveProcessIdentity {
     if (-not [string]::IsNullOrWhiteSpace([string]$expectedPath)) {
         $pathMatches = ([string]$expectedPath -eq [string]$currentPath)
     }
-    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $controlState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $PreviewEntry)
     $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null) $controlState.startTimeUtc
 
     return [pscustomobject]@{
@@ -285,7 +285,7 @@ try {
                     Write-RooIndustriesOperationJson $backupManifest $backupPath
                 }
             }
-            $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null
+            $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
             if ($appliedControls.Count -gt 0) {
                 $changed.Add([pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $snapshot 'processId' 0

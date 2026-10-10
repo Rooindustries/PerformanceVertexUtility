@@ -15,7 +15,7 @@ The official site identifies **1.5.2042 RC 1** and an address-list date of **202
 
 PE version strings identify `1.5.2042` and assembly `1.5.2042.0`. `Constructor.json` supplies custom Group Policy, service, scheduled-task and registry examples. `README.txt` agrees with the online list of 102 switches. Static setup registrations identify the eight additional controls as `Pro1` through `Pro8`. Every fixed setup registration is now accounted for. [Official package](https://wpd.app/get/latest.zip), [arguments](https://wpd.app/docs/arguments/).
 
-The independent mappings below use Microsoft documentation and Microsoft ADMX files copied read-only from the verified 9070XT, build 26200. The private machine inventory records the matching policy name, source-file hash and declared scope. ADMX availability establishes a policy definition, not that an obsolete component exists or honors it on that build.
+The independent mappings below use Microsoft documentation and Microsoft ADMX files copied read-only from the verified the i5-14600K test PCXT, build 26200. The private machine inventory records the matching policy name, source-file hash and declared scope. ADMX availability establishes a policy definition, not that an obsolete component exists or honors it on that build.
 
 ## Coverage and limits
 
@@ -294,4 +294,4 @@ For policies, detect build/edition/component support and higher-precedence or pe
 
 Review must show the actual target, intended value, applicable scope and recovery consequence. Tests must exercise missing values, non-default types, identical/contradictory selections, overlapping presets, outside changes, failed middle steps, restart/recovery, and duplicate application. The native write test already approved for the tweak engine does not authorize new production policies, services, firewall rules or package removals.
 
-Private evidence is at `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/wpd/`: `inventory.json`, `vendor-facts.json`, `blocker-addresses.json`, `embedded-blocker-addresses.json`, `package-manifest.json`, captured first-party pages, package data and reproducible extraction/normalization scripts. The inventory's `executionVerified` remains false for every row. Read-only audit completion is distinct from native implementation, UI integration and real apply/restore verification.
+Private evidence is at `<private work folder>/four-tool-tweaks-20260919/wpd/`: `inventory.json`, `vendor-facts.json`, `blocker-addresses.json`, `embedded-blocker-addresses.json`, `package-manifest.json`, captured first-party pages, package data and reproducible extraction/normalization scripts. The inventory's `executionVerified` remains false for every row. Read-only audit completion is distinct from native implementation, UI integration and real apply/restore verification.

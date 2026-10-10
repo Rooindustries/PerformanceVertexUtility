@@ -1,6 +1,7 @@
-param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Evidence,[Parameter(Mandatory)][ValidatePattern('\A[A-Fa-f0-9]{64}\z')][string]$ExpectedSha256,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateRange(1,45)][int]$Minutes=45)
+param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Evidence,[Parameter(Mandatory)][ValidatePattern('\A[A-Fa-f0-9]{64}\z')][string]$ExpectedSha256,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[ValidateRange(1,45)][int]$Minutes=45,[string]$ExpectedMachine=$env:ROO_TEST_COMPUTER,[string]$KvmUrl=$env:ROO_TEST_KVM_URL)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Blackwell-only interactive check'}
+if([string]::IsNullOrWhiteSpace($ExpectedMachine) -or [string]::IsNullOrWhiteSpace($KvmUrl)){throw 'ExpectedMachine and KvmUrl are required; pass arguments or set ROO_TEST_COMPUTER and ROO_TEST_KVM_URL.'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong interactive test machine'}
 if((Get-FileHash -LiteralPath $Installer).Hash -cne $ExpectedSha256.ToUpperInvariant()){throw 'Sealed new installer hash differs'}
 if(Test-Path -LiteralPath $Evidence){throw 'Evidence exists; choose a new path'}
 [IO.Directory]::CreateDirectory($Evidence)|Out-Null
@@ -310,7 +311,7 @@ try {
                     if($signature.Status -ne [Management.Automation.SignatureStatus]::NotSigned){$case.error='UAC publisher criteria require the sealed unsigned beta installer.';break}
                     $names=@([IO.Path]::GetFileName($sealedInstaller),[Diagnostics.FileVersionInfo]::GetVersionInfo($sealedInstaller).FileDescription)|Where-Object {$_}|Select-Object -Unique
                     $uacWaitUntil=[DateTime]::UtcNow.AddSeconds(180);if($uacWaitUntil -gt $caseDeadline){$uacWaitUntil=$caseDeadline}
-                    $uacRequest=[ordered]@{protocol='roo-blackwell-uac-approval/v1';machine=$env:COMPUTERNAME;kvmTarget='https://glkvm-gaming-9950x3d.tail9fe6d9.ts.net';case='normal-uac';requestedUtc=[DateTime]::UtcNow.ToString('o');expiresUtc=$uacWaitUntil.ToString('o');expectedProgramNames=@($names);expectedPublisher='Unknown publisher';expectedPath=$sealedInstaller;expectedSha256=$ExpectedSha256.ToUpperInvariant();installerIdentity=$installerIdentity;caller=$case.caller;setupPid=$case.setupPid;criteria='Capture KVM; require exact expected program name and Unknown publisher, expand more details when available and require exact sealed path there; press Yes once only on a match. Any mismatch cancels and remains missing proof.'}
+                    $uacRequest=[ordered]@{protocol='roo-blackwell-uac-approval/v1';machine=$env:COMPUTERNAME;kvmTarget=$KvmUrl;case='normal-uac';requestedUtc=[DateTime]::UtcNow.ToString('o');expiresUtc=$uacWaitUntil.ToString('o');expectedProgramNames=@($names);expectedPublisher='Unknown publisher';expectedPath=$sealedInstaller;expectedSha256=$ExpectedSha256.ToUpperInvariant();installerIdentity=$installerIdentity;caller=$case.caller;setupPid=$case.setupPid;criteria='Capture KVM; require exact expected program name and Unknown publisher, expand more details when available and require exact sealed path there; press Yes once only on a match. Any mismatch cancels and remains missing proof.'}
                     $case.uacCriteria=$uacRequest;$uacRequest|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $Evidence 'normal-uac-kvm-request.json') -Encoding UTF8;Save-Result
                     $steps.Add(@{action='await visible KVM consent verification';observedUtc=[DateTime]::UtcNow.ToString('o')})
                 }

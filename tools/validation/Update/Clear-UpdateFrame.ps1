@@ -1,6 +1,7 @@
-param([Parameter(Mandatory)][string]$Frame)
+param([Parameter(Mandatory)][string]$Frame,[string]$ExpectedMachine=$env:ROO_TEST_COMPUTER)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'SERVI-WINDOWS-D'){throw 'Wrong cleanup machine'}
+if([string]::IsNullOrWhiteSpace($ExpectedMachine)){throw 'ExpectedMachine is required; pass -ExpectedMachine or set ROO_TEST_COMPUTER.'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong cleanup machine'}
 $root=[IO.Path]::GetFullPath($Frame).TrimEnd('\')
 if($root -cnotmatch '^C:\\RooBuild\\roo-industries-roo20-ota(?:-ui)?-[a-f0-9]{32}$'){throw 'Update frame scope differs'}
 if(-not[IO.Directory]::Exists($root)){return}

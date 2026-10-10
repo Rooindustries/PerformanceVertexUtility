@@ -2,11 +2,13 @@ import argparse
 import base64
 import hashlib
 import json
+import mmap
 import os
 from pathlib import Path
 import re
 import shlex
 import subprocess
+import struct
 import sys
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -48,6 +50,103 @@ def file_identity(path):
             count += len(block)
             sha.update(block)
     return count, sha.hexdigest()
+
+
+def product_version(path):
+    with Path(path).open("rb") as source, mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ) as image:
+        def unpack(fmt, offset):
+            if offset < 0 or offset + struct.calcsize(fmt) > len(image):
+                raise ValueError("Truncated installer PE resource")
+            return struct.unpack_from(fmt, image, offset)
+        if image[:2] != b"MZ":
+            raise ValueError("Installer is not a Windows executable")
+        pe = unpack("<I", 60)[0]
+        if image[pe:pe + 4] != b"PE\0\0":
+            raise ValueError("Installer has no PE header")
+        sections = unpack("<H", pe + 6)[0]
+        optional_size = unpack("<H", pe + 20)[0]
+        optional = pe + 24
+        magic = unpack("<H", optional)[0]
+        directory = {0x10b: 96, 0x20b: 112}.get(magic)
+        if directory is None or optional_size < directory + 24 or sections > 96:
+            raise ValueError("Installer has an unsupported PE header")
+        if unpack("<I", optional + directory - 4)[0] < 3:
+            raise ValueError("Installer has no version resources")
+        resource_rva, resource_size = unpack("<II", optional + directory + 16)
+        section_table = optional + optional_size
+        def mapped(rva, size):
+            for index in range(sections):
+                offset = section_table + index * 40
+                virtual, address, raw_size, raw = unpack("<IIII", offset + 8)
+                if address <= rva and rva - address + size <= raw_size:
+                    result = raw + rva - address
+                    if result + size <= len(image):
+                        return result
+            raise ValueError("Installer version resource points outside the PE image")
+        if not 16 <= resource_size <= 16 * 1024 * 1024:
+            raise ValueError("Installer resource directory is missing or too large")
+        resource = bytes(image[mapped(resource_rva, resource_size):mapped(resource_rva, resource_size) + resource_size])
+        def resource_unpack(fmt, offset):
+            if offset < 0 or offset + struct.calcsize(fmt) > len(resource):
+                raise ValueError("Installer resource offset is out of bounds")
+            return struct.unpack_from(fmt, resource, offset)
+        visited = set()
+        versions = []
+        def blocks(data, start, limit, parents=()):
+            if len(parents) > 4 or start + 6 > limit:
+                raise ValueError("Malformed installer version block")
+            length, value_length, kind = struct.unpack_from("<HHH", data, start)
+            end = start + length
+            if length < 8 or end > limit or kind not in (0, 1):
+                raise ValueError("Malformed installer version block length")
+            key_end = start + 6
+            while key_end + 2 <= end and data[key_end:key_end + 2] != b"\0\0":
+                key_end += 2
+            if key_end + 2 > end:
+                raise ValueError("Unterminated installer version key")
+            key = data[start + 6:key_end].decode("utf-16-le")
+            value_start = (key_end + 5) & ~3
+            value_end = value_start + value_length * (2 if kind else 1)
+            if value_end > end:
+                raise ValueError("Installer version value exceeds its block")
+            if not parents and key != "VS_VERSION_INFO":
+                raise ValueError("Installer version resource has the wrong root")
+            if len(parents) == 3 and parents[1] == "StringFileInfo" and key == "ProductVersion":
+                if kind != 1 or not value_length:
+                    raise ValueError("Installer ProductVersion is not text")
+                text = data[value_start:value_end].decode("utf-16-le").rstrip("\0").rstrip(" ")
+                if "\0" in text:
+                    raise ValueError("Installer ProductVersion contains a null")
+                versions.append(text)
+            child = (value_end + 3) & ~3
+            while child + 6 <= end:
+                child = (blocks(data, child, end, parents + (key,)) + 3) & ~3
+            return end
+        def walk(offset, level):
+            if level > 2 or offset in visited or len(visited) > 256:
+                raise ValueError("Malformed installer resource directory")
+            visited.add(offset)
+            named, ids = resource_unpack("<HH", offset + 12)
+            if named + ids > 256:
+                raise ValueError("Installer resource directory has too many entries")
+            for index in range(named + ids):
+                name, target = resource_unpack("<II", offset + 16 + index * 8)
+                if level == 0 and name != 16:
+                    continue
+                if target & 0x80000000:
+                    walk(target & 0x7fffffff, level + 1)
+                else:
+                    if level != 2:
+                        raise ValueError("Installer version resource has the wrong depth")
+                    rva, size = resource_unpack("<II", target)
+                    if not 8 <= size <= 1024 * 1024:
+                        raise ValueError("Installer version resource is missing or too large")
+                    begin = mapped(rva, size)
+                    blocks(bytes(image[begin:begin + size]), 0, size)
+        walk(0, 0)
+        if not versions or len(set(versions)) != 1:
+            raise ValueError("Installer has missing or conflicting ProductVersion strings")
+        return versions[0]
 
 
 def trusted_key(key_id):
@@ -99,6 +198,9 @@ def verify_manifest(data, installer=None, feed_url=None):
 
 def manifest(args):
     check_version(args.version)
+    actual_version = product_version(args.installer)
+    if actual_version != args.version:
+        raise ValueError("Installer ProductVersion '" + actual_version + "' differs from --version '" + args.version + "'")
     size, sha = file_identity(args.installer)
     key_bytes = Path(args.key).read_bytes()
     private = serialization.load_pem_private_key(key_bytes, password=None)
@@ -200,7 +302,7 @@ def main():
             print(json.dumps({"verified": True, "version": payload["version"], "installer": payload["installer"]}))
         else:
             publish(args)
-    except (ValueError, KeyError, TypeError, AttributeError, OSError, InvalidSignature) as error:
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, struct.error, InvalidSignature) as error:
         print("Update release refused: " + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)), file=sys.stderr)
         return 1
     return 0

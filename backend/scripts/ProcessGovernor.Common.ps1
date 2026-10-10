@@ -202,15 +202,15 @@ function Get-RooIndustriesGovernorProcessSnapshot {
         }
         $cim = $cimById[$processIdValue]
         $path = $null
-        try { $path = $live.Path } catch { $path = $null }
+        $query = $null
+        try { $query = Get-RooIndustriesProcessQuerySnapshot $live; $path = $query.executablePath } catch { $path = $null }
         if ([string]::IsNullOrWhiteSpace([string]$path) -and $cim) { $path = $cim.ExecutablePath }
         $sessionId = $null
         try { $sessionId = [int]$live.SessionId } catch { $sessionId = $null }
         $category = Get-RooIndustriesGovernorProcessCategory $name
         $cpuSeconds = $null
         $priority = $null
-        try { $cpuSeconds = [double]$live.CPU } catch { $cpuSeconds = $null }
-        try { $priority = [string]$live.PriorityClass } catch { $priority = $null }
+        if($query){$cpuSeconds=$query.cpuSeconds;$priority=$query.priorityClass}
         $workingSetBytes = [uint64]0
         $privateBytes = [uint64]0
         try { $workingSetBytes = [uint64]$live.WorkingSet64 } catch { $workingSetBytes = [uint64]0 }
@@ -485,7 +485,9 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
     $processId = [int](Get-RooIndustriesPropertyValue $Process 'pid' 0)
     $processName = [string](Get-RooIndustriesPropertyValue $Process 'name' '')
     $cpuPercent = [double](Get-RooIndustriesPropertyValue $Process 'cpuPercent' 0)
-    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null)
+    $thresholdMet = ($TotalCpuPercent -ge [double]$Config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$Config.perProcessCpuThresholdPercent)
+    $readGpu = -not $decision.blocked -and $decision.candidateMatched -and $thresholdMet -and (Test-RooIndustriesGpuPriorityAllowed ([string]$Config.gpuPriority))
+    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null) -ReadGpu:$readGpu
     $currentPriority = $currentControls.priorityClass
     $currentAffinity = $currentControls.affinityMask
     $currentIoPriority = $currentControls.ioPriority
@@ -498,7 +500,6 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
     $proposedGpuPriority = $currentGpuPriority
     $controlChanges = New-Object System.Collections.Generic.List[object]
     $blocked = [bool]$decision.blocked
-    $thresholdMet = ($TotalCpuPercent -ge [double]$Config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$Config.perProcessCpuThresholdPercent)
     $reason = $null
     if ($blocked) {
         $reason = ($decision.skipReasons -join ' ')
@@ -517,7 +518,7 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
         } else {
             $reason = "$reason Governor would apply restraint after the configured grace period if sustained."
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$Config.priorityClass) -and [string]$currentPriority -ne [string]$Config.priorityClass) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$Config.priorityClass)) {
             if (Test-RooIndustriesPriorityAllowed ([string]$Config.priorityClass)) {
                 $proposedPriority = [string]$Config.priorityClass
                 $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $proposedPriority 'setPriority' 'Temporarily lower background offender priority.')) | Out-Null
@@ -537,7 +538,7 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
                 $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinity $configuredAffinity 'setAffinity' 'Requested CPU affinity is invalid.' $true $reason)) | Out-Null
             }
         }
-        if (-not $blocked -and -not [string]::IsNullOrWhiteSpace([string]$Config.ioPriority) -and [string]$currentIoPriority -ne [string]$Config.ioPriority) {
+        if (-not $blocked -and -not [string]::IsNullOrWhiteSpace([string]$Config.ioPriority)) {
             if (Test-RooIndustriesIoPriorityAllowed ([string]$Config.ioPriority)) {
                 $proposedIoPriority = [string]$Config.ioPriority
                 $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $proposedIoPriority 'setIoPriority' 'Temporarily lower background offender I/O priority.')) | Out-Null
@@ -546,7 +547,7 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
                 $reason = "I/O priority '$($Config.ioPriority)' is outside the allow-list."
             }
         }
-        if (-not $blocked -and $null -ne $Config.memoryPriority -and [string]$currentMemoryPriority -ne [string]$Config.memoryPriority) {
+        if (-not $blocked -and $null -ne $Config.memoryPriority) {
             $memoryChange = New-RooIndustriesControlChange 'memoryPriority' $currentMemoryPriority $Config.memoryPriority 'setMemoryPriority' 'Temporarily lower background offender memory priority.'
             $memoryReason = Get-RooIndustriesControlChangeValidationReason $memoryChange $currentControls
             if ($memoryReason) {
@@ -570,6 +571,18 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
                 $proposedGpuPriority = [string]$Config.gpuPriority
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $proposedGpuPriority 'setGpuPriority' 'Temporarily set background offender GPU scheduling priority.')) | Out-Null
             }
+        }
+    }
+
+    $directed = Select-RooIndustriesPriorityDirection @($controlChanges.ToArray()) 'lower'
+    $controlChanges.Clear()
+    foreach ($change in $directed.changes) { $controlChanges.Add($change) | Out-Null }
+    foreach ($skip in $directed.skippedControls) {
+        $reason += ' ' + $skip.reason
+        switch ($skip.control) {
+            'priorityClass' { $proposedPriority = $currentPriority }
+            'ioPriority' { $proposedIoPriority = $currentIoPriority }
+            'memoryPriority' { $proposedMemoryPriority = $currentMemoryPriority }
         }
     }
 
@@ -607,6 +620,7 @@ function New-RooIndustriesProcessGovernorPreviewEntry {
         gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentControls 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
+        skippedControls = $directed.skippedControls
         ruleId = $ruleId
         reason = $reason
         reasonCodes = @($decision.reasonCodes)
@@ -736,7 +750,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
             if (-not $pathMatches) { $pathReason = 'Live process path does not match the session entry.' }
         }
     }
-    $controlState = Get-RooIndustriesProcessControlState $processId $null $live
+    $controlState = Get-RooIndustriesProcessControlState $processId $null $live -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $Entry)
     $expectedStartTimeUtc = [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' (Get-RooIndustriesPropertyValue $Entry 'startTimeUtc' ''))
     $currentStartTimeUtc = [string](Get-RooIndustriesPropertyValue $controlState 'startTimeUtc' '')
     $startTimeMatches = $true
