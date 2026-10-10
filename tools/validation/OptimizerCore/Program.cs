@@ -45,7 +45,10 @@ if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }
 if (args is ["--batch-state"]) { CleanupBatchStateChecks.Run(Check); return; }
-if (args.Length != 0) throw new ArgumentException("Unknown validation area.");
+var processOnly = args is ["--process-controls"];
+if (args.Length != 0 && !processOnly) throw new ArgumentException("Unknown validation area.");
+if (!processOnly)
+{
 BrandCompatibilityChecks.Run(Check);
 DataFolderChecks.Run(Check, []);
 using (var self = Process.GetCurrentProcess())
@@ -64,6 +67,7 @@ using (var self = Process.GetCurrentProcess())
     }
     finally { GC.EndNoGCRegion(); }
     Check(after <= before + 8, $"Repeated ownership queries release native handles without waiting for GC ({before} to {after})");
+}
 }
 void Reject(Action operation, string message)
 {
@@ -214,6 +218,7 @@ finally
     Directory.Delete(root, true);
 }
 Check(!Directory.Exists(root), "Core validation removes its process and operation files");
+if (processOnly) return;
 OperationFileChecks.Run(Check);
 ReplaceRaceChecks.Run(Check);
 ReplaceFaultChecks.Run(Check);

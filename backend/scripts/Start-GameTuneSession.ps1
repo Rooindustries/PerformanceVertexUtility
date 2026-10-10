@@ -220,7 +220,7 @@ try {
                     $snapshotsByKey[$snapshotKey] = $snapshot
                 } else {
                     $known = $snapshotsByKey[$snapshotKey]
-                    $recordedControls = @(Get-RooIndustriesPropertyArray $known 'controlChanges' | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+                    $recordedControls = @(Get-RooIndustriesPropertyArray $known 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' } | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
                     $later = @($entryControlChanges | Where-Object { $recordedControls -notcontains [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
                     foreach ($change in $later) {
                         switch ([string](Get-RooIndustriesPropertyValue $change 'control' '')) {
@@ -231,9 +231,11 @@ try {
                             'gpuPriority' { $known.originalGpuPriority = $originalState.gpuPriority }
                         }
                     }
-                    if ($later.Count -gt 0) { $known.controlChanges = @($known.controlChanges) + $later }
+                    if ($later.Count -gt 0) { $known.controlChanges = @($known.controlChanges | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' }) + $later }
                 }
 
+                $known = $snapshotsByKey[$snapshotKey]
+                foreach ($change in $entryControlChanges) { $known.controlChanges = @($known.controlChanges | Where-Object { $_.control -ne $change.control }) + @($change) }
                 $backupManifest.snapshots = @($snapshots.ToArray())
                 $backupPath = Join-Path $sessionDirectory 'backup.json'
                 Write-RooIndustriesGameTuneJsonFile $backupManifest $backupPath
@@ -250,6 +252,10 @@ try {
                         $appliedControls.Add($change) | Out-Null
                     } catch {
                         $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                    } finally {
+                        $known = $snapshotsByKey[$snapshotKey]
+                        $known.controlChanges = @($known.controlChanges | Where-Object { $_.control -ne $change.control }) + @($change)
+                        Write-RooIndustriesGameTuneJsonFile $backupManifest $backupPath
                     }
                 }
 

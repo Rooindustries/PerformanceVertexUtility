@@ -32,7 +32,7 @@ function New-GovernorRestorePreview {
     $currentState = if ($blocked) {
         [pscustomobject]@{ priorityClass = $null; affinityMask = $null; ioPriority = $null; memoryPriority = $null; memoryPriorityAvailable = $false; gpuPriority = $null; gpuPriorityAvailable = $false }
     } else {
-        Get-RooIndustriesProcessControlState $processId $null
+        $Candidate.currentControlState
     }
     if (-not $blocked) {
         if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and (Test-RooIndustriesPriorityAllowed ([string]$originalPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null) -ne [string]$originalPriority) {
@@ -51,7 +51,6 @@ function New-GovernorRestorePreview {
             if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
             } else {
-                $blocked = $true
                 $reason = 'GPU scheduling priority is unavailable for this restore target.'
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
             }
@@ -63,7 +62,7 @@ function New-GovernorRestorePreview {
     $selectedChanges=@(Select-RooIndustriesGovernorOwnedRestoreChanges $Snapshot @($controlChanges.ToArray()))
     $controlChanges.Clear()
     foreach($change in $selectedChanges){$controlChanges.Add($change)|Out-Null}
-    $blocked=(-not $Candidate.exists) -or (-not $Candidate.matches) -or @($selectedChanges|Where-Object {$_.blocked}).Count -gt 0
+    $blocked=(-not $Candidate.exists) -or (-not $Candidate.matches)
     if(@($selectedChanges|Where-Object {$_.blocked}).Count -gt 0){$reason='A recorded control changed externally; its current value was preserved.'}
     $selectedControls=@($selectedChanges|ForEach-Object {$_.control})
     if($selectedControls -notcontains 'priorityClass'){$originalPriority=Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null}
@@ -81,6 +80,7 @@ function New-GovernorRestorePreview {
         processId = $processId
         processName = $processName
         executablePath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
+        processStartTimeUtc = Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null
         currentPriorityClass = Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null
         proposedPriorityClass = if ($blocked) { Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null } else { $originalPriority }
         currentAffinityMask = Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null
@@ -220,15 +220,19 @@ try {
                 continue
             }
             $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $live = Get-Process -Id $processId -ErrorAction SilentlyContinue
-            if ($null -eq $live) {
+            $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entry
+            if (-not $identity.exists -or -not $identity.matches) {
                 $skipped.Add([pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = 'Process exited before governor restore.'
+                    reason = $identity.reason
                     skippedAtUtc = Get-RooIndustriesUtcStamp
                 }) | Out-Null
                 continue
+            }
+            $live = $identity.process
+            foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
+                $skipped.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $control.control; reason = $control.blockedReason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
             }
             $entryControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entry))
             if ($entryControlChanges.Count -eq 0) { continue }

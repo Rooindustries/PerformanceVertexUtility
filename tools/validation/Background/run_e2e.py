@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--machine', choices=['9070', 'blackwell'], default='9070')
     parser.add_argument('--receipt', type=Path, required=True)
-    parser.add_argument('--scenario', required=True, choices=['build', 'presets', 'placement-origins', 'game-memory', 'limits-memory', 'identity', 'memory-controls', 'memory-ownership', 'priority', 'games', 'guides', 'services', 'background-ui', 'memory', 'install'])
+    parser.add_argument('--scenario', required=True, choices=['build', 'presets', 'placement-origins', 'game-memory', 'limits-memory', 'identity', 'memory-controls', 'memory-ownership', 'fix-round', 'priority', 'games', 'guides', 'services', 'background-ui', 'memory', 'install'])
     parser.add_argument('--out-root')
     parser.add_argument('--arguments', default='{}')
     args = parser.parse_args()
@@ -24,7 +24,7 @@ def main():
     output = args.out_root or receipt['runRoot'] + '\\evidence'
     fields = {'Source': source, 'OutRoot': output}
     fields.update(json.loads(args.arguments))
-    scripts = {'build': 'Build-Merged.ps1', 'memory': 'Measure-MemoryBaseline.ps1', 'memory-ownership': 'Test-MemoryOwnership.ps1'}
+    scripts = {'build': 'Build-Merged.ps1', 'memory': 'Measure-MemoryBaseline.ps1', 'memory-ownership': 'Test-MemoryOwnership.ps1', 'fix-round': 'Test-FixRound.ps1'}
     if args.scenario in ('presets', 'placement-origins', 'game-memory', 'limits-memory', 'identity', 'memory-controls'):
         script = 'Invoke-BackgroundScenario.ps1'
         fields['Scenario'] = args.scenario

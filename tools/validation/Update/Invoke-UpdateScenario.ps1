@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
-    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','cleanup')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='0.11.0-beta', [string]$EvidenceName='')
+    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup')][string]$Scenario,
+    [string]$InstallerPath='', [string]$ExpectedVersion='0.11.0-beta', [string]$EvidenceName='', [switch]$ResumeCopyRecovery)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
@@ -135,7 +135,7 @@ try{
   }
   'cleanup' {Launch;Settings;Save 'final.json' (Readback);StopApp}
   default {
-   Launch;Settings
+   if(-not$ResumeCopyRecovery){Launch;Settings}
    if($Scenario -in 'ready','scheduled-download'){
     $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
     if([string]$toggle.Current.ToggleState -eq 'Off'){$toggle.Toggle()}
@@ -164,11 +164,28 @@ try{
     'scheduled-download' {$started=[DateTime]::UtcNow;WaitStatus 'Version 0.11.1-beta is ready to install' 180|Out-Null;Save 'scheduled.json' @{checkButtonPressed=$false;secondsFromSettings=([DateTime]::UtcNow-$started).TotalSeconds};Preserved}
     'blocked' {Click 'UpdateInstallButton';WaitStatus "Stop your game session and turn off the timer setting first. The update can't install while they run."|Out-Null}
     'cancel' {Click 'UpdateInstallButton';WaitFor {ByName 'Not now'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Not now');WaitFor {(ById 'UpdateInstallButton').Current.IsEnabled} 20 'canceled'}
-    {$_ -in 'install','failure'} {
-     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Install')
-     WaitFor {if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null
-     $script:owned=$null;$script:app=$null;$script:window=$null;Attach;Settings
-     if($Scenario -eq 'install'){WaitStatus 'Updated to version 0.11.1-beta' 90|Out-Null;if((Version) -ne '0.11.1-beta'){throw 'Installed version did not advance'}}else{WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne '0.11.0-beta'){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null}
+    {$_ -in 'install','failure','copy-failure'} {
+     $prior=0
+     if(-not$ResumeCopyRecovery){$prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Install')
+      WaitFor {if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null}
+     if($Scenario -eq 'copy-failure'){
+      $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -like '*Setup*Roo Industries*' -and $_.Current.ClassName -eq 'TWizardForm'}|Select-Object -First 1} 180 'interactive recovery setup'
+      $setup=Get-Process -Id $script:window.Current.ProcessId;$script:setupReceipts.Add((New-OwnedProcess $setup))
+      Save 'missing-executable.json' @{exists=(Test-Path $exe -PathType Leaf);destinationIsDirectory=(Test-Path $exe -PathType Container);installedVersion=Version;setupPid=$script:window.Current.ProcessId;processStarts=@(ProcessStarts)}
+      if(Test-Path $exe -PathType Leaf){throw 'Copy-failure fixture did not remove the old executable'}
+      Shot 'interactive-recovery'
+      $until=[DateTime]::UtcNow.AddMinutes(6);$guideCleared=$false
+      while(-not$setup.HasExited -and [DateTime]::UtcNow -lt $until){
+       foreach($name in 'Read the beta tester guide','Open Roo Industries Optimization Suite'){$box=ByName $name;if($box){try{$toggle=$box.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}catch{}}}
+       if(-not$guideCleared -and (ByNameControl 'Finish' $CT::Button)){$list=$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'));if($list){[IntPtr]$result=[IntPtr]::Zero;$handle=[IntPtr]::new($list.Current.NativeWindowHandle);[RooUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::Zero,[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;$guideCleared=$true}}
+       foreach($name in 'Finish','Install','Next >','Next'){$button=ByNameControl $name $CT::Button;if($button -and $button.Current.IsEnabled){Activate $button;Start-Sleep -Milliseconds 500;break}}
+       Start-Sleep -Milliseconds 200
+      }
+      if(-not$setup.HasExited -or -not(Test-Path $exe -PathType Leaf)){throw 'Interactive recovery did not restore the executable'}
+      Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-Path $exe -PathType Leaf)}
+     }
+     $script:owned=$null;$script:app=$null;$script:window=$null;if($Scenario -eq 'copy-failure'){Launch}else{Attach};Settings
+     if($Scenario -in 'install','copy-failure'){WaitStatus 'Updated to version 0.11.1-beta' 90|Out-Null;if((Version) -ne '0.11.1-beta'){throw 'Installed version did not advance'}}else{WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne '0.11.0-beta'){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to 0.11.1-beta didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
    }

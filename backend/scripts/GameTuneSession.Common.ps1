@@ -29,7 +29,7 @@ function Write-RooIndustriesGameTuneJsonFile {
         [string]$Path
     )
     Ensure-RooIndustriesDirectory (Split-Path $Path -Parent)
-    ($Value | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $Path -Encoding UTF8
+    Write-RooIndustriesOperationJson $Value $Path
 }
 
 function Add-RooIndustriesGameTuneLogFileEntry {

@@ -259,7 +259,14 @@ begin
         Log('Could not relaunch Roo Industries after update setup: ' + IntToStr(Code));
     end
     else
-      Log('Roo Industries update relaunch skipped because the app executable is missing.');
+    begin
+      AppPath := ExpandConstant('{srcexe}');
+      Log('Roo Industries app executable is missing; opening update setup interactively for recovery.');
+      if Exec(AppPath, '', ExtractFileDir(AppPath), SW_SHOWNORMAL, ewNoWait, Code) then
+        Log('Opened interactive Roo Industries setup after failed update.')
+      else
+        Log('Could not open interactive Roo Industries recovery setup: ' + IntToStr(Code));
+    end;
   end;
 end;
 

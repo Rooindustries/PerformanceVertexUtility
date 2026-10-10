@@ -29,7 +29,7 @@ function Write-RooIndustriesProcessGovernorJsonFile {
         [string]$Path
     )
     Ensure-RooIndustriesDirectory (Split-Path $Path -Parent)
-    ($Value | ConvertTo-Json -Depth 36) | Set-Content -LiteralPath $Path -Encoding UTF8
+    Write-RooIndustriesOperationJson $Value $Path
 }
 
 function Add-RooIndustriesProcessGovernorLogFileEntry {
@@ -694,7 +694,7 @@ function Get-RooIndustriesProcessGovernorPreview {
 
 function Select-RooIndustriesGovernorOwnedRestoreChanges {
     param($Snapshot,[object[]]$Changes)
-    $recorded=if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')}
+    $recorded=if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })}
     foreach($change in $Changes) {
         $control=[string](Get-RooIndustriesPropertyValue $change 'control' '')
         $owned=@($recorded|Where-Object {[string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control -and -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false)})
@@ -723,7 +723,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     $expectedName = [string](Get-RooIndustriesPropertyValue $Entry 'processName' '')
     $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $currentPath = $null
-    try { $currentPath = $live.Path } catch { $currentPath = $null }
+    try { $held = $live.Handle; $currentPath = $live.Path } catch { return [pscustomobject]@{ exists = $true; matches = $false; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
     $expectedPath = Get-RooIndustriesPropertyValue $Entry 'executablePath' $null
     $pathMatches = $true
     $pathReason = $null
@@ -736,7 +736,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
             if (-not $pathMatches) { $pathReason = 'Live process path does not match the session entry.' }
         }
     }
-    $controlState = Get-RooIndustriesProcessControlState $processId $null
+    $controlState = Get-RooIndustriesProcessControlState $processId $null $live
     $expectedStartTimeUtc = [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' (Get-RooIndustriesPropertyValue $Entry 'startTimeUtc' ''))
     $currentStartTimeUtc = [string](Get-RooIndustriesPropertyValue $controlState 'startTimeUtc' '')
     $startTimeMatches = $true
@@ -745,7 +745,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
         if ([string]::IsNullOrWhiteSpace($currentStartTimeUtc)) {
             $startTimeMatches = $false
             $startTimeReason = 'Live process start time could not be verified.'
-        } elseif ($currentStartTimeUtc -ne $expectedStartTimeUtc) {
+        } elseif (-not (Test-RooIndustriesProcessStartTime $expectedStartTimeUtc $currentStartTimeUtc)) {
             $startTimeMatches = $false
             $startTimeReason = 'Live process start time does not match the session entry.'
         }

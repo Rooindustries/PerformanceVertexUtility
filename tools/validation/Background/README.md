@@ -77,6 +77,8 @@ also save UIAutomation text/trees and screenshots. Collect the receipt's
 `runRoot\evidence` with SCP before removing an owned frame. Do not remove other
 frames, scheduled tasks or processes.
 
+Fix-round failure cases: a job may accept a priority write but keep its pinned value; each flow must report that control as failed, retain the other successful fields, and exclude the failed field from subsequent restore ownership. A governor restore may find one field changed externally; it must preserve that field while restoring the rest. A matching PID/name/path with a different start time must refuse every write, including when reopening the process after preview. New named scenarios record independent CPU, affinity, I/O and memory readback, backup outcomes, skips and cleanup.
+
 For a controlled reproduction against an earlier staged backend,
 `--arguments '{"BackendSource":"C:\\RooBuild\\<earlier-frame>\\source"}'` selects
 that backend only inside the fixture driver. It does not change the installed

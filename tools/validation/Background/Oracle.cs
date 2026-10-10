@@ -65,10 +65,15 @@ public static class RooBackgroundOracle
         if(!SetKernelObjectSecurity(p.Handle,4,changed)) throw new Win32Exception();return original;
     }
     public static void RestoreDacl(Process p,byte[] bytes) { if(!SetKernelObjectSecurity(p.Handle,4,bytes)) throw new Win32Exception(); }
-    public static IntPtr PinNormal(Process p) {
+    public static IntPtr PinNormal(Process p) { return PinPriority(p,0x20); }
+    public static IntPtr PinPriority(Process p,uint priority) {
         var job=CreateJobObject(IntPtr.Zero,null);if(job==IntPtr.Zero)throw new Win32Exception();
-        var limits=new Limits { flags=0x20, priority=0x20 };
+        var limits=new Limits { flags=0x20, priority=priority };
         if(!SetInformationJobObject(job,2,ref limits,(uint)Marshal.SizeOf(typeof(Limits))) || !AssignProcessToJobObject(job,p.Handle)) { CloseHandle(job); throw new Win32Exception(); }
         return job;
+    }
+    public static void ChangeJobPriority(IntPtr job,uint priority) {
+        var limits=new Limits { flags=priority==0 ? 0u : 0x20u, priority=priority };
+        if(!SetInformationJobObject(job,2,ref limits,(uint)Marshal.SizeOf(typeof(Limits)))) throw new Win32Exception();
     }
 }

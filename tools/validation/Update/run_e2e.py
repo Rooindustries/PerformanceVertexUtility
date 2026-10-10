@@ -135,8 +135,10 @@ def contracts(receipt, builds, pc_out, installer, valid):
 
 
 def main():
+    global OUT
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "cleanup", "contracts"])
+    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts"])
+    parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--build-root")
     parser.add_argument("--evidence-root")
@@ -144,6 +146,8 @@ def main():
     parser.add_argument("--skip-contracts", action="store_true")
     parser.add_argument("--from-scenario", help="Resume the all-scenarios journey at a named scenario using its retained baseline")
     args = parser.parse_args()
+    if args.out_dir:
+        OUT = args.out_dir.resolve()
     OUT.mkdir(parents=True, exist_ok=True)
     receipt_path = args.receipt or OUT / "receipt.json"
     if args.scenario in ("all", "build") and args.receipt is None and not args.skip_build:
@@ -241,10 +245,12 @@ def main():
         command(["sudo", "-n", "tailscale", "serve", "--bg", "--https=8460", "http://127.0.0.1:13684"], OUT / "tailscale-start.log")
         serving = True
         remote("$r=Invoke-WebRequest -UseBasicParsing " + windows.ps_literal(FEED) + ";@{status=$r.StatusCode;bytes=$r.RawContentLength}|ConvertTo-Json", "feed-reachability")
-        sequence = ["seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "cleanup"] if args.scenario == "all" else [args.scenario]
+        sequence = ["seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup"] if args.scenario == "all" else [args.scenario]
         if args.from_scenario:
             sequence = sequence[sequence.index(args.from_scenario):]
         for name in sequence:
+            if name in ("seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download"):
+                fixture("reset-download")
             if name == "feed-down":
                 stop_server()
             elif name == "slow-feed":
@@ -296,6 +302,21 @@ def main():
                     scenario(name)
                 finally:
                     fixture("unblock-setup")
+            elif name == "copy-failure":
+                shutil.copyfile(OUT / "same.json", feed_file)
+                scenario("manual-install", builds + "\\A\\" + a.name, "reset-A-before-copy-failure")
+                fixture("reset-download")
+                fixture_installer = OUT / "builds/copy-failure" / b.name
+                interactive(receipt, "tools/validation/Update/Build-CopyFailureFixture.ps1", {"Source": source, "Stage": builds + r"\B\work-0.11.1-beta\stage", "OutRoot": builds + r"\copy-failure"}, "BuildCopyFailure", 8)
+                copy_from(builds + "\\copy-failure\\" + b.name, fixture_installer)
+                shutil.copyfile(fixture_installer, installer_file)
+                copy_manifest = OUT / "copy-failure.json"
+                signed(fixture_installer, "0.11.1-beta", url, copy_manifest)
+                shutil.copyfile(copy_manifest, feed_file)
+                scenario("ready", evidence_name="copy-failure-ready")
+                scenario(name)
+                shutil.copyfile(OUT / "same.json", feed_file)
+                scenario("manual-install", builds + "\\A\\" + a.name, "reset-A-after-copy-failure")
             elif name == "contracts":
                 remote("'Use UpdateProbe with each retained signed contract manifest.'", "contracts")
             else:

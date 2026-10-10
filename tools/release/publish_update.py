@@ -142,8 +142,8 @@ def publish(args):
     if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
         raise ValueError("Installer path differs from the signed URL")
     commands = [
-        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--add-random-suffix", "false", "--allow-overwrite", "false", "--content-type", "application/octet-stream"],
-        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--add-random-suffix", "false", "--allow-overwrite", "true", "--cache-control-max-age", "60", "--content-type", "application/json"],
+        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--content-type", "application/octet-stream"],
+        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"],
     ]
     for command in commands:
         print(shlex.join(command))
