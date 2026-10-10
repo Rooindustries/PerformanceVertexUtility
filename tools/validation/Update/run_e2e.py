@@ -146,6 +146,7 @@ def main():
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--fixture-exe")
+    parser.add_argument("--manual-retry", action="store_true")
     parser.add_argument("--transport-fault", choices=["http-error", "disconnect"], default="disconnect")
     parser.add_argument("--build-root")
     parser.add_argument("--evidence-root")
@@ -246,6 +247,8 @@ def main():
             log = None
     def scenario(name, installer=None, evidence_name=None):
         fields = {"Source": source, "OutRoot": pc_out, "Scenario": name}
+        if args.manual_retry:
+            fields["ManualRetry"] = True
         if installer:
             fields["InstallerPath"] = installer
         if evidence_name:

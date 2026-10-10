@@ -26,7 +26,8 @@ public sealed record PendingUpdate([property: JsonRequired] string FromVersion, 
 public sealed class UpdateService
 {
     private const string Blocked = "Stop your game session and turn off the timer setting first. The update can't install while they run.";
-    private const string Mismatch = "The download didn't match the signed release, so it was deleted. The app will try again later.";
+    private string DownloadRetry => AutomaticDownloads ? "The app will try again later." : "Press Download to try again.";
+    private string Mismatch => "The download didn't match the signed release, so it was deleted. " + DownloadRetry;
     private readonly Uri? _feed;
     private readonly HttpClient _http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = Timeout.InfiniteTimeSpan };
     private readonly SettingsStore _settings = new();
@@ -268,7 +269,7 @@ public sealed class UpdateService
 
     private void DownloadFailed(string reason)
     {
-        var message = "Couldn't download the update: " + reason.TrimEnd('.') + ". The app will try again later.";
+        var message = "Couldn't download the update: " + reason.TrimEnd('.') + ". " + DownloadRetry;
         Set(State with { Ready = false, CanDownload = true, Status = message, Banner = "", BannerKind = "" });
         AppLog.Write("update", message);
     }

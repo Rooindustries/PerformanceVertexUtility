@@ -19,6 +19,49 @@
     },
     "protectedProcesses": [
       {
+        "itemId": "protect-game-launchers-names",
+        "type": "process",
+        "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+        "reasonCodes": [
+          "GAME_LAUNCHER_PROTECTED"
+        ],
+        "defaultAction": "block",
+        "names": [
+          "Battle.net.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "RiotClientServices.exe",
+          "EADesktop.exe",
+          "UbisoftConnect.exe",
+          "GalaxyClient.exe",
+          "gamelaunchhelper.exe"
+        ]
+      },
+      {
+        "itemId": "protect-game-launchers-patterns",
+        "type": "process",
+        "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+        "reasonCodes": [
+          "GAME_LAUNCHER_PROTECTED"
+        ],
+        "defaultAction": "block",
+        "namePatterns": [
+          "*launcher*.exe"
+        ]
+      },
+      {
+        "itemId": "protect-game-launchers-category",
+        "type": "process",
+        "reason": "Game launchers are left unchanged so games do not inherit background priority or CPU placement.",
+        "reasonCodes": [
+          "GAME_LAUNCHER_PROTECTED"
+        ],
+        "defaultAction": "block",
+        "processCategories": [
+          "launcher"
+        ]
+      },
+      {
         "itemId": "protect-game-capture-voice-driver-network",
         "type": "process",
         "names": [
@@ -72,35 +115,32 @@
         "risk": "low"
       },
       {
-        "ruleId": "policy-launcher-background",
+        "ruleId": "policy-updater-background",
         "enabled": true,
         "allowConfirmedApply": false,
         "match": {
-          "processNames": [
-            "Battle.net.exe",
-            "steam.exe",
-            "EpicGamesLauncher.exe",
-            "RiotClientServices.exe",
-            "EADesktop.exe",
-            "UbisoftConnect.exe"
-          ],
+          "processNames": [],
           "excludeProcessNames": [
             "MicrosoftEdgeUpdate.exe",
             "MoUsoCoreWorker.exe",
             "UsoClient.exe",
             "TiWorker.exe",
             "TrustedInstaller.exe"
+          ],
+          "namePatterns": [
+            "*updater*.exe",
+            "*update*.exe"
           ]
         },
         "controls": {
           "priorityClass": "BelowNormal"
         },
-        "reason": "Launchers can be kept below normal priority after the game is already running when a safe apply profile allows it.",
+        "reason": "Updaters can be kept below normal priority when a safe apply profile allows it. Game launchers are left unchanged.",
         "reasonCodes": [
-          "PERSISTENT_POLICY_LAUNCHER"
+          "PERSISTENT_POLICY_UPDATER"
         ],
         "scenarioTags": [
-          "launcher",
+          "updater",
           "game"
         ],
         "risk": "low"

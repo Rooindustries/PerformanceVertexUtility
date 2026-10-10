@@ -48,7 +48,8 @@
           "RiotClientServices.exe",
           "EADesktop.exe",
           "UbisoftConnect.exe",
-          "GalaxyClient.exe"
+          "GalaxyClient.exe",
+          "gamelaunchhelper.exe"
         ],
         "namePatterns": [
           "*launcher*.exe"

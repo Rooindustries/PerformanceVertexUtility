@@ -213,7 +213,7 @@ function Invoke-GovernorActiveRestore {
         return $false
     }
 
-    $currentState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null
+    $currentState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
     $restoreChanges = @(Get-GovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
     $restoreFailed = $false
@@ -230,7 +230,7 @@ function Invoke-GovernorActiveRestore {
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONTROL_FAILED' $_.Exception.Message 'error' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $true 'Stop the session and retry restore if the process is still running.' $null)) | Out-Null
         }
     }
-    $restoredState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null
+    $restoredState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
     $restoreItem = New-GovernorRestoredItem $snapshot $restoredState @($appliedRestoreControls.ToArray()) $Reason $PollIndex
     if($appliedRestoreControls.Count -gt 0) {
         if(@($restoreChanges|Where-Object {$_.blocked}).Count -gt 0){$restoreItem.reason='Restored owned controls; conflicting external controls were preserved.'}
@@ -546,7 +546,7 @@ try {
                         }
                     }
                     if ($appliedControls.Count -gt 0) {
-                        $appliedState = Get-RooIndustriesProcessControlState $processId $null
+                        $appliedState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entryToApply)
                         $changedItem = New-GovernorChangedItem $entryToApply $originalState $appliedState @($appliedControls.ToArray()) $pollIndex $sustainedSeconds
                         $changed.Add($changedItem) | Out-Null
                         $pollChanged.Add($changedItem) | Out-Null

@@ -25,7 +25,7 @@ public sealed class SettingsStore
     {
         try
         {
-            if (TryLoad(_filePath, out var latest, out var loadError))
+            if (TryLoad(_filePath, out var latest, out var loadError, allowMissing: !_loaded))
             {
                 _values = latest;
                 _loaded = true;
@@ -51,6 +51,17 @@ public sealed class SettingsStore
             values = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
                 ?? throw new JsonException("The settings file is empty.");
             return true;
+        }
+        catch (JsonException failure)
+        {
+            try
+            {
+                var archive = path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ") + "-" + Guid.NewGuid().ToString("N");
+                File.Move(path, archive);
+                AppLog.Write("settings", "The settings file contained invalid JSON. Kept it at " + archive + ": " + failure.Message);
+                return allowMissing;
+            }
+            catch (Exception archiveError) { error = archiveError.Message; return false; }
         }
         catch (FileNotFoundException failure) { error = failure.Message; return allowMissing; }
         catch (Exception failure)
