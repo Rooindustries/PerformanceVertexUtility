@@ -7,10 +7,12 @@ using System.Security.Principal;
 
 public static class RooBackgroundOracle
 {
+    [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessInformation(IntPtr h, int kind, out uint value, int size);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetProcessInformation(IntPtr h, int kind, ref uint value, int size);
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr h, int kind, out int value, int size, IntPtr length);
     [DllImport("ntdll.dll")] static extern int NtSetInformationProcess(IntPtr h, int kind, ref int value, int size);
+    [DllImport("gdi32.dll")] static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr h, out int value);
     [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetKernelObjectSecurity(IntPtr h, uint info, byte[] bytes, uint size, out uint needed);
     [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetKernelObjectSecurity(IntPtr h, uint info, byte[] bytes);
     [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr CreateJobObject(IntPtr attributes, string name);
@@ -27,6 +29,7 @@ public static class RooBackgroundOracle
     [StructLayout(LayoutKind.Sequential)] struct Limits { public long processTime, jobTime; public uint flags; public UIntPtr minimumWs, maximumWs; public uint active; public UIntPtr affinity; public uint priority, scheduling; }
     public static int Io(Process p) { int value; int status=NtQueryInformationProcess(p.Handle,33,out value,4,IntPtr.Zero); if(status!=0) throw new Exception("I/O read NTSTATUS "+status); return value; }
     public static uint Memory(Process p) { uint value; if(!GetProcessInformation(p.Handle,0,out value,4)) throw new Win32Exception(); return value; }
+    public static int Gpu(Process p) { int value; int status=D3DKMTGetProcessSchedulingPriorityClass(p.Handle,out value); if(status!=0) throw new Exception("GPU read NTSTATUS "+status); return value; }
     public static void SetIo(Process p,int value) {
         IntPtr token=IntPtr.Zero;var prior=new TokenPrivilege();
         try {
@@ -65,6 +68,26 @@ public static class RooBackgroundOracle
         if(!SetKernelObjectSecurity(p.Handle,4,changed)) throw new Win32Exception();return original;
     }
     public static void RestoreDacl(Process p,byte[] bytes) { if(!SetKernelObjectSecurity(p.Handle,4,bytes)) throw new Win32Exception(); }
+    public static byte[] QueryOnly(Process p) {
+        uint needed;GetKernelObjectSecurity(p.Handle,4,null,0,out needed);var original=new byte[needed];
+        if(!GetKernelObjectSecurity(p.Handle,4,original,needed,out needed))throw new Win32Exception();
+        var descriptor=new RawSecurityDescriptor(original,0);
+        descriptor.DiscretionaryAcl=new RawAcl(2,1);
+        descriptor.DiscretionaryAcl.InsertAce(0,new CommonAce(AceFlags.None,AceQualifier.AccessAllowed,0x101000,new SecurityIdentifier(WellKnownSidType.WorldSid,null),false,null));
+        var changed=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(changed,0);
+        if(!SetKernelObjectSecurity(p.Handle,4,changed))throw new Win32Exception();return original;
+    }
+    public static int OpenError(Process p,uint rights) {var h=OpenProcess(rights,false,p.Id);if(h==IntPtr.Zero)return Marshal.GetLastWin32Error();CloseHandle(h);return 0;}
+    public static uint DebugPrivilege(bool enabled) {
+        IntPtr token;Luid luid;int needed;
+        if(!OpenProcessToken(new IntPtr(-1),0x28,out token))throw new Win32Exception();
+        try {
+            if(!LookupPrivilegeValue(null,"SeDebugPrivilege",out luid))throw new Win32Exception();
+            var request=new TokenPrivilege {count=1,luid=luid,attributes=enabled?2u:0u};TokenPrivilege prior;
+            if(!AdjustTokenPrivileges(token,false,ref request,16,out prior,out needed) || Marshal.GetLastWin32Error()!=0)throw new Win32Exception();
+            return prior.count==0?request.attributes:prior.attributes;
+        } finally {CloseHandle(token);}
+    }
     public static IntPtr PinNormal(Process p) { return PinPriority(p,0x20); }
     public static IntPtr PinPriority(Process p,uint priority) {
         var job=CreateJobObject(IntPtr.Zero,null);if(job==IntPtr.Zero)throw new Win32Exception();

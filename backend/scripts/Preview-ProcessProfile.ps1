@@ -78,7 +78,7 @@ function New-ProcessPreviewEntry {
             $reason = $Placement.label
             $rollbackSupported = $true
         } else {
-            $reason = if (-not $Placement.available) { $Placement.reason } else { 'This app is excluded from background placement.' }
+            $reason = if($classification -eq 'protectedCompanion'){Get-CompanionReasonById $Profile ([string](Get-RooIndustriesPropertyValue $Process 'matchedProfileItemId' ''))}elseif(-not $Placement.available){$Placement.reason}else{'This app is excluded from background placement.'}
         }
     } elseif ($classification -eq 'gameTarget') {
         $foregroundGame = Get-RooIndustriesPropertyValue $Profile 'foregroundGame' $null
@@ -125,7 +125,8 @@ function New-ProcessPreviewEntry {
 
     $processId = [int](Get-RooIndustriesPropertyValue $Process 'pid' 0)
     $processName = [string](Get-RooIndustriesPropertyValue $Process 'name' '')
-    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null)
+    $readGpu = -not $protected -and -not $blocked -and [bool](Get-RooIndustriesPropertyValue $Process 'canChangePriority' $false) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$proposedGpuPriority))
+    $currentControls = Get-RooIndustriesProcessControlState $processId (Get-RooIndustriesPropertyValue $Process 'priorityClass' $null) -ReadGpu:$readGpu
     $currentPriority = $currentControls.priorityClass
     $currentAffinityMask = $currentControls.affinityMask
     $currentIoPriority = $currentControls.ioPriority

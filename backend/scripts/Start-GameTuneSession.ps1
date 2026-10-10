@@ -260,7 +260,7 @@ try {
                 }
 
                 if ($appliedControls.Count -gt 0) {
-                    $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $entry 'processId' 0)) $null
+                    $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $entry 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
                     $appliedState = [pscustomobject]@{
                         priorityClass = $afterControls.priorityClass
                         affinityMask = $afterControls.affinityMask

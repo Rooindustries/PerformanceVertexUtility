@@ -16,7 +16,7 @@ This is an inventory, not proof that Roo Industries implements all 79 controls. 
 
 The [official archive](https://fsosx.com/FSOS-XR11H2.apbx) is 436,280,934 bytes with SHA-256 `75d0e6a716f722d452d7ed9b9d403c9b9ef20207f35a84ada4213e043fc62741`. Its Dash executable is 137,034,281 bytes with SHA-256 `dd50c1d39bd4c75f44076e49320206759004b2e498f64657681796648c81b8db`. The archive declares PolyForm Noncommercial 1.0.0. No upstream executable or implementation body was added to product code. The official website still advertised the same archive digest when checked on this date.
 
-Private evidence is under `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/fsos/`:
+Private evidence is under `<private work folder>/four-tool-tweaks-20260919/fsos/`:
 
 | Artifact | Meaning |
 | --- | --- |

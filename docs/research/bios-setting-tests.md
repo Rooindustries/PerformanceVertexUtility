@@ -1,14 +1,14 @@
-# 9070XT BIOS setting inventory and effectiveness tests
+# the i5-14600K test PCXT BIOS setting inventory and effectiveness tests
 
 This note is a test design and inventory record. It does not claim that a BIOS setting is effective or ineffective. Every setting in the machine-readable inventory is currently `untested`.
 
 ## Evidence boundary
 
-The reviewed source is the fresh read at `/home/serviroo/.local/share/LeanClientOptimizer/work/bios-verification-20260920/original.txt`.
+The reviewed source is the fresh read at `<private work folder>/bios-verification-20260920/original.txt`.
 
 | Field | Value |
 | --- | --- |
-| Machine | 9070XT development PC; exact machine identity retained with the private snapshot |
+| Machine | the i5-14600K test PCXT development PC; exact machine identity retained with the private snapshot |
 | Board | Gigabyte Technology Co., Ltd. B760M DS3H WIFI6E DDR4 GEN5 x.x |
 | BIOS | American Megatrends International, LLC. F4, 2025-12-02 |
 | Raw export SHA-256 | `B324FAEBD2AF63EF65DFCBCB80113FB0DD285843FCEF6BD7D38A58C4FB4A67F6` |
@@ -23,7 +23,7 @@ The parser accepts AMISCE's verbose HII script and derives the product setting I
 
 ## Inventory and binding findings
 
-The complete parseable inventory is `/home/serviroo/.local/share/LeanClientOptimizer/work/bios-verification-20260920/inventory/effectiveness-inventory.json`. It retains the exact question IDs, names, help text, current values, options, form context, variable GUID/name, token, offset, width, and source block. The parser input copy and its unmodified inventory are also retained as `original.txt` and `original.inventory.json` in that directory.
+The complete parseable inventory is `<private work folder>/bios-verification-20260920/inventory/effectiveness-inventory.json`. It retains the exact question IDs, names, help text, current values, options, form context, variable GUID/name, token, offset, width, and source block. The parser input copy and its unmodified inventory are also retained as `original.txt` and `original.inventory.json` in that directory.
 
 There are 18 variable names across 253 form contexts and 204 form titles. No two questions share the complete storage identity. Five groups share a GUID, offset, and width while using different variable names; these are namespace collisions to review, not proven aliases:
 

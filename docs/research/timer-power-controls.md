@@ -1,8 +1,8 @@
 # Timer requests and Ultimate Performance ownership
 
-Date: 2026-09-19. This is backend research and a private ownership prototype. No timer request, power-plan creation/activation/deletion, registry change, scheduled task, service change or reboot was performed on the 9070XT. Native declarations were compiled and probe syntax was checked without invoking their setters.
+Date: 2026-09-19. This is backend research and a private ownership prototype. No timer request, power-plan creation/activation/deletion, registry change, scheduled task, service change or reboot was performed on the the i5-14600K test PCXT. Native declarations were compiled and probe syntax was checked without invoking their setters.
 
-Private artifacts: `/home/serviroo/.local/share/LeanClientOptimizer/work/four-tool-tweaks-20260919/fsos/timer-power/`.
+Private artifacts: `<private work folder>/four-tool-tweaks-20260919/fsos/timer-power/`.
 
 ## Existing backend behavior
 
@@ -20,7 +20,7 @@ FSOS's bundled `SetTimerResolution.exe` imports `NtSetTimerResolution` and `NtQu
 
 High-resolution waitable timers are a supported way to schedule the app's own timed work, but creating one is not equivalent to applying FSOS's persistent timer-resolution request to other applications. [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw).
 
-Read-only native observations on `SERVI-WINDOWS-D` at `2026-09-19T17:17:48Z` were:
+Read-only native observations on `the i5-14600K test PC` at `2026-09-19T17:17:48Z` were:
 
 | Observation | Result |
 | --- | --- |
@@ -49,7 +49,7 @@ Use `PowerDuplicateScheme` with an explicitly supplied destination GUID. It retu
 
 `PowerGetActiveScheme` returns the active GUID and allocated memory that must be freed through `LocalFree`. `PowerSetActiveScheme` changes the current user's selection; use the same user identity for capture, apply and restore. Creating a plan does not activate it. Each return code must be zero and the selected GUID must be read back. [Active scheme reader](https://learn.microsoft.com/en-us/windows/win32/api/powersetting/nf-powersetting-powergetactivescheme), [selector](https://learn.microsoft.com/en-us/windows/win32/api/powersetting/nf-powersetting-powersetactivescheme), [scheme management](https://learn.microsoft.com/en-us/windows/win32/power/managing-power-schemes).
 
-The 9070XT's active GUID was `0d4215c0-8a6b-4819-9f38-288a679c6a33`; 17 schemes were enumerated. The Ultimate template GUID was not in that enumeration. This does not establish whether the approved duplicate operation can resolve a hidden/default template. Do not silently substitute another plan if duplication fails; report the exact Win32 result. The existing user plan must remain intact.
+The the i5-14600K test PCXT's active GUID was `0d4215c0-8a6b-4819-9f38-288a679c6a33`; 17 schemes were enumerated. The Ultimate template GUID was not in that enumeration. This does not establish whether the approved duplicate operation can resolve a hidden/default template. Do not silently substitute another plan if duplication fails; report the exact Win32 result. The existing user plan must remain intact.
 
 ### Deterministic ownership and recovery
 
@@ -71,12 +71,12 @@ A crash between native creation and durable acknowledgement is a real uncertaint
 
 `ownership_fixture.py` uses only disposable JSON files. Thirteen cases passed: shared/idempotent ownership, first-baseline retention, GUID collision, external active selection, modified-plan retention, failed restore/retry, uncertain creation, unused-plan cleanup, fresh reactivation, missing original, timer acquire/release pairing, external timer requests and process-identity mismatch. A representative wrong restore that overwrote an external selection was rejected. This validates the ownership model, not Windows behavior.
 
-`ProbeNative.cs` compiled on the 9070XT and both test scripts passed PowerShell parsing. Their native setters were **not invoked**. Both scripts default to review-only output and require `-ExecuteApprovedTest`, an exact machine check and separate approval before execution:
+`ProbeNative.cs` compiled on the the i5-14600K test PCXT and both test scripts passed PowerShell parsing. Their native setters were **not invoked**. Both scripts default to review-only output and require `-ExecuteApprovedTest`, an exact machine check and separate approval before execution:
 
 - `test-timer-native.ps1`: a bounded three-second request, either WinMM 1 ms or the native 0.5 ms compatibility export, with acquisition/release receipts and before/during/after queries. It does not change registry/BCD/startup state or assert game effectiveness.
 - `test-power-native.ps1`: duplicate only the Ultimate template into `98472f39-9146-5073-8c16-73ea66ded98f`, require the reviewed prior active GUID above, select for one second, restore if no external change intervened, and delete only the newly created inactive test plan. A pre-existing destination causes a no-mutation failure. It verifies the final GUID set and active selection.
 
-The exact review scope is `native-test-scope.md`. These small probes do not cover worker crash, app-close survival, reboot persistence, arbitrary settings drift or performance. A subsequent sustained-session test must exercise the final product worker with multiple logical owners, app restart, explicit stop, controlled helper termination and concurrent unrelated requests, while retaining precise request ownership. Neither current probe has approval to alter the 9070XT.
+The exact review scope is `native-test-scope.md`. These small probes do not cover worker crash, app-close survival, reboot persistence, arbitrary settings drift or performance. A subsequent sustained-session test must exercise the final product worker with multiple logical owners, app restart, explicit stop, controlled helper termination and concurrent unrelated requests, while retaining precise request ownership. Neither current probe has approval to alter the the i5-14600K test PCXT.
 
 ## Native power API audit
 

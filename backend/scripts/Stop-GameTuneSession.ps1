@@ -186,6 +186,7 @@ try {
             processName = Get-RooIndustriesPropertyValue $snapshot 'processName' ''
             executablePath = Get-RooIndustriesPropertyValue $snapshot 'executablePath' $null
             processStartTimeUtc = Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' $null
+            controlChanges = @(Get-RooIndustriesPreviewControlChanges $snapshot)
         }
         $candidate = Get-RooIndustriesGameTuneLiveProcessIdentity $candidateEntry
         $entry = New-GameTuneRestorePreview $snapshot $candidate
@@ -232,7 +233,7 @@ try {
                 }
             }
             if ($appliedControls.Count -gt 0) {
-                $afterControls = Get-RooIndustriesProcessControlState $processId $null
+                $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
                 $restoreItem = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''

@@ -233,6 +233,9 @@ function Get-RooIndustriesProtectedCompanionMatch {
         $match = [pscustomobject]@{
             names = @(Get-RooIndustriesPropertyArray $item 'names')
             processNames = @([string](Get-RooIndustriesPropertyValue $item 'name' ''))
+            namePatterns = @(Get-RooIndustriesPropertyArray $item 'namePatterns')
+            pathPatterns = @(Get-RooIndustriesPropertyArray $item 'pathPatterns')
+            processCategories = @(Get-RooIndustriesPropertyArray $item 'processCategories')
         }
         if (Test-RooIndustriesProcessMatch $Process $match) {
             return [pscustomobject]@{ matched = $true; item = $item }
@@ -562,6 +565,16 @@ function Ensure-RooIndustriesNativeProcessControl {
 using System;
 using System.Runtime.InteropServices;
 public static class RooIndustriesNativeProcessControl {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr process);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern uint GetPriorityClass(IntPtr process);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetProcessTimes(IntPtr process, out long created, out long exited, out long kernel, out long user);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool QueryFullProcessImageName(IntPtr process, uint flags, System.Text.StringBuilder path, ref uint size);
     [DllImport("gdi32.dll")]
     public static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int priorityClass);
     [DllImport("gdi32.dll")]
@@ -703,90 +716,116 @@ function Test-RooIndustriesMemoryPriorityAllowed {
     return $null -ne $Priority -and [string]$Priority -match '^[1-5]$' -and $script:RooIndustriesAllowedMemoryPriorities -contains [int]$Priority
 }
 
+function Open-RooIndustriesProcessControlHandle {
+    param([System.Diagnostics.Process]$Process,[uint32]$Access)
+    Ensure-RooIndustriesNativeProcessControl
+    $handle=[RooIndustriesNativeProcessControl]::OpenProcess($Access,$false,$Process.Id)
+    if($handle -eq [IntPtr]::Zero){throw [ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error())}
+    return $handle
+}
+
 function Get-RooIndustriesProcessMemoryPriority {
     param([System.Diagnostics.Process]$Process)
-    Ensure-RooIndustriesNativeProcessControl
-    [uint32]$value=0
-    $available=[RooIndustriesNativeProcessControl]::GetProcessInformation($Process.Handle,0,[ref]$value,4)
-    $status=if($available){0}else{[Runtime.InteropServices.Marshal]::GetLastWin32Error()}
-    return [pscustomobject]@{available=$available;value=if($available){[int]$value}else{$null};name=if($available){Convert-RooIndustriesMemoryPriorityName $value}else{$null};status=$status}
+    $handle=[IntPtr]::Zero
+    try {
+        $handle=Open-RooIndustriesProcessControlHandle $Process 0x1000
+        [uint32]$value=0
+        $available=[RooIndustriesNativeProcessControl]::GetProcessInformation($handle,0,[ref]$value,4)
+        $status=if($available){0}else{[Runtime.InteropServices.Marshal]::GetLastWin32Error()}
+        return [pscustomobject]@{available=$available;value=if($available){[int]$value}else{$null};name=if($available){Convert-RooIndustriesMemoryPriorityName $value}else{$null};status=$status}
+    } catch {
+        return [pscustomobject]@{available=$false;value=$null;name=$null;status=$_.Exception.Message}
+    } finally {if($handle -ne [IntPtr]::Zero){[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}}
 }
 
 function Set-RooIndustriesProcessMemoryPriority {
     param([System.Diagnostics.Process]$Process,[object]$Priority)
     if(-not(Test-RooIndustriesMemoryPriorityAllowed $Priority)){throw "Memory priority '$Priority' is outside the allow-list."}
-    Ensure-RooIndustriesNativeProcessControl
-    [uint32]$value=$Priority
-    if(-not[RooIndustriesNativeProcessControl]::SetProcessInformation($Process.Handle,0,[ref]$value,4)) {
-        throw "Failed to set memory priority '$Priority' (Win32 $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))."
-    }
+    $handle=Open-RooIndustriesProcessControlHandle $Process 0x200
+    try {
+        [uint32]$value=$Priority
+        if(-not[RooIndustriesNativeProcessControl]::SetProcessInformation($handle,0,[ref]$value,4)) {
+            throw "Failed to set memory priority '$Priority' (Win32 $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))."
+        }
+    } finally {[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
 }
 
 function Get-RooIndustriesProcessIoPriority {
     param([System.Diagnostics.Process]$Process)
-    Ensure-RooIndustriesNativeProcessControl
-    $value = 0
-    $status = [RooIndustriesNativeProcessControl]::NtQueryInformationProcess($Process.Handle, 33, [ref]$value, 4, [IntPtr]::Zero)
-    if ($status -ne 0) {
-        return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
-    }
-    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesIoPriorityFromValue $value; status = $status }
+    $handle=Open-RooIndustriesProcessControlHandle $Process 0x1000
+    try {
+        $value = 0
+        $status = [RooIndustriesNativeProcessControl]::NtQueryInformationProcess($handle, 33, [ref]$value, 4, [IntPtr]::Zero)
+        if ($status -ne 0) {return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }}
+        return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesIoPriorityFromValue $value; status = $status }
+    } finally {[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
 }
 
 function Set-RooIndustriesProcessIoPriority {
-    param(
-        [System.Diagnostics.Process]$Process,
-        [string]$Priority,
-        [switch]$Restoring
-    )
+    param([System.Diagnostics.Process]$Process,[string]$Priority,[switch]$Restoring)
     Ensure-RooIndustriesNativeProcessControl
     $value = Convert-RooIndustriesIoPriorityToValue $Priority -Restoring:$Restoring
     if ($null -eq $value) { throw "I/O priority '$Priority' is outside the allow-list." }
+    $handle=Open-RooIndustriesProcessControlHandle $Process 0x200
     $privilege=$null
     try {
         if($value -eq 3){$privilege=[RooIndustriesIoPriorityPrivilege]::new()}
-        $status = [RooIndustriesNativeProcessControl]::NtSetInformationProcess($Process.Handle, 33, [ref]$value, 4)
-    } finally {if($privilege){$privilege.Dispose()}}
+        $status = [RooIndustriesNativeProcessControl]::NtSetInformationProcess($handle, 33, [ref]$value, 4)
+    } finally {if($privilege){$privilege.Dispose()};[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
     if ($status -ne 0) { throw "Failed to set I/O priority '$Priority' (NTSTATUS $status)." }
 }
 
 function Get-RooIndustriesProcessGpuPriority {
-    param([System.Diagnostics.Process]$Process)
-    Ensure-RooIndustriesNativeProcessControl
-    $value = 0
-    $status = [RooIndustriesNativeProcessControl]::D3DKMTGetProcessSchedulingPriorityClass($Process.Handle, [ref]$value)
-    if ($status -ne 0) {
-        return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }
-    }
-    return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesGpuPriorityFromValue $value; status = $status }
+    param([System.Diagnostics.Process]$Process,[switch]$ForControl)
+    $handle=Open-RooIndustriesProcessControlHandle $Process $(if($ForControl){0x600}else{0x1000})
+    try {
+        $value = 0
+        $status = [RooIndustriesNativeProcessControl]::D3DKMTGetProcessSchedulingPriorityClass($handle, [ref]$value)
+        if ($status -ne 0) {return [pscustomobject]@{ available = $false; value = $null; name = $null; status = $status }}
+        return [pscustomobject]@{ available = $true; value = $value; name = Convert-RooIndustriesGpuPriorityFromValue $value; status = $status }
+    } finally {[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
 }
 
 function Set-RooIndustriesProcessGpuPriority {
-    param(
-        [System.Diagnostics.Process]$Process,
-        [string]$Priority
-    )
+    param([System.Diagnostics.Process]$Process,[string]$Priority)
     Ensure-RooIndustriesNativeProcessControl
     $value = Convert-RooIndustriesGpuPriorityToValue $Priority
     if ($null -eq $value) { throw "GPU priority '$Priority' is outside the allow-list." }
-    $status = [RooIndustriesNativeProcessControl]::D3DKMTSetProcessSchedulingPriorityClass($Process.Handle, $value)
+    $handle=Open-RooIndustriesProcessControlHandle $Process 0x200
+    try {$status = [RooIndustriesNativeProcessControl]::D3DKMTSetProcessSchedulingPriorityClass($handle, $value)}
+    finally {[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
     if ($status -ne 0) { throw "Failed to set GPU priority '$Priority' (status $status)." }
+}
+
+function Get-RooIndustriesProcessQuerySnapshot {
+    param([System.Diagnostics.Process]$Process)
+    $handle=Open-RooIndustriesProcessControlHandle $Process 0x1000
+    try {
+        $priority=[RooIndustriesNativeProcessControl]::GetPriorityClass($handle)
+        [long]$created=0;[long]$exited=0;[long]$kernel=0;[long]$user=0
+        $times=[RooIndustriesNativeProcessControl]::GetProcessTimes($handle,[ref]$created,[ref]$exited,[ref]$kernel,[ref]$user)
+        $path=[Text.StringBuilder]::new(32768);[uint32]$size=$path.Capacity
+        $hasPath=[RooIndustriesNativeProcessControl]::QueryFullProcessImageName($handle,0,$path,[ref]$size)
+        return [pscustomobject]@{
+            priorityClass=if($priority -ne 0){[string][Diagnostics.ProcessPriorityClass]$priority}else{$null}
+            startTimeUtc=if($times){[DateTime]::FromFileTimeUtc($created).ToString('o')}else{$null}
+            cpuSeconds=if($times){[double]($kernel+$user)/10000000}else{$null}
+            executablePath=if($hasPath){$path.ToString()}else{$null}
+        }
+    } finally {[RooIndustriesNativeProcessControl]::CloseHandle($handle)|Out-Null}
 }
 
 function Get-RooIndustriesProcessStartTimeUtc {
     param([System.Diagnostics.Process]$Process)
-    try {
-        return $Process.StartTime.ToUniversalTime().ToString('o')
-    } catch {
-        return $null
-    }
+    try {return (Get-RooIndustriesProcessQuerySnapshot $Process).startTimeUtc} catch {return $null}
 }
 
 function Get-RooIndustriesProcessControlState {
     param(
         [int]$ProcessId,
         [string]$FallbackPriorityClass = $null,
-        [System.Diagnostics.Process]$Process = $null
+        [System.Diagnostics.Process]$Process = $null,
+        [switch]$ReadGpu
     )
     $live = if ($null -ne $Process) { $Process } else { Get-Process -Id $ProcessId -ErrorAction SilentlyContinue }
     if ($null -eq $live) {
@@ -804,21 +843,25 @@ function Get-RooIndustriesProcessControlState {
 
     $live.Refresh()
     $priority = $FallbackPriorityClass
-    try { $priority = [string]$live.PriorityClass } catch { }
     $affinity = $null
-    try { $affinity = [int64]$live.ProcessorAffinity } catch { }
+    $systemAffinity = $null
+    $queryHandle = [IntPtr]::Zero
+    try {
+        $queryHandle = Open-RooIndustriesProcessControlHandle $live 0x1000
+        $priorityValue = [RooIndustriesNativeProcessControl]::GetPriorityClass($queryHandle)
+        if($priorityValue -ne 0){$priority = [string][Diagnostics.ProcessPriorityClass]$priorityValue}
+        $processMask=[IntPtr]::Zero;$systemMask=[IntPtr]::Zero
+        if([RooIndustriesNativeProcessControl]::GetProcessAffinityMask($queryHandle,[ref]$processMask,[ref]$systemMask)) {
+            $affinity=$processMask.ToInt64();$systemAffinity=$systemMask.ToInt64()
+        }
+    } catch { }
+    finally {if($queryHandle -ne [IntPtr]::Zero){[RooIndustriesNativeProcessControl]::CloseHandle($queryHandle)|Out-Null}}
     $io = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
     try { $io = Get-RooIndustriesProcessIoPriority $live } catch { }
     $gpu = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
-    try { $gpu = Get-RooIndustriesProcessGpuPriority $live } catch { }
+    try { $gpu = Get-RooIndustriesProcessGpuPriority $live -ForControl:$ReadGpu } catch { }
     $memory = [pscustomobject]@{ available = $false; value = $null; name = $null; status = $null }
     try { $memory = Get-RooIndustriesProcessMemoryPriority $live } catch { $memory.status = $_.Exception.Message }
-    $systemAffinity=$null
-    try {
-        Ensure-RooIndustriesNativeProcessControl
-        $processMask=[IntPtr]::Zero;$systemMask=[IntPtr]::Zero
-        if([RooIndustriesNativeProcessControl]::GetProcessAffinityMask($live.Handle,[ref]$processMask,[ref]$systemMask)){$systemAffinity=$systemMask.ToInt64()}
-    } catch { }
 
     return [pscustomobject]@{
         exists = $true
@@ -883,6 +926,11 @@ function Test-RooIndustriesProcessStartTime {
     try {
         return [datetime]::Parse([string]$SavedStartTimeUtc).ToUniversalTime().Ticks -eq [datetime]::Parse([string]$CurrentStartTimeUtc).ToUniversalTime().Ticks
     } catch { return $false }
+}
+
+function Test-RooIndustriesEntryHasGpuControl {
+    param([object]$Entry)
+    return [bool](@(Get-RooIndustriesPreviewControlChanges $Entry | Where-Object { $_.control -eq 'gpuPriority' }).Count)
 }
 
 function Get-RooIndustriesControlStateValue {
@@ -998,7 +1046,7 @@ function Get-RooIndustriesProcessControlReadback {
         'affinityMask' { return [int64]$Process.ProcessorAffinity }
         'ioPriority' { $read = Get-RooIndustriesProcessIoPriority $Process; if (-not $read.available) { throw 'Windows could not read back I/O priority.' }; return $read.name }
         'memoryPriority' { $read = Get-RooIndustriesProcessMemoryPriority $Process; if (-not $read.available) { throw 'Windows could not read back memory priority.' }; return $read.value }
-        'gpuPriority' { $read = Get-RooIndustriesProcessGpuPriority $Process; if (-not $read.available) { throw 'Windows could not read back GPU priority.' }; return $read.name }
+        'gpuPriority' { $read = Get-RooIndustriesProcessGpuPriority $Process -ForControl; if (-not $read.available) { throw 'Windows could not read back GPU priority.' }; return $read.name }
         default { throw "Unsupported process control '$Control'." }
     }
 }
