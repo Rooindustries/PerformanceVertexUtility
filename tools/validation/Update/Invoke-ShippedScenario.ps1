@@ -136,10 +136,10 @@ try{
  $process=[Diagnostics.Process]::Start($start)
  $owned=Register-HarnessStartedProcess $process 'shell-setup'
  $process.WaitForExit()
- $result=@{pid=$process.Id;identity=$owned.Identity;status='exited';exitCode=$process.ExitCode}
-}catch{$result=@{status='failed';error=$_.Exception.ToString()}}
-New-HarnessText $Result (@{nonce=$Nonce;data=$result}|ConvertTo-Json -Depth 20) 'result' 'run'|Out-Null
-if($result.status -eq 'failed'){exit 1}
+ $outcome=@{pid=$process.Id;identity=$owned.Identity;status='exited';exitCode=$process.ExitCode}
+}catch{$outcome=@{status='failed';error=$_.Exception.ToString()}}
+New-HarnessText $Result (@{nonce=$Nonce;data=$outcome}|ConvertTo-Json -Depth 20) 'result' 'run'|Out-Null
+if($outcome.status -eq 'failed'){exit 1}
 '@
  New-HarnessText $launcherPath $launcher 'shell-launcher'|Out-Null
  $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$launcherPath+'" -Installer "'+$path+'" -Log "'+$setupLog+'" -Result "'+$launchResult+'" -Nonce "'+$nonce+'" -FrameRoot "'+$script:Harness.Root+'" -FrameId "'+$script:Harness.FrameId+'" -Manifest "'+$script:Harness.Manifest+'" -Source "'+$Source+'"'
