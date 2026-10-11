@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
@@ -11,6 +12,7 @@ import sys
 import time
 from urllib.request import urlopen
 from urllib.parse import urlsplit, urljoin
+import xml.etree.ElementTree as ET
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -20,6 +22,8 @@ HOST = None
 MACHINE = None
 FEED = None
 KEY = None
+VERSION_A = None
+VERSION_B = None
 spec = importlib.util.spec_from_file_location("windows_ssh", ROOT / "tools/validation/windows_ssh.py")
 windows = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows)
@@ -117,7 +121,7 @@ def contracts(receipt, builds, pc_out, installer, valid):
         remote_manifest = pc_out + "\\contracts\\" + path.name
         remote_result = pc_out + "\\contracts\\" + name + "-result.json"
         copy_to(path, remote_manifest)
-        call = "& " + windows.ps_literal(builds + r"\probe\UpdateProbe.exe") + " " + " ".join(windows.ps_literal(value) for value in [remote_manifest, FEED, "0.11.0-beta", remote_result])
+        call = "& " + windows.ps_literal(builds + r"\probe\UpdateProbe.exe") + " " + " ".join(windows.ps_literal(value) for value in [remote_manifest, FEED, VERSION_A, remote_result])
         if name in ("valid", "unknown-fields", "long-notes"):
             call += " " + windows.ps_literal(builds + "\\B\\" + installer.name)
         remote(call + ";if($LASTEXITCODE -ne 0){throw 'Contract probe failed'}", "contract-" + name)
@@ -136,7 +140,7 @@ def contracts(receipt, builds, pc_out, installer, valid):
 
 
 def main():
-    global OUT, HOST, MACHINE, FEED, KEY
+    global OUT, HOST, MACHINE, FEED, KEY, VERSION_A, VERSION_B
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
     parser.add_argument("--host", default=os.environ.get("ROO_TEST_SSH_HOST"))
@@ -146,6 +150,7 @@ def main():
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--fixture-exe")
+    parser.add_argument("--scenario-script", default="tools/validation/Update/Invoke-UpdateScenario.ps1")
     parser.add_argument("--manual-retry", action="store_true")
     parser.add_argument("--transport-fault", choices=["http-error", "disconnect"], default="disconnect")
     parser.add_argument("--build-root")
@@ -163,6 +168,14 @@ def main():
         parser.error("--feed-url must be an HTTPS test feed on port 8460 ending in /beta.json, without a query, fragment or traversal")
     if not KEY.is_file():
         parser.error("--signing-key does not exist on this Linux machine")
+    project = ROOT / "docs/internal/frontend/RooIndustries.OptimizationSuite.App/RooIndustries.OptimizationSuite.App.csproj"
+    VERSION_A = ET.parse(project).find('.//Version').text.strip()
+    version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?', VERSION_A)
+    if not version:
+        parser.error("The source App Version must be a SemVer release version.")
+    major, minor, patch = (int(version[i]) for i in (1, 2, 3))
+    VERSION_B = f'{major}.{minor}.{patch + 1}' + (version[4] or '')
+    older_version = (f'{major}.{minor}.{patch - 1}' if patch else f'{major}.{minor - 1}.0' if minor else f'{major - 1}.0.0') + (version[4] or '') if major or minor or patch else '0.0.0-0'
 
     if args.out_dir:
         OUT = args.out_dir.resolve()
@@ -178,16 +191,16 @@ def main():
     pc_out = args.evidence_root or frame + r"\ota"
     builds = args.build_root or pc_out + r"\builds"
     if args.scenario in ("all", "build") and not args.skip_build:
-        interactive(receipt, "tools/validation/Update/Build-UpdatePair.ps1", {"Source": source, "OutputRoot": builds, "FeedUrl": FEED}, "BuildPair", 40)
-        for build, version in (("A", "0.11.0-beta"), ("B", "0.11.1-beta")):
+        interactive(receipt, "tools/validation/Update/Build-UpdatePair.ps1", {"Source": source, "OutputRoot": builds, "FeedUrl": FEED, "VersionA": VERSION_A, "VersionB": VERSION_B}, "BuildPair", 40)
+        for build, version in (("A", VERSION_A), ("B", VERSION_B)):
             name = "RooIndustries-OptimizationSuite-" + version + "-setup.exe"
             copy_from(builds + "\\" + build + "\\" + name, OUT / "builds" / build / name)
             copy_from(builds + "\\" + build + "\\" + name + ".sha256", OUT / "builds" / build / (name + ".sha256"))
         copy_from(builds + r"\build-times.json", OUT / "build-times.json")
         if args.scenario == "build":
             return
-    a = OUT / "builds/A/RooIndustries-OptimizationSuite-0.11.0-beta-setup.exe"
-    b = OUT / "builds/B/RooIndustries-OptimizationSuite-0.11.1-beta-setup.exe"
+    a = OUT / ("builds/A/RooIndustries-OptimizationSuite-" + VERSION_A + "-setup.exe")
+    b = OUT / ("builds/B/RooIndustries-OptimizationSuite-" + VERSION_B + "-setup.exe")
     http_root = OUT / "http-root"
     feed_file = http_root / parsed_feed.path.lstrip("/")
     feed_file.parent.mkdir(parents=True, exist_ok=True)
@@ -201,7 +214,7 @@ def main():
     with b.open("rb") as input_file:
         actual_hash = hashlib.file_digest(input_file, "sha256").hexdigest()
     if not valid.exists() or actual_hash != expected_hash:
-        signed(b, "0.11.1-beta", url, valid)
+        signed(b, VERSION_B, url, valid)
         envelope = json.loads(valid.read_text())
         signature = bytearray(base64.b64decode(envelope["signature"]))
         signature[-1] ^= 1
@@ -210,7 +223,7 @@ def main():
     envelope = json.loads(valid.read_text())
     payload = json.loads(base64.b64decode(envelope["payload"]))
     private = serialization.load_pem_private_key(KEY.read_bytes(), password=None)
-    for name, field, value in [("same", "version", "0.11.0-beta"), ("older", "version", "0.10.0-beta"), ("wrong-product", "product", "another.product"), ("wrong-channel", "channel", "stable")]:
+    for name, field, value in [("same", "version", VERSION_A), ("older", "version", older_version), ("wrong-product", "product", "another.product"), ("wrong-channel", "channel", "stable")]:
         data = json.dumps(dict(payload, **{field: value}), ensure_ascii=False, separators=(",", ":")).encode()
         variant = dict(envelope, payload=base64.b64encode(data).decode(), signature=base64.b64encode(private.sign(data, ec.ECDSA(hashes.SHA256()))).decode())
         (OUT / (name + ".json")).write_text(json.dumps(variant))
@@ -246,7 +259,7 @@ def main():
             log.close()
             log = None
     def scenario(name, installer=None, evidence_name=None):
-        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name}
+        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B}
         if args.manual_retry:
             fields["ManualRetry"] = True
         if installer:
@@ -257,7 +270,7 @@ def main():
             if not args.fixture_exe:
                 raise RuntimeError("timer-read-failure requires --fixture-exe from the hook-only app copy")
             fields["FixtureExe"] = args.fixture_exe
-        interactive(receipt, "tools/validation/Update/Invoke-UpdateScenario.ps1", fields, name.replace("-", "_"), 24 if name == "manual-timeout" else 12)
+        interactive(receipt, args.scenario_script, fields, name.replace("-", "_"), 24 if name == "manual-timeout" else 12)
     def fixture(action):
         interactive(receipt, "tools/validation/Update/Invoke-UpdateFixture.ps1", {"Source": source, "OutRoot": pc_out, "Action": action}, action.replace("-", "_"), 8)
     try:
@@ -331,11 +344,11 @@ def main():
                 scenario("manual-install", builds + "\\A\\" + a.name, "reset-A-before-copy-failure")
                 fixture("reset-download")
                 fixture_installer = OUT / "builds/copy-failure" / b.name
-                interactive(receipt, "tools/validation/Update/Build-CopyFailureFixture.ps1", {"Source": source, "Stage": builds + r"\B\work-0.11.1-beta\stage", "OutRoot": builds + r"\copy-failure"}, "BuildCopyFailure", 8)
+                interactive(receipt, "tools/validation/Update/Build-CopyFailureFixture.ps1", {"Source": source, "Stage": builds + "\\B\\work-" + VERSION_B + r"\stage", "OutRoot": builds + r"\copy-failure"}, "BuildCopyFailure", 8)
                 copy_from(builds + "\\copy-failure\\" + b.name, fixture_installer)
                 shutil.copyfile(fixture_installer, installer_file)
                 copy_manifest = OUT / "copy-failure.json"
-                signed(fixture_installer, "0.11.1-beta", url, copy_manifest)
+                signed(fixture_installer, VERSION_B, url, copy_manifest)
                 shutil.copyfile(copy_manifest, feed_file)
                 scenario("ready", evidence_name="copy-failure-ready")
                 scenario(name)
@@ -356,7 +369,7 @@ def main():
             stop_server()
         command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
         evidence = pc_out + "-evidence.zip"
-        remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
+        remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
         copy_from(evidence, OUT / "pc-evidence.zip")
         import zipfile
         with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:

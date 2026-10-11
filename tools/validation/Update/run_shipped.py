@@ -1,0 +1,354 @@
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import time
+from urllib.request import Request, urlopen
+import zipfile
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[3]
+EMPTY = hashlib.sha256(b'').hexdigest()
+
+
+def module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    value = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(value)
+    return value
+
+
+windows = module('shipped_windows', ROOT / 'tools/validation/windows_ssh.py')
+release_tool = module('shipped_release', ROOT / 'tools/release/publish_update.py')
+
+
+class Journey:
+    def __init__(self, args):
+        self.args = args
+        self.out = args.out_dir.resolve()
+        self.out.mkdir(parents=True, exist_ok=True)
+        self.feed = (ROOT / 'tools/release/update-feed.txt').read_text().strip()
+
+    def save(self, path, value):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=2))
+
+    def command(self, values, log=None):
+        started = time.monotonic()
+        result = subprocess.run([str(v) for v in values], cwd=ROOT, capture_output=True, text=True)
+        if log:
+            Path(log).parent.mkdir(parents=True, exist_ok=True)
+            Path(log).write_text(result.stdout + result.stderr)
+        if result.returncode:
+            raise RuntimeError(f'Command failed ({result.returncode}); evidence: {log}\n' + (result.stdout + result.stderr)[-2400:])
+        return result.stdout, time.monotonic() - started
+
+    def remote(self, host, machine, script, log):
+        try:
+            result = windows.invoke(host, machine, script)
+        except subprocess.CalledProcessError as error:
+            Path(log).parent.mkdir(parents=True, exist_ok=True)
+            Path(log).write_text((error.stdout or '') + (error.stderr or ''))
+            raise RuntimeError(f'Windows command failed; evidence: {log}') from None
+        Path(log).parent.mkdir(parents=True, exist_ok=True)
+        Path(log).write_text(result.stdout)
+        return result.stdout
+
+    def desktop(self, host, machine, receipt, script, fields, label, minutes=20):
+        log = self.out / label / 'desktop.log'
+        log.parent.mkdir(parents=True, exist_ok=True)
+        self.save(log.with_suffix('.command.json'), {'script': script, 'arguments': fields, 'minutes': minutes, 'machine': machine})
+        started = time.monotonic()
+        try:
+            result = windows.interactive(host, machine, receipt, script, fields, minutes, 'RooIndustries_ROO29_' + label.replace('/', '_').replace('-', '_'))
+            log.write_text(result.stdout)
+            return {'status': 'pass', 'seconds': time.monotonic() - started, 'evidence': str(log)}
+        except subprocess.CalledProcessError as error:
+            log.write_text((error.stdout or '') + (error.stderr or ''))
+            return {'status': 'fail', 'seconds': time.monotonic() - started, 'evidence': str(log)}
+
+    def binding(self):
+        base = subprocess.check_output(['git', 'rev-parse', '--verify', '--end-of-options', self.args.source_commit + '^{commit}'], cwd=ROOT, text=True).strip()
+        data = subprocess.check_output(['git', 'diff', base, '--', 'backend', 'docs', 'tools/release', 'tools/scripts'], cwd=ROOT)
+        digest = hashlib.sha256(data).hexdigest()
+        value = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'base': base, 'requestedSourceCommit': self.args.source_commit, 'productDiffBytes': len(data), 'productDiffSha256': digest}
+        self.save(self.out / 'p0/source-binding.json', value)
+        if digest != EMPTY:
+            raise RuntimeError('Product source differs from --source-commit; no build or PC mutation is allowed.')
+        return value
+
+    def source_version(self):
+        project = ROOT / 'docs/internal/frontend/RooIndustries.OptimizationSuite.App/RooIndustries.OptimizationSuite.App.csproj'
+        return ET.parse(project).find('.//Version').text.strip()
+
+    def verified(self):
+        if not self.args.published_installer:
+            raise RuntimeError('--published-installer is required to verify the signed release identity.')
+        directory = self.out / 'p0'
+        directory.mkdir(exist_ok=True)
+        manifest = directory / 'live-feed.json'
+        cached = manifest.exists()
+        if cached:
+            data = manifest.read_bytes()
+        else:
+            with urlopen(Request(self.feed, headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
+                if response.status != 200 or response.url != self.feed:
+                    raise RuntimeError('Live feed did not return HTTPS 200 at the committed URL.')
+                data = response.read(65537)
+                (directory / 'live-feed.headers.txt').write_text(str(response.headers))
+        payload = release_tool.verify_manifest(data, self.args.published_installer, self.feed)
+        manifest.write_bytes(data)
+        value = {'feedUrl': self.feed, 'keyId': json.loads(data)['keyId'], 'payload': payload, 'verifiedVersion': payload['version'], 'manifestSource': 'existing signed evidence file' if cached else 'live HTTPS GET', 'localInstaller': str(self.args.published_installer), 'localInstallerIdentity': release_tool.file_identity(self.args.published_installer), 'verification': 'ECDSA P-256 SHA-256 RFC3279 DER against tools/release/update-keys.json'}
+        self.save(directory / 'verified-release.json', value)
+        return value
+
+    def frame(self, host, machine, label):
+        path = self.out / (label + '-frame.json')
+        if path.exists():
+            receipt = json.loads(path.read_text())
+            windows.validate_receipt(machine, receipt)
+            windows.verify_source(host, machine, receipt)
+            return receipt
+        receipt = windows.upload(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+        self.save(path, receipt)
+        self.remote(host, machine, "$errors=@();Get-ChildItem -LiteralPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -Filter '*.ps1'|ForEach-Object {$tokens=$null;$parseErrors=$null;[Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)|Out-Null;$errors+=@($parseErrors)};@{errors=$errors.Count;detail=$errors}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'PowerShell parse failed'}", self.out / 'p0' / (label + '-powershell-parse.json'))
+        return receipt
+
+    def preflight(self):
+        script = r'''
+$data=Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite';$install='C:\Program Files\Roo Industries\Optimization Suite'
+$key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
+$tasks=@(Get-ScheduledTask|ForEach-Object {@{name=$_.TaskName;path=$_.TaskPath;state=[string]$_.State;enabled=[bool]$_.Settings.Enabled;xml=(Export-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath)}})
+$ts=Get-Command tailscale -ErrorAction SilentlyContinue;$binary=if($ts){$ts.Source}else{Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'}
+$files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-Object {@{path=$_.FullName.Substring($data.Length+1);bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash;attributes=[string]$_.Attributes}}})
+@{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-Path $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-Path $install);dataRoot=$data;dataFiles=$files;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-Path 'C:\RooBuild'){Get-ChildItem 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-Path $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-Path $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
+'''
+        rows = []
+        for host, machine, label in [(self.args.host, self.args.expected_machine, '9070'), (self.args.blackwell_host, self.args.blackwell_machine, 'blackwell')]:
+            if not host or not machine:
+                rows.append({'check': label + ' preflight', 'status': 'unverified', 'observed': 'No host/machine arguments; no power action.'})
+                continue
+            path = self.out / 'p0' / (label + '-as-found.json')
+            if path.exists():
+                value = json.loads(path.read_text())
+            else:
+                value = json.loads(self.remote(host, machine, script, path))
+            rows.append({'check': label + ' as-found state', 'status': 'pass', 'observed': {'installedVersion': value['installedVersion'], 'dataFiles': len(value['dataFiles']), 'frames': len(value['frames']), 'activeFrameOrSuiteProcesses': value['processes'], 'cs2Tasks': [{k: t[k] for k in ('name', 'state', 'enabled')} for t in value['tasks'] if 'CS2' in t['name']], 'tailscaleBinary': value.get('tailscaleBinary')}, 'evidence': str(path)})
+            if value['processes']:
+                raise RuntimeError(label + ' has active Suite/frame processes; preserve them and stop preflight.')
+        serve, _ = self.command(['tailscale', 'serve', 'status', '--json'])
+        path = self.out / 'p0/linux-tailscale-as-found.json'
+        if not path.exists():
+            path.write_text(serve)
+        if '8460' in serve:
+            raise RuntimeError('Tailnet port 8460 is already occupied; never reuse or reset it.')
+        rows.append({'check': 'tailnet 8460 absent', 'status': 'pass', 'observed': json.loads(serve), 'evidence': str(path)})
+        self.save(self.out / 'p0/receipt.json', {'part': 'p0', 'status': 'pass', 'source': self.binding(), 'checks': rows})
+        self.verified()
+
+    def copy_to(self, host, local, remote):
+        self.command(['scp', *windows.SSH_OPTIONS, local, host + ':' + remote.replace('\\', '/')])
+
+    def copy_from(self, host, remote, local):
+        local = Path(local)
+        local.parent.mkdir(parents=True, exist_ok=True)
+        self.command(['scp', *windows.SSH_OPTIONS, host + ':' + remote.replace('\\', '/'), local])
+
+    def inputs(self, host, machine, receipt):
+        self.verified()
+        pc = receipt['runRoot'] + r'\shipped'
+        self.remote(host, machine, '[IO.Directory]::CreateDirectory(' + windows.ps_literal(pc) + ')|Out-Null', self.out / 'p0' / (machine + '-directory.log'))
+        self.copy_to(host, self.out / 'p0/verified-release.json', pc + r'\verified-release.json')
+        return pc
+
+    def extract(self):
+        installer = self.args.published_installer
+        if not installer:
+            raise RuntimeError('--published-installer is required for installed payload verification.')
+        verified = json.loads((self.out / 'p0/verified-release.json').read_text())
+        release_tool.verify_manifest((self.out / 'p0/live-feed.json').read_bytes(), installer, self.feed)
+        hashes = self.out / 'p0/payload-hashes.json'
+        if hashes.exists():
+            return hashes
+        binary = self.args.innoextract or shutil.which('innoextract')
+        if not binary:
+            raise RuntimeError('innoextract is required; supply --innoextract without changing the shared system.')
+        directory = self.out / 'p0/extracted'
+        self.command([binary, '--version'], self.out / 'p0/innoextract-version.log')
+        self.command([binary, '-d', directory, installer], self.out / 'p0/innoextract.log')
+        app = directory / 'app'
+        values = []
+        for path in sorted(app.rglob('*')):
+            if path.is_file():
+                with path.open('rb') as source:
+                    sha = hashlib.file_digest(source, 'sha256').hexdigest()
+                values.append({'path': path.relative_to(app).as_posix(), 'bytes': path.stat().st_size, 'sha256': sha})
+        if not values or not any(v['path'] == 'app/RooIndustries.OptimizationSuite.App.exe' for v in values):
+            raise RuntimeError('Extracted published installer has no expected app payload.')
+        self.save(hashes, values)
+        self.save(self.out / 'p0/payload-source.json', {'installer': str(installer), 'identity': release_tool.file_identity(installer), 'verifiedVersion': verified['payload']['version'], 'method': 'innoextract', 'files': len(values)})
+        return hashes
+
+    def collect(self, host, machine, receipt, label):
+        frame = receipt['runRoot']
+        destination = frame + r'\shipped-evidence.zip'
+        script = r'''
+Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
+$frame=FRAME;$destination=DEST
+if(Test-Path $destination){[IO.File]::Delete($destination)}
+$file=[IO.File]::Create($destination);$zip=[IO.Compression.ZipArchive]::new($file,[IO.Compression.ZipArchiveMode]::Create)
+try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullName.Substring($frame.Length+1);if($relative -match '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -or $item.Extension -notin '.json','.png','.log','.txt','.csv','.sha256'){continue};[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.FullName,$relative.Replace('\','/'))|Out-Null}}finally{$zip.Dispose();$file.Dispose()}
+'''.replace('FRAME', windows.ps_literal(frame)).replace('DEST', windows.ps_literal(destination))
+        self.remote(host, machine, script, self.out / label / 'collect.log')
+        local = self.out / label / 'pc-evidence.zip'
+        self.copy_from(host, destination, local)
+        with zipfile.ZipFile(local) as bundle:
+            for item in bundle.infolist():
+                path = Path(item.filename)
+                if path.is_absolute() or '..' in path.parts:
+                    raise RuntimeError('Unsafe evidence archive member.')
+                if not item.is_dir():
+                    target = self.out / label / 'pc-artifacts' / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(bundle.read(item))
+
+    def p1(self):
+        host, machine = self.args.host, self.args.expected_machine
+        if not self.args.test_feed_url or not self.args.signing_key:
+            raise RuntimeError('p1 requires --test-feed-url and --signing-key (Linux only).')
+        receipt = self.frame(host, machine, '9070')
+        receipt_path = self.out / '9070-frame.json'
+        full = self.out / 'p1/all'
+        full.mkdir(parents=True, exist_ok=True)
+        base = [sys.executable, '-I', ROOT / 'tools/validation/Update/run_e2e.py', '--host', host, '--expected-machine', machine, '--feed-url', self.args.test_feed_url, '--signing-key', self.args.signing_key, '--receipt', receipt_path, '--build-root', receipt['runRoot'] + r'\b', '--evidence-root', receipt['runRoot'] + r'\o']
+        rows = json.loads((self.out / 'p1/receipt.json').read_text())['checks'] if self.args.p1_extras_from else []
+        if not self.args.p1_extras_from:
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'running', 'source': self.binding(), 'checks': rows})
+            try:
+                resume = ['--skip-build', '--skip-contracts', '--from-scenario', self.args.p1_from_scenario] if self.args.p1_from_scenario else []
+                _, seconds = self.command(base + ['--scenario', 'all', '--out-dir', full, *resume], self.out / 'p1' / ('all-resume.log' if resume else 'all.log'))
+            except Exception:
+                rows.append({'check': 'all', 'status': 'fail', 'evidence': 'all.log'})
+                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'fail', 'source': self.binding(), 'checks': rows})
+                raise
+            rows.append({'check': 'all', 'status': 'pass', 'seconds': seconds, 'evidence': 'all/pc-artifacts'})
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'source': self.binding(), 'checks': rows})
+        stage = receipt['runRoot'] + '\\b\\A\\work-' + self.source_version() + '\\stage'
+        fixtures = receipt['runRoot'] + r'\o\timer-fixtures'
+        if not self.args.p1_extras_from:
+            result = self.desktop(host, machine, receipt, 'tools/validation/Background/Build-Review2Fixtures.ps1', {'Source': receipt['stagingPath'], 'Stage': stage, 'OutRoot': fixtures}, 'p1/timer-fixture', 10)
+            if result['status'] != 'pass':
+                raise RuntimeError('Timer fixture build failed; see its desktop log.')
+        cases = [('contracts', 'contracts', []), ('transport-http', 'transport-error', ['--transport-fault', 'http-error']), ('transport-disconnect', 'transport-error', ['--transport-fault', 'disconnect']), ('settings-readonly', 'settings-readonly', []), ('timer-ready', 'ready', []), ('timer-read-failure', 'timer-read-failure', ['--fixture-exe', fixtures + r'\timer-app\app\RooIndustries.OptimizationSuite.App.exe']), ('manual-timeout', 'manual-timeout', [])]
+        if self.args.p1_extras_from:
+            cases = cases[[c[0] for c in cases].index(self.args.p1_extras_from):]
+        for name, scenario, extra in cases:
+            target = self.out / 'p1' / name
+            target.mkdir(parents=True, exist_ok=True)
+            link = target / 'builds'
+            if not link.exists() and not link.is_symlink():
+                link.symlink_to(full / 'builds', target_is_directory=True)
+            try:
+                _, seconds = self.command(base + ['--scenario', scenario, '--skip-build', '--out-dir', target, *extra], self.out / 'p1' / (name + '.log'))
+            except Exception:
+                rows.append({'check': name, 'status': 'fail', 'evidence': name + '.log'})
+                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'fail', 'source': self.binding(), 'checks': rows})
+                raise
+            rows.append({'check': name, 'status': 'pass', 'seconds': seconds, 'evidence': name + '/pc-artifacts'})
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'source': self.binding(), 'checks': rows})
+        self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'pass', 'source': self.binding(), 'checks': rows})
+
+    def shipped(self, part):
+        if part == 'p5':
+            host, machine, label = self.args.blackwell_host, self.args.blackwell_machine, 'blackwell'
+            if not host or not machine:
+                raise RuntimeError('p5 requires --blackwell-host and --blackwell-machine; never power on a PC.')
+        else:
+            host, machine, label = self.args.host, self.args.expected_machine, '9070'
+        receipt = self.frame(host, machine, label)
+        pc = self.inputs(host, machine, receipt)
+        fields = {'Source': receipt['stagingPath'], 'OutRoot': pc, 'Part': part, 'ReleasePath': pc + r'\verified-release.json', 'FrameId': receipt['frameId']}
+        if part in ('p2', 'p3', 'p5'):
+            hashes = self.extract()
+            self.copy_to(host, hashes, pc + r'\payload-hashes.json')
+            fields['PayloadHashes'] = pc + r'\payload-hashes.json'
+        if part == 'p2':
+            if not self.args.baseline_installer or not self.args.baseline_sha256:
+                raise RuntimeError('p2 requires --baseline-installer and --baseline-sha256.')
+            size, sha = release_tool.file_identity(self.args.baseline_installer)
+            if sha != self.args.baseline_sha256.lower():
+                raise RuntimeError('Baseline installer hash differs from --baseline-sha256; do not install it.')
+            old = pc + '\\' + self.args.baseline_installer.name
+            self.copy_to(host, self.args.baseline_installer, old)
+            fields['OldInstaller'] = old
+            fields['OldVersion'] = release_tool.product_version(self.args.baseline_installer)
+            self.save(self.out / 'p2/old-installer.json', {'path': str(self.args.baseline_installer), 'size': size, 'sha256': sha, 'expectedSha256': self.args.baseline_sha256.lower(), 'productVersion': fields['OldVersion']})
+        if part == 'p3':
+            alpha = receipt['runRoot'] + r'\a'
+            published_version = json.loads((self.out / 'p0/verified-release.json').read_text())['payload']['version']
+            alpha_version = published_version.split('-', 1)[0].split('+', 1)[0] + '-alpha'
+            build = self.desktop(host, machine, receipt, 'tools/validation/Update/Build-ShippedAlpha.ps1', {'Source': receipt['stagingPath'], 'OutRoot': alpha, 'PublishedVersion': published_version, 'AlphaVersion': alpha_version}, 'p3/build-alpha', 15)
+            self.save(self.out / 'p3/build-receipt.json', build)
+            if build['status'] != 'pass':
+                self.collect(host, machine, receipt, part)
+                raise RuntimeError('Production-feed alpha build failed.')
+            alpha_fields = dict(fields, Part='p3-alpha', AlphaInstaller=alpha + '\\release\\RooIndustries-OptimizationSuite-' + alpha_version + '-setup.exe', AlphaVersion=alpha_version)
+            result = self.desktop(host, machine, receipt, 'tools/validation/Update/Invoke-ShippedScenario.ps1', alpha_fields, 'p3/install-alpha', 15)
+            if result['status'] != 'pass':
+                self.collect(host, machine, receipt, part)
+                raise RuntimeError('Alpha installation/preservation failed.')
+        if part == 'p5':
+            preflight = self.out / 'p0/blackwell-as-found.json'
+            self.copy_to(host, preflight, pc + r'\preflight.json')
+            fields['PreflightPath'] = pc + r'\preflight.json'
+        result = self.desktop(host, machine, receipt, 'tools/validation/Update/Invoke-ShippedScenario.ps1', fields, part, 25)
+        self.save(self.out / part / 'run.json', result)
+        self.collect(host, machine, receipt, part)
+        self.copy_from(host, pc + '\\' + part + r'\receipt.json', self.out / part / 'receipt.json')
+        if result['status'] != 'pass':
+            raise RuntimeError(f'{part} stopped; see receipt and failure.json. Product code stays unchanged.')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--scenario', required=True, choices=['p0', 'p1', 'p2', 'p3', 'p4', 'p5'])
+    parser.add_argument('--source-commit', required=True)
+    parser.add_argument('--host', default=os.environ.get('ROO_TEST_SSH_HOST'))
+    parser.add_argument('--expected-machine', default=os.environ.get('ROO_TEST_COMPUTER'))
+    parser.add_argument('--blackwell-host', default=os.environ.get('ROO_CCD_TEST_SSH_HOST'))
+    parser.add_argument('--blackwell-machine', default=os.environ.get('ROO_CCD_TEST_COMPUTER'))
+    parser.add_argument('--test-feed-url', default=os.environ.get('ROO_TEST_UPDATE_FEED'))
+    parser.add_argument('--signing-key', type=Path, default=os.environ.get('ROO_UPDATE_SIGNING_KEY'))
+    parser.add_argument('--published-installer', type=Path)
+    parser.add_argument('--baseline-installer', type=Path)
+    parser.add_argument('--baseline-sha256')
+    parser.add_argument('--innoextract', type=Path)
+    parser.add_argument('--p1-from-scenario', help='Resume the all journey on its existing receipt after an environmental or harness interruption; completed builds and contracts stay frozen.')
+    parser.add_argument('--p1-extras-from', choices=['contracts', 'transport-http', 'transport-disconnect', 'settings-readonly', 'timer-ready', 'timer-read-failure', 'manual-timeout'])
+    parser.add_argument('--out-dir', type=Path, default=ROOT / 'artifacts/roo-29')
+    args = parser.parse_args()
+    if not args.host or not args.expected_machine:
+        parser.error('--host and --expected-machine (or ROO_TEST_SSH_HOST / ROO_TEST_COMPUTER) are required.')
+    if args.scenario != 'p1' and not args.published_installer:
+        parser.error('--published-installer is required for p0 and p2-p5.')
+    if args.scenario == 'p2' and (not args.baseline_installer or not args.baseline_sha256 or not re.fullmatch(r'[0-9a-fA-F]{64}', args.baseline_sha256)):
+        parser.error('p2 requires --baseline-installer and a 64-hex --baseline-sha256.')
+    journey = Journey(args)
+    journey.binding()
+    if args.scenario == 'p0':
+        journey.preflight()
+    elif args.scenario == 'p1':
+        journey.p1()
+    else:
+        journey.shipped(args.scenario)
+
+
+if __name__ == '__main__':
+    main()
