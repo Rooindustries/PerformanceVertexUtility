@@ -42,6 +42,7 @@ class Journey:
         self.args = args
         self.out = args.out_dir.resolve()
         self.out.mkdir(parents=True, exist_ok=True)
+        self.frames = {}
         self.feed = (ROOT / 'tools/release/update-feed.txt').read_text().strip()
 
     def save(self, path, value):
@@ -78,7 +79,8 @@ class Journey:
         try:
             result = windows.interactive(host, machine, receipt, script, fields, minutes, 'RooIndustries_ROO29_' + label.replace('/', '_').replace('-', '_'))
             log.write_text(result.stdout)
-            return {'status': 'pass', 'seconds': time.monotonic() - started, 'evidence': str(log)}
+            completion = windows.completion(result.stdout)
+            return {'status': 'pass' if completion['passed'] else 'fail', 'nonce': completion['nonce'], 'frameId': receipt['frameId'], 'seconds': time.monotonic() - started, 'evidence': str(log)}
         except subprocess.CalledProcessError as error:
             log.write_text((error.stdout or '') + (error.stderr or ''))
             return {'status': 'fail', 'seconds': time.monotonic() - started, 'evidence': str(log)}
@@ -121,9 +123,11 @@ class Journey:
             receipt = json.loads(path.read_text())
             windows.validate_receipt(machine, receipt)
             windows.verify_local_source(host, machine, receipt)
+            self.frames[host] = (machine, receipt)
             return receipt
         receipt = windows.upload(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
         self.save(path, receipt)
+        self.frames[host] = (machine, receipt)
         self.remote(host, machine, "$errors=@();Get-ChildItem -LiteralPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -Filter '*.ps1'|ForEach-Object {$tokens=$null;$parseErrors=$null;[Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)|Out-Null;$errors+=@($parseErrors)};@{errors=$errors.Count;detail=$errors}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'PowerShell parse failed'}", self.out / 'p0' / (label + '-powershell-parse.json'))
         return receipt
 
@@ -143,16 +147,13 @@ $files=@(($roots|Where-Object path -eq $data).files)
                 rows.append({'check': label + ' preflight', 'status': 'unverified', 'observed': 'No host/machine arguments; no power action.'})
                 continue
             path = self.out / 'p0' / (label + '-as-found.json')
-            if path.exists():
-                value = json.loads(path.read_text())
-            else:
-                try:
-                    value = json.loads(self.remote(host, machine, script, path))
-                except RuntimeError:
-                    if label != 'blackwell':
-                        raise
-                    rows.append({'check': 'blackwell reachable', 'status': 'unverified', 'observed': 'SSH unavailable; no power action.', 'evidence': str(path)})
-                    continue
+            try:
+                value = json.loads(self.remote(host, machine, script, path))
+            except RuntimeError:
+                if label != 'blackwell':
+                    raise
+                rows.append({'check': 'blackwell reachable', 'status': 'unverified', 'observed': 'SSH unavailable; no power action.', 'evidence': str(path)})
+                continue
             rows.append({'check': label + ' as-found state', 'status': 'pass', 'observed': {'installedVersion': value['installedVersion'], 'dataRoots': value['dataRoots'], 'dataFiles': len(value['dataFiles']), 'frames': len(value['frames']), 'activeFrameOrSuiteProcesses': value['processes'], 'cs2Tasks': [{k: t[k] for k in ('name', 'state', 'enabled')} for t in value['tasks'] if 'CS2' in t['name']], 'tailscaleBinary': value.get('tailscaleBinary')}, 'evidence': str(path)})
             if value['processes']:
                 raise RuntimeError(label + ' has active Suite/frame processes; preserve them and stop preflight.')
@@ -168,7 +169,11 @@ $files=@(($roots|Where-Object path -eq $data).files)
         self.save(self.out / 'p0/receipt.json', {'part': 'p0', 'status': 'pass', 'source': self.binding(), 'checks': rows})
 
     def copy_to(self, host, local, remote):
+        machine, receipt = self.frames[host]
+        scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';'
+        windows.invoke(host, machine, scope + 'if(Test-Path -LiteralPath ' + windows.ps_literal(remote) + "){throw 'Upload input already exists; retained.'}")
         self.command(['scp', *windows.SSH_OPTIONS, local, host + ':' + remote.replace('\\', '/')])
+        windows.invoke(host, machine, scope + 'Register-HarnessFile ' + windows.ps_literal(remote) + " 'upload-input'|Out-Null")
 
     def copy_from(self, host, remote, local):
         local = Path(local)
@@ -178,9 +183,13 @@ $files=@(($roots|Where-Object path -eq $data).files)
     def inputs(self, host, machine, receipt):
         self.verified()
         pc = receipt['runRoot'] + r'\shipped'
-        self.remote(host, machine, '[IO.Directory]::CreateDirectory(' + windows.ps_literal(pc) + ')|Out-Null', self.out / 'p0' / (machine + '-directory.log'))
-        self.copy_to(host, self.out / 'p0/verified-release.json', pc + r'\verified-release.json')
-        return pc
+        setup = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';Ensure-HarnessOutputDirectory ' + windows.ps_literal(pc)
+        self.remote(host, machine, setup, self.out / 'p0' / (machine + '-directory.log'))
+        import uuid
+        inputs = pc + '\\inputs-' + uuid.uuid4().hex
+        self.remote(host, machine, setup.rsplit(';Ensure-HarnessOutputDirectory', 1)[0] + ';New-HarnessDirectory ' + windows.ps_literal(inputs) + " 'harness-inputs'|Out-Null", self.out / 'p0' / (machine + '-inputs.log'))
+        self.copy_to(host, self.out / 'p0/verified-release.json', inputs + r'\verified-release.json')
+        return pc, inputs
 
     def extract(self):
         installer = self.args.published_installer
@@ -216,13 +225,16 @@ $files=@(($roots|Where-Object path -eq $data).files)
 
     def collect(self, host, machine, receipt, label):
         frame = receipt['runRoot']
-        destination = frame + r'\shipped-evidence.zip'
-        script = r'''
+        import uuid
+        destination = frame + r'\shipped' + '\\evidence-' + uuid.uuid4().hex + '.zip'
+        scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';'
+        script = scope + r'''
 Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 $frame=FRAME;$destination=DEST
-if(Test-Path $destination){[IO.File]::Delete($destination)}
-$file=[IO.File]::Create($destination);$zip=[IO.Compression.ZipArchive]::new($file,[IO.Compression.ZipArchiveMode]::Create)
-try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullName.Substring($frame.Length+1);if($relative -match '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -or $item.Extension -notin '.json','.png','.log','.txt','.csv','.sha256'){continue};[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.FullName,$relative.Replace('\','/'))|Out-Null}}finally{$zip.Dispose();$file.Dispose()}
+if(Test-Path $destination){throw 'Fresh evidence archive already exists'}
+$file=[IO.FileStream]::new($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$zip=[IO.Compression.ZipArchive]::new($file,[IO.Compression.ZipArchiveMode]::Create)
+try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullName.Substring($frame.Length+1);if($item.FullName -ieq $destination){continue};if($relative -match '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -or $item.Extension -notin '.json','.png','.log','.txt','.csv','.sha256'){continue};[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.FullName,$relative.Replace('\','/'))|Out-Null}}finally{$zip.Dispose();$file.Dispose()}
+Register-HarnessFile $destination 'evidence-archive'|Out-Null
 '''.replace('FRAME', windows.ps_literal(frame)).replace('DEST', windows.ps_literal(destination))
         self.remote(host, machine, script, self.out / label / 'collect.log')
         local = self.out / label / 'pc-evidence.zip'
@@ -302,19 +314,19 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
         else:
             host, machine, label = self.args.host, self.args.expected_machine, '9070'
         receipt = self.frame(host, machine, label)
-        pc = self.inputs(host, machine, receipt)
-        fields = {'Source': receipt['stagingPath'], 'OutRoot': pc, 'Part': part, 'ReleasePath': pc + r'\verified-release.json', 'FrameId': receipt['frameId']}
+        pc, inputs = self.inputs(host, machine, receipt)
+        fields = {'Source': receipt['stagingPath'], 'OutRoot': pc, 'Part': part, 'ReleasePath': inputs + r'\verified-release.json', 'FrameId': receipt['frameId']}
         if part in ('p2', 'p3', 'p5'):
             hashes = self.extract()
-            self.copy_to(host, hashes, pc + r'\payload-hashes.json')
-            fields['PayloadHashes'] = pc + r'\payload-hashes.json'
+            self.copy_to(host, hashes, inputs + r'\payload-hashes.json')
+            fields['PayloadHashes'] = inputs + r'\payload-hashes.json'
         if part == 'p2':
             if not self.args.baseline_installer or not self.args.baseline_sha256:
                 raise RuntimeError('p2 requires --baseline-installer and --baseline-sha256.')
             size, sha = release_tool.file_identity(self.args.baseline_installer)
             if sha != self.args.baseline_sha256.lower():
                 raise RuntimeError('Baseline installer hash differs from --baseline-sha256; do not install it.')
-            old = pc + '\\' + self.args.baseline_installer.name
+            old = inputs + '\\' + self.args.baseline_installer.name
             self.copy_to(host, self.args.baseline_installer, old)
             fields['OldInstaller'] = old
             fields['OldVersion'] = release_tool.product_version(self.args.baseline_installer)
@@ -323,7 +335,7 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
             alpha = receipt['runRoot'] + r'\a'
             published_version = json.loads((self.out / 'p0/verified-release.json').read_text())['payload']['version']
             alpha_version = published_version.split('-', 1)[0].split('+', 1)[0] + '-alpha'
-            published_app = pc + r'\published-app.dll'
+            published_app = inputs + r'\published-app.dll'
             self.copy_to(host, self.out / 'p0/extracted/app/app/RooIndustries.OptimizationSuite.App.dll', published_app)
             build = self.desktop(host, machine, receipt, 'tools/validation/Update/Build-ShippedAlpha.ps1', {'Source': receipt['stagingPath'], 'OutRoot': alpha, 'PublishedVersion': published_version, 'AlphaVersion': alpha_version, 'PublishedApp': published_app}, 'p3/build-alpha', 15)
             self.save(self.out / 'p3/build-receipt.json', build)
@@ -335,14 +347,11 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
             if result['status'] != 'pass':
                 self.collect(host, machine, receipt, part)
                 raise RuntimeError('Alpha installation/preservation failed.')
-        if part == 'p5':
-            preflight = self.out / 'p0/blackwell-as-found.json'
-            self.copy_to(host, preflight, pc + r'\preflight.json')
-            fields['PreflightPath'] = pc + r'\preflight.json'
         result = self.desktop(host, machine, receipt, 'tools/validation/Update/Invoke-ShippedScenario.ps1', fields, part, 25)
         self.save(self.out / part / 'run.json', result)
         self.collect(host, machine, receipt, part)
-        self.copy_from(host, pc + '\\' + part + r'\receipt.json', self.out / part / 'receipt.json')
+        if result.get('nonce'):
+            self.save(self.out / part / 'receipt.json', windows.read_result(host, machine, receipt, 'receipt.json', result['nonce']))
         if result['status'] != 'pass':
             raise RuntimeError(f'{part} stopped; see receipt and failure.json. Product code stays unchanged.')
 
