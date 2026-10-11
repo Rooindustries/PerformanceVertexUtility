@@ -5,10 +5,12 @@ param([Parameter(Mandatory)][string]$OutRoot,
 $ErrorActionPreference='Stop'
 if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong evidence machine.'}
 if($EndUtc -le $StartUtc -or ($EndUtc-$StartUtc).TotalHours -gt 1){throw 'Supply an increasing evidence window no longer than one hour.'}
-if(Test-Path $OutRoot){throw 'Evidence folder already exists; retain it and use a fresh folder.'}
-[IO.Directory]::CreateDirectory($OutRoot)|Out-Null
+. (Join-Path $PSScriptRoot 'Harness.Common.ps1')
+$nonce=Initialize-HarnessInvocation 'restart-evidence' $OutRoot
+Ensure-HarnessOutputDirectory $OutRoot
+$OutRoot=New-HarnessEvidenceDirectory $OutRoot 'restart-evidence'
 $utf8=[Text.UTF8Encoding]::new($false)
-function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $OutRoot $name),($value|ConvertTo-Json -Depth 40),$utf8)}
+function Save([string]$name,$value){Write-HarnessResult $OutRoot $name $value|Out-Null}
 function Record($event){
  $xml=[xml]$event.ToXml();$fields=@{}
  foreach($field in @($xml.Event.EventData.Data)){if($field.Name){$fields[[string]$field.Name]=[string]$field.'#text'}}
@@ -32,8 +34,8 @@ $logs=@();$windowLines=@();$restartLines=@()
 foreach($root in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){
  $folder=Join-Path $env:LOCALAPPDATA ($root+'\logs')
  foreach($file in @(Get-ChildItem $folder -File -ErrorAction SilentlyContinue|Where-Object Name -like 'app*')){
-  $destination=Join-Path $OutRoot ($root+'-'+$file.Name)
-  Copy-Item -LiteralPath $file.FullName -Destination $destination
+  $destination=Get-HarnessOutputPath $OutRoot ($root+'-'+$file.Name)
+  Copy-HarnessFile $file.FullName $destination 'log-copy'|Out-Null
   $logs+=@(@{root=$root;path=$file.FullName;copy=$destination;bytes=$file.Length;sha256=(Get-FileHash $destination).Hash})
   $lineNumber=0;$stamp=$null
   foreach($line in [IO.File]::ReadLines($destination)){
@@ -56,8 +58,8 @@ $security=Query 'Security' @(4688);Save 'security-4688-window.json' $security
 $shutdown=@($security.events|Where-Object {$_.fields.NewProcessName -match '(?i)\\shutdown\.exe$'})
 $parents=@($shutdown|ForEach-Object {$_.fields.ProcessId})
 Save 'security-shutdown-and-parent.json' @{shutdown=$shutdown;parents=@($security.events|Where-Object {$_.fields.NewProcessId -in $parents})}
-$audit=@(& (Join-Path $env:SystemRoot 'System32\auditpol.exe') /get /category:* /r 2>&1);$auditExit=$LASTEXITCODE
-[IO.File]::WriteAllText((Join-Path $OutRoot 'audit-policy.csv'),($audit -join "`r`n"),$utf8)
+$audit=Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\auditpol.exe') '/get /category:* /r' 'audit-policy';$auditExit=0
+New-HarnessText (Get-HarnessOutputPath $OutRoot 'audit-policy.csv') $audit 'audit-evidence'|Out-Null
 $task=Query 'Microsoft-Windows-TaskScheduler/Operational';Save 'task-scheduler-events.json' $task
 $ssh=Query 'OpenSSH/Operational';Save 'openssh-operational-events.json' $ssh
 $sshAdmin=Query 'OpenSSH/Admin';Save 'openssh-admin-events.json' $sshAdmin
@@ -65,3 +67,5 @@ $powershell=Query 'Microsoft-Windows-PowerShell/Operational' @(4103,4104)
 $matching=@($powershell.events|Where-Object {($_.message+' '+$_.xml) -match '(?i)shutdown|restart'})
 Save 'powershell-shutdown-restart-events.json' @{log=$powershell.log;enabled=$powershell.enabled;oldest=$powershell.oldest;newest=$powershell.newest;status=$powershell.status;error=$powershell.error;windowEventCount=@($powershell.events).Count;events=$matching}
 Save 'receipt.json' @{machine=$env:COMPUTERNAME;collectedAtUtc=[DateTime]::UtcNow.ToString('o');startUtc=$StartUtc.ToUniversalTime().ToString('o');endUtc=$EndUtc.ToUniversalTime().ToString('o');timeZone=@{id=$tz.Id;baseUtcOffset=[string]$tz.BaseUtcOffset;displayName=$tz.DisplayName};auditPolicyExit=$auditExit;appFiles=$logs.Count;appWindowLines=$windowLines.Count;appRestartLines=$restartLines.Count;systemEvents=@($system.events).Count;securityEvents=@($security.events).Count;shutdownEvents=$shutdown.Count;taskEvents=@($task.events).Count;sshEvents=@($ssh.events).Count;sshAdminEvents=@($sshAdmin.events).Count;powerShellWindowEvents=@($powershell.events).Count;powerShellMatchingEvents=$matching.Count}
+
+Complete-HarnessInvocation 'pass' -Cleanup|Out-Null

@@ -9,6 +9,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import signal
+import uuid
 import time
 from urllib.request import urlopen
 from urllib.parse import urlsplit, urljoin
@@ -24,6 +26,7 @@ FEED = None
 KEY = None
 VERSION_A = None
 VERSION_B = None
+FRAME_RECEIPT = None
 spec = importlib.util.spec_from_file_location("windows_ssh", ROOT / "tools/validation/windows_ssh.py")
 windows = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows)
@@ -60,7 +63,11 @@ def interactive(receipt, script, fields, name, minutes=10):
         raise RuntimeError("Desktop scenario failed: " + name + "\n" + output) from None
     (OUT / (name + ".log")).write_text(output)
     (OUT / (name + "-command.json")).write_text(json.dumps({"script": script, "arguments": fields, "seconds": time.monotonic() - start}, indent=2))
+    completed = windows.completion(output)
+    if not completed["passed"]:
+        raise RuntimeError("Invocation did not complete its cleanup: " + name)
     print(name + " completed", flush=True)
+    return completed
 
 
 def copy_from(remote_path, destination):
@@ -69,7 +76,10 @@ def copy_from(remote_path, destination):
 
 
 def copy_to(local_path, remote_path):
+    scope = ". " + windows.ps_literal(FRAME_RECEIPT["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(FRAME_RECEIPT[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(FRAME_RECEIPT["frameId"]) + ";"
+    remote(scope + "if(Test-Path -LiteralPath " + windows.ps_literal(remote_path) + "){throw 'Upload input already exists; retained.'}", "upload-input-guard")
     command(["scp", local_path, HOST + ":" + remote_path.replace("\\", "/")])
+    remote(scope + "Register-HarnessFile " + windows.ps_literal(remote_path) + " 'upload-input'|Out-Null", "upload-input-record")
 
 
 def signed(installer, version, url, output):
@@ -115,32 +125,34 @@ def contracts(receipt, builds, pc_out, installer, valid):
         add(name, dict(payload, installer=dict(payload["installer"], **{field: value})), 0, True)
     add("unknown-fields", dict(payload, extra={"anything": [1, 2, "ignored"]}), 2, True)
     add("long-notes", dict(payload, notes="x" * 2100), 2, True)
-    remote("[IO.Directory]::CreateDirectory(" + windows.ps_literal(pc_out + r"\contracts") + ")|Out-Null", "contracts-directory")
+    import uuid
+    input_dir = pc_out + "\\contract-inputs-" + uuid.uuid4().hex
+    setup = ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(receipt["frameId"]) + ";Ensure-HarnessOutputDirectory " + windows.ps_literal(pc_out) + ";New-HarnessDirectory " + windows.ps_literal(input_dir) + " 'contract-inputs'|Out-Null"
+    remote(setup, "contracts-directory")
     results = []
     for name, path, expected in cases:
-        remote_manifest = pc_out + "\\contracts\\" + path.name
-        remote_result = pc_out + "\\contracts\\" + name + "-result.json"
+        remote_manifest = input_dir + "\\" + path.name
         copy_to(path, remote_manifest)
-        call = "& " + windows.ps_literal(builds + r"\probe\UpdateProbe.exe") + " " + " ".join(windows.ps_literal(value) for value in [remote_manifest, FEED, VERSION_A, remote_result])
+        fields = {"Source": receipt["stagingPath"], "OutRoot": pc_out, "Action": "contract-probe", "Probe": builds + r"\probe\UpdateProbe.exe", "Manifest": remote_manifest, "FeedUrl": FEED, "CurrentVersion": VERSION_A}
         if name in ("valid", "unknown-fields", "long-notes"):
-            call += " " + windows.ps_literal(builds + "\\B\\" + installer.name)
-        remote(call + ";if($LASTEXITCODE -ne 0){throw 'Contract probe failed'}", "contract-" + name)
+            fields["InstallerPath"] = builds + "\\B\\" + installer.name
+        invocation = interactive(receipt, "tools/validation/Update/Invoke-UpdateFixture.ps1", fields, "contract_" + name.replace("-", "_"))
+        result = windows.read_result(HOST, MACHINE, receipt, "contract.json", invocation["nonce"])
         result_path = directory / (name + "-result.json")
-        copy_from(remote_result, result_path)
-        result = json.loads(result_path.read_text())
+        result_path.write_text(json.dumps(dict(nonce=invocation["nonce"], data=result), indent=2))
         if result["result"]["Kind"] != expected:
             raise RuntimeError("Contract outcome differs: " + name)
         if name == "long-notes" and len(result["result"]["Release"]["Notes"]) != 2000:
             raise RuntimeError("Release notes were not truncated")
         if result.get("file") and not result["file"]["Verified"]:
             raise RuntimeError("Correct installer was refused: " + name)
-        results.append({"case": name, "expected": expected, "observed": result["result"]["Kind"], "reason": result["result"]["Reason"]})
+        results.append({"case": name, "nonce": invocation["nonce"], "frameId": receipt["frameId"], "expected": expected, "observed": result["result"]["Kind"], "reason": result["result"]["Reason"]})
     (directory / "results.json").write_text(json.dumps(results, indent=2))
     print(str(len(results)) + " signed-feed contract cases completed", flush=True)
 
 
 def main():
-    global OUT, HOST, MACHINE, FEED, KEY, VERSION_A, VERSION_B
+    global OUT, HOST, MACHINE, FEED, KEY, VERSION_A, VERSION_B, FRAME_RECEIPT
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
     parser.add_argument("--host", default=os.environ.get("ROO_TEST_SSH_HOST"))
@@ -159,6 +171,8 @@ def main():
     parser.add_argument("--skip-contracts", action="store_true")
     parser.add_argument("--from-scenario", help="Resume the all-scenarios journey at a named scenario using its retained baseline")
     args = parser.parse_args()
+    if args.scenario == "contracts" and args.skip_contracts:
+        parser.error("--scenario contracts cannot be combined with --skip-contracts")
     missing = [name for name in ("host", "expected_machine", "feed_url", "signing_key") if not getattr(args, name)]
     if missing:
         parser.error("Required test configuration is missing: " + ", ".join("--" + name.replace("_", "-") for name in missing) + ". Supply arguments or the corresponding ROO_TEST_* / ROO_UPDATE_SIGNING_KEY environment variables.")
@@ -187,18 +201,19 @@ def main():
         receipt_path.write_text(json.dumps(receipt, indent=2))
     else:
         receipt = json.loads(receipt_path.read_text())
+    FRAME_RECEIPT = receipt
     windows.verify_local_source(HOST, MACHINE, receipt)
     frame = receipt["runRoot"]
     source = receipt["stagingPath"]
     pc_out = args.evidence_root or frame + r"\ota"
     builds = args.build_root or pc_out + r"\builds"
     if args.scenario in ("all", "build") and not args.skip_build:
-        interactive(receipt, "tools/validation/Update/Build-UpdatePair.ps1", {"Source": source, "OutputRoot": builds, "FeedUrl": FEED, "VersionA": VERSION_A, "VersionB": VERSION_B}, "BuildPair", 40)
+        built = interactive(receipt, "tools/validation/Update/Build-UpdatePair.ps1", {"Source": source, "OutputRoot": builds, "FeedUrl": FEED, "VersionA": VERSION_A, "VersionB": VERSION_B}, "BuildPair", 40)
         for build, version in (("A", VERSION_A), ("B", VERSION_B)):
             name = "RooIndustries-OptimizationSuite-" + version + "-setup.exe"
             copy_from(builds + "\\" + build + "\\" + name, OUT / "builds" / build / name)
             copy_from(builds + "\\" + build + "\\" + name + ".sha256", OUT / "builds" / build / (name + ".sha256"))
-        copy_from(builds + r"\build-times.json", OUT / "build-times.json")
+        (OUT / "build-times.json").write_text(json.dumps(windows.read_result(HOST, MACHINE, receipt, "build-times.json", built["nonce"]), indent=2))
         if args.scenario == "build":
             return
     a = OUT / ("builds/A/RooIndustries-OptimizationSuite-" + VERSION_A + "-setup.exe")
@@ -240,12 +255,30 @@ def main():
     server = None
     log = None
     serving = False
+    server_entry = None
+    server_handle = None
+    server_birth = None
+    serve_entry = None
+    client_nonce = uuid.uuid4().hex
+    def local_creation(pid):
+        stat = Path('/proc/' + str(pid) + '/stat').read_text()
+        return Path('/proc/sys/kernel/random/boot_id').read_text().strip() + ':' + stat[stat.rfind(')') + 2:].split()[19]
+    def ledger_scope():
+        return ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(client_nonce) + ";"
+    def record_local(kind, identity, purpose):
+        value = base64.b64encode(json.dumps(identity).encode()).decode()
+        return remote(ledger_scope() + "$id=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + value + "'))|ConvertFrom-Json;($e=Add-HarnessEntry " + windows.ps_literal(kind) + " $id " + windows.ps_literal(purpose) + " 'run' @{platform='linux';host=" + windows.ps_literal(socket.gethostname()) + "}).id", "local-ledger-record").strip()
+    def retire_local(entry):
+        remote(ledger_scope() + "Set-HarnessEntryState " + windows.ps_literal(entry) + " 'removed'", "local-ledger-cleanup")
     def start_server(fault=None):
-        nonlocal server, log
+        nonlocal server, log, server_entry, server_handle, server_birth
         if server is None:
             log = (OUT / "http-server.log").open("a")
             args = [sys.executable, "-I", ROOT / "tools/validation/Update/serve_fixture.py", "--directory", str(http_root), "--feed-path", parsed_feed.path, "--fault", fault] if fault else [sys.executable, "-m", "http.server", "13684", "--bind", "127.0.0.1", "--directory", str(http_root)]
             server = subprocess.Popen(args, stdout=log, stderr=log)
+            server_handle = os.pidfd_open(server.pid)
+            server_birth = local_creation(server.pid)
+            server_entry = record_local('process', {'pid': server.pid, 'creationTimeNative': server_birth, 'imagePath': str(Path(sys.executable).resolve())}, 'http-server')
             for attempt in range(40):
                 if server.poll() is not None:
                     raise RuntimeError("Owned HTTP server exited")
@@ -256,15 +289,23 @@ def main():
                     time.sleep(0.1)
             (OUT / "owned-server.json").write_text(json.dumps({"pid": server.pid, "host": socket.gethostname(), "port": 13684, "httpsPort": 8460}))
     def stop_server():
-        nonlocal server, log
+        nonlocal server, log, server_handle, server_entry
         if server:
-            server.terminate()
+            if server.poll() is None:
+                if local_creation(server.pid) != server_birth:
+                    raise RuntimeError('Owned HTTP-server identity changed; retained.')
+                signal.pidfd_send_signal(server_handle, signal.SIGTERM)
             server.wait(timeout=10)
+            os.close(server_handle)
+            retire_local(server_entry)
+            server_handle = server_entry = None
             server = None
         if log:
             log.close()
             log = None
+    last_invocation = None
     def scenario(name, installer=None, evidence_name=None):
+        nonlocal last_invocation
         fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B, "FeedUrl": FEED, "FeedKeyId": envelope["keyId"]}
         if args.manual_retry:
             fields["ManualRetry"] = True
@@ -276,9 +317,10 @@ def main():
             if not args.fixture_exe:
                 raise RuntimeError("timer-read-failure requires --fixture-exe from the hook-only app copy")
             fields["FixtureExe"] = args.fixture_exe
-        interactive(receipt, args.scenario_script, fields, name.replace("-", "_"), 24 if name == "manual-timeout" else 12)
+        last_invocation = interactive(receipt, args.scenario_script, fields, name.replace("-", "_"), 24 if name == "manual-timeout" else 12)
+        return last_invocation
     def fixture(action):
-        interactive(receipt, "tools/validation/Update/Invoke-UpdateFixture.ps1", {"Source": source, "OutRoot": pc_out, "Action": action}, action.replace("-", "_"), 8)
+        interactive(receipt, "tools/validation/Update/Invoke-UpdateFixture.ps1", {"Source": source, "OutRoot": pc_out, "Action": action, "Version": VERSION_B, "CurrentVersion": VERSION_A}, action.replace("-", "_"), 8)
     try:
         status = command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-before.json")
         if "8460" in status:
@@ -287,6 +329,7 @@ def main():
         start_server()
         command(["sudo", "-n", "tailscale", "serve", "--bg", "--https=8460", "http://127.0.0.1:13684"], OUT / "tailscale-start.log")
         serving = True
+        serve_entry = record_local('tailnet', {'httpsPort': 8460, 'proxy': 'http://127.0.0.1:13684', 'nonce': client_nonce}, 'https-serve')
         remote("$r=Invoke-WebRequest -UseBasicParsing " + windows.ps_literal(FEED) + ";@{status=$r.StatusCode;bytes=$r.RawContentLength}|ConvertTo-Json", "feed-reachability")
         sequence = ["seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup"] if args.scenario == "all" else [args.scenario]
         if args.from_scenario:
@@ -368,10 +411,10 @@ def main():
                 shutil.copyfile(OUT / "same.json", feed_file)
                 scenario("manual-install", builds + "\\A\\" + a.name, "reset-A-after-copy-failure")
             elif name == "contracts":
-                remote("'Use UpdateProbe with each retained signed contract manifest.'", "contracts")
+                raise RuntimeError("Contracts must run the contract probe entry point")
             else:
                 scenario(name)
-            ledger["checks"].append({"check": name, "status": "pass", "frameId": receipt["frameId"]})
+            ledger["checks"].append({"check": name, "status": "pass", "frameId": receipt["frameId"], "nonce": last_invocation["nonce"]})
             ledger_path.write_text(json.dumps(ledger, indent=2))
             if name in ("tampered", "tampered-size"):
                 shutil.copyfile(b, installer_file)
@@ -385,12 +428,22 @@ def main():
         try:
             try:
                 if serving:
+                    current = json.loads(command(["tailscale", "serve", "status", "--json"]))
+                    targets = [handler.get('Proxy') for key, web in current.get('Web', {}).items() if key.endswith(':8460') for handler in web.get('Handlers', {}).values()]
+                    if targets != ['http://127.0.0.1:13684']:
+                        raise RuntimeError('Owned tailnet route changed; retained.')
                     command(["sudo", "-n", "tailscale", "serve", "--https=8460", "off"], OUT / "tailscale-stop.log")
+                    retire_local(serve_entry)
             finally:
                 stop_server()
-            command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
-            evidence = pc_out + "-evidence.zip"
-            remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures','wrong-subject')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
+            after = command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
+            if json.loads(after) != json.loads(status):
+                raise RuntimeError('Tailnet configuration differs from its as-found JSON.')
+            import uuid
+            evidence = pc_out + "\\evidence-" + uuid.uuid4().hex + ".zip"
+            scope = ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(receipt["frameId"]) + ";"
+            remote(scope + "$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});if(Test-Path " + windows.ps_literal(evidence) + "){throw 'Evidence archive already exists; retained.'};Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + ";Register-HarnessFile " + windows.ps_literal(evidence) + " 'evidence-archive'|Out-Null", "collect-evidence")
+
             copy_from(evidence, OUT / "pc-evidence.zip")
             import zipfile
             with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
