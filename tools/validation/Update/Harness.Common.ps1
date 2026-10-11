@@ -84,6 +84,8 @@ function Get-HarnessProcess([int]$ProcessId){
  return $null
 }
 function Start-HarnessDescendantTracker($Root){
+ $known=Get-HarnessProcess ([int]$Root.Identity.pid)
+ if(-not$known -or $known.Identity.creationTimeFileTimeUtc -cne $Root.Identity.creationTimeFileTimeUtc -or $known.Identity.imagePath -ine $Root.Identity.imagePath){throw 'Tracking root is not in this creation ledger; retained.'}
  if(-not('RooHarnessProcesses' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'HarnessProcesses.cs') -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll}
  if(-not$script:Harness.Trackers){$script:Harness.Trackers=[Collections.Generic.List[object]]::new()}
  $tracker=[RooHarnessProcesses]::new([int]$Root.Identity.pid,[long]$Root.Identity.creationTimeFileTimeUtc,$Root.Identity.imagePath,$script:Harness.LedgerPath,$script:Harness.FrameId,$script:Harness.Manifest,$script:Harness.Nonce,$env:COMPUTERNAME)
