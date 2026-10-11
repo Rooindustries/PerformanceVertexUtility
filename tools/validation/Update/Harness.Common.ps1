@@ -4,7 +4,6 @@ if(-not ('RooHarnessWindow' -as [type])){
 using System;
 using System.Runtime.InteropServices;
 public static class RooHarnessWindow {
- public static System.Threading.Tasks.Task<System.Diagnostics.Process> StartShell(System.Diagnostics.ProcessStartInfo start) { return System.Threading.Tasks.Task.Run(()=>System.Diagnostics.Process.Start(start)); }
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string path,IntPtr security);
  public static void CreateDirectory(string path) { if(!CreateDirectoryW(path,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); }
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
@@ -91,13 +90,9 @@ function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Li
  $script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt
  return $receipt
 }
-function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo,[scriptblock]$WhileStarting){
- if($StartInfo -and $StartInfo.UseShellExecute){
-  if(-not$WhileStarting){throw 'Shell launches require an owned-dialog observer.'}
-  $pending=[RooHarnessWindow]::StartShell($StartInfo);$deadline=[DateTime]::UtcNow.AddSeconds(90)
-  while(-not$pending.IsCompleted){& $WhileStarting;if([DateTime]::UtcNow -ge $deadline){throw 'Shell launch timed out before a process was created.'};Start-Sleep -Milliseconds 100}
-  $process=$pending.GetAwaiter().GetResult()
- }elseif($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
+function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo){
+ if($StartInfo -and $StartInfo.UseShellExecute){throw 'Run ShellExecute in a separate owned launcher so its dialogs cannot block the harness.'}
+ if($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
   $arguments=@{FilePath=$FilePath;WindowStyle=$WindowStyle;PassThru=$true}
   if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=$ArgumentList}
   $process=Start-Process @arguments
@@ -139,7 +134,23 @@ function Start-HarnessExplorerProcess([string]$Image,[string]$Arguments,[string]
   return $owned
  }finally{[Runtime.InteropServices.Marshal]::ReleaseComObject($broker.shell)|Out-Null}
 }
-function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru){
+function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null){
+ if($Ancestor){
+  $ancestorId=[int]$Ancestor.Identity.pid;$seen=@{};$childTime=$null;$cursor=$ProcessId;$reached=$false
+  for($hop=0;$hop -lt 32;$hop++){
+   if($cursor -le 4 -or $seen.ContainsKey($cursor)){return $false};$seen[$cursor]=$true
+   $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$cursor) -ErrorAction SilentlyContinue
+   if(-not$cim -or -not$cim.CreationDate){return $false}
+   $created=$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()
+   if($childTime -and $created -gt $childTime){return $false}
+   if($cursor -eq $ancestorId){
+    if([RooValidationOwnership.Native]::Created($Ancestor.handle).ToString() -cne $Ancestor.Identity.creationTimeFileTimeUtc -or [Math]::Abs([long]$Ancestor.Identity.creationTimeFileTimeUtc-$created) -gt 10){return $false}
+    $reached=$true;break
+   }
+   $childTime=$created;$cursor=[int]$cim.ParentProcessId
+  }
+  if(-not$reached){return $false}
+ }
  $known=Get-HarnessProcess $ProcessId
  if($known){if($PassThru){return $known};return $true}
  $chain=@();$seen=@{};$childTime=$null;$anchor=$null
