@@ -120,40 +120,66 @@ function Wizard([string]$path,[string]$label,[string]$version){
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
  $existingWindows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
  $setupLog=Get-HarnessOutputPath $directory ($label+'-setup.log');$script:setupLogs=@{}+$script:setupLogs;$script:setupLogs[$label]=$setupLog
- $start=[Diagnostics.ProcessStartInfo]::new($path);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $path -Parent;$start.Arguments='/LOG="'+$setupLog+'"'
- $setupOwned=Start-OwnedProcess -StartInfo $start -Purpose setup -WhileStarting {
-  Assert-HarnessNewSmartScreen $existingWindows $directory
-  foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
-   if($win.Current.NativeWindowHandle -notin $existingWindows -and $win.Current.ClassName -eq '#32770' -and $win.Current.Name -eq 'Open File - Security Warning' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId))){
-    $script:window=Register-HarnessWindow $win;Save ($label+'-security-warning.json') @{title=$win.Current.Name;controls=@(Tree)};Shot ($label+'-security-warning')
-    $button=ByNameControl 'Run' $CT::Button;if(-not$button){throw 'Owned security warning has no Run button.'};Activate $button
-   }
-  }
- }
- $setup=$setupOwned.process;$script:setupReceipts.Add($setupOwned)
- Save ($label+'-launch.json') @{path=$path;arguments=$start.Arguments;useShellExecute=$true;setup=$setupOwned.Identity;zone=try{Zone $path}catch{$null}}
- $until=[DateTime]::UtcNow.AddMinutes(10);$seen=[Collections.Generic.HashSet[string]]::new();$number=0
- while([DateTime]::UtcNow -lt $until -and -not$setup.HasExited){
+ $launchResult=Join-Path $directory ($label+'-shell-result-'+$nonce+'.json')
+ $launcherPath=Get-HarnessOutputPath $directory ($label+'-shell.ps1')
+ if(Test-Path -LiteralPath $launchResult){throw 'Shell result already exists; retained.'}
+ $launcher=@'
+param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Log,[Parameter(Mandatory)][string]$Result,
+ [Parameter(Mandatory)][string]$Nonce,[Parameter(Mandatory)][string]$FrameRoot,[Parameter(Mandatory)][string]$FrameId,
+ [Parameter(Mandatory)][string]$Manifest,[Parameter(Mandatory)][string]$Source)
+$ErrorActionPreference='Stop'
+. (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
+Open-HarnessRun $FrameRoot $FrameId $Manifest $Nonce
+if(Test-Path -LiteralPath $Result){throw 'Shell result already exists; retained.'}
+try{
+ $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $Installer -Parent;$start.Arguments='/LOG="'+$Log+'"'
+ $process=[Diagnostics.Process]::Start($start)
+ $owned=Register-HarnessStartedProcess $process 'shell-setup'
+ $process.WaitForExit()
+ $result=@{pid=$process.Id;identity=$owned.Identity;status='exited';exitCode=$process.ExitCode}
+}catch{$result=@{status='failed';error=$_.Exception.ToString()}}
+New-HarnessText $Result (@{nonce=$Nonce;data=$result}|ConvertTo-Json -Depth 20) 'result' 'run'|Out-Null
+if($result.status -eq 'failed'){exit 1}
+'@
+ New-HarnessText $launcherPath $launcher 'shell-launcher'|Out-Null
+ $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$launcherPath+'" -Installer "'+$path+'" -Log "'+$setupLog+'" -Result "'+$launchResult+'" -Nonce "'+$nonce+'" -FrameRoot "'+$script:Harness.Root+'" -FrameId "'+$script:Harness.FrameId+'" -Manifest "'+$script:Harness.Manifest+'" -Source "'+$Source+'"'
+ $shellOwned=Start-OwnedProcess -FilePath powershell.exe -ArgumentList $arguments -WindowStyle Normal -Purpose shell-launcher
+ $shell=$shellOwned.process;$script:extraProcesses.Add($shellOwned)
+ Save ($label+'-launch.json') @{path=$path;arguments=('/LOG="'+$setupLog+'"');useShellExecute=$true;launcher=$shellOwned.Identity;result=$launchResult;nonce=$nonce;zone=try{Zone $path}catch{$null}}
+ $until=[DateTime]::UtcNow.AddMinutes(10);$seen=[Collections.Generic.HashSet[string]]::new();$number=0;$result=$null
+ while([DateTime]::UtcNow -lt $until){
   CollectStarts
   foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
    if($win.Current.NativeWindowHandle -notin $existingWindows){Assert-HarnessSmartScreen $win $directory}
    if($win.Current.ClassName -eq 'TWizardForm' -and $win.Current.Name -like '*Roo Industries*'){
+    $setupOwned=Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shellOwned -PassThru
+    if(-not$setupOwned){throw 'Wizard belongs to a non-owned setup; retained.'}
+    if($win.Current.ProcessId -notin @($script:setupReceipts.Identity.pid)){$script:setupReceipts.Add($setupOwned)}
     $script:window=Register-HarnessWindow $win
     $tree=@(Tree);$button=$null
     foreach($name in 'Finish','Install','Next >','Next'){$candidate=ByNameControl $name $CT::Button;if($candidate -and $candidate.Current.IsEnabled){$button=$candidate;break}}
     $key=if($button){$tree.name -join '|'}else{'install-progress'}
     if($seen.Add($key)){$number++;$shotName=$label+'-page-'+('{0:D2}'-f$number);Save ($shotName+'.json') @{title=$win.Current.Name;controls=$tree;defaultChoicesKept=$true};Shot $shotName;if($button){Activate $button;Start-Sleep -Milliseconds 400}}
-   }elseif($win.Current.ClassName -eq '#32770' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId))){
+   }elseif($win.Current.ClassName -eq '#32770' -and $win.Current.ProcessId -eq $shell.Id){
+    if(-not(Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shellOwned)){throw 'Shell security warning owner changed; retained.'}
+    $script:window=Register-HarnessWindow $win;$number++;Save ($label+'-security-warning-'+$number+'.json') @(Tree);Shot ($label+'-security-warning-'+$number)
+    $button=ByNameControl 'Run' $CT::Button
+    if($button){Activate $button}else{throw 'Shell security warning did not expose Run.'}
+   }elseif($win.Current.ClassName -eq '#32770' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shellOwned)){
     $script:window=Register-HarnessWindow $win;$tree=@(Tree);$key=$tree.name -join '|'
     if($seen.Add($key)){$number++;Save ($label+'-dialog-'+$number+'.json') $tree;Shot ($label+'-dialog-'+$number)}
-    $button=ByNameControl 'Run' $CT::Button;if(-not$button){$button=ByNameControl 'OK' $CT::Button}
+    $button=ByNameControl 'OK' $CT::Button
     if($button){Activate $button}else{throw ('Installer dialog requires an unplanned choice: '+$key)}
    }
   }
+  $recorded=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.purpose -eq 'result' -and $_.identity.path -ieq $launchResult -and $_.nonce -ceq $nonce -and $_.state -eq 'active'})
+  if($recorded.Count){$result=Read-HarnessResult $launchResult $nonce}
+  if($result.status -eq 'failed'){throw ('ShellExecute failed: '+$result.error)}
+  if($result.status -eq 'exited'){break}
+  if($shell.HasExited){throw 'Owned shell launcher exited without its nonce-bound result.'}
   Start-Sleep -Milliseconds 100
  }
  CollectStarts
- $result=@{pid=$setup.Id;status=if($setup.HasExited){'exited'}else{'timeout'};exitCode=if($setup.HasExited){$setup.ExitCode}else{$null}}
  Check ($label+' wizard completed') @{shell=$result;pages=$number;smartScreen=$false;version=try{Version}catch{$null};defaultCheckboxes=$true} ($result.status -eq 'exited' -and $result.exitCode -eq 0 -and (Version) -eq $version) $setupLog
  $script:window=$null;$script:app=$null;$script:owned=$null
 }
