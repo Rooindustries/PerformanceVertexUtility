@@ -5,6 +5,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class RooHarnessWindow {
  public static System.Threading.Tasks.Task<System.Diagnostics.Process> StartShell(System.Diagnostics.ProcessStartInfo start) { return System.Threading.Tasks.Task.Run(()=>System.Diagnostics.Process.Start(start)); }
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string path,IntPtr security);
+ public static void CreateDirectory(string path) { if(!CreateDirectoryW(path,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); }
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out int p);
  delegate bool EnumWindow(IntPtr h,IntPtr data);
@@ -182,9 +184,18 @@ function Register-HarnessWindow($Window){
  return $Window
 }
 function New-HarnessDirectory([string]$Path,[string]$Purpose='',[string]$Lifetime='run'){
- if(Test-Path -LiteralPath $Path){throw 'Directory exists before this creation; retained.'}
- [IO.Directory]::CreateDirectory($Path)|Out-Null
- return Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $Path) $Purpose $Lifetime
+ $full=[IO.Path]::GetFullPath($Path).TrimEnd('\')
+ if(Test-Path -LiteralPath $full){throw 'Directory exists before this creation; retained.'}
+ $missing=[Collections.Generic.Stack[string]]::new();$parent=$full
+ while(-not(Test-Path -LiteralPath $parent)){$missing.Push($parent);$parent=[IO.Path]::GetDirectoryName($parent);if(-not$parent){throw 'Directory has no existing ancestor.'}}
+ Get-HarnessFolderIdentity $parent|Out-Null
+ $leaf=$null
+ while($missing.Count){
+  $next=$missing.Pop();[RooHarnessWindow]::CreateDirectory($next)
+  $entry=Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $next) $Purpose $Lifetime $(if($next -ine $full){@{emptyOnly=$true}}else{$null})
+  if($next -ieq $full){$leaf=$entry}
+ }
+ return $leaf
 }
 function Register-HarnessFile([string]$Path,[string]$Purpose='',[string]$Lifetime='run',$Metadata=$null){
  $handle=[RooValidationOwnership.Native]::CreateFile($Path,[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
@@ -294,11 +305,12 @@ function Remove-HarnessEntry($Entry){
    {$_ -in 'folder','cache'}{
     if(Test-Path -LiteralPath $Entry.identity.path){
      if($Entry.metadata.reparseTarget){$item=Get-Item -LiteralPath $Entry.identity.path -Force;if(-not($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.CreationTimeUtc.ToFileTimeUtc().ToString() -cne $Entry.identity.creationTimeFileTimeUtc -or @($item.Target).Count -ne 1 -or $item.Target[0] -ine $Entry.metadata.reparseTarget){throw 'Owned junction fixture identity changed; retained.'};[IO.Directory]::Delete($Entry.identity.path,$false)}
+     elseif($Entry.metadata.emptyOnly){$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};[IO.Directory]::Delete($Entry.identity.path,$false)}
      else{$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};if(@(Get-HarnessEntries|Where-Object {$_.state -eq 'error' -and $_.identity.path -and $_.identity.path.StartsWith($Entry.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){throw 'Folder has a child with a failed cleanup identity; retained.'};Remove-HarnessDirectory $Entry.identity.path}
     }
    }
    'firewall'{$rule=Get-NetFirewallRule -Name $Entry.identity.name -ErrorAction SilentlyContinue;if($rule){if($rule.Description -cne $Entry.identity.nonce){throw 'Firewall ownership changed; retained.'};$rule|Remove-NetFirewallRule}}
-   'hosts'{Remove-HarnessHostsLine $Entry.identity.path $Entry.identity.line $Entry.identity.marker; & ipconfig.exe /flushdns|Out-Null}
+   'hosts'{Remove-HarnessHostsLine $Entry.identity.path $Entry.identity.line $Entry.identity.marker; Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null}
    'cert'{$path=$Entry.identity.store+'\'+$Entry.identity.thumbprint;if(Test-Path $path){$cert=Get-Item $path;if($cert.Subject -cne $Entry.identity.subject){throw 'Certificate identity changed; retained.'};Remove-Item -LiteralPath $path -DeleteKey}}
    default{throw 'Unknown ledger cleanup kind; retained.'}
   }
@@ -448,9 +460,14 @@ function Invoke-HarnessHost([string]$File,[string]$Action,$Request){
  $raw=$read.GetAwaiter().GetResult();$errorText=$errors.GetAwaiter().GetResult();if($process.ExitCode -ne 0){throw ($Action+': '+$raw+$errorText)};return $raw|ConvertFrom-Json
 }
 
-function Register-HarnessGeneratedFolders([string]$Base,[DateTime]$After){
- foreach($folder in @(Get-ChildItem $Base -Directory -Force -Recurse|Where-Object {$_.Name -in 'bin','obj'})){
-  if($folder.CreationTimeUtc -ge $After -and -not@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $folder.FullName -and $_.state -eq 'active'}).Count){Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $folder.FullName) 'generated-build' 'run'|Out-Null}
+function Initialize-HarnessBuildFolders([string]$Base){
+ foreach($project in @(Get-ChildItem -LiteralPath $Base -File -Recurse -Filter '*.csproj'|Where-Object {$_.FullName.Substring($Base.Length) -notmatch '(^|\\)(bin|obj)(\\|$)'})){
+  foreach($name in 'bin','obj'){
+   $path=Join-Path $project.DirectoryName $name
+   if(-not(Test-Path -LiteralPath $path)){New-HarnessDirectory $path 'generated-build'|Out-Null;continue}
+   $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $path -and $_.state -eq 'active'})
+   if($entries.Count -ne 1 -or (Get-HarnessFolderIdentity $path).creationTimeFileTimeUtc -cne $entries[0].identity.creationTimeFileTimeUtc){throw 'An existing build folder is not owned by this run; retained.'}
+  }
  }
 }
 
