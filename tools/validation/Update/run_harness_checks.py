@@ -122,6 +122,27 @@ def main():
     windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=New-HarnessText ' + windows.ps_literal(extra) + " '<Project/>' 'extra-targets';$entry.id")
     refused('F8 extra remote Directory.Build.targets refuses reuse', lambda: windows.verify_source(args.host, args.expected_machine, receipt), 'Staged source file set differs')
     windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq ' + windows.ps_literal(extra) + " -and $_.state -eq 'active'})[0];Remove-HarnessEntry $entry")
+    other = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+    (args.out_dir / 'other-frame.json').write_text(json.dumps(other, indent=2))
+    other_scope = ". " + windows.ps_literal(other["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(other[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(other["frameId"]) + ";"
+    foreign_directory = receipt['runRoot'] + r'\foreign-empty-directory'
+    windows.invoke(args.host, args.expected_machine, other_scope + "New-HarnessDirectory " + windows.ps_literal(foreign_directory) + " 'foreign-empty-directory'|Out-Null")
+    clear = '& ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
+    try:
+        windows.invoke(args.host, args.expected_machine, clear)
+    except subprocess.CalledProcessError as error:
+        observed = (error.stdout or '') + (error.stderr or '')
+        if 'Unrecorded frame directory retained; ledger kept' not in observed:
+            raise
+        retained = windows.invoke(args.host, args.expected_machine, "(Test-Path " + windows.ps_literal(receipt['runRoot'] + r'\ledger.json') + ") -and (Test-Path " + windows.ps_literal(receipt['stagingPath'] + r'\source-verification.json') + ")").stdout.strip()
+        if retained != 'True':
+            raise RuntimeError('Empty-directory refusal lost the frame ledger or source')
+        rows.append({'check': 'unrecorded empty frame directory refuses cleanup and keeps ledger/source', 'status': 'pass', 'observed': observed.strip()})
+    else:
+        raise RuntimeError('Frame cleanup removed another run\'s empty directory')
+    windows.invoke(args.host, args.expected_machine, other_scope + "$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq " + windows.ps_literal(foreign_directory) + "})[0];Remove-HarnessEntry $entry")
+    result = windows.invoke(args.host, args.expected_machine, '& ' + windows.ps_literal(other['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(other['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine))
+    (args.out_dir / 'other-cleanup.json').write_text(result.stdout)
     held_frame = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
     (args.out_dir / 'held-frame.json').write_text(json.dumps(held_frame, indent=2))
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:

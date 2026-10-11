@@ -108,6 +108,7 @@ try{
   Rejected 'earlier fixture instance retained' {Get-ShippedFixture $image $after} {-not$older.process.HasExited}
   Rejected 'Current refuses an app before its check launch window' {Assert-ShippedFreshApp $older.process $after} {-not$older.process.HasExited}
   Rejected 'F2 foreign process cannot be adopted as a descendant' {if(-not(Test-OwnedDescendant $older.Identity.pid)){throw 'Foreign process chain refused'}} {-not$older.process.HasExited}
+  Rejected 'F2 descendant tracker refuses a foreign root receipt' {Start-HarnessDescendantTracker $older} {-not$older.process.HasExited}
  }finally{$script:Harness=$foreign.scope;Stop-HarnessProcess $older;$script:Harness=$main}
 
  $wizardSource=Join-Path $directory 'window-fixture.iss'
