@@ -1,5 +1,9 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$Stage,[Parameter(Mandatory)][string]$OutRoot)
 $ErrorActionPreference='Stop'
+. (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
+$nonce=Initialize-HarnessInvocation 'Build-CopyFailureFixture' $OutRoot
+Ensure-HarnessOutputDirectory $OutRoot
+
 [IO.Directory]::CreateDirectory($OutRoot)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false)
 $text=[IO.File]::ReadAllText((Join-Path $Source 'tools\release\RooIndustries.OptimizationSuite.iss'))
@@ -22,8 +26,8 @@ begin
 end;
 '@
 $script=Join-Path $OutRoot 'RooIndustries.OptimizationSuite.iss'
-[IO.File]::WriteAllText($script,$text,$utf8)
-Copy-Item (Join-Path $Source 'tools\release\SetupProcess.iss') $OutRoot
+New-HarnessText $script $text 'installer-fixture'|Out-Null
+Copy-HarnessFile (Join-Path $Source 'tools\release\SetupProcess.iss') (Join-Path $OutRoot 'SetupProcess.iss')|Out-Null
 $iscc=Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe';if(-not(Test-Path $iscc)){$iscc=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'}
 $hash=(Get-FileHash (Join-Path $Stage 'backend\scripts\Invoke-GovernorSetup.ps1')).Hash
 $commonHash=(Get-FileHash (Join-Path $Stage 'backend\scripts\BrandCompatibility.Common.ps1')).Hash
@@ -31,7 +35,8 @@ $version=(Get-Item (Join-Path $Stage 'app\RooIndustries.OptimizationSuite.App.ex
 if($version -notmatch '^(\d+\.\d+\.\d+)(?:-|\+|$)'){throw 'Copy-failure stage ProductVersion is invalid'}
 $numericVersion=$Matches[1]+'.0'
 $name='RooIndustries-OptimizationSuite-'+$version+'-setup'
-& $iscc /Q ('/DAppVersion='+$version) ('/DAppNumericVersion='+$numericVersion) ('/DGovernorSetupHash='+$hash) ('/DGovernorSetupCommonHash='+$commonHash) ('/DSourceDir='+$Stage) ('/DOutputDir='+$OutRoot) ('/DOutputName='+$name) $script
-if($LASTEXITCODE -ne 0){throw 'Copy-failure fixture compilation failed'}
+$arguments=@('/Q',('/DAppVersion='+$version),('/DAppNumericVersion='+$numericVersion),('/DGovernorSetupHash='+$hash),('/DGovernorSetupCommonHash='+$commonHash),('/DSourceDir='+$Stage),('/DOutputDir='+$OutRoot),('/DOutputName='+$name),$script)|ForEach-Object {'"'+$_+'"'}
+Invoke-HarnessProcess $iscc ($arguments -join ' ') 'copy-failure-build'|Out-Null
 $exe=Join-Path $OutRoot ($name+'.exe')
-@{path=$exe;size=(Get-Item $exe).Length;sha256=(Get-FileHash $exe).Hash;failureMode='After three copied files, silent only, executable destination is a directory';sourceScriptHash=(Get-FileHash $script).Hash}|ConvertTo-Json|Set-Content (Join-Path $OutRoot 'fixture.json')
+Write-HarnessResult $OutRoot 'fixture.json' @{path=$exe;size=(Get-Item $exe).Length;sha256=(Get-FileHash $exe).Hash;failureMode='After three copied files, silent only, executable destination is a directory';sourceScriptHash=(Get-FileHash $script).Hash}|Out-Null
+Complete-HarnessInvocation 'pass' -Cleanup|Out-Null

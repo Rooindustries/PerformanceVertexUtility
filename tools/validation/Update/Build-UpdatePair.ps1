@@ -1,12 +1,17 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutputRoot,[Parameter(Mandatory)][string]$FeedUrl,[Parameter(Mandatory)][string]$VersionA,[Parameter(Mandatory)][string]$VersionB)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+. (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
+$nonce=Initialize-HarnessInvocation 'Build-UpdatePair' $OutputRoot
+Ensure-HarnessOutputDirectory $OutputRoot
+$buildStarted=[DateTime]::UtcNow
+
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
 $env:ROO_INDUSTRIES_BUG_WEBHOOK=''
 [IO.Directory]::CreateDirectory($OutputRoot)|Out-Null
 $copy=Join-Path $OutputRoot 'source-B'
-[IO.Directory]::CreateDirectory($copy)|Out-Null
+New-HarnessDirectory $copy 'build-source'|Out-Null
 foreach($file in Get-ChildItem -LiteralPath $Source -File -Recurse){
  $relative=$file.FullName.Substring($Source.Length).TrimStart('\')
  if($relative -match '(^|\\)(obj|bin|artifacts|\.git)(\\|$)' -or $relative -eq 'source-verification.json'){continue}
@@ -21,10 +26,10 @@ if([regex]::Matches($text,$pattern).Count -ne 1){throw 'Build A Version differs 
 $rows=@()
 foreach($build in @(@{name='A';source=$Source},@{name='B';source=$copy})){
  $clock=[Diagnostics.Stopwatch]::StartNew()
- & (Join-Path $build.source 'tools\scripts\Build-Release.ps1') -OutputRoot (Join-Path $OutputRoot $build.name) -UpdateFeedUrl $FeedUrl
- if(-not$?){throw ('Build '+$build.name+' failed')}
+ Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') ('-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $build.source 'tools\scripts\Build-Release.ps1')+'" -OutputRoot "'+(Join-Path $OutputRoot $build.name)+'" -UpdateFeedUrl "'+$FeedUrl+'"') ('build-'+$build.name)|Out-Null
  $clock.Stop();$rows+=@{build=$build.name;seconds=$clock.Elapsed.TotalSeconds;source=$build.source;feed=$FeedUrl}
 }
-& $dotnet publish (Join-Path $Source 'tools\validation\Update\UpdateProbe\UpdateProbe.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $OutputRoot 'probe')
-if($LASTEXITCODE -ne 0){throw 'Update contract probe build failed'}
-[IO.File]::WriteAllText((Join-Path $OutputRoot 'build-times.json'),($rows|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+Invoke-HarnessProcess $dotnet ('publish "'+(Join-Path $Source 'tools\validation\Update\UpdateProbe\UpdateProbe.csproj')+'" -c Release -r win-x64 --self-contained true -p:UseSharedCompilation=false -o "'+(Join-Path $OutputRoot 'probe')+'"') 'build-probe'|Out-Null
+Write-HarnessResult $OutputRoot 'build-times.json' $rows|Out-Null
+Register-HarnessGeneratedFolders $Source $buildStarted
+Complete-HarnessInvocation 'pass' -Cleanup|Out-Null

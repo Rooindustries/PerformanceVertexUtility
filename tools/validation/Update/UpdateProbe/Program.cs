@@ -2,6 +2,13 @@ using System.Text.Json;
 using System.Reflection;
 using RooIndustries.Optimizer;
 
+static void Save(string path, object value)
+{
+    var nonce = Environment.GetEnvironmentVariable("ROO_HARNESS_NONCE") ?? throw new InvalidOperationException("Invocation nonce is required");
+    using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+    JsonSerializer.Serialize(output, new { nonce, data = value });
+}
+
 if (args is ["--resources", var resourceAssembly, var resourceOutput])
 {
     var assembly = Assembly.LoadFile(Path.GetFullPath(resourceAssembly));
@@ -10,7 +17,7 @@ if (args is ["--resources", var resourceAssembly, var resourceOutput])
         using var input = assembly.GetManifestResourceStream(name)!;
         return new { name, sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(input)).ToLowerInvariant() };
     }).ToArray();
-    File.WriteAllText(resourceOutput, JsonSerializer.Serialize(resources));
+    Save(resourceOutput, resources);
     return;
 }
 if (args is ["--embedded-feed", var assemblyPath, var outputPath])
@@ -19,7 +26,7 @@ if (args is ["--embedded-feed", var assemblyPath, var outputPath])
     using var resource = assembly.GetManifestResourceStream("RooIndustries.UpdateFeed") ?? throw new InvalidDataException("Embedded feed is missing");
     using var reader = new StreamReader(resource);
     var feed = reader.ReadToEnd().Trim();
-    File.WriteAllText(outputPath, JsonSerializer.Serialize(new { assemblyPath, feed }));
+    Save(outputPath, new { assemblyPath, feed });
     Console.WriteLine(feed);
     return;
 }
@@ -30,7 +37,7 @@ if (args is ["--install-space", var installPath, var spaceOutput])
     var rows = new[] { threshold - 1, threshold, threshold + 1 }.Select(bytes => new { bytes, reason = UpdateFeed.InstallDriveSpaceReason(drive.Name, bytes) }).ToArray();
     if (rows[0].reason != "Free at least 1 GB on drive " + drive.Name.TrimEnd('\\', '/') + " and try again." || rows[1].reason is not null || rows[2].reason is not null)
         throw new InvalidDataException("Install-space comparison failed");
-    File.WriteAllText(spaceOutput, JsonSerializer.Serialize(new { installPath, drive = drive.Name, availableFreeSpace = drive.AvailableFreeSpace, threshold, rows, realLowDisk = false }, new JsonSerializerOptions { WriteIndented = true }));
+    Save(spaceOutput, new { installPath, drive = drive.Name, availableFreeSpace = drive.AvailableFreeSpace, threshold, rows, realLowDisk = false });
     Console.WriteLine("Install-drive threshold boundaries passed");
     return;
 }
@@ -55,5 +62,5 @@ foreach (var (left, right, expected) in comparisons)
         throw new InvalidDataException("SemVer precedence failed: " + left + " vs " + right);
 foreach (var invalid in new[] { "01.0.0", "1.0", "1.0.0-beta.01", "1.0.0-", "1.0.0+", "1.0.0/a", "1.0.0\n" })
     if (SemanticVersion.TryParse(invalid, out _)) throw new InvalidDataException("Invalid SemVer accepted: " + invalid);
-File.WriteAllText(args[3], JsonSerializer.Serialize(new { result, file, semverChecks = comparisons.Length + 7 }, new JsonSerializerOptions { WriteIndented = true }));
+Save(args[3], new { result, file, semverChecks = comparisons.Length + 7 });
 Console.WriteLine(JsonSerializer.Serialize(new { result.Kind, result.Reason, file }));

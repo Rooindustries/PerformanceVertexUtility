@@ -8,7 +8,8 @@ try{
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage;owned=@($script:ownedHandles.Values|ForEach-Object {@{identity=$_.Identity;hasProcess=[bool]$_.process;hasHandle=[bool]$_.handle;fields=@($_.PSObject.Properties.Name)}})}
  $script:receiptStatus='fail';throw
 }finally{
- foreach($entry in @($script:extraProcesses)+@($script:setupReceipts)){Stop-OwnedProcess $entry}
+ foreach($entry in @($script:extraProcesses)+@($script:setupReceipts)){Stop-HarnessProcess $entry}
+ $script:receiptStatus=Complete-HarnessInvocation $script:receiptStatus -Cleanup
  Receipt
  Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
  Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
