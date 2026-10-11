@@ -5,7 +5,7 @@ $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'Build-ShippedAlpha' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
-$buildStarted=[DateTime]::UtcNow
+Initialize-HarnessBuildFolders $Source
 $env:ROO_HARNESS_NONCE=$nonce
 
 $copy=Join-Path $OutRoot 'src'
@@ -34,6 +34,8 @@ if(@(Get-ChildItem $copy -File -Recurse).Count -ne $expectedFiles){throw 'Alpha 
 if([IO.File]::ReadAllText($project).Replace('<Version>'+$AlphaVersion+'</Version>','<Version>'+$PublishedVersion+'</Version>') -cne $text){throw 'Alpha csproj differs beyond the one Version line.'}
 if($differences.Count -ne 1 -or $differences[0] -ne $relative){throw 'Alpha product tree differs beyond Version.'}
 Write-HarnessResult $OutRoot 'alpha-source-binding.json' @{differences=$differences;beforeVersion=$PublishedVersion;afterVersion=$AlphaVersion;source=$Source;copy=$copy}|Out-Null
+New-HarnessDirectory (Join-Path $OutRoot 'release') 'release-output'|Out-Null
+New-HarnessDirectory (Join-Path $OutRoot 'probe') 'probe-output'|Out-Null
 Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') ('-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $copy 'tools\scripts\Build-Release.ps1')+'" -OutputRoot "'+(Join-Path $OutRoot 'release')+'"') 'build-alpha'|Out-Null
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 Invoke-HarnessProcess $dotnet ('publish "'+(Join-Path $Source 'tools\validation\Update\UpdateProbe\UpdateProbe.csproj')+'" -c Release -r win-x64 --self-contained true -p:UseSharedCompilation=false -o "'+(Join-Path $OutRoot 'probe')+'"') 'build-alpha-probe'|Out-Null
@@ -52,5 +54,4 @@ $resourceDifferences=@(Compare-Object @($published|ForEach-Object {$_.name+':'+$
 Write-HarnessResult $OutRoot 'resource-comparison.json' @{differences=$resourceDifferences;versionOnly=($resourceDifferences.Count -eq 0)}|Out-Null
 if($resourceDifferences.Count){throw 'Alpha embedded resources differ from the published app; see resource-comparison.json.'}
 
-Register-HarnessGeneratedFolders $Source $buildStarted
 Complete-HarnessInvocation 'pass' -Cleanup|Out-Null
