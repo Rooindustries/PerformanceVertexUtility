@@ -89,7 +89,11 @@ function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Li
  return $receipt
 }
 function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo){
- if($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{$process=Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WindowStyle $WindowStyle -PassThru}
+ if($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
+  $arguments=@{FilePath=$FilePath;WindowStyle=$WindowStyle;PassThru=$true}
+  if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=$ArgumentList}
+  $process=Start-Process @arguments
+ }
  return Register-HarnessStartedProcess $process $Purpose $Lifetime
 }
 function Get-HarnessExplorerBroker{

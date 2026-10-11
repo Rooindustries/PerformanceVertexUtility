@@ -83,7 +83,13 @@ class Journey:
             return {'status': 'pass' if completion['passed'] else 'fail', 'nonce': completion['nonce'], 'frameId': receipt['frameId'], 'seconds': time.monotonic() - started, 'evidence': str(log)}
         except subprocess.CalledProcessError as error:
             log.write_text((error.stdout or '') + (error.stderr or ''))
-            return {'status': 'fail', 'seconds': time.monotonic() - started, 'evidence': str(log)}
+            failed = {'status': 'fail', 'seconds': time.monotonic() - started, 'evidence': str(log)}
+            try:
+                completion = windows.completion(error.stdout or '')
+                failed.update(nonce=completion['nonce'], frameId=receipt['frameId'])
+            except ValueError:
+                pass
+            return failed
 
     def binding(self):
         base = subprocess.check_output(['git', 'rev-parse', '--verify', '--end-of-options', self.args.source_commit + '^{commit}'], cwd=ROOT, text=True).strip()
