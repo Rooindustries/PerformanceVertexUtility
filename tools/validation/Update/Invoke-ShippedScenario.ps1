@@ -360,7 +360,7 @@ function HangingNetwork{
  $status=WaitStatus "Couldn't check for updates. The request timed out." ([Math]::Max(1,30-[int]$clock.Elapsed.TotalSeconds))
  $clock.Stop();Shot 'hanging-timeout'
  Check 'navigation renders during a hanging network check' $pages ($pages.Count -eq 3) 'hanging-settings.png'
- Check 'hanging check reports timeout within 30 seconds' @{text=$status;seconds=$clock.Elapsed.TotalSeconds;alive=(-not$script:app.HasExited)} ($clock.Elapsed.TotalSeconds -ge 18 -and $clock.Elapsed.TotalSeconds -le 30 -and $status -ceq "Couldn't check for updates. The request timed out.") 'hanging-timeout.png'
+ Check 'hanging check reports timeout within 30 seconds' @{text=$status;seconds=$clock.Elapsed.TotalSeconds;alive=(-not$script:app.HasExited)} (Test-ShippedRequestTimeout $status $clock.Elapsed.TotalSeconds) 'hanging-timeout.png'
  if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted during the test.'}
  Remove-ShippedHosts
  Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText($path).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText($path).Contains($script:hostsMarker))
@@ -465,9 +465,8 @@ try{
   }
   'p5'{
    $before=Get-HarnessMachineSnapshot;Save 'p5-as-found.json' $before
-   if(-not$before.installedVersion){if($before.installDirectory.exists -or @($before.tasks|Where-Object {$_.name -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}).Count){throw 'As-found Suite files or tasks exist without an install record; retained.'};Assert-HarnessFreshData (Get-RooIndustriesLocalDataRoot) $before}
+   if(-not$before.installedVersion){if($before.installDirectory.exists -or @($before.tasks|Where-Object {$_.name -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}).Count){throw 'As-found Suite files or tasks exist without an install record; retained.'};Assert-HarnessFreshData $bootstrapRoot $before}
    $published=DownloadPublished;Wizard $published 'published' $release.payload.version
-   if(-not$before.installedVersion){Register-HarnessCreatedData (Get-RooIndustriesLocalDataRoot) $before|Out-Null}
    Payload
    Launch
    if(-not$before.installedVersion){Register-HarnessCreatedData (Get-RooIndustriesLocalDataRoot) $before|Out-Null}
