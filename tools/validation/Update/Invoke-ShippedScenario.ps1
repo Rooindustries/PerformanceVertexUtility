@@ -2,7 +2,7 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
  [Parameter(Mandatory)][ValidateSet('p2','p3-alpha','p3','p4','p5')][string]$Part,
  [Parameter(Mandatory)][string]$ReleasePath,[string]$OldInstaller='',[string]$OldVersion='',
  [string]$AlphaInstaller='',[string]$AlphaVersion='',[string]$PayloadHashes='',[string]$FrameId='',
- [string]$PreflightPath='')
+ [string]$PreflightPath='',[switch]$HarnessOnly)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1') -Source $Source -OutRoot $OutRoot -Scenario seed -EvidenceName $Part -HelpersOnly
@@ -39,7 +39,8 @@ function Receipt{
  Save 'receipt.json' @{part=$Part;status=$script:receiptStatus;machine=$env:COMPUTERNAME;frameId=$FrameId;utc=[DateTime]::UtcNow.ToString('o');checks=@($script:checks);release=$release;processStarts=@($script:starts);completedInstallerDownloads=$script:completedInstallerDownloads;cleanupErrors=@($script:cleanupErrors)}
 }
 function Test-OwnedProcess($ownedProcess){
- if(-not$ownedProcess -or $ownedProcess.process.HasExited){return $false}
+ if(-not$ownedProcess -or -not$ownedProcess.process -or $ownedProcess.process.HasExited){return $false}
+ if(-not$ownedProcess.handle){throw ('Incomplete process ownership receipt: '+$ownedProcess.GetType().FullName+'; fields '+($ownedProcess.PSObject.Properties.Name -join ',')+'; '+$MyInvocation.PositionMessage)}
  return [RooValidationOwnership.Native]::Created($ownedProcess.handle).ToString() -eq $ownedProcess.Identity.creationTimeFileTimeUtc
 }
 function Check([string]$name,$observed,[bool]$passed,[string]$evidence='receipt.json'){
@@ -428,6 +429,7 @@ function HangingNetwork{
  Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText($path).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText($path).Contains($script:hostsMarker))
  Current $true
 }
+if($HarnessOnly){return}
 try{
  Receipt
  switch($Part){
@@ -590,7 +592,7 @@ try{
  }
  CollectStarts;$script:receiptStatus='pass'
 }catch{
- CollectStarts;$script:receiptStatus='fail';Save 'failure.json' @{error=$_.Exception.ToString();texts=if($script:window){try{@(Texts)}catch{@()}}else{@()};checks=@($script:checks)};Receipt;throw
+ CollectStarts;$script:receiptStatus='fail';Save 'failure.json' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage;texts=if($script:window){try{@(Texts)}catch{@()}}else{@()};checks=@($script:checks)};Receipt;throw
 }finally{
  try{Remove-ShippedFirewall $firewallName $script:firewallNonce $script:firewallCreated}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  try{Remove-ShippedHosts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
