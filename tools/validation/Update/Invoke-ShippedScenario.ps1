@@ -52,6 +52,28 @@ function Remember-Owned($Process){
  if($ownedProcess){$script:ownedPids[[int]$Process.Id]=[long]$ownedProcess.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$Process.Id]=$ownedProcess}
  return $ownedProcess
 }
+function Bind-OwnedChain([int]$ProcessId){
+ $chain=@();$seen=@{};$childTime=$null
+ for($hop=0;$hop -lt 32;$hop++){
+  if($seen.ContainsKey($ProcessId)){return $false};$seen[$ProcessId]=$true
+  $process=Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+  if(-not$process){return $false}
+  $ownedProcess=New-OwnedProcess $process
+  if(-not$ownedProcess){return $false}
+  $created=[long]$ownedProcess.Identity.creationTimeFileTimeUtc
+  if($childTime -and $created -gt $childTime){return $false}
+  if($script:ownedHandles.ContainsKey($ProcessId)){
+   $held=$script:ownedHandles[$ProcessId]
+   if($held.Identity.creationTimeFileTimeUtc -cne $ownedProcess.Identity.creationTimeFileTimeUtc -or -not(Test-OwnedProcess $held)){return $false}
+   foreach($entry in $chain){$script:ownedPids[[int]$entry.Identity.pid]=[long]$entry.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$entry.Identity.pid]=$entry;$script:extraProcesses.Add($entry)}
+   return $true
+  }
+  $chain+=@($ownedProcess);$childTime=$created
+  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId) -ErrorAction SilentlyContinue
+  if(-not$cim){return $false};$ProcessId=[int]$cim.ParentProcessId
+ }
+ return $false
+}
 function CollectStarts{
  $pending=@(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Sort-Object EventIdentifier)
  foreach($event in $pending){
@@ -67,6 +89,7 @@ function CollectStarts{
   if($p.ProcessName -notmatch '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -and -not$ours){continue}
   $row=@{pid=[int]$p.ProcessID;parentPid=$parent;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=$ours}
   $script:starts.Add($row)
+  if(-not$ours -and $cim){$ours=Bind-OwnedChain ([int]$p.ProcessID);$row.ownedChain=$ours}
   if($ours -and $cim){
    $process=Get-Process -Id $p.ProcessID -ErrorAction SilentlyContinue
    if($process -and $process.StartTime.ToUniversalTime().ToFileTimeUtc() -le $stamp){$ownedProcess=Remember-Owned $process;if($ownedProcess){$script:extraProcesses.Add($ownedProcess)}}
@@ -152,7 +175,7 @@ try{
   $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))
   foreach($win in $windows){
    if($win.Current.ClassName -eq 'TWizardForm' -and $win.Current.Name -like '*Roo Industries*'){
-    if(-not$script:ownedHandles.ContainsKey([int]$win.Current.ProcessId) -or -not(Test-OwnedProcess $script:ownedHandles[[int]$win.Current.ProcessId])){throw 'Wizard belongs to a non-owned setup; retained.'}
+    if(-not(Bind-OwnedChain ([int]$win.Current.ProcessId))){throw 'Wizard belongs to a non-owned setup; retained.'}
     $script:window=$win
     if($win.Current.ProcessId -notin @($script:setupReceipts.Identity.pid)){$script:setupReceipts.Add((Remember-Owned (Get-Process -Id $win.Current.ProcessId)))}
     $tree=@(Tree);$button=$null
@@ -192,9 +215,13 @@ try{
 }
 function Uninstall{
  $unins=Join-Path $install 'unins000.exe'
- if(-not(Test-Path $unins)){throw 'Installed uninstaller is missing.'}
+ if(-not(Test-Path $unins)){
+  $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
+  if(Test-Path $key){throw 'Installed uninstaller is missing.'}
+  Check 'no current installation to uninstall' @{uninstallerExists=$false;uninstallKeyExists=$false} $true;return
+ }
  $p=Start-Process $unins -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory 'uninstall.log')+'"') -PassThru
- $ownedProcess=New-OwnedProcess $p
+ $ownedProcess=Remember-Owned $p
  try{if(-not$p.WaitForExit(360000)){throw 'Uninstall timed out.'};Check 'uninstall completed' $p.ExitCode ($p.ExitCode -eq 0) 'uninstall.log'}finally{Stop-OwnedProcess $ownedProcess}
 }
 function DownloadPublished{
