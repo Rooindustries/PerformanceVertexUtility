@@ -128,7 +128,8 @@ def main():
         running = pool.submit(windows.interactive, args.host, args.expected_machine, held_frame, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': held_frame['stagingPath'], 'OutRoot': held_frame['runRoot'] + r'\checks', 'Hold': True}, 2)
         deadline = time.monotonic() + 40
         while time.monotonic() < deadline:
-            live = windows.invoke(args.host, args.expected_machine, "$l=Get-Content -Raw " + windows.ps_literal(held_frame['runRoot'] + '/ledger.json') + "|ConvertFrom-Json;@($l.entries|Where-Object {$_.kind -eq 'process' -and $_.purpose -eq 'interactive-child' -and $_.state -eq 'active'}).Count").stdout.strip()
+            held_scope = ". " + windows.ps_literal(held_frame["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(held_frame[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(held_frame["frameId"]) + " -ReadOnly;"
+            live = windows.invoke(args.host, args.expected_machine, held_scope + "@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.purpose -eq 'interactive-child' -and $_.state -eq 'active'}).Count").stdout.strip()
             if live == '1':
                 break
             if running.done():

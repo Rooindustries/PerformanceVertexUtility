@@ -155,6 +155,20 @@ end;
  Invoke-HarnessLedger {param($ledger) $ledger.invocations=@([pscustomobject]@{nonce=$script:Harness.Nonce;scenario='failed-cleanup-fixture';scope=$script:Harness.Root;status='fail';cleanupErrors=@('Governor pause timeout')})}|Out-Null
  if((Complete-HarnessInvocation 'pass') -cne 'fail'){throw 'The wrapper overwrote a completed cleanup failure.'}
  $script:Harness=$main;Passed 'shared ledger never turns an earlier cleanup failure into pass' 'fail remains fail when the wrapper finishes successfully'
+ $nested=Join-Path $directory 'nested-output\builds';New-HarnessDirectory $nested 'nested-output' 'invocation'|Out-Null
+ $parent=Split-Path $nested -Parent;Ensure-HarnessOutputDirectory $parent
+ $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -in @($nested,$parent) -and $_.state -eq 'active'})
+ if($entries.Count -ne 2 -or -not($entries|Where-Object {$_.identity.path -ieq $parent}).metadata.emptyOnly){throw 'Recursive output creation left an unrecorded ancestor or broad parent cleanup.'}
+ try{[RooHarnessWindow]::CreateDirectory($parent);throw 'Atomic directory creation adopted an existing path.'}catch{if($_.Exception.Message -like '*adopted an existing*'){throw}}
+ Passed 'nested output records every created ancestor' @{folders=$entries.identity.path;parentCleanup='empty-only';existingNativeCreate='refused'}
+ $projectRoot=Fixture 'foreign-build-folder';New-HarnessText (Join-Path $projectRoot 'Example.csproj') '<Project/>' 'project-fixture'|Out-Null
+ $script:Harness=$foreign.scope;$foreignBin=Join-Path $projectRoot 'bin';New-HarnessDirectory $foreignBin 'foreign-build'|Out-Null;New-HarnessText (Join-Path $foreignBin 'keep.txt') 'foreign build output'|Out-Null;$script:Harness=$main
+ $refusal=$null;try{Initialize-HarnessBuildFolders $projectRoot}catch{$refusal=$_.Exception.Message}
+ if($refusal -cne 'An existing build folder is not owned by this run; retained.' -or [IO.File]::ReadAllText((Join-Path $foreignBin 'keep.txt')) -cne 'foreign build output' -or @(Get-HarnessEntries|Where-Object {$_.identity.path -ieq $foreignBin}).Count){throw 'Foreign build folder was not refused for its ownership.'}
+ Passed 'foreign generated folder is never adopted by timestamp' $refusal
+ $script:Harness=$foreign.scope;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq (Join-Path $foreignBin 'keep.txt')})[0];Remove-HarnessEntry $entry;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $foreignBin})[0];Remove-HarnessEntry $entry;$script:Harness=$main
+ Initialize-HarnessBuildFolders $projectRoot
+ if(@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'generated-build' -and $_.identity.path -in @((Join-Path $projectRoot 'bin'),(Join-Path $projectRoot 'obj'))}).Count -ne 2){throw 'Prepared build folders were not recorded.'}
  $status='pass'
 }finally{
  $script:Harness=$main
