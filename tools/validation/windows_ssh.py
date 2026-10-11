@@ -121,12 +121,48 @@ def verify_source(host: str, machine: str, receipt: dict):
     invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'")
 
 
+def snapshot_files(include_frontend: bool = True, root: Path | None = None):
+    root = root or Path(__file__).resolve().parents[2]
+    names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode().split('\0')
+    files = sorted(set(name for name in names if name and (include_frontend or not name.startswith('docs/internal/frontend/')) and (root / name).is_file()))
+    for name in files:
+        if Path(name).suffix.casefold() in ('.pem', '.key', '.pfx', '.p12', '.snk'):
+            raise ValueError('Private signing material cannot be staged: ' + name)
+        if (root / name).is_symlink() or '..' in Path(name).parts or Path(name).is_absolute():
+            raise ValueError('Unsafe snapshot source: ' + name)
+    return {name: (root / name).read_bytes() for name in files}
+
+
+def local_manifest(include_frontend: bool = True):
+    return {name: hashlib.sha256(data).hexdigest() for name, data in snapshot_files(include_frontend).items()}
+
+
+def assert_external_signing_key(path: Path):
+    root = Path(__file__).resolve().parents[2]
+    common = Path(subprocess.check_output(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], cwd=root, text=True).strip()).parent
+    key = path.resolve()
+    if any(key.is_relative_to(folder.resolve()) for folder in (root, common)):
+        raise ValueError('--signing-key must resolve outside the repository and its worktrees.')
+
+
+def verify_local_source(host: str, machine: str, receipt: dict):
+    current = local_manifest(receipt.get('frontendIncluded', True))
+    validate_receipt(machine, receipt)
+    raw = invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};$m.files|ConvertTo-Json -Depth 5 -Compress").stdout
+    staged = json.loads(raw)
+    if staged != current:
+        raise ValueError('Local files differ from the source manifest; stage a fresh frame.')
+    return hashlib.sha256(json.dumps(current, sort_keys=True).encode()).hexdigest()
+
+
 def upload(host: str, machine: str, directory: str, include_frontend: bool = False,
            parent: str | None = None):
     if not re.fullmatch(r'roo-industries-[a-z0-9-]{1,70}', directory):
         raise ValueError('Use a roo-industries- prefixed source frame name.')
     if not parent:
         raise ValueError('Specify an existing verified admin-protected staging parent.')
+    contents = snapshot_files(include_frontend)
+    root = Path(__file__).resolve().parents[2]
     identity = inspect(host, machine)
     if not identity['admin']:
         raise ValueError('Protected staging requires an administrator token.')
@@ -134,13 +170,6 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
     frame_id = uuid.uuid4().hex
     remote_root = parent.rstrip('\\/') + '\\' + directory + '-' + frame_id
     remote_source = remote_root + '\\source'
-    root = Path(__file__).resolve().parents[2]
-    names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode().split('\0')
-    files = sorted(set(name for name in names if name and (include_frontend or not name.startswith('docs/internal/frontend/')) and (root / name).is_file()))
-    for name in files:
-        if (root / name).is_symlink() or '..' in Path(name).parts or Path(name).is_absolute():
-            raise ValueError('Unsafe snapshot source: ' + name)
-    contents = {name: (root / name).read_bytes() for name in files}
     manifest = {
         'protocol': 'roo-industries-source-snapshot/v2', 'machine': identity['machine'],
         'sid': scope['sid'], 'frameId': frame_id,
@@ -151,7 +180,7 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
     receipt = {'machine': identity['machine'], 'sid': scope['sid'], 'frameId': frame_id,
                'runRoot': remote_root, 'stagingPath': remote_source,
                'manifestSha256': hashlib.sha256(data).hexdigest(),
-               'sourceCommit': manifest['commit'], 'sourceFileCount': len(files),
+               'sourceCommit': manifest['commit'], 'sourceFileCount': len(contents),
                'frontendIncluded': include_frontend}
     invoke(host, machine, REMOTE_GUARDS + f"\nNew-ProtectedFrame {ps_literal(remote_root)};New-ProtectedFrame {ps_literal(remote_source)} {ps_literal(scope['sid'])}")
     with tempfile.TemporaryDirectory(prefix='roo-industries-source-upload-') as staging:

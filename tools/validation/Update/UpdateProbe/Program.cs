@@ -2,6 +2,17 @@ using System.Text.Json;
 using System.Reflection;
 using RooIndustries.Optimizer;
 
+if (args is ["--resources", var resourceAssembly, var resourceOutput])
+{
+    var assembly = Assembly.LoadFile(Path.GetFullPath(resourceAssembly));
+    var resources = assembly.GetManifestResourceNames().OrderBy(name => name).Select(name =>
+    {
+        using var input = assembly.GetManifestResourceStream(name)!;
+        return new { name, sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(input)).ToLowerInvariant() };
+    }).ToArray();
+    File.WriteAllText(resourceOutput, JsonSerializer.Serialize(resources));
+    return;
+}
 if (args is ["--embedded-feed", var assemblyPath, var outputPath])
 {
     var assembly = Assembly.LoadFile(Path.GetFullPath(assemblyPath));

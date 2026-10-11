@@ -5,7 +5,11 @@ if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong cleanup machine'}
 $root=[IO.Path]::GetFullPath($Frame).TrimEnd('\')
 if($root -cnotmatch '^C:\\RooBuild\\roo-industries-(?:roo20-ota(?:-ui)?|roo29-shipped)-[a-f0-9]{32}$'){throw 'Update frame scope differs'}
 if(-not[IO.Directory]::Exists($root)){return}
-if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){throw 'Update frame still has running processes; retained'}
+for($ancestor=$root;$ancestor;$ancestor=[IO.Path]::GetDirectoryName($ancestor)){
+ if((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked update frame ancestry retained'}
+ if($ancestor -ieq 'C:\RooBuild'){break}
+}
+if(@(Get-CimInstance Win32_Process|Where-Object {($_.ExecutablePath -and $_.ExecutablePath.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)) -or ($_.CommandLine -and $_.CommandLine.IndexOf($root,[StringComparison]::OrdinalIgnoreCase) -ge 0)}).Count){throw 'Update frame still has running processes; retained'}
 $queue=[Collections.Generic.Stack[string]]::new();$queue.Push('\\?\'+$root)
 $folders=[Collections.Generic.List[string]]::new();$files=[Collections.Generic.List[string]]::new()
 while($queue.Count){

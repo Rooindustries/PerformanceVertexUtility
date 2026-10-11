@@ -28,6 +28,13 @@ windows = module('shipped_windows', ROOT / 'tools/validation/windows_ssh.py')
 release_tool = module('shipped_release', ROOT / 'tools/release/publish_update.py')
 
 
+ALL_SCENARIOS = ['seed', 'manual-install', 'feed-down', 'slow-feed', 'malformed-feed', 'bad-signature', 'wrong-product', 'wrong-channel', 'same-version', 'older-version', 'tampered', 'tampered-size', 'manual-download', 'ready', 'scheduled-download', 'blocked', 'cancel', 'install', 'failure', 'copy-failure', 'cleanup']
+
+
+def required_passes(rows, required):
+    return all(any(row['check'] == name and row['status'] == 'pass' for row in rows) for name in required) and not any(row['status'] == 'fail' for row in rows)
+
+
 class Journey:
     def __init__(self, args):
         self.args = args
@@ -76,11 +83,12 @@ class Journey:
 
     def binding(self):
         base = subprocess.check_output(['git', 'rev-parse', '--verify', '--end-of-options', self.args.source_commit + '^{commit}'], cwd=ROOT, text=True).strip()
-        data = subprocess.check_output(['git', 'diff', base, '--', 'backend', 'docs', 'tools/release', 'tools/scripts'], cwd=ROOT)
+        data = subprocess.check_output(['git', 'diff', base, '--', 'backend', 'docs', 'tools/release', 'tools/scripts', 'assets', '*.props', '*.targets', 'Directory.Build.*'], cwd=ROOT)
+        dirty = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all', '--', 'backend', 'docs', 'tools/release', 'tools/scripts', 'assets', '*.props', '*.targets', 'Directory.Build.*'], cwd=ROOT, text=True)
         digest = hashlib.sha256(data).hexdigest()
-        value = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'base': base, 'requestedSourceCommit': self.args.source_commit, 'productDiffBytes': len(data), 'productDiffSha256': digest}
+        value = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'base': base, 'requestedSourceCommit': self.args.source_commit, 'productDiffBytes': len(data), 'productDiffSha256': digest, 'productStatus': dirty}
         self.save(self.out / 'p0/source-binding.json', value)
-        if digest != EMPTY:
+        if digest != EMPTY or dirty:
             raise RuntimeError('Product source differs from --source-commit; no build or PC mutation is allowed.')
         return value
 
@@ -94,18 +102,14 @@ class Journey:
         directory = self.out / 'p0'
         directory.mkdir(exist_ok=True)
         manifest = directory / 'live-feed.json'
-        cached = manifest.exists()
-        if cached:
-            data = manifest.read_bytes()
-        else:
-            with urlopen(Request(self.feed, headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
-                if response.status != 200 or response.url != self.feed:
-                    raise RuntimeError('Live feed did not return HTTPS 200 at the committed URL.')
-                data = response.read(65537)
-                (directory / 'live-feed.headers.txt').write_text(str(response.headers))
+        with urlopen(Request(self.feed + '?t=' + str(int(time.time())), headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
+            if response.status != 200 or not response.url.startswith(self.feed + '?t='):
+                raise RuntimeError('Live feed did not return HTTPS 200 at the committed URL.')
+            data = response.read(65537)
+            (directory / 'live-feed.headers.txt').write_text(str(response.headers))
         payload = release_tool.verify_manifest(data, self.args.published_installer, self.feed)
         manifest.write_bytes(data)
-        value = {'feedUrl': self.feed, 'keyId': json.loads(data)['keyId'], 'payload': payload, 'verifiedVersion': payload['version'], 'manifestSource': 'existing signed evidence file' if cached else 'live HTTPS GET', 'localInstaller': str(self.args.published_installer), 'localInstallerIdentity': release_tool.file_identity(self.args.published_installer), 'verification': 'ECDSA P-256 SHA-256 RFC3279 DER against tools/release/update-keys.json'}
+        value = {'feedUrl': self.feed, 'keyId': json.loads(data)['keyId'], 'payload': payload, 'verifiedVersion': payload['version'], 'manifestSource': 'live HTTPS GET', 'localInstaller': str(self.args.published_installer), 'localInstallerIdentity': release_tool.file_identity(self.args.published_installer), 'verification': 'ECDSA P-256 SHA-256 RFC3279 DER against tools/release/update-keys.json'}
         self.save(directory / 'verified-release.json', value)
         return value
 
@@ -114,7 +118,7 @@ class Journey:
         if path.exists():
             receipt = json.loads(path.read_text())
             windows.validate_receipt(machine, receipt)
-            windows.verify_source(host, machine, receipt)
+            windows.verify_local_source(host, machine, receipt)
             return receipt
         receipt = windows.upload(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
         self.save(path, receipt)
@@ -127,8 +131,9 @@ $data=Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite';$install='C:\Program Fi
 $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
 $tasks=@(Get-ScheduledTask|ForEach-Object {@{name=$_.TaskName;path=$_.TaskPath;state=[string]$_.State;enabled=[bool]$_.Settings.Enabled;xml=(Export-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath)}})
 $ts=Get-Command tailscale -ErrorAction SilentlyContinue;$binary=if($ts){$ts.Source}else{Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'}
-$files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-Object {@{path=$_.FullName.Substring($data.Length+1);bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash;attributes=[string]$_.Attributes}}})
-@{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-Path $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-Path $install);dataRoot=$data;dataFiles=$files;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-Path 'C:\RooBuild'){Get-ChildItem 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-Path $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-Path $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
+$roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){$root=Join-Path $env:LOCALAPPDATA $name;@{path=$root;exists=(Test-Path -LiteralPath $root);files=@(if(Test-Path $root){Get-ChildItem $root -File -Recurse -Force|ForEach-Object {@{path=$_.FullName.Substring($root.Length+1);bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash;attributes=[string]$_.Attributes}}})}})
+$files=@(($roots|Where-Object path -eq $data).files)
+@{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-Path $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-Path $install);dataRoot=$data;dataFiles=$files;dataRoots=$roots;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-Path 'C:\RooBuild'){Get-ChildItem 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-Path $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-Path $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
 '''
         rows = []
         for host, machine, label in [(self.args.host, self.args.expected_machine, '9070'), (self.args.blackwell_host, self.args.blackwell_machine, 'blackwell')]:
@@ -139,8 +144,14 @@ $files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-O
             if path.exists():
                 value = json.loads(path.read_text())
             else:
-                value = json.loads(self.remote(host, machine, script, path))
-            rows.append({'check': label + ' as-found state', 'status': 'pass', 'observed': {'installedVersion': value['installedVersion'], 'dataFiles': len(value['dataFiles']), 'frames': len(value['frames']), 'activeFrameOrSuiteProcesses': value['processes'], 'cs2Tasks': [{k: t[k] for k in ('name', 'state', 'enabled')} for t in value['tasks'] if 'CS2' in t['name']], 'tailscaleBinary': value.get('tailscaleBinary')}, 'evidence': str(path)})
+                try:
+                    value = json.loads(self.remote(host, machine, script, path))
+                except RuntimeError:
+                    if label != 'blackwell':
+                        raise
+                    rows.append({'check': 'blackwell reachable', 'status': 'unverified', 'observed': 'SSH unavailable; no power action.', 'evidence': str(path)})
+                    continue
+            rows.append({'check': label + ' as-found state', 'status': 'pass', 'observed': {'installedVersion': value['installedVersion'], 'dataRoots': value['dataRoots'], 'dataFiles': len(value['dataFiles']), 'frames': len(value['frames']), 'activeFrameOrSuiteProcesses': value['processes'], 'cs2Tasks': [{k: t[k] for k in ('name', 'state', 'enabled')} for t in value['tasks'] if 'CS2' in t['name']], 'tailscaleBinary': value.get('tailscaleBinary')}, 'evidence': str(path)})
             if value['processes']:
                 raise RuntimeError(label + ' has active Suite/frame processes; preserve them and stop preflight.')
         serve, _ = self.command(['tailscale', 'serve', 'status', '--json'])
@@ -150,8 +161,9 @@ $files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-O
         if '8460' in serve:
             raise RuntimeError('Tailnet port 8460 is already occupied; never reuse or reset it.')
         rows.append({'check': 'tailnet 8460 absent', 'status': 'pass', 'observed': json.loads(serve), 'evidence': str(path)})
+        release = self.verified()
+        rows.append({'check': 'live signed feed matches published installer', 'status': 'pass', 'observed': release['localInstallerIdentity'], 'evidence': 'verified-release.json'})
         self.save(self.out / 'p0/receipt.json', {'part': 'p0', 'status': 'pass', 'source': self.binding(), 'checks': rows})
-        self.verified()
 
     def copy_to(self, host, local, remote):
         self.command(['scp', *windows.SSH_OPTIONS, local, host + ':' + remote.replace('\\', '/')])
@@ -175,7 +187,11 @@ $files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-O
         verified = json.loads((self.out / 'p0/verified-release.json').read_text())
         release_tool.verify_manifest((self.out / 'p0/live-feed.json').read_bytes(), installer, self.feed)
         hashes = self.out / 'p0/payload-hashes.json'
+        identity = release_tool.file_identity(installer)
         if hashes.exists():
+            cached = json.loads(hashes.read_text())
+            if cached.get('installerSha256') != identity[1] or cached.get('installerSize') != identity[0]:
+                raise RuntimeError('Cached payload oracle belongs to another installer; preserve it and use a fresh output directory.')
             return hashes
         binary = self.args.innoextract or shutil.which('innoextract')
         if not binary:
@@ -192,7 +208,7 @@ $files=@(if(Test-Path $data){Get-ChildItem $data -File -Recurse -Force|ForEach-O
                 values.append({'path': path.relative_to(app).as_posix(), 'bytes': path.stat().st_size, 'sha256': sha})
         if not values or not any(v['path'] == 'app/RooIndustries.OptimizationSuite.App.exe' for v in values):
             raise RuntimeError('Extracted published installer has no expected app payload.')
-        self.save(hashes, values)
+        self.save(hashes, {'installerSha256': identity[1], 'installerSize': identity[0], 'files': values})
         self.save(self.out / 'p0/payload-source.json', {'installer': str(installer), 'identity': release_tool.file_identity(installer), 'verifiedVersion': verified['payload']['version'], 'method': 'innoextract', 'files': len(values)})
         return hashes
 
@@ -228,18 +244,21 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
         full = self.out / 'p1/all'
         full.mkdir(parents=True, exist_ok=True)
         base = [sys.executable, '-I', ROOT / 'tools/validation/Update/run_e2e.py', '--host', host, '--expected-machine', machine, '--feed-url', self.args.test_feed_url, '--signing-key', self.args.signing_key, '--receipt', receipt_path, '--build-root', receipt['runRoot'] + r'\b', '--evidence-root', receipt['runRoot'] + r'\o']
-        rows = json.loads((self.out / 'p1/receipt.json').read_text())['checks'] if self.args.p1_extras_from else []
+        earlier = json.loads((self.out / 'p1/receipt.json').read_text()) if self.args.p1_extras_from or self.args.p1_from_scenario else None
+        if earlier and (earlier.get('frameId') != receipt['frameId'] or any(row['status'] != 'pass' for row in earlier['checks'])):
+            raise RuntimeError('Resume requires earlier pass rows bound to the same frame receipt.')
+        rows = earlier['checks'] if self.args.p1_extras_from else []
         if not self.args.p1_extras_from:
-            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'running', 'source': self.binding(), 'checks': rows})
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'running', 'source': self.binding(), 'checks': rows})
             try:
                 resume = ['--skip-build', '--skip-contracts', '--from-scenario', self.args.p1_from_scenario] if self.args.p1_from_scenario else []
                 _, seconds = self.command(base + ['--scenario', 'all', '--out-dir', full, *resume], self.out / 'p1' / ('all-resume.log' if resume else 'all.log'))
             except Exception:
                 rows.append({'check': 'all', 'status': 'fail', 'evidence': 'all.log'})
-                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'fail', 'source': self.binding(), 'checks': rows})
+                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'fail', 'source': self.binding(), 'checks': rows})
                 raise
             rows.append({'check': 'all', 'status': 'pass', 'seconds': seconds, 'evidence': 'all/pc-artifacts'})
-            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'source': self.binding(), 'checks': rows})
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'source': self.binding(), 'checks': rows})
         stage = receipt['runRoot'] + '\\b\\A\\work-' + self.source_version() + '\\stage'
         fixtures = receipt['runRoot'] + r'\o\timer-fixtures'
         if not self.args.p1_extras_from:
@@ -255,15 +274,23 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
             link = target / 'builds'
             if not link.exists() and not link.is_symlink():
                 link.symlink_to(full / 'builds', target_is_directory=True)
+            if not link.is_symlink() or link.resolve() != (full / 'builds').resolve():
+                raise RuntimeError('Existing builds symlink differs from this receipt.')
             try:
                 _, seconds = self.command(base + ['--scenario', scenario, '--skip-build', '--out-dir', target, *extra], self.out / 'p1' / (name + '.log'))
             except Exception:
                 rows.append({'check': name, 'status': 'fail', 'evidence': name + '.log'})
-                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'fail', 'source': self.binding(), 'checks': rows})
+                self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'fail', 'source': self.binding(), 'checks': rows})
                 raise
             rows.append({'check': name, 'status': 'pass', 'seconds': seconds, 'evidence': name + '/pc-artifacts'})
-            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'source': self.binding(), 'checks': rows})
-        self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'status': 'pass', 'source': self.binding(), 'checks': rows})
+            self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'source': self.binding(), 'checks': rows})
+        required = ['all', 'contracts', 'transport-http', 'transport-disconnect', 'settings-readonly', 'timer-ready', 'timer-read-failure', 'manual-timeout']
+        complete = required_passes(rows, required)
+        all_rows = json.loads((full / 'scenario-results.json').read_text())
+        complete = complete and all_rows['frameId'] == receipt['frameId'] and required_passes(all_rows['checks'], ALL_SCENARIOS)
+        self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'pass' if complete else 'fail', 'required': required, 'source': self.binding(), 'checks': rows})
+        if not complete:
+            raise RuntimeError('Required P1 scenarios do not all have pass rows on this frame.')
 
     def shipped(self, part):
         if part == 'p5':
@@ -294,7 +321,9 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
             alpha = receipt['runRoot'] + r'\a'
             published_version = json.loads((self.out / 'p0/verified-release.json').read_text())['payload']['version']
             alpha_version = published_version.split('-', 1)[0].split('+', 1)[0] + '-alpha'
-            build = self.desktop(host, machine, receipt, 'tools/validation/Update/Build-ShippedAlpha.ps1', {'Source': receipt['stagingPath'], 'OutRoot': alpha, 'PublishedVersion': published_version, 'AlphaVersion': alpha_version}, 'p3/build-alpha', 15)
+            published_app = pc + r'\published-app.dll'
+            self.copy_to(host, self.out / 'p0/extracted/app/app/RooIndustries.OptimizationSuite.App.dll', published_app)
+            build = self.desktop(host, machine, receipt, 'tools/validation/Update/Build-ShippedAlpha.ps1', {'Source': receipt['stagingPath'], 'OutRoot': alpha, 'PublishedVersion': published_version, 'AlphaVersion': alpha_version, 'PublishedApp': published_app}, 'p3/build-alpha', 15)
             self.save(self.out / 'p3/build-receipt.json', build)
             if build['status'] != 'pass':
                 self.collect(host, machine, receipt, part)
@@ -340,11 +369,14 @@ def main():
         parser.error('--published-installer is required for p0 and p2-p5.')
     if args.scenario == 'p2' and (not args.baseline_installer or not args.baseline_sha256 or not re.fullmatch(r'[0-9a-fA-F]{64}', args.baseline_sha256)):
         parser.error('p2 requires --baseline-installer and a 64-hex --baseline-sha256.')
+    if args.signing_key:
+        windows.assert_external_signing_key(args.signing_key)
     journey = Journey(args)
     journey.binding()
     if args.scenario == 'p0':
         journey.preflight()
     elif args.scenario == 'p1':
+        windows.assert_external_signing_key(args.signing_key)
         journey.p1()
     else:
         journey.shipped(args.scenario)
