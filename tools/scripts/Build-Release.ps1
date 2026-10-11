@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Release.Checks.ps1')
-if (-not $PSBoundParameters.ContainsKey('SignArguments') -and $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) { $SignArguments = @(ConvertFrom-Json -InputObject $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) }
+if (-not $PSBoundParameters.ContainsKey('SignArguments') -and $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) { $SignArguments = [string[]](ConvertFrom-Json -InputObject $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) }
 if ($env:ROO_INDUSTRIES_SIGN_ALLOW_UNTRUSTED -eq '1') { $AllowUntrustedSignature = $true }
 $signing = $SignArguments.Count -gt 0
 if ($signing) {
