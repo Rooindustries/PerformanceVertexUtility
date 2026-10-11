@@ -352,7 +352,8 @@ function Current([bool]$pressCheck){
  if($pressCheck){Click 'UpdateCheckButton'}
  $status=WaitStatus 'You have the latest version' 50
  $newLines=Read-ShippedLog $cursor
- $currentLines=@($newLines -split "`n"|Where-Object {$_ -like '*[[]update] You have the latest version*'})
+ $feedResult='[update] Feed '+([uri]$release.feedUrl).IdnHost+': Current, key '+$release.keyId+', release '+$release.payload.version+'. You have the latest version; installed '+(Version)+'.'
+ $currentLines=@($newLines -split "`n"|Where-Object {$_ -like '*[[]update] You have the latest version*' -or $_.Contains($feedResult)})
  Save 'current-process-log.json' @{pid=$script:app.Id;creationTimeUtc=$script:app.StartTime.ToUniversalTime().ToString('o');launchAfter=$script:launchAfter.ToString('o');lines=$currentLines;segment=$newLines}
  Check 'Current is a new log result from this owned launch' $currentLines ($currentLines.Count -gt 0 -and $newLines -notmatch '[[]update] Downloading') 'current-process-log.json'
  Shot 'live-feed-current'
@@ -419,7 +420,8 @@ function AppLog{
  Check 'app log has no exceptions' $errors ($errors.Count -eq 0) 'app-log-new.txt'
  $logged=@($segment -split "`n"|Where-Object {$_ -like '*[[]update]*'})
  Save 'update-log-lines.json' $logged
- $script:checks.Add(@{check='app log fetch/keyId/Current detail';status=if($segment -match [regex]::Escape($release.keyId) -and $segment -match [regex]::Escape($release.feedUrl)){'pass'}else{'unverified'};observed=@{lines=$logged;source='UpdateService.CheckAsync logs Current reason only; no request URL or keyId logging in shipped code'};evidence='update-log-lines.json'})
+ $hasFeedDetail=$segment.Contains('[update] Feed '+([uri]$release.feedUrl).IdnHost+': ') -and $segment.Contains(', key '+$release.keyId)
+ $script:checks.Add(@{check='app log fetch/keyId/Current detail';status=if($hasFeedDetail){'pass'}else{'unverified'};observed=@{lines=$logged;source='Older releases log only the reason; newer releases log the feed host and verified key.'};evidence='update-log-lines.json'})
 }
 function Remove-ShippedHosts{
  if(-not$script:hostsCreated){return}
