@@ -91,11 +91,12 @@ try{switch($Scenario){
  }
  'negative'{
   $record=Read-HarnessLatestResult 'signing-certificate.json' 'signing-build';SigningEnvironment $record;$env:ROO_INDUSTRIES_SIGN_SUBJECT='CN=Wrong Subject'
-  $directory=Join-Path $OutRoot 'wrong-subject'
+  $negativeOutput=Join-Path $directory 'wrong-subject';New-HarnessDirectory $negativeOutput 'negative-build'|Out-Null
   $message=$null
-  try{& (Join-Path $Source 'tools\scripts\Build-Release.ps1') -OutputRoot $directory -UpdateFeedUrl $FeedUrl}catch{$message=$_.Exception.Message}
-  $installers=@(Get-ChildItem $directory -File -Filter '*-setup.exe' -ErrorAction SilentlyContinue)
-  if(-not$message -or $message -notlike 'Signer subject differs from SignSubject:*' -or $installers.Count){throw 'Wrong subject did not fail before writing an installer.'}
+  $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $Source 'tools\scripts\Build-Release.ps1')+'" -OutputRoot "'+$negativeOutput+'" -UpdateFeedUrl "'+$FeedUrl+'"'
+  try{Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') $arguments 'negative-signing-build'|Out-Null}catch{$message=$_.Exception.Message}
+  $installers=@(Get-ChildItem $negativeOutput -File -Filter '*-setup.exe' -ErrorAction SilentlyContinue)
+  if(-not$message -or -not$message.Contains('Signer subject differs from SignSubject:') -or $installers.Count){throw 'Wrong subject did not fail before writing an installer.'}
   Save 'negative.json' @{status='pass';error=$message;installerCount=$installers.Count;beforeISCC=$true}
  }
  'cleanup'{
