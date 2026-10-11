@@ -39,7 +39,7 @@ $events='RooIndustries_OTA_'+[Guid]::NewGuid().ToString('N')
 Register-WmiEvent -Class Win32_ProcessStartTrace -SourceIdentifier $events|Out-Null
 Start-Sleep -Milliseconds 500
 function Save([string]$name,$value){Write-HarnessResult $directory $name $value|Out-Null}
-function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$until=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $until){try{$v=& $probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
+function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$until=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $until){if($script:smartScreenBefore){Assert-HarnessNewSmartScreen $script:smartScreenBefore $directory};try{$v=& $probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
 function ById([string]$id){$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$id))}
 function ByName([string]$name){$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,$name))}
 function ByNameControl([string]$name,$type){@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,$name))|Where-Object {$_.Current.ControlType -eq $type -or ($type -eq $CT::Button -and $_.Current.ClassName -in @('TNewButton','Button'))})|Select-Object -First 1}
@@ -170,12 +170,14 @@ try{
   }
   'manual-install' {
    if(-not$InstallerPath){throw 'InstallerPath required'}
+   $script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
    $setupOwned=Start-OwnedProcess -FilePath $InstallerPath -ArgumentList ('/SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory ('setup-'+$nonce+'.log'))+'"') -WindowStyle Normal -Purpose setup
    $setup=$setupOwned.process
    $script:setupReceipts.Add($setupOwned);Save 'owned-setup.json' @($script:setupReceipts.Identity)
    $until=[DateTime]::UtcNow.AddMinutes(6)
    $guideCleared=$false
    while(-not$setup.HasExited -and [DateTime]::UtcNow -lt $until){
+    Assert-HarnessNewSmartScreen $script:smartScreenBefore $directory
     foreach($child in @(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$setup.Id))){if($child.ProcessId -notin @($script:setupReceipts.Identity.pid)){$receipt=Test-OwnedDescendant ([int]$child.ProcessId) -PassThru;if($receipt){$script:setupReceipts.Add($receipt);Save 'owned-setup.json' @($script:setupReceipts.Identity)}}}
     $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Window))|Where-Object {$_.Current.ProcessId -in @($script:setupReceipts.Identity.pid)})
     foreach($win in $windows){$script:window=Register-HarnessWindow $win
@@ -253,7 +255,7 @@ try{
       foreach($i in 0..4){$path=Join-Path $updates ('install-retention-'+$nonce+'-'+$i+'.log');New-HarnessText $path 'owned log retention fixture' 'retention-fixture'|Out-Null;[IO.File]::SetLastWriteTimeUtc($path,[DateTime]::UtcNow.AddMinutes(-10+$i))}
      }
      $prior=0
-     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation'; $script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
+     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
       WaitFor {CollectOwnedStarts;if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null
      if($Scenario -eq 'copy-failure'){
       $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -like '*Setup*Roo Industries*' -and $_.Current.ClassName -eq 'TWizardForm'}|ForEach-Object {Register-HarnessWindow $_}|Select-Object -First 1} 180 'interactive recovery setup'

@@ -208,6 +208,11 @@ function Assert-HarnessSmartScreen($Window,[string]$Directory){
   throw 'SmartScreen shown; a tester presses More info -> Run anyway'
  }
 }
+function Assert-HarnessNewSmartScreen($Before,[string]$Directory){
+ foreach($window in @([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition))){
+  if($window.Current.NativeWindowHandle -notin $Before){Assert-HarnessSmartScreen $window $Directory}
+ }
+}
 function New-HarnessText([string]$Path,[string]$Text,[string]$Purpose='',[string]$Lifetime='run'){
  $probe=New-OwnedTextFile $Path $Text
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
