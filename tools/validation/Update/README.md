@@ -82,3 +82,5 @@ SmartScreen stops the harness with a screenshot and UIA tree: a tester presses M
 `close-during-check` serves a slow test feed, closes only the owned app while Settings says Checking for updates, and requires the host-only closing-cancellation log plus exit code zero. Contract probes check verified key IDs on signed payload refusals; ready recovery checks the Cached feed line. User-visible status text remains unchanged.
 
 `ready` primes a verified next-version cache, closes its owned app and launches it again so cached-feed recovery is measured from the new process. The ledger retires a cache identity when the app has removed that directory. `Invoke-HarnessChecks.ps1 -CacheOnly` checks cache identity retirement, and `-TimeoutOnly` checks the exact hanging-request status and 18/30-second boundaries; it does not replace the real P4b request.
+
+The shared native descendant tracker retains PID, native creation time and process handles before Install is pressed, including short-lived setup parents. `Invoke-HarnessChecks.ps1 -TrackingOnly` verifies a 25 ms middle process and ledger-based cleanup after both parents exit.
