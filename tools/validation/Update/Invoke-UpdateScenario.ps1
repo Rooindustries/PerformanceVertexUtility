@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
     [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='')
+    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='',[string]$OlderVersion='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -116,7 +116,7 @@ function Attach{
 function Launch{
  Assert-NoForeignInstance $exe
  if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'This invocation already has an app; stop it before launching another.'}
- $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null;$script:appLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
+ $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null;$script:appLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log');$script:feedLogCursor=$script:appLogCursor
  $script:owned=Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose app
  $script:app=$script:owned.process;Attach
 }
@@ -234,7 +234,7 @@ try{
    switch($Scenario){
     'feed-down' {WaitStatus "Couldn't check for updates.*" 40|Out-Null;Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 40 'Home remains usable'|Out-Null;Settings}
     'slow-feed' {Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 5 'Home while feed waits'|Out-Null;Settings;WaitStatus "Couldn't check for updates. The request timed out." 30|Out-Null}
-    'close-during-check' {WaitStatus 'Checking for updates...' 10|Out-Null;Shot 'checking-before-close';$script:app.CloseMainWindow()|Out-Null;if(-not$script:app.WaitForExit(15000)){throw 'App did not exit cleanly during a check'};Save 'closed-during-check.json' @{exitCode=$script:app.ExitCode;cleanExit=($script:app.ExitCode -eq 0);log=(Read-ShippedLog $script:appLogCursor)};if($script:app.ExitCode -ne 0){throw 'App exit failed'};$script:window=$null}
+    'close-during-check' {$script:closingStatus=WaitStatus 'Checking for updates...' 10;Shot 'checking-before-close';$identity=$script:owned.Identity;$script:app.CloseMainWindow()|Out-Null;if(-not$script:app.WaitForExit(15000)){throw 'App did not exit cleanly during a check'};Save 'closed-during-check.json' @{identity=$identity;statusBeforeClose=$script:closingStatus;exitCode=$script:app.ExitCode;cleanExit=($script:app.ExitCode -eq 0);log=(Read-ShippedLog $script:appLogCursor)};if($script:app.ExitCode -ne 0){throw 'App exit failed'};Stop-HarnessProcess $script:owned;$script:owned=$null;$script:app=$null;$script:window=$null}
     'malformed-feed' {WaitStatus "Couldn't verify the update.*"|Out-Null;Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 5 'Home after malformed feed'|Out-Null;Settings}
     'bad-signature' {WaitStatus "Couldn't verify the update.*signature*"|Out-Null}
     'wrong-product' {WaitStatus "Couldn't verify the update. This release is for another product."|Out-Null}
@@ -279,9 +279,42 @@ try{
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
    }
+   if($FeedUrl){
+    $segment=Read-ShippedLog $script:feedLogCursor;$feed=[uri]$FeedUrl
+    if($segment.Contains($feed.AbsolutePath) -or ($feed.Query -and $segment.Contains($feed.Query))){throw 'App log contains the feed path or query.'}
+    $available='Feed '+$feed.IdnHost+': Available, key '+$FeedKeyId+', release '+$NextVersion+'. Version '+$NextVersion+' is available; installed '+$ExpectedVersion+'.'
+    $cached='Cached feed '+$feed.IdnHost+': Available, key '+$FeedKeyId+', release '+$NextVersion+'. Version '+$NextVersion+' is available; installed '+$ExpectedVersion+'.'
+    $expected=@(switch($Scenario){
+     'same-version' {'Feed '+$feed.IdnHost+': Current, key '+$FeedKeyId+', release '+$ExpectedVersion+'. You have the latest version; installed '+$ExpectedVersion+'.'}
+     'older-version' {'Feed '+$feed.IdnHost+': Current, key '+$FeedKeyId+', release '+$OlderVersion+'. You have the latest version; installed '+$ExpectedVersion+'.'}
+     'bad-signature' {'Feed '+$feed.IdnHost+": Refused. The update signature is invalid. Couldn't verify this release; installed "+$ExpectedVersion+'.'}
+     'wrong-product' {'Feed '+$feed.IdnHost+': Refused, key '+$FeedKeyId+'. This release is for another product; installed '+$ExpectedVersion+'.'}
+     'wrong-channel' {'Feed '+$feed.IdnHost+': Refused, key '+$FeedKeyId+'. This release is for another update channel; installed '+$ExpectedVersion+'.'}
+     'feed-down' {'Feed '+$feed.IdnHost+': HTTP 502; installed '+$ExpectedVersion+'.'}
+     'slow-feed' {'Feed '+$feed.IdnHost+': failed: The request timed out; installed '+$ExpectedVersion+'.'}
+     'close-during-check' {'Feed '+$feed.IdnHost+': canceled: the app is closing; installed '+$ExpectedVersion+'.'}
+     'malformed-feed' {'Feed '+$feed.IdnHost+': Refused. '+(StatusText).Substring("Couldn't verify the update. ".Length).TrimEnd('.')+'; installed '+$ExpectedVersion+'.'}
+     'ready' {$cached;$available}
+     {$_ -in 'blocked','cancel','install','failure','copy-failure','timer-read-failure'} {$cached}
+     {$_ -in 'manual-download','scheduled-download','tampered','tampered-size','transport-error','manual-timeout'} {$available}
+    })
+    foreach($line in $expected){if(-not$segment.Contains($line)){throw ('Expected fresh feed log is absent: '+$line)}}
+    $statusExpected=switch($Scenario){
+     {$_ -in 'same-version','older-version'} {'You have the latest version'}
+     {$_ -in 'manual-download','ready','scheduled-download'} {'Version '+$NextVersion+' is ready to install'}
+     'bad-signature' {"Couldn't verify the update. The update signature is invalid. Couldn't verify this release."}
+     'wrong-product' {"Couldn't verify the update. This release is for another product."}
+     'wrong-channel' {"Couldn't verify the update. This release is for another update channel."}
+     'feed-down' {"Couldn't check for updates. The update server returned HTTP 502 instead of 200."}
+     'slow-feed' {"Couldn't check for updates. The request timed out."}
+     'close-during-check' {'Checking for updates...'}
+    }
+    $status=if($Scenario -eq 'close-during-check'){$script:closingStatus}else{StatusText}
+    if($statusExpected -and $status -cne $statusExpected){throw 'The update status text changed.'}
+    Save $(if($expected.Count){'feed-log.json'}else{'app-log-safety.json'}) @{expected=$expected;lines=@($segment -split "`n"|Where-Object {$_ -like '*[[]update]*'});feedPathAbsent=$true;status=$status;statusExpected=$statusExpected}
+   }
    if($script:window){Shot 'settings-banner'}
    if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready','transport-error','manual-timeout','settings-readonly','timer-read-failure')){
-$script:feedLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
     if((Version) -ne $ExpectedVersion){throw 'Refusal/download changed installed version'}
     if(@(ProcessStarts|Where-Object {$_.image -like '*-setup*'}).Count){throw 'Unexpected setup process'}
    }

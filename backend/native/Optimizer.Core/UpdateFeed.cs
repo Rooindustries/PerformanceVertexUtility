@@ -78,7 +78,8 @@ public static class UpdateFeed
 
     public static UpdateFeedResult Verify(byte[] body, int httpStatus, Uri feedUrl, string currentVersion)
     {
-        static UpdateFeedResult Refuse(string reason) => new(UpdateFeedKind.Refused, reason);
+        string? verifiedKey = null;
+        UpdateFeedResult Refuse(string reason) => new(UpdateFeedKind.Refused, reason, null, verifiedKey);
         try
         {
             if (httpStatus != 200) return Refuse("The update server returned HTTP " + httpStatus + " instead of 200.");
@@ -98,6 +99,7 @@ public static class UpdateFeed
             verifier.ImportSubjectPublicKeyInfo(publicKey, out var consumed);
             if (consumed != publicKey.Length || !verifier.VerifyData(payload, signature, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence))
                 return Refuse("The update signature is invalid. Couldn't verify this release.");
+            verifiedKey = keyId;
             using var document = JsonDocument.Parse(payload);
             Unique(document.RootElement);
             var data = document.RootElement;

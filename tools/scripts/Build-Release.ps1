@@ -19,7 +19,7 @@ if ($env:ROO_INDUSTRIES_SIGN_ALLOW_UNTRUSTED -eq '1') { $AllowUntrustedSignature
 $signing = $SignArguments.Count -gt 0
 if ($signing) {
     if ([string]::IsNullOrWhiteSpace($SignSubject)) { throw 'SignSubject is required when signing a release.' }
-    if (@($SignArguments | Where-Object { $_ -match '^/p(?:$|[\s:=])' }).Count) { throw 'Password arguments are forbidden; use a certificate store or hardware token.' }
+    if (@($SignArguments | Where-Object { $_ -match '^[/-]p(?:$|[\s:=])' }).Count) { throw 'Password arguments are forbidden; use a certificate store or hardware token.' }
 }
 if ($TestHooks) { $env:RooIndustriesTestHooks = 'true' }
 elseif ($env:RooIndustriesTestHooks) { throw 'RooIndustriesTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
