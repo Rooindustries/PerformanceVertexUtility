@@ -31,7 +31,9 @@ release_tool = module('shipped_release', ROOT / 'tools/release/publish_update.py
 ALL_SCENARIOS = ['seed', 'manual-install', 'feed-down', 'slow-feed', 'malformed-feed', 'bad-signature', 'wrong-product', 'wrong-channel', 'same-version', 'older-version', 'tampered', 'tampered-size', 'manual-download', 'ready', 'scheduled-download', 'blocked', 'cancel', 'install', 'failure', 'copy-failure', 'cleanup']
 
 
-def required_passes(rows, required):
+def required_passes(rows, required, frame_id=None):
+    if frame_id is not None and any(row.get("frameId") != frame_id for row in rows):
+        return False
     return all(any(row['check'] == name and row['status'] == 'pass' for row in rows) for name in required) and not any(row['status'] == 'fail' for row in rows)
 
 
@@ -245,7 +247,7 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
         full.mkdir(parents=True, exist_ok=True)
         base = [sys.executable, '-I', ROOT / 'tools/validation/Update/run_e2e.py', '--host', host, '--expected-machine', machine, '--feed-url', self.args.test_feed_url, '--signing-key', self.args.signing_key, '--receipt', receipt_path, '--build-root', receipt['runRoot'] + r'\b', '--evidence-root', receipt['runRoot'] + r'\o']
         earlier = json.loads((self.out / 'p1/receipt.json').read_text()) if self.args.p1_extras_from or self.args.p1_from_scenario else None
-        if earlier and (earlier.get('frameId') != receipt['frameId'] or any(row['status'] != 'pass' for row in earlier['checks'])):
+        if earlier and (earlier.get('frameId') != receipt['frameId'] or any(row['status'] != 'pass' or row.get('frameId') != receipt['frameId'] for row in earlier['checks'])):
             raise RuntimeError('Resume requires earlier pass rows bound to the same frame receipt.')
         rows = earlier['checks'] if self.args.p1_extras_from else []
         if not self.args.p1_extras_from:
@@ -254,10 +256,10 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
                 resume = ['--skip-build', '--skip-contracts', '--from-scenario', self.args.p1_from_scenario] if self.args.p1_from_scenario else []
                 _, seconds = self.command(base + ['--scenario', 'all', '--out-dir', full, *resume], self.out / 'p1' / ('all-resume.log' if resume else 'all.log'))
             except Exception:
-                rows.append({'check': 'all', 'status': 'fail', 'evidence': 'all.log'})
+                rows.append({'check': 'all', 'status': 'fail', 'frameId': receipt['frameId'], 'evidence': 'all.log'})
                 self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'fail', 'source': self.binding(), 'checks': rows})
                 raise
-            rows.append({'check': 'all', 'status': 'pass', 'seconds': seconds, 'evidence': 'all/pc-artifacts'})
+            rows.append({'check': 'all', 'status': 'pass', 'frameId': receipt['frameId'], 'seconds': seconds, 'evidence': 'all/pc-artifacts'})
             self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'source': self.binding(), 'checks': rows})
         stage = receipt['runRoot'] + '\\b\\A\\work-' + self.source_version() + '\\stage'
         fixtures = receipt['runRoot'] + r'\o\timer-fixtures'
@@ -279,15 +281,15 @@ try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullNa
             try:
                 _, seconds = self.command(base + ['--scenario', scenario, '--skip-build', '--out-dir', target, *extra], self.out / 'p1' / (name + '.log'))
             except Exception:
-                rows.append({'check': name, 'status': 'fail', 'evidence': name + '.log'})
+                rows.append({'check': name, 'status': 'fail', 'frameId': receipt['frameId'], 'evidence': name + '.log'})
                 self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'fail', 'source': self.binding(), 'checks': rows})
                 raise
-            rows.append({'check': name, 'status': 'pass', 'seconds': seconds, 'evidence': name + '/pc-artifacts'})
+            rows.append({'check': name, 'status': 'pass', 'frameId': receipt['frameId'], 'seconds': seconds, 'evidence': name + '/pc-artifacts'})
             self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'source': self.binding(), 'checks': rows})
         required = ['all', 'contracts', 'transport-http', 'transport-disconnect', 'settings-readonly', 'timer-ready', 'timer-read-failure', 'manual-timeout']
-        complete = required_passes(rows, required)
+        complete = required_passes(rows, required, receipt['frameId'])
         all_rows = json.loads((full / 'scenario-results.json').read_text())
-        complete = complete and all_rows['frameId'] == receipt['frameId'] and required_passes(all_rows['checks'], ALL_SCENARIOS)
+        complete = complete and all_rows['frameId'] == receipt['frameId'] and all_rows['manifestSha256'] == receipt['manifestSha256'] and required_passes(all_rows['checks'], ALL_SCENARIOS, receipt['frameId'])
         self.save(self.out / 'p1/receipt.json', {'part': 'p1', 'frameId': receipt['frameId'], 'status': 'pass' if complete else 'fail', 'required': required, 'source': self.binding(), 'checks': rows})
         if not complete:
             raise RuntimeError('Required P1 scenarios do not all have pass rows on this frame.')

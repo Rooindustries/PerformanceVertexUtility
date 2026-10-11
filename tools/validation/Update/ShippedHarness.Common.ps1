@@ -54,3 +54,12 @@ function Get-ShippedFinalStatus([string]$Status,$CleanupErrors){
  if(@($CleanupErrors).Count){return 'fail'}
  return $Status
 }
+
+function Remove-ShippedHostsLine([string]$Path,[string]$Line,[string]$Marker){
+ $encoding=[Text.Encoding]::GetEncoding(28591)
+ $text=$encoding.GetString([IO.File]::ReadAllBytes($Path))
+ $owned="`r`n"+$Line+"`r`n"
+ if($text.Split(@($Marker),[StringSplitOptions]::None).Count -ne 2 -or -not$text.Contains($owned)){throw 'Owned hosts marker was changed or removed; retain evidence.'}
+ [IO.File]::WriteAllBytes($Path,$encoding.GetBytes($text.Replace($owned,'')))
+ if([IO.File]::ReadAllText($Path).Contains($Marker)){throw 'Owned hosts line remains.'}
+}

@@ -235,7 +235,7 @@ def main():
             return
     ledger_path = OUT / "scenario-results.json"
     ledger = json.loads(ledger_path.read_text()) if args.from_scenario else {"frameId": receipt["frameId"], "manifestSha256": receipt["manifestSha256"], "checks": []}
-    if ledger["frameId"] != receipt["frameId"] or any(row["status"] != "pass" for row in ledger["checks"]):
+    if ledger["frameId"] != receipt["frameId"] or ledger["manifestSha256"] != receipt["manifestSha256"] or any(row["status"] != "pass" or row.get("frameId") != receipt["frameId"] for row in ledger["checks"]):
         raise RuntimeError("Resume requires earlier pass rows on this exact frame")
     server = None
     log = None

@@ -23,6 +23,8 @@ $p=Start-Process $image -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassTh
 try{
  Rejected 'pre-running app instance retained' {Assert-ShippedNoApp $image} {-not$p.HasExited}
  $after=[DateTime]::UtcNow
+ $second=Start-Process $image -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$secondOwned=New-OwnedProcess $second
+ try{Rejected 'second fixture with an earlier instance retained' {Get-ShippedFixture $image $after} {-not$p.HasExited -and -not$second.HasExited}}finally{Stop-OwnedProcess $secondOwned}
  Rejected 'earlier fixture instance retained' {Get-ShippedFixture $image $after} {-not$p.HasExited}
  Rejected 'Current refuses an app before its check launch window' {Assert-ShippedFreshApp $p $after} {-not$p.HasExited}
 }finally{Stop-OwnedProcess $owned}
@@ -37,6 +39,12 @@ $keep=Join-Path $target 'keep.txt';[IO.File]::WriteAllText($keep,'untouched')
 $frame='C:\RooBuild\roo-industries-roo29-shipped-'+[Guid]::NewGuid().ToString('N')
 New-Item -ItemType Junction -Path $frame -Target $target|Out-Null
 try{Rejected 'junction frame retained without touching target' {& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $frame -ExpectedMachine $env:COMPUTERNAME} {[IO.File]::ReadAllText($keep) -ceq 'untouched'}}finally{[IO.Directory]::Delete($frame,$false)}
+$hosts=Join-Path $OutRoot 'hosts-fixture';$original=[byte[]]@(239,187,191,35,32,195,169,10)
+[IO.File]::WriteAllBytes($hosts,$original);$marker='# RooShipped-fixture';$line='192.0.2.1 example.test '+$marker
+[IO.File]::AppendAllText($hosts,"`r`n"+$line+"`r`n",[Text.UTF8Encoding]::new($false))
+Remove-ShippedHostsLine $hosts $line $marker
+if([Convert]::ToBase64String([IO.File]::ReadAllBytes($hosts)) -cne [Convert]::ToBase64String($original)){throw 'Hosts cleanup changed unrelated bytes.'}
+$rows.Add(@{check='hosts cleanup preserves BOM, UTF-8 and original line endings';status='pass';observed='byte-identical after marked line removal'})
 $log=Join-Path $OutRoot 'app.log';[IO.File]::WriteAllText($log,'before')
 $cursor=Get-ShippedLogCursor $log
 [IO.File]::AppendAllText($log,' old-tail');[IO.File]::Move($log,$log+'.old');[IO.File]::WriteAllText($log,'new-head')

@@ -58,6 +58,10 @@ def main():
     if shipped.required_passes(complete, required):
         raise RuntimeError('Failed P1 receipt was accepted')
     rows.append({'check': 'P1 failed scenario cannot pass final receipt', 'status': 'pass', 'observed': complete[3]})
+    wrong_frame = [{'check': name, 'status': 'pass', 'frameId': 'other-frame'} for name in required]
+    if shipped.required_passes(wrong_frame, required, 'this-frame'):
+        raise RuntimeError('P1 rows from another frame were accepted')
+    rows.append({'check': 'P1 refuses pass rows from another frame', 'status': 'pass', 'observed': 'other-frame rows => fail'})
     journey.binding()
     frozen = ROOT.parents[2] / 'artifacts/roo-29/p2-real-0.10/p0'
     if not frozen.is_dir():

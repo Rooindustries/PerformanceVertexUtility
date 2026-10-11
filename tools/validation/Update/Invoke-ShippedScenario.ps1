@@ -424,11 +424,7 @@ function AppLog{
 function Remove-ShippedHosts{
  if(-not$script:hostsCreated){return}
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
- $lines=[IO.File]::ReadAllLines($path)
- $owned=@($lines|Where-Object {$_.EndsWith($script:hostsMarker,[StringComparison]::Ordinal)})
- if($owned.Count -ne 1){throw 'Owned hosts marker was changed or removed; retain evidence.'}
- [IO.File]::WriteAllLines($path,@($lines|Where-Object {-not$_.EndsWith($script:hostsMarker,[StringComparison]::Ordinal)}),[Text.UTF8Encoding]::new($false))
- if([IO.File]::ReadAllText($path).Contains($script:hostsMarker)){throw 'Owned hosts line remains.'}
+ Remove-ShippedHostsLine $path $script:hostsLine $script:hostsMarker
  $script:hostsCreated=$false
  & ipconfig.exe /flushdns|Out-Null
  if($LASTEXITCODE){throw 'DNS flush failed.'}
@@ -436,7 +432,7 @@ function Remove-ShippedHosts{
 function HangingNetwork{
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts';$hostName=([uri]$release.feedUrl).DnsSafeHost
  $begin=[DateTime]::UtcNow
- $line='192.0.2.1 '+$hostName+' '+$script:hostsMarker
+ $line='192.0.2.1 '+$hostName+' '+$script:hostsMarker;$script:hostsLine=$line
  try{
   [IO.File]::AppendAllText($path,"`r`n"+$line+"`r`n",[Text.UTF8Encoding]::new($false));$script:hostsCreated=$true
   if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted.'}
@@ -620,6 +616,7 @@ try{
     CollectStarts
     foreach($process in $script:extraProcesses){Stop-OwnedProcess $process}
     Uninstall
+    WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
     $active=Get-RooIndustriesLocalDataRoot
     Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-ChildItem $active -File -Recurse|Select-Object FullName,Length})} $true
     if(Test-Path $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
