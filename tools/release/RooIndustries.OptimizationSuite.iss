@@ -12,6 +12,10 @@
 #define AppExe "RooIndustries.OptimizationSuite.App.exe"
 
 [Setup]
+#ifdef SignInstaller
+SignTool=roosign
+SignedUninstaller=yes
+#endif
 AppId={{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}
 AppName={#AppName}
 AppVersion={#AppVersion}

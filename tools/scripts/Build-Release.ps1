@@ -3,13 +3,24 @@
     [string]$IsccPath = '',
     [string]$OutputRoot = '',
     [AllowEmptyString()][string]$UpdateFeedUrl,
-    [switch]$TestHooks
+    [switch]$TestHooks,
+    [string]$SignToolPath = $env:ROO_INDUSTRIES_SIGNTOOL,
+    [string[]]$SignArguments = @(),
+    [string]$SignSubject = $env:ROO_INDUSTRIES_SIGN_SUBJECT,
+    [switch]$AllowUntrustedSignature
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Release.Checks.ps1')
+if (-not $PSBoundParameters.ContainsKey('SignArguments') -and $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) { $SignArguments = @(ConvertFrom-Json -InputObject $env:ROO_INDUSTRIES_SIGN_ARGS_JSON) }
+if ($env:ROO_INDUSTRIES_SIGN_ALLOW_UNTRUSTED -eq '1') { $AllowUntrustedSignature = $true }
+$signing = $SignArguments.Count -gt 0
+if ($signing) {
+    if ([string]::IsNullOrWhiteSpace($SignSubject)) { throw 'SignSubject is required when signing a release.' }
+    if (@($SignArguments | Where-Object { $_ -match '^/p(?:$|[\s:=])' }).Count) { throw 'Password arguments are forbidden; use a certificate store or hardware token.' }
+}
 if ($TestHooks) { $env:RooIndustriesTestHooks = 'true' }
 elseif ($env:RooIndustriesTestHooks) { throw 'RooIndustriesTestHooks is set in this environment, so this build would contain test hooks. Remove it, or pass -TestHooks to build a test installer on purpose.' }
 if ($env:GovernorTestHooks) { throw 'GovernorTestHooks is set in this environment, so this build would contain governor test hooks. Remove it before building a release.' }
@@ -44,6 +55,34 @@ function Resolve-Iscc([string]$RequestedPath) {
         if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) { return (Resolve-Path -LiteralPath $candidate).Path }
     }
     throw 'Inno Setup 6 was not found. Install it with: winget install JRSoftware.InnoSetup --scope user'
+}
+
+function Resolve-SignTool([string]$RequestedPath) {
+    if ($RequestedPath) {
+        if (-not (Test-Path -LiteralPath $RequestedPath -PathType Leaf)) { throw 'SignToolPath does not name an existing executable.' }
+        return (Resolve-Path -LiteralPath $RequestedPath).ProviderPath
+    }
+    $sdk = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    $candidate = Get-ChildItem -Path (Join-Path $sdk '10.*\x64\signtool.exe') -File -ErrorAction SilentlyContinue | Sort-Object { [Version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+    if (-not $candidate) { throw 'signtool.exe was not found. Pass -SignToolPath or set ROO_INDUSTRIES_SIGNTOOL.' }
+    return $candidate.FullName
+}
+
+function Assert-ReleaseSignature([string]$Path) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if (-not $signature.SignerCertificate -or $signature.SignerCertificate.Subject -cne $SignSubject) { throw ('Signer subject differs from SignSubject: ' + $Path) }
+    $accepted = $signature.Status -eq 'Valid' -or ($AllowUntrustedSignature -and $signature.Status -in @('UnknownError', 'NotTrusted'))
+    if (-not $accepted) { throw ('Signature verification failed (' + $signature.Status + '): ' + $Path) }
+    return $signature
+}
+
+function ConvertTo-InnoSignArgument([string]$Value) {
+    if ($Value.Contains("`r") -or $Value.Contains("`n")) { throw 'Signing arguments cannot contain line breaks.' }
+    $escaped = $Value.Replace('$', '$$')
+    if ($Value -notmatch '[\s"]') { return $escaped }
+    $escaped = [regex]::Replace($escaped, '(\\*)"', { param($match) ('\' * ($match.Groups[1].Length * 2 + 1)) + '$q' })
+    $escaped = [regex]::Replace($escaped, '\\+$', '$0$0')
+    return '$q' + $escaped + '$q'
 }
 
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$Step) {
@@ -95,6 +134,8 @@ Assert-ReleaseVersion $repoRoot $version
 
 $dotnet = Resolve-DotNetSdk $DotNetPath
 $iscc = Resolve-Iscc $IsccPath
+$signtool = if ($signing) { Resolve-SignTool $SignToolPath } else { $null }
+$innoSignCommand = if ($signing) { (ConvertTo-InnoSignArgument $signtool) + ' sign ' + (($SignArguments | ForEach-Object { ConvertTo-InnoSignArgument $_ }) -join ' ') + ' $f' } else { $null }
 Write-Host "Version $version using $dotnet and $iscc"
 Write-Host ('Bug report webhook: ' + $(if ([string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_BUG_WEBHOOK)) { 'not set, testers save reports to a file' } else { 'embedded from ROO_INDUSTRIES_BUG_WEBHOOK' }))
 Write-Host ('Update feed: ' + $(if ($UpdateFeedUrl) { $UpdateFeedUrl } else { 'not set, updates disabled' }))
@@ -147,6 +188,40 @@ foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\
     if (-not (Test-Path -LiteralPath (Join-Path $stage $required))) { throw "The release layout is missing $required." }
 }
 
+$unsignedFiles = @()
+$setupSignature = $null
+if ($signing) {
+    $signFiles = @('app\RooIndustries.OptimizationSuite.App.exe', 'app\RooIndustries.OptimizationSuite.App.dll', 'app\Optimizer.Core.dll',
+        'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\Optimizer.Host.dll', 'backend\bin\optimizer\Optimizer.Core.dll',
+        'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\bin\optimizer\session\RooIndustries.SessionHost.dll', 'backend\bin\optimizer\session\Optimizer.Core.dll')
+    $rooNames = @('RooIndustries.OptimizationSuite.App', 'Optimizer.Core', 'Optimizer.Host', 'RooIndustries.SessionHost')
+    $peFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Where-Object { $_.Extension -in @('.exe', '.dll') })
+    foreach ($file in $peFiles) {
+        $assemblyName = $file.BaseName
+        try { $assemblyName = [Reflection.AssemblyName]::GetAssemblyName($file.FullName).Name } catch [BadImageFormatException] { }
+        if ($assemblyName -in $rooNames -or $assemblyName -like 'RooIndustries.*' -or $assemblyName -like 'Optimizer.*') {
+            $relative = $file.FullName.Substring($stage.Length + 1)
+            if ($relative -notin $signFiles) { $signFiles += $relative }
+        }
+    }
+    $files = @($signFiles | ForEach-Object {
+        $path = Join-Path $stage $_
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Required signing file is missing: ' + $_) }
+        $path
+    })
+    & $signtool sign @SignArguments @files
+    if ($LASTEXITCODE -ne 0) { throw ('Release signing failed with exit code ' + $LASTEXITCODE + '.') }
+    foreach ($file in $files) { Assert-ReleaseSignature $file | Out-Null }
+    foreach ($file in $peFiles) {
+        $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+        if ($signature.Status -eq 'NotSigned') {
+            $relative = $file.FullName.Substring($stage.Length + 1)
+            if ($relative -in $signFiles) { throw ('A Roo-built PE is unsigned: ' + $relative) }
+            $unsignedFiles += $relative
+        }
+    }
+}
+
 Assert-ReleaseScripts $repoRoot $stage -TestHooks:$TestHooks
 
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -161,8 +236,11 @@ Write-Host ('Smoke test: the obfuscated helper returned the Windows tweak catalo
 $setupName = "RooIndustries-OptimizationSuite-$version-setup"
 $governorSetupHash = (Get-FileHash -LiteralPath (Join-Path $stage 'backend\scripts\Invoke-GovernorSetup.ps1') -Algorithm SHA256).Hash
 $governorSetupCommonHash = (Get-FileHash -LiteralPath (Join-Path $stage 'backend\scripts\BrandCompatibility.Common.ps1') -Algorithm SHA256).Hash
-Invoke-Checked $iscc @('/Q', "/DAppVersion=$version", "/DGovernorSetupHash=$governorSetupHash", "/DGovernorSetupCommonHash=$governorSetupCommonHash", "/DAppNumericVersion=$numericVersion", "/DSourceDir=$stage", "/DOutputDir=$OutputRoot", "/DOutputName=$setupName", (Join-Path $releaseTools 'RooIndustries.OptimizationSuite.iss')) 'Installer build'
+$isccArguments = @('/Q', "/DAppVersion=$version", "/DGovernorSetupHash=$governorSetupHash", "/DGovernorSetupCommonHash=$governorSetupCommonHash", "/DAppNumericVersion=$numericVersion", "/DSourceDir=$stage", "/DOutputDir=$OutputRoot", "/DOutputName=$setupName", (Join-Path $releaseTools 'RooIndustries.OptimizationSuite.iss'))
+if ($signing) { $isccArguments += @('/DSignInstaller=1', ('/Sroosign=' + $innoSignCommand)) }
+Invoke-Checked $iscc $isccArguments 'Installer build'
 $setup = Join-Path $OutputRoot ($setupName + '.exe')
+if ($signing) { $setupSignature = Assert-ReleaseSignature $setup }
 $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText($setup + '.sha256', $hash + '  ' + [IO.Path]::GetFileName($setup) + "`n", [Text.UTF8Encoding]::new($false))
-[pscustomobject]@{ version = $version; installer = $setup; bytes = (Get-Item -LiteralPath $setup).Length; sha256 = $hash; stage = $stage; obfuscationMaps = $maps } | ConvertTo-Json
+[pscustomobject]@{ version = $version; installer = $setup; bytes = (Get-Item -LiteralPath $setup).Length; sha256 = $hash; stage = $stage; obfuscationMaps = $maps; signed = $signing; signerSubject = if ($setupSignature) { $setupSignature.SignerCertificate.Subject } else { $null }; signerThumbprint = if ($setupSignature) { $setupSignature.SignerCertificate.Thumbprint } else { $null }; signatureStatus = if ($setupSignature) { [string]$setupSignature.Status } else { 'NotSigned' }; unsignedFiles = $unsignedFiles } | ConvertTo-Json
