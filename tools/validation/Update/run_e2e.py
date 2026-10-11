@@ -390,7 +390,7 @@ def main():
                 stop_server()
             command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
             evidence = pc_out + "-evidence.zip"
-            remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
+            remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures','wrong-subject')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
             copy_from(evidence, OUT / "pc-evidence.zip")
             import zipfile
             with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
