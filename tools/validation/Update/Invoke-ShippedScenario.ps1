@@ -481,7 +481,7 @@ try{
    Check 'startup live download exactly signed published bytes' $download ($download.bytes -eq $item.size -and $download.sha256 -ieq $item.sha256) 'live-download.json'
    $script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
    $prior=$script:app.Id;Click 'UpdateInstallButton'
-   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
+   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';Start-HarnessDescendantTracker $script:owned|Out-Null;$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
    $until=[DateTime]::UtcNow.AddMinutes(5)
    while([DateTime]::UtcNow -lt $until){CollectStarts;$pending=Join-Path $updates 'pending-install.json';if(Test-Path $pending){try{Save 'pending-install-observed.json' (Get-Content -Raw $pending|ConvertFrom-Json)}catch{}};if($script:app.HasExited -and (Version) -eq $release.payload.version){break};Start-Sleep -Milliseconds 100}
    Check 'alpha exits for silent setup' @{pid=$prior;exited=$script:app.HasExited} $script:app.HasExited
