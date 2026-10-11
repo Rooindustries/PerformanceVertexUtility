@@ -56,22 +56,26 @@ function Remember-Owned($Process){
 function Bind-OwnedChain([int]$ProcessId){
  $chain=@();$seen=@{};$childTime=$null
  for($hop=0;$hop -lt 32;$hop++){
-  if($seen.ContainsKey($ProcessId)){return $false};$seen[$ProcessId]=$true
-  $process=Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-  if(-not$process){return $false}
-  $ownedProcess=New-OwnedProcess $process
-  if(-not$ownedProcess){return $false}
-  $created=[long]$ownedProcess.Identity.creationTimeFileTimeUtc
+  if($ProcessId -le 4 -or $seen.ContainsKey($ProcessId)){return $false};$seen[$ProcessId]=$true
+  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId) -ErrorAction SilentlyContinue
+  if(-not$cim -or -not$cim.CreationDate){return $false}
+  $created=$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()
   if($childTime -and $created -gt $childTime){return $false}
   if($script:ownedHandles.ContainsKey($ProcessId)){
    $held=$script:ownedHandles[$ProcessId]
-   if($held.Identity.creationTimeFileTimeUtc -cne $ownedProcess.Identity.creationTimeFileTimeUtc -or -not(Test-OwnedProcess $held)){return $false}
-   foreach($entry in $chain){$script:ownedPids[[int]$entry.Identity.pid]=[long]$entry.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$entry.Identity.pid]=$entry;$script:extraProcesses.Add($entry)}
+   if(-not(Test-OwnedProcess $held)){return $false}
+   $verified=@()
+   foreach($entry in $chain){
+    $process=Get-Process -Id $entry.ProcessId -ErrorAction SilentlyContinue
+    if(-not$process){return $false}
+    $ownedProcess=New-OwnedProcess $process
+    if(-not$ownedProcess -or [Math]::Abs([long]$ownedProcess.Identity.creationTimeFileTimeUtc-$entry.CreationDate.ToUniversalTime().ToFileTimeUtc()) -gt 10 -or $process.Path -ine $entry.ExecutablePath){return $false}
+    $verified+=@($ownedProcess)
+   }
+   foreach($entry in $verified){$script:ownedPids[[int]$entry.Identity.pid]=[long]$entry.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$entry.Identity.pid]=$entry;$script:extraProcesses.Add($entry)}
    return $true
   }
-  $chain+=@($ownedProcess);$childTime=$created
-  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId) -ErrorAction SilentlyContinue
-  if(-not$cim){return $false};$ProcessId=[int]$cim.ParentProcessId
+  $chain+=@($cim);$childTime=$created;$ProcessId=[int]$cim.ParentProcessId
  }
  return $false
 }
@@ -82,10 +86,11 @@ function CollectStarts{
   $p=$event.SourceEventArgs.NewEvent
   $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.ProcessID) -ErrorAction SilentlyContinue
   $parent=[int]$p.ParentProcessID;$stamp=[long]$p.TIME_CREATED
+  $childCreated=if($cim){$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()}else{$stamp}
   $ours=$false
   if($script:ownedHandles.ContainsKey($parent)){
    $held=$script:ownedHandles[$parent]
-   $ours=$stamp -ge [long]$held.Identity.creationTimeFileTimeUtc -and (-not$held.process.HasExited -or $stamp -le $held.process.ExitTime.ToUniversalTime().ToFileTimeUtc())
+   $ours=$childCreated -ge [long]$held.Identity.creationTimeFileTimeUtc -and (-not$held.process.HasExited -or $childCreated -le $held.process.ExitTime.ToUniversalTime().ToFileTimeUtc())
   }
   if($p.ProcessName -notmatch '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -and -not$ours){continue}
   $row=@{pid=[int]$p.ProcessID;parentPid=$parent;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=$ours}
@@ -594,6 +599,8 @@ try{
 }catch{
  CollectStarts;$script:receiptStatus='fail';Save 'failure.json' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage;texts=if($script:window){try{@(Texts)}catch{@()}}else{@()};checks=@($script:checks)};Receipt;throw
 }finally{
+ Start-Sleep -Milliseconds 800
+ try{CollectStarts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  try{Remove-ShippedFirewall $firewallName $script:firewallNonce $script:firewallCreated}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  try{Remove-ShippedHosts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  foreach($fixture in $script:fixtures){try{Stop-OwnedProcess $fixture}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
@@ -603,10 +610,13 @@ try{
  }
  foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-OwnedProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  $browserFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$FrameId)
- if(Test-Path $browserFolder){
-  $files=@(Get-ChildItem $browserFolder -Force)
-  if($files.Count -eq 1 -and -not($files[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -and $files[0].Length -eq $item.size -and (Get-FileHash $files[0].FullName).Hash -ieq $item.sha256){[IO.Directory]::Move($browserFolder,(Join-Path $directory 'browser-download'))}
- }
+ try{
+  if(Test-Path $browserFolder){
+   $files=@(Get-ChildItem $browserFolder -Force)
+   if($files.Count -ne 1 -or ($files[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or $files[0].Length -ne $item.size -or (Get-FileHash $files[0].FullName).Hash -ine $item.sha256){throw 'Browser-download folder identity changed; retained.'}
+   [IO.Directory]::Move($browserFolder,(Join-Path $directory 'browser-download'))
+  }
+ }catch{$script:cleanupErrors.Add($_.Exception.Message)}
  Save 'process-starts.json' @(ProcessStarts)
  Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
  Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
