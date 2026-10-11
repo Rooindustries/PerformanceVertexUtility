@@ -18,6 +18,7 @@ $script:extraProcesses=[Collections.Generic.List[object]]::new()
 $script:starts=[Collections.Generic.List[object]]::new()
 $script:loggedEvents=[Collections.Generic.HashSet[int]]::new()
 $script:receiptStatus='running'
+$script:freshP5Installed=$false
 $script:setupLogs=@{}
 $script:governorStarted=$false
 $ruleRoot=Join-Path $data 'process-rules'
@@ -397,6 +398,24 @@ function HangingNetwork{
  Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText($path).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText($path).Contains($script:hostsMarker))
  Current $true
 }
+function RestoreFreshP5Installation{
+ if(-not$script:freshP5Installed){return}
+ $now=Get-HarnessMachineSnapshot;Save 'p5-before-uninstall.json' $now
+ if($now.installedVersion -cne $release.payload.version){throw 'The fresh installation changed before cleanup; retained.'}
+ Assert-NoForeignInstance $exe
+ Payload
+ CollectStarts
+ foreach($process in $script:extraProcesses){Stop-HarnessProcess $process}
+ Uninstall
+ WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
+ $active=Get-RooIndustriesLocalDataRoot
+ Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-ChildItem $active -File -Recurse|Select-Object FullName,Length})} $true
+ if(Test-Path $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
+ $tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State)
+ $services=@(Get-Service|Where-Object {$_.Name -match 'RooIndustries|RooOptimizationSuite'}|Select-Object Name,Status)
+ Check 'fresh-install uninstall leaves no Suite tasks services files or data' @{tasks=$tasks;services=$services;installExists=(Test-Path $install);dataExists=(Test-Path $data);dataArchived=(Join-Path $directory 'removed-test-data')} ($tasks.Count -eq 0 -and $services.Count -eq 0 -and -not(Test-Path $install) -and -not(Test-Path $data))
+ $script:freshP5Installed=$false
+}
 if($HarnessOnly){return}
 try{
  Receipt
@@ -498,6 +517,7 @@ try{
    $before=Get-HarnessMachineSnapshot;Save 'p5-as-found.json' $before
    if(-not$before.installedVersion){if($before.installDirectory.exists -or @($before.tasks|Where-Object {$_.name -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}).Count){throw 'As-found Suite files or tasks exist without an install record; retained.'};Assert-HarnessFreshData $bootstrapRoot $before}
    $published=DownloadPublished;Wizard $published 'published' $release.payload.version
+   $script:freshP5Installed=-not$before.installedVersion
    Payload
    Launch
    if(-not$before.installedVersion){Register-HarnessCreatedData (Get-RooIndustriesLocalDataRoot) $before|Out-Null}
@@ -523,11 +543,11 @@ try{
     $owned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($owned);$owned.process
    })
    $profile=Get-Content -Raw (Join-Path $install 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
-   $profile.profileId='shipped-background-fixture';$profile.protectedCatalogPath=Join-Path $install 'backend\profiles\protected-processes.json'
+   $profile.profileId='shipped-fixture';$profile.protectedCatalogPath=Join-Path $install 'backend\profiles\protected-processes.json'
    $profile.foregroundGame.processNames=@('RooFixtureGame.exe');$profile.targetGames=@([pscustomobject]@{gameId='fixture';processNames=@('RooFixtureGame.exe')})
    $profile.rules=@([pscustomobject]@{ruleId='fixture-background';enabled=$true;match=@{processNames=@('RooFixtureUpdater.exe','RooFixtureWebHelper.exe','RooFixtureGame.exe','MsMpEng.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'})
    $profilePath=Join-Path $directory ('profile-'+$nonce+'.json');New-HarnessText $profilePath ($profile|ConvertTo-Json -Depth 40) 'background-profile'|Out-Null
-   $state=Join-Path $directory 'background-state';New-HarnessDirectory $state 'background-state'|Out-Null
+   $state=Join-Path $script:Harness.Root ('pf-'+$nonce);New-HarnessDirectory $state 'background-state'|Out-Null
    foreach($preset in 'lower','placement'){
     foreach($fixture in @($fixtures|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($fixture,1);[RooBackgroundOracle]::SetMemory($fixture,3)}
     $originals=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-before.json') $originals
@@ -551,18 +571,7 @@ try{
     Check 'published CCD placement apply/restore' @{topology=$topology;logicalProcessorCount=$cpus.Count;cpus=$cpus;expectedCcdMask=$ccdMask;fullMask=$fullMask;readback=$placement;originals=$originals;restored=$restored;restoreMismatches=$restoreMismatches} $passed
    }
    foreach($owned in $script:fixtures){Stop-HarnessProcess $owned}
-   if(-not$before.installedVersion){
-    CollectStarts
-    foreach($process in $script:extraProcesses){Stop-HarnessProcess $process}
-    Uninstall
-    WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
-    $active=Get-RooIndustriesLocalDataRoot
-    Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-ChildItem $active -File -Recurse|Select-Object FullName,Length})} $true
-    if(Test-Path $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
-    $tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State)
-    $services=@(Get-Service|Where-Object {$_.Name -match 'RooIndustries|RooOptimizationSuite'}|Select-Object Name,Status)
-    Check 'fresh-install uninstall leaves no Suite tasks services files or data' @{tasks=$tasks;services=$services;installExists=(Test-Path $install);dataExists=(Test-Path $data);dataArchived=(Join-Path $directory 'removed-test-data')} ($tasks.Count -eq 0 -and $services.Count -eq 0 -and -not(Test-Path $install) -and -not(Test-Path $data))
-   }
+   if(-not$before.installedVersion){RestoreFreshP5Installation}
    $cs2=@(Get-ScheduledTask|Where-Object {$_.TaskName -like '*CS2*'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})
    Check 'as-found CS2 tasks remain Ready and Enabled' $cs2 (@($cs2|Where-Object {$_.State -ne 'Ready' -or -not$_.enabled}).Count -eq 0 -and $cs2.Count -eq @($before.tasks|Where-Object {$_.name -like '*CS2*'}).Count)
   }
@@ -581,6 +590,7 @@ try{
   try{Governor 'Pause'|Out-Null;WaitFor {-not(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 40 'owned governor stops'|Out-Null}catch{$script:cleanupErrors.Add($_.Exception.Message);Save 'governor-cleanup-error.json' @{error=$_.Exception.Message}}
  }
  foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-HarnessProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
+ if($Part -eq 'p5' -and $script:freshP5Installed){try{RestoreFreshP5Installation}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  Save 'process-starts.json' @(ProcessStarts)
  Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
  Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
