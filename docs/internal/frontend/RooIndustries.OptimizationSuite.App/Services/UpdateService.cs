@@ -79,6 +79,7 @@ public sealed class UpdateService
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
     private void Set(UpdateState state) { State = state; Notify(); }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
+    private void LogFeed(string outcome) => AppLog.Write("update", "Feed " + _feed!.IdnHost + ": " + outcome + "; installed " + CurrentVersion + ".");
 
     public void Start(DispatcherQueue dispatcher)
     {
@@ -215,6 +216,7 @@ public sealed class UpdateService
             using var response = await GetAsync(builder.Uri, deadline.Token);
             if (response.StatusCode != HttpStatusCode.OK)
             {
+                LogFeed("HTTP " + (int)response.StatusCode);
                 Status("Couldn't check for updates. The update server returned HTTP " + (int)response.StatusCode + " instead of 200.");
                 return;
             }
@@ -230,12 +232,12 @@ public sealed class UpdateService
             }
             var bytes = output.ToArray();
             var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
+            LogFeed(result.Kind + (result.KeyId is { } key ? ", key " + key : "") + (result.Release is { } r ? ", release " + r.Version : "") + ". " + result.Reason);
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
             {
                 _release = null; _envelope = null;
                 Set(State with { Ready = false, CanDownload = false, Notes = "", Status = result.Reason, Banner = State.BannerKind == "ready" ? "" : State.Banner });
-                AppLog.Write("update", result.Reason);
                 return;
             }
             var release = result.Release!;
@@ -245,8 +247,8 @@ public sealed class UpdateService
                 Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
             if (AutomaticDownloads && !same) await DownloadCoreAsync();
         }
-        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) Status("Couldn't check for updates. The request timed out."); }
-        catch (Exception error) { Status("Couldn't check for updates. " + error.Message); }
+        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
+        catch (Exception error) { LogFeed("failed: " + error.Message); Status("Couldn't check for updates. " + error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
     }
 

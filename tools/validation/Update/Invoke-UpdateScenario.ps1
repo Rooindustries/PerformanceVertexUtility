@@ -1,10 +1,11 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
     [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [switch]$ResumeCopyRecovery,[string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='')
+    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [switch]$ResumeCopyRecovery,[string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Join-Path $Source 'tools\validation\Update\ShippedHarness.Common.ps1')
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms
 Add-Type @'
 using System;
@@ -32,6 +33,7 @@ $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT
 $utf8=[Text.UTF8Encoding]::new($false)
 $directory=Join-Path $OutRoot $(if($EvidenceName){$EvidenceName}else{$Scenario})
 [IO.Directory]::CreateDirectory($directory)|Out-Null
+$script:feedLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
 $script:window=$null;$script:app=$null;$script:owned=$null;$settingsAttributes=$null;$settingsOriginal=$null;$settingsPath=Join-Path $data 'settings.json'
 $script:setupReceipts=[Collections.Generic.List[object]]::new()
 $events='RooIndustries_OTA_'+[Guid]::NewGuid().ToString('N')
@@ -247,6 +249,26 @@ try{
      if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-Path (Join-Path $updates $NextVersion)){throw 'Installed version cache was retained'};$logs=@(Get-ChildItem $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-Path (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
+   }
+   if ($FeedUrl) {
+    $segment = Read-ShippedLog $script:feedLogCursor
+    $feed = [uri]$FeedUrl
+    $expected = switch ($Scenario) {
+     'same-version' { 'Feed ' + $feed.IdnHost + ': Current, key ' + $FeedKeyId + ', release ' + $ExpectedVersion + '. You have the latest version; installed ' + $ExpectedVersion + '.' }
+     'manual-download' { 'Feed ' + $feed.IdnHost + ': Available, key ' + $FeedKeyId + ', release ' + $NextVersion + '. Version ' + $NextVersion + ' is available; installed ' + $ExpectedVersion + '.' }
+     'bad-signature' { 'Feed ' + $feed.IdnHost + ": Refused. The update signature is invalid. Couldn't verify this release.; installed " + $ExpectedVersion + '.' }
+     'feed-down' { 'Feed ' + $feed.IdnHost + ': HTTP 502; installed ' + $ExpectedVersion + '.' }
+    }
+    if ($expected -and -not $segment.Contains($expected)) { throw ('Expected fresh feed log is absent: ' + $expected) }
+    if ($segment.Contains($feed.AbsolutePath) -or ($feed.Query -and $segment.Contains($feed.Query))) { throw 'App log contains the feed path or query.' }
+    $statusExpected = switch ($Scenario) {
+     'same-version' { 'You have the latest version' }
+     'manual-download' { 'Version ' + $NextVersion + ' is ready to install' }
+     'bad-signature' { "Couldn't verify the update. The update signature is invalid. Couldn't verify this release." }
+     'feed-down' { "Couldn't check for updates. The update server returned HTTP 502 instead of 200." }
+    }
+    if ($statusExpected -and (StatusText) -cne $statusExpected) { throw 'The update status text changed.' }
+    Save 'feed-log.json' @{expected=$expected;lines=@($segment -split "`n" | Where-Object { $_ -like '*[[]update]*' });feedPathAbsent=$true;status=StatusText;statusExpected=$statusExpected}
    }
    Shot 'settings-banner'
    if($Scenario -in @('feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready','transport-error','manual-timeout','settings-readonly','timer-read-failure')){
