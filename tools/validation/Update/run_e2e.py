@@ -265,7 +265,7 @@ def main():
             log.close()
             log = None
     def scenario(name, installer=None, evidence_name=None):
-        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B}
+        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B, "FeedUrl": FEED, "FeedKeyId": envelope["keyId"]}
         if args.manual_retry:
             fields["ManualRetry"] = True
         if installer:

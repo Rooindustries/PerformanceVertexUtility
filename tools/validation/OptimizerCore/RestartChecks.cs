@@ -25,6 +25,20 @@ static class RestartChecks
         }
 
         var refused = false;
+        foreach (var failBootTarget in new[] { false, true })
+        {
+            var sequence = new List<string>();
+            SystemRestart.Restart(system, command =>
+            {
+                sequence.Add("run " + Path.GetFileName(command.FileName));
+                if (failBootTarget && command.Optional) throw new InvalidOperationException("fixture boot target failure");
+            }, log: message => sequence.Add("log " + message));
+            check(sequence.SequenceEqual([
+                "log Running bcdedit.exe /set {fwbootmgr} bootsequence {bootmgr}", "run bcdedit.exe",
+                "log Running shutdown.exe /r /t 0", "run shutdown.exe"]),
+                "Restart logs each command before running it" + (failBootTarget ? " when bcdedit fails" : ""));
+        }
+
         try { SystemRestart.Restart(system, command => { if (command.FileName.EndsWith("shutdown.exe", StringComparison.Ordinal)) throw new InvalidOperationException("shutdown.exe returned 5."); }); }
         catch (InvalidOperationException) { refused = true; }
         check(refused, "A failed restart is reported instead of hidden");
