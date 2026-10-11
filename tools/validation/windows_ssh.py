@@ -99,6 +99,9 @@ function Assert-SourceSnapshot([string]$Source,[string]$Expected) {
  $m=Get-Content -Raw -LiteralPath $manifestPath|ConvertFrom-Json
  if($m.protocol -cne 'roo-industries-source-snapshot/v2' -or $m.machine -ine $env:COMPUTERNAME -or $m.sid -cne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value){throw 'Source scope changed'}
  if(-not$m.files -or @($m.files.PSObject.Properties).Count -eq 0){throw 'Empty source manifest'}
+ $actual=@(Get-ChildItem -LiteralPath $Source -File -Force -Recurse|ForEach-Object {$n=$_.FullName.Substring($Source.TrimEnd('\').Length+1).Replace('\','/');if($n -ne 'source-verification.json' -and $n -notmatch '(^|/)(bin|obj|artifacts|\.git)(/|$)'){$n}})
+ $wanted=@($m.files.PSObject.Properties.Name)
+ if(@(Compare-Object $actual $wanted -CaseSensitive).Count){throw 'Staged source file set differs; stage a fresh frame.'}
  foreach($f in $m.files.PSObject.Properties){$p=[IO.Path]::GetFullPath((Join-Path $Source $f.Name));if(-not$p.StartsWith($Source.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Manifest traversal'};Assert-PlainAncestry $p;if((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash -ine $f.Value){throw ('Staged bytes changed: '+$f.Name)}}
  return $m
 }
@@ -118,7 +121,42 @@ def validate_receipt(machine: str, receipt: dict):
 
 def verify_source(host: str, machine: str, receipt: dict):
     validate_receipt(machine, receipt)
-    invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'")
+    try:
+        invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'")
+    except subprocess.CalledProcessError as error:
+        raise ValueError((error.stdout or '') + (error.stderr or '')) from None
+
+
+def is_pkcs12(data: bytes):
+    def tlv(offset):
+        if offset + 2 > len(data):
+            raise ValueError()
+        tag, length = data[offset], data[offset + 1]
+        start = offset + 2
+        if length & 128:
+            count = length & 127
+            if not 1 <= count <= 4 or start + count > len(data):
+                raise ValueError()
+            length = int.from_bytes(data[start:start + count], 'big')
+            start += count
+        end = start + length
+        if end > len(data):
+            raise ValueError()
+        return tag, start, end
+    try:
+        tag, start, end = tlv(0)
+        if tag != 48 or end != len(data):
+            return False
+        tag, integer, next_item = tlv(start)
+        if tag != 2 or data[integer:next_item] != b'\x03':
+            return False
+        tag, content, _ = tlv(next_item)
+        if tag != 48:
+            return False
+        tag, oid, oid_end = tlv(content)
+        return tag == 6 and data[oid:oid_end] in (bytes.fromhex('2a864886f70d010701'), bytes.fromhex('2a864886f70d010702'))
+    except ValueError:
+        return False
 
 
 def snapshot_files(include_frontend: bool = True, root: Path | None = None):
@@ -130,7 +168,11 @@ def snapshot_files(include_frontend: bool = True, root: Path | None = None):
             raise ValueError('Private signing material cannot be staged: ' + name)
         if (root / name).is_symlink() or '..' in Path(name).parts or Path(name).is_absolute():
             raise ValueError('Unsafe snapshot source: ' + name)
-    return {name: (root / name).read_bytes() for name in files}
+    contents = {name: (root / name).read_bytes() for name in files}
+    for name, data in contents.items():
+        if b'PRIVATE ' + b'KEY-----' in data or is_pkcs12(data):
+            raise ValueError('Private signing material cannot be staged: ' + name)
+    return contents
 
 
 def local_manifest(include_frontend: bool = True):
@@ -182,7 +224,25 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
                'manifestSha256': hashlib.sha256(data).hexdigest(),
                'sourceCommit': manifest['commit'], 'sourceFileCount': len(contents),
                'frontendIncluded': include_frontend}
-    invoke(host, machine, REMOTE_GUARDS + f"\nNew-ProtectedFrame {ps_literal(remote_root)};New-ProtectedFrame {ps_literal(remote_source)} {ps_literal(scope['sid'])}")
+    ledger_scope = base64.b64encode(json.dumps(dict(receipt, nonce=frame_id)).encode()).decode()
+    create = REMOTE_GUARDS + f"\n$r={ps_literal(remote_root)};$s={ps_literal(remote_source)};New-ProtectedFrame $r;"
+    create += f"$scope=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{ledger_scope}'))|ConvertFrom-Json;"
+    create += r"""
+$item=Get-Item $r
+$entries=@(@{id=[Guid]::NewGuid().ToString('N');nonce=$scope.nonce;kind='folder';identity=@{path=$r;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()};purpose='source-frame';lifetime='frame';state='active';metadata=$null;cleanupError=$null})
+$l=@{protocol='roo-harness-ledger/v1';machine=$env:COMPUTERNAME;frameId=$scope.frameId;manifestSha256=$scope.manifestSha256;entries=$entries;invocations=@()}
+$bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));$f=[IO.FileStream]::new((Join-Path $r 'ledger.json'),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);try{$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
+"""
+    create += f"New-ProtectedFrame $s {ps_literal(scope['sid'])};"
+    create += r"""
+$item=Get-Item $s
+$l.entries+=@(@{id=[Guid]::NewGuid().ToString('N');nonce=$scope.nonce;kind='folder';identity=@{path=$s;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()};purpose='source-frame';lifetime='frame';state='active';metadata=$null;cleanupError=$null})
+$bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));$f=[IO.FileStream]::new((Join-Path $r 'ledger.json'),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);try{$f.SetLength(0);$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
+"""
+    invoke(host, machine, create)
+    retained = Path(tempfile.gettempdir()) / ('roo-windows-frame-' + frame_id + '.json')
+    with retained.open('x') as output:
+        json.dump(receipt, output, indent=2)
     with tempfile.TemporaryDirectory(prefix='roo-industries-source-upload-') as staging:
         archive = Path(staging) / 'source.tar.gz'
         with tarfile.open(archive, 'w:gz') as bundle:
@@ -193,8 +253,34 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
             bundle.addfile(entry, io.BytesIO(data))
         destination = host + ':' + remote_root.replace('\\', '/') + '/source.tar.gz'
         subprocess.run(['scp', *SSH_OPTIONS, str(archive), destination], check=True, capture_output=True)
+        record = f"$r={ps_literal(remote_root)};$archive={ps_literal(remote_root + '/source.tar.gz')};"
+        record += r"""
+$item=Get-Item $archive
+$f=[IO.FileStream]::new((Join-Path $r 'ledger.json'),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+try{$reader=[IO.StreamReader]::new($f,[Text.Encoding]::UTF8,$true,4096,$true);try{$l=$reader.ReadToEnd()|ConvertFrom-Json}finally{$reader.Dispose()}
+$l.entries=@($l.entries)+@(@{id=[Guid]::NewGuid().ToString('N');nonce=$l.frameId;kind='file';identity=@{path=$item.FullName;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString();hash=(Get-FileHash $archive).Hash};purpose='source-archive';lifetime='frame';state='active';metadata=$null;cleanupError=$null})
+$bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));$f.Position=0;$f.SetLength(0);$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
+"""
+        invoke(host, machine, record)
         invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath $source;& (Join-Path ([Environment]::SystemDirectory) 'tar.exe') -xzf {ps_literal(remote_root + '/source.tar.gz')};if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-SourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'")
     return receipt
+
+
+def completion(output: str):
+    for line in reversed(output.splitlines()):
+        if line.startswith('{'):
+            value = json.loads(line)
+            if 'completion' in value and 'nonce' in value:
+                return value
+    raise ValueError('Interactive completion is missing its invocation nonce.')
+
+
+def read_result(host: str, machine: str, receipt: dict, name: str, nonce: str):
+    validate_receipt(machine, receipt)
+    if not re.fullmatch('[0-9a-f]{32}', nonce):
+        raise ValueError('Result nonce is invalid.')
+    script = f". {ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1')};Open-HarnessRun {ps_literal(receipt['runRoot'])} {ps_literal(receipt['frameId'])} {ps_literal(receipt['manifestSha256'])} {ps_literal(nonce)} -ReadOnly;Read-HarnessLatestResult {ps_literal(name)} -Nonce {ps_literal(nonce)}|ConvertTo-Json -Depth 60 -Compress"
+    return json.loads(invoke(host, machine, script).stdout)
 
 
 def interactive(host: str, machine: str, receipt: dict, script: str, arguments: dict,
@@ -207,46 +293,49 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         raise ValueError('Invalid bounded task duration or logon type.')
     if not all(re.fullmatch('[A-Za-z][A-Za-z0-9]*', key) for key in arguments):
         raise ValueError('Invalid parameter name.')
+    if 'Source' in arguments and PureWindowsPath(arguments['Source']) != PureWindowsPath(receipt['stagingPath']):
+        raise ValueError('Source argument differs from the verified frame; stage a fresh frame.')
     task_name = task_name or 'RooIndustries_Verify_' + uuid.uuid4().hex
     if not re.fullmatch('[A-Za-z0-9_-]{1,120}', task_name):
         raise ValueError('Invalid private task name.')
-    run = receipt['runRoot'] + '\\execution-' + uuid.uuid4().hex
+    nonce = uuid.uuid4().hex
+    run = receipt['runRoot'] + '\\execution-' + nonce
     payload = base64.b64encode(json.dumps(arguments).encode()).decode()
-    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=(Get-Content -Raw -LiteralPath (Join-Path $run 'task.json')|ConvertFrom-Json);wrapper=(Get-Content -Raw -LiteralPath (Join-Path $run 'wrapper.json')|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message);exit 1}}"
+    context = base64.b64encode(json.dumps(dict(protocol='roo-industries-verification-invocation/v2', run=run, taskName=task_name, nonce=nonce, frame=receipt)).encode()).decode()
+    common = ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1')
+    scope = f"Open-HarnessRun {ps_literal(receipt['runRoot'])} {ps_literal(receipt['frameId'])} {ps_literal(receipt['manifestSha256'])} '{nonce}'"
+    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$global:RooVerificationInvocationContext=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{context}'))|ConvertFrom-Json;. {common};{scope};$deadline=[DateTime]::UtcNow.AddSeconds(15);while(-not(Get-HarnessProcess $PID)){{if([DateTime]::UtcNow -gt $deadline){{throw 'Child creation was not recorded'}};Start-Sleep -Milliseconds 50}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$scope=if($p.OutRoot){{$p.OutRoot}}elseif($p.OutputRoot){{$p.OutputRoot}}else{{$run}};Initialize-HarnessInvocation {ps_literal(relative.stem)} $scope|Out-Null;$env:ROO_HARNESS_NONCE='{nonce}';if($scope -ne $run){{Ensure-HarnessOutputDirectory $scope}};$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message);exit 1}}"
     child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
     wrapper = "\n".join([
-        "$ErrorActionPreference='Stop'",
-        f". {ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')}",
-        f"$run={ps_literal(run)}",
-        "$self=New-OwnedProcess (Get-Process -Id $PID);$self.Identity|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $run 'wrapper.json')",
+        "$ErrorActionPreference='Stop'", f". {common}", scope,
+        f"$run={ps_literal(run)};$deadline=[DateTime]::UtcNow.AddSeconds(15)",
+        "while(-not(Test-OwnedDescendant $PID)){if([DateTime]::UtcNow -gt $deadline){throw 'Wrapper is not a descendant of the owned scheduled action'};Start-Sleep -Milliseconds 50}",
+        "$self=Get-HarnessProcess $PID;Invoke-HarnessLedger {param($ledger) $entry=@($ledger.entries|Where-Object id -CEQ $self.LedgerId)[0];$entry.lifetime='runner';$entry.purpose='interactive-wrapper'}|Out-Null",
         "$p=$null;$r=$null;$exit=1;$status='failed'",
         "try{",
         f"$p=Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe') -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {child_encoded}' -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'child.log') -RedirectStandardError (Join-Path $run 'child-error.log') -PassThru",
-        "$r=New-OwnedProcess $p;if($r){$r.Identity|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $run 'child.json')}",
-        f"if(-not$p.WaitForExit({int(minutes * 60000)})){{Stop-OwnedProcess $r;throw 'Child timeout'}}",
+        "$r=Register-HarnessStartedProcess $p 'interactive-child' 'runner'",
+        f"if(-not$p.WaitForExit({int(minutes * 60000)})){{Remove-HarnessEntry (@(Get-HarnessEntries|Where-Object id -CEQ $r.LedgerId)[0]);throw 'Child timeout'}}",
         "$p.Refresh();$exit=$p.ExitCode;if($exit -eq 0){$status='completed'}",
-        "}catch{$_|Out-String|Set-Content -LiteralPath (Join-Path $run 'wrapper-error.log')}finally{",
-        "if($r -and -not$p.HasExited){Stop-OwnedProcess $r}",
-        "@{status=$status;childExit=$exit;childIdentity=$(if($r){$r.Identity}else{$null})}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $run 'done.json.pending')",
-        "[IO.File]::Move((Join-Path $run 'done.json.pending'),(Join-Path $run 'done.json'))",
-        "}",
-        "exit $exit",
+        "}catch{Write-HarnessResult $run 'wrapper-error.json' @{error=$_.Exception.ToString()}|Out-Null}finally{",
+        "if($r -and -not$p.HasExited){Remove-HarnessEntry (@(Get-HarnessEntries|Where-Object id -CEQ $r.LedgerId)[0])}",
+        "$final=if($exit -eq 0){'pass'}else{'fail'};try{$final=Complete-HarnessInvocation $final -Cleanup;if($final -ne 'pass'){$status='failed';$exit=1}}catch{$status='failed';$exit=1;Write-HarnessResult $run 'cleanup-error.json' @{error=$_.Exception.Message}|Out-Null}",
+        f"Write-HarnessResult $run 'done.json' @{{nonce='{nonce}';status=$status;childExit=$exit;childIdentity=$(if($r){{$r.Identity}}else{{$null}})}}|Out-Null",
+        "}", "exit $exit",
     ])
     encoded = base64.b64encode(wrapper.encode('utf-16le')).decode()
-    args = '--headless "' + 'SYSTEM_POWERSHELL' + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + encoded
-    setup = REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};if($m.frameId -cne {ps_literal(receipt['frameId'])} -or $m.sid -cne {ps_literal(receipt['sid'])}){{throw 'Source run receipt scope differs'}};New-ProtectedFrame {ps_literal(run)};"
-    setup += f"\n. {ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')}\n"
-    setup += f"$name={ps_literal(task_name)};$run={ps_literal(run)};$receipt=$null;$completed=$null\n"
+    args = '--headless "SYSTEM_POWERSHELL" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + encoded
+    setup = REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};if($m.frameId -cne {ps_literal(receipt['frameId'])} -or $m.sid -cne {ps_literal(receipt['sid'])}){{throw 'Source run receipt scope differs'}};. {common};{scope};New-HarnessDirectory {ps_literal(run)} 'interactive-output'|Out-Null;"
+    setup += f"$name={ps_literal(task_name)};$run={ps_literal(run)};$taskReceipt=$null;$completed=$null;$action=$null\n"
     setup += "$user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$system=[Environment]::SystemDirectory\n"
     setup += f"$arguments={ps_literal(args)}.Replace('SYSTEM_POWERSHELL',(Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe'))\n"
     setup += "try{\n"
-    setup += f"$receipt=Register-OwnedProbeTask $name (Join-Path $system 'conhost.exe') $arguments $run $(if({logon_type} -eq 5){{'S-1-5-18'}}else{{$user}}) {max(1,int(minutes)+2)} {logon_type};$receipt|ConvertTo-Json -Depth 10|Set-Content (Join-Path $run 'task.json');Assert-OwnedTaskUnchanged $receipt\n"
-    setup += "[void](Get-OwnedTaskFolder '\\').GetTask($name).Run($null)\n"
-    setup += f"$deadline=[DateTime]::UtcNow.AddMinutes({minutes+1});while([DateTime]::UtcNow -lt $deadline -and -not(Test-Path -LiteralPath (Join-Path $run 'done.json'))){{Start-Sleep -Milliseconds 250}}\n"
-    setup += "if(Test-Path -LiteralPath (Join-Path $run 'done.json')){$completed=Get-Content -Raw (Join-Path $run 'done.json')|ConvertFrom-Json}\n"
-    setup += "}finally{if($receipt){$taskError=$null;try{Assert-OwnedTaskUnchanged $receipt}catch{$taskError=$_};foreach($f in 'child.json','wrapper.json'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Stop-OwnedProcessIdentity (Get-Content -Raw $p|ConvertFrom-Json)}};if($taskError){throw $taskError};Remove-OwnedTask $receipt}}\n"
-    setup += "foreach($f in 'child.log','child-error.log','wrapper-error.log'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Get-Content -LiteralPath $p -Encoding UTF8}}\n"
-    setup += "$ok=$completed -and $completed.status -ceq 'completed' -and $completed.childExit -eq 0;@{run=$run;task=$name;completion=$completed;passed=[bool]$ok}|ConvertTo-Json -Depth 15 -Compress\nif(-not$ok){exit 1}"
+    setup += f"$taskReceipt=Register-OwnedProbeTask $name (Join-Path $system 'conhost.exe') $arguments $run $(if({logon_type} -eq 5){{'S-1-5-18'}}else{{$user}}) {max(1,int(minutes)+2)} {logon_type};$taskEntry=Add-HarnessEntry 'task' $taskReceipt 'interactive-task' 'runner';Write-HarnessResult $run 'task.json' $taskReceipt|Out-Null;Assert-OwnedTaskUnchanged $taskReceipt\n"
+    setup += "$trigger=[DateTime]::UtcNow;$running=(Get-OwnedTaskFolder '\\').GetTask($name).Run($null);$deadline=[DateTime]::UtcNow.AddSeconds(15);do{$matches=@(Get-CimInstance Win32_Process -Filter \"Name='conhost.exe'\"|Where-Object {$_.CreationDate.ToUniversalTime() -ge $trigger -and $_.CommandLine -and $_.CommandLine.IndexOf($arguments,[StringComparison]::Ordinal) -ge 0});if($matches.Count -gt 1){throw 'Scheduled action identity is ambiguous'};if($matches.Count -eq 1){$actionId=[int]$matches[0].ProcessId;break};Start-Sleep -Milliseconds 50}while([DateTime]::UtcNow -lt $deadline);if(-not$actionId){throw 'Exact scheduled action PID unavailable'};Assert-OwnedTaskUnchanged $taskReceipt;$action=Register-HarnessStartedProcess (Get-Process -Id $actionId) 'interactive-action' 'runner'\n"
+    setup += f"$deadline=[DateTime]::UtcNow.AddMinutes({minutes+1});while([DateTime]::UtcNow -lt $deadline){{try{{$completed=Read-HarnessLatestResult 'done.json' -Nonce '{nonce}'}}catch{{$completed=$null}};if($completed){{break}};Start-Sleep -Milliseconds 250}}\n"
+    setup += "}finally{if($taskReceipt){Assert-OwnedTaskUnchanged $taskReceipt;$items=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.lifetime -eq 'runner' -and $_.state -eq 'active'});[array]::Reverse($items);foreach($item in $items){Remove-HarnessEntry $item}}}\n"
+    setup += "foreach($f in 'child.log','child-error.log'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Get-Content -LiteralPath $p -Encoding UTF8}}\n"
+    setup += f"$errors=@(Get-HarnessEntries|Where-Object {{$_.nonce -ceq '{nonce}' -and $_.state -eq 'error'}});$ok=$completed -and $completed.nonce -ceq '{nonce}' -and $completed.status -ceq 'completed' -and $completed.childExit -eq 0 -and -not$errors.Count;@{{run=$run;nonce='{nonce}';frameId={ps_literal(receipt['frameId'])};task=$name;completion=$completed;passed=[bool]$ok}}|ConvertTo-Json -Depth 15 -Compress\nif(-not$ok){{exit 1}}"
     return invoke(host, machine, setup)
 
 

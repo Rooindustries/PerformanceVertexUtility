@@ -9,8 +9,8 @@ $ProgressPreference='SilentlyContinue'
 $bootstrapRoot=if($Part -eq 'p5'){Get-RooIndustriesLocalDataRoot -LocalData (Get-RooIndustriesLocalAppData)}else{''}
 . (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1') -Source $Source -OutRoot $OutRoot -Scenario seed -EvidenceName $Part -HelpersOnly -InitialDataRoot $bootstrapRoot
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
-. (Join-Path $Source 'tools\validation\Update\ShippedHarness.Common.ps1')
-$release=Get-Content -Raw $ReleasePath|ConvertFrom-Json
+$nonce=Initialize-HarnessInvocation $Part $OutRoot
+$release=Read-HarnessInputText $ReleasePath|ConvertFrom-Json
 $item=$release.payload.installer
 $script:checks=[Collections.Generic.List[object]]::new()
 $script:fixtures=[Collections.Generic.List[object]]::new()
@@ -18,16 +18,14 @@ $script:extraProcesses=[Collections.Generic.List[object]]::new()
 $script:starts=[Collections.Generic.List[object]]::new()
 $script:loggedEvents=[Collections.Generic.HashSet[int]]::new()
 $script:receiptStatus='running'
+$script:setupLogs=@{}
 $script:governorStarted=$false
 $ruleRoot=Join-Path $data 'process-rules'
 $logPath=Join-Path $data 'logs\app.log'
 $script:partLogCursor=Get-ShippedLogCursor $logPath
 $script:appLogCursor=$null
 $script:launchAfter=[DateTime]::UtcNow
-$script:ownedPids=@{}
-$script:ownedHandles=@{}
-$script:ownedHandles[$PID]=New-OwnedProcess (Get-Process -Id $PID)
-$script:ownedPids[$PID]=[long]$script:ownedHandles[$PID].Identity.creationTimeFileTimeUtc
+$script:ownedHandles=$script:Harness.Handles
 $script:installPressed=$null
 $script:firewallCreated=$false
 $script:firewallNonce='RooShipped-'+[Guid]::NewGuid().ToString('N')
@@ -36,7 +34,7 @@ $script:hostsCreated=$false
 $script:completedInstallerDownloads=0
 $script:cleanupErrors=[Collections.Generic.List[string]]::new()
 $firewallName='RooTest-ShippedOffline-'+$FrameId
-$seedPath=Join-Path $OutRoot 'tester-preservation.json'
+$seedPath=$null
 function Receipt{
  Save 'receipt.json' @{part=$Part;status=$script:receiptStatus;machine=$env:COMPUTERNAME;frameId=$FrameId;utc=[DateTime]::UtcNow.ToString('o');checks=@($script:checks);release=$release;processStarts=@($script:starts);completedInstallerDownloads=$script:completedInstallerDownloads;cleanupErrors=@($script:cleanupErrors)}
 }
@@ -51,82 +49,29 @@ function Check([string]$name,$observed,[bool]$passed,[string]$evidence='receipt.
  if(-not$passed){throw ('PRODUCT CHECK FAILED: '+$name)}
 }
 function Remember-Owned($Process){
- $ownedProcess=New-OwnedProcess $Process
- if($ownedProcess){$script:ownedPids[[int]$Process.Id]=[long]$ownedProcess.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$Process.Id]=$ownedProcess}
+ $ownedProcess=Get-HarnessProcess $Process.Id
+ if(-not$ownedProcess){$ownedProcess=Test-OwnedDescendant $Process.Id -PassThru}
+ if(-not$ownedProcess){throw 'Process is not a verified descendant of this run; retained.'}
  return $ownedProcess
 }
-function Bind-OwnedChain([int]$ProcessId){
- $chain=@();$seen=@{};$childTime=$null
- for($hop=0;$hop -lt 32;$hop++){
-  if($ProcessId -le 4 -or $seen.ContainsKey($ProcessId)){return $false};$seen[$ProcessId]=$true
-  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId) -ErrorAction SilentlyContinue
-  if(-not$cim -or -not$cim.CreationDate){return $false}
-  $created=$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()
-  if($childTime -and $created -gt $childTime){return $false}
-  if($script:ownedHandles.ContainsKey($ProcessId)){
-   $held=$script:ownedHandles[$ProcessId]
-   if(-not(Test-OwnedProcess $held)){return $false}
-   $verified=@()
-   foreach($entry in $chain){
-    $process=Get-Process -Id $entry.ProcessId -ErrorAction SilentlyContinue
-    if(-not$process){return $false}
-    $ownedProcess=New-OwnedProcess $process
-    if(-not$ownedProcess -or [Math]::Abs([long]$ownedProcess.Identity.creationTimeFileTimeUtc-$entry.CreationDate.ToUniversalTime().ToFileTimeUtc()) -gt 10 -or $process.Path -ine $entry.ExecutablePath){return $false}
-    $verified+=@($ownedProcess)
-   }
-   foreach($entry in $verified){$script:ownedPids[[int]$entry.Identity.pid]=[long]$entry.Identity.creationTimeFileTimeUtc;$script:ownedHandles[[int]$entry.Identity.pid]=$entry;$script:extraProcesses.Add($entry)}
-   return $true
-  }
-  $chain+=@($cim);$childTime=$created;$ProcessId=[int]$cim.ParentProcessId
- }
- return $false
-}
 function CollectStarts{
- $pending=@(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Sort-Object EventIdentifier)
- foreach($event in $pending){
+ foreach($event in @(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Sort-Object EventIdentifier)){
   if(-not$script:loggedEvents.Add([int]$event.EventIdentifier)){continue}
   $p=$event.SourceEventArgs.NewEvent
   $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.ProcessID) -ErrorAction SilentlyContinue
-  $parent=[int]$p.ParentProcessID;$stamp=[long]$p.TIME_CREATED
-  $childCreated=if($cim){$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()}else{$stamp}
-  $ours=$false
-  if($script:ownedHandles.ContainsKey($parent)){
-   $held=$script:ownedHandles[$parent]
-   $ours=$childCreated -ge [long]$held.Identity.creationTimeFileTimeUtc -and (-not$held.process.HasExited -or $childCreated -le $held.process.ExitTime.ToUniversalTime().ToFileTimeUtc())
-  }
-  if($p.ProcessName -notmatch '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -and -not$ours){continue}
-  $row=@{pid=[int]$p.ProcessID;parentPid=$parent;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=$ours}
-  $script:starts.Add($row)
-  if(-not$ours -and $cim){$ours=Bind-OwnedChain ([int]$p.ProcessID);$row.ownedChain=$ours}
-  if($ours -and $cim){
-   $process=Get-Process -Id $p.ProcessID -ErrorAction SilentlyContinue
-   if($process -and $process.StartTime.ToUniversalTime().ToFileTimeUtc() -le $stamp){$ownedProcess=Remember-Owned $process;if($ownedProcess){$script:extraProcesses.Add($ownedProcess)}}
+  $ours=if($cim){Test-OwnedDescendant ([int]$p.ProcessID)}else{$false}
+  if($p.ProcessName -match '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -or $ours){
+   $script:starts.Add(@{pid=[int]$p.ProcessID;parentPid=[int]$p.ParentProcessID;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=[bool]$ours})
   }
  }
  Save 'process-starts-detailed.json' @($script:starts)
 }
 function Bind-UpdateSetup($ParentOwned,[string]$Installer){
- $until=[DateTime]::UtcNow.AddSeconds(30)
- while([DateTime]::UtcNow -lt $until){
-  $matches=@(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$ParentOwned.Identity.pid)|Where-Object {$_.ExecutablePath -ieq $Installer -and $_.CreationDate.ToUniversalTime() -ge $script:installPressed})
-  if($matches.Count -gt 1){throw 'Several update setups match the owned launch; retained.'}
-  if($matches.Count -eq 1){
-   $process=Get-Process -Id $matches[0].ProcessId -ErrorAction SilentlyContinue
-   if($process){
-    $held=New-OwnedProcess $process
-    if($held){
-     $created=[long]$held.Identity.creationTimeFileTimeUtc
-     $exited=if($ParentOwned.process.HasExited){$ParentOwned.process.ExitTime.ToUniversalTime().ToFileTimeUtc()}else{$null}
-     Save 'update-setup-parent.json' @{parent=$ParentOwned.Identity;parentExit=$exited;child=$held.Identity;childCimCreated=$matches[0].CreationDate.ToUniversalTime().ToFileTimeUtc();installPressed=$script:installPressed.ToString('o')}
-     if($created -lt [long]$ParentOwned.Identity.creationTimeFileTimeUtc -or $exited -and $created -gt $exited){throw 'Update setup parent lifetime differs; retained.'}
-     $script:ownedPids[[int]$process.Id]=$created;$script:ownedHandles[[int]$process.Id]=$held;$script:extraProcesses.Add($held)
-     return
-    }
-   }
-  }
-  Start-Sleep -Milliseconds 50
- }
- throw 'Owned update setup was not captured before it exited.'
+ WaitFor {
+  $matches=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $Installer -and $_.CreationDate.ToUniversalTime() -ge $script:installPressed})
+  if($matches.Count -gt 1){throw 'Several update setups match; retained.'}
+  if($matches.Count -eq 1){$owned=Test-OwnedDescendant ([int]$matches[0].ProcessId) -PassThru;if(-not$owned){throw 'Update setup is not in the owned updater chain; retained.'};Save 'update-setup-parent.json' @{parent=$ParentOwned.Identity;child=$owned.Identity;installPressed=$script:installPressed.ToString('o')};return $owned}
+ } 30 'owned update setup'|Out-Null
 }
 function Attach{
  $script:app=WaitFor {
@@ -135,7 +80,7 @@ function Attach{
   if($matches.Count -gt 1){throw 'Several app instances; retained.'}
   if($matches.Count -eq 1){
    $match=$matches[0]
-   if(-not$script:ownedHandles.ContainsKey([int]$match.ProcessId) -or -not(Test-OwnedProcess $script:ownedHandles[[int]$match.ProcessId]) -or $match.CreationDate.ToUniversalTime() -lt $script:launchAfter){return $null}
+   if(-not(Test-OwnedDescendant ([int]$match.ProcessId))){throw 'An app instance is already running that this run did not start; retained.'};if($match.CreationDate.ToUniversalTime() -lt $script:launchAfter){throw 'App predates this launch; retained.'}
    if($script:installPressed -and $match.CreationDate.ToUniversalTime() -lt $script:installPressed){return $null}
    Get-Process -Id $match.ProcessId
   }
@@ -152,14 +97,15 @@ function Attach{
   }
   @($windows|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1
  } 120 'owned app navigation window'
+ Register-HarnessWindow $script:window|Out-Null
  Save 'owned-app.json' $script:owned.Identity
 }
 function Launch{
  Assert-ShippedNoApp $exe
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null
  $script:appLogCursor=Get-ShippedLogCursor $logPath
- $p=Start-Process $exe -PassThru
- $script:owned=Remember-Owned $p
+ if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'An app already runs; stop it before a fresh launch.'}
+ $script:owned=Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose app
  Attach
 }
 function Tree{
@@ -169,88 +115,46 @@ function Zone([string]$path){
  $raw=Get-Content -Raw -LiteralPath $path -Stream Zone.Identifier
  return [string]::new($raw.ToCharArray())
 }
-function SmartScreen($candidate){
- if(-not$candidate){return $false}
- try{$info=$candidate.Current}catch{return $false}
- if(-not$info -or -not$info.ProcessId){return $false}
- if($info.Name -eq 'Windows protected your PC' -or $info.Name -like '*Microsoft Defender SmartScreen*'){return $true}
- $process=Get-Process -Id $info.ProcessId -ErrorAction SilentlyContinue
- return $process -and $process.ProcessName -ieq 'smartscreen'
-}
 function Wizard([string]$path,[string]$label,[string]$version){
- $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not$script:ownedPids.ContainsKey([int]$_.ProcessId)})
+ $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))})
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
  $existingWindows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
- $wizardStarted=[DateTime]::UtcNow
- $setupLog=Join-Path $directory ($label+'-setup.log')
- $launchResult=Join-Path $directory ($label+'-shell-result.json')
- $launcherPath=Join-Path $directory ($label+'-shell.ps1')
- $launcher=@'
-param([string]$Installer,[string]$Log,[string]$Result)
-$ErrorActionPreference='Stop'
-try{
- $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $Installer -Parent;$start.Arguments='/LOG="'+$Log+'"'
- $process=[Diagnostics.Process]::Start($start)
- @{pid=$process.Id;status='started'}|ConvertTo-Json|Set-Content -LiteralPath $Result
- $process.WaitForExit()
- @{pid=$process.Id;status='exited';exitCode=$process.ExitCode}|ConvertTo-Json|Set-Content -LiteralPath $Result
-}catch{@{status='failed';error=$_.Exception.ToString()}|ConvertTo-Json|Set-Content -LiteralPath $Result;exit 1}
-'@
- [IO.File]::WriteAllText($launcherPath,$launcher,$utf8)
- $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$launcherPath+'" -Installer "'+$path+'" -Log "'+$setupLog+'" -Result "'+$launchResult+'"'
- $shell=Start-Process powershell.exe -ArgumentList $arguments -WindowStyle Normal -PassThru
- $script:extraProcesses.Add((Remember-Owned $shell))
- Save ($label+'-launch.json') @{path=$path;arguments=('/LOG="'+$setupLog+'"');useShellExecute=$true;launcherPid=$shell.Id;zone=try{Zone $path}catch{$null}}
- $until=[DateTime]::UtcNow.AddMinutes(10);$seen=[Collections.Generic.HashSet[string]]::new();$number=0;$smartScreen=$false
- $result=$null
- while([DateTime]::UtcNow -lt $until){
-  if(Test-Path $launchResult){
-   try{$launchIdentity=Get-Content -Raw $launchResult|ConvertFrom-Json}catch{$launchIdentity=$null}
-   if($launchIdentity.pid -and -not$script:ownedPids.ContainsKey([int]$launchIdentity.pid)){
-    $process=Get-Process -Id $launchIdentity.pid -ErrorAction SilentlyContinue
-    if($process -and $process.Path -ieq $path -and $process.StartTime.ToUniversalTime() -ge $wizardStarted){$ownedProcess=Remember-Owned $process;$script:setupReceipts.Add($ownedProcess)}
+ $setupLog=Get-HarnessOutputPath $directory ($label+'-setup.log');$script:setupLogs=@{}+$script:setupLogs;$script:setupLogs[$label]=$setupLog
+ $start=[Diagnostics.ProcessStartInfo]::new($path);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $path -Parent;$start.Arguments='/LOG="'+$setupLog+'"'
+ $setupOwned=Start-OwnedProcess -StartInfo $start -Purpose setup -WhileStarting {
+  Assert-HarnessNewSmartScreen $existingWindows $directory
+  foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
+   if($win.Current.NativeWindowHandle -notin $existingWindows -and $win.Current.ClassName -eq '#32770' -and $win.Current.Name -eq 'Open File - Security Warning' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId))){
+    $script:window=Register-HarnessWindow $win;Save ($label+'-security-warning.json') @{title=$win.Current.Name;controls=@(Tree)};Shot ($label+'-security-warning')
+    $button=ByNameControl 'Run' $CT::Button;if(-not$button){throw 'Owned security warning has no Run button.'};Activate $button
    }
   }
+ }
+ $setup=$setupOwned.process;$script:setupReceipts.Add($setupOwned)
+ Save ($label+'-launch.json') @{path=$path;arguments=$start.Arguments;useShellExecute=$true;setup=$setupOwned.Identity;zone=try{Zone $path}catch{$null}}
+ $until=[DateTime]::UtcNow.AddMinutes(10);$seen=[Collections.Generic.HashSet[string]]::new();$number=0
+ while([DateTime]::UtcNow -lt $until -and -not$setup.HasExited){
   CollectStarts
-  $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))
-  foreach($win in $windows){
+  foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
+   if($win.Current.NativeWindowHandle -notin $existingWindows){Assert-HarnessSmartScreen $win $directory}
    if($win.Current.ClassName -eq 'TWizardForm' -and $win.Current.Name -like '*Roo Industries*'){
-    if(-not(Bind-OwnedChain ([int]$win.Current.ProcessId))){throw 'Wizard belongs to a non-owned setup; retained.'}
-    $script:window=$win
-    if($win.Current.ProcessId -notin @($script:setupReceipts.Identity.pid)){$script:setupReceipts.Add((Remember-Owned (Get-Process -Id $win.Current.ProcessId)))}
+    $script:window=Register-HarnessWindow $win
     $tree=@(Tree);$button=$null
     foreach($name in 'Finish','Install','Next >','Next'){$candidate=ByNameControl $name $CT::Button;if($candidate -and $candidate.Current.IsEnabled){$button=$candidate;break}}
     $key=if($button){$tree.name -join '|'}else{'install-progress'}
-    if($seen.Add($key)){
-     $number++;$shotName=$label+'-page-'+('{0:D2}'-f$number)
-     Save ($shotName+'.json') @{title=$win.Current.Name;controls=$tree;defaultChoicesKept=$true}
-     Shot $shotName;if($button){Activate $button;Start-Sleep -Milliseconds 400}
-    }
-   }elseif($win.Current.ClassName -eq '#32770' -and $win.Current.ProcessId -eq $shell.Id){
-    $script:window=$win;$number++;Save ($label+'-security-warning-'+$number+'.json') @(Tree);Shot ($label+'-security-warning-'+$number)
-    $button=ByNameControl 'Run' $CT::Button
-    if($button){Activate $button}else{throw 'Shell security warning did not expose Run.'}
-   }elseif($win.Current.ClassName -eq '#32770' -and $win.Current.ProcessId -in @($script:setupReceipts.Identity.pid)){
-    $script:window=$win;$tree=@(Tree);$key=($tree.name -join '|')
+    if($seen.Add($key)){$number++;$shotName=$label+'-page-'+('{0:D2}'-f$number);Save ($shotName+'.json') @{title=$win.Current.Name;controls=$tree;defaultChoicesKept=$true};Shot $shotName;if($button){Activate $button;Start-Sleep -Milliseconds 400}}
+   }elseif($win.Current.ClassName -eq '#32770' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId))){
+    $script:window=Register-HarnessWindow $win;$tree=@(Tree);$key=$tree.name -join '|'
     if($seen.Add($key)){$number++;Save ($label+'-dialog-'+$number+'.json') $tree;Shot ($label+'-dialog-'+$number)}
-    $button=ByNameControl 'OK' $CT::Button
+    $button=ByNameControl 'Run' $CT::Button;if(-not$button){$button=ByNameControl 'OK' $CT::Button}
     if($button){Activate $button}else{throw ('Installer dialog requires an unplanned choice: '+$key)}
-   }elseif(SmartScreen $win){
-    $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not$script:ownedPids.ContainsKey([int]$_.ProcessId)})
-    if($win.Current.NativeWindowHandle -in $existingWindows -or $foreign.Count){throw 'SmartScreen cannot be bound to this launch; retained.'}
-    if([DateTime]::UtcNow -lt $wizardStarted){throw 'SmartScreen predates owned launch.'}
-    $script:window=$win;$smartScreen=$true;$number++;Save ($label+'-smartscreen-'+$number+'.json') @(Tree);Shot ($label+'-smartscreen-'+$number)
-    $button=ByName 'More info';if($button){Activate $button;Start-Sleep -Milliseconds 500;Shot ($label+'-smartscreen-more-info')}
-    $button=ByName 'Run anyway';if($button){Activate $button}else{throw 'SmartScreen did not expose Run anyway.'}
    }
   }
-  if(Test-Path $launchResult){try{$result=Get-Content -Raw $launchResult|ConvertFrom-Json}catch{}}
-  if($result.status -eq 'failed'){throw ('ShellExecute failed: '+$result.error)}
-  if($result.status -eq 'exited'){break}
-  Start-Sleep -Milliseconds 150
+  Start-Sleep -Milliseconds 100
  }
  CollectStarts
- Check ($label+' wizard completed') @{shell=$result;pages=$number;smartScreen=$smartScreen;version=try{Version}catch{$null};defaultCheckboxes=$true} ($result.status -eq 'exited' -and $result.exitCode -eq 0 -and (Version) -eq $version) ($label+'-setup.log')
+ $result=@{pid=$setup.Id;status=if($setup.HasExited){'exited'}else{'timeout'};exitCode=if($setup.HasExited){$setup.ExitCode}else{$null}}
+ Check ($label+' wizard completed') @{shell=$result;pages=$number;smartScreen=$false;version=try{Version}catch{$null};defaultCheckboxes=$true} ($result.status -eq 'exited' -and $result.exitCode -eq 0 -and (Version) -eq $version) $setupLog
  $script:window=$null;$script:app=$null;$script:owned=$null
 }
 function Uninstall{
@@ -260,18 +164,19 @@ function Uninstall{
   if(Test-Path $key){throw 'Installed uninstaller is missing.'}
   Check 'no current installation to uninstall' @{uninstallerExists=$false;uninstallKeyExists=$false} $true;return
  }
- $p=Start-Process $unins -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory 'uninstall.log')+'"') -PassThru
- $ownedProcess=Remember-Owned $p
- try{if(-not$p.WaitForExit(360000)){throw 'Uninstall timed out.'};Check 'uninstall completed' $p.ExitCode ($p.ExitCode -eq 0) 'uninstall.log'}finally{Stop-OwnedProcess $ownedProcess}
+ $ownedProcess=Start-OwnedProcess -FilePath $unins -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+(Get-HarnessOutputPath $directory 'uninstall.log')+'"') -Purpose uninstaller
+ $p=$ownedProcess.process
+ try{if(-not$p.WaitForExit(360000)){throw 'Uninstall timed out.'};Check 'uninstall completed' $p.ExitCode ($p.ExitCode -eq 0) 'uninstall.log'}finally{Stop-HarnessProcess $ownedProcess}
 }
 function DownloadPublished{
- $downloadFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$FrameId)
+ $downloadFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$nonce)
  if(Test-Path $downloadFolder){throw 'Owned browser-download folder already exists; retain it.'}
- [IO.Directory]::CreateDirectory($downloadFolder)|Out-Null
+ New-HarnessDirectory $downloadFolder 'browser-download' 'invocation'|Out-Null
  $path=Join-Path $downloadFolder ([IO.Path]::GetFileName(([uri]$item.url).AbsolutePath))
  if(Test-Path $path){throw 'Published installer download already exists; do not silently repeat the GET.'}
  $clock=[Diagnostics.Stopwatch]::StartNew()
  Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile $path
+ Register-HarnessFile $path 'download' 'invocation'|Out-Null
  $script:completedInstallerDownloads++
  $clock.Stop();Set-Content -LiteralPath $path -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ASCII
  $actual=@{path=$path;url=$item.url;bytes=(Get-Item $path).Length;sha256=(Get-FileHash $path).Hash;seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
@@ -295,10 +200,10 @@ function SeedTester{
  Launch;WaitFor {@(Texts) -contains 'Start here'} 90 'baseline Home'|Out-Null
  Check 'baseline app running before seed' @{version=Version;pid=$script:app.Id} ((Version) -eq $OldVersion)
  StopApp
- $fixture=Join-Path $data ('shipped-fixture\'+$FrameId);[IO.Directory]::CreateDirectory($fixture)|Out-Null
- $target=Join-Path $fixture 'RooTesterGame.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $target
- $p=Start-Process $target -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$ownedProcess=New-OwnedProcess $p
- try{$snapshot=Core 'process-status' @{processId=$p.Id};Save 'seed-process-status.json' $snapshot}finally{Stop-OwnedProcess $ownedProcess}
+ $fixture=Join-Path $data ('shipped-fixture\'+$nonce);New-HarnessDirectory $fixture 'tester-data' 'retained'|Out-Null
+ $target=Join-Path $fixture 'RooTesterGame.exe';Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $target 'tester-data' 'retained'|Out-Null
+ $ownedProcess=Start-OwnedProcess -FilePath $target -ArgumentList '-t 127.0.0.1' -Purpose fixture;$p=$ownedProcess.process
+ try{$snapshot=Core 'process-status' @{processId=$p.Id};Save 'seed-process-status.json' $snapshot}finally{Stop-HarnessProcess $ownedProcess}
  $text=(@($snapshot.topology|Sort-Object group,index|ForEach-Object {'{0}:{1}:{2}:{3}:{4}:{5}' -f $_.group,$_.index,$_.core,$_.cache,$_.numa,$_.efficiency}) -join ';')
  $sha=[Security.Cryptography.SHA256]::Create();try{$fingerprint=([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($text)))).Replace('-','')}finally{$sha.Dispose()}
  $rule=@{schemaVersion=1;ruleId=([Guid]::NewGuid().ToString('N'));owner=@{machine=$env:COMPUTERNAME;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value};name='Shipped tester game rule';enabled=$true;matchMode='path';executablePath=$target;executableHash=$null;controls=@{cpuPriority='High';memoryPriority=2;affinity=@{group=0;mask='0x3'}};cpuSelection=$null;affinityTopologyHash=$fingerprint}
@@ -322,14 +227,14 @@ function SeedTester{
  WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 60 '0.10 governor starts'|Out-Null
  $files=@(Get-Item $settingsPath;Get-ChildItem (Join-Path $ruleRoot 'rules') -File;Get-ChildItem (Join-Path $data 'operations') -File -Recurse|Where-Object {$_.Name -notlike '*.lock'})
  $baseline=@{files=@($files|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash}});themeId='roo-industries-blue';simpleMode='1';automaticDownloads='1';ruleId=$savedRule.ruleId;fixturePath=$target;controls=$rule.controls;governor=(GovernorRead)}
- [IO.File]::WriteAllText($seedPath,($baseline|ConvertTo-Json -Depth 40),$utf8)
+ Save 'tester-preservation.json' $baseline
  Launch;WaitFor {@(Texts) -contains 'Start here'} 90 'seeded 0.10 Home'|Out-Null;Shot 'seeded-0.10-home'
  Save 'tester-before-upgrade.json' @{appPid=$script:app.Id;governor=(GovernorRead);preservation=$baseline}
  Check 'tester undo data exists' @{operationFiles=@($baseline.files|Where-Object {$_.path -like '*\operations\*'}).Count;tweakResult=$applied.status} (@($baseline.files|Where-Object {$_.path -like '*\operations\*'}).Count -gt 0)
  Check 'old app and governor running at upgrade' @{appPid=$script:app.Id;governor=$baseline.governor} ($baseline.governor.status.hostRunning -eq $true -and -not$script:app.HasExited)
 }
 function Preservation{
- $baseline=Get-Content -Raw $seedPath|ConvertFrom-Json
+ $baseline=Read-HarnessLatestResult 'tester-preservation.json' 'p2'
  $rows=@($baseline.files|ForEach-Object {$exists=Test-Path $_.path;@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-FileHash $_.path).Hash}else{$null};match=($exists -and (Get-FileHash $_.path).Hash -ieq $_.sha256)}})
  Save 'preservation-readback.json' $rows
  Check 'tester preservation hashes' @{files=$rows.Count;mismatches=@($rows|Where-Object {-not$_.match})} (@($rows|Where-Object {-not$_.match}).Count -eq 0) 'preservation-readback.json'
@@ -337,7 +242,7 @@ function Preservation{
  Check 'theme and settings kept' $settings ($settings.themeId -eq $baseline.themeId -and $settings.simpleMode -eq $baseline.simpleMode -and $settings.downloadUpdatesAutomatically -eq $baseline.automaticDownloads)
 }
 function Payload{
- $oracle=Get-Content -Raw $PayloadHashes|ConvertFrom-Json
+ $oracle=Read-HarnessInputText $PayloadHashes|ConvertFrom-Json
  if($oracle.installerSha256 -ine $item.sha256 -or $oracle.installerSize -ne $item.size){throw 'Payload oracle installer identity differs.'}
  $hashes=@($oracle.files)
  $rows=@($hashes|ForEach-Object {$p=Join-Path $install $_.path;$exists=Test-Path $p -PathType Leaf;@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-FileHash $p).Hash}else{$null};match=($exists -and (Get-FileHash $p).Hash -ieq $_.sha256)}})
@@ -371,33 +276,30 @@ function GovernorVerified{
  $hostHash=($hashes|Where-Object {$_.path -eq 'backend/bin/optimizer/Optimizer.Host.exe'}|Select-Object -First 1).sha256
  Check 'governor enabled and running from new install' @{before=$script:governorBeforeUpgrade;after=$governor} ((Test-ShippedGovernorReplacement $script:governorBeforeUpgrade $governor) -and $governor.status.hostRunning -eq $true -and $governor.path -ieq $hostExe -and $governor.sha256 -ieq $hostHash -and @($governor.tasks|Where-Object enabled).Count -gt 0) 'governor-readback.json'
 }
+function ShippedFixtureRead($Process){
+ $Process.Refresh();@{pid=$Process.Id;name=$Process.ProcessName;path=$Process.Path;startTimeUtc=$Process.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$Process.PriorityClass;affinityMask=$Process.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($Process);memoryPriority=[RooBackgroundOracle]::Memory($Process)}
+}
+function ShippedProfileCall([string]$Script,[hashtable]$Arguments){
+ $raw=& (Join-Path $install ('backend\scripts\'+$Script+'.ps1')) @Arguments
+ $result=$raw|ConvertFrom-Json
+ if($result.errors.Count){throw ($Script+': '+($result.errors|ConvertTo-Json -Depth 10))};return $result
+}
 function SavedRuleReadback{
- $seed=Get-Content -Raw $seedPath|ConvertFrom-Json
+ $seed=Read-HarnessLatestResult 'tester-preservation.json' 'p2'
  $governor=GovernorRead
  if(-not$governor.status.hostRunning){throw 'Saved-rule check requires the published governor running.'}
- $shell=$null;$folderWindow=$null;$attempts=@();$observed=$false
+ $attempts=@();$observed=$false;$ownedProcess=$null
  try{
-  $folder=Split-Path $seed.fixturePath -Parent
-  $shell=New-Object -ComObject Shell.Application
-  $windowIds=@($shell.Windows()|ForEach-Object {$_.HWND})
-  Start-Process explorer.exe -ArgumentList ('"'+$folder+'"')|Out-Null
-  $folderWindow=WaitFor {@($shell.Windows()|Where-Object {try{$_.HWND -notin $windowIds -and $_.Document.Folder.Self.Path -ieq $folder}catch{$false}})|Select-Object -First 1} 30 'owned Explorer fixture folder'
-  $desktopShell=$folderWindow.Document.Application
   for($attempt=1;$attempt -le 3;$attempt++){
-   if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $seed.fixturePath}).Count){throw 'A fixture instance already exists; retained.'}
-   $explorerLaunch=[DateTime]::UtcNow
-   $desktopShell.ShellExecute($seed.fixturePath,'-t 127.0.0.1',$folder,'open',0)
-   WaitFor {@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $seed.fixturePath}).Count -gt 0} 30 'desktop fixture'|Out-Null
-   $match=Get-ShippedFixture $seed.fixturePath $explorerLaunch
-   $p=Get-Process -Id $match.ProcessId
-   $ownedProcess=New-OwnedProcess $p;$script:fixtures.Add($ownedProcess)
+   $ownedProcess=Start-HarnessExplorerProcess $seed.fixturePath '-t 127.0.0.1' 'saved-rule-fixture';$script:fixtures.Add($ownedProcess)
+   $explorerLaunch=$ownedProcess.ExplorerLaunchUtc;$parent=$ownedProcess.ExplorerParent;$p=$ownedProcess.process
    $p.Refresh();$before=@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinity=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p)}
    $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.Id)
    $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$cim.ParentProcessId)
    if([IO.Path]::GetFileName($parent.ExecutablePath) -ine 'explorer.exe'){throw 'Fixture was not launched by desktop Explorer.'}
    $row=@{attempt=$attempt;before=$before;identity=$ownedProcess.Identity;parent=@{pid=$cim.ParentProcessId;image=$parent.ExecutablePath}}
    $distinct=$before.priorityClass -ne 'High' -and $before.affinity -ne 3 -and $before.memoryPriority -ne 2
-   if(-not$distinct){$row.outcome='Initial sample already equals at least one target; inconclusive.';$attempts+=@($row);Save 'saved-rule-launch-attempts.json' $attempts;Stop-OwnedProcess $ownedProcess;continue}
+   if(-not$distinct){$row.outcome='Initial sample already equals at least one target; inconclusive.';$attempts+=@($row);Save 'saved-rule-launch-attempts.json' $attempts;Stop-HarnessProcess $ownedProcess;continue}
    Save 'saved-rule-launch-attempts.json' @($attempts+@($row))
    Check 'fresh game starts with all three controls different from the rule' $row $distinct 'saved-rule-launch-attempts.json'
    $until=[DateTime]::UtcNow.AddSeconds(60)
@@ -405,17 +307,16 @@ function SavedRuleReadback{
    $row.after=$after;$attempts+=@($row);Save 'saved-rule-launch-attempts.json' $attempts
    Save 'saved-rule-independent-readback.json' @{before=$before;after=$after;expected=$seed.controls;parent=$row.parent;attempts=$attempts;governor=$governor}
    Check 'fresh game receives saved controls' $after ($after.priorityClass -eq 'High' -and $after.affinity -eq 3 -and $after.memoryPriority -eq 2) 'saved-rule-independent-readback.json'
-   Stop-OwnedProcess $ownedProcess;$observed=$true;break
+   Stop-HarnessProcess $ownedProcess;$observed=$true;break
   }
   if(-not$observed){throw 'Harness could not sample three distinct initial control values in three desktop launches.'}
  }finally{
-  if($folderWindow){$folderWindow.Quit()}
-  if($shell){[Runtime.InteropServices.Marshal]::ReleaseComObject($shell)|Out-Null}
+  if($ownedProcess){Stop-HarnessProcess $ownedProcess}
  }
 }
 function AppLog{
  $segment=Read-ShippedLog $script:partLogCursor
- [IO.File]::WriteAllText((Join-Path $directory 'app-log-new.txt'),$segment,$utf8)
+ New-HarnessText (Get-HarnessOutputPath $directory 'app-log-new.txt') $segment 'app-log-evidence'|Out-Null
  $errors=@($segment -split "`n"|Where-Object {$_ -match 'Exception|Unhandled|\[fatal\]'})
  Check 'app log has no exceptions' $errors ($errors.Count -eq 0) 'app-log-new.txt'
  $logged=@($segment -split "`n"|Where-Object {$_ -like '*[[]update]*'})
@@ -426,7 +327,7 @@ function AppLog{
 function Remove-ShippedHosts{
  if(-not$script:hostsCreated){return}
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
- Remove-ShippedHostsLine $path $script:hostsLine $script:hostsMarker
+ $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -ceq $script:hostsMarker -and $_.state -eq 'active'});if($entry.Count -ne 1){throw 'Hosts line is not in this creation ledger; retained.'};Remove-HarnessEntry $entry[0]
  $script:hostsCreated=$false
  & ipconfig.exe /flushdns|Out-Null
  if($LASTEXITCODE){throw 'DNS flush failed.'}
@@ -436,7 +337,7 @@ function HangingNetwork{
  $begin=[DateTime]::UtcNow
  $line='192.0.2.1 '+$hostName+' '+$script:hostsMarker;$script:hostsLine=$line
  try{
-  [IO.File]::AppendAllText($path,"`r`n"+$line+"`r`n",[Text.UTF8Encoding]::new($false));$script:hostsCreated=$true
+  Add-HarnessHostsLine $path $line $script:hostsMarker;$script:hostsCreated=$true
   if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted.'}
   & ipconfig.exe /flushdns|Out-Null;if($LASTEXITCODE){throw 'DNS flush failed.'}
  }catch{
@@ -457,10 +358,10 @@ function HangingNetwork{
   if($page -eq 'Settings' -and (StatusText) -ne 'Checking for updates...'){throw 'Hanging check ended before Settings rendered.'}
   Shot ('hanging-'+$page.ToLowerInvariant())
  }
- $status=WaitStatus "Couldn't check for updates.*" ([Math]::Max(1,30-[int]$clock.Elapsed.TotalSeconds))
+ $status=WaitStatus "Couldn't check for updates. The request timed out." ([Math]::Max(1,30-[int]$clock.Elapsed.TotalSeconds))
  $clock.Stop();Shot 'hanging-timeout'
  Check 'navigation renders during a hanging network check' $pages ($pages.Count -eq 3) 'hanging-settings.png'
- Check 'hanging check reports timeout within 30 seconds' @{text=$status;seconds=$clock.Elapsed.TotalSeconds;alive=(-not$script:app.HasExited)} ($clock.Elapsed.TotalSeconds -le 30 -and $status -like "Couldn't check for updates.*") 'hanging-timeout.png'
+ Check 'hanging check reports timeout within 30 seconds' @{text=$status;seconds=$clock.Elapsed.TotalSeconds;alive=(-not$script:app.HasExited)} ($clock.Elapsed.TotalSeconds -ge 18 -and $clock.Elapsed.TotalSeconds -le 30 -and $status -ceq "Couldn't check for updates. The request timed out.") 'hanging-timeout.png'
  if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted during the test.'}
  Remove-ShippedHosts
  Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText($path).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText($path).Contains($script:hostsMarker))
@@ -472,12 +373,8 @@ try{
  switch($Part){
   'p2'{
    if(-not$PayloadHashes -or -not$OldInstaller -or -not$OldVersion){throw 'p2 requires PayloadHashes, OldInstaller and OldVersion.'}
-   if(Test-Path $updates){
-    Save 'earlier-test-updates.json' @(UpdateFiles)
-    $archive=Join-Path $OutRoot 'earlier-test-updates'
-    if(Test-Path $archive){throw 'Earlier test-update archive already exists; retain both folders.'}
-    [IO.Directory]::Move($updates,$archive)
-   }
+   Save 'as-found-updates.json' @(UpdateFiles)
+   Initialize-HarnessCache $updates @($release.payload.version,($release.payload.version.Split('-')[0]+'-alpha'))
    Uninstall
    Wizard $OldInstaller 'baseline' $OldVersion
    SeedTester
@@ -489,8 +386,8 @@ try{
    $script:governorStarted=$true
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 70 'enabled governor resumes'|Out-Null
    Launch;Versions;Payload;Preservation;GovernorVerified;SavedRuleReadback;Current $false
-   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves update folder empty' @{files=$files;log=$segment} ($files.Count -eq 0 -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
-   $setupLog=[IO.File]::ReadAllText((Join-Path $directory 'published-setup.log'))
+   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} (@($files|Where-Object {$_.path -notmatch '\install-[^\]+\.log$'}).Count -eq 0 -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
+   $setupLog=[IO.File]::ReadAllText($script:setupLogs['published'])
    $candidates=@($setupLog -split "`n"|Where-Object {$_ -match '(?i)\berror\b|\bexception\b'})
    $errors=@($candidates|Where-Object {$_ -notmatch '^\d{4}-\d{2}-\d{2} .*?\s+(Dest filename|Source filename): '})
    Save 'setup-error-audit.json' @{errors=$errors;filenameLines=@($candidates|Where-Object {$_ -notin $errors})}
@@ -502,11 +399,11 @@ try{
    $script:governorStarted=$true
    Wizard $AlphaInstaller 'alpha' $AlphaVersion
    Preservation
-   Check 'alpha installed over newer beta' @{version=Version;log=(Join-Path $directory 'alpha-setup.log')} ((Version) -eq $AlphaVersion) 'alpha-setup.log'
+   Check 'alpha installed over newer beta' @{version=Version;log=$script:setupLogs['alpha']} ((Version) -eq $AlphaVersion) 'alpha-setup.log'
   }
   'p3'{
    $script:governorStarted=$true
-   Check 'startup update folder is empty' @(UpdateFiles) (@(UpdateFiles).Count -eq 0)
+   Check 'startup release cache is empty' @(UpdateFiles) (@(UpdateFiles|Where-Object {$_.path -notmatch '\install-[^\]+\.log$'}).Count -eq 0)
    Governor 'Resume'|Out-Null
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 60 'governor running before OTA'|Out-Null
    Launch
@@ -529,7 +426,7 @@ try{
    Shot 'live-installer-ready'
    $downloads=@(UpdateFiles|Where-Object {$_.path -match '\.exe$'})
    if($downloads.Count -ne 1){throw 'Expected one newly downloaded installer.'}
-   $download=$downloads[0];$created=(Get-Item $download.path).CreationTimeUtc
+   $download=$downloads[0];Register-HarnessCache $release.payload.version|Out-Null;$created=(Get-Item $download.path).CreationTimeUtc
    Check 'installer was created after this app launch' @{created=$created;appStarted=$script:app.StartTime.ToUniversalTime()} ($created -ge $script:app.StartTime.ToUniversalTime())
    Save 'live-download.json' @{file=$download;secondsFromLaunch=([DateTime]::UtcNow-$launched).TotalSeconds;automaticDownloads=$toggle;checkButtonPressed=$false;status=$ready;texts=@(Texts)}
    Check 'startup live download exactly signed published bytes' $download ($download.bytes -eq $item.size -and $download.sha256 -ieq $item.sha256) 'live-download.json'
@@ -568,12 +465,14 @@ try{
    HangingNetwork
   }
   'p5'{
-   if(-not$PreflightPath){throw 'p5 requires PreflightPath.'}
-   $before=Get-Content -Raw $PreflightPath|ConvertFrom-Json
+   $before=Get-HarnessMachineSnapshot;Save 'p5-as-found.json' $before
+   if(-not$before.installedVersion){if($before.installDirectory.exists -or @($before.tasks|Where-Object {$_.name -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}).Count){throw 'As-found Suite files or tasks exist without an install record; retained.'};Assert-HarnessFreshData (Get-RooIndustriesLocalDataRoot) $before}
    $published=DownloadPublished;Wizard $published 'published' $release.payload.version
+   if(-not$before.installedVersion){Register-HarnessCreatedData (Get-RooIndustriesLocalDataRoot) $before|Out-Null}
    Payload
    Launch
-   $data=Get-RooIndustriesLocalDataRoot;$updates=Join-Path $data 'updates';$ruleRoot=Join-Path $data 'process-rules';$logPath=Join-Path $data 'logs\app.log';$settingsPath=Join-Path $data 'settings.json';$script:partLogCursor=Get-ShippedLogCursor $logPath;$script:appLogCursor=$script:partLogCursor
+   if(-not$before.installedVersion){Register-HarnessCreatedData (Get-RooIndustriesLocalDataRoot) $before|Out-Null}
+   $data=Get-RooIndustriesLocalDataRoot;$updates=Join-Path $data 'updates';$ruleRoot=Join-Path $data 'process-rules';$logPath=Join-Path $data 'logs\app.log';$settingsPath=Join-Path $data 'settings.json'
    Versions;Current $false
    Activate (ByName 'Memory')
    $guides=Get-Content -Raw (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Assets\Guides\memory-guides.json')|ConvertFrom-Json
@@ -588,35 +487,44 @@ try{
    $private=@($samples|Where-Object {$_.Path -like '*\working set - private' -and $_.InstanceName -in $instances}|Select-Object -ExpandProperty CookedValue)
    $script:app.Refresh();Check 'minimized private working set after 10 seconds' @{pid=$processId;privateWorkingSetBytes=$private;workingSet64=$script:app.WorkingSet64;privateMemorySize64=$script:app.PrivateMemorySize64;seconds=10} ($private.Count -eq 1)
    StopApp
-   & (Join-Path $Source 'tools\validation\Background\Invoke-BackgroundScenario.ps1') -Source $Source -BackendSource $install -OutRoot $directory -Scenario presets
-   if(-not$?){throw 'Published CCD preset/restore failed.'}
-   $placement=Get-Content -Raw (Join-Path $directory 'presets\placement-after.json')|ConvertFrom-Json
-   $topology=@(& (Join-Path $install 'backend\scripts\Get-BackgroundPlacement.ps1')) -join "`n"|ConvertFrom-Json
+   . (Join-Path $install 'backend\scripts\ProcessProfile.Common.ps1')
    . (Join-Path $install 'backend\scripts\BackgroundPlacement.Common.ps1')
-   $target=[RooIndustries.Optimization.CpuSets.Target]::new($PID,$false)
-   try{$cpus=@($target.Topology())}finally{$target.Dispose()}
-   $originals=Get-Content -Raw (Join-Path $directory 'presets\placement-before.json')|ConvertFrom-Json
-   $restored=Get-Content -Raw (Join-Path $directory 'presets\placement-restored.json')|ConvertFrom-Json
-   $cpu0=@($cpus|Where-Object {$_.group -eq 0 -and $_.logicalProcessorIndex -eq 0})|Select-Object -First 1
-   [uint64]$ccdMask=0;[uint64]$fullMask=0
-   foreach($cpu in @($cpus|Where-Object group -eq 0)){
-    $bit=[uint64]1 -shl $cpu.logicalProcessorIndex;$fullMask=$fullMask -bor $bit
-    if($cpu.lastLevelCacheIndex -ne $cpu0.lastLevelCacheIndex){$ccdMask=$ccdMask -bor $bit}
+   $fixtures=@(foreach($name in 'RooFixtureUpdater','RooFixtureWebHelper','RooFixtureGame','MsMpEng'){
+    $path=Join-Path $directory ($name+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $path|Out-Null
+    $owned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($owned);$owned.process
+   })
+   $profile=Get-Content -Raw (Join-Path $install 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
+   $profile.profileId='shipped-background-fixture';$profile.protectedCatalogPath=Join-Path $install 'backend\profiles\protected-processes.json'
+   $profile.foregroundGame.processNames=@('RooFixtureGame.exe');$profile.targetGames=@([pscustomobject]@{gameId='fixture';processNames=@('RooFixtureGame.exe')})
+   $profile.rules=@([pscustomobject]@{ruleId='fixture-background';enabled=$true;match=@{processNames=@('RooFixtureUpdater.exe','RooFixtureWebHelper.exe','RooFixtureGame.exe','MsMpEng.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'})
+   $profilePath=Join-Path $directory ('profile-'+$nonce+'.json');New-HarnessText $profilePath ($profile|ConvertTo-Json -Depth 40) 'background-profile'|Out-Null
+   $state=Join-Path $directory 'background-state';New-HarnessDirectory $state 'background-state'|Out-Null
+   foreach($preset in 'lower','placement'){
+    foreach($fixture in @($fixtures|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($fixture,1);[RooBackgroundOracle]::SetMemory($fixture,3)}
+    $originals=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-before.json') $originals
+    $preview=ShippedProfileCall 'Preview-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset};Save ($preset+'-preview.json') $preview
+    $apply=ShippedProfileCall 'Apply-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset;StateRoot=$state;ConfirmApply=$true};Save ($preset+'-apply.json') $apply
+    $placement=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-after.json') $placement
+    if(-not$apply.backup.location){throw 'Background fixture Apply saved no originals.'}
+    $restore=ShippedProfileCall 'Restore-ProcessProfileBackup' @{BackupPath=$apply.backup.location;ConfirmApply=$true};Save ($preset+'-restore.json') $restore
+    $restored=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-restored.json') $restored
+    $restoreMismatches=@()
+    foreach($original in $originals){$actual=@($restored|Where-Object pid -eq $original.pid);foreach($field in 'name','path','startTimeUtc','priorityClass','affinityMask','ioPriority','memoryPriority'){if($actual.Count -ne 1 -or $actual[0].$field -ne $original.$field){$restoreMismatches+=@(@{pid=$original.pid;field=$field;expected=$original.$field;observed=$(if($actual.Count -eq 1){$actual[0].$field})})}}}
+    if($restoreMismatches.Count){throw ('Background Restore differs: '+($restoreMismatches|ConvertTo-Json -Compress))}
+    if($preset -eq 'lower'){Check 'published Lower fixture restore' @{originals=$originals;after=$placement;restored=$restored} (@($placement|Where-Object {$_.name -in 'RooFixtureUpdater','RooFixtureWebHelper' -and ($_.priorityClass -ne 'BelowNormal' -or $_.memoryPriority -ne 2)}).Count -eq 0);continue}
+    $topology=Read-RooIndustriesBackgroundPlacement
+    $target=[RooIndustries.Optimization.CpuSets.Target]::new($PID,$false);try{$cpus=@($target.Topology())}finally{$target.Dispose()}
+    $cpu0=@($cpus|Where-Object {$_.group -eq 0 -and $_.logicalProcessorIndex -eq 0})|Select-Object -First 1
+    [uint64]$ccdMask=0;[uint64]$fullMask=0
+    foreach($cpu in @($cpus|Where-Object group -eq 0)){$bit=[uint64]1 -shl $cpu.logicalProcessorIndex;$fullMask=$fullMask -bor $bit;if($cpu.lastLevelCacheIndex -ne $cpu0.lastLevelCacheIndex){$ccdMask=$ccdMask -bor $bit}}
+    $background=@($placement|Where-Object name -in 'RooFixtureUpdater','RooFixtureWebHelper');$untouched=@($placement|Where-Object name -in 'RooFixtureGame','MsMpEng')
+    $passed=$topology.available -and $topology.kind -eq 'ccd' -and $cpu0 -and $ccdMask -ne 0 -and [uint64]$topology.mask -eq $ccdMask -and $background.Count -eq 2 -and $untouched.Count -eq 2 -and @($background|Where-Object {[uint64]$_.affinityMask -ne $ccdMask -or $_.priorityClass -ne 'Normal' -or $_.ioPriority -ne 2 -or $_.memoryPriority -ne 5}).Count -eq 0 -and @($untouched|Where-Object {[uint64]$_.affinityMask -ne $fullMask}).Count -eq 0 -and $originals.Count -eq 4 -and $restored.Count -eq $originals.Count -and $restoreMismatches.Count -eq 0
+    Check 'published CCD placement apply/restore' @{topology=$topology;logicalProcessorCount=$cpus.Count;cpus=$cpus;expectedCcdMask=$ccdMask;fullMask=$fullMask;readback=$placement;originals=$originals;restored=$restored;restoreMismatches=$restoreMismatches} $passed
    }
-   $background=@($placement|Where-Object name -in 'RooFixtureUpdater','RooFixtureWebHelper')
-   $untouched=@($placement|Where-Object name -in 'RooFixtureGame','MsMpEng')
-   $restoreMismatches=@()
-   foreach($original in $originals){
-    $actual=@($restored|Where-Object pid -eq $original.pid)
-    foreach($field in 'name','path','startTimeUtc','priorityClass','affinityMask','ioPriority','memoryPriority'){
-     if($actual.Count -ne 1 -or $actual[0].$field -ne $original.$field){$restoreMismatches+=@(@{pid=$original.pid;field=$field;expected=$original.$field;observed=if($actual.Count -eq 1){$actual[0].$field}else{$null}})}
-    }
-   }
-   $passed=$topology.available -and $topology.kind -eq 'ccd' -and $cpu0 -and $ccdMask -ne 0 -and [uint64]$topology.mask -eq $ccdMask -and $background.Count -eq 2 -and $untouched.Count -eq 2 -and @($background|Where-Object {[uint64]$_.affinityMask -ne $ccdMask}).Count -eq 0 -and @($untouched|Where-Object {[uint64]$_.affinityMask -ne $fullMask}).Count -eq 0 -and $originals.Count -eq 4 -and $restored.Count -eq $originals.Count -and $restoreMismatches.Count -eq 0
-   Check 'published CCD placement apply/restore' @{topology=$topology;logicalProcessorCount=$cpus.Count;cpus=$cpus;expectedCcdMask=$ccdMask;fullMask=$fullMask;readback=$placement;originals=$originals;restored=$restored;restoreMismatches=$restoreMismatches} $passed 'presets/placement-after.json'
+   foreach($owned in $script:fixtures){Stop-HarnessProcess $owned}
    if(-not$before.installedVersion){
     CollectStarts
-    foreach($process in $script:extraProcesses){Stop-OwnedProcess $process}
+    foreach($process in $script:extraProcesses){Stop-HarnessProcess $process}
     Uninstall
     WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
     $active=Get-RooIndustriesLocalDataRoot
@@ -638,24 +546,17 @@ try{
  try{CollectStarts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  try{Remove-ShippedFirewall $firewallName $script:firewallNonce $script:firewallCreated}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  try{Remove-ShippedHosts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
- foreach($fixture in $script:fixtures){try{Stop-OwnedProcess $fixture}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
+ foreach($fixture in $script:fixtures){try{Stop-HarnessProcess $fixture}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  try{StopApp}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  if($script:governorStarted -and (Test-Path $hostExe)){
   try{Governor 'Pause'|Out-Null;WaitFor {-not(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 40 'owned governor stops'|Out-Null}catch{$script:cleanupErrors.Add($_.Exception.Message);Save 'governor-cleanup-error.json' @{error=$_.Exception.Message}}
  }
- foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-OwnedProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
- $browserFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$FrameId)
- try{
-  if(Test-Path $browserFolder){
-   $files=@(Get-ChildItem $browserFolder -Force)
-   if($files.Count -ne 1 -or ($files[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or $files[0].Length -ne $item.size -or (Get-FileHash $files[0].FullName).Hash -ine $item.sha256){throw 'Browser-download folder identity changed; retained.'}
-   [IO.Directory]::Move($browserFolder,(Join-Path $directory 'browser-download'))
-  }
- }catch{$script:cleanupErrors.Add($_.Exception.Message)}
+ foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-HarnessProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  Save 'process-starts.json' @(ProcessStarts)
  Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
  Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
  $script:receiptStatus=Get-ShippedFinalStatus $script:receiptStatus @($script:cleanupErrors)
+ try{$script:receiptStatus=Complete-HarnessInvocation $script:receiptStatus -Cleanup}catch{$script:cleanupErrors.Add($_.Exception.Message);$script:receiptStatus='fail'}
  Receipt
  if($script:cleanupErrors.Count){throw ('Cleanup failed: '+($script:cleanupErrors -join '; '))}
 }

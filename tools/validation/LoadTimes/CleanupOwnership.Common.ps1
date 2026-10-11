@@ -42,6 +42,7 @@ namespace RooValidationOwnership {
   void CheckIdentity(){if(stream==null)throw new InvalidOperationException("Probe receipt is closed");if(Native.FileId(stream.SafeFileHandle)!=Identity.id||Hash(stream)!=Identity.hash)throw new InvalidOperationException("Probe bytes changed; retained");}
   public void Restore(){CheckIdentity();if(movedPath==null)throw new InvalidOperationException("Rename receipt absent; retained");if(!String.Equals(Native.Path(stream.SafeFileHandle),Native.Canonical(movedPath),StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Disabled path identity changed; retained");Native.Rename(stream.SafeFileHandle,Identity.path);CheckIdentity();Dispose();}
   public void Remove(){CheckIdentity();if(movedPath!=null)throw new InvalidOperationException("Disabled original must be restored; retained");Native.Delete(stream.SafeFileHandle);Dispose();}
+  public string ReadText(){CheckIdentity();stream.Position=0;using(var reader=new StreamReader(stream,new UTF8Encoding(false),true,4096,true)){return reader.ReadToEnd();}}
   public void Dispose(){if(stream!=null){stream.Dispose();stream=null;}}
  }
 }

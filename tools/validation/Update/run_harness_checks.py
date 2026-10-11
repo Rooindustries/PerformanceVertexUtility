@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import time
+import concurrent.futures
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -40,14 +42,33 @@ def main():
             raise RuntimeError(name + ' did not refuse')
 
     dummy = ROOT / 'tools/validation/Update/roo-key-fixture.pem'
-    dummy.write_text('DUMMY FIXTURE - NO KEY')
+    with dummy.open('x') as output:
+        output.write('DUMMY FIXTURE - NO KEY')
     try:
         refused('in-repository signing key rejected', lambda: windows.assert_external_signing_key(dummy), 'outside')
         refused('upload rejects PEM before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
     finally:
         dummy.unlink()
+    extensionless = ROOT / 'tools/release/update-signing-private'
+    if extensionless.exists():
+        raise RuntimeError('Private-marker fixture path already exists; retained.')
+    extensionless.write_bytes(b'-----BEGIN EC ' + b'PRIVATE ' + b'KEY-----\nDUMMY\n-----END EC ' + b'PRIVATE ' + b'KEY-----\n')
+    try:
+        refused('F7 extensionless PEM content rejected before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
+    finally:
+        extensionless.unlink()
+    extensionless.write_bytes(bytes.fromhex('3014020103300f06092a864886f70d010701a0020400'))
+    try:
+        refused('F7 extensionless PKCS12 DER rejected before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
+    finally:
+        extensionless.unlink()
+    result = subprocess.run([__import__('sys').executable, '-I', str(ROOT / 'tools/validation/Update/run_e2e.py'), '--scenario', 'contracts', '--skip-contracts'], capture_output=True, text=True)
+    if result.returncode != 2 or 'cannot be combined' not in result.stderr:
+        raise RuntimeError('F14 skipped contracts did not fail in argparse before networking')
+    rows.append({'check': 'F14 contracts cannot be skipped', 'status': 'pass', 'observed': result.stderr.strip()})
     props = ROOT / 'RooHarnessFixture.props'
-    props.write_text('<Project/>')
+    with props.open('x') as output:
+        output.write('<Project/>')
     try:
         refused('untracked root build property rejected', journey.binding, 'Product source differs')
     finally:
@@ -92,8 +113,44 @@ def main():
         (args.out_dir / 'desktop.log').write_text((error.stdout or '') + (error.stderr or ''))
         raise RuntimeError('Owned harness fixture failed; see desktop.log') from None
     (args.out_dir / 'desktop.log').write_text(result.stdout)
-    subprocess.run(['scp', *windows.SSH_OPTIONS, args.host + ':' + (receipt['runRoot'] + '/checks/receipt.json').replace('\\', '/'), str(args.out_dir / 'windows-receipt.json')], check=True, capture_output=True)
-    rows.extend(json.loads((args.out_dir / 'windows-receipt.json').read_text()))
+    completion = windows.completion(result.stdout)
+    pc_receipt = windows.read_result(args.host, args.expected_machine, receipt, 'receipt.json', completion['nonce'])
+    (args.out_dir / 'windows-receipt.json').write_text(json.dumps(pc_receipt, indent=2))
+    rows.extend(pc_receipt['checks'])
+    guard_scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId'])
+    extra = receipt['stagingPath'] + r'\Directory.Build.targets'
+    windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=New-HarnessText ' + windows.ps_literal(extra) + " '<Project/>' 'extra-targets';$entry.id")
+    refused('F8 extra remote Directory.Build.targets refuses reuse', lambda: windows.verify_source(args.host, args.expected_machine, receipt), 'Staged source file set differs')
+    windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq ' + windows.ps_literal(extra) + " -and $_.state -eq 'active'})[0];Remove-HarnessEntry $entry")
+    held_frame = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+    (args.out_dir / 'held-frame.json').write_text(json.dumps(held_frame, indent=2))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        running = pool.submit(windows.interactive, args.host, args.expected_machine, held_frame, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': held_frame['stagingPath'], 'OutRoot': held_frame['runRoot'] + r'\checks', 'Hold': True}, 2)
+        deadline = time.monotonic() + 40
+        while time.monotonic() < deadline:
+            live = windows.invoke(args.host, args.expected_machine, "$l=Get-Content -Raw " + windows.ps_literal(held_frame['runRoot'] + '/ledger.json') + "|ConvertFrom-Json;@($l.entries|Where-Object {$_.kind -eq 'process' -and $_.purpose -eq 'interactive-child' -and $_.state -eq 'active'}).Count").stdout.strip()
+            if live == '1':
+                break
+            if running.done():
+                running.result()
+                raise RuntimeError('Real interactive runner ended before the guard check')
+            time.sleep(0.2)
+        else:
+            raise RuntimeError('Real interactive child did not enter its ledger')
+        call = '& ' + windows.ps_literal(held_frame['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(held_frame['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
+        try:
+            windows.invoke(args.host, args.expected_machine, call)
+        except subprocess.CalledProcessError as error:
+            observed = (error.stdout or '') + (error.stderr or '')
+            if not any(text in observed for text in ('Encoded PowerShell', 'running processes', 'runner child')):
+                raise
+            rows.append({'check': 'F6 REAL windows_ssh interactive encoded runner prevents frame cleanup', 'status': 'pass', 'observed': observed.strip()})
+        else:
+            raise RuntimeError('Frame cleanup removed a live real interactive frame')
+        finished = running.result()
+        (args.out_dir / 'real-interactive.log').write_text(finished.stdout)
+    cleared = windows.invoke(args.host, args.expected_machine, call)
+    (args.out_dir / 'held-cleanup.json').write_text(cleared.stdout)
     cleanup = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
     result = windows.invoke(args.host, args.expected_machine, cleanup)
     (args.out_dir / 'cleanup.json').write_text(result.stdout)
