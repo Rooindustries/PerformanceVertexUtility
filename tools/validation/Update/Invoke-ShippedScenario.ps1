@@ -115,6 +115,11 @@ function Zone([string]$path){
  $raw=Get-Content -Raw -LiteralPath $path -Stream Zone.Identifier
  return [string]::new($raw.ToCharArray())
 }
+function ReleaseCacheEmpty{
+ $unexpected=@(UpdateFiles|Where-Object {[IO.Path]::GetDirectoryName($_.path) -ine $updates -or [IO.Path]::GetFileName($_.path) -notlike 'install-*.log'})
+ $folders=@(if(Test-Path $updates){Get-ChildItem -LiteralPath $updates -Directory})
+ return $unexpected.Count -eq 0 -and $folders.Count -eq 0
+}
 function Wizard([string]$path,[string]$label,[string]$version){
  $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))})
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
@@ -409,7 +414,7 @@ try{
    $script:governorStarted=$true
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 70 'enabled governor resumes'|Out-Null
    Launch;Versions;Payload;Preservation;GovernorVerified;SavedRuleReadback;Current $false
-   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} (@($files|Where-Object {$_.path -notmatch '\install-[^\]+\.log$'}).Count -eq 0 -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
+   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} ((ReleaseCacheEmpty) -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
    $setupLog=[IO.File]::ReadAllText($script:setupLogs['published'])
    $candidates=@($setupLog -split "`n"|Where-Object {$_ -match '(?i)\berror\b|\bexception\b'})
    $errors=@($candidates|Where-Object {$_ -notmatch '^\d{4}-\d{2}-\d{2} .*?\s+(Dest filename|Source filename): '})
@@ -426,7 +431,7 @@ try{
   }
   'p3'{
    $script:governorStarted=$true
-   Check 'startup release cache is empty' @(UpdateFiles) (@(UpdateFiles|Where-Object {$_.path -notmatch '\install-[^\]+\.log$'}).Count -eq 0)
+   Check 'startup release cache is empty' @(UpdateFiles) ((ReleaseCacheEmpty))
    Governor 'Resume'|Out-Null
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 60 'governor running before OTA'|Out-Null
    Launch
