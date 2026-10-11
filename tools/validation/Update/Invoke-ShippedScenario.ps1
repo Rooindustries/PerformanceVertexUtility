@@ -5,7 +5,9 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
  [string]$PreflightPath='',[switch]$HarnessOnly)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-. (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1') -Source $Source -OutRoot $OutRoot -Scenario seed -EvidenceName $Part -HelpersOnly
+. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+$bootstrapRoot=if($Part -eq 'p5'){Get-RooIndustriesLocalDataRoot -LocalData (Get-RooIndustriesLocalAppData)}else{''}
+. (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1') -Source $Source -OutRoot $OutRoot -Scenario seed -EvidenceName $Part -HelpersOnly -InitialDataRoot $bootstrapRoot
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
 . (Join-Path $Source 'tools\validation\Update\ShippedHarness.Common.ps1')
 $release=Get-Content -Raw $ReleasePath|ConvertFrom-Json
@@ -140,7 +142,16 @@ function Attach{
  } 150 'owned installed app'
  Assert-ShippedFreshApp $script:app $script:launchAfter
  $script:owned=Remember-Owned $script:app
- $script:window=WaitFor {@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id))|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1} 120 'owned app navigation window'
+ $script:window=WaitFor {
+  $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id)))
+  if($Part -eq 'p5'){
+   foreach($dialog in $windows|Where-Object {$_.Current.ClassName -eq '#32770'}){
+    $message=$dialog.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'The earlier data folder was gone, so Roo Industries started fresh. Its saved rules and undo history are no longer available.'))
+    if($message){$script:window=$dialog;Save 'as-found-missing-data-notice.json' @{pid=$script:app.Id;message=$message.Current.Name};Shot 'as-found-missing-data-notice';Activate (ByNameControl 'OK' $CT::Button)}
+   }
+  }
+  @($windows|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1
+ } 120 'owned app navigation window'
  Save 'owned-app.json' $script:owned.Identity
 }
 function Launch{
@@ -563,7 +574,9 @@ try{
    $before=Get-Content -Raw $PreflightPath|ConvertFrom-Json
    $published=DownloadPublished;Wizard $published 'published' $release.payload.version
    Payload
-   Launch;Versions;Current $false
+   Launch
+   $data=Get-RooIndustriesLocalDataRoot;$updates=Join-Path $data 'updates';$ruleRoot=Join-Path $data 'process-rules';$logPath=Join-Path $data 'logs\app.log';$settingsPath=Join-Path $data 'settings.json';$script:partLogCursor=Get-ShippedLogCursor $logPath;$script:appLogCursor=$script:partLogCursor
+   Versions;Current $false
    Activate (ByName 'Memory')
    $guides=Get-Content -Raw (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Assets\Guides\memory-guides.json')|ConvertFrom-Json
    WaitFor {ByName $guides.title} 60 'Memory guides'|Out-Null
