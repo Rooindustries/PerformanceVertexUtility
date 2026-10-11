@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
     [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [switch]$ResumeCopyRecovery,[string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='')
+    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [switch]$ResumeCopyRecovery,[string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
@@ -26,7 +26,7 @@ public static class RooUpdateUi {
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $exe=if($FixtureExe){$FixtureExe}else{Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'}
 $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
-$data=Get-RooIndustriesLocalDataRoot
+$data=if($InitialDataRoot){$InitialDataRoot}else{Get-RooIndustriesLocalDataRoot}
 $updates=Join-Path $data 'updates'
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $utf8=[Text.UTF8Encoding]::new($false)
