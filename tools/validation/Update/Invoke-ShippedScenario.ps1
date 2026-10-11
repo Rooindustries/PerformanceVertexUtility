@@ -538,9 +538,9 @@ try{
    StopApp
    . (Join-Path $install 'backend\scripts\ProcessProfile.Common.ps1')
    . (Join-Path $install 'backend\scripts\BackgroundPlacement.Common.ps1')
-   $fixtures=@(foreach($name in 'RooFixtureUpdater','RooFixtureWebHelper','RooFixtureGame','MsMpEng'){
+   $fixtureProcesses=@(foreach($name in 'RooFixtureUpdater','RooFixtureWebHelper','RooFixtureGame','MsMpEng'){
     $path=Join-Path $directory ($name+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $path|Out-Null
-    $owned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($owned);$owned.process
+    $fixtureOwned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($fixtureOwned);$fixtureOwned.process
    })
    $profile=Get-Content -Raw (Join-Path $install 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
    $profile.profileId='shipped-fixture';$profile.protectedCatalogPath=Join-Path $install 'backend\profiles\protected-processes.json'
@@ -549,14 +549,14 @@ try{
    $profilePath=Join-Path $directory ('profile-'+$nonce+'.json');New-HarnessText $profilePath ($profile|ConvertTo-Json -Depth 40) 'background-profile'|Out-Null
    $state=Join-Path $script:Harness.Root ('pf-'+$nonce);New-HarnessDirectory $state 'background-state'|Out-Null
    foreach($preset in 'lower','placement'){
-    foreach($fixture in @($fixtures|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($fixture,1);[RooBackgroundOracle]::SetMemory($fixture,3)}
-    $originals=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-before.json') $originals
+    foreach($fixture in @($fixtureProcesses|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($fixture,1);[RooBackgroundOracle]::SetMemory($fixture,3)}
+    $originals=@($fixtureProcesses|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-before.json') $originals
     $preview=ShippedProfileCall 'Preview-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset};Save ($preset+'-preview.json') $preview
     $apply=ShippedProfileCall 'Apply-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset;StateRoot=$state;ConfirmApply=$true};Save ($preset+'-apply.json') $apply
-    $placement=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-after.json') $placement
+    $placement=@($fixtureProcesses|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-after.json') $placement
     if(-not$apply.backup.location){throw 'Background fixture Apply saved no originals.'}
     $restore=ShippedProfileCall 'Restore-ProcessProfileBackup' @{BackupPath=$apply.backup.location;ConfirmApply=$true};Save ($preset+'-restore.json') $restore
-    $restored=@($fixtures|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-restored.json') $restored
+    $restored=@($fixtureProcesses|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-restored.json') $restored
     $restoreMismatches=@()
     foreach($original in $originals){$actual=@($restored|Where-Object pid -eq $original.pid);foreach($field in 'name','path','startTimeUtc','priorityClass','affinityMask','ioPriority','memoryPriority'){if($actual.Count -ne 1 -or $actual[0].$field -ne $original.$field){$restoreMismatches+=@(@{pid=$original.pid;field=$field;expected=$original.$field;observed=$(if($actual.Count -eq 1){$actual[0].$field})})}}}
     if($restoreMismatches.Count){throw ('Background Restore differs: '+($restoreMismatches|ConvertTo-Json -Compress))}
@@ -570,7 +570,7 @@ try{
     $passed=$topology.available -and $topology.kind -eq 'ccd' -and $cpu0 -and $ccdMask -ne 0 -and [uint64]$topology.mask -eq $ccdMask -and $background.Count -eq 2 -and $untouched.Count -eq 2 -and @($background|Where-Object {[uint64]$_.affinityMask -ne $ccdMask -or $_.priorityClass -ne 'Normal' -or $_.ioPriority -ne 2 -or $_.memoryPriority -ne 5}).Count -eq 0 -and @($untouched|Where-Object {[uint64]$_.affinityMask -ne $fullMask}).Count -eq 0 -and $originals.Count -eq 4 -and $restored.Count -eq $originals.Count -and $restoreMismatches.Count -eq 0
     Check 'published CCD placement apply/restore' @{topology=$topology;logicalProcessorCount=$cpus.Count;cpus=$cpus;expectedCcdMask=$ccdMask;fullMask=$fullMask;readback=$placement;originals=$originals;restored=$restored;restoreMismatches=$restoreMismatches} $passed
    }
-   foreach($owned in $script:fixtures){Stop-HarnessProcess $owned}
+   foreach($fixtureOwned in $script:fixtures){Stop-HarnessProcess $fixtureOwned}
    if(-not$before.installedVersion){RestoreFreshP5Installation}
    $cs2=@(Get-ScheduledTask|Where-Object {$_.TaskName -like '*CS2*'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})
    Check 'as-found CS2 tasks remain Ready and Enabled' $cs2 (@($cs2|Where-Object {$_.State -ne 'Ready' -or -not$_.enabled}).Count -eq 0 -and $cs2.Count -eq @($before.tasks|Where-Object {$_.name -like '*CS2*'}).Count)
