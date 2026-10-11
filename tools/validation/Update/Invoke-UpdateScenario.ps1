@@ -212,7 +212,7 @@ try{
     Click 'UpdateCheckButton';WaitStatus "Version $NextVersion is ready to install" 180|Out-Null;Preserved
     $cache=Register-HarnessCache $NextVersion;if(-not$cache){throw 'Ready priming did not create a verified cache.'}
     Save 'ready-cache-prime.json' @{app=$script:owned.Identity;cache=$cache.identity;status=StatusText}
-    StopApp;Launch;Settings
+    StopApp;Launch;Settings;WaitStatus "Version $NextVersion is ready to install" 180|Out-Null
    }
    if($Scenario -eq 'manual-timeout'){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
    if($ManualRetry){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
