@@ -103,6 +103,29 @@ function CollectStarts{
  }
  Save 'process-starts-detailed.json' @($script:starts)
 }
+function Bind-UpdateSetup($ParentOwned,[string]$Installer){
+ $until=[DateTime]::UtcNow.AddSeconds(30)
+ while([DateTime]::UtcNow -lt $until){
+  $matches=@(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$ParentOwned.Identity.pid)|Where-Object {$_.ExecutablePath -ieq $Installer -and $_.CreationDate.ToUniversalTime() -ge $script:installPressed})
+  if($matches.Count -gt 1){throw 'Several update setups match the owned launch; retained.'}
+  if($matches.Count -eq 1){
+   $process=Get-Process -Id $matches[0].ProcessId -ErrorAction SilentlyContinue
+   if($process){
+    $held=New-OwnedProcess $process
+    if($held){
+     $created=[long]$held.Identity.creationTimeFileTimeUtc
+     $exited=if($ParentOwned.process.HasExited){$ParentOwned.process.ExitTime.ToUniversalTime().ToFileTimeUtc()}else{$null}
+     Save 'update-setup-parent.json' @{parent=$ParentOwned.Identity;parentExit=$exited;child=$held.Identity;childCimCreated=$matches[0].CreationDate.ToUniversalTime().ToFileTimeUtc();installPressed=$script:installPressed.ToString('o')}
+     if($created -lt [long]$ParentOwned.Identity.creationTimeFileTimeUtc -or $exited -and $created -gt $exited){throw 'Update setup parent lifetime differs; retained.'}
+     $script:ownedPids[[int]$process.Id]=$created;$script:ownedHandles[[int]$process.Id]=$held;$script:extraProcesses.Add($held)
+     return
+    }
+   }
+  }
+  Start-Sleep -Milliseconds 50
+ }
+ throw 'Owned update setup was not captured before it exited.'
+}
 function Attach{
  $script:app=WaitFor {
   CollectStarts
@@ -503,7 +526,7 @@ try{
    Check 'startup live download exactly signed published bytes' $download ($download.bytes -eq $item.size -and $download.sha256 -ieq $item.sha256) 'live-download.json'
    $script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
    $prior=$script:app.Id;Click 'UpdateInstallButton'
-   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
+   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
    $until=[DateTime]::UtcNow.AddMinutes(5)
    while([DateTime]::UtcNow -lt $until){CollectStarts;$pending=Join-Path $updates 'pending-install.json';if(Test-Path $pending){try{Save 'pending-install-observed.json' (Get-Content -Raw $pending|ConvertFrom-Json)}catch{}};if($script:app.HasExited -and (Version) -eq $release.payload.version){break};Start-Sleep -Milliseconds 100}
    Check 'alpha exits for silent setup' @{pid=$prior;exited=$script:app.HasExited} $script:app.HasExited
