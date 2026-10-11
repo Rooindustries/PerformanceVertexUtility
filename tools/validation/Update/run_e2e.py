@@ -166,6 +166,7 @@ def main():
     parsed_feed = urlsplit(FEED)
     if parsed_feed.scheme != "https" or not parsed_feed.hostname or parsed_feed.port != 8460 or not parsed_feed.path.endswith("/beta.json") or parsed_feed.query or parsed_feed.fragment or ".." in parsed_feed.path.split("/"):
         parser.error("--feed-url must be an HTTPS test feed on port 8460 ending in /beta.json, without a query, fragment or traversal")
+    windows.assert_external_signing_key(KEY)
     if not KEY.is_file():
         parser.error("--signing-key does not exist on this Linux machine")
     project = ROOT / "docs/internal/frontend/RooIndustries.OptimizationSuite.App/RooIndustries.OptimizationSuite.App.csproj"
@@ -186,6 +187,7 @@ def main():
         receipt_path.write_text(json.dumps(receipt, indent=2))
     else:
         receipt = json.loads(receipt_path.read_text())
+    windows.verify_local_source(HOST, MACHINE, receipt)
     frame = receipt["runRoot"]
     source = receipt["stagingPath"]
     pc_out = args.evidence_root or frame + r"\ota"
@@ -231,6 +233,10 @@ def main():
         contracts(receipt, builds, pc_out, b, valid)
         if args.scenario == "contracts":
             return
+    ledger_path = OUT / "scenario-results.json"
+    ledger = json.loads(ledger_path.read_text()) if args.from_scenario else {"frameId": receipt["frameId"], "manifestSha256": receipt["manifestSha256"], "checks": []}
+    if ledger["frameId"] != receipt["frameId"] or any(row["status"] != "pass" for row in ledger["checks"]):
+        raise RuntimeError("Resume requires earlier pass rows on this exact frame")
     server = None
     log = None
     serving = False
@@ -284,8 +290,15 @@ def main():
         remote("$r=Invoke-WebRequest -UseBasicParsing " + windows.ps_literal(FEED) + ";@{status=$r.StatusCode;bytes=$r.RawContentLength}|ConvertTo-Json", "feed-reachability")
         sequence = ["seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup"] if args.scenario == "all" else [args.scenario]
         if args.from_scenario:
+            prior = sequence[:sequence.index(args.from_scenario)]
+            if any(not any(row['check'] == name and row['status'] == 'pass' for row in ledger['checks']) for name in prior):
+                raise RuntimeError('Cannot resume: required earlier scenarios did not pass on this receipt')
             sequence = sequence[sequence.index(args.from_scenario):]
+        ledger["required"] = sequence if not args.from_scenario else ledger["required"]
+        ledger["status"] = "running"
+        ledger_path.write_text(json.dumps(ledger, indent=2))
         for name in sequence:
+            ledger["current"] = name
             if name in ("seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "transport-error", "manual-timeout"):
                 fixture("reset-download")
             if name == "feed-down":
@@ -358,29 +371,43 @@ def main():
                 remote("'Use UpdateProbe with each retained signed contract manifest.'", "contracts")
             else:
                 scenario(name)
+            ledger["checks"].append({"check": name, "status": "pass", "frameId": receipt["frameId"]})
+            ledger_path.write_text(json.dumps(ledger, indent=2))
             if name in ("tampered", "tampered-size"):
                 shutil.copyfile(b, installer_file)
         fixture("read-security")
+        ledger["status"] = "pass"
+    except Exception:
+        ledger["checks"].append({"check": ledger.get("current", "setup"), "status": "fail", "frameId": receipt["frameId"]})
+        ledger["status"] = "fail"
+        raise
     finally:
         try:
-            if serving:
-                command(["sudo", "-n", "tailscale", "serve", "--https=8460", "off"], OUT / "tailscale-stop.log")
+            try:
+                if serving:
+                    command(["sudo", "-n", "tailscale", "serve", "--https=8460", "off"], OUT / "tailscale-stop.log")
+            finally:
+                stop_server()
+            command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
+            evidence = pc_out + "-evidence.zip"
+            remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
+            copy_from(evidence, OUT / "pc-evidence.zip")
+            import zipfile
+            with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
+                for entry in archive.infolist():
+                    relative = Path(entry.filename.replace("\\", "/"))
+                    if relative.is_absolute() or ".." in relative.parts:
+                        raise RuntimeError("Unexpected evidence archive path")
+                    target = OUT / "pc-artifacts/ota" / relative
+                    if not entry.is_dir() and not entry.filename.endswith(("/", "\\")):
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(archive.read(entry))
+        except Exception:
+            ledger["status"] = "fail"
+            ledger["checks"].append({"check": "cleanup", "status": "fail", "frameId": receipt["frameId"]})
+            raise
         finally:
-            stop_server()
-        command(["tailscale", "serve", "status", "--json"], OUT / "tailscale-after.json")
-        evidence = pc_out + "-evidence.zip"
-        remote("$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + " -Force", "collect-evidence")
-        copy_from(evidence, OUT / "pc-evidence.zip")
-        import zipfile
-        with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
-            for entry in archive.infolist():
-                relative = Path(entry.filename.replace("\\", "/"))
-                if relative.is_absolute() or ".." in relative.parts:
-                    raise RuntimeError("Unexpected evidence archive path")
-                target = OUT / "pc-artifacts/ota" / relative
-                if not entry.is_dir() and not entry.filename.endswith(("/", "\\")):
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(archive.read(entry))
+            ledger_path.write_text(json.dumps(ledger, indent=2))
 
 
 if __name__ == "__main__":
