@@ -1,10 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'harness-checks' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot 'checks'
-if(@($Hold,$TimeoutOnly,$CacheOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
+if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
 if($Hold){Write-HarnessResult $directory 'holding.json' @{pid=$PID;nonce=$nonce}|Out-Null;Start-Sleep -Seconds 30;Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return}
 $rows=[Collections.Generic.List[object]]::new();$status='fail';$main=$script:Harness
 function Passed([string]$Name,$Value){$rows.Add(@{check=$Name;status='pass';observed=$Value})}
@@ -25,6 +25,42 @@ function CacheLifecycle([string]$Clean,[string]$Version){
  [RooHarnessWindow]::CreateDirectory($path);$after=Register-HarnessCache $Version
  if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
  Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
+}
+if($TrackingOnly){
+ try{
+  $launcher=Join-Path $directory 'RooHarnessFastLauncher.exe'
+  Add-Type -OutputAssembly $launcher -OutputType ConsoleApplication @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+public static class RooHarnessFastLauncher {
+ public static void Main(string[] args) {
+  if(args[0]=="middle"){Process.Start(new ProcessStartInfo(args[1],"-t 127.0.0.1"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(25);return;}
+  while(!File.Exists(args[2]))Thread.Sleep(2);
+  var middle=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"middle \""+args[1]+"\""){UseShellExecute=false,CreateNoWindow=true});middle.WaitForExit();
+ }
+}
+'@
+  Register-HarnessFile $launcher 'tracking-fixture'|Out-Null
+  foreach($iteration in 1..5){
+   $childImage=Join-Path $directory ('RooHarnessFastChild-'+$iteration+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $childImage|Out-Null
+   $gate=Join-Path $directory ('release-'+$iteration+'.txt')
+   $root=Start-OwnedProcess -FilePath $launcher -ArgumentList ('root "'+$childImage+'" "'+$gate+'"') -Purpose tracking-fixture
+   Start-HarnessDescendantTracker $root|Out-Null;New-HarnessText $gate 'release' 'tracking-fixture'|Out-Null
+   if(-not$root.process.WaitForExit(10000)){throw 'Tracking launcher did not exit'};Start-Sleep -Milliseconds 500
+   Receive-HarnessDescendants
+   $matches=@(Get-CimInstance Win32_Process|Where-Object ExecutablePath -IEQ $childImage)
+   if($matches.Count -ne 1){throw 'Tracking child identity is ambiguous or missing'}
+   $child=Test-OwnedDescendant ([int]$matches[0].ProcessId) -PassThru
+   if(-not$child){throw 'A fast relaunch lost its verified owned chain'}
+   $entry=Get-HarnessEntryById $child.LedgerId;$parent=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.identity.pid -eq $entry.metadata.parentPid -and $_.identity.creationTimeFileTimeUtc -ceq $entry.metadata.parentCreationTimeFileTimeUtc})
+   if($parent.Count -ne 1 -or $parent[0].metadata.parentPid -ne $root.Identity.pid -or $parent[0].metadata.parentCreationTimeFileTimeUtc -cne $root.Identity.creationTimeFileTimeUtc -or [long]$parent[0].identity.creationTimeFileTimeUtc -gt [long]$child.Identity.creationTimeFileTimeUtc){throw 'Fast relaunch ledger lacks ordered native parent identities'}
+   Passed ('fast parent chain retained '+$iteration) @{root=$root.Identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;observedAfterRootExit=$true};Stop-HarnessProcess $child
+  }
+  $status='pass'
+ }finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
+ return
 }
 if($CacheOnly){
  try{$clean=Fixture 'cache-lifecycle';Initialize-HarnessCache $clean @('4.2.7-beta','4.2.8-beta');CacheLifecycle $clean '4.2.8-beta';$status='pass'}
