@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutputRoot,[Parameter(Mandatory)][string]$FeedUrl)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutputRoot,[Parameter(Mandatory)][string]$FeedUrl,[Parameter(Mandatory)][string]$VersionA,[Parameter(Mandatory)][string]$VersionB)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
@@ -15,8 +15,9 @@ foreach($file in Get-ChildItem -LiteralPath $Source -File -Recurse){
 }
 $project=Join-Path $copy 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
 $text=[IO.File]::ReadAllText($project)
-if(-not$text.Contains('<Version>0.11.0-beta</Version>')){throw 'Build A must be 0.11.0-beta'}
-[IO.File]::WriteAllText($project,$text.Replace('<Version>0.11.0-beta</Version>','<Version>0.11.1-beta</Version>'),[Text.UTF8Encoding]::new($false))
+$pattern='<Version>'+[regex]::Escape($VersionA)+'</Version>'
+if([regex]::Matches($text,$pattern).Count -ne 1){throw 'Build A Version differs from the selected source version'}
+[IO.File]::WriteAllText($project,[regex]::Replace($text,$pattern,('<Version>'+$VersionB+'</Version>')),[Text.UTF8Encoding]::new($false))
 $rows=@()
 foreach($build in @(@{name='A';source=$Source},@{name='B';source=$copy})){
  $clock=[Diagnostics.Stopwatch]::StartNew()

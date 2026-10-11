@@ -1,6 +1,7 @@
 import argparse
 import functools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 import time
 from urllib.parse import urlsplit
 
@@ -22,7 +23,7 @@ class DelayedFeed(SimpleHTTPRequestHandler):
             return
         elif path.endswith(".exe") and args.fault in ("disconnect", "stall-installer"):
             self.send_response(200)
-            self.send_header("Content-Length", "110000000")
+            self.send_header("Content-Length", str(Path(self.translate_path(path)).stat().st_size))
             self.end_headers()
             if args.fault == "stall-installer":
                 time.sleep(1250)
