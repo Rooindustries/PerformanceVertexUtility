@@ -327,8 +327,7 @@ function Remove-ShippedHosts{
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -ceq $script:hostsMarker -and $_.state -eq 'active'});if($entry.Count -ne 1){throw 'Hosts line is not in this creation ledger; retained.'};Remove-HarnessEntry $entry[0]
  $script:hostsCreated=$false
- & ipconfig.exe /flushdns|Out-Null
- if($LASTEXITCODE){throw 'DNS flush failed.'}
+ Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null
 }
 function HangingNetwork{
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts';$hostName=([uri]$release.feedUrl).DnsSafeHost
@@ -337,7 +336,7 @@ function HangingNetwork{
  try{
   Add-HarnessHostsLine $path $line $script:hostsMarker;$script:hostsCreated=$true
   if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted.'}
-  & ipconfig.exe /flushdns|Out-Null;if($LASTEXITCODE){throw 'DNS flush failed.'}
+  Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null
  }catch{
   Save 'hosts-edit-failure.json' @{error=$_.Exception.Message;events=@(Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';StartTime=$begin.ToLocalTime()} -ErrorAction SilentlyContinue|Select-Object TimeCreated,Id,Message)}
   throw
