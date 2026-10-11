@@ -54,7 +54,6 @@ function Remember-Owned($Process){
  if(-not$ownedProcess){throw 'Process is not a verified descendant of this run; retained.'}
  return $ownedProcess
 }
-function Bind-OwnedChain([int]$ProcessId){return Test-OwnedDescendant $ProcessId}
 function CollectStarts{
  foreach($event in @(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Sort-Object EventIdentifier)){
   if(-not$script:loggedEvents.Add([int]$event.EventIdentifier)){continue}
@@ -116,21 +115,21 @@ function Zone([string]$path){
  $raw=Get-Content -Raw -LiteralPath $path -Stream Zone.Identifier
  return [string]::new($raw.ToCharArray())
 }
-function SmartScreen($candidate){
- if(-not$candidate){return $false}
- try{$info=$candidate.Current}catch{return $false}
- if(-not$info -or -not$info.ProcessId){return $false}
- if($info.Name -eq 'Windows protected your PC' -or $info.Name -like '*Microsoft Defender SmartScreen*'){return $true}
- $process=Get-Process -Id $info.ProcessId -ErrorAction SilentlyContinue
- return $process -and $process.ProcessName -ieq 'smartscreen'
-}
 function Wizard([string]$path,[string]$label,[string]$version){
  $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))})
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
  $existingWindows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
  $setupLog=Get-HarnessOutputPath $directory ($label+'-setup.log');$script:setupLogs=@{}+$script:setupLogs;$script:setupLogs[$label]=$setupLog
  $start=[Diagnostics.ProcessStartInfo]::new($path);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $path -Parent;$start.Arguments='/LOG="'+$setupLog+'"'
- $setupOwned=Start-OwnedProcess -StartInfo $start -Purpose setup
+ $setupOwned=Start-OwnedProcess -StartInfo $start -Purpose setup -WhileStarting {
+  Assert-HarnessNewSmartScreen $existingWindows $directory
+  foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
+   if($win.Current.NativeWindowHandle -notin $existingWindows -and $win.Current.ClassName -eq '#32770' -and $win.Current.Name -eq 'Open File - Security Warning' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId))){
+    $script:window=Register-HarnessWindow $win;Save ($label+'-security-warning.json') @{title=$win.Current.Name;controls=@(Tree)};Shot ($label+'-security-warning')
+    $button=ByNameControl 'Run' $CT::Button;if(-not$button){throw 'Owned security warning has no Run button.'};Activate $button
+   }
+  }
+ }
  $setup=$setupOwned.process;$script:setupReceipts.Add($setupOwned)
  Save ($label+'-launch.json') @{path=$path;arguments=$start.Arguments;useShellExecute=$true;setup=$setupOwned.Identity;zone=try{Zone $path}catch{$null}}
  $until=[DateTime]::UtcNow.AddMinutes(10);$seen=[Collections.Generic.HashSet[string]]::new();$number=0
