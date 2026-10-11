@@ -1,9 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'harness-checks' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot 'checks'
+if(@($Hold,$TimeoutOnly,$CacheOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
 if($Hold){Write-HarnessResult $directory 'holding.json' @{pid=$PID;nonce=$nonce}|Out-Null;Start-Sleep -Seconds 30;Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return}
 $rows=[Collections.Generic.List[object]]::new();$status='fail';$main=$script:Harness
 function Passed([string]$Name,$Value){$rows.Add(@{check=$Name;status='pass';observed=$Value})}
@@ -16,6 +17,28 @@ function Rejected([string]$CaseName,[scriptblock]$Action,[scriptblock]$Unchanged
 function Fixture([string]$Name,[string]$Text='untouched'){
  $folder=Join-Path $directory $Name;New-HarnessDirectory $folder 'targeted-fixture'|Out-Null
  $file=Join-Path $folder 'keep.txt';New-HarnessText $file $Text 'targeted-fixture'|Out-Null;return $folder
+}
+function CacheLifecycle([string]$Clean,[string]$Version){
+ $path=Join-Path $Clean $Version
+ [RooHarnessWindow]::CreateDirectory($path);$before=Register-HarnessCache $Version;Remove-HarnessDirectory $path
+ if((Register-HarnessCache $Version) -or (Get-HarnessEntryById $before.id).state -cne 'removed'){throw 'App-deleted cache identity was not retired.'}
+ [RooHarnessWindow]::CreateDirectory($path);$after=Register-HarnessCache $Version
+ if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
+ Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
+}
+if($CacheOnly){
+ try{$clean=Fixture 'cache-lifecycle';Initialize-HarnessCache $clean @('4.2.7-beta','4.2.8-beta');CacheLifecycle $clean '4.2.8-beta';$status='pass'}
+ finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
+ return
+}
+if($TimeoutOnly){
+ try{
+  $message="Couldn't check for updates. The request timed out."
+  $values=@(foreach($seconds in 17.9,18,30,30.1){@{text=$message;seconds=$seconds;accepted=(Test-ShippedRequestTimeout $message $seconds)}})
+  if($values[0].accepted -or -not$values[1].accepted -or -not$values[2].accepted -or $values[3].accepted -or (Test-ShippedRequestTimeout "Couldn't check for updates. Other failure." 20)){throw 'Hanging-network predicate accepts an incorrect status or deadline.'}
+  Passed 'F12 hanging check requires the exact request timeout at 18 through 30 seconds' $values;$status='pass'
+ }finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
+ return
 }
 function ForeignScope{
  $root='C:\RooBuild\roo-industries-harness-'+[Guid]::NewGuid().ToString('N')
@@ -127,6 +150,7 @@ end;
  $entry=Register-HarnessCache $version
  if($entry.metadata.version -cne $version){throw 'Reset used a hardcoded version'};Remove-HarnessEntry $entry
  if(Test-Path $b){throw 'Owned actual-version cache remained'};Passed 'F9 reset selects actual B version from preflight' @{version=$version;absent=$true}
+ CacheLifecycle $clean $version
  $hosts=Join-Path $directory 'hosts-fixture';$original=[byte[]]@(239,187,191,35,32,195,169,10)
  $stream=[IO.FileStream]::new($hosts,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);try{$stream.Write($original,0,$original.Length)}finally{$stream.Dispose()}
  $marker='# RooShipped-fixture';$line='192.0.2.1 example.test '+$marker

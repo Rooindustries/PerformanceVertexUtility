@@ -355,8 +355,9 @@ function Register-HarnessCache([string]$Version){
  if($row.Count -ne 1 -or -not$row[0].absent){throw 'Cache was not absent at run preflight; retained.'}
  $path=$row[0].path
  $owned=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'cache' -and $_.identity.path -ieq $path -and $_.state -eq 'active'})
- if($owned.Count -eq 1){return $owned[0]}
- if(-not(Test-Path $path)){return $null}
+ if($owned.Count -gt 1){throw 'Cache has ambiguous creation identities; retained.'}
+ if(-not(Test-Path $path)){if($owned.Count){Set-HarnessEntryState $owned[0].id 'removed'};return $null}
+ if($owned.Count){if((Get-HarnessFolderIdentity $path).creationTimeFileTimeUtc -cne $owned[0].identity.creationTimeFileTimeUtc){throw 'Cache identity changed; retained.'};return $owned[0]}
  if((Get-Item $path).CreationTimeUtc -lt [DateTime]::Parse($before.timeUtc).ToUniversalTime()){throw 'Cache predates this run; retained.'}
  return Add-HarnessEntry 'cache' (Get-HarnessFolderIdentity $path) 'update-cache' 'run' @{version=$Version;preflightAbsent=$true}
 }
@@ -405,6 +406,7 @@ function Read-ShippedLog($Cursor){
  $old=if(Test-Path ($Cursor.path+'.old')){[IO.File]::ReadAllText($Cursor.path+'.old')}else{''}
  if($Cursor.length -and -not$old.StartsWith($Cursor.prefix,[StringComparison]::Ordinal)){throw 'App-log history rotated more than once; keep evidence and rerun in a fresh window.'};return $old.Substring($Cursor.length)+$text
 }
+function Test-ShippedRequestTimeout([string]$Text,[double]$Seconds){return $Text -ceq "Couldn't check for updates. The request timed out." -and $Seconds -ge 18 -and $Seconds -le 30}
 function Test-ShippedGovernorReplacement($Before,$After){return $Before -and $After -and $After.pid -ne $Before.pid -and $After.creationTimeUtc -ne $Before.creationTimeUtc}
 function Get-ShippedFinalStatus([string]$Status,$CleanupErrors){if(@($CleanupErrors).Count){return 'fail'};return $Status}
 function Remove-ShippedHostsLine([string]$Path,[string]$Line,[string]$Marker){Remove-HarnessHostsLine $Path $Line $Marker}
