@@ -4,6 +4,7 @@ if(-not ('RooHarnessWindow' -as [type])){
 using System;
 using System.Runtime.InteropServices;
 public static class RooHarnessWindow {
+ public static System.Threading.Tasks.Task<System.Diagnostics.Process> StartShell(System.Diagnostics.ProcessStartInfo start) { return System.Threading.Tasks.Task.Run(()=>System.Diagnostics.Process.Start(start)); }
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out int p);
  delegate bool EnumWindow(IntPtr h,IntPtr data);
@@ -88,8 +89,13 @@ function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Li
  $script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt
  return $receipt
 }
-function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo){
- if($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
+function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo,[scriptblock]$WhileStarting){
+ if($StartInfo -and $StartInfo.UseShellExecute){
+  if(-not$WhileStarting){throw 'Shell launches require an owned-dialog observer.'}
+  $pending=[RooHarnessWindow]::StartShell($StartInfo);$deadline=[DateTime]::UtcNow.AddSeconds(90)
+  while(-not$pending.IsCompleted){& $WhileStarting;if([DateTime]::UtcNow -ge $deadline){throw 'Shell launch timed out before a process was created.'};Start-Sleep -Milliseconds 100}
+  $process=$pending.GetAwaiter().GetResult()
+ }elseif($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
   $arguments=@{FilePath=$FilePath;WindowStyle=$WindowStyle;PassThru=$true}
   if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=$ArgumentList}
   $process=Start-Process @arguments
