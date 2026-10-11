@@ -98,11 +98,11 @@ def contracts(receipt, builds, pc_out, installer, valid):
     cases = []
     def add(name, value, expected, signed_payload=False):
         if signed_payload:
-            data = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+            data = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
             value = dict(envelope, payload=base64.b64encode(data).decode(), signature=base64.b64encode(private.sign(data, ec.ECDSA(hashes.SHA256()))).decode())
         path = directory / (name + ".json")
         path.write_bytes(value if isinstance(value, bytes) else json.dumps(value).encode())
-        cases.append((name, path, expected))
+        cases.append((name, path, expected, envelope["keyId"] if signed_payload or name in ("valid", "same", "older") else None))
     add("valid", envelope, 2)
     add("bad-signature", json.loads((OUT / "bad-signature.json").read_text()), 0)
     add("same", json.loads((OUT / "same.json").read_text()), 1)
@@ -125,12 +125,13 @@ def contracts(receipt, builds, pc_out, installer, valid):
         add(name, dict(payload, installer=dict(payload["installer"], **{field: value})), 0, True)
     add("unknown-fields", dict(payload, extra={"anything": [1, 2, "ignored"]}), 2, True)
     add("long-notes", dict(payload, notes="x" * 2100), 2, True)
+    add("signed-malformed-payload", b"{", 0, True)
     import uuid
     input_dir = pc_out + "\\contract-inputs-" + uuid.uuid4().hex
     setup = ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(receipt["frameId"]) + ";Ensure-HarnessOutputDirectory " + windows.ps_literal(pc_out) + ";New-HarnessDirectory " + windows.ps_literal(input_dir) + " 'contract-inputs'|Out-Null"
     remote(setup, "contracts-directory")
     results = []
-    for name, path, expected in cases:
+    for name, path, expected, expected_key in cases:
         remote_manifest = input_dir + "\\" + path.name
         copy_to(path, remote_manifest)
         fields = {"Source": receipt["stagingPath"], "OutRoot": pc_out, "Action": "contract-probe", "Probe": builds + r"\probe\UpdateProbe.exe", "Manifest": remote_manifest, "FeedUrl": FEED, "CurrentVersion": VERSION_A}
@@ -142,11 +143,13 @@ def contracts(receipt, builds, pc_out, installer, valid):
         result_path.write_text(json.dumps(dict(nonce=invocation["nonce"], data=result), indent=2))
         if result["result"]["Kind"] != expected:
             raise RuntimeError("Contract outcome differs: " + name)
+        if result["result"].get("KeyId") != expected_key:
+            raise RuntimeError("Contract verified-key outcome differs: " + name)
         if name == "long-notes" and len(result["result"]["Release"]["Notes"]) != 2000:
             raise RuntimeError("Release notes were not truncated")
         if result.get("file") and not result["file"]["Verified"]:
             raise RuntimeError("Correct installer was refused: " + name)
-        results.append({"case": name, "nonce": invocation["nonce"], "frameId": receipt["frameId"], "expected": expected, "observed": result["result"]["Kind"], "reason": result["result"]["Reason"]})
+        results.append({"case": name, "nonce": invocation["nonce"], "frameId": receipt["frameId"], "expected": expected, "observed": result["result"]["Kind"], "reason": result["result"]["Reason"], "expectedKeyId": expected_key, "observedKeyId": result["result"].get("KeyId")})
     (directory / "results.json").write_text(json.dumps(results, indent=2))
     print(str(len(results)) + " signed-feed contract cases completed", flush=True)
 
@@ -154,7 +157,7 @@ def contracts(receipt, builds, pc_out, installer, valid):
 def main():
     global OUT, HOST, MACHINE, FEED, KEY, VERSION_A, VERSION_B, FRAME_RECEIPT
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
+    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "close-during-check", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
     parser.add_argument("--host", default=os.environ.get("ROO_TEST_SSH_HOST"))
     parser.add_argument("--expected-machine", default=os.environ.get("ROO_TEST_COMPUTER"))
     parser.add_argument("--feed-url", default=os.environ.get("ROO_TEST_UPDATE_FEED"))
@@ -306,7 +309,7 @@ def main():
     last_invocation = None
     def scenario(name, installer=None, evidence_name=None):
         nonlocal last_invocation
-        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B, "FeedUrl": FEED, "FeedKeyId": envelope["keyId"]}
+        fields = {"Source": source, "OutRoot": pc_out, "Scenario": name, "ExpectedVersion": VERSION_A, "NextVersion": VERSION_B, "FeedUrl": FEED, "FeedKeyId": envelope["keyId"], "OlderVersion": older_version}
         if args.manual_retry:
             fields["ManualRetry"] = True
         if installer:
@@ -342,13 +345,13 @@ def main():
         ledger_path.write_text(json.dumps(ledger, indent=2))
         for name in sequence:
             ledger["current"] = name
-            if name in ("seed", "manual-install", "feed-down", "slow-feed", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "transport-error", "manual-timeout"):
+            if name in ("seed", "manual-install", "feed-down", "slow-feed", "close-during-check", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "transport-error", "manual-timeout"):
                 fixture("reset-download")
             if name == "feed-down":
                 stop_server()
-            elif name in ("slow-feed", "transport-error", "manual-timeout"):
+            elif name in ("slow-feed", "close-during-check", "transport-error", "manual-timeout"):
                 stop_server()
-                start_server(fault={"slow-feed": "slow-feed", "transport-error": args.transport_fault, "manual-timeout": "stall-installer"}[name])
+                start_server(fault={"slow-feed": "slow-feed", "close-during-check": "slow-feed", "transport-error": args.transport_fault, "manual-timeout": "stall-installer"}[name])
             else:
                 if name == "malformed-feed":
                     stop_server()
@@ -361,7 +364,7 @@ def main():
                 shutil.copyfile(OUT / (name + ".json"), feed_file)
             elif name == "malformed-feed":
                 feed_file.write_bytes(b"{")
-            elif name in ("feed-down", "slow-feed"):
+            elif name in ("feed-down", "slow-feed", "close-during-check"):
                 shutil.copyfile(OUT / "same.json", feed_file)
             else:
                 shutil.copyfile(valid, feed_file)

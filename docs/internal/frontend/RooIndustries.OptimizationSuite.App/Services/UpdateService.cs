@@ -79,7 +79,8 @@ public sealed class UpdateService
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
     private void Set(UpdateState state) { State = state; Notify(); }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
-    private void LogFeed(string outcome) => AppLog.Write("update", "Feed " + _feed!.IdnHost + ": " + outcome + "; installed " + CurrentVersion + ".");
+    private static string Describe(UpdateFeedResult r) => r.Kind + (r.KeyId is { } key ? ", key " + key : "") + (r.Release is { } release ? ", release " + release.Version : "") + ". " + r.Reason;
+    private void LogFeed(string outcome, string source = "Feed") => AppLog.Write("update", source + " " + _feed!.IdnHost + ": " + outcome.TrimEnd('.') + "; installed " + CurrentVersion + ".");
 
     public void Start(DispatcherQueue dispatcher)
     {
@@ -178,6 +179,7 @@ public sealed class UpdateService
                 if (!File.Exists(path) || new FileInfo(path).Length > UpdateFeed.MaximumBodyBytes) continue;
                 var bytes = await File.ReadAllBytesAsync(path, _stop.Token);
                 var result = UpdateFeed.Verify(bytes, 200, _feed, CurrentVersion);
+                LogFeed(Describe(result), "Cached feed");
                 if (result.Kind != UpdateFeedKind.Available || result.Release is not { } release || release.Version != candidate.Name) continue;
                 var installer = Installer(release);
                 if (!File.Exists(installer)) continue;
@@ -232,7 +234,7 @@ public sealed class UpdateService
             }
             var bytes = output.ToArray();
             var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
-            LogFeed(result.Kind + (result.KeyId is { } key ? ", key " + key : "") + (result.Release is { } r ? ", release " + r.Version : "") + ". " + result.Reason);
+            LogFeed(Describe(result));
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
             {
@@ -247,7 +249,7 @@ public sealed class UpdateService
                 Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
             if (AutomaticDownloads && !same) await DownloadCoreAsync();
         }
-        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
+        catch (OperationCanceledException) { if (_stop.IsCancellationRequested) LogFeed("canceled: the app is closing"); else { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
         catch (Exception error) { LogFeed("failed: " + error.Message); Status("Couldn't check for updates. " + error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
     }
