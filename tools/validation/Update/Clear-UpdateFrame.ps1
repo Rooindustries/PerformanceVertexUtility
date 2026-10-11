@@ -23,7 +23,13 @@ foreach($expected in $receipt.files.PSObject.Properties){
 }
 foreach($item in @(Get-ChildItem $root -Force -Recurse)){
  if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked update frame entry retained'}
- if($item.PSIsContainer){continue}
+ if($item.PSIsContainer){
+  $known=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $item.FullName}).Count
+  $container=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.purpose -ne 'source-frame' -and $item.FullName.StartsWith($_.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count
+  $manifestDirectory=$item.FullName.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -and @($receipt.files.PSObject.Properties|Where-Object {$_.Name.StartsWith($item.FullName.Substring($source.Length+1).Replace('\','/')+'/',[StringComparison]::OrdinalIgnoreCase)}).Count
+  if(-not$known -and -not$container -and -not$manifestDirectory){throw ('Unrecorded frame directory retained; ledger kept: '+$item.FullName)}
+  continue
+ }
  $path=$item.FullName;$relative=$path.Substring($source.Length+1).Replace('\','/')
  $manifestFile=$path.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -and ($relative -eq 'source-verification.json' -or $receipt.files.PSObject.Properties[$relative])
  $tracked=@($entries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq $path}).Count
@@ -37,7 +43,16 @@ foreach($entry in $entries){
 }
 $actual=Get-HarnessFolderIdentity $root
 if($actual.creationTimeFileTimeUtc -cne $rootEntry[0].identity.creationTimeFileTimeUtc){throw 'Frame identity changed; retained.'}
-$final=Get-Content -Raw $script:Harness.LedgerPath|ConvertFrom-Json
+$saved=[IO.File]::ReadAllBytes($script:Harness.LedgerPath)
+$final=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json
+if(@(Get-ChildItem -LiteralPath $root -Force|Where-Object FullName -INE $script:Harness.LedgerPath).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
 $final.entries|Where-Object id -CEQ $rootEntry[0].id|ForEach-Object {$_.state='removed'}
+[IO.File]::Delete($script:Harness.LedgerPath)
+try{[IO.Directory]::Delete($root,$false)}catch{
+ if([IO.Directory]::Exists($root) -and (Get-HarnessFolderIdentity $root).creationTimeFileTimeUtc -ceq $rootEntry[0].identity.creationTimeFileTimeUtc -and -not(Test-Path $script:Harness.LedgerPath)){
+  $stream=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+  try{$stream.Write($saved,0,$saved.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+ }
+ throw
+}
 $final|ConvertTo-Json -Depth 60 -Compress
-[IO.File]::Delete($script:Harness.LedgerPath);[IO.Directory]::Delete($root,$false)
