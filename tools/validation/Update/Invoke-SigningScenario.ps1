@@ -61,14 +61,14 @@ switch($Scenario){
    if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw ('Installed signing file is missing: '+$relative)}
    $sig=Get-AuthenticodeSignature -LiteralPath $path
    $row=@{path=$relative;subject=$sig.SignerCertificate.Subject;thumbprint=$sig.SignerCertificate.Thumbprint;status=[string]$sig.Status}
-   if($row.subject -cne $subject -or $row.thumbprint -cne $record.thumbprint){throw ('Installed signature differs: '+$relative)}
+   if($row.subject -cne $subject -or $row.thumbprint -cne $record.thumbprint -or $row.status -notin @('Valid','UnknownError','NotTrusted')){throw ('Installed signature differs: '+$relative)}
    $rows+=@($row)
   }
   foreach($version in $VersionA,$VersionB){
    $build=if($version -eq $VersionA){'A'}else{'B'}
    $setup=Join-Path $OutRoot ('builds\'+$build+'\RooIndustries-OptimizationSuite-'+$version+'-setup.exe')
    $sig=Get-AuthenticodeSignature -LiteralPath $setup
-   if($sig.SignerCertificate.Subject -cne $subject -or $sig.SignerCertificate.Thumbprint -cne $record.thumbprint){throw 'Setup signature differs.'}
+   if($sig.SignerCertificate.Subject -cne $subject -or $sig.SignerCertificate.Thumbprint -cne $record.thumbprint -or [string]$sig.Status -notin @('Valid','UnknownError','NotTrusted')){throw 'Setup signature differs.'}
    $rows+=@(@{path=$setup;subject=$sig.SignerCertificate.Subject;thumbprint=$sig.SignerCertificate.Thumbprint;status=[string]$sig.Status})
   }
   $root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules';$signedHost=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
