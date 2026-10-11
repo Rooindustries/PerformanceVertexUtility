@@ -73,7 +73,7 @@ switch($Scenario){
   }
   $root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules';$signedHost=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
   $until=[DateTime]::UtcNow.AddSeconds(60);$status=$null
-  do{$request=@{schemaVersion=1;policyRoot=$root}|ConvertTo-Json;$OutputEncoding=$utf8;$status=(@($request|& $signedHost 'policy-status' '-') -join "`n"|ConvertFrom-Json).data;if($status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
+  do{$request=@{schemaVersion=1;repoRoot=$install;policyRoot=$root}|ConvertTo-Json;$OutputEncoding=$utf8;$result=(@($request|& $signedHost 'policy-status' '-') -join "`n"|ConvertFrom-Json);if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw 'Signed governor status read failed.'};$status=$result.data;if($status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
   if(-not$status.hostRunning){throw 'Signed governor did not run.'}
   $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$status.state.host.processId)
   $sig=Get-AuthenticodeSignature -LiteralPath $worker.ExecutablePath
@@ -97,7 +97,7 @@ switch($Scenario){
   if(Test-Path (Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe')){
    $root=Governor 'Pause';$signedHost=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
    $until=[DateTime]::UtcNow.AddSeconds(40)
-   do{$OutputEncoding=$utf8;$status=(@((@{schemaVersion=1;policyRoot=$root}|ConvertTo-Json)|& $signedHost 'policy-status' '-') -join "`n"|ConvertFrom-Json).data;if(-not$status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
+   do{$OutputEncoding=$utf8;$result=(@((@{schemaVersion=1;repoRoot=$install;policyRoot=$root}|ConvertTo-Json)|& $signedHost 'policy-status' '-') -join "`n"|ConvertFrom-Json);if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw 'Signed governor status read failed.'};$status=$result.data;if(-not$status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
    if($status.hostRunning){throw 'Owned signed governor did not pause.'}
   }
   $record=Get-Content -Raw $certificatePath|ConvertFrom-Json
