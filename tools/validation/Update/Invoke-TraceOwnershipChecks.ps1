@@ -76,6 +76,12 @@ public static class RooTraceParent {
   if(-not$inside){throw 'Reuse fixture accidentally tested an out-of-window event'}
   $rows.Add(@{check='iii simulated PID reuse native/event mismatch';status='pass';observed=@{childPid=$childId;nativeBirth=$native.ToString();eventTime=$wrong;differenceSeconds=5;insideInvocationWindow=$inside;adopted=$false}})
  }finally{Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $event.id)[0]).identity.timeCreatedFileTimeUtc=$original}|Out-Null}
+ $rootEvent=TraceEntry ([int]$root.Identity.pid);$rootName=$rootEvent.identity.processName
+ Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $rootEvent.id)[0]).identity.processName='RooTraceForeignParent.exe'}|Out-Null
+ try{
+  if(Test-TracedDescendant $childId -Ancestor $root){throw 'A different root start identity was accepted'}
+  $rows[$rows.Count-1].observed.rootEventMismatchRefused=$true
+ }finally{Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $rootEvent.id)[0]).identity.processName=$rootName}|Out-Null}
  $child=Wait-Trace {Test-TracedDescendant $childId -PassThru -Ancestor $root} 'cleanup after correct event restored';Stop-HarnessProcess $child
  $status='pass'
 }finally{
