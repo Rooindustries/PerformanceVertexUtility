@@ -37,7 +37,7 @@ using System.Threading;
 public static class RooHarnessFastLauncher {
  public static void Main(string[] args) {
   if(args[0]=="middle"){Process.Start(new ProcessStartInfo(args[1],"-t 127.0.0.1"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(25);return;}
-  while(!File.Exists(args[2]))Thread.Sleep(2);
+  using(var ready=new EventWaitHandle(false,EventResetMode.ManualReset,args[2]))ready.WaitOne();
   var middle=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"middle \""+args[1]+"\""){UseShellExecute=false,CreateNoWindow=true});middle.WaitForExit();
  }
 }
@@ -45,10 +45,18 @@ public static class RooHarnessFastLauncher {
   Register-HarnessFile $launcher 'tracking-fixture'|Out-Null
   foreach($iteration in 1..5){
    $childImage=Join-Path $directory ('RooHarnessFastChild-'+$iteration+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $childImage|Out-Null
-   $gate=Join-Path $directory ('release-'+$iteration+'.txt')
+   $gate='Local\RooHarnessTracking-'+$nonce+'-'+$iteration
    $root=Start-OwnedProcess -FilePath $launcher -ArgumentList ('root "'+$childImage+'" "'+$gate+'"') -Purpose tracking-fixture
-   Start-HarnessDescendantTracker $root|Out-Null;New-HarnessText $gate 'release' 'tracking-fixture'|Out-Null
-   if(-not$root.process.WaitForExit(10000)){throw 'Tracking launcher did not exit'};Start-Sleep -Milliseconds 500
+   $ready=$null;$until=[DateTime]::UtcNow.AddSeconds(10)
+   do{try{$ready=[Threading.EventWaitHandle]::OpenExisting($gate)}catch [Threading.WaitHandleCannotBeOpenedException]{Start-Sleep -Milliseconds 10}}while(-not$ready -and [DateTime]::UtcNow -lt $until)
+   if(-not$ready){throw 'Owned tracking root did not create its ready event'}
+   $tracker=Start-HarnessDescendantTracker $root
+   $locked=$null
+   try{$locked=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None);$ready.Set()|Out-Null;Start-Sleep -Milliseconds 800}
+   finally{if($locked){$locked.Dispose()};$ready.Dispose()}
+   if(-not$root.process.WaitForExit(10000)){throw 'Tracking launcher did not exit'}
+   $until=[DateTime]::UtcNow.AddSeconds(10)
+   while(-not@($tracker.Entries()|Where-Object {$_.Image -ieq ('\\?\'+$childImage)}).Count -and [DateTime]::UtcNow -lt $until){if($tracker.Error){throw $tracker.Error};Start-Sleep -Milliseconds 20}
    Receive-HarnessDescendants
    $matches=@(Get-CimInstance Win32_Process|Where-Object ExecutablePath -IEQ $childImage)
    if($matches.Count -ne 1){throw 'Tracking child identity is ambiguous or missing'}
@@ -56,7 +64,7 @@ public static class RooHarnessFastLauncher {
    if(-not$child){throw 'A fast relaunch lost its verified owned chain'}
    $entry=Get-HarnessEntryById $child.LedgerId;$parent=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.identity.pid -eq $entry.metadata.parentPid -and $_.identity.creationTimeFileTimeUtc -ceq $entry.metadata.parentCreationTimeFileTimeUtc})
    if($parent.Count -ne 1 -or $parent[0].metadata.parentPid -ne $root.Identity.pid -or $parent[0].metadata.parentCreationTimeFileTimeUtc -cne $root.Identity.creationTimeFileTimeUtc -or [long]$parent[0].identity.creationTimeFileTimeUtc -gt [long]$child.Identity.creationTimeFileTimeUtc){throw 'Fast relaunch ledger lacks ordered native parent identities'}
-   Passed ('fast parent chain retained '+$iteration) @{root=$root.Identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;observedAfterRootExit=$true};Stop-HarnessProcess $child
+   Passed ('fast parent chain retained during ledger contention '+$iteration) @{root=$root.Identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;ledgerLockedMs=800;observedAfterRootExit=$true};Stop-HarnessProcess $child
   }
   $status='pass'
  }finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
