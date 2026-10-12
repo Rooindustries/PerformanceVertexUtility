@@ -20,7 +20,7 @@ function Get-HarnessFolderIdentity([string]$Path){
  if(-not$item.PSIsContainer -or $item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Owned folder identity is not a plain directory.'}
  @{path=$item.FullName;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()}
 }
-function Invoke-HarnessLedger([scriptblock]$Action){
+function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
  if(-not$script:Harness){throw 'Harness invocation has no verified frame scope.'}
  $stream=$null
  for($attempt=0;$attempt -lt 10;$attempt++){
@@ -32,7 +32,7 @@ function Invoke-HarnessLedger([scriptblock]$Action){
   try{$ledger=$reader.ReadToEnd()|ConvertFrom-Json}finally{$reader.Dispose()}
   if($ledger.frameId -cne $script:Harness.FrameId -or $ledger.manifestSha256 -cne $script:Harness.Manifest -or $ledger.machine -cne $env:COMPUTERNAME){throw 'Harness ledger scope changed; retained.'}
   $result=& $Action $ledger
-  if(-not$script:Harness.ReadOnly){
+  if(-not$script:Harness.ReadOnly -and -not$NoWrite){
    $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 60))
    $stream.Position=0;$stream.SetLength(0);$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)
   }
@@ -44,7 +44,7 @@ function Open-HarnessRun([string]$FrameRoot,[string]$FrameId,[string]$ManifestSh
  if($root -notmatch '^C:\\RooBuild\\roo-industries-[A-Za-z0-9_-]+-[a-f0-9]{32}$' -or $FrameId -cne $root.Substring($root.Length-32)){throw 'Harness frame scope differs.'}
  $script:Harness=@{Root=$root;FrameId=$FrameId;Manifest=$ManifestSha256;Nonce=$Nonce;LedgerPath=(Join-Path $root 'ledger.json');ReadOnly=[bool]$ReadOnly;Handles=@{};Scenario='';Scope=''}
  if(-not(Test-Path $script:Harness.LedgerPath -PathType Leaf)){throw 'Frame has no creation ledger; stage a fresh frame.'}
- Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+ Invoke-HarnessLedger {param($ledger) $null} -NoWrite|Out-Null
 }
 function Initialize-HarnessInvocation([string]$Scenario,[string]$Scope){
  if(-not$global:RooVerificationInvocationContext -or -not$global:RooVerificationInvocationContext.frame){throw 'A verified windows_ssh interactive invocation is required.'}
@@ -67,7 +67,7 @@ function Add-HarnessEntry([string]$Kind,$Identity,[string]$Purpose='',[string]$L
   $ledger.entries=@($ledger.entries)+@($entry);return $entry
  }
 }
-function Get-HarnessEntries{Invoke-HarnessLedger {param($ledger) @($ledger.entries)}}
+function Get-HarnessEntries{Invoke-HarnessLedger {param($ledger) @($ledger.entries)} -NoWrite}
 function Set-HarnessEntryState([string]$Id,[string]$State,[string]$Error=''){
  Invoke-HarnessLedger {param($ledger) $entry=@($ledger.entries|Where-Object id -CEQ $Id);if($entry.Count -ne 1){throw 'Ledger entry is missing or ambiguous.'};$entry[0].state=$State;$entry[0].cleanupError=$Error}|Out-Null
 }
@@ -273,7 +273,7 @@ function New-HarnessText([string]$Path,[string]$Text,[string]$Purpose='',[string
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
 }
 function Write-HarnessResult([string]$Directory,[string]$Name,$Value){
- $sequence=Invoke-HarnessLedger {param($ledger) @($ledger.entries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.purpose -eq 'result'}).Count+1}
+ $sequence=Invoke-HarnessLedger {param($ledger) @($ledger.entries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.purpose -eq 'result'}).Count+1} -NoWrite
  $file=[IO.Path]::GetFileNameWithoutExtension($Name)+'-'+$script:Harness.Nonce+'-'+('{0:D4}' -f $sequence)+[IO.Path]::GetExtension($Name)
  $path=Join-Path $Directory $file
  $json=@{nonce=$script:Harness.Nonce;data=$Value}|ConvertTo-Json -Depth 60
@@ -296,7 +296,7 @@ function Read-HarnessInputText([string]$Path){
 function Read-HarnessLatestResult([string]$Name,[string]$Scenario='', [string]$Nonce=''){
  if(-not$Nonce -and $Scenario -ceq $script:Harness.Scenario -and @(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.purpose -eq 'result' -and $_.metadata.name -ceq $Name}).Count){$Nonce=$script:Harness.Nonce}
  if(-not$Nonce){
-  $invocation=Invoke-HarnessLedger {param($ledger) @($ledger.invocations|Where-Object {$_.scenario -ceq $Scenario -and $_.status -eq 'pass'})|Select-Object -Last 1}
+  $invocation=Invoke-HarnessLedger {param($ledger) @($ledger.invocations|Where-Object {$_.scenario -ceq $Scenario -and $_.status -eq 'pass'})|Select-Object -Last 1} -NoWrite
   if(-not$invocation){throw 'Earlier scenario has no completed invocation in this frame.'};$Nonce=$invocation.nonce
  }
  $entry=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $Nonce -and $_.purpose -eq 'result' -and $_.metadata.name -ceq $Name}|Sort-Object {$_.metadata.sequence}|Select-Object -Last 1)
@@ -358,7 +358,7 @@ function Complete-HarnessInvocation([string]$Status,[switch]$Cleanup){
  foreach($tracker in @($script:Harness.Trackers|Where-Object {$null -ne $_})){try{$tracker.Dispose()}catch{$errors.Add($_.Exception.Message)}}
  $script:Harness.Trackers=$null
  $failed=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.state -eq 'error'})
- $previous=Invoke-HarnessLedger {param($ledger) (@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0]).status}
+ $previous=Invoke-HarnessLedger {param($ledger) (@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0]).status} -NoWrite
  if($errors.Count -or $failed.Count -or $previous -eq 'fail'){$Status='fail'}
  Invoke-HarnessLedger {param($ledger) $i=@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0];$i.status=$Status;$i.cleanupErrors=@($i.cleanupErrors)+@($errors)}|Out-Null
  if($Status -eq 'fail' -and $errors.Count){throw ('Harness cleanup failed: '+($errors -join '; '))}
@@ -387,7 +387,7 @@ function Initialize-HarnessCache([string]$Updates,[string[]]$Versions){
  }|Out-Null
 }
 function Register-HarnessCache([string]$Version){
- $before=Invoke-HarnessLedger {param($ledger) $ledger.cachePreflight}
+ $before=Invoke-HarnessLedger {param($ledger) $ledger.cachePreflight} -NoWrite
  $row=@($before.versions|Where-Object version -CEQ $Version)
  if($row.Count -ne 1 -or -not$row[0].absent){throw 'Cache was not absent at run preflight; retained.'}
  $path=$row[0].path
