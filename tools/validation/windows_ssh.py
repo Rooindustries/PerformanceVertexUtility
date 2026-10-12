@@ -9,23 +9,52 @@ import json
 from pathlib import Path, PureWindowsPath
 import re
 import subprocess
+import sys
 import tarfile
 import tempfile
 import uuid
 
 
 SSH_OPTIONS = [
-    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
-    '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2',
+    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+    '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
+    '-o', 'ConnectionAttempts=1', '-o', 'ControlMaster=no', '-o', 'ControlPath=none',
     '-o', 'ProxyCommand=none', '-o', 'ProxyJump=none',
 ]
+COMMAND_TIMEOUT = 75
+TRANSFER_TIMEOUT = 300
+
+
+class HostUnreachable(subprocess.CalledProcessError):
+    def __init__(self, host: str, reason: str):
+        super().__init__(255, ['ssh/scp', host], output='', stderr='host unreachable: ' + host + '. ' + reason)
+
+
+def run_transport(host: str, program: str, arguments, timeout: float = COMMAND_TIMEOUT, **kwargs):
+    if program not in ('ssh', 'scp') or not host or host.startswith('-') or any(char.isspace() for char in host):
+        raise ValueError('Use a valid SSH hostname or alias and ssh/scp transport.')
+    try:
+        return subprocess.run([program, *SSH_OPTIONS, *(str(value) for value in arguments)],
+                              timeout=timeout, check=True, **kwargs)
+    except subprocess.TimeoutExpired:
+        raise HostUnreachable(host, 'The operation did not finish within ' + str(timeout) + ' seconds.') from None
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr or error.stdout or ''
+        if isinstance(detail, bytes):
+            detail = detail.decode('utf-8', errors='replace')
+        if any(message in detail.casefold() for message in ('connection timed out', 'connection refused',
+                'network is unreachable', 'no route to host', 'could not resolve hostname',
+                'connection closed', 'connection reset', 'broken pipe', 'timeout, server',
+                'kex_exchange_identification')):
+            raise HostUnreachable(host, detail.strip()[-1000:]) from None
+        raise
 
 
 def ps_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def invoke(host: str, machine: str, script: str, capture: bool = True):
+def invoke(host: str, machine: str, script: str, capture: bool = True, timeout: float = COMMAND_TIMEOUT):
     guarded = (
         "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'\n"
         f"if ($env:COMPUTERNAME -ine {ps_literal(machine)}) {{throw 'Unexpected Windows computer'}}\n"
@@ -54,9 +83,13 @@ def invoke(host: str, machine: str, script: str, capture: bool = True):
     )
     encoded = base64.b64encode(bootstrap.encode('utf-16le')).decode()
     command = 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + encoded
-    return subprocess.run(['ssh', '-T', *SSH_OPTIONS, host, command],
+    result = run_transport(host, 'ssh', ['-T', host, command], timeout=timeout,
                           input=base64.b64encode(payload).decode() + '\n',
-                          capture_output=capture, text=True, encoding='utf-8', check=True)
+                          capture_output=True, text=True, encoding='utf-8')
+    if not capture:
+        print(result.stdout, end='')
+        print(result.stderr, end='', file=sys.stderr)
+    return result
 
 
 
@@ -252,7 +285,7 @@ $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));
             entry = tarfile.TarInfo('source-verification.json'); entry.size = len(data)
             bundle.addfile(entry, io.BytesIO(data))
         destination = host + ':' + remote_root.replace('\\', '/') + '/source.tar.gz'
-        subprocess.run(['scp', *SSH_OPTIONS, str(archive), destination], check=True, capture_output=True)
+        run_transport(host, 'scp', [str(archive), destination], timeout=TRANSFER_TIMEOUT, capture_output=True)
         record = f"$r={ps_literal(remote_root)};$archive={ps_literal(remote_root + '/source.tar.gz')};"
         record += r"""
 $item=Get-Item $archive
@@ -336,7 +369,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
     setup += "}finally{if($taskReceipt){Assert-OwnedTaskUnchanged $taskReceipt;$items=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.lifetime -eq 'runner' -and $_.state -eq 'active'});[array]::Reverse($items);foreach($item in $items){Remove-HarnessEntry $item}}}\n"
     setup += "foreach($f in 'child.log','child-error.log'){$p=Join-Path $run $f;if(Test-Path -LiteralPath $p){Get-Content -LiteralPath $p -Encoding UTF8}}\n"
     setup += f"$errors=@(Get-HarnessEntries|Where-Object {{$_.nonce -ceq '{nonce}' -and $_.state -eq 'error'}});$ok=$completed -and $completed.nonce -ceq '{nonce}' -and $completed.status -ceq 'completed' -and $completed.childExit -eq 0 -and -not$errors.Count;@{{run=$run;nonce='{nonce}';frameId={ps_literal(receipt['frameId'])};task=$name;completion=$completed;passed=[bool]$ok}}|ConvertTo-Json -Depth 15 -Compress\nif(-not$ok){{exit 1}}"
-    return invoke(host, machine, setup)
+    return invoke(host, machine, setup, timeout=(minutes + 2) * 60)
 
 
 def main():

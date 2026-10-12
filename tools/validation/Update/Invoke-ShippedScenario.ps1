@@ -16,7 +16,7 @@ $script:checks=[Collections.Generic.List[object]]::new()
 $script:fixtures=[Collections.Generic.List[object]]::new()
 $script:extraProcesses=[Collections.Generic.List[object]]::new()
 $script:starts=[Collections.Generic.List[object]]::new()
-$script:loggedEvents=[Collections.Generic.HashSet[int]]::new()
+$script:loggedEvents=[Collections.Generic.HashSet[string]]::new()
 $script:receiptStatus='running'
 $script:freshP5Installed=$false
 $script:setupLogs=@{}
@@ -56,14 +56,13 @@ function Remember-Owned($Process){
  return $ownedProcess
 }
 function CollectStarts{
- foreach($event in @(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Sort-Object EventIdentifier)){
-  if(-not$script:loggedEvents.Add([int]$event.EventIdentifier)){continue}
-  $p=$event.SourceEventArgs.NewEvent
-  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.ProcessID) -ErrorAction SilentlyContinue
-  $ours=if($cim){Test-OwnedDescendant ([int]$p.ProcessID)}else{$false}
-  if($p.ProcessName -match '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -or $ours){
-   $script:starts.Add(@{pid=[int]$p.ProcessID;parentPid=[int]$p.ParentProcessID;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=[bool]$ours})
-  }
+ Receive-ProcessTrace
+ foreach($entry in @(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce})){
+  if(-not$script:loggedEvents.Add($entry.identity.eventNonce)){continue}
+  $p=$entry.identity
+  $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.processId) -ErrorAction SilentlyContinue
+  $ours=if($cim){Test-OwnedDescendant ([int]$p.processId)}else{$false}
+  if($p.processName -match '(?i)RooIndustries|Optimizer\.|setup|unins|notepad|smartscreen|RooTester' -or $ours){$script:starts.Add(@{pid=$p.processId;parentPid=$p.parentProcessId;image=$p.processName;time=$p.timeCreatedFileTimeUtc;eventNonce=$p.eventNonce;path=$cim.ExecutablePath;arguments=$cim.CommandLine;ownedChain=[bool]$ours})}
  }
  Save 'process-starts-detailed.json' @($script:starts)
 }
@@ -71,7 +70,7 @@ function Bind-UpdateSetup($ParentOwned,[string]$Installer){
  WaitFor {
   $matches=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $Installer -and $_.CreationDate.ToUniversalTime() -ge $script:installPressed})
   if($matches.Count -gt 1){throw 'Several update setups match; retained.'}
-  if($matches.Count -eq 1){$owned=Test-OwnedDescendant ([int]$matches[0].ProcessId) -PassThru;if(-not$owned){throw 'Update setup is not in the owned updater chain; retained.'};Save 'update-setup-parent.json' @{parent=$ParentOwned.Identity;child=$owned.Identity;installPressed=$script:installPressed.ToString('o')};return $owned}
+  if($matches.Count -eq 1){$owned=Test-OwnedDescendant ([int]$matches[0].ProcessId) -PassThru;if(-not$owned){throw 'Update setup is not in the owned updater chain; retained.'};Save 'update-setup-parent.json' @{parent=$ParentOwned.Identity;child=$owned.Identity;ownershipProof=$owned.OwnershipProof;installPressed=$script:installPressed.ToString('o')};return $owned}
  } 30 'owned update setup'|Out-Null
 }
 function Attach{
@@ -87,7 +86,8 @@ function Attach{
   }
  } 150 'owned installed app'
  Assert-ShippedFreshApp $script:app $script:launchAfter
- $script:owned=Remember-Owned $script:app
+ $script:owned=if($script:installPressed){Test-TracedDescendant $script:app.Id -PassThru}else{Remember-Owned $script:app}
+ if(-not$script:owned){throw 'App has no verified ownership proof; retained.'}
  $script:window=WaitFor {
   $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id)))
   if($Part -eq 'p5'){
@@ -99,7 +99,7 @@ function Attach{
   @($windows|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1
  } 120 'owned app navigation window'
  Register-HarnessWindow $script:window|Out-Null
- Save 'owned-app.json' $script:owned.Identity
+ Save 'owned-app.json' @{identity=$script:owned.Identity;ownershipProof=$script:owned.OwnershipProof}
 }
 function Launch{
  Assert-ShippedNoApp $exe
@@ -122,6 +122,7 @@ function ReleaseCacheEmpty{
  return $unexpected.Count -eq 0 -and $folders.Count -eq 0
 }
 function Wizard([string]$path,[string]$label,[string]$version){
+ Start-ProcessTrace|Out-Null
  $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))})
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
  $existingWindows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
@@ -481,7 +482,7 @@ try{
    Check 'startup live download exactly signed published bytes' $download ($download.bytes -eq $item.size -and $download.sha256 -ieq $item.sha256) 'live-download.json'
    $script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
    $prior=$script:app.Id;Click 'UpdateInstallButton'
-   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';Start-HarnessDescendantTracker $script:owned|Out-Null;$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
+   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
    $until=[DateTime]::UtcNow.AddMinutes(5)
    while([DateTime]::UtcNow -lt $until){CollectStarts;$pending=Join-Path $updates 'pending-install.json';if(Test-Path $pending){try{Save 'pending-install-observed.json' (Get-Content -Raw $pending|ConvertFrom-Json)}catch{}};if($script:app.HasExited -and (Version) -eq $release.payload.version){break};Start-Sleep -Milliseconds 100}
    Check 'alpha exits for silent setup' @{pid=$prior;exited=$script:app.HasExited} $script:app.HasExited
@@ -592,8 +593,7 @@ try{
  foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-HarnessProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  if($Part -eq 'p5' -and $script:freshP5Installed){try{RestoreFreshP5Installation}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  Save 'process-starts.json' @(ProcessStarts)
- Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
- Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
+
  $script:receiptStatus=Get-ShippedFinalStatus $script:receiptStatus @($script:cleanupErrors)
  try{$script:receiptStatus=Complete-HarnessInvocation $script:receiptStatus -Cleanup}catch{$script:cleanupErrors.Add($_.Exception.Message);$script:receiptStatus='fail'}
  Receipt
