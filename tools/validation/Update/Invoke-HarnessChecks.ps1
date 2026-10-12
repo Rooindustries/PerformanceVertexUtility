@@ -36,8 +36,10 @@ using System.IO;
 using System.Threading;
 public static class RooHarnessFastLauncher {
  public static void Main(string[] args) {
+  if(args[0]=="ordinary"){Thread.Sleep(3000);return;}
   if(args[0]=="middle"){Process.Start(new ProcessStartInfo(args[1],"-t 127.0.0.1"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(25);return;}
   using(var ready=new EventWaitHandle(false,EventResetMode.ManualReset,args[2]))ready.WaitOne();
+  Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"ordinary"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(150);
   var middle=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"middle \""+args[1]+"\""){UseShellExecute=false,CreateNoWindow=true});middle.WaitForExit();
  }
 }
@@ -64,7 +66,9 @@ public static class RooHarnessFastLauncher {
    if(-not$child){throw 'A fast relaunch lost its verified owned chain'}
    $entry=Get-HarnessEntryById $child.LedgerId;$parent=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.identity.pid -eq $entry.metadata.parentPid -and $_.identity.creationTimeFileTimeUtc -ceq $entry.metadata.parentCreationTimeFileTimeUtc})
    if($parent.Count -ne 1 -or $parent[0].metadata.parentPid -ne $root.Identity.pid -or $parent[0].metadata.parentCreationTimeFileTimeUtc -cne $root.Identity.creationTimeFileTimeUtc -or [long]$parent[0].identity.creationTimeFileTimeUtc -gt [long]$child.Identity.creationTimeFileTimeUtc){throw 'Fast relaunch ledger lacks ordered native parent identities'}
-   Passed ('fast parent chain retained during ledger contention '+$iteration) @{root=$root.Identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;ledgerLockedMs=800;observedAfterRootExit=$true};Stop-HarnessProcess $child
+   $ordinary=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.metadata.parentPid -eq $root.Identity.pid -and $_.identity.imagePath -ieq $parent[0].identity.imagePath -and $_.identity.pid -ne $parent[0].identity.pid})
+   if($ordinary.Count -ne 1 -or [long]$ordinary[0].identity.creationTimeFileTimeUtc -ge [long]$parent[0].identity.creationTimeFileTimeUtc){throw 'The contention fixture did not record its earlier sibling'}
+   Passed ('fast parent chain retained during ledger contention '+$iteration) @{root=$root.Identity;ordinarySibling=$ordinary[0].identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;middleStartsAfterSiblingMs=150;ledgerLockedMs=800;observedAfterRootExit=$true};Stop-HarnessProcess $child
   }
   $status='pass'
  }finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
