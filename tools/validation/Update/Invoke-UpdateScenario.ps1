@@ -36,8 +36,7 @@ $directory=New-HarnessEvidenceDirectory $OutRoot $(if($EvidenceName){$EvidenceNa
 $script:feedLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
 $script:window=$null;$script:app=$null;$script:owned=$null;$settingsAttributes=$null;$settingsOriginal=$null;$settingsPath=Join-Path $data 'settings.json'
 $script:setupReceipts=[Collections.Generic.List[object]]::new()
-$events='RooIndustries_OTA_'+[Guid]::NewGuid().ToString('N')
-Register-WmiEvent -Class Win32_ProcessStartTrace -SourceIdentifier $events|Out-Null
+Start-ProcessTrace|Out-Null
 Start-Sleep -Milliseconds 500
 function Save([string]$name,$value){Write-HarnessResult $directory $name $value|Out-Null}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$until=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $until){if($script:smartScreenBefore){Assert-HarnessNewSmartScreen $script:smartScreenBefore $directory};try{$v=& $probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
@@ -103,7 +102,7 @@ function Attach{
   $matches=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe})
   if($matches.Count -gt 1){throw 'Several app instances; retained.'}
   if($matches.Count -eq 1){
-   $owned=Get-HarnessProcess ([int]$matches[0].ProcessId)
+   $owned=if($script:installPressed){Test-TracedDescendant ([int]$matches[0].ProcessId) -PassThru}else{Get-HarnessProcess ([int]$matches[0].ProcessId)}
    if(-not$owned){throw 'An app instance is already running that this run did not start; retained.'}
    if($script:installPressed -and $owned.process.StartTime.ToUniversalTime() -lt $script:installPressed){throw 'Post-update app predates Install; retained.'}
    $script:owned=$owned;return $owned.process
@@ -111,7 +110,7 @@ function Attach{
  } 150 'owned installed app'
  $script:window=WaitFor {@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id))|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1} 120 'app navigation window'
  Register-HarnessWindow $script:window|Out-Null
- Save 'owned-app.json' $script:owned.Identity
+ Save 'owned-app.json' @{identity=$script:owned.Identity;ownershipProof=$script:owned.OwnershipProof}
 }
 function Launch{
  Assert-NoForeignInstance $exe
@@ -123,7 +122,7 @@ function Launch{
 function StopApp{if($script:owned){if(-not$script:app.HasExited){$script:app.CloseMainWindow()|Out-Null;$script:app.WaitForExit(20000)|Out-Null};Stop-HarnessProcess $script:owned;$script:owned=$null;$script:app=$null;$script:window=$null}}
 function Version{(Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1').DisplayVersion}
 function UpdateFiles{@(if(Test-Path $updates){Get-ChildItem $updates -File -Recurse|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash}}})}
-function ProcessStarts{@(Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|ForEach-Object {$p=$_.SourceEventArgs.NewEvent;if($p.ProcessName -match '(?i)RooIndustries|Optimizer\.(?:Host|SessionHost)|ProcessGovernor|powershell'){@{pid=[int]$p.ProcessID;parentPid=[int]$p.ParentProcessID;image=[string]$p.ProcessName;time=[string]$p.TIME_CREATED}}})}
+function ProcessStarts{Receive-ProcessTrace;@(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce -and $_.identity.processName -match '(?i)RooIndustries|Optimizer\.|ProcessGovernor|powershell|setup'}|ForEach-Object {@{pid=$_.identity.processId;parentPid=$_.identity.parentProcessId;image=$_.identity.processName;time=$_.identity.timeCreatedFileTimeUtc;eventNonce=$_.identity.eventNonce}})}
 function Readback{
  $settings=if(Test-Path (Join-Path $data 'settings.json')){Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json}else{$null}
  @{installedVersion=Version;runningPid=if($script:app){$script:app.Id}else{$null};runningImage=if($script:app){$script:app.Path}else{$null};runningProductVersion=if($script:app){(Get-Item $script:app.Path).VersionInfo.ProductVersion}else{$null};installedProductVersion=(Get-Item $exe).VersionInfo.ProductVersion;settings=$settings;status=if($script:window -and (ById 'UpdateStatusText')){StatusText}else{$null};texts=if($script:window){@(Texts)}else{@()};files=@(UpdateFiles);processStarts=@(ProcessStarts);helpers=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $script:app -and $_.ParentProcessId -eq $script:app.Id}|Select-Object ProcessId,ParentProcessId,ExecutablePath);governor=(Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')});governorTasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,TaskPath,State,@{n='enabled';e={$_.Settings.Enabled}},@{n='userId';e={$_.Principal.UserId}});utc=[DateTime]::UtcNow.ToString('o')}
@@ -182,7 +181,7 @@ try{
     foreach($child in @(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$setup.Id))){if($child.ProcessId -notin @($script:setupReceipts.Identity.pid)){$receipt=Test-OwnedDescendant ([int]$child.ProcessId) -PassThru;if($receipt){$script:setupReceipts.Add($receipt);Save 'owned-setup.json' @($script:setupReceipts.Identity)}}}
     $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Window))|Where-Object {$_.Current.ProcessId -in @($script:setupReceipts.Identity.pid)})
     foreach($win in $windows){$script:window=Register-HarnessWindow $win
-     foreach($name in 'Read the beta tester guide','Open Roo Industries Optimization Suite'){ $box=ByName $name;if($box){try{$toggle=$box.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}catch{}} }
+     foreach($name in @('Read the beta tester guide')){ $box=ByName $name;if($box){try{$toggle=$box.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}catch{}} }
      if(-not$guideCleared -and (ByNameControl 'Finish' $CT::Button)){
       $list=$win.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'))
       if($list){[IntPtr]$result=[IntPtr]::Zero;$handle=[IntPtr]::new($list.Current.NativeWindowHandle)
@@ -262,7 +261,7 @@ try{
       foreach($i in 0..4){$path=Join-Path $updates ('install-retention-'+$nonce+'-'+$i+'.log');New-HarnessText $path 'owned log retention fixture' 'retention-fixture'|Out-Null;[IO.File]::SetLastWriteTimeUtc($path,[DateTime]::UtcNow.AddMinutes(-10+$i))}
      }
      $prior=0
-     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Start-HarnessDescendantTracker $script:owned|Out-Null;$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
+     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
       WaitFor {CollectOwnedStarts;if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null
      if($Scenario -eq 'copy-failure'){
       $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -like '*Setup*Roo Industries*' -and $_.Current.ClassName -eq 'TWizardForm'}|ForEach-Object {Register-HarnessWindow $_}|Select-Object -First 1} 180 'interactive recovery setup'
@@ -272,15 +271,20 @@ try{
       Shot 'interactive-recovery'
       $until=[DateTime]::UtcNow.AddMinutes(6);$guideCleared=$false
       while(-not$setup.HasExited -and [DateTime]::UtcNow -lt $until){
-       foreach($name in 'Read the beta tester guide','Open Roo Industries Optimization Suite'){$box=ByName $name;if($box){try{$toggle=$box.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}catch{}}}
-       if(-not$guideCleared -and (ByNameControl 'Finish' $CT::Button)){$list=$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'));if($list){[IntPtr]$result=[IntPtr]::Zero;$handle=[IntPtr]::new($list.Current.NativeWindowHandle);[RooUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::Zero,[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;$guideCleared=$true}}
+       if(-not$guideCleared -and (ByNameControl 'Finish' $CT::Button)){
+        $list=$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'))
+        if(-not$list){throw 'Recovery Finish checkboxes are unavailable'}
+        $handle=[IntPtr]::new($list.Current.NativeWindowHandle);[IntPtr]$result=[IntPtr]::Zero
+        foreach($index in 0,1){[RooUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::new($index),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null}
+        Save 'recovery-finish-choices.json' @{readGuide=$false;openApp=$true;source='Inno [Run] defaults: checked guide at index 0, unchecked app at index 1'};Shot 'recovery-finish-open-app';$guideCleared=$true
+       }
        foreach($name in 'Finish','Install','Next >','Next'){$button=ByNameControl $name $CT::Button;if($button -and $button.Current.IsEnabled){Activate $button;Start-Sleep -Milliseconds 500;break}}
        Start-Sleep -Milliseconds 200
       }
       if(-not$setup.HasExited -or -not(Test-Path $exe -PathType Leaf)){throw 'Interactive recovery did not restore the executable'}
       Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-Path $exe -PathType Leaf)}
      }
-     $script:owned=$null;$script:app=$null;$script:window=$null;if($Scenario -eq 'copy-failure'){Launch}else{Attach};Settings
+     $script:owned=$null;$script:app=$null;$script:window=$null;Attach;Settings;Save 'relaunch-ownership.json' @{identity=$script:owned.Identity;proof=$script:owned.OwnershipProof};if($script:owned.OwnershipProof.kind -ne 'trace'){throw 'Update relaunch did not use trace proof'}
      if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-Path (Join-Path $updates $NextVersion)){throw 'Installed version cache was retained'};$logs=@(Get-ChildItem $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-Path (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
@@ -335,7 +339,6 @@ finally{
  if($settingsAttributes -ne $null){try{[IO.File]::SetAttributes($settingsPath,($settingsAttributes -band (-bnot [IO.FileAttributes]::ReadOnly)));[IO.File]::WriteAllBytes($settingsPath,$settingsOriginal);[IO.File]::SetAttributes($settingsPath,$settingsAttributes)}catch{$cleanupErrors.Add($_.Exception.Message)}}
  try{Register-HarnessCache $NextVersion|Out-Null}catch{$cleanupErrors.Add($_.Exception.Message)}
  Save 'process-starts.json' @(ProcessStarts)
- Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue;Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
  try{StopApp}catch{$cleanupErrors.Add($_.Exception.Message)}
  if($cleanupErrors.Count){$script:scenarioStatus='fail'}
  $status=Complete-HarnessInvocation $script:scenarioStatus -Cleanup

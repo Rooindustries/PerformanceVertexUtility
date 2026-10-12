@@ -33,7 +33,17 @@ spec.loader.exec_module(windows)
 
 
 def command(args, log=None):
-    result = subprocess.run([str(a) for a in args], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    argv = [str(a) for a in args]
+    try:
+        result = (windows.run_transport(HOST, argv[0], argv[1:], timeout=windows.TRANSFER_TIMEOUT,
+                  cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  if argv[0] in ('ssh', 'scp') else
+                  subprocess.run(argv, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+    except subprocess.CalledProcessError as error:
+        output = (error.stdout or '') + (error.stderr or '')
+        if log:
+            Path(log).write_text(output)
+        raise RuntimeError('Network command failed: ' + output) from None
     if log:
         Path(log).write_text(result.stdout)
     if result.returncode:

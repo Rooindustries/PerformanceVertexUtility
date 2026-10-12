@@ -26,54 +26,7 @@ function CacheLifecycle([string]$Clean,[string]$Version){
  if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
  Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
 }
-if($TrackingOnly){
- try{
-  $launcher=Join-Path $directory 'RooHarnessFastLauncher.exe'
-  Add-Type -OutputAssembly $launcher -OutputType ConsoleApplication @'
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Threading;
-public static class RooHarnessFastLauncher {
- public static void Main(string[] args) {
-  if(args[0]=="ordinary"){Thread.Sleep(3000);return;}
-  if(args[0]=="middle"){Process.Start(new ProcessStartInfo(args[1],"-t 127.0.0.1"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(25);return;}
-  using(var ready=new EventWaitHandle(false,EventResetMode.ManualReset,args[2]))ready.WaitOne();
-  Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"ordinary"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(150);
-  var middle=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"middle \""+args[1]+"\""){UseShellExecute=false,CreateNoWindow=true});middle.WaitForExit();
- }
-}
-'@
-  Register-HarnessFile $launcher 'tracking-fixture'|Out-Null
-  foreach($iteration in 1..5){
-   $childImage=Join-Path $directory ('RooHarnessFastChild-'+$iteration+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $childImage|Out-Null
-   $gate='Local\RooHarnessTracking-'+$nonce+'-'+$iteration
-   $root=Start-OwnedProcess -FilePath $launcher -ArgumentList ('root "'+$childImage+'" "'+$gate+'"') -Purpose tracking-fixture
-   $ready=$null;$until=[DateTime]::UtcNow.AddSeconds(10)
-   do{try{$ready=[Threading.EventWaitHandle]::OpenExisting($gate)}catch [Threading.WaitHandleCannotBeOpenedException]{Start-Sleep -Milliseconds 10}}while(-not$ready -and [DateTime]::UtcNow -lt $until)
-   if(-not$ready){throw 'Owned tracking root did not create its ready event'}
-   $tracker=Start-HarnessDescendantTracker $root
-   $locked=$null
-   try{$locked=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None);$ready.Set()|Out-Null;Start-Sleep -Milliseconds 800}
-   finally{if($locked){$locked.Dispose()};$ready.Dispose()}
-   if(-not$root.process.WaitForExit(10000)){throw 'Tracking launcher did not exit'}
-   $until=[DateTime]::UtcNow.AddSeconds(10)
-   while(-not@($tracker.Entries()|Where-Object {$_.Image -ieq ('\\?\'+$childImage)}).Count -and [DateTime]::UtcNow -lt $until){if($tracker.Error){throw $tracker.Error};Start-Sleep -Milliseconds 20}
-   Receive-HarnessDescendants
-   $matches=@(Get-CimInstance Win32_Process|Where-Object ExecutablePath -IEQ $childImage)
-   if($matches.Count -ne 1){throw 'Tracking child identity is ambiguous or missing'}
-   $child=Test-OwnedDescendant ([int]$matches[0].ProcessId) -PassThru
-   if(-not$child){throw 'A fast relaunch lost its verified owned chain'}
-   $entry=Get-HarnessEntryById $child.LedgerId;$parent=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.identity.pid -eq $entry.metadata.parentPid -and $_.identity.creationTimeFileTimeUtc -ceq $entry.metadata.parentCreationTimeFileTimeUtc})
-   if($parent.Count -ne 1 -or $parent[0].metadata.parentPid -ne $root.Identity.pid -or $parent[0].metadata.parentCreationTimeFileTimeUtc -cne $root.Identity.creationTimeFileTimeUtc -or [long]$parent[0].identity.creationTimeFileTimeUtc -gt [long]$child.Identity.creationTimeFileTimeUtc){throw 'Fast relaunch ledger lacks ordered native parent identities'}
-   $ordinary=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.metadata.parentPid -eq $root.Identity.pid -and $_.identity.imagePath -ieq $parent[0].identity.imagePath -and $_.identity.pid -ne $parent[0].identity.pid})
-   if($ordinary.Count -ne 1 -or [long]$ordinary[0].identity.creationTimeFileTimeUtc -ge [long]$parent[0].identity.creationTimeFileTimeUtc){throw 'The contention fixture did not record its earlier sibling'}
-   Passed ('fast parent chain retained during ledger contention '+$iteration) @{root=$root.Identity;ordinarySibling=$ordinary[0].identity;middle=$parent[0].identity;child=$child.Identity;middleDelayMs=25;middleStartsAfterSiblingMs=150;ledgerLockedMs=800;observedAfterRootExit=$true};Stop-HarnessProcess $child
-  }
-  $status='pass'
- }finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
- return
-}
+if($TrackingOnly){& (Join-Path $Source 'tools\validation\Update\Invoke-TraceOwnershipChecks.ps1') -Source $Source -OutRoot $OutRoot;return}
 if($CacheOnly){
  try{$clean=Fixture 'cache-lifecycle';Initialize-HarnessCache $clean @('4.2.7-beta','4.2.8-beta');CacheLifecycle $clean '4.2.8-beta';$status='pass'}
  finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
@@ -120,7 +73,7 @@ try{
   Rejected 'earlier fixture instance retained' {Get-ShippedFixture $image $after} {-not$older.process.HasExited}
   Rejected 'Current refuses an app before its check launch window' {Assert-ShippedFreshApp $older.process $after} {-not$older.process.HasExited}
   Rejected 'F2 foreign process cannot be adopted as a descendant' {if(-not(Test-OwnedDescendant $older.Identity.pid)){throw 'Foreign process chain refused'}} {-not$older.process.HasExited}
-  Rejected 'F2 descendant tracker refuses a foreign root receipt' {Start-HarnessDescendantTracker $older} {-not$older.process.HasExited}
+  Rejected 'F2 process trace refuses a foreign anchor receipt' {Start-ProcessTrace -Anchor $older} {-not$older.process.HasExited}
  }finally{$script:Harness=$foreign.scope;Stop-HarnessProcess $older;$script:Harness=$main}
 
  $wizardSource=Join-Path $directory 'window-fixture.iss'

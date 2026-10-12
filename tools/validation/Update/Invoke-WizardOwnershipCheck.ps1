@@ -11,6 +11,4 @@ try{
  foreach($entry in @($script:extraProcesses)+@($script:setupReceipts)){Stop-HarnessProcess $entry}
  $script:receiptStatus=Complete-HarnessInvocation $script:receiptStatus -Cleanup
  Receipt
- Unregister-Event -SourceIdentifier $events -ErrorAction SilentlyContinue
- Get-Event -SourceIdentifier $events -ErrorAction SilentlyContinue|Remove-Event
 }
