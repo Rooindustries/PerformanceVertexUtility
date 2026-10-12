@@ -57,6 +57,7 @@ function Initialize-HarnessInvocation([string]$Scenario,[string]$Scope){
  $known=Get-HarnessProcess $PID
  if(-not$known){throw 'Interactive child was not recorded immediately after creation.'}
  $script:Harness.Handles[$PID]=$known
+ Start-ProcessTrace|Out-Null
  return $script:Harness.Nonce
 }
 function Add-HarnessEntry([string]$Kind,$Identity,[string]$Purpose='',[string]$Lifetime='invocation',$Metadata=$null){
@@ -72,37 +73,98 @@ function Set-HarnessEntryState([string]$Id,[string]$State,[string]$Error=''){
  Invoke-HarnessLedger {param($ledger) $entry=@($ledger.entries|Where-Object id -CEQ $Id);if($entry.Count -ne 1){throw 'Ledger entry is missing or ambiguous.'};$entry[0].state=$State;$entry[0].cleanupError=$Error}|Out-Null
 }
 function Get-HarnessProcess([int]$ProcessId){
- Receive-HarnessDescendants
+ Receive-ProcessTrace
  $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.metadata.platform -ne 'linux' -and $_.identity.pid -eq $ProcessId -and $_.state -eq 'active'})
  foreach($entry in $entries){
   $process=Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
   if(-not$process){continue}
   $receipt=New-OwnedProcess $process
-  if($receipt -and $receipt.Identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and $receipt.Identity.imagePath -ieq $entry.identity.imagePath){$receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $entry.nonce;return $receipt}
+  if($receipt -and $receipt.Identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and $receipt.Identity.imagePath -ieq $entry.identity.imagePath){$receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $entry.nonce;$receipt|Add-Member OwnershipProof $(if($entry.metadata.ownershipProof){$entry.metadata.ownershipProof}else{@{kind='creation-ledger'}});return $receipt}
   $process.Dispose()
  }
  return $null
 }
-function Start-HarnessDescendantTracker($Root){
- $known=Get-HarnessProcess ([int]$Root.Identity.pid)
- if(-not$known -or $known.Identity.creationTimeFileTimeUtc -cne $Root.Identity.creationTimeFileTimeUtc -or $known.Identity.imagePath -ine $Root.Identity.imagePath){throw 'Tracking root is not in this creation ledger; retained.'}
- if(-not('RooHarnessProcesses' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'HarnessProcesses.cs') -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll}
- if(-not$script:Harness.Trackers){$script:Harness.Trackers=[Collections.Generic.List[object]]::new()}
- $tracker=[RooHarnessProcesses]::new([int]$Root.Identity.pid,[long]$Root.Identity.creationTimeFileTimeUtc,$Root.Identity.imagePath,$script:Harness.LedgerPath,$script:Harness.FrameId,$script:Harness.Manifest,$script:Harness.Nonce,$env:COMPUTERNAME)
- $script:Harness.Trackers.Add($tracker)
- return $tracker
+function Start-ProcessTrace($Anchor=$null){
+ if(-not$script:Harness -or $script:Harness.ReadOnly){throw 'Process trace needs a writable verified invocation.'}
+ if($Anchor){$known=Get-HarnessProcess ([int]$Anchor.Identity.pid);if(-not$known -or $known.Identity.creationTimeFileTimeUtc -cne $Anchor.Identity.creationTimeFileTimeUtc -or $known.Identity.imagePath -ine $Anchor.Identity.imagePath){throw 'Trace anchor is not in this creation ledger; retained.'}}
+ if($script:Harness.Trace){return $script:Harness.Trace}
+ if(-not$global:RooHarnessTraces){$global:RooHarnessTraces=@{}}
+ $key=$script:Harness.FrameId+':'+$script:Harness.Nonce
+ if($global:RooHarnessTraces.ContainsKey($key)){$script:Harness.Trace=$global:RooHarnessTraces[$key];return $script:Harness.Trace}
+ $invocation=Invoke-HarnessLedger {param($ledger) @($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)|Select-Object -First 1} -NoWrite
+ if(-not$invocation){throw 'Process trace has no invocation window.'}
+ if(-not('RooHarnessProcessTrace' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'HarnessTrace.cs') -ReferencedAssemblies System.dll,System.Management.dll}
+ $traceNonce=[Guid]::NewGuid().ToString('N');$started=[DateTime]::UtcNow
+ $receiver=[RooHarnessProcessTrace]::new($traceNonce)
+ $script:Harness.Trace=@{Receiver=$receiver;Nonce=$traceNonce;Start=[DateTime]::Parse($invocation.startedAtUtc).ToUniversalTime();Subscribed=$started;Stopped=$false}
+ $global:RooHarnessTraces[$key]=$script:Harness.Trace
+ Invoke-HarnessLedger {param($ledger) $i=@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0];$i|Add-Member trace ([pscustomobject]@{nonce=$traceNonce;subscribedAtUtc=$started.ToString('o')}) -Force}|Out-Null
+ return $script:Harness.Trace
 }
-function Receive-HarnessDescendants{
- foreach($tracker in @($script:Harness.Trackers|Where-Object {$null -ne $_})){
-  if($tracker.Error){throw ('Owned process tracking failed: '+$tracker.Error)}
-  foreach($held in $tracker.Entries()){
-   if(-not$script:Harness.Handles.ContainsKey($held.Pid)){$script:Harness.Handles[$held.Pid]=[pscustomobject]@{process=$held.Process;handle=$held.Handle;Identity=[pscustomobject]@{pid=$held.Pid;creationTimeFileTimeUtc=$held.Created.ToString();imagePath=$held.Image};LedgerId=$held.LedgerId;Nonce=$script:Harness.Nonce}}
+function Receive-ProcessTrace{
+ $trace=$script:Harness.Trace
+ if(-not$trace){return}
+ if($trace.Receiver.Error){throw ('Process-start trace failed: '+$trace.Receiver.Error)}
+ $batch=@($trace.Receiver.Pending())
+ if(-not$batch.Count){return}
+ Invoke-HarnessLedger {param($ledger)
+  foreach($event in $batch){
+   if(@($ledger.entries|Where-Object {$_.kind -eq 'trace' -and $_.identity.eventNonce -ceq $event.EventNonce}).Count){continue}
+   $ledger.entries=@($ledger.entries)+@([pscustomobject]@{id=[Guid]::NewGuid().ToString('N');nonce=$script:Harness.Nonce;kind='trace';identity=[pscustomobject]@{eventNonce=$event.EventNonce;traceNonce=$event.TraceNonce;processId=$event.ProcessId;parentProcessId=$event.ParentProcessId;processName=$event.ProcessName;timeCreatedFileTimeUtc=$event.TimeCreatedFileTimeUtc};purpose='process-start';lifetime='invocation';metadata=$null;createdAtUtc=$event.ReceivedAtUtc;state='active';cleanupError=$null})
   }
- }
+ }|Out-Null
+ $trace.Receiver.Acknowledge($batch.Count)
 }
-function Stop-HarnessDescendantTrackers{
- foreach($tracker in @($script:Harness.Trackers|Where-Object {$null -ne $_})){$tracker.Stop()}
- Receive-HarnessDescendants
+function Stop-ProcessTrace{
+ if($script:Harness.Trace -and -not$script:Harness.Trace.Stopped){$script:Harness.Trace.Receiver.Stop();$script:Harness.Trace.Stopped=$true}
+ Receive-ProcessTrace
+}
+function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null){
+ if(-not$script:Harness.Trace -or $script:Harness.Trace.Stopped -or $ProcessId -le 4){return $false}
+ Receive-ProcessTrace
+ $trace=$script:Harness.Trace;$end=[DateTime]::UtcNow.ToFileTimeUtc();$start=$trace.Start.ToFileTimeUtc()
+ $entries=@(Get-HarnessEntries);$events=@($entries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $script:Harness.Nonce -and $_.identity.traceNonce -ceq $trace.Nonce -and [long]$_.identity.timeCreatedFileTimeUtc -ge $start -and [long]$_.identity.timeCreatedFileTimeUtc -le $end})
+ $candidates=@($events|Where-Object {$_.identity.processId -eq $ProcessId})
+ if(-not$candidates.Count){return $false}
+ $proofs=@()
+ foreach($candidate in $candidates){
+  $chain=@($candidate);$seen=@{};$seen[$ProcessId]=$true;$cursor=$candidate;$root=$null
+  for($hop=0;$hop -lt 64;$hop++){
+   $parentId=[int]$cursor.identity.parentProcessId
+   if($parentId -le 4 -or $seen.ContainsKey($parentId)){break};$seen[$parentId]=$true
+   $owned=@($entries|Where-Object {$_.kind -eq 'process' -and $_.state -eq 'active' -and $_.metadata.platform -ne 'linux' -and $_.identity.pid -eq $parentId -and [long]$_.identity.creationTimeFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc})
+   if($Ancestor){$owned=@($owned|Where-Object {$_.identity.pid -eq $Ancestor.Identity.pid -and $_.identity.creationTimeFileTimeUtc -ceq $Ancestor.Identity.creationTimeFileTimeUtc})}
+   foreach($entry in $owned){
+    $held=if($script:Harness.Handles.ContainsKey($parentId)){$script:Harness.Handles[$parentId]}else{Get-HarnessProcess $parentId}
+    if($held -and $held.Identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Created($held.handle).ToString() -ceq $entry.identity.creationTimeFileTimeUtc){$root=$entry;break}
+   }
+   if($root){break}
+   $parents=@($events|Where-Object {$_.identity.processId -eq $parentId -and [long]$_.identity.timeCreatedFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc}|Sort-Object {[long]$_.identity.timeCreatedFileTimeUtc} -Descending)
+   if(-not$parents.Count){break}
+   $latest=$parents[0];if(@($parents|Where-Object {$_.identity.timeCreatedFileTimeUtc -ceq $latest.identity.timeCreatedFileTimeUtc}).Count -ne 1){break}
+   $cursor=$latest;$chain+=@($cursor)
+  }
+  if($root){$proofs+=@(@{candidate=$candidate;chain=$chain;root=$root})}
+ }
+ if(-not$proofs.Count){return $false}
+ $process=Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+ if(-not$process){return $false}
+ $receipt=$null;$accepted=$false
+ try{
+  $receipt=New-OwnedProcess $process
+  if(-not$receipt -or $process.HasExited){return $false}
+  $birth=[long]$receipt.Identity.creationTimeFileTimeUtc
+  $matching=@($candidates|Where-Object {[Math]::Abs([long]$_.identity.timeCreatedFileTimeUtc-$birth) -le 20000000 -and $_.identity.processName -ieq [IO.Path]::GetFileName($receipt.Identity.imagePath)})
+  if($matching.Count -ne 1){return $false}
+  $valid=@($proofs|Where-Object {$_.candidate.id -ceq $matching[0].id})
+  if($valid.Count -ne 1 -or [long]$valid[0].root.identity.creationTimeFileTimeUtc -gt $birth -or [RooValidationOwnership.Native]::Created($receipt.handle) -ne $birth -or $process.HasExited){return $false}
+  $proof=@{kind='trace';traceNonce=$trace.Nonce;eventIds=@($valid[0].chain|ForEach-Object {$_.identity.eventNonce});root=$valid[0].root.identity;nativeBirth=$birth.ToString();eventTime=$matching[0].identity.timeCreatedFileTimeUtc;windowStart=$trace.Start.ToString('o');windowEnd=[DateTime]::FromFileTimeUtc($end).ToString('o')}
+  $entry=Add-HarnessEntry 'process' $receipt.Identity 'descendant' 'invocation' @{ownershipProof=$proof}
+  Invoke-HarnessLedger {param($ledger) $record=@($ledger.entries|Where-Object id -CEQ $entry.id)[0];if(-not$record.metadata){$record.metadata=[pscustomobject]@{}};$record.metadata|Add-Member ownershipProof ([pscustomobject]$proof) -Force}|Out-Null
+  $receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $script:Harness.Nonce;$receipt|Add-Member OwnershipProof $proof
+  $script:Harness.Handles[$ProcessId]=$receipt;$accepted=$true
+  if($PassThru){return $receipt};return $true
+ }finally{if(-not$accepted){$process.Dispose()}}
 }
 function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Lifetime='invocation'){
  $handle=$Process.Handle
@@ -157,7 +219,9 @@ function Start-HarnessExplorerProcess([string]$Image,[string]$Arguments,[string]
  }finally{[Runtime.InteropServices.Marshal]::ReleaseComObject($broker.shell)|Out-Null}
 }
 function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null){
- Receive-HarnessDescendants
+ $traced=Test-TracedDescendant $ProcessId -PassThru -Ancestor $Ancestor
+ if($traced){if($PassThru){return $traced};return $true}
+ Receive-ProcessTrace
  if($Ancestor){
   $ancestorId=[int]$Ancestor.Identity.pid;$seen=@{};$childTime=$null;$cursor=$ProcessId;$reached=$false
   for($hop=0;$hop -lt 32;$hop++){
@@ -204,7 +268,7 @@ function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null)
   if(-not$receipt -or [Math]::Abs([long]$receipt.Identity.creationTimeFileTimeUtc-$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()) -gt 10 -or $process.Path -ine $cim.ExecutablePath){return $false}
   $receipts+=@($receipt)
  }
- foreach($receipt in $receipts){$entry=Add-HarnessEntry 'process' $receipt.Identity 'descendant';$receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $script:Harness.Nonce;$script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt}
+ foreach($receipt in $receipts){$proof=@{kind='live-chain';root=$anchor.Identity};$entry=Add-HarnessEntry 'process' $receipt.Identity 'descendant' 'invocation' @{ownershipProof=$proof};$receipt|Add-Member OwnershipProof $proof;$receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $script:Harness.Nonce;$script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt}
  if($PassThru){return $receipts[0]};return $true
 }
 function Assert-NoForeignInstance([string]$Image){
@@ -343,6 +407,7 @@ function Remove-HarnessEntry($Entry){
      else{$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};if(@(Get-HarnessEntries|Where-Object {$_.state -eq 'error' -and $_.identity.path -and $_.identity.path.StartsWith($Entry.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){throw 'Folder has a child with a failed cleanup identity; retained.'};Remove-HarnessDirectory $Entry.identity.path}
     }
    }
+   'trace'{}
    'firewall'{$rule=Get-NetFirewallRule -Name $Entry.identity.name -ErrorAction SilentlyContinue;if($rule){if($rule.Description -cne $Entry.identity.nonce){throw 'Firewall ownership changed; retained.'};$rule|Remove-NetFirewallRule}}
    'hosts'{Remove-HarnessHostsLine $Entry.identity.path $Entry.identity.line $Entry.identity.marker; Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null}
    'cert'{$path=$Entry.identity.store+'\'+$Entry.identity.thumbprint;if(Test-Path $path){$cert=Get-Item $path;if($cert.Subject -cne $Entry.identity.subject){throw 'Certificate identity changed; retained.'};Remove-Item -LiteralPath $path -DeleteKey}}
@@ -353,10 +418,14 @@ function Remove-HarnessEntry($Entry){
 }
 function Complete-HarnessInvocation([string]$Status,[switch]$Cleanup){
  $errors=[Collections.Generic.List[string]]::new()
- try{Stop-HarnessDescendantTrackers}catch{$errors.Add($_.Exception.Message)}
- if($Cleanup){$entries=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.lifetime -eq 'invocation' -and $_.state -eq 'active'});[array]::Reverse($entries);foreach($entry in $entries){try{Remove-HarnessEntry $entry}catch{$errors.Add($_.Exception.Message)}}}
- foreach($tracker in @($script:Harness.Trackers|Where-Object {$null -ne $_})){try{$tracker.Dispose()}catch{$errors.Add($_.Exception.Message)}}
- $script:Harness.Trackers=$null
+ try{Stop-ProcessTrace}catch{$errors.Add($_.Exception.Message)}
+ if($Cleanup){
+  $entries=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.lifetime -eq 'invocation' -and $_.state -eq 'active'});[array]::Reverse($entries)
+  foreach($entry in $entries){if($entry.kind -eq 'trace'){continue};try{Remove-HarnessEntry $entry}catch{$errors.Add($_.Exception.Message)}}
+  $traceIds=@($entries|Where-Object kind -EQ 'trace'|ForEach-Object {$_.id})
+  if($traceIds.Count){Invoke-HarnessLedger {param($ledger) foreach($id in $traceIds){(@($ledger.entries|Where-Object id -CEQ $id)[0]).state='removed'}}|Out-Null}
+ }
+ if($script:Harness.Trace){try{$script:Harness.Trace.Receiver.Dispose()}catch{$errors.Add($_.Exception.Message)}; $global:RooHarnessTraces.Remove($script:Harness.FrameId+':'+$script:Harness.Nonce);$script:Harness.Trace=$null}
  $failed=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.state -eq 'error'})
  $previous=Invoke-HarnessLedger {param($ledger) (@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0]).status} -NoWrite
  if($errors.Count -or $failed.Count -or $previous -eq 'fail'){$Status='fail'}

@@ -50,9 +50,19 @@ class Journey:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value, indent=2))
 
-    def command(self, values, log=None):
+    def command(self, values, log=None, host=None):
         started = time.monotonic()
-        result = subprocess.run([str(v) for v in values], cwd=ROOT, capture_output=True, text=True)
+        argv = [str(v) for v in values]
+        try:
+            result = (windows.run_transport(host, argv[0], argv[1:], timeout=windows.TRANSFER_TIMEOUT,
+                      cwd=ROOT, capture_output=True, text=True) if argv[0] in ('ssh', 'scp') else
+                      subprocess.run(argv, cwd=ROOT, capture_output=True, text=True))
+        except subprocess.CalledProcessError as error:
+            output = (error.stdout or '') + (error.stderr or '')
+            if log:
+                Path(log).parent.mkdir(parents=True, exist_ok=True)
+                Path(log).write_text(output)
+            raise RuntimeError('Network command failed: ' + output) from None
         if log:
             Path(log).parent.mkdir(parents=True, exist_ok=True)
             Path(log).write_text(result.stdout + result.stderr)
@@ -178,13 +188,13 @@ $files=@(($roots|Where-Object path -eq $data).files)
         machine, receipt = self.frames[host]
         scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';'
         windows.invoke(host, machine, scope + 'if(Test-Path -LiteralPath ' + windows.ps_literal(remote) + "){throw 'Upload input already exists; retained.'}")
-        self.command(['scp', *windows.SSH_OPTIONS, local, host + ':' + remote.replace('\\', '/')])
+        self.command(['scp', local, host + ':' + remote.replace('\\', '/')], host=host)
         windows.invoke(host, machine, scope + 'Register-HarnessFile ' + windows.ps_literal(remote) + " 'upload-input'|Out-Null")
 
     def copy_from(self, host, remote, local):
         local = Path(local)
         local.parent.mkdir(parents=True, exist_ok=True)
-        self.command(['scp', *windows.SSH_OPTIONS, host + ':' + remote.replace('\\', '/'), local])
+        self.command(['scp', host + ':' + remote.replace('\\', '/'), local], host=host)
 
     def inputs(self, host, machine, receipt):
         self.verified()
