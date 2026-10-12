@@ -37,11 +37,19 @@ public sealed class RooHarnessProcesses : IDisposable
         public long Created;
         public string Image, LedgerId;
     }
+    sealed class Pending
+    {
+        public Held Child, Parent;
+        public string DiscoveredAt, LedgerId;
+    }
     readonly Dictionary<int, Held> held = new Dictionary<int, Held>();
+    readonly Queue<Pending> pending = new Queue<Pending>();
+    readonly AutoResetEvent changed = new AutoResetEvent(false);
     readonly string ledgerPath, frameId, manifest, nonce, machine;
-    readonly Thread thread;
-    volatile bool stop;
-    public string Error { get; private set; }
+    readonly Thread thread, writer;
+    volatile bool stop, stopWriter;
+    volatile string error;
+    public string Error { get { return error; } }
     static long Birth(IntPtr handle)
     {
         long created, exited, kernel, user;
@@ -75,7 +83,9 @@ public sealed class RooHarnessProcesses : IDisposable
             held.Add(pid, new Held { Process = process, Handle = handle, Pid = pid, Created = created, Image = image });
         }
         catch { process.Dispose(); throw; }
+        writer = new Thread(Write) { IsBackground = true };
         thread = new Thread(Watch) { IsBackground = true };
+        writer.Start();
         thread.Start();
     }
     Dictionary<int, int> Snapshot()
@@ -92,7 +102,7 @@ public sealed class RooHarnessProcesses : IDisposable
         }
         finally { CloseHandle(snapshot); }
     }
-    void Append(Held child, Held parent)
+    void Append(List<Pending> batch)
     {
         var serializer = new JavaScriptSerializer { MaxJsonLength = Int32.MaxValue, RecursionLimit = 100 };
         FileStream stream = null;
@@ -109,25 +119,35 @@ public sealed class RooHarnessProcesses : IDisposable
             if ((string)ledger["frameId"] != frameId || (string)ledger["manifestSha256"] != manifest || (string)ledger["machine"] != machine) throw new InvalidOperationException("Tracking ledger scope changed; retained.");
             var entries = new List<object>();
             foreach (object entry in (IList)ledger["entries"]) entries.Add(entry);
-            foreach (Dictionary<string, object> entry in entries)
+            foreach (var item in batch)
             {
-                if ((string)entry["kind"] != "process" || (string)entry["state"] != "active") continue;
-                var metadata = entry["metadata"] as Dictionary<string, object>;
-                if (metadata != null && metadata.ContainsKey("platform") && (string)metadata["platform"] == "linux") continue;
-                var identity = (Dictionary<string, object>)entry["identity"];
-                if (Convert.ToInt32(identity["pid"]) == child.Pid && (string)identity["creationTimeFileTimeUtc"] == child.Created.ToString() && String.Equals((string)identity["imagePath"], child.Image, StringComparison.OrdinalIgnoreCase)) { child.LedgerId = (string)entry["id"]; return; }
+                Held child = item.Child, parent = item.Parent;
+                string id = null;
+                foreach (Dictionary<string, object> entry in entries)
+                {
+                    if ((string)entry["kind"] != "process" || (string)entry["state"] != "active") continue;
+                    var metadata = entry["metadata"] as Dictionary<string, object>;
+                    if (metadata != null && metadata.ContainsKey("platform") && (string)metadata["platform"] == "linux") continue;
+                    var identity = (Dictionary<string, object>)entry["identity"];
+                    if (Convert.ToInt32(identity["pid"]) == child.Pid && (string)identity["creationTimeFileTimeUtc"] == child.Created.ToString() && String.Equals((string)identity["imagePath"], child.Image, StringComparison.OrdinalIgnoreCase)) { id = (string)entry["id"]; break; }
+                }
+                if (id == null)
+                {
+                    id = Guid.NewGuid().ToString("N");
+                    entries.Add(new Dictionary<string, object> {
+                        { "id", id }, { "nonce", nonce }, { "kind", "process" },
+                        { "identity", new Dictionary<string, object> { { "pid", child.Pid }, { "creationTimeFileTimeUtc", child.Created.ToString() }, { "imagePath", child.Image } } },
+                        { "purpose", "descendant" }, { "lifetime", "invocation" },
+                        { "metadata", new Dictionary<string, object> { { "parentPid", parent.Pid }, { "parentCreationTimeFileTimeUtc", parent.Created.ToString() }, { "tracker", "native-live-chain" } } },
+                        { "createdAtUtc", item.DiscoveredAt }, { "state", "active" }, { "cleanupError", null }
+                    });
+                }
+                item.LedgerId = id;
             }
-            child.LedgerId = Guid.NewGuid().ToString("N");
-            entries.Add(new Dictionary<string, object> {
-                { "id", child.LedgerId }, { "nonce", nonce }, { "kind", "process" },
-                { "identity", new Dictionary<string, object> { { "pid", child.Pid }, { "creationTimeFileTimeUtc", child.Created.ToString() }, { "imagePath", child.Image } } },
-                { "purpose", "descendant" }, { "lifetime", "invocation" },
-                { "metadata", new Dictionary<string, object> { { "parentPid", parent.Pid }, { "parentCreationTimeFileTimeUtc", parent.Created.ToString() }, { "tracker", "native-live-chain" } } },
-                { "createdAtUtc", DateTime.UtcNow.ToString("o") }, { "state", "active" }, { "cleanupError", null }
-            });
             ledger["entries"] = entries.ToArray();
             byte[] bytes = new UTF8Encoding(false).GetBytes(serializer.Serialize(ledger));
             stream.Position = 0; stream.SetLength(0); stream.Write(bytes, 0, bytes.Length); stream.Flush(true);
+            lock (held) foreach (var item in batch) item.Child.LedgerId = item.LedgerId;
         }
     }
     void Scan()
@@ -164,9 +184,12 @@ public sealed class RooHarnessProcesses : IDisposable
                 catch (ArgumentException) { if (process != null) process.Dispose(); break; }
                 catch (InvalidOperationException) { if (process != null) process.Dispose(); break; }
                 catch (Win32Exception) { if (process != null) process.Dispose(); break; }
-                try { Append(child, parent); }
-                catch { process.Dispose(); throw; }
-                lock (held) held.Add(childPid, child);
+                lock (held)
+                {
+                    held.Add(childPid, child);
+                    pending.Enqueue(new Pending { Child = child, Parent = parent, DiscoveredAt = DateTime.UtcNow.ToString("o") });
+                }
+                changed.Set();
                 parent = child;
             }
         }
@@ -174,9 +197,30 @@ public sealed class RooHarnessProcesses : IDisposable
     void Watch()
     {
         try { while (!stop) { Scan(); Thread.Sleep(2); } }
-        catch (Exception error) { Error = error.ToString(); }
+        catch (Exception failure) { error = failure.ToString(); }
+    }
+    void Write()
+    {
+        try
+        {
+            while (true)
+            {
+                var batch = new List<Pending>();
+                lock (held) while (pending.Count != 0) batch.Add(pending.Dequeue());
+                if (batch.Count != 0) Append(batch);
+                else if (stopWriter) return;
+                else changed.WaitOne(100);
+            }
+        }
+        catch (Exception failure) { error = failure.ToString(); }
     }
     public Held[] Entries() { lock (held) { var result = new List<Held>(); foreach (var entry in held.Values) if (entry.LedgerId != null) result.Add(entry); return result.ToArray(); } }
-    public void Stop() { stop = true; if (!thread.Join(5000)) throw new InvalidOperationException("Process tracker did not stop."); }
-    public void Dispose() { Stop(); lock (held) { foreach (var entry in held.Values) entry.Process.Dispose(); held.Clear(); } }
+    public void Stop()
+    {
+        stop = true;
+        if (!thread.Join(5000)) throw new InvalidOperationException("Process tracker did not stop.");
+        stopWriter = true; changed.Set();
+        if (!writer.Join(30000)) throw new InvalidOperationException("Process creation ledger did not drain.");
+    }
+    public void Dispose() { Stop(); lock (held) { foreach (var entry in held.Values) entry.Process.Dispose(); held.Clear(); } changed.Dispose(); }
 }
