@@ -136,7 +136,14 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
    if($Ancestor){$owned=@($owned|Where-Object {$_.identity.pid -eq $Ancestor.Identity.pid -and $_.identity.creationTimeFileTimeUtc -ceq $Ancestor.Identity.creationTimeFileTimeUtc})}
    foreach($entry in $owned){
     $held=if($script:Harness.Handles.ContainsKey($parentId)){$script:Harness.Handles[$parentId]}else{Get-HarnessProcess $parentId}
-    if($held -and $held.Identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Created($held.handle).ToString() -ceq $entry.identity.creationTimeFileTimeUtc){$root=$entry;break}
+    if(-not$held -or $held.Identity.creationTimeFileTimeUtc -cne $entry.identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Created($held.handle).ToString() -cne $entry.identity.creationTimeFileTimeUtc){continue}
+    if([long]$entry.identity.creationTimeFileTimeUtc -lt $trace.Subscribed.ToFileTimeUtc() -and $held.process.HasExited){continue}
+    $rootEvents=@($events|Where-Object {$_.identity.processId -eq $parentId -and [long]$_.identity.timeCreatedFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc}|Sort-Object {[long]$_.identity.timeCreatedFileTimeUtc} -Descending)
+    if($rootEvents.Count){
+     $rootMatches=@($rootEvents|Where-Object {[Math]::Abs([long]$_.identity.timeCreatedFileTimeUtc-[long]$entry.identity.creationTimeFileTimeUtc) -le 20000000 -and $_.identity.processName -ieq [IO.Path]::GetFileName($entry.identity.imagePath)})
+     if($rootMatches.Count -ne 1 -or $rootMatches[0].id -cne $rootEvents[0].id){continue}
+    }elseif($held.process.HasExited){continue}
+    $root=$entry;break
    }
    if($root){break}
    $parents=@($events|Where-Object {$_.identity.processId -eq $parentId -and [long]$_.identity.timeCreatedFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc}|Sort-Object {[long]$_.identity.timeCreatedFileTimeUtc} -Descending)
