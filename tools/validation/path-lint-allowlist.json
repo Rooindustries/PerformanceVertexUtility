@@ -25,31 +25,31 @@
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 144,
+    "line": 145,
     "text": "$text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 146,
+    "line": 147,
     "text": "$copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 148,
+    "line": 149,
     "text": "$hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 151,
+    "line": 152,
     "text": "$children=@(Get-ChildItem -LiteralPath (Get-HarnessToolPath $tools) -File)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 155,
+    "line": 156,
     "text": "Remove-Item -LiteralPath (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
@@ -61,19 +61,19 @@
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 150,
+    "line": 151,
     "text": "Passed 'tool boundary Copy-Item normal paths' $hash;Passed 'tool boundary Get-FileHash normal path' $hash",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 152,
+    "line": 153,
     "text": "if($children.Name -notcontains 'cmdlet-copy.txt'){throw 'Tool children missed a file'};Passed 'tool boundary Get-ChildItem normal path' $children.Count",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 157,
+    "line": 158,
     "text": "if(Test-HarnessPath $copy){throw 'Tool Remove-Item left its owned file'};Passed 'tool boundary Remove-Item normal path' $copy",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   }

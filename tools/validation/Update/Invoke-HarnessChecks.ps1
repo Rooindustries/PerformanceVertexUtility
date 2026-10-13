@@ -133,7 +133,8 @@ public static class ToolFixture {
  Passed 'tool boundary Expand-Archive normal paths' $expanded
  $junction=Join-Path $tools 'junction'
  New-Item -ItemType Junction -Path (Get-HarnessToolPath $junction) -Target (Get-HarnessToolPath $expanded)|Out-Null
- $entry=Add-HarnessEntry 'reparse' @{path=$junction;target=$expanded} 'tool-junction'
+ $item=Get-HarnessItem $junction
+ $entry=Add-HarnessEntry 'folder' @{path=$junction;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()} 'tool-junction' 'invocation' @{reparseTarget=$expanded}
  Remove-HarnessEntry $entry;Passed 'tool boundary New-Item junction normal paths' $junction
  $scriptPath=Join-Path $tools 'tool-script.ps1';New-HarnessText $scriptPath "param([string]`$Value);`$Value" 'tool-script'|Out-Null
  $value=& (Get-HarnessToolPath $scriptPath) -Value $nonce
