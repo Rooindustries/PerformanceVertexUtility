@@ -145,7 +145,7 @@ public static class ToolFixture {
  Register-HarnessFile (Join-Path $tools 'external.txt') 'tool-result'|Out-Null
  Passed 'tool boundary external executable normal paths' $assembly
  $text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw
- if($text -cne $nonce){throw 'Tool Get-Content bytes differ'};Passed 'tool boundary Get-Content normal path' $text
+ if($text -cne $nonce){throw 'Tool Get-Content bytes differ'};Passed 'tool boundary Get-Content normal path' @{characters=$text.Length;sha256=(Get-HarnessFileSha256 $download)}
  $copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)
  $copyEntry=Register-HarnessFile $copy 'tool-copy'
  $hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash
