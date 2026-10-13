@@ -18,7 +18,7 @@ def lint_tree(directory):
     allow_path = root / 'tools/validation/path-lint-allowlist.json'
     exceptions = json.loads(allow_path.read_text()) if allow_path.exists() else []
     boundary_inputs = [root / 'tools/scripts/Build-Release.ps1', root / 'tools/scripts/Release.Checks.ps1']
-    native_path = re.compile(r'Get-Harness' + r'LongPath\s*\(|ConvertTo-Release' + r'ExtendedPath\s*\(|\.LongPath\b', re.I)
+    native_path = re.compile(r'Get-Harness' + r'LongPath\b|ConvertTo-Release' + r'ExtendedPath\b|\.LongPath\b', re.I)
     commands = ['Invoke-' + 'WebRequest', 'Invoke-' + 'RestMethod', 'Add-' + 'Type', 'Start-' + 'Process', 'Start-' + 'Job', 'Expand-' + 'Archive', 'Compress-' + 'Archive', 'Out-' + 'File', 'Set-' + 'Content', 'Add-' + 'Content', 'Get-' + 'Content', 'New-' + 'Item', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Rename-' + 'Item', 'Set-' + 'Location', 'Push-' + 'Location', 'Get-' + 'AuthenticodeSignature', 'Set-' + 'AuthenticodeSignature', 'Get-' + 'FileHash']
     tool_call = re.compile(r'(?<![A-Za-z-])(?:' + '|'.join(re.escape(c) for c in commands) + r')(?![A-Za-z-])|(?<![A-Za-z-])(?:Export|Import)-[A-Za-z]+|&\s+|[A-Za-z0-9_.-]+\.exe\s+', re.I)
     errors = []
