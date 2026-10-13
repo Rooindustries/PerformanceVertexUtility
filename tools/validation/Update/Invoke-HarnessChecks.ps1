@@ -121,6 +121,8 @@ public static class ToolFixture {
  $output=Join-Path $tools 'working-directory.txt'
  $owned=Start-OwnedProcess -FilePath $assembly -WorkingDirectory (Get-HarnessLongPath $tools) -ArgumentList ('record "'+(Get-HarnessLongPath $output)+'"') -Purpose tool-fixture
  try{if(-not$owned.process.WaitForExit(10000) -or $owned.process.ExitCode -ne 0){throw 'Tool fixture process failed'};Register-HarnessFile $output 'tool-result'|Out-Null;if([IO.File]::ReadAllText((Get-HarnessLongPath $output)) -ine $tools){throw 'Child working directory or argument path differs'};Passed 'tool boundary Start-Process normal working directory and argument' $tools}finally{Stop-HarnessProcess $owned}
+ $command=Start-OwnedProcess -FilePath powershell.exe -ArgumentList '-NoProfile -NonInteractive -Command "exit 0"' -Purpose named-tool
+ try{if(-not$command.process.WaitForExit(10000) -or $command.process.ExitCode -ne 0 -or $command.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical((Get-Command powershell.exe -CommandType Application).Source)){throw 'Named tool resolution differs'};Passed 'tool boundary resolves a command name before its path guard' $command.Identity.imagePath}finally{Stop-HarnessProcess $command}
  $signature=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $assembly)
  Passed 'tool boundary Get-AuthenticodeSignature normal path' ([string]$signature.Status)
  $beforeLocation=Get-Location
