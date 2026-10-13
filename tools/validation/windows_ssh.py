@@ -23,11 +23,19 @@ SSH_OPTIONS = [
 ]
 COMMAND_TIMEOUT = 75
 TRANSFER_TIMEOUT = 300
+SOURCE_TIMEOUT = 300
+EVIDENCE_TIMEOUT = 600
+CLEANUP_TIMEOUT = 900
 
 
 class HostUnreachable(subprocess.CalledProcessError):
     def __init__(self, host: str, reason: str):
         super().__init__(255, ['ssh/scp', host], output='', stderr='host unreachable: ' + host + '. ' + reason)
+
+
+class RemoteTimeout(subprocess.CalledProcessError):
+    def __init__(self, host: str, reason: str):
+        super().__init__(124, ['ssh/scp', host], output='', stderr=reason)
 
 
 def run_transport(host: str, program: str, arguments, timeout: float = COMMAND_TIMEOUT, **kwargs):
@@ -37,12 +45,12 @@ def run_transport(host: str, program: str, arguments, timeout: float = COMMAND_T
         return subprocess.run([program, *SSH_OPTIONS, *(str(value) for value in arguments)],
                               timeout=timeout, check=True, **kwargs)
     except subprocess.TimeoutExpired:
-        raise HostUnreachable(host, 'The operation did not finish within ' + str(timeout) + ' seconds.') from None
+        raise RemoteTimeout(host, 'The operation did not finish within ' + str(timeout) + ' seconds.') from None
     except subprocess.CalledProcessError as error:
         detail = error.stderr or error.stdout or ''
         if isinstance(detail, bytes):
             detail = detail.decode('utf-8', errors='replace')
-        if any(message in detail.casefold() for message in ('connection timed out', 'connection refused',
+        if error.returncode == 255 and any(message in detail.casefold() for message in ('connection timed out', 'connection refused',
                 'network is unreachable', 'no route to host', 'could not resolve hostname',
                 'connection closed', 'connection reset', 'broken pipe', 'timeout, server',
                 'kex_exchange_identification')):
@@ -155,7 +163,7 @@ def validate_receipt(machine: str, receipt: dict):
 def verify_source(host: str, machine: str, receipt: dict):
     validate_receipt(machine, receipt)
     try:
-        invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'")
+        invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'", timeout=SOURCE_TIMEOUT)
     except subprocess.CalledProcessError as error:
         raise ValueError((error.stdout or '') + (error.stderr or '')) from None
 
@@ -223,7 +231,7 @@ def assert_external_signing_key(path: Path):
 def verify_local_source(host: str, machine: str, receipt: dict):
     current = local_manifest(receipt.get('frontendIncluded', True))
     validate_receipt(machine, receipt)
-    raw = invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};$m.files|ConvertTo-Json -Depth 5 -Compress").stdout
+    raw = invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};$m.files|ConvertTo-Json -Depth 5 -Compress", timeout=SOURCE_TIMEOUT).stdout
     staged = json.loads(raw)
     if staged != current:
         raise ValueError('Local files differ from the source manifest; stage a fresh frame.')
@@ -295,7 +303,7 @@ $l.entries=@($l.entries)+@(@{id=[Guid]::NewGuid().ToString('N');nonce=$l.frameId
 $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));$f.Position=0;$f.SetLength(0);$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
 """
         invoke(host, machine, record)
-        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath $source;& (Join-Path ([Environment]::SystemDirectory) 'tar.exe') -xzf {ps_literal(remote_root + '/source.tar.gz')};if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-SourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'")
+        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath $source;& (Join-Path ([Environment]::SystemDirectory) 'tar.exe') -xzf {ps_literal(remote_root + '/source.tar.gz')};if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-SourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'", timeout=SOURCE_TIMEOUT)
     return receipt
 
 
@@ -384,6 +392,7 @@ def main():
     stage.add_argument('--include-frontend', action='store_true', help='Include desktop sources for an authorized UI validation run')
     run = commands.add_parser('run')
     run.add_argument('script', type=Path, help='A trusted local PowerShell validation script')
+    run.add_argument('--timeout', type=float, default=COMMAND_TIMEOUT)
     task = commands.add_parser('interactive')
     task.add_argument('--receipt', type=Path, required=True)
     task.add_argument('--script', required=True)
@@ -402,7 +411,7 @@ def main():
             result = interactive(args.host, args.expected_machine, json.loads(args.receipt.read_text()), args.script, json.loads(args.arguments), args.minutes, args.task)
             print(result.stdout, end='')
         else:
-            invoke(args.host, args.expected_machine, args.script.read_text(encoding='utf-8-sig'), capture=False)
+            invoke(args.host, args.expected_machine, args.script.read_text(encoding='utf-8-sig'), capture=False, timeout=args.timeout)
     except subprocess.CalledProcessError as error:
         if error.stdout:
             print(error.stdout.strip())

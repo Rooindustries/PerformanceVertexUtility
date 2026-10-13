@@ -46,16 +46,16 @@ with tempfile.TemporaryDirectory(prefix='roo-f12-') as td:
     with tarfile.open(archive,'w:gz') as t:
         for p in sorted(set(files)): t.add(ROOT/p,arcname=p,recursive=False)
     subprocess.run(['scp','-q',*w.SSH_OPTIONS,str(archive),HOST+':'+remote.replace('\\','/')+'/source.tar.gz'],check=True)
-w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+'; tar.exe -xzf source.tar.gz; if($LASTEXITCODE){throw "Extract failed"}')
+w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+'; tar.exe -xzf source.tar.gz; if($LASTEXITCODE){throw "Extract failed"}',timeout=w.SOURCE_TIMEOUT)
 (out/'remote-path.txt').write_text(remote)
 command='& '+w.ps_literal(remote+'\\tools\\validation\\SetupMigration\\Test-SetupMigration.ps1')+' -Work '+w.ps_literal(remote)
 try:
-    result=w.invoke(HOST,MACHINE,command)
+    result=w.invoke(HOST,MACHINE,command,timeout=1800)
 except subprocess.CalledProcessError as error:
     result=error
 (out/'run-output.txt').write_text(result.stdout or '')
 (out/'run-stderr.txt').write_text(result.stderr or '')
-w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+"; $files=@(Get-ChildItem -File|Where-Object {$_.Extension -in @('.txt','.json','.log')}|ForEach-Object {$_.Name}); tar.exe -czf evidence.tar.gz evidence identities @files; if($LASTEXITCODE){throw 'Evidence archive failed'}")
+w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+"; $files=@(Get-ChildItem -File|Where-Object {$_.Extension -in @('.txt','.json','.log')}|ForEach-Object {$_.Name}); tar.exe -czf evidence.tar.gz evidence identities @files; if($LASTEXITCODE){throw 'Evidence archive failed'}",timeout=w.EVIDENCE_TIMEOUT)
 subprocess.run(['scp','-q',*w.SSH_OPTIONS,HOST+':'+remote.replace('\\','/')+'/evidence.tar.gz',str(out/'evidence.tar.gz')],check=True)
 with tarfile.open(out/'evidence.tar.gz') as t:t.extractall(out,filter='data')
 print(json.dumps({'returncode':result.returncode,'remote':remote,'evidence':str(out),'output':result.stdout},indent=2))

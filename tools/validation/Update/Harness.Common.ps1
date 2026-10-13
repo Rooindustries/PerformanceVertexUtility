@@ -392,7 +392,12 @@ function Remove-HarnessEntry($Entry){
  if($Entry.state -ne 'active'){return}
  try{
   switch($Entry.kind){
-   'process'{if($Entry.metadata.platform -eq 'linux'){throw 'Linux process requires cleanup by its native-handle owner; retained.'};Stop-OwnedProcessIdentity $Entry.identity}
+   'process'{
+    if($Entry.metadata.platform -eq 'linux'){throw 'Linux process requires cleanup by its native-handle owner; retained.'}
+    $boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToFileTimeUtc()
+    if([long]$Entry.identity.creationTimeFileTimeUtc -lt $boot -or -not(Get-Process -Id $Entry.identity.pid -ErrorAction SilentlyContinue)){Set-HarnessEntryState $Entry.id 'absent';return}
+    Stop-OwnedProcessIdentity $Entry.identity
+   }
    'task'{Remove-OwnedTask $Entry.identity}
    'window'{
     if([RooHarnessWindow]::IsWindow([IntPtr]::new([long]$Entry.identity.hwnd))){[int]$owner=0;[RooHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new([long]$Entry.identity.hwnd),[ref]$owner)|Out-Null;if($owner -ne $Entry.identity.ownerPid){throw 'Window owner changed; retained.'};$held=Get-HarnessProcess $owner;if(-not$held){throw 'Window owner is no longer an owned process; retained.'};if($held.Identity.creationTimeFileTimeUtc -cne $Entry.identity.ownerCreationTime){throw 'Window process identity changed; retained.'}}
