@@ -31,16 +31,18 @@ function Get-HarnessPlainPath([string]$Path){
 function Test-HarnessPath([string]$Path,[ValidateSet('Any','Leaf','Container')][string]$PathType='Any'){
  if($Path -match '^(HKLM|HKCU|Cert):'){if($PathType -eq 'Any'){return Test-Path -LiteralPath $Path};return Test-Path -LiteralPath $Path -PathType $PathType}
  $long=Get-HarnessLongPath $Path
- if($PathType -eq 'Leaf'){return [IO.File]::Exists($long)}
- if($PathType -eq 'Container'){return [IO.Directory]::Exists($long)}
- return [IO.File]::Exists($long) -or [IO.Directory]::Exists($long)
+ try{$attributes=[IO.File]::GetAttributes($long)}catch [IO.FileNotFoundException]{return $false}catch [IO.DirectoryNotFoundException]{return $false}
+ $directory=[bool]($attributes -band [IO.FileAttributes]::Directory)
+ if($PathType -eq 'Leaf'){return -not$directory}
+ if($PathType -eq 'Container'){return $directory}
+ return $true
 }
 function Get-HarnessItem([string]$Path,[switch]$Force){
  $long=Get-HarnessLongPath $Path;$plain=Get-HarnessPlainPath $long;$attributes=[IO.File]::GetAttributes($long)
  $directory=[bool]($attributes -band [IO.FileAttributes]::Directory)
  $parent=[IO.Path]::GetDirectoryName($plain.TrimEnd('\'))
  $target=$null
- if($attributes -band [IO.FileAttributes]::ReparsePoint){$handle=[RooValidationOwnership.Native]::CreateFile($long,0,7,[IntPtr]::Zero,3,0x02000000,[IntPtr]::Zero);try{$target=@(Get-HarnessPlainPath ([RooValidationOwnership.Native]::Path($handle)))}finally{$handle.Dispose()}}
+ if($attributes -band [IO.FileAttributes]::ReparsePoint){$target=@([RooValidationOwnership.Native]::JunctionTarget($long))}
  [pscustomobject]@{FullName=$plain;LongPath=$long;Name=[IO.Path]::GetFileName($plain.TrimEnd('\'));Extension=[IO.Path]::GetExtension($plain);DirectoryName=$parent;Directory=if($parent){[IO.DirectoryInfo]::new((Get-HarnessLongPath $parent))}else{$null};Target=$target;PSIsContainer=$directory;IsDirectory=$directory;Attributes=$attributes;Length=if($directory){0}else{[IO.FileInfo]::new($long).Length};CreationTimeUtc=[IO.File]::GetCreationTimeUtc($long);LastWriteTimeUtc=[IO.File]::GetLastWriteTimeUtc($long);VersionInfo=if(-not$directory -and [IO.Path]::GetExtension($plain) -in '.exe','.dll'){[Diagnostics.FileVersionInfo]::GetVersionInfo($long)}else{$null}}
 }
 function Get-HarnessChildren([string]$Path,[switch]$File,[switch]$Directory,[string]$Filter='*',[switch]$Force,[string]$ErrorAction='Stop'){
@@ -517,7 +519,7 @@ function Remove-HarnessEntry($Entry){
     $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $identity.path),$identity.id,$identity.hash);try{Remove-OwnedProbe $probe}finally{$probe.Dispose()}
    }}
    {$_ -in 'folder','cache'}{
-    if([IO.Directory]::Exists((Get-HarnessLongPath $Entry.identity.path))){
+    if(Test-HarnessPath $Entry.identity.path -PathType Container){
      if($Entry.metadata.reparseTarget){$item=Get-HarnessItem $Entry.identity.path -Force;if(-not($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.CreationTimeUtc.ToFileTimeUtc().ToString() -cne $Entry.identity.creationTimeFileTimeUtc -or @($item.Target).Count -ne 1 -or $item.Target[0] -ine $Entry.metadata.reparseTarget){throw 'Owned junction fixture identity changed; retained.'};[IO.Directory]::Delete((Get-HarnessLongPath $Entry.identity.path),$false)}
      elseif($Entry.metadata.emptyOnly){$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};[IO.Directory]::Delete((Get-HarnessLongPath $Entry.identity.path),$false)}
      else{$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};if(@(Get-HarnessEntries|Where-Object {$_.state -eq 'error' -and $_.identity.path -and $_.identity.path.StartsWith($Entry.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){throw 'Folder has a child with a failed cleanup identity; retained.'};Remove-HarnessDirectory $Entry.identity.path}
