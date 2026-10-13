@@ -33,6 +33,10 @@ $status='fail'
 try{switch($Scenario){
  'build'{
   if(-not$FeedUrl -or -not$VersionA -or -not$VersionB){throw 'Signed pair requires FeedUrl, VersionA and VersionB.'}
+  $project=[xml][IO.File]::ReadAllText((Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'))
+  $framework=$project.SelectSingleNode('//TargetFramework').InnerText;$assembly=$project.SelectSingleNode('//AssemblyName').InnerText
+  $intermediate=Join-Path $OutRoot ('builds\source-B\docs\internal\frontend\RooIndustries.OptimizationSuite.App\obj\x64\Release\'+$framework+'\win-x64\intermediatexaml\'+$assembly+'.dll')
+  if([IO.Path]::GetFullPath($intermediate).Length -ge 260){throw 'The signed build path exceeds the XAML compiler limit. Use a short output root, such as <frame>\s.'}
   if(@(Get-HarnessEntries|Where-Object {$_.kind -eq 'cert' -and $_.state -eq 'active'}).Count){throw 'This run already has a test certificate; preserve it.'}
   if(@(Get-ChildItem Cert:\CurrentUser\My|Where-Object Subject -ceq $subject).Count){throw 'An unrelated test certificate already exists; preserve it.'}
   $cert=New-SelfSignedCertificate -Type CodeSigningCert -Subject $subject -KeyAlgorithm RSA -KeyLength 3072 -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(2)
