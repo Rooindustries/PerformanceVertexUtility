@@ -1,5 +1,94 @@
 # ROO-62 Slice14 final report
 
+## Slice 19: OS normalization implemented; final gate stopped
+
+**Verdict: NOT READY to merge.** The specified OS normalizer is implemented. The long-path file-ID acceptance proof cannot run as written on the as-found test PC. No fallback normalizer, registry opt-in or product fix was added. P2/P3 and B's all/contracts/close/signed gate were not started.
+
+The failing check is `Windows normalization long doubled separators`, invocation `c9c46113fb784121b5c0070f06f6a04e`, frame `55276c5be43241349f937fc1896044a4`. Its 381-character plain input normalized successfully, but the direct plain `CreateFileW` oracle could not open it (`paths/path-failure.json`). A separate 416-character owned diagnostic captured **Win32 3**, “The system cannot find the path specified”, for both the doubled and canonical plain paths; `GetFullPathNameW` succeeded, the extended open returned error 0, and the release and harness normalizers agreed. **This is not a demonstrated GetFullPathNameW failure or product failure.** `LongPathsEnabled` was read as 0 and was left unchanged.
+
+Microsoft documents that an unprefixed long `CreateFileW` needs both the registry opt-in and a longPathAware manifest; [maximum path length documentation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation). [GetFullPathNameW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfullpathnamew) calculates a name without proving that a file can be opened. The observed failed open is consistent with the disabled opt-in. The long-path plain-open oracle needs a lead-approved adjustment; the implementation was not replaced by a hand-written or fallback normalizer.
+
+### Code and self-review
+
+| Item | Change | Location | Check/evidence |
+| --- | --- | --- | --- |
+| Native normalization | Added the requested 32768-character GetFullPathNameW P/Invoke; native file helpers now use it too | `tools/validation/LoadTimes/CleanupOwnership.Common.ps1:17` | Shared type compiled during every upload; short file-ID checks passed; long normalization succeeded |
+| Harness normalizer | Split and validate ADS suffix, normalize only the file part, preserve extended inputs and append the stream | `tools/validation/Update/Harness.Common.ps1:18` | 11 short checks passed; long proof stopped on plain open |
+| Tool boundary | Reject stream paths before the length/tool check, including the native argument helper | `Harness.Common.ps1:36`, `CleanupOwnership.Common.ps1:27` | Short ADS tool refusal; B release stream refusal in the separate diagnostic |
+| Fixtures | Replaced the slice-17 hand-normalization assumptions with a direct CreateFileW/file-ID oracle; added PathsOnly | `tools/validation/Update/Invoke-HarnessChecks.ps1:80` | `artifacts/roo-62/slice19/paths/receipt.json` |
+| Bootstrap | Load the same current native helper before pre-frame paths | `tools/validation/windows_ssh.py:111` | Fresh A/B uploads, source verification, parse/compile |
+| v1 compatibility | Caller helper is loaded before an older staged helper. Protected CreateNew UTF-8 BOM wrapper/child files avoid nested encoded-command size limits while retaining the v1 context/output contract | `tools/validation/windows_ssh.py:451` | Old `20618f6` helper desktop fixture passed; task arguments 210 characters; frame path remains visible to cleanup guards; `artifacts/roo-62/slice19/v1-compatibility3/receipt.json` |
+| Lint | Require an explicit reason for any .NET GetFullPath use in scanned PowerShell; kept provider-only allowlist entries | `tools/validation/Update/run_harness_checks.py:13` | Final A/B lint pass; scratch old-normalizer restoration fails |
+| B-only release helper | Minimal guarded native type, same ADS split/OS normalization and stream tool refusal; A product tree untouched | `tools/scripts/Release.Checks.ps1:1` on B | Release type compiled and agreed with harness on the 416-character diagnostic |
+
+Self-review found and corrected the v1 staged-helper dependency before handoff. An intermediate compressed transport still exceeded the task command bound in a dry invocation; the final code uses protected script files, the same boundary used by v2. Failed attempts are retained, not used as passing evidence. Two diagnostic attempts failed because the mechanical driver called Complete-HarnessInvocation without an invocation row; diagnostic3 instead reports native observations and lets Clear-UpdateFrame close the ledger. No path algorithm was changed in response to the long-path refusal.
+
+### Path fixtures
+
+| Path form | Short | 300+ characters | Evidence |
+| --- | --- | --- | --- |
+| doubled separators | PASS: matching plain, extended and original file IDs | FAIL: normalization succeeded; plain CreateFileW failed before file-ID comparison | `artifacts/roo-62/slice19/paths/receipt.json` |
+| dot segment | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| parent segment | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| trailing dot | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| trailing space | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| forward slashes | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| relative path | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| drive-relative path | PASS: matching plain, extended and original file IDs | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| Zone.Identifier ADS and explicit DATA | PASS: write/read, explicit $DATA and separate Get-Item -Stream readback | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| invalid stream refused | PASS: refused, ADS bytes unchanged | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+| stream tool refused | PASS: refused before a tool call | UNRUN after the first long-path refusal | `artifacts/roo-62/slice19/paths/receipt.json` |
+
+
+Control: only the path spelling or stream suffix varies; the file bytes and expected file identity stay fixed. Effects: raw Windows open, helper-result open and original file IDs, ADS bytes/provider readback, refusal and retained bytes. These checks do not observe product OTA or UI behavior. Long checks after the first failure are explicitly unverified.
+
+### Gate and evidence
+
+Initial attempted gate heads: A `82ddec79b9911b0b9ebc4dd859f3b60fb148c7a4`, B `61f1b55a6c9b6f5e116c5d8fa0e1e2fba353ce08`. Final code heads after the compatibility correction: A `610bd4bcae3066406b75cb31350adc82c638265a`, B `12e68848d0276d3c1822b2125baf4b219a7ccefa`. Report-only commits follow these heads; their final SHAs are recorded in `final-branches.json` and the handoff. No complete final gate is claimed at either pair.
+
+| Check | Observed | Result | Evidence |
+| --- | --- | --- | --- |
+| A product binding | Diff against 20618f6 under backend/docs/tools/release/tools/scripts empty; SHA e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | PASS | `artifacts/roo-62/slice19/product-source-binding.json` |
+| Fresh report-bearing A/B source staging | Both final code heads verified; reports included in the manifest | PASS | `artifacts/roo-62/slice19/final-staging/staging-receipt.json` |
+| PS 5.1 parse and HarnessTrace compile | 80 A files, 81 B files; zero parse errors; shared native + trace compile | PASS | `artifacts/roo-62/slice19/final-staging/a-parse.json`, `b-parse.json` |
+| B release native type | Compiled; extended open succeeds; same normalized result as harness | PASS diagnostic | `artifacts/roo-62/slice19/native-diagnostic3/native-error.json` |
+| Python compile and lint | Both final trees pass | PASS | `artifacts/roo-62/slice19/lint-final-a.log`, `lint-final-b.log` |
+| Old-normalizer scratch revert | Rejected for GetFullPath without allowlist | PASS negative | `artifacts/roo-62/slice19/lint-old-normalizer-fail.log` |
+| Normalization path fixture | 11 short checks pass; first long plain-open proof fails | FAIL | `artifacts/roo-62/slice19/paths/receipt.json`, `paths/path-failure.json` |
+| Full run_harness_checks / trace 3 | Not run after path-class stop | UNRUN | `artifacts/roo-62/slice19/gate-summary.json` |
+| A P2 / P3 | No install, live feed or installer request | UNRUN | `artifacts/roo-62/slice19/gate-summary.json` |
+| B all 21 / contracts 25 / close-during-check | Not started | UNRUN | `artifacts/roo-62/slice19/gate-summary.json` |
+| B signed subset / release bounds per build | No build or test certificate created | UNRUN | `artifacts/roo-62/slice19/gate-summary.json` |
+| Lease and cleanup | All 11 saved frame ledgers closed; no active/error entries; native process audit and WMI inventory clear | PASS | `artifacts/roo-62/slice19/ledger-inventory.json`, `cleanup-audit.json`, `owned-process-audit.json` |
+| Raw registry/data equality | Exact captured type/base64 bytes and every data-file hash equal | PASS | `artifacts/roo-62/slice19/raw-registry-as-found.json`, `raw-registry-final.json`, `cleanup-audit.json` |
+
+### Commands
+
+```bash
+python3 -I -m py_compile tools/validation/windows_ssh.py tools/validation/Update/run_harness_checks.py
+python3 -I tools/validation/Update/run_harness_checks.py --lint-only
+# Mechanical evidence drivers use fresh frames and explicit optimizer-9070 / SERVI-WINDOWS-D.
+python3 -I artifacts/roo-62/slice19/prepare.py
+python3 -I artifacts/roo-62/slice19/paths.py
+python3 -I artifacts/roo-62/slice19/native-diagnostic3.py
+python3 -I artifacts/roo-62/slice19/v1-compatibility3.py
+python3 -I artifacts/roo-62/slice19/prepare-final.py
+python3 -I artifacts/roo-62/slice19/final-audit.py
+python3 -I artifacts/roo-62/slice19/owned-audit.py
+```
+
+`paths.py` calls `windows_ssh.interactive_frame` on `Invoke-HarnessChecks.ps1 -Source <fresh-source> -OutRoot <owned-frame>\p -PathsOnly`, then collects its nonce-bound receipt and clears the frame through its ledger. The native diagnostic is a distinct owned, non-product fixture. `v1-compatibility3.py` stages a synthetic contract fixture containing the original `20618f6` ownership helper, then calls the public v1 `interactive()`; it does not claim to be an exact-head product gate. The fixture records its freshly created v1 execution directory immediately after creation, and the existing v1 wrapper removes its task/processes by their receipts.
+
+
+### Cleanup and remaining decision
+
+All 160 legacy frames retain their as-found paths and native creation identities. The six CS2 tasks are Ready/Enabled with identical exported XML. Both data roots keep their as-found files; no seeded tester data or settings were changed. No Roo/frame process, harness task, firewall rule, hosts edit, test certificate, lease or update-version cache remains. The original install log is retained. Tailscale serve JSON is unchanged; no 8460 entry was created. The pre-existing Linux `/opt/roo-support` HTTP service is preserved.
+
+The 9070 remains on its **as-found signed test-feed 0.11.1-beta**, app stopped and saved-rules governor paused. Blackwell/KVM were not contacted. **Completed production installer downloads: 0; live Vercel feed GETs: 0.** The signing key was neither read nor copied. Nothing owned is left running.
+
+Remaining blocker: agree a long-file oracle that can work under the PC's disabled unprefixed long-path policy, then prove every long form and run the still-unrun final gate. All other late-round accepted results remain historical evidence, not substitutes for this gate.
+
+
 **Not ready to merge: one cleanup blocker remains.** All executable Windows gates passed; final owned-frame cleanup did not. The kernel trace now proves the early-abort relaunch instead of requiring a short-lived setup parent to remain alive. CR7 distinguishes a remote command deadline from an unreachable host. No product file changed in this slice.
 
 A code HEAD `c5c24f9a9ec8bd3ec6c05e4d45ed398afd196eff`; B code HEAD `0f4a48188ab47dc2141a5f5f846f3007c3835885`. The final report-only commits and clean-tree readback are recorded in `slice14/final-branches.json` after these reports are committed. A's published-product/build projection against `20618f6` is zero bytes, SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. Published gates used A `70e094c`; the later changes affect optional-preflight deadline handling and the signing fixture only. The affected shipped deadline path was separately exercised after `dedd7ec`. Unsigned B gate used `bc5cb6c`; later merges change no product/trace/UpdateScenario inputs. The fresh signed gate used B `0f4a481`. Reports change no staged test inputs.
