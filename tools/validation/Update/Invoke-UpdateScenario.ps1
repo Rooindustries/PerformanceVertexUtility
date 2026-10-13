@@ -82,14 +82,14 @@ function Shot([string]$name){
   $r=$script:window.Current.BoundingRectangle
   $bitmap=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap)
   $graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size)
-  $path=Get-HarnessOutputPath $directory ($name+'.png');$stream=[IO.FileStream]::new($path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+  $path=Get-HarnessOutputPath $directory ($name+'.png');$stream=[IO.FileStream]::new((Get-HarnessLongPath $path),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
   try{$bitmap.Save($stream,[Drawing.Imaging.ImageFormat]::Png)}finally{$stream.Dispose()};Register-HarnessFile $path 'screenshot'|Out-Null
  }finally{
   if($graphics){$graphics.Dispose()};if($bitmap){$bitmap.Dispose()}
   [RooUpdateUi]::SetWindowPos($handle,[IntPtr]::new($(if($wasTopmost){-1}else{-2})),0,0,0,0,0x13)|Out-Null
  }
 }
-function Core([string]$action,[hashtable]$fields){$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($name in $fields.Keys){$request[$name]=$fields[$name]};Save ('request-'+$action+'.json') $request;$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($action+': '+($result|ConvertTo-Json -Depth 40))};return $result.data}
+function Core([string]$action,[hashtable]$fields){Assert-HarnessHostLease;$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($name in $fields.Keys){$request[$name]=$fields[$name]};Save ('request-'+$action+'.json') $request;$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($action+': '+($result|ConvertTo-Json -Depth 40))};return $result.data}
 function CollectOwnedStarts{
  foreach($cim in @(Get-CimInstance Win32_Process)){
   if($cim.Name -match '(?i)setup|unins|RooIndustries|Optimizer\.|notepad') {Test-OwnedDescendant ([int]$cim.ProcessId)|Out-Null}
@@ -112,6 +112,7 @@ function Attach{
  Save 'owned-app.json' @{identity=$script:owned.Identity;ownershipProof=$script:owned.OwnershipProof}
 }
 function Launch{
+ Assert-HarnessHostLease
  Assert-NoForeignInstance $exe
  if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'This invocation already has an app; stop it before launching another.'}
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null;$script:appLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
@@ -120,17 +121,17 @@ function Launch{
 }
 function StopApp{if($script:owned){if(-not$script:app.HasExited){$script:app.CloseMainWindow()|Out-Null;$script:app.WaitForExit(20000)|Out-Null};Stop-HarnessProcess $script:owned;$script:owned=$null;$script:app=$null;$script:window=$null}}
 function Version{(Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1').DisplayVersion}
-function UpdateFiles{@(if(Test-Path $updates){Get-HarnessTree $updates -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $updates}|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath)}}})}
+function UpdateFiles{@(if(Test-HarnessPath $updates){Get-HarnessTree $updates -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $updates}|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath)}}})}
 function ProcessStarts{Receive-ProcessTrace;@(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce -and $_.identity.processName -match '(?i)RooIndustries|Optimizer\.|ProcessGovernor|powershell|setup'}|ForEach-Object {@{pid=$_.identity.processId;parentPid=$_.identity.parentProcessId;image=$_.identity.processName;time=$_.identity.timeCreatedFileTimeUtc;eventNonce=$_.identity.eventNonce}})}
 function Readback{
- $settings=if(Test-Path (Join-Path $data 'settings.json')){Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json}else{$null}
- @{installedVersion=Version;runningPid=if($script:app){$script:app.Id}else{$null};runningImage=if($script:app){$script:app.Path}else{$null};runningProductVersion=if($script:app){(Get-Item $script:app.Path).VersionInfo.ProductVersion}else{$null};installedProductVersion=(Get-Item $exe).VersionInfo.ProductVersion;settings=$settings;status=if($script:window -and (ById 'UpdateStatusText')){StatusText}else{$null};texts=if($script:window){@(Texts)}else{@()};files=@(UpdateFiles);processStarts=@(ProcessStarts);helpers=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $script:app -and $_.ParentProcessId -eq $script:app.Id}|Select-Object ProcessId,ParentProcessId,ExecutablePath);governor=(Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')});governorTasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,TaskPath,State,@{n='enabled';e={$_.Settings.Enabled}},@{n='userId';e={$_.Principal.UserId}});utc=[DateTime]::UtcNow.ToString('o')}
+ $settings=if(Test-HarnessPath (Join-Path $data 'settings.json')){[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json}else{$null}
+ @{installedVersion=Version;runningPid=if($script:app){$script:app.Id}else{$null};runningImage=if($script:app){$script:app.Path}else{$null};runningProductVersion=if($script:app){(Get-HarnessItem $script:app.Path).VersionInfo.ProductVersion}else{$null};installedProductVersion=(Get-HarnessItem $exe).VersionInfo.ProductVersion;settings=$settings;status=if($script:window -and (ById 'UpdateStatusText')){StatusText}else{$null};texts=if($script:window){@(Texts)}else{@()};files=@(UpdateFiles);processStarts=@(ProcessStarts);helpers=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $script:app -and $_.ParentProcessId -eq $script:app.Id}|Select-Object ProcessId,ParentProcessId,ExecutablePath);governor=(Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')});governorTasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,TaskPath,State,@{n='enabled';e={$_.Settings.Enabled}},@{n='userId';e={$_.Principal.UserId}});utc=[DateTime]::UtcNow.ToString('o')}
 }
 function Preserved{
  $seed=Read-HarnessLatestResult 'preservation.json' 'seed'
  $changed=@($seed.files|Where-Object {-not[IO.File]::Exists((Get-HarnessLongPath $_.path)) -or (Get-HarnessFileSha256 $_.path) -cne $_.sha256})
  if($changed.Count){throw ('Preserved files changed: '+($changed.path -join ', '))}
- $settings=Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json
+ $settings=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json
  if($settings.themeId -ne $seed.themeId){throw 'Theme did not survive the upgrade'}
  $before=Read-HarnessLatestResult 'before.json' 'seed'
  $governor=Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')}
@@ -140,7 +141,7 @@ function Preserved{
 if($HelpersOnly){return}
 $script:scenarioStatus='running'
 if(-not$ExpectedVersion){
- $project=[xml][IO.File]::ReadAllText((Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'))
+ $project=[xml][IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj')))
  $ExpectedVersion=$project.SelectSingleNode('//Version').InnerText.Trim()
 }
 if(-not$NextVersion){
@@ -158,16 +159,17 @@ try{
    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
    $rule=@{schemaVersion=1;ruleId=([Guid]::NewGuid().ToString('N'));owner=@{machine=$env:COMPUTERNAME;userSid=$sid};name='OTA preserved rule';enabled=$false;matchMode='path';executablePath=$target;executableHash=$null;controls=@{cpuPriority='Normal'};cpuSelection=$null}
    Save 'saved-rule.json' (Core 'rule-save' @{policyRoot=(Join-Path $data 'process-rules');rule=$rule})
-   $settingsPath=Join-Path $data 'settings.json';$settings=Get-Content -Raw $settingsPath|ConvertFrom-Json
+   $settingsPath=Join-Path $data 'settings.json';$settings=[IO.File]::ReadAllText((Get-HarnessLongPath $settingsPath))|ConvertFrom-Json
    Save 'as-found-settings.json' $settings
    $settings|Add-Member themeId 'roo-industries-blue' -Force;$settings|Add-Member simpleMode '1' -Force
-   [IO.File]::WriteAllText($settingsPath,($settings|ConvertTo-Json -Compress),$utf8)
+   [IO.File]::WriteAllText((Get-HarnessLongPath $settingsPath),($settings|ConvertTo-Json -Compress),$utf8)
    $files=@(Get-HarnessTree (Join-Path $data 'process-rules\rules') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'process-rules\rules')) -and [IO.Path]::GetDirectoryName($_.FullName) -ieq (Join-Path $data 'process-rules\rules')}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})
-   if(Test-Path (Join-Path $data 'operations')){$files+=@(Get-HarnessTree (Join-Path $data 'operations') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'operations')) -and [IO.Path]::GetFileName($_.FullName) -notlike '*.lock'}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})}
+   if(Test-HarnessPath (Join-Path $data 'operations')){$files+=@(Get-HarnessTree (Join-Path $data 'operations') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'operations')) -and [IO.Path]::GetFileName($_.FullName) -notlike '*.lock'}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})}
    Save 'preservation.json' @{files=$files;themeId='roo-industries-blue';ruleId=$rule.ruleId}
    Save 'before.json' (Readback)
   }
   'manual-install' {
+   Assert-HarnessInstallStart $exe
    if(-not$InstallerPath){throw 'InstallerPath required'}
    $script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
    $setupOwned=Start-OwnedProcess -FilePath $InstallerPath -ArgumentList ('/SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory ('setup-'+$nonce+'.log'))+'"') -WindowStyle Normal -Purpose setup
@@ -215,12 +217,12 @@ try{
    if($Scenario -eq 'manual-timeout'){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
    if($ManualRetry){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
    if($Scenario -eq 'settings-readonly'){
-    $settingsOriginal=[IO.File]::ReadAllBytes($settingsPath);$settingsAttributes=[IO.File]::GetAttributes($settingsPath)
-    [IO.File]::SetAttributes($settingsPath,($settingsAttributes -bor [IO.FileAttributes]::ReadOnly))
+    $settingsOriginal=[IO.File]::ReadAllBytes((Get-HarnessLongPath $settingsPath));$settingsAttributes=[IO.File]::GetAttributes((Get-HarnessLongPath $settingsPath))
+    [IO.File]::SetAttributes((Get-HarnessLongPath $settingsPath),($settingsAttributes -bor [IO.FileAttributes]::ReadOnly))
     $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);$previous=[string]$toggle.Current.ToggleState;$toggle.Toggle()
     WaitStatus "Couldn't save this setting: *" 15|Out-Null
     WaitFor {[string](ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq $previous} 15 'toggle previous value'|Out-Null
-    if($script:app.HasExited -or [Convert]::ToBase64String([IO.File]::ReadAllBytes($settingsPath)) -cne [Convert]::ToBase64String($settingsOriginal)){throw 'Read-only setting crashed the app or changed its bytes'}
+    if($script:app.HasExited -or [Convert]::ToBase64String([IO.File]::ReadAllBytes((Get-HarnessLongPath $settingsPath))) -cne [Convert]::ToBase64String($settingsOriginal)){throw 'Read-only setting crashed the app or changed its bytes'}
     Save 'readonly.json' @{previousToggle=$previous;currentToggle=[string](ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState;pid=$script:app.Id;alive=(-not$script:app.HasExited);bytesUnchanged=$true};Shot 'readonly-error'
     Activate (ByName 'Home');WaitFor {@(Texts) -contains 'Start here'} 40 'Home after settings error'|Out-Null;Settings
    }
@@ -228,7 +230,7 @@ try{
     $toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}
     $theme=ById 'ThemePicker';$theme.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Activate (WaitFor {ByName 'Blackout Gold'} 15 'gold theme');Start-Sleep 1;Attach;Settings
-    if((Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json).downloadUpdatesAutomatically -ne '0'){throw 'Theme change overwrote automatic download preference'}
+    if(([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json).downloadUpdatesAutomatically -ne '0'){throw 'Theme change overwrote automatic download preference'}
     $theme=ById 'ThemePicker';$theme.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Activate (WaitFor {ByName 'Roo Industries Blue'} 15 'blue theme');Start-Sleep 1;Attach;Settings
    }
@@ -256,17 +258,17 @@ try{
     'cancel' {Click 'UpdateInstallButton';WaitFor {ByName 'Not now'} 60 'confirmation'|Out-Null;Shot 'confirmation';Activate (ByName 'Not now');WaitFor {(ById 'UpdateInstallButton').Current.IsEnabled} 20 'canceled'}
     {$_ -in 'install','failure','copy-failure'} {
      if($Scenario -eq 'install'){
-      Save 'logs-before.json' @(Get-ChildItem $updates -Filter 'install-*.log'|Select-Object Name,Length,LastWriteTimeUtc)
-      foreach($i in 0..4){$path=Join-Path $updates ('install-retention-'+$nonce+'-'+$i+'.log');New-HarnessText $path 'owned log retention fixture' 'retention-fixture'|Out-Null;[IO.File]::SetLastWriteTimeUtc($path,[DateTime]::UtcNow.AddMinutes(-10+$i))}
+      Save 'logs-before.json' @(Get-HarnessChildren $updates -Filter 'install-*.log'|Select-Object Name,Length,LastWriteTimeUtc)
+      foreach($i in 0..4){$path=Join-Path $updates ('install-retention-'+$nonce+'-'+$i+'.log');New-HarnessText $path 'owned log retention fixture' 'retention-fixture'|Out-Null;[IO.File]::SetLastWriteTimeUtc((Get-HarnessLongPath $path),[DateTime]::UtcNow.AddMinutes(-10+$i))}
      }
      $prior=0
-     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install')
+     $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Assert-HarnessInstallStart $exe;Activate (ByName 'Install')
       WaitFor {CollectOwnedStarts;if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null
      if($Scenario -eq 'copy-failure'){
       $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -like '*Setup*Roo Industries*' -and $_.Current.ClassName -eq 'TWizardForm'}|ForEach-Object {Register-HarnessWindow $_}|Select-Object -First 1} 180 'interactive recovery setup'
       $setup=Get-Process -Id $script:window.Current.ProcessId;$script:setupReceipts.Add((Test-OwnedDescendant $setup.Id -PassThru))
-      Save 'missing-executable.json' @{exists=(Test-Path $exe -PathType Leaf);destinationIsDirectory=(Test-Path $exe -PathType Container);installedVersion=Version;setupPid=$script:window.Current.ProcessId;processStarts=@(ProcessStarts)}
-      if(Test-Path $exe -PathType Leaf){throw 'Copy-failure fixture did not remove the old executable'}
+      Save 'missing-executable.json' @{exists=(Test-HarnessPath $exe -PathType Leaf);destinationIsDirectory=(Test-HarnessPath $exe -PathType Container);installedVersion=Version;setupPid=$script:window.Current.ProcessId;processStarts=@(ProcessStarts)}
+      if(Test-HarnessPath $exe -PathType Leaf){throw 'Copy-failure fixture did not remove the old executable'}
       Shot 'interactive-recovery'
       $until=[DateTime]::UtcNow.AddMinutes(6);$guideCleared=$false
       while(-not$setup.HasExited -and [DateTime]::UtcNow -lt $until){
@@ -280,11 +282,11 @@ try{
        foreach($name in 'Finish','Install','Next >','Next'){$button=ByNameControl $name $CT::Button;if($button -and $button.Current.IsEnabled){Activate $button;Start-Sleep -Milliseconds 500;break}}
        Start-Sleep -Milliseconds 200
       }
-      if(-not$setup.HasExited -or -not(Test-Path $exe -PathType Leaf)){throw 'Interactive recovery did not restore the executable'}
-      Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-Path $exe -PathType Leaf)}
+      if(-not$setup.HasExited -or -not(Test-HarnessPath $exe -PathType Leaf)){throw 'Interactive recovery did not restore the executable'}
+      Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-HarnessPath $exe -PathType Leaf)}
      }
      $script:owned=$null;$script:app=$null;$script:window=$null;Attach;Settings;Save 'relaunch-ownership.json' @{identity=$script:owned.Identity;proof=$script:owned.OwnershipProof};if($script:owned.OwnershipProof.kind -ne 'trace'){throw 'Update relaunch did not use trace proof'}
-     if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-Path (Join-Path $updates $NextVersion)){throw 'Installed version cache was retained'};$logs=@(Get-ChildItem $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-Path (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
+     if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-HarnessPath (Join-Path $updates $NextVersion)){throw 'Installed version cache was retained'};$logs=@(Get-HarnessChildren $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-HarnessPath (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
    }
@@ -301,7 +303,7 @@ try{
 }catch{$script:scenarioStatus='fail';Save 'failure.json' @{error=$_.Exception.ToString();texts=if($script:window){@(Texts)}else{@()};processStarts=@(ProcessStarts)};throw}
 finally{
  $cleanupErrors=[Collections.Generic.List[string]]::new()
- if($settingsAttributes -ne $null){try{[IO.File]::SetAttributes($settingsPath,($settingsAttributes -band (-bnot [IO.FileAttributes]::ReadOnly)));[IO.File]::WriteAllBytes($settingsPath,$settingsOriginal);[IO.File]::SetAttributes($settingsPath,$settingsAttributes)}catch{$cleanupErrors.Add($_.Exception.Message)}}
+ if($settingsAttributes -ne $null){try{[IO.File]::SetAttributes((Get-HarnessLongPath $settingsPath),($settingsAttributes -band (-bnot [IO.FileAttributes]::ReadOnly)));[IO.File]::WriteAllBytes((Get-HarnessLongPath $settingsPath),$settingsOriginal);[IO.File]::SetAttributes((Get-HarnessLongPath $settingsPath),$settingsAttributes)}catch{$cleanupErrors.Add($_.Exception.Message)}}
  try{Register-HarnessCache $NextVersion|Out-Null}catch{$cleanupErrors.Add($_.Exception.Message)}
  Save 'process-starts.json' @(ProcessStarts)
  try{StopApp}catch{$cleanupErrors.Add($_.Exception.Message)}

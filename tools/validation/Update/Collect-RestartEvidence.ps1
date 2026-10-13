@@ -33,12 +33,12 @@ $tz=[TimeZoneInfo]::Local
 $logs=@();$windowLines=@();$restartLines=@()
 foreach($root in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){
  $folder=Join-Path $env:LOCALAPPDATA ($root+'\logs')
- foreach($file in @(Get-ChildItem $folder -File -ErrorAction SilentlyContinue|Where-Object Name -like 'app*')){
+ foreach($file in @(Get-HarnessChildren $folder -File -ErrorAction SilentlyContinue|Where-Object Name -like 'app*')){
   $destination=Get-HarnessOutputPath $OutRoot ($root+'-'+$file.Name)
   Copy-HarnessFile $file.FullName $destination 'log-copy'|Out-Null
   $logs+=@(@{root=$root;path=$file.FullName;copy=$destination;bytes=$file.Length;sha256=(Get-HarnessFileSha256 $destination)})
   $lineNumber=0;$stamp=$null
-  foreach($line in [IO.File]::ReadLines($destination)){
+  foreach($line in [IO.File]::ReadLines((Get-HarnessLongPath $destination))){
    $lineNumber++
    if($line -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) '){
     $local=[DateTime]::ParseExact($Matches[1],'yyyy-MM-dd HH:mm:ss',[Globalization.CultureInfo]::InvariantCulture)

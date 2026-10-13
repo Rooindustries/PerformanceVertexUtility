@@ -9,7 +9,7 @@ Initialize-HarnessBuildFolders $Source
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
 $env:ROO_INDUSTRIES_BUG_WEBHOOK=''
-[IO.Directory]::CreateDirectory($OutputRoot)|Out-Null
+[IO.Directory]::CreateDirectory((Get-HarnessLongPath $OutputRoot))|Out-Null
 $copy=Join-Path $OutputRoot 'source-B'
 New-HarnessDirectory $copy 'build-source'|Out-Null
 foreach($file in Get-HarnessTree $Source -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $Source}){
