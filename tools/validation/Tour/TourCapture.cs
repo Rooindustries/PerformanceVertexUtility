@@ -28,6 +28,18 @@ namespace RooTour {
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint pid);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint from,uint to,bool attach);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hwnd);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd,int command);
+  public static int ForegroundPid() { uint pid;GetWindowThreadProcessId(GetForegroundWindow(),out pid);return (int)pid; }
+  public static bool Focus(IntPtr hwnd) {
+   uint ignored;uint current=GetCurrentThreadId(), foreground=GetWindowThreadProcessId(GetForegroundWindow(),out ignored), target=GetWindowThreadProcessId(hwnd,out ignored);
+   bool first=false,second=false;
+   try { if(foreground!=0 && current!=foreground)first=AttachThreadInput(current,foreground,true);if(target!=0 && current!=target && target!=foreground)second=AttachThreadInput(current,target,true);ShowWindow(hwnd,9);BringWindowToTop(hwnd);return SetForegroundWindow(hwnd); }
+   finally { if(second)AttachThreadInput(current,target,false);if(first)AttachThreadInput(current,foreground,false); }
+  }
+
   public static Rect Bounds(IntPtr hwnd) { Rect rect; if(DwmGetWindowAttribute(hwnd,9,out rect,Marshal.SizeOf(typeof(Rect)))!=0 || rect.Width<=0 || rect.Height<=0) throw new InvalidOperationException("DWM frame bounds unavailable"); return rect; }
   public static void Center(IntPtr hwnd,int width,int height,int x,int y) {
    for(int i=0;i<3;i++) { Rect outer; if(!GetWindowRect(hwnd,out outer)) throw new InvalidOperationException("Window rect unavailable"); Rect frame=Bounds(hwnd); SetWindowPos(hwnd,IntPtr.Zero,x-(frame.Left-outer.Left),y-(frame.Top-outer.Top),width+outer.Width-frame.Width,height+outer.Height-frame.Height,0x0040); Thread.Sleep(150); }

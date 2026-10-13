@@ -15,14 +15,14 @@ function FindId([string]$id){$script:window.FindFirst($TS::Descendants,[Windows.
 function FindName([string]$name,$type){$script:window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$type)))}
 function WaitFor([scriptblock]$test,[int]$seconds,[string]$label){$limit=[DateTime]::UtcNow.AddSeconds($seconds);do{$answer=& $test;if($answer){return $answer};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $limit);throw ('Timed out: '+$label)}
 function WindowTree{ @($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {@{name=$_.Current.Name;id=$_.Current.AutomationId;type=$_.Current.ControlType.ProgrammaticName;class=$_.Current.ClassName;offscreen=$_.Current.IsOffscreen;enabled=$_.Current.IsEnabled;bounds=$_.Current.BoundingRectangle.ToString()}}) }
-function AttachWindow($win){$script:window=Register-HarnessWindow $win;[RooTour.Desktop]::SetForegroundWindow([IntPtr]$win.Current.NativeWindowHandle)|Out-Null;if($script:recorder){$script:recorder.Window([IntPtr]$win.Current.NativeWindowHandle,[int]$win.Current.ProcessId)}}
+function AttachWindow($win){$script:window=Register-HarnessWindow $win;[RooTour.Desktop]::Focus([IntPtr]$win.Current.NativeWindowHandle)|Out-Null;if($script:recorder){$script:recorder.Window([IntPtr]$win.Current.NativeWindowHandle,[int]$win.Current.ProcessId)}}
 function StartMovie([string]$name){$folder=Join-Path $directory $name;New-HarnessDirectory $folder 'tour-video-frames'|Out-Null;$script:recorder=[RooTour.Recorder]::new((Get-HarnessLongPath $folder));return $folder}
 function StopMovie{$script:recorder.Dispose();$info=@{frames=$script:recorder.Count;skippedTicks=$script:recorder.Skipped;wallSeconds=$script:recorder.Seconds;fps=15};$script:recorder=$null;return $info}
 function Shot([string]$pass,[string]$page,[string]$tab,[int]$part=0){
  $tab=$tab.Substring(0,[Math]::Min(90,$tab.Length));$script:screenNumber++;$name=$pass+'-'+('{0:D3}'-f$script:screenNumber)+'-'+$page+'-'+$tab+$(if($part){'-part'+$part}else{''})+'.png'
  $folder=if($pass -eq 'installer'){$script:installDir}else{$script:screensDir};$path=Join-Path $folder $name
  $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle
- if(-not[RooTour.Desktop]::VisibleOwner($hwnd,[int]$script:window.Current.ProcessId)){throw 'Capture window is covered; retained.'}
+ if(-not[RooTour.Desktop]::VisibleOwner($hwnd,[int]$script:window.Current.ProcessId)){throw ('Capture window is covered; expected PID '+$script:window.Current.ProcessId+', foreground PID '+[RooTour.Desktop]::ForegroundPid()+', title '+$script:window.Current.Name+', offscreen '+$script:window.Current.IsOffscreen)}
  [RooTour.Desktop]::Shot($hwnd,(Get-HarnessLongPath $path));$bounds=[RooTour.Desktop]::Bounds($hwnd)
  $script:shots.Add(@{file=$name;pass=$pass;page=$page;tab=$tab;part=$part;path=$path;sha256=Get-HarnessFileSha256 $path;width=$bounds.Width;height=$bounds.Height;bounds=$bounds;timeUtc=[DateTime]::UtcNow.ToString('o')})
  Write-HarnessResult $directory ($name+'.uia.json') @{screen=$name;elements=@(WindowTree)}|Out-Null
@@ -136,14 +136,14 @@ try{
  $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))});if($foreign.Count){throw 'Another setup is running.'}
  $existing=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
  $log=Get-HarnessOutputPath $directory 'candidate-setup.log';$launchResult=Get-HarnessOutputPath $directory 'shell-result.json'
- $args='-NoProfile -ExecutionPolicy Bypass -File "'+(Get-HarnessToolPath (Join-Path $Source 'tools\validation\Tour\Invoke-TourLauncher.ps1'))+'" -Source "'+(Get-HarnessToolPath $Source)+'" -FrameRoot "'+(Get-HarnessToolPath $script:Harness.Root)+'" -FrameId "'+$script:Harness.FrameId+'" -Manifest "'+$script:Harness.Manifest+'" -Nonce "'+$nonce+'" -Installer "'+(Get-HarnessToolPath $Installer)+'" -Log "'+(Get-HarnessToolPath $log)+'" -Result "'+(Get-HarnessToolPath $launchResult)+'"'
- $shell=Start-OwnedProcess -FilePath powershell.exe -ArgumentList $args -WindowStyle Normal -Purpose tour-shell
+ $launchArguments='-NoProfile -ExecutionPolicy Bypass -File "'+(Get-HarnessToolPath (Join-Path $Source 'tools\validation\Tour\Invoke-TourLauncher.ps1'))+'" -Source "'+(Get-HarnessToolPath $Source)+'" -FrameRoot "'+(Get-HarnessToolPath $script:Harness.Root)+'" -FrameId "'+$script:Harness.FrameId+'" -Manifest "'+$script:Harness.Manifest+'" -Nonce "'+$nonce+'" -Installer "'+(Get-HarnessToolPath $Installer)+'" -Log "'+(Get-HarnessToolPath $log)+'" -Result "'+(Get-HarnessToolPath $launchResult)+'"'
+ $shell=Start-OwnedProcess -FilePath powershell.exe -ArgumentList $launchArguments -WindowStyle Normal -Purpose tour-shell
  $installerFrames=StartMovie 'installer-frames';$seen=[Collections.Generic.HashSet[string]]::new();$end=[DateTime]::UtcNow.AddMinutes(10);$finished=$false
  while([DateTime]::UtcNow -lt $end){
   Receive-ProcessTrace
   foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
    if($win.Current.NativeWindowHandle -notin $existing){Assert-HarnessSmartScreen $win $directory}
-   if($win.Current.ClassName -eq 'TWizardForm'){
+   if($win.Current.ClassName -eq 'TWizardForm' -and -not$win.Current.IsOffscreen){
     if(-not(Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shell -PassThru)){throw 'Wizard ownership failed.'};AttachWindow $win
     $tree=@(WindowTree);$button=$null;foreach($name in 'Finish','Install','Next >','Next'){$test=FindName $name $CT::Button;if($test -and $test.Current.IsEnabled){$button=$test;break}}
     $key=if($button){$tree.name -join '|'}else{'installing'}
