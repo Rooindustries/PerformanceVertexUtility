@@ -235,7 +235,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
  if(-not$script:Harness.Trace -or $script:Harness.Trace.Stopped -or $ProcessId -le 4){return $false}
  Receive-ProcessTrace
  $trace=$script:Harness.Trace;$end=[DateTime]::UtcNow.ToFileTimeUtc();$start=$trace.Start.ToFileTimeUtc()
- $entries=@(Get-HarnessEntries);$events=@($entries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $script:Harness.Nonce -and $_.identity.traceNonce -ceq $trace.Nonce -and [long]$_.identity.timeCreatedFileTimeUtc -ge $start -and [long]$_.identity.timeCreatedFileTimeUtc -le $end})
+ $entries=@(Get-HarnessEntries);$traceEvents=@($entries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $script:Harness.Nonce -and $_.identity.traceNonce -ceq $trace.Nonce});$events=@($traceEvents|Where-Object {[long]$_.identity.timeCreatedFileTimeUtc -ge $start -and [long]$_.identity.timeCreatedFileTimeUtc -le $end})
  $candidates=@($events|Where-Object {$_.identity.processId -eq $ProcessId})
  if(-not$candidates.Count){return Register-HarnessTraceRefusal $ProcessId 'No start event' $candidates}
  $proofs=@()
@@ -252,7 +252,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
     if([long]$entry.identity.creationTimeFileTimeUtc -lt $trace.Subscribed.ToFileTimeUtc() -and $held.process.HasExited){continue}
     $rootEvents=@($events|Where-Object {$_.identity.processId -eq $parentId -and [long]$_.identity.timeCreatedFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc}|Sort-Object {[long]$_.identity.timeCreatedFileTimeUtc} -Descending)
     if($rootEvents.Count){
-     $rootMatch=Get-HarnessBirthMatch $events $parentId ([long]$entry.identity.creationTimeFileTimeUtc);$rootMatches=@($rootMatch.matches|Where-Object {$_.identity.processName -ieq [IO.Path]::GetFileName($entry.identity.imagePath)})
+     $rootMatch=Get-HarnessBirthMatch $traceEvents $parentId ([long]$entry.identity.creationTimeFileTimeUtc);$rootMatches=@($rootMatch.matches|Where-Object {$_.identity.processName -ieq [IO.Path]::GetFileName($entry.identity.imagePath)})
      if(-not$rootMatch.unique -or $rootMatches.Count -ne 1 -or $rootMatches[0].id -cne $rootEvents[0].id){continue}
     }elseif($held.process.HasExited){continue}
     $root=$entry;break
@@ -273,7 +273,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
   $receipt=New-OwnedProcess $process
   if(-not$receipt -or $process.HasExited){return Register-HarnessTraceRefusal $ProcessId 'Process ended before ownership proof' $candidates}
   $birth=[long]$receipt.Identity.creationTimeFileTimeUtc
-  $birthMatch=Get-HarnessBirthMatch $events $ProcessId $birth;$matching=@($birthMatch.matches|Where-Object {$_.identity.processName -ieq [IO.Path]::GetFileName($receipt.Identity.imagePath)})
+  $birthMatch=Get-HarnessBirthMatch $traceEvents $ProcessId $birth;$matching=@($birthMatch.matches|Where-Object {$_.identity.processName -ieq [IO.Path]::GetFileName($receipt.Identity.imagePath)})
   if(-not$birthMatch.unique -or $matching.Count -ne 1){return Register-HarnessTraceRefusal $ProcessId 'Native birth is outside the interval or ambiguous' $candidates}
   $valid=@($proofs|Where-Object {$_.candidate.id -ceq $matching[0].id})
   if($valid.Count -ne 1 -or [long]$valid[0].root.identity.creationTimeFileTimeUtc -gt $birth -or [RooValidationOwnership.Native]::Created($receipt.handle) -ne $birth -or $process.HasExited){return Register-HarnessTraceRefusal $ProcessId 'Parent proof or retained native identity changed' $candidates}
