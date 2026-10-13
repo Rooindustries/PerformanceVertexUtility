@@ -66,16 +66,17 @@ class Tour(memory.Measurement):
             if inspection['width'] < 1600 or inspection['height'] < 1000:
                 raise RuntimeError('Signed-in desktop cannot contain 1600x1000: ' + inspection['workArea'])
             self.modified_install = True
+            self.desktop('Install-MemoryBuild', {'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\candidate-install', 'Installer': candidate, 'ExpectedVersion': self.args.version, 'Sha256': self.args.sha256.upper()}, 10, 'Memory')
             completion, capture = self.desktop('Invoke-AppTour', {
                 'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\tour',
-                'Installer': candidate, 'Sha256': self.args.sha256.upper(), 'ExpectedVersion': self.args.version,
+                'ExpectedVersion': self.args.version,
                 'HoldSeconds': self.args.hold_seconds}, 45)
             memory.save(self.out / 'capture.json', capture)
             checks.extend([
-                {'check': 'candidate interactive upgrade', 'passed': capture['version'] == self.args.version},
+                {'check': 'candidate upgrade before app tour', 'passed': capture['version'] == self.args.version},
                 {'check': 'original appearance restored in Settings', 'passed': capture['appearanceRestored']},
                 {'check': 'all app screenshots are 1600x1000 DWM bounds', 'passed': all(s['width'] == 1600 and s['height'] == 1000 for s in capture['screens'] if s['pass'] != 'installer')},
-                {'check': 'only verified cursor clicks or recorded navigation Select fallbacks', 'passed': all(a['verified'] or a['kind'] == 'navigation' and a['method'].endswith('fallback') for a in capture['actions'])},
+                {'check': 'all app actions use allowed UIA patterns without clicks', 'passed': all(not a['mouseClick'] and a['result'] == 'success' for a in capture['actions'])},
             ])
         except BaseException as error:
             result['failure'] = memory.describe_error(error)
@@ -113,7 +114,7 @@ class Tour(memory.Measurement):
         return result
 
 
-def encode(out, capture, hold):
+def encode(out, capture, hold, accepted):
     from PIL import Image, ImageDraw
     extracted = out / 'evidence'
     screens, installer = out / 'screens', out / 'installer'
@@ -127,7 +128,7 @@ def encode(out, capture, hold):
         target = (installer if shot['pass'] == 'installer' else screens) / shot['file']
         shutil.copyfile(matches[0], target)
         listing.append((target.relative_to(out).as_posix(), shot['pass'] + ': ' + shot['page'] + ', ' + shot['tab'] + (', scroll part ' + str(shot['part']) if shot['part'] else '')))
-    for name in ['installer', 'tour']:
+    for name in ['tour']:
         info = capture['movies'][name]
         relative = info['folder'].split('\\tour\\', 1)[1]
         folder = extracted / 'tour' / relative.replace('\\', '/')
@@ -155,22 +156,35 @@ def encode(out, capture, hold):
         target = out / ('contact-sheet-' + letter + '.png')
         sheet.save(target)
         listing.append((target.name, 'Pass ' + letter + ' contact sheet'))
+    accepted_receipt = json.loads((accepted / 'source-binding.json').read_text())
+    for path in sorted((accepted / 'installer').glob('*.png')):
+        shutil.copyfile(path, installer / path.name)
+        listing.append(('installer/' + path.name, 'Accepted interactive wizard screenshot'))
+    for name in ['installer.mp4', 'installer-video.json']:
+        shutil.copyfile(accepted / name, out / name)
+    listing.append(('installer.mp4', 'Accepted complete upgrade wizard, reused without recapture'))
+    action_file = next(extracted.rglob(Path(capture['actionLog']['path'].replace('\\', '/')).name))
+    if memory.identity(action_file)['sha256'].upper() != capture['actionLog']['sha256']:
+        raise ValueError('Action log identity differs')
+    shutil.copyfile(action_file, out / 'actions.json')
+    memory.save(out / 'reused-installer-media.json', {'source': str(accepted), 'sourceBinding': accepted_receipt, 'files': {str(p.relative_to(accepted)): memory.identity(p) for p in sorted((accepted / 'installer').glob('*.png')) + [accepted / 'installer.mp4']}, 'homeRetained': str(accepted / 'screens/A-001-home-main.png')})
     memory.save(out / 'media-summary.json', {
-        'screenshots': {key: sum(s['pass'] == key for s in capture['screens']) for key in ['installer', 'A', 'B', 'C']},
-        'fallbacks': [a for a in capture['actions'] if not a['verified']],
+        'screenshots': {'installer': len(list(installer.glob('*.png'))), **{key: sum(s['pass'] == key for s in capture['screens']) for key in ['A', 'B', 'C']}},
+        'actions': {p: sum(a['pattern'] == p for a in capture['actions']) for p in sorted({a['pattern'] for a in capture['actions']})},
+        'mouseClicks': sum(a['mouseClick'] for a in capture['actions']),
         'notCaptured': capture['notCaptured'], 'holdSeconds': hold,
         'videos': {name: {**memory.identity(out / (name + '.mp4')), 'durationSeconds': float(json.loads((out / (name + '-video.json')).read_text())['format']['duration'])} for name in ['tour', 'installer']}})
     # Raw frames remain in the verified archive; the index inventories that archive once.
-    for name in ['installer', 'tour']:
+    for name in ['tour']:
         relative = capture['movies'][name]['folder'].split('\\tour\\', 1)[1]
         folder = extracted / 'tour' / relative.replace('\\', '/')
         shutil.rmtree(folder)
     lines = ['# Roo Industries Optimization Suite ' + capture['version'] + ' tour', '',
              'The installer upgrades published 0.11.0. Pass A uses the original theme in Simple mode; B uses advanced mode; C uses Blackout Gold in advanced mode. App images contain only their 1600×1000 DWM frame bounds.', '',
-             '## Media', '']
+             'The accepted installer clip and first Home shot are retained separately; reused-installer-media.json binds those files to their original receipt. This run silently upgrades the candidate over 0.11.0 before the UIA-only app tour.', '', '## Media', '']
     lines += ['- [' + path + '](' + path + '): ' + description for path, description in listing]
     lines += ['', '## Not captured', ''] + ['- ' + str(item.get('pass', 'All')) + ': ' + item['state'] + '. ' + item['reason'] for item in capture['notCaptured']]
-    lines += ['', '## Evidence', '', 'The nonce-bound capture receipt contains every cursor verification, navigation fallback, DWM bound and screenshot hash. Raw 15 fps window frames and UIA trees are retained in evidence.zip. cleanup-audit.json records published-build, file-data and raw-registry restoration.']
+    lines += ['', '## Evidence', '', 'The nonce-bound capture receipt and actions.json contain every exact target identity, cursor position, UIA pattern/result, DWM bound and screenshot hash. Raw 15 fps window frames and UIA trees are retained in evidence.zip. cleanup-audit.json records published-build, file-data and raw-registry restoration.']
     for path in sorted(out.rglob('*')):
         if path.is_file() and path.relative_to(out).as_posix() not in {p for p, _ in listing} and path.name != 'index.md':
             lines.append('- [' + path.relative_to(out).as_posix() + '](' + path.relative_to(out).as_posix() + '): ' + ('UIA tree or raw capture provenance' if path.is_relative_to(extracted) else 'Run evidence'))
@@ -183,6 +197,7 @@ def main():
     parser.add_argument('--host', required=True)
     parser.add_argument('--expected-machine', required=True)
     parser.add_argument('--installer', type=Path, required=True)
+    parser.add_argument('--installer-media', type=Path, required=True)
     parser.add_argument('--sha256', required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--restore-installer', type=Path, required=True)
@@ -193,6 +208,12 @@ def main():
     for path, expected in [(args.installer, args.sha256), (args.restore_installer, args.restore_sha256)]:
         if memory.identity(path)['sha256'].lower() != expected.lower():
             parser.error('Installer SHA-256 differs; no remote action started')
+    accepted = json.loads((args.installer_media / 'source-binding.json').read_text())
+    if accepted['candidate'] != memory.identity(args.installer):
+        parser.error('Accepted installer media belongs to different installer bytes')
+    for name in ['installer.mp4', 'installer-video.json', 'screens/A-001-home-main.png']:
+        if not (args.installer_media / name).is_file():
+            parser.error('Accepted media is missing: ' + name)
     if subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip():
         parser.error('Commit the scripts first; stage a clean head')
     load('tour_lint', ROOT / 'tools/validation/Update/run_harness_checks.py').lint_tree(ROOT / 'tools/validation/Tour')
@@ -202,7 +223,7 @@ def main():
     result = Tour(args).run()
     if (args.out_dir / 'capture.json').exists():
         try:
-            encode(args.out_dir, json.loads((args.out_dir / 'capture.json').read_text()), args.hold_seconds)
+            encode(args.out_dir, json.loads((args.out_dir / 'capture.json').read_text()), args.hold_seconds, args.installer_media)
         except Exception as error:
             result['status'] = 'fail'
             result['encodingFailure'] = memory.describe_error(error)
