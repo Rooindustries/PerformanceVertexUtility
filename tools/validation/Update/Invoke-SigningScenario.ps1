@@ -11,7 +11,7 @@ Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot ('signing-'+$Scenario)
 $utf8=[Text.UTF8Encoding]::new($false)
 [IO.Directory]::CreateDirectory((Get-HarnessLongPath $OutRoot))|Out-Null
-. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 $install=Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite'
 $peFiles=@('app\RooIndustries.OptimizationSuite.App.exe','app\RooIndustries.OptimizationSuite.App.dll','app\Optimizer.Core.dll',
  'backend\bin\optimizer\Optimizer.Host.exe','backend\bin\optimizer\Optimizer.Host.dll','backend\bin\optimizer\Optimizer.Core.dll',
@@ -26,7 +26,7 @@ function SigningEnvironment($record){
 function Governor($action){
  Assert-HarnessHostLease
  $root=Join-Path (Get-RooIndustriesLocalDataRoot) 'process-rules'
- $text=@(& (Join-Path $install 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Action $action -PolicyRoot $root -ConfirmApply) -join "`n"
+ $text=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProcessPolicyWorker.ps1')) -Action $action -PolicyRoot (Get-HarnessToolPath $root) -ConfirmApply) -join "`n"
  $result=$text|ConvertFrom-Json
  if($result.status -ne 'completed'){throw ('Governor '+$action+' failed: '+$text)}
  return $root
@@ -44,21 +44,21 @@ try{switch($Scenario){
   $record=@{ledgerId=$certEntry.id;thumbprint=$cert.Thumbprint;subject=$cert.Subject;createdAtUtc=[DateTime]::UtcNow.ToString('o');signtool=$null;privateKeyExported=$false;rootTrustChanged=$false}
   Save 'signing-certificate.json' $record
   $sdk=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
-  $tool=Get-ChildItem -Path (Join-Path $sdk '10.*\x64\signtool.exe') -File -ErrorAction SilentlyContinue|Sort-Object {[Version]$_.Directory.Parent.Name} -Descending|Select-Object -First 1
+  $tool=Get-HarnessChildren $sdk -Directory -Filter '10.*' -ErrorAction SilentlyContinue|Sort-Object {[Version]$_.Name} -Descending|ForEach-Object {$path=Join-Path $_.FullName 'x64\signtool.exe';if(Test-HarnessPath $path){Get-HarnessItem $path}}|Select-Object -First 1
   if(-not$tool){
    $index=Invoke-WebRequest -UseBasicParsing 'https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/index.json'
    Save 'sdk-package-index.json' ($index.Content|ConvertFrom-Json)
    $version=@(($index.Content|ConvertFrom-Json).versions|Where-Object {$_ -notlike '*-*'}|Sort-Object {[Version]$_} -Descending)[0]
    $package=Get-HarnessOutputPath $directory 'sdk-buildtools.zip'
-   Invoke-WebRequest -UseBasicParsing ('https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/'+$version+'/microsoft.windows.sdk.buildtools.'+$version+'.nupkg') -OutFile (Get-HarnessLongPath $package)
-   $sdkDirectory=Join-Path $directory 'sdk-buildtools';Register-HarnessFile $package 'sdk-package'|Out-Null;New-HarnessDirectory $sdkDirectory 'sdk-tools'|Out-Null;Expand-Archive -LiteralPath (Get-HarnessLongPath $package) -DestinationPath (Get-HarnessLongPath $sdkDirectory)
+   Invoke-WebRequest -UseBasicParsing ('https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/'+$version+'/microsoft.windows.sdk.buildtools.'+$version+'.nupkg') -OutFile (Get-HarnessToolPath $package)
+   $sdkDirectory=Join-Path $directory 'sdk-buildtools';Register-HarnessFile $package 'sdk-package'|Out-Null;New-HarnessDirectory $sdkDirectory 'sdk-tools'|Out-Null;Expand-Archive -LiteralPath (Get-HarnessToolPath $package) -DestinationPath (Get-HarnessToolPath $sdkDirectory)
    $tool=Get-HarnessTree $sdkDirectory -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ $sdkDirectory) -and $_.FullName.EndsWith('\x64\signtool.exe',[StringComparison]::OrdinalIgnoreCase)}|Select-Object -First 1
    $record.packageVersion=$version
   }
   if(-not$tool){throw 'The owned Windows SDK package contains no x64 signtool.exe.'}
   $record.signtool=$tool.FullName;Save 'signing-certificate.json' $record
   SigningEnvironment $record
-  & (Join-Path $Source 'tools\validation\Update\Build-UpdatePair.ps1') -Source $Source -OutputRoot (Join-Path $OutRoot 'builds') -FeedUrl $FeedUrl -VersionA $VersionA -VersionB $VersionB
+  & (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Build-UpdatePair.ps1')) -Source (Get-HarnessToolPath $Source) -OutputRoot (Join-Path $OutRoot 'builds') -FeedUrl $FeedUrl -VersionA $VersionA -VersionB $VersionB
   if(-not$?){throw 'Signed pair build failed.'}
   Save 'signed-build.json' @{status='pass';certificate=$record;versionA=$VersionA;versionB=$VersionB}
  }
@@ -68,7 +68,7 @@ try{switch($Scenario){
   foreach($relative in $peFiles){
    $path=Join-Path $install $relative
    if(-not(Test-HarnessPath $path -PathType Leaf)){throw ('Installed signing file is missing: '+$relative)}
-   $sig=Get-AuthenticodeSignature -LiteralPath $path
+   $sig=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $path)
    $row=@{path=$relative;subject=$sig.SignerCertificate.Subject;thumbprint=$sig.SignerCertificate.Thumbprint;status=[string]$sig.Status}
    if($row.subject -cne $subject -or $row.thumbprint -cne $record.thumbprint -or $row.status -notin @('Valid','UnknownError','NotTrusted')){throw ('Installed signature differs: '+$relative)}
    $rows+=@($row)
@@ -76,7 +76,7 @@ try{switch($Scenario){
   foreach($version in $VersionA,$VersionB){
    $build=if($version -eq $VersionA){'A'}else{'B'}
    $setup=Join-Path $OutRoot ('builds\'+$build+'\RooIndustries-OptimizationSuite-'+$version+'-setup.exe')
-   $sig=Get-AuthenticodeSignature -LiteralPath $setup
+   $sig=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $setup)
    if($sig.SignerCertificate.Subject -cne $subject -or $sig.SignerCertificate.Thumbprint -cne $record.thumbprint -or [string]$sig.Status -notin @('Valid','UnknownError','NotTrusted')){throw 'Setup signature differs.'}
    $rows+=@(@{path=$setup;subject=$sig.SignerCertificate.Subject;thumbprint=$sig.SignerCertificate.Thumbprint;status=[string]$sig.Status})
   }
@@ -85,7 +85,7 @@ try{switch($Scenario){
   do{$result=Invoke-HarnessHost $signedHost 'policy-status' @{schemaVersion=1;repoRoot=$install;policyRoot=$root};if($result.status -ne 'completed'){throw 'Signed governor status read failed.'};$status=$result.data;if($status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
   if(-not$status.hostRunning){throw 'Signed governor did not run.'}
   $worker=Get-CimInstance Win32_Process -Filter ('ProcessId='+$status.state.host.processId)
-  $sig=Get-AuthenticodeSignature -LiteralPath $worker.ExecutablePath
+  $sig=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $worker.ExecutablePath)
   if($worker.ExecutablePath -ine $signedHost -or $sig.SignerCertificate.Subject -cne $subject){throw 'Governor does not run from signed installed Host.'}
   Save ($Scenario+'.json') @{status='pass';signatures=$rows;governor=$status;governorPath=$worker.ExecutablePath;governorSubject=$sig.SignerCertificate.Subject}
  }

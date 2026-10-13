@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$ReleasePath,[Parameter(Mandatory)][string]$FrameId)
 $ErrorActionPreference='Stop'
-. (Join-Path $Source 'tools\validation\Update\Invoke-ShippedScenario.ps1') -Source $Source -OutRoot $OutRoot -Part p2 -ReleasePath $ReleasePath -FrameId $FrameId -HarnessOnly
+. (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Invoke-ShippedScenario.ps1')) -Source (Get-HarnessToolPath $Source) -OutRoot (Get-HarnessToolPath $OutRoot) -Part p2 -ReleasePath $ReleasePath -FrameId $FrameId -HarnessOnly
 try{
  Wizard $Installer 'ownership' $release.payload.version
  $script:receiptStatus='pass'

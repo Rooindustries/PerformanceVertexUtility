@@ -6,7 +6,7 @@ $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation $(if($HelpersOnly -and $EvidenceName){$EvidenceName}else{$Scenario}) $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
-. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms
 if(-not('RooUpdateUi' -as [type])){Add-Type @'
 using System;

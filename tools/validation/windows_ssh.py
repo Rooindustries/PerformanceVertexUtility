@@ -120,7 +120,7 @@ function Assert-PlainAncestry([string]$Path) {
 }
 function Assert-ProtectedFrame([string]$Path) {
  Assert-PlainAncestry $Path
- $acl=Get-Acl -LiteralPath (Get-HarnessLongPath $Path)
+ $acl=Get-Acl -LiteralPath (Get-HarnessToolPath $Path)
  if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin 'S-1-5-18','S-1-5-32-544'){throw 'Source frame owner is not admin'}
  foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin 'S-1-5-18','S-1-5-32-544' -and ([long]$ace.FileSystemRights -band 0x500D0156)){throw ('Source frame writable by '+$ace.IdentityReference.Value)}}
 }
@@ -309,7 +309,7 @@ $l.entries=@($l.entries)+@(@{id=[Guid]::NewGuid().ToString('N');nonce=$l.frameId
 $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($l|ConvertTo-Json -Depth 30));$f.Position=0;$f.SetLength(0);$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
 """
         invoke(host, machine, record)
-        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath $source;& (Join-Path ([Environment]::SystemDirectory) 'tar.exe') -xzf {ps_literal(remote_root + '/source.tar.gz')};if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-FrameSourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'", timeout=SOURCE_TIMEOUT)
+        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath (Get-HarnessToolPath $source);& (Get-HarnessToolPath (Join-Path ([Environment]::SystemDirectory) 'tar.exe')) -xzf (Get-HarnessToolPath {ps_literal(remote_root + '/source.tar.gz')});if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-FrameSourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'", timeout=SOURCE_TIMEOUT)
     return receipt
 
 
@@ -365,7 +365,7 @@ def interactive_frame(host: str, machine: str, receipt: dict, script: str, argum
     context = base64.b64encode(json.dumps(dict(protocol='roo-industries-verification-invocation/v2', run=run, taskName=task_name, nonce=nonce, frame=receipt)).encode()).decode()
     common = ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1')
     scope = f"Open-HarnessRun {ps_literal(receipt['runRoot'])} {ps_literal(receipt['frameId'])} {ps_literal(receipt['manifestSha256'])} '{nonce}'"
-    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$global:RooVerificationInvocationContext=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{context}'))|ConvertFrom-Json;. {common};{scope};$deadline=[DateTime]::UtcNow.AddSeconds(15);while(-not(Get-HarnessProcess $PID)){{if([DateTime]::UtcNow -gt $deadline){{throw 'Child creation was not recorded'}};Start-Sleep -Milliseconds 50}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$scope=if($p.OutRoot){{$p.OutRoot}}elseif($p.OutputRoot){{$p.OutputRoot}}else{{$run}};Initialize-HarnessInvocation {ps_literal(relative.stem)} $scope|Out-Null;$env:ROO_HARNESS_NONCE='{nonce}';if($scope -ne $run){{Ensure-HarnessOutputDirectory $scope}};$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
+    child = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$global:RooVerificationInvocationContext=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{context}'))|ConvertFrom-Json;. {common};{scope};$deadline=[DateTime]::UtcNow.AddSeconds(15);while(-not(Get-HarnessProcess $PID)){{if([DateTime]::UtcNow -gt $deadline){{throw 'Child creation was not recorded'}};Start-Sleep -Milliseconds 50}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$scope=if($p.OutRoot){{$p.OutRoot}}elseif($p.OutputRoot){{$p.OutputRoot}}else{{$run}};Initialize-HarnessInvocation {ps_literal(relative.stem)} $scope|Out-Null;$env:ROO_HARNESS_NONCE='{nonce}';if($scope -ne $run){{Ensure-HarnessOutputDirectory $scope}};$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& (Get-HarnessToolPath {ps_literal(receipt['stagingPath'] + '/' + str(relative))}) @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
     child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
     wrapper = "\n".join([
         "$ErrorActionPreference='Stop'", f". {common}", scope,
@@ -374,7 +374,7 @@ def interactive_frame(host: str, machine: str, receipt: dict, script: str, argum
         "$self=Get-HarnessProcess $PID;Invoke-HarnessLedger {param($ledger) $entry=@($ledger.entries|Where-Object id -CEQ $self.LedgerId)[0];$entry.lifetime='runner';$entry.purpose='interactive-wrapper'}|Out-Null",
         "$p=$null;$r=$null;$exit=1;$status='failed'",
         "try{",
-        f"$p=Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe') -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {child_encoded}' -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'child.log') -RedirectStandardError (Join-Path $run 'child-error.log') -PassThru",
+        f"$p=Start-Process -FilePath (Get-HarnessToolPath (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe')) -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {child_encoded}' -WindowStyle Hidden -RedirectStandardOutput (Get-HarnessToolPath (Join-Path $run 'child.log')) -RedirectStandardError (Get-HarnessToolPath (Join-Path $run 'child-error.log')) -PassThru",
         "$r=Register-HarnessStartedProcess $p 'interactive-child' 'runner'",
         f"if(-not$p.WaitForExit({int(minutes * 60000)})){{Remove-HarnessEntry (@(Get-HarnessEntries|Where-Object id -CEQ $r.LedgerId)[0]);throw 'Child timeout'}}",
         "$p.Refresh();$exit=$p.ExitCode;if($exit -eq 0){$status='completed'}",
@@ -438,7 +438,7 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
             bundle.addfile(entry, io.BytesIO(data))
         destination = host + ':' + remote_root.replace('\\', '/') + '/source.tar.gz'
         run_transport(host, 'scp', [str(archive), destination], timeout=TRANSFER_TIMEOUT, capture_output=True)
-        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath $source;& (Join-Path ([Environment]::SystemDirectory) 'tar.exe') -xzf {ps_literal(remote_root + '/source.tar.gz')};if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-SourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'", timeout=SOURCE_TIMEOUT)
+        invoke(host, machine, REMOTE_GUARDS + f"\n$source={ps_literal(remote_source)};Set-Location -LiteralPath (Get-HarnessToolPath $source);& (Get-HarnessToolPath (Join-Path ([Environment]::SystemDirectory) 'tar.exe')) -xzf (Get-HarnessToolPath {ps_literal(remote_root + '/source.tar.gz')});if($LASTEXITCODE -ne 0){{throw 'Source extraction failed'}};$m=Assert-SourceSnapshot $source {ps_literal(receipt['manifestSha256'])};'source verified'", timeout=SOURCE_TIMEOUT)
     return receipt
 
 def verify_source(host: str, machine: str, receipt: dict):
@@ -461,7 +461,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
     run = receipt['runRoot'] + '\\execution-' + uuid.uuid4().hex
     payload = base64.b64encode(json.dumps(arguments).encode()).decode()
     helpers = harness_tree_helpers().split('function Get-HarnessItem(')[0]
-    child = f"{helpers}$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'task.json')))|ConvertFrom-Json);wrapper=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')))|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& {ps_literal(receipt['stagingPath'] + '/' + str(relative))} @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
+    child = f"{helpers}$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'task.json')))|ConvertFrom-Json);wrapper=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')))|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& (Get-HarnessToolPath {ps_literal(receipt['stagingPath'] + '/' + str(relative))}) @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
     child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
     wrapper = "\n".join([
         helpers,
@@ -471,7 +471,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         "$self=New-OwnedProcess (Get-Process -Id $PID);[IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')),($self.Identity|ConvertTo-Json),[Text.UTF8Encoding]::new($false))",
         "$p=$null;$r=$null;$exit=1;$status='failed'",
         "try{",
-        f"$p=Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe') -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {child_encoded}' -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'child.log') -RedirectStandardError (Join-Path $run 'child-error.log') -PassThru",
+        f"$p=Start-Process -FilePath (Get-HarnessToolPath (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe')) -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {child_encoded}' -WindowStyle Hidden -RedirectStandardOutput (Get-HarnessToolPath (Join-Path $run 'child.log')) -RedirectStandardError (Get-HarnessToolPath (Join-Path $run 'child-error.log')) -PassThru",
         "$r=New-OwnedProcess $p;if($r){[IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $run 'child.json')),($r.Identity|ConvertTo-Json),[Text.UTF8Encoding]::new($false))}",
         f"if(-not$p.WaitForExit({int(minutes * 60000)})){{Stop-OwnedProcess $r;throw 'Child timeout'}}",
         "$p.Refresh();$exit=$p.ExitCode;if($exit -eq 0){$status='completed'}",

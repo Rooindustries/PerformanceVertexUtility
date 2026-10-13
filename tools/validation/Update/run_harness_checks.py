@@ -17,6 +17,10 @@ def lint_tree(directory):
     tokens = ['-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive', 'Test-' + 'Path', 'Get-' + 'Item', 'Get-' + 'ChildItem', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Directory]' + '::Move']
     allow_path = root / 'tools/validation/path-lint-allowlist.json'
     exceptions = json.loads(allow_path.read_text()) if allow_path.exists() else []
+    boundary_inputs = [root / 'tools/scripts/Build-Release.ps1', root / 'tools/scripts/Release.Checks.ps1']
+    native_path = re.compile(r'Get-Harness' + r'LongPath\s*\(|ConvertTo-Release' + r'ExtendedPath\s*\(|\.LongPath\b', re.I)
+    commands = ['Invoke-' + 'WebRequest', 'Invoke-' + 'RestMethod', 'Add-' + 'Type', 'Start-' + 'Process', 'Start-' + 'Job', 'Expand-' + 'Archive', 'Compress-' + 'Archive', 'Out-' + 'File', 'Set-' + 'Content', 'Add-' + 'Content', 'Get-' + 'Content', 'New-' + 'Item', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Rename-' + 'Item', 'Set-' + 'Location', 'Push-' + 'Location', 'Get-' + 'AuthenticodeSignature', 'Set-' + 'AuthenticodeSignature', 'Get-' + 'FileHash']
+    tool_call = re.compile(r'(?<![A-Za-z-])(?:' + '|'.join(re.escape(c) for c in commands) + r')(?![A-Za-z-])|(?<![A-Za-z-])(?:Export|Import)-[A-Za-z]+|&\s+|[A-Za-z0-9_.-]+\.exe\s+', re.I)
     errors = []
     for path in sorted(set(files)):
         if not path.is_file():
@@ -30,8 +34,21 @@ def lint_tree(directory):
                 if any(e['file'] == rel and e['line'] == line and e['text'] == actual and e['reason'] for e in exceptions):
                     continue
                 errors.append(rel + ':' + str(line) + ': ' + token)
+    for path in sorted(set(files + boundary_inputs)):
+        if not path.is_file():
+            continue
+        text = path.read_bytes().decode('utf-8', errors='replace')
+        rel = path.relative_to(root).as_posix()
+        offset = 0
+        for statement in re.split(r'[;\n]', text):
+            if native_path.search(statement) and tool_call.search(statement):
+                line = text.count('\n', 0, offset) + 1
+                actual = text.splitlines()[line - 1].strip()
+                if not any(e['file'] == rel and e['line'] == line and e['text'] == actual and e['reason'] for e in exceptions):
+                    errors.append(rel + ':' + str(line) + ': extended path reaches a cmdlet/tool statement')
+            offset += len(statement) + 1
     if errors:
-        raise RuntimeError('Legacy filesystem API is forbidden; use extended-path helpers:\n' + '\n'.join(errors))
+        raise RuntimeError('Filesystem/tool path boundary lint failed:\n' + '\n'.join(errors))
 
 
 def load(name, path):
@@ -153,7 +170,7 @@ def main():
         refused('changed local harness rejects frame reuse', lambda: windows.verify_local_source(args.host, args.expected_machine, receipt), 'stage a fresh frame')
     finally:
         path.write_bytes(original)
-    parse = ". " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1') + ";$errors=@();$files=@(Get-HarnessTree " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'});foreach($file in $files){$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};Add-Type -Path " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\HarnessTrace.cs') + " -ReferencedAssemblies System.dll,System.Management.dll;@{files=$files.Count;errors=$errors.Count;detail=$errors;traceCompiled=[bool]('RooHarnessProcessTrace' -as [type])}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
+    parse = ". " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1') + ";$errors=@();$files=@(Get-HarnessTree " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'});foreach($file in $files){$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};Add-Type -Path (Get-HarnessToolPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\HarnessTrace.cs') + ") -ReferencedAssemblies System.dll,System.Management.dll;@{files=$files.Count;errors=$errors.Count;detail=$errors;traceCompiled=[bool]('RooHarnessProcessTrace' -as [type])}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
     result = windows.invoke(args.host, args.expected_machine, parse)
     (args.out_dir / 'powershell-parse.json').write_text(result.stdout)
     try:
