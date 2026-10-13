@@ -109,8 +109,10 @@ def inspect(host: str, machine: str):
 
 
 def harness_tree_helpers():
-    text = (Path(__file__).resolve().parents[2] / 'tools/validation/Update/Harness.Common.ps1').read_text()
-    return text[text.index('function Get-HarnessLongPath('):text.index('function Test-HarnessVisiblePath(')]
+    root = Path(__file__).resolve().parents[2]
+    native = (root / 'tools/validation/LoadTimes/CleanupOwnership.Common.ps1').read_text().split('function Copy-OwnedProbe(')[0]
+    text = (root / 'tools/validation/Update/Harness.Common.ps1').read_text()
+    return native + text[text.index('function Get-HarnessLongPath('):text.index('function Test-HarnessVisiblePath(')]
 
 
 REMOTE_GUARDS = harness_tree_helpers() + r"""
@@ -461,13 +463,16 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         raise ValueError('Invalid private task name.')
     run = receipt['runRoot'] + '\\execution-' + uuid.uuid4().hex
     payload = base64.b64encode(json.dumps(arguments).encode()).decode()
-    helpers = harness_tree_helpers().split('function Get-HarnessItem(')[0]
-    child = f"{helpers}$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'task.json')))|ConvertFrom-Json);wrapper=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')))|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& (Get-HarnessToolPath {ps_literal(receipt['stagingPath'] + '/' + str(relative))}) @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
+    helpers = 'function Get-HarnessLongPath([string]$Path){[RooValidationOwnership.Native]::Long($Path)}\nfunction Get-HarnessPlainPath([string]$Path){[RooValidationOwnership.Native]::Plain($Path)}\nfunction Get-HarnessToolPath([string]$Path){[RooValidationOwnership.Native]::Tool($Path)}\n'
+    functions = harness_tree_helpers()
+    helpers += functions[functions.index('function Test-HarnessPath('):functions.index('function Get-HarnessItem(')]
+    native = '. ' + ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1') + ';'
+    child = f"{native}{helpers}$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'task.json')))|ConvertFrom-Json);wrapper=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')))|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& (Get-HarnessToolPath {ps_literal(receipt['stagingPath'] + '/' + str(relative))}) @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
     child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
     wrapper = "\n".join([
-        helpers,
         "$ErrorActionPreference='Stop'",
-        f". {ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')}",
+        native,
+        helpers,
         f"$run={ps_literal(run)}",
         "$self=New-OwnedProcess (Get-Process -Id $PID);[IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')),($self.Identity|ConvertTo-Json),[Text.UTF8Encoding]::new($false))",
         "$p=$null;$r=$null;$exit=1;$status='failed'",
