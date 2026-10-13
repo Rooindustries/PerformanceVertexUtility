@@ -298,3 +298,5 @@ Absolute argv and exact remote commands/source manifests are in published/p2-com
 Completed production installer downloads: **0**. One production installer Invoke-WebRequest was attempted and failed before any output file was created; no successful transfer is claimed. The discriminating probe made two additional small live-feed GET attempts, with one completed 1,251-byte output. No publish, push, signing-key use/transfer, new test cert, trust-root/Defender change, Blackwell or KVM contact occurred.
 
 **Verdict: not ready to merge.** R1 staging, hardening and the ownership checks pass, but the shared provider/download IO blocker is open and P2/P3 plus B's unsigned/contracts/close/signed/build guards still lack the required final-gate proof. No product failure was observed.
+
+Update-cache audit found no release directory, executable, partial file or pending record. The as-found install-0.11.1-beta.log is preserved with its original SHA; install logs are not counted as release cache. Evidence: cache-audit.json and task-cache-audit.json.
