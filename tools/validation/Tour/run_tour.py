@@ -70,7 +70,7 @@ class Tour(memory.Measurement):
             completion, capture = self.desktop('Invoke-AppTour', {
                 'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\tour',
                 'ExpectedVersion': self.args.version,
-                'HoldSeconds': self.args.hold_seconds}, 45)
+                'HoldSeconds': self.args.hold_seconds}, 90)
             memory.save(self.out / 'capture.json', capture)
             checks.extend([
                 {'check': 'candidate upgrade before app tour', 'passed': capture['version'] == self.args.version},

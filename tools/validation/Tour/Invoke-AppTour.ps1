@@ -37,8 +37,15 @@ function AppWindow{
  $matches=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$script:app.Identity.pid))|Where-Object {$_.Current.ControlType -eq $CT::Window -and -not$_.Current.IsOffscreen})
  if($matches.Count -gt 1){throw 'Owned app has ambiguous main windows.'};if($matches.Count){return $matches[0]}
 }
+function EnsureForeground{
+ $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle;$owner=[int]$script:window.Current.ProcessId
+ if([RooTour.Desktop]::VisibleOwner($hwnd,$owner)){return}
+ $before=[RooTour.Desktop]::ForegroundPid();[RooTour.Desktop]::Focus($hwnd)|Out-Null
+ WaitFor {[RooTour.Desktop]::VisibleOwner($hwnd,$owner)} 5 ('owned foreground, previous PID '+$before)|Out-Null
+ Write-HarnessResult $directory 'foreground.json' @{timeUtc=[DateTime]::UtcNow.ToString('o');previousPid=$before;ownerPid=$owner;hwnd=$hwnd.ToInt64();result='owned window focused'}|Out-Null
+}
 function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0){
- Assert-HarnessHostLease
+ Assert-HarnessHostLease;EnsureForeground
  $parent=$script:window;$patternName='';$target=$null
  switch($Kind){
   'navigation' {if($Selector -notin 'Home','Games','Remove apps','Graphics drivers','Windows tweaks','Tools','Undo changes','Report a bug','Settings','Startup & services','Memory','Timer & cache'){throw 'Navigation is not allowed'};$parent=NavParent $Selector;$target=Unique $parent '' $Selector $CT::ListItem;$patternName='SelectionItemPattern.Select'}
@@ -92,6 +99,7 @@ function ScrollPage{
 function SetScroll($scroll,[double]$to){Action scroll '' $scroll.element $to;Start-Sleep -Milliseconds 400}
 function Shot([string]$page,[string]$tab,[int]$part=0){
  $tab=$tab.Substring(0,[Math]::Min(90,$tab.Length));$script:screenNumber++;$name=$script:pass+'-'+('{0:D3}'-f$script:screenNumber)+'-'+$page+'-'+$tab+$(if($part){'-part'+$part}else{''})+'.png';$path=Join-Path $script:screensDir $name
+ EnsureForeground
  $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle
  if(-not[RooTour.Desktop]::VisibleOwner($hwnd,[int]$script:window.Current.ProcessId)){throw 'Owned capture window is not in front'}
  [RooTour.Desktop]::Shot($hwnd,(Get-HarnessLongPath $path));$bounds=[RooTour.Desktop]::Bounds($hwnd)
@@ -99,12 +107,12 @@ function Shot([string]$page,[string]$tab,[int]$part=0){
  Write-HarnessResult $directory ($name+'.uia.json') @{screen=$name;elements=@(WindowTree)}|Out-Null
  Write-Output ('SCREEN '+$name)
 }
-function CapturePage([string]$page,[string]$tab='main'){
+function CapturePage([string]$page,[string]$tab='main',[switch]$TopOnly){
  $scroll=ScrollPage;if($scroll){SetScroll $scroll 0};Start-Sleep -Seconds $HoldSeconds
- if($script:pass -eq 'C' -or -not$scroll){Shot $page $tab;return}
+ if($TopOnly -or $script:pass -eq 'C' -or -not$scroll){Shot $page $tab;return}
  $part=1;Shot $page $tab $part
- for($guard=0;$guard -lt 60 -and $scroll.pattern.Current.VerticalScrollPercent -lt 99.8;$guard++){
-  $current=$scroll.pattern.Current.VerticalScrollPercent;$view=$scroll.pattern.Current.VerticalViewSize;$step=if($view -ge 100){100}else{80*$view/(100-$view)};$next=[Math]::Min(100,$current+[Math]::Max(2,$step))
+ for($guard=0;$guard -lt 500 -and $scroll.pattern.Current.VerticalScrollPercent -lt 99.8;$guard++){
+  $current=$scroll.pattern.Current.VerticalScrollPercent;$view=$scroll.pattern.Current.VerticalViewSize;$step=if($view -ge 100){100}else{80*$view/(100-$view)};$next=[Math]::Min(100.0,$current+[Math]::Max(0.01,$step))
   SetScroll $scroll $next;Start-Sleep -Seconds $HoldSeconds;$part++;Shot $page $tab $part
   if($scroll.pattern.Current.VerticalScrollPercent -le $current){throw 'Page scroll made no progress'}
  }
@@ -121,7 +129,7 @@ function Sections{
  $list=FindId 'WindowsTweakSections';$items=@($list.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)))
  if(-not$items.Count){throw 'No tweak sections realized'}
  $names=@($items|ForEach-Object {$_.Current.Name});if(@($names|Sort-Object -Unique).Count -ne $names.Count){throw 'Duplicate tweak section names'}
- foreach($section in $names){Action section $section;Start-Sleep -Seconds 2;CapturePage 'windows-tweaks' ([regex]::Replace($section.ToLowerInvariant(),'[^a-z0-9]+','-').Trim('-'))}
+ foreach($section in $names){Action section $section;Start-Sleep -Seconds 2;CapturePage 'windows-tweaks' ([regex]::Replace($section.ToLowerInvariant(),'[^a-z0-9]+','-').Trim('-')) -TopOnly:($section -ne 'All tweaks')}
 }
 function CapturePass([string]$value){
  $script:pass=$value;$script:screenNumber=0
