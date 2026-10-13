@@ -12,6 +12,8 @@ public static class MemoryRelief
 {
     private static readonly TimeSpan MinimizedDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan BackgroundDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ForegroundIdle = TimeSpan.FromSeconds(10);
+    private static int _foreground;
     private static Window? _window;
     private static int _generation;
 
@@ -33,7 +35,38 @@ public static class MemoryRelief
         _window = null;
         Minimized = false;
         Interlocked.Increment(ref _generation);
+        Interlocked.Increment(ref _foreground);
     }
+
+    public static void PageShown()
+    {
+        var generation = Interlocked.Increment(ref _foreground);
+        _ = Task.Run(async () =>
+        {
+            for (var waited = 0; waited < 120; waited += 2)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                if (generation != Volatile.Read(ref _foreground) || Minimized) return;
+                if (IdleTime() < ForegroundIdle) continue;
+                try
+                {
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                }
+                catch (Exception error) { AppLog.Write("memory", "Freeing memory failed: " + error.Message); }
+                return;
+            }
+        });
+    }
+
+    private static TimeSpan IdleTime()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) ? TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time)) : TimeSpan.Zero;
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct LastInputInfo { public uint Size; public uint Time; }
+    [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LastInputInfo info);
 
     private static void OnChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
