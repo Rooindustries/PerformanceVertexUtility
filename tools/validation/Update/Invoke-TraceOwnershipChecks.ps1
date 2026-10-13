@@ -9,7 +9,11 @@ function Wait-Trace([scriptblock]$Action,[string]$Name){$until=[DateTime]::UtcNo
 function Trigger($Root,[string]$Gate){
  $ready=Wait-Trace {try{[Threading.EventWaitHandle]::OpenExisting($Gate)}catch [Threading.WaitHandleCannotBeOpenedException]{$null}} 'root ready event'
  $locked=$null
- try{$locked=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None);$ready.Set()|Out-Null;Start-Sleep -Milliseconds 800}
+ try{
+  $until=[DateTime]::UtcNow.AddSeconds(5)
+  while(-not$locked){try{$locked=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)}catch [IO.IOException]{if(($_.Exception.HResult -band 0xffff) -notin 32,33 -or [DateTime]::UtcNow -ge $until){throw};Start-Sleep -Milliseconds 50}}
+  $ready.Set()|Out-Null;Start-Sleep -Milliseconds 800
+ }
  finally{if($locked){$locked.Dispose()};$ready.Dispose()}
  if(-not$Root.process.WaitForExit(10000)){throw 'Fixture root did not exit'}
 }
