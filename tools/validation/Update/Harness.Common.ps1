@@ -311,6 +311,7 @@ function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$
   $StartInfo.Arguments=Get-HarnessToolArguments $StartInfo.Arguments
   $process=[Diagnostics.Process]::Start($StartInfo)
  }else{
+  if(-not[IO.Path]::IsPathRooted($FilePath) -and $FilePath -notmatch '[\\/]'){$FilePath=(Get-Command $FilePath -CommandType Application -ErrorAction Stop).Source}
   $arguments=@{FilePath=(Get-HarnessToolPath $FilePath);WindowStyle=$WindowStyle;PassThru=$true}
   if($WorkingDirectory){$arguments.WorkingDirectory=Get-HarnessToolPath $WorkingDirectory}
   if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=Get-HarnessToolArguments $ArgumentList}
