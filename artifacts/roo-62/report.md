@@ -1,5 +1,102 @@
 # ROO-62 Slice14 final report
 
+## Slice 20: corrected oracle passed; gate stopped on product cleanup
+
+**Verdict: NOT READY for the combined merge.** The corrected long-path oracle passed for the harness and release helpers. Published P2/P3 passed after a harness ownership correction. B's all-scenarios driver recorded 21/21, but its independent copy-failure readback exposes a product cleanup failure, so that count is insufficient to approve the change. Contracts were interrupted; close-during-check and the signed subset were not run. No product fix was made.
+
+### Product blocker
+
+`docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/UpdateService.cs:159,165,170,183`: after interactive recovery from a forced silent mid-copy failure, the app reports the successful update and consumes `pending-install.json`, but deleting the cached installer fails. The readback still contains **110,083,366 bytes**, SHA-256 `E571731CEAB7FE6415F301C3D41DC5CEF7825C598B561AE45DCD8619D763F46B`, in the installed version's cache. The fresh log says `Couldn't clean up the installed update: Access to the path 'RooIndustries-OptimizationSuite-0.11.1-beta-setup.exe' is denied.` The existing recovery path does not retry cleanup for a current-version folder after the pending record is consumed.
+
+Severity **Low**, confidence **high**, rare failure-recovery path. This cleanup code already exists in `20618f6`; it was observed on B, not reproduced against the published binary's failure path. The retained installer and consumed pending record are confirmed. An Inno process retaining the source executable is the leading **unconfirmed hypothesis**; the denying handle was not captured. A handle trace at recovery startup would distinguish that from an ACL or attribute problem. Normal silent install cleaned its cache successfully in the same gate.
+
+Evidence: `artifacts/roo-63-64/slice20/product-cache-cleanup-failure.json`, and the nonce-bound `result-...0012.json`, `feed-log-...0010.json`, `relaunch-ownership-...0007.json` in `artifacts/roo-63-64/slice20/attempt2/all/pc-artifacts/ota/copy-failure-ee37e4de484f4b11aabc23f1fecd47fd/`. The product stop rule was applied; there is no change to UpdateService in this slice.
+
+### Changes and exact-scenario checks
+
+| Change | Location | Result/evidence |
+| --- | --- | --- |
+| Create the long target and canonical file-ID oracle with literal extended strings and direct CreateDirectoryW/CreateFileW; compare helper-result IDs; ADS roundtrip and unchanged base ID | `tools/validation/Update/Invoke-HarnessChecks.ps1:80` | 31 passing rows on B: 30 executed assertions plus the explicit long-relative not-applicable observation; `paths/receipt.json` |
+| Keep an already accepted trace proof after its owned setup root exits/retires; recheck the child native birth/image, invocation/trace nonce, unique event, and requested ancestor | `Harness.Common.ps1:251`, `Invoke-TraceOwnershipChecks.ps1:49` | Retired-root fixture passes, foreign/reused/ambiguous candidates still refuse; `trace-final/receipt.json` |
+| Shorten the temporary B copy to `c` and align the signing preguard with that path; B preserves its shared Assert-ReleasePathBound calculation | `Build-UpdatePair.ps1:13`, `Invoke-SigningScenario.ps1:39` | Successful unsigned pair has maximum output paths 256/253; `artifacts/roo-63-64/slice20/attempt2/build-bound-evidence.json`. Signing itself remains unrun after the product stop |
+| Rebind the lint allowlist after fixture lines move | `tools/validation/path-lint-allowlist.json` | Final A/B lint pass; `lint-code-final-a.log`, `lint-code-final-b.log` |
+
+The first P3 attempt installed the correct bytes, but a later harness ownership check discarded a proof already accepted by the same invocation after setup exited. That is fixed at the shared proof lookup, with the retired-root fixture, then fresh published P2/P3. The first B pair attempt was correctly refused by the release bound because the copy root made a generated path 263 characters. The short copy root fixes the harness layout; no path normalizer or product bound was weakened. Evidence from both failed attempts is retained.
+
+### Path-form fixture matrix
+
+All evidence below is `artifacts/roo-62/slice20/paths/receipt.json`. Long targets exceed 300 characters, and the canonical expected path is constructed independently of either helper. `LongPathsEnabled=0` was preserved.
+
+| Form | Short harness | Long harness | Long Release.Checks |
+| --- | --- | --- | --- |
+| doubled separators | PASS, same raw/plain/canonical ID | PASS, same literal canonical ID | PASS, same canonical ID |
+| dot segment | PASS | PASS | PASS |
+| parent segment | PASS | PASS | PASS |
+| trailing dot | PASS | PASS | PASS |
+| trailing space | PASS | PASS | PASS |
+| forward slashes | PASS | PASS | PASS |
+| relative / drive-relative | PASS, both forms | Not applicable: tool boundary cannot set a 260+ current directory | Same reason |
+| Zone.Identifier ADS | PASS, bytes, ID and Get-Item -Stream readback | PASS, literal stream bytes/ID and unchanged base ID | PASS, stream bytes and canonical base ID |
+| invalid stream | PASS, refused without altering bytes | PASS, refused | Harness validation is the shared fixture |
+| stream passed to tool | PASS, refused | PASS, refused | PASS, refused |
+| canonical long path passed to tool | Not applicable to short length | PASS, 260-character tool refusal | PASS, same refusal |
+
+Control varies only the spelling/stream suffix; expected canonical identity and bytes stay fixed. Effects observed: native open/file ID, ADS bytes and provider readback, refusals, preserved bytes. Product update behavior and long relative current directories are outside this fixture.
+
+### Gate results and source binding
+
+| Gate | Observed | Result | Evidence |
+| --- | --- | --- | --- |
+| Fresh report-bearing A/B staging | Exact staged manifests pass source snapshot; 80 A and 81 B PowerShell files parse, native helpers and HarnessTrace compile | PASS at the recorded heads | `final-staging/staging-receipt.json`, `final-staging/a-parse.json`, `b-parse.json` |
+| Corrected path oracle | All short and applicable long forms, both helpers | PASS | `paths/receipt.json` |
+| Linux compile/lint | Both code-final trees | PASS | `lint-code-final-a.log`, `lint-code-final-b.log`; py_compile commands below |
+| run_harness_checks | 116/116 rows, zero skips; one explicit not-applicable observation | PASS | `harness-final/receipt.json` |
+| Trace ownership | Required i–iii, ambiguity, retained-root proof: 5/5 | PASS | `trace-final/receipt.json` |
+| A P2 | Real baseline 6c6515cd…; published payload 1,379/1,379; preservation, governor and discriminating High/0x3/memory 2 rule readback | PASS; known richer-log field unverified | `published-final/p2/receipt.json`, `run.json` |
+| A P3 | Live production download 110,073,731 bytes / 7fd804b4…; alpha→beta, preserved data and governor, fresh latest-version check | PASS; transient Available text and richer shipped log unverified | `published-final/p3/receipt.json`, `run.json` |
+| B all scenarios | Driver 21/21, install/failure/copy-failure trace proofs; independent successful-recovery cache readback fails | FAIL overall despite passing driver count | `artifacts/roo-63-64/slice20/attempt2/all/scenario-results.json`, product blocker above |
+| B contracts | Seven completed cases before the deliberate product stop | INCOMPLETE, no 25/25 claim | `artifacts/roo-63-64/slice20/attempt2/contracts/runner.log` |
+| B close-during-check | Not started after product stop | UNRUN | `artifacts/roo-63-64/slice20/attempt2/unsigned-gate-results.json` |
+| B signed pair/OTA/governor/negative | No new test certificate or signing run | UNRUN | Product stop decision |
+| B release bounds | Source, post-publish and final payload checkpoints pass for both unsigned builds | PASS for these builds; signed/negative unrun | `artifacts/roo-63-64/slice20/attempt2/build-bound-evidence.json` |
+| Lease/resources/raw as-found data | 20 terminal ledgers closed, 459 native process identities absent/reused-preserved, original files/registry equal | PASS | `cleanup-audit.json`, `terminal-ledger-audit.json`, `owned-process-audit.json`, `update-cache-audit.json` |
+
+Staging/parse and the final harness/P2/P3/trace reruns used A `68d157fed470ec2c9dfa1770aaad04a001916cad` / B `7def76e18ecdf2972b93642a72184fd17600dd26`, as recorded in `gate-code-heads.json`. B all/contracts used **`27d427518872fef233b6cf1011c8cd4ea3878eb6`**, fresh frame `4d7bf1ae3b954d97b9f0bb8becbd18bd`, manifest `c1067aa8c5c23b97202ac0506c4bb3997010153f86fbd7503b6b68a7695c1027`. Code-final heads before report commits are A **873f5ffe62c954f5996e7576c055ec20280e81af** and B **24371b6d27a56645e235a5c3a212245d7a59323e**. The later changes only shorten the pair copy and align the signing preguard; the signed path is explicitly unverified. No complete gate at the final heads is claimed. Report-only final commits are identified in the handoff and `artifacts/roo-62/slice20/final-branches.json`.
+
+A's product diff against `20618f6` under backend/docs/tools/release/tools/scripts remains empty, SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; `product-source-binding-final.json`.
+
+### Commands and controls
+
+Exact host, frame, nonce and argument records accompany each receipt (`desktop.command.json`, `command.json`, `*-command.json`). The scripts below are the mechanical drivers retained with this gate:
+
+```bash
+python3 -I tools/validation/Update/run_harness_checks.py --lint-only
+python3 -I -m py_compile tools/validation/windows_ssh.py tools/validation/Update/run_harness_checks.py tools/validation/Update/run_e2e.py tools/validation/Update/run_shipped.py
+python3 -I artifacts/roo-62/slice20/prepare-final.py
+python3 -I artifacts/roo-62/slice20/paths.py
+python3 -I tools/validation/Update/run_harness_checks.py --host "$ROO_TEST_SSH_HOST" --expected-machine "$ROO_TEST_COMPUTER" --source-commit 20618f6 --published-installer "$PUBLISHED_INSTALLER" --out-dir "$HARNESS_OUT"
+python3 -I artifacts/roo-62/slice20/trace-final.py
+python3 -I artifacts/roo-62/slice20/published-final.py
+python3 -I artifacts/roo-63-64/slice20/b-gate2.py
+python3 -I artifacts/roo-62/slice20/cleanup-capture.py
+python3 -I artifacts/roo-62/slice20/cleanup-read-new.py
+python3 -I artifacts/roo-62/slice20/cleanup-restore.py
+python3 -I artifacts/roo-62/slice20/final-audit.py
+python3 -I artifacts/roo-62/slice20/owned-audit.py
+```
+
+P2 varies the installed baseline and then launches the exact published installer through the owned shell launcher with MOTW. It observes payload hashes, saved files/settings, governor identity and independent rule controls; richer feed logging is unavailable in the shipped binary. P3 varies only the source Version to alpha, uses the default production feed, and observes newly created exact installer bytes, setup/relaunch, preservation and current status; it cannot capture the brief Available text before auto-download. B varies one feed/install failure input per scenario and observes fresh status/logs, cache/files, process ownership and preservation; it does not capture the denying file handle. Ownership fixtures vary parent provenance, PID birth, ambiguity and root retirement; they observe native birth/image, event proof and refusal, not arbitrary process lifetime.
+
+### Cleanup, production requests and remaining work
+
+The PC is restored to the prior **0.11.1-beta test-feed build** using the frozen slice-14 signed installer, with governor paused. All **449 original files** and both data-root existence states match as found. The raw registry comparison covers exact value kind and bytes, including the **17,833,984-byte State value**; no reserialized state is used. Both P2 retained fixture ledgers were reconciled. Removal of 26 new data files is bound to original creation ledgers, saved-rule responses, native fixture identities or the owned stopped game-session response. Four modified original files were restored from the captured archives. The first cleanup driver failed before mutation on a null metadata field; it was corrected. The process audit was chunked after the inline 64 KiB transport cap refused a too-large read-only request.
+
+There are zero owned Roo/frame processes, tasks, firewall rules, hosts edits, test certificates, leases, update-cache directories or frames. All 160 unledgered legacy frames retain their native creation identities. All six CS2 tasks are Ready/Enabled with byte-identical XML. Tailscale serve equals its as-found JSON with no 8460 route. The unrelated support HTTP service was preserved. Blackwell, KVM, LongPathsEnabled, Defender and trust roots were untouched. Nothing owned is left running.
+
+**Completed production installer downloads: 4**, comprising two harness Invoke-WebRequest downloads and two independently verified app OTA downloads (one pair in the initial attempt, one pair in the successful rerun). Production had GETs only; no publish/upload/push or Blob token. The signing key stayed on Linux. See `production-download-count.json`.
+
+Open: lead decision/product fix for cleanup after successful interactive recovery, then the affected gate and the outstanding contracts, close-during-check and signed subset. The accepted native normalizer and corrected oracle have no open path-handling finding. The shared trace-proof retention and short copy layout fixes passed their applicable reruns. Approval of the combined merge is withheld.
+
 ## Slice 19: OS normalization implemented; final gate stopped
 
 **Verdict: NOT READY to merge.** The specified OS normalizer is implemented. The long-path file-ID acceptance proof cannot run as written on the as-found test PC. No fallback normalizer, registry opt-in or product fix was added. P2/P3 and B's all/contracts/close/signed gate were not started.
