@@ -78,8 +78,9 @@ public sealed partial class FirmwarePage : Page
             await ViewModel.VerifyAsync();
             if (_restarting || !ViewModel.CanRestart) return;
             _restarting = true;
-            await Task.Run(() => SystemRestart.Restart((command, error) => AppLog.Write("firmware-restart", Path.GetFileName(command.FileName) + " boot target skipped: " + error.Message)));
+            AppLog.Write("firmware-restart", "Restart now confirmed on the BIOS session page; restarting Windows.");
+            await Task.Run(() => SystemRestart.Restart((command, error) => AppLog.Write("firmware-restart", Path.GetFileName(command.FileName) + " boot target skipped: " + error.Message), message => AppLog.Write("firmware-restart", message)));
         }
-        catch (Exception ex) { _restarting = false; ViewModel.Message = ex.Message; }
+        catch (Exception ex) { AppLog.Write("firmware-restart", "Restart failed: " + ex.Message); _restarting = false; ViewModel.Message = ex.Message; }
     }
 }

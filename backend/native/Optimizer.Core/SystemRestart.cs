@@ -13,12 +13,13 @@ public static class SystemRestart
         new(Path.Combine(systemDirectory, "shutdown.exe"), ["/r", "/t", "0"], false)
     ];
 
-    public static void Restart(Action<RestartCommand, Exception>? skipped = null) => Restart(Environment.GetFolderPath(Environment.SpecialFolder.System), Run, skipped);
+    public static void Restart(Action<RestartCommand, Exception>? skipped = null, Action<string>? log = null) => Restart(Environment.GetFolderPath(Environment.SpecialFolder.System), Run, skipped, log);
 
-    public static void Restart(string systemDirectory, Action<RestartCommand> run, Action<RestartCommand, Exception>? skipped = null)
+    public static void Restart(string systemDirectory, Action<RestartCommand> run, Action<RestartCommand, Exception>? skipped = null, Action<string>? log = null)
     {
         foreach (var command in Commands(systemDirectory))
         {
+            try { log?.Invoke("Running " + Path.GetFileName(command.FileName) + " " + string.Join(' ', command.Arguments)); } catch { }
             try { run(command); }
             catch (Exception error) when (command.Optional) { skipped?.Invoke(command, error); }
         }

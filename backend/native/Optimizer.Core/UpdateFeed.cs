@@ -56,7 +56,7 @@ public sealed class SemanticVersion : IComparable<SemanticVersion>
 
 public enum UpdateFeedKind { Refused, Current, Available }
 public sealed record UpdateRelease(string Version, DateTimeOffset PublishedAtUtc, Uri InstallerUrl, long Size, string Sha256, string Notes);
-public sealed record UpdateFeedResult(UpdateFeedKind Kind, string Reason, UpdateRelease? Release = null);
+public sealed record UpdateFeedResult(UpdateFeedKind Kind, string Reason, UpdateRelease? Release = null, string? KeyId = null);
 public enum UpdateFileFailure { None, Mismatch, Canceled, Error }
 public sealed record UpdateFileResult(bool Verified, string Reason, long Bytes, string? Sha256 = null, UpdateFileFailure Failure = UpdateFileFailure.None);
 
@@ -78,7 +78,8 @@ public static class UpdateFeed
 
     public static UpdateFeedResult Verify(byte[] body, int httpStatus, Uri feedUrl, string currentVersion)
     {
-        static UpdateFeedResult Refuse(string reason) => new(UpdateFeedKind.Refused, reason);
+        string? verifiedKey = null;
+        UpdateFeedResult Refuse(string reason) => new(UpdateFeedKind.Refused, reason, null, verifiedKey);
         try
         {
             if (httpStatus != 200) return Refuse("The update server returned HTTP " + httpStatus + " instead of 200.");
@@ -98,6 +99,7 @@ public static class UpdateFeed
             verifier.ImportSubjectPublicKeyInfo(publicKey, out var consumed);
             if (consumed != publicKey.Length || !verifier.VerifyData(payload, signature, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence))
                 return Refuse("The update signature is invalid. Couldn't verify this release.");
+            verifiedKey = keyId;
             using var document = JsonDocument.Parse(payload);
             Unique(document.RootElement);
             var data = document.RootElement;
@@ -121,8 +123,8 @@ public static class UpdateFeed
             var notes = data.TryGetProperty("notes", out var note) ? note.GetString() ?? "" : "";
             if (notes.Length > 2000) notes = notes[..(char.IsHighSurrogate(notes[1999]) ? 1999 : 2000)];
             var release = new UpdateRelease(version, date, url, size, hash.ToLowerInvariant(), notes);
-            return next!.CompareTo(current) > 0 ? new(UpdateFeedKind.Available, "Version " + version + " is available", release)
-                : new(UpdateFeedKind.Current, "You have the latest version", release);
+            return next!.CompareTo(current) > 0 ? new(UpdateFeedKind.Available, "Version " + version + " is available", release, keyId)
+                : new(UpdateFeedKind.Current, "You have the latest version", release, keyId);
         }
         catch (CryptographicException) { return Refuse("The update signature is invalid. Couldn't verify this release."); }
         catch (Exception error) when (error is JsonException or InvalidOperationException or InvalidDataException or FormatException or ArgumentException)

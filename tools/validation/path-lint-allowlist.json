@@ -19,7 +19,7 @@
   },
   {
     "file": "tools/validation/Update/Invoke-SigningScenario.ps1",
-    "line": 43,
+    "line": 41,
     "text": "if(@(Get-ChildItem Cert:\\CurrentUser\\My|Where-Object Subject -ceq $subject).Count){throw 'An unrelated test certificate already exists; preserve it.'}",
     "reason": "Certificate-store enumeration, not a filesystem walk."
   },
