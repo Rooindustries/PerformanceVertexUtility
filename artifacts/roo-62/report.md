@@ -242,3 +242,59 @@ R3 final caller audit also found Background's historical install subcommand stil
 The initial local ZIP-result reader expected a filename without the helper's sequence suffix. The desktop invocation and its cleanup passed; that reader failed and its receipt remains fail. The corrected reader requires the actual invocation nonce and sequence-bound filename, and its fresh owned invocation passes. No installed product or seeded data changed. The adapter's real setup path is deliberately not run in this targeted-only slice; it uses the existing manual-install path for the next authorized gate.
 
 Slice16 final code heads before report-only commits: A `a3d8b951614278863e5af198788c027b6e18dd9f`, B `42f5ff616b4a4b46b190daf38508b51ed5893895`. Exact final report-bearing heads and clean states are recorded in `artifacts/roo-62/slice16/final-branches.json`.
+
+
+# Slice 17 final gate: stopped on a shared harness blocker
+
+Gate A: `0f43b62453f38f3d760161340704e7ebf74ac579`.
+Gate B: `8322a13cb3663fae8ebf4ca26d907207dd5a52f9`.
+Both heads were clean before staging and include the committed reports. Report-only commits follow this gate; their final SHAs are in `final-branches.json`.
+
+The gate is **not complete**. P2 failed in the harness before the published installer ran. The small discriminating fixture confirms that Windows PowerShell 5.1 `Invoke-WebRequest -OutFile` rejects a `\\?\` destination even when the directory exists: extended path fails with `System.IO.FileNotFoundException: Unable to find the specified file`; the same HTTPS feed request to the ordinary short path succeeds and writes 1,251 bytes. This is another path in the accepted provider/extended-path compatibility class. Per the lead's same-class rule, remaining gates were stopped and no product fix or download-path patch was made.
+
+| Gate | Observed | Result | Evidence |
+| --- | --- | --- | --- |
+| Hardening | Exact requested normalizer in Harness.Common.ps1:18; Release.Checks.ps1:1. Short paths normalize through GetFullPath; long separators collapse; long dot/parent/trailing dot/space segments refuse. Three new fixtures at Invoke-HarnessChecks.ps1:234. | pass | hardening-failure-ways.json; harness/windows-receipt.json |
+| Fresh A staging / R1 | Manifest includes artifacts/roo-62/report.md; exact source snapshot passes at A gate SHA. | pass | staging-receipt.json; a-staging-frame.json; a-staging-cleanup.json |
+| Fresh B staging / R1 | Manifest includes both committed reports; exact source snapshot passes at B gate SHA. | pass | staging-receipt.json; b-staging-frame.json; b-staging-cleanup.json |
+| PS 5.1 parse / HarnessTrace compile | A 80 files, B 81 files, zero errors; HarnessTrace compiled on both. All Update/LoadTimes/Release and tools/scripts PS1 files were included. | pass | a-parse.json; b-parse.json |
+| Full harness checks | 64/64, including 43/43 native checks; zero skips. Short doubled separator found; long doubled separator found at 313 chars; long parent segment refused with the explicit normalization reason. | pass | harness/receipt.json; windows-receipt.json; harness-runner.log |
+| Trace once | All three required ownership fixtures plus the existing ambiguity fixture pass (4/4). The eight-run CR9 series was not repeated. | pass | trace/receipt.json; desktop.log; cleanup.json |
+| P2 published bootstrap | Uninstall, real 6c6515cd baseline wizard, seed, independent tweak readback, undo existence, old app + governor running all pass. DownloadPublished then fails at Invoke-ShippedScenario.ps1:218. No published setup starts. Cleanup reports zero errors. | fail | published/p2/receipt.json; desktop.log; pc-artifacts/shipped/p2-14f1cde1202e4f50acdb8877f1db3584/failure-14f1cde1202e4f50acdb8877f1db3584-0065.json |
+| P3 live alpha OTA | Not started after the shared-class failure. | blocked | published/gate-results.json |
+| B all 21 / contracts 25 / close-during-check | Not started after the shared-class failure. | blocked | gate-summary.json |
+| B signed subset / governor / wrong-subject / cert cleanup | Not started; no new signing certificate was created. | blocked | gate-summary.json |
+| B normal/pair/signed/negative release bounds | No B build ran, so no execution/pass claim for its release guards. Parse only passed. | unverified | b-parse.json; gate-summary.json |
+| Host leases | Every driver actually run takes a ledger-owned lease; all owner frames close. Final lease absent. | pass | staging cleanup receipts; harness/cleanup.json; trace/cleanup.json; download-path-probe/closed-ledger.json; cleanup/closed-ledger.json; cleanup-audit.json |
+| Final cleanup / preservation | Original signed test-feed 0.11.1-beta build restored from the retained slice14 installer, app stopped, governor paused. Zero owned processes/tasks/firewall/hosts/certs/lease/cache/frames. Both data-root file sets/hashes match as-found. 160 legacy frame paths + native births match. Six CS2 tasks remain Ready/Enabled with identical XML. | pass | final-inventory.json; cleanup-audit.json; owned-process-audit.json; cleanup/build-rollback.json; cleanup/data-restore.json |
+
+## Confirmed shared blocker and the follow-up scope
+
+High-confidence High harness blocker: `tools/validation/Update/Invoke-ShippedScenario.ps1:218` calls `Invoke-WebRequest -OutFile (Get-HarnessLongPath $path)`. Both native directory existence and ordinary-path success contradict an absent directory or bad HTTPS feed as the cause. `download-path-probe/receipt.json` retains both requests, output paths, existence and exceptions. It creates and closes only its own frame.
+
+The same command shape exists in `Invoke-SigningScenario.ps1:53` for the SDK package. Its `Expand-Archive` at :54 also delegates extended paths to a PowerShell provider. Those signing paths were not executed here and are **unverified**, not claimed as a second reproduced failure. The shared fix should make harness download/extraction file IO use native extended-path streams/ZIP APIs, with targeted real PS5.1 checks; do not switch random call sites back to ordinary paths. The bounded Add-Type/compiler boundary already documented in slice16 remains separate.
+
+## Commands
+
+```sh
+python3 -I artifacts/roo-62/slice17/prepare.py
+python3 -I tools/validation/Update/run_harness_checks.py --host optimizer-9070 --expected-machine SERVI-WINDOWS-D --source-commit 20618f6 --published-installer <main>/artifacts/release/RooIndustries-OptimizationSuite-0.11.0-beta-setup.exe --out-dir <main>/artifacts/roo-62/slice17/harness
+python3 -I artifacts/roo-62/slice17/trace.py
+python3 -I tools/validation/Update/run_shipped.py --scenario p2 --source-commit 20618f6 --host optimizer-9070 --expected-machine SERVI-WINDOWS-D --baseline-installer <main>/artifacts/release/RooIndustries-OptimizationSuite-0.10.0-beta-setup.exe --baseline-sha256 6c6515cdf93c6b5751a37957ae855962d534ca786720773571747d202b576ed4 --published-installer <main>/artifacts/release/RooIndustries-OptimizationSuite-0.11.0-beta-setup.exe --innoextract <main>/artifacts/roo-29/p0/tool/build/innoextract --out-dir <main>/artifacts/roo-62/slice17/published
+python3 -I artifacts/roo-62/slice17/download-path-probe.py
+python3 -I artifacts/roo-62/slice17/final-audit.py
+```
+
+Absolute argv and exact remote commands/source manifests are in published/p2-command.json, published/p2/desktop.command.json and the retained mechanical recipes. A's product diff against 20618f6 remains empty (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). The Release.Checks helper change is B-only because A must keep that published product binding.
+
+## Cleanup details and limits
+
+- P2 leaves two deliberately retained tester-fixture entries. Cleanup replayed their actual creation ledger and checked native identities, rather than matching a replacement PID/path. The reconciled historical ledger has no active retained entries: cleanup/p2-reconciled-ledger.json.
+- The test-created rule and preview are bound to the nonce-bearing rule-save/tweak-preview receipts and checked by hash/native birth before ledger removal. Original settings, app log, governor heartbeat and host state were restored from the initial ZIP after comparing hashes. No original file was lost.
+- A mechanical cleanup comparison initially compared a doubled-separator literal with the canonical rule path; the first audit correctly reported that one seeded rule remained. Its exact nonce/id/hash/birth were then verified and it was removed through the ledger; final audit passes. No product/harness source was changed for that cleanup correction.
+- Tweak recovery lives in HKLM, outside the two file roots. Its original raw byte hash was not captured. The prior accepted slice14 state exactly matches P2's BeforeRevision. That revision-bound state was restored and every decoded field independently matches; raw registry-byte equality remains unverified. Transparency returned to its initial value 0. Evidence: cleanup/prior-tweak-state.json, data-restore.json, tweak-state-comparison.json.
+- Native audit checks 45 owned PID/birth identities: zero live matches, zero unreadable identities. Root/lease/network/cert/task audit passes. An unrelated Linux support HTTP server (PID 1530, port 8080) was preserved; this slice started no Linux server.
+
+Completed production installer downloads: **0**. One production installer Invoke-WebRequest was attempted and failed before any output file was created; no successful transfer is claimed. The discriminating probe made two additional small live-feed GET attempts, with one completed 1,251-byte output. No publish, push, signing-key use/transfer, new test cert, trust-root/Defender change, Blackwell or KVM contact occurred.
+
+**Verdict: not ready to merge.** R1 staging, hardening and the ownership checks pass, but the shared provider/download IO blocker is open and P2/P3 plus B's unsigned/contracts/close/signed/build guards still lack the required final-gate proof. No product failure was observed.
