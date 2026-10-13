@@ -1,20 +1,38 @@
+if (-not ('RooReleasePathNative' -as [type])) {
+    Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class RooReleasePathNative {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetFullPathNameW(string lpFileName, uint nBufferLength, StringBuilder lpBuffer, IntPtr lpFilePart);
+    public static string FullPath(string path) {
+        var buffer = new StringBuilder(32768);
+        var length = GetFullPathNameW(path, (uint)buffer.Capacity, buffer, IntPtr.Zero);
+        if (length == 0 || length >= buffer.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Windows could not normalize the path: " + path);
+        return buffer.ToString();
+    }
+    public static int StreamOffset(string path) { int colon = path.IndexOf(':', path.LastIndexOf('\\') + 1); return colon == 1 && char.IsLetter(path[0]) ? path.IndexOf(':', 2) : colon; }
+}
+'@
+}
 function ConvertTo-ReleaseExtendedPath([string]$Path) {
     if ($Path.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $Path }
     $plain = $Path.Replace('/', '\')
-    $unc = $plain.StartsWith('\\', [StringComparison]::Ordinal)
-    if ($plain.Length -lt 260) { $plain = [IO.Path]::GetFullPath($plain) }
-    else {
-        $plain = ($(if ($unc) { '\\' } else { '' })) + ([regex]::Replace($plain.Substring($(if ($unc) { 2 } else { 0 })), '\\{2,}', '\'))
-        $rooted = $plain -match '^[A-Za-z]:\\' -or $plain -match '^\\\\[^\\]+\\[^\\]+'
-        if (-not $rooted -or @($plain.Split('\') | Where-Object { $_ -in '.', '..' -or ($_ -and $_ -match '[. ]$') }).Count) { throw ('Long path needs normalization the extended form cannot apply; refused: ' + $plain) }
+    $stream = ''; $offset = [RooReleasePathNative]::StreamOffset($plain)
+    if ($offset -ge 0) {
+        $stream = $plain.Substring($offset)
+        if ($stream.Substring(1) -cnotmatch '^[^\\/:*?"<>|]+(:\$DATA)?$') { throw ('Invalid stream name; refused: ' + $Path) }
+        $plain = $plain.Substring(0, $offset)
     }
-    if ($plain.StartsWith('\\', [StringComparison]::Ordinal)) { return '\\?\UNC\' + $plain.Substring(2) }
-    return '\\?\' + $plain
+    $plain = [RooReleasePathNative]::FullPath($plain)
+    if ($plain.StartsWith('\\', [StringComparison]::Ordinal)) { return '\\?\UNC\' + $plain.Substring(2) + $stream }
+    return '\\?\' + $plain + $stream
 }
 
 function Get-ReleaseToolPath([string]$Path) {
     $long = ConvertTo-ReleaseExtendedPath $Path
     $plain = if ($long.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $long.Substring(8) } else { $long.Substring(4) }
+    if ([RooReleasePathNative]::StreamOffset($plain) -ge 0) { throw 'stream paths are .NET-only; cmdlets take -Stream separately' }
     if ($plain.Length -ge 260) { throw ('Path reaches the 260-character tool limit; use a shorter frame: ' + $plain) }
     return $plain
 }
