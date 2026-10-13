@@ -9,6 +9,37 @@ static void Save(string path, object value)
     JsonSerializer.Serialize(output, new { nonce, data = value });
 }
 
+if (args is ["--installer-handoff", var installedApp, var appPid, var installer, var nextVersion, var size, var sha256, var updateRoot, var handoffOutput])
+{
+    using var app = System.Diagnostics.Process.GetProcessById(int.Parse(appPid));
+    if (!string.Equals(app.MainModule!.FileName, installedApp, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Installed app identity differs");
+    using var heldInstaller = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read);
+    var actualHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(heldInstaller));
+    if (heldInstaller.Length != long.Parse(size) || !actualHash.Equals(sha256, StringComparison.OrdinalIgnoreCase) ||
+        System.Diagnostics.FileVersionInfo.GetVersionInfo(installer).ProductVersion?.TrimEnd(' ') != nextVersion)
+        throw new InvalidDataException("Candidate installer identity differs");
+    var fromVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(installedApp).ProductVersion!.TrimEnd(' ');
+    var log = Path.Combine(updateRoot, "install-" + nextVersion + ".log");
+    var pending = new { FromVersion = fromVersion, ToVersion = nextVersion, StartedAtUtc = DateTime.UtcNow, LogPath = log };
+    var pendingPath = Path.Combine(updateRoot, "pending-install.json");
+    if (File.Exists(pendingPath)) throw new InvalidDataException("A pending install already exists; retained");
+    OperationFiles.Write(pendingPath, pending);
+    var start = new System.Diagnostics.ProcessStartInfo(installer)
+    {
+        UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(installer)!,
+        Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG=\"" + log + "\" /ROORELAUNCH=1 /ROOWAITPID=" + app.Id
+    };
+    var installedCore = Assembly.LoadFile(Path.Combine(Path.GetDirectoryName(installedApp)!, "Optimizer.Core.dll"));
+    installedCore.GetType("RooIndustries.Optimizer.RuntimeEnvironment", true)!.GetMethod("Apply")!.Invoke(null, [start]);
+    using var setup = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("Installer did not start");
+    Save(handoffOutput, new { standIn = "installer launch only; no feed offered the candidate", pending, pendingPath,
+        setupPid = setup.Id, setupCreationTimeFileTimeUtc = setup.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(),
+        start.FileName, start.Arguments, start.WorkingDirectory, start.UseShellExecute,
+        runtimeEnvironmentAssembly = installedCore.Location, environmentKeys = start.Environment.Keys.Order().ToArray(),
+        appPid = app.Id, appCreationTimeFileTimeUtc = app.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(), actualHash });
+    if (!app.WaitForExit(60000)) throw new InvalidOperationException("Installed app did not exit cleanly within 60 seconds");
+    return;
+}
 if (args is ["--resources", var resourceAssembly, var resourceOutput])
 {
     var assembly = Assembly.LoadFile(Path.GetFullPath(resourceAssembly));
