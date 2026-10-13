@@ -129,7 +129,7 @@ def main():
     windows.invoke(args.host, args.expected_machine, other_scope + "New-HarnessDirectory " + windows.ps_literal(foreign_directory) + " 'foreign-empty-directory'|Out-Null")
     clear = '& ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
     try:
-        windows.invoke(args.host, args.expected_machine, clear)
+        windows.invoke(args.host, args.expected_machine, clear, timeout=windows.CLEANUP_TIMEOUT)
     except subprocess.CalledProcessError as error:
         observed = (error.stdout or '') + (error.stderr or '')
         if 'Unrecorded frame directory retained; ledger kept' not in observed:
@@ -141,7 +141,7 @@ def main():
     else:
         raise RuntimeError('Frame cleanup removed another run\'s empty directory')
     windows.invoke(args.host, args.expected_machine, other_scope + "$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq " + windows.ps_literal(foreign_directory) + "})[0];Remove-HarnessEntry $entry")
-    result = windows.invoke(args.host, args.expected_machine, '& ' + windows.ps_literal(other['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(other['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine))
+    result = windows.invoke(args.host, args.expected_machine, '& ' + windows.ps_literal(other['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(other['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine), timeout=windows.CLEANUP_TIMEOUT)
     (args.out_dir / 'other-cleanup.json').write_text(result.stdout)
     held_frame = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
     (args.out_dir / 'held-frame.json').write_text(json.dumps(held_frame, indent=2))
@@ -161,7 +161,7 @@ def main():
             raise RuntimeError('Real interactive child did not enter its ledger')
         call = '& ' + windows.ps_literal(held_frame['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(held_frame['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
         try:
-            windows.invoke(args.host, args.expected_machine, call)
+            windows.invoke(args.host, args.expected_machine, call, timeout=windows.CLEANUP_TIMEOUT)
         except subprocess.CalledProcessError as error:
             observed = (error.stdout or '') + (error.stderr or '')
             if not any(text in observed for text in ('Encoded PowerShell', 'running processes', 'runner child')):
@@ -171,10 +171,10 @@ def main():
             raise RuntimeError('Frame cleanup removed a live real interactive frame')
         finished = running.result()
         (args.out_dir / 'real-interactive.log').write_text(finished.stdout)
-    cleared = windows.invoke(args.host, args.expected_machine, call)
+    cleared = windows.invoke(args.host, args.expected_machine, call, timeout=windows.CLEANUP_TIMEOUT)
     (args.out_dir / 'held-cleanup.json').write_text(cleared.stdout)
     cleanup = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
-    result = windows.invoke(args.host, args.expected_machine, cleanup)
+    result = windows.invoke(args.host, args.expected_machine, cleanup, timeout=windows.CLEANUP_TIMEOUT)
     (args.out_dir / 'cleanup.json').write_text(result.stdout)
     (args.out_dir / 'receipt.json').write_text(json.dumps({'status': 'pass', 'checks': rows}, indent=2))
     print('PASS ' + str(len(rows)) + ' targeted harness checks')

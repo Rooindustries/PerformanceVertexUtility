@@ -51,9 +51,9 @@ def command(args, log=None):
     return result.stdout
 
 
-def remote(script, name):
+def remote(script, name, timeout=windows.COMMAND_TIMEOUT):
     try:
-        result = windows.invoke(HOST, MACHINE, script)
+        result = windows.invoke(HOST, MACHINE, script, timeout=timeout)
     except subprocess.CalledProcessError as error:
         output = (error.stdout or "") + (error.stderr or "")
         (OUT / (name + ".log")).write_text(output)
@@ -454,8 +454,7 @@ def main():
                 raise RuntimeError('Tailnet configuration differs from its as-found JSON.')
             evidence = pc_out + "\\evidence-" + uuid.uuid4().hex + ".zip"
             scope = ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(receipt["frameId"]) + ";"
-            remote(scope + "$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});if(Test-Path " + windows.ps_literal(evidence) + "){throw 'Evidence archive already exists; retained.'};Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + ";Register-HarnessFile " + windows.ps_literal(evidence) + " 'evidence-archive'|Out-Null", "collect-evidence")
-
+            remote(scope + "$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});if(Test-Path " + windows.ps_literal(evidence) + "){throw 'Evidence archive already exists; retained.'};Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + ";Register-HarnessFile " + windows.ps_literal(evidence) + " 'evidence-archive'|Out-Null", "collect-evidence", timeout=windows.EVIDENCE_TIMEOUT)
             copy_from(evidence, OUT / "pc-evidence.zip")
             import zipfile
             with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
