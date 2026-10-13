@@ -107,6 +107,7 @@ function Launch{
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null
  $script:appLogCursor=Get-ShippedLogCursor $logPath
  if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'An app already runs; stop it before a fresh launch.'}
+ Assert-HarnessHostLease
  $script:owned=Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose app
  Attach
 }
@@ -142,6 +143,7 @@ Open-HarnessRun $FrameRoot $FrameId $Manifest $Nonce
 if(Test-HarnessPath $Result){throw 'Shell result already exists; retained.'}
 try{
  $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $Installer -Parent;$start.Arguments='/LOG="'+$Log+'"'
+ Assert-HarnessInstallStart (Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe')
  $process=[Diagnostics.Process]::Start($start)
  $owned=Register-HarnessStartedProcess $process 'shell-setup'
  $process.WaitForExit()
@@ -152,6 +154,7 @@ if($outcome.status -eq 'failed'){exit 1}
 '@
  New-HarnessText $launcherPath $launcher 'shell-launcher'|Out-Null
  $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$launcherPath+'" -Installer "'+$path+'" -Log "'+$setupLog+'" -Result "'+$launchResult+'" -Nonce "'+$nonce+'" -FrameRoot "'+$script:Harness.Root+'" -FrameId "'+$script:Harness.FrameId+'" -Manifest "'+$script:Harness.Manifest+'" -Source "'+$Source+'"'
+ Assert-HarnessInstallStart $exe
  $shellOwned=Start-OwnedProcess -FilePath powershell.exe -ArgumentList $arguments -WindowStyle Normal -Purpose shell-launcher
  $shell=$shellOwned.process;$script:extraProcesses.Add($shellOwned)
  Save ($label+'-launch.json') @{path=$path;arguments=('/LOG="'+$setupLog+'"');useShellExecute=$true;launcher=$shellOwned.Identity;result=$launchResult;nonce=$nonce;zone=try{Zone $path}catch{$null}}
@@ -200,6 +203,7 @@ function Uninstall{
   if(Test-HarnessPath $key){throw 'Installed uninstaller is missing.'}
   Check 'no current installation to uninstall' @{uninstallerExists=$false;uninstallKeyExists=$false} $true;return
  }
+ Assert-HarnessInstallStart $exe
  $ownedProcess=Start-OwnedProcess -FilePath $unins -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+(Get-HarnessOutputPath $directory 'uninstall.log')+'"') -Purpose uninstaller
  $p=$ownedProcess.process
  try{if(-not$p.WaitForExit(360000)){throw 'Uninstall timed out.'};Check 'uninstall completed' $p.ExitCode ($p.ExitCode -eq 0) 'uninstall.log'}finally{Stop-HarnessProcess $ownedProcess}
