@@ -162,3 +162,70 @@ One shared extended-path walker/hash/archive path now handles the listed harness
 Frame `31805230c2994beebc7ab152f304f221` is closed: 1,039 entries, 137.017 seconds, frame/ledger/264-character path absent. The three new fixtures distinguish recorded versus unrecorded long descendants and ZIP inclusion, with 331-character file paths. Final audit: zero owned processes or ledgered frames; same 160 legacy frames; 449 unchanged data files and exactly three ledger-owned fixture files removed. Installed build remains the stopped signed test-feed 0.11.1-beta; governor paused/disabled. Completed installer downloads this slice: 0. Blackwell/KVM untouched.
 
 Detailed check and site-by-site tables: `slice15/report.md`; authoritative evidence: `slice15/harness-last/receipt.json`, `slice15/trace-receipt.json`, `slice15/frame-31805230-receipt.json`, `slice15/final-audit-receipt.json`. CR8 is resolved. Full gates remain intentionally deferred until the independent review/fix round, as requested. Final commit identities and clean-state proof: `slice15/final-branches.json`.
+
+
+# Slice 16 targeted fix round
+
+Harness A code head: `a20d61a764f7fe4565793c8b3095a17ee3cc2ff3`. Logging/signing B code head: `f52714edeb0b7a7b6652f34d82d6acd139f08503`. A merged into B; product changes remain B-only. Reports are committed separately after these code heads. No full gate, P2/P3, OTA all/contracts, signed pipeline, push or publish ran. Blackwell and KVM were not contacted. Completed installer downloads: **0**.
+
+| Item | Change and location | Check and observed result | Evidence |
+| --- | --- | --- | --- |
+| R1 | No new change. Exact-file-set guard includes manifest-listed artifacts, windows_ssh.py:146. | Fresh A frames stage the tracked reports and pass source verification. The final gate at the exact report-bearing heads remains for the lead's next slice. | harness-final-tree/frame.json; p0/source-binding.json |
+| R2 | CreateNew host lease and identity assertion, Harness.Common.ps1:152/160; immediate guards at app/setup/uninstall/governor/network mutations. Clear releases the owning lease. | Second frame refused; owner bytes/app untouched; stale missing-frame lease refused/kept; owner Clear releases it; foreign app refuses before setup. All four checks pass. | harness-final-tree/windows-receipt.json (R2 rows); cleanup.json |
+| R3 | Public upload/verify_source/interactive restored to main v1; Update APIs renamed *_frame, windows_ssh.py:403/444/448 and :247/:347. Bounded timeouts preserved. | Configurable Encoding proof 4/4 passes on a fresh legacy frame under an owned protected parent. v1 handles native success/failure, UTF-8 and completion. Public verifier accepts an extra generated file, matching main. Caller table linked below. | ../../roo-63-64/slice16/targeted/encoding/result.json; legacy-frame.json; legacy-callers.md |
+| R4 | Guard logger separately, SystemRestart.cs:22. RestartChecks.cs:42 adds throwing-every-call and throwing-second-call controls. | 12/12 restart checks pass; both commands run in order in each logger case. Real Windows restart never invoked. | ../../roo-63-64/slice16/targeted/restart.log |
+| R5 | Encoded switch/parser, Harness.Common.ps1:595: powershell/pwsh, e/ec, encodedcommand prefixes >=2 and encodedarguments >=8; malformed/missing UTF-16LE refuses. | Live suspended -ec, /enc and undecodable -e refuse through the encoded guard itself. pwsh absent, so direct parser stand-in is explicitly labeled. | harness-final-tree/windows-receipt.json (R5 rows) |
+| R6 | git-common-dir input resolution and --frozen-p0, run_harness_checks.py:44. | Detached /tmp/roo-fresh-check resolves the main checkout's artifacts/roo-29/p2-real-0.10/p0 without Windows/network; worktree removed. | linux/frozen-resolution.json |
+| CR8 filesystem | Shared extended-path metadata/read/copy/hash/archive/cleanup; LoadTimes Native CreateFile/FileStream/ReadAllBytes use extended paths. | 331-character create/register/copy/result/hash/archive/clear checks pass; unrecorded long directory/file refused with path/bytes/ledger kept. Long generated obj ignored by snapshot; long unexpected source refused. | harness-final-tree/windows-receipt.json; long-evidence.zip; receipt.json |
+| CR8 lint | Update files, embedded Python PowerShell, windows_ssh and LoadTimes scanned; explicit exact file/line/text/reason allowlist. | Both branch lints pass. Scratch reverted recursive walk and embedded Test-Path fail. | linux/lint.json; linux/lint-final.json; tools/validation/path-lint-allowlist.json |
+| CR8 release bound | B Release.Checks.ps1:17 shared calculation; Build-Release.ps1:29 before work/output, :168/:191 after publish/final payload before signing/hashes/ISCC. Signing scenario reuses it. | Actual deep Build-Release refuses at a 379-character XAML path with no output. Extended output walker refuses a 331-character payload tree. Normal positive builds belong to the next full gate. | ../../roo-63-64/slice16/targeted/release-bound.json |
+| CR8 Linux extraction | safe_archive_path, windows_ssh.py:322, used by both runners and payload oracle. | Extended/UNC/colon/parent/absolute/double-dot names refused; extraction errors propagate to fail. | linux/zip-member-refusals.json; harness-final-tree/receipt.json |
+| CR10 | Direct prefix of drive/UNC rooted paths without dot segments, Harness.Common.ps1:18; same in native ownership helper. | Long Register-HarnessFile/New-HarnessText/Copy-HarnessFile/Read-HarnessResult passes at 331+ characters. | harness-final-tree/windows-receipt.json (CR10 row) |
+| CR9 | Unique native/event birth match [-1,+10] s, Harness.Common.ps1:221; entire trace used for ambiguity, existing chain/window/handle checks retained. Native birth captured on refusal; trace proof records lagMs. | 8/8 invocations, 4 checks each, zero skips. Five idle and three loaded fresh nonces. Ambiguous two-event matcher refused (stand-in). Loaded total CPU samples 100%; logical threads hard pinned one per CPU. | trace-complete/receipt.json; trace-1..8.json; load-counters-6..8.json |
+| Simplification | Removed duplicate flush after hosts removal in Invoke-ShippedScenario.ps1. | Existing exclusive hosts cleanup/writer fixtures pass; DNS flush remains in ledger cleanup. | harness-final-tree/windows-receipt.json (hosts rows) |
+
+## Targeted gate
+
+- Python py_compile: six changed Python entry points pass. Linux input resolution and both lint refusal controls pass.
+- PowerShell 5.1.26100.9444: 127 validation/scripts files parsed with zero errors; HarnessTrace.cs compiles. Final A harness run parses its Update files again, zero errors.
+- Invoke-HarnessChecks and driver checks: **61/61 pass**, including **40/40 native checks**, no skips.
+- CR9: **8/8**, each 4/4. Across 16 traced adoptions: min **1132.9649 ms**, median **1600.93035 ms**, max **1993.0319 ms**. These measured lags support widening the matching interval; they do not prove a particular WMI delivery-lag mechanism.
+- Restart **12/12**; legacy Encoding **4/4**; release refusal **2/2**.
+
+## Commands
+
+```sh
+python3 -m py_compile tools/validation/windows_ssh.py tools/validation/Update/run_e2e.py tools/validation/Update/run_shipped.py tools/validation/Update/run_harness_checks.py tools/validation/Update/run_trace_checks.py tools/validation/Release/Test-WindowsSshEncoding.py
+python3 -I tools/validation/Update/run_harness_checks.py --lint-only
+python3 -I tools/validation/Update/run_harness_checks.py --host optimizer-9070 --expected-machine SERVI-WINDOWS-D --source-commit 20618f6 --published-installer <main>/artifacts/release/RooIndustries-OptimizationSuite-0.11.0-beta-setup.exe --out-dir <main>/artifacts/roo-62/slice16/harness-final-tree
+python3 -I tools/validation/Update/run_trace_checks.py --host optimizer-9070 --expected-machine SERVI-WINDOWS-D --out-dir <main>/artifacts/roo-62/slice16/trace-complete
+python3 -I tools/validation/Release/Test-WindowsSshEncoding.py --host optimizer-9070 --expected-machine SERVI-WINDOWS-D --receipt <main>/artifacts/roo-63-64/slice16/targeted/legacy-frame.json --out <main>/artifacts/roo-63-64/slice16/targeted/encoding
+```
+
+Post-check mechanical recipe and actual stage bindings: `prepare.py`, `post.py`, `legacy.py`, targeted/frame.json. Restart was built with `dotnet build tools/validation/OptimizerCore/OptimizerCore.csproj -c Release -p:UseSharedCompilation=false --disable-build-servers /nr:false`, then its built DLL ran with `--restart`. The deep bound fixture is kept in `Invoke-ReleaseBoundChecks.ps1` and runs by name through `interactive_frame`.
+
+## In-scope harness fixes and deviations
+
+1. The junction fixture exposed loss of Target metadata and then a dangling link whose target had already gone. The native ownership helper now reads the recorded junction itself with FSCTL_GET_REPARSE_POINT; a new dangling-junction fixture proves cleanup. The failed closure's surviving owned link was removed by verifying its original identity through a recovered copy of that ledger. Failed receipts and recovery evidence are kept in prepare/ and harness/.
+2. PowerShell interpreted the unparenthesized switch `-in` expression differently than intended. Explicit parentheses fix it; live decoder checks now require the precise encoded-runner refusal, preventing another guard from satisfying them.
+3. PowerShell 5.1 Add-Type rejects extended OutputAssembly paths at its provider resolver. Console compilation is an explicit bounded external-tool boundary: plain output <260, pre-existing output refused. All harness read/hash/delete operations still use extended paths. This exception is in New-HarnessConsoleAssembly; there is no long-path compiler fallback.
+4. The initial CPU load inherited BelowNormal and used only the eight E-core threads. Normal/AboveNormal unpinned load made observation difficult. Final fixture stays BelowNormal, pins one busy thread to each of the 20 logical CPUs, clears inherited CPU sets/power restraint on only its owned process and exits itself after four minutes. Counter evidence confirms 100% CPU during the accepted loaded runs.
+5. Owned PID 2260 (native birth 134363454863692424, recorded image in load-probe2/load.json) was stopped through a retained birth/image-verified handle using a high-priority Reflection.Emit rescue because compilation in ordinary cleanup was starved. Its ledger was reconciled and closed; no name kill occurred. Rescue command/result evidence is retained under load-probe2/. This was our own load fixture, not a lead exception or product process.
+6. Legacy upload's receipt count referred to a removed variable during the API split; Encoding staging reproduced it. It now reports len(contents); the real legacy proof passes.
+
+## Cleanup
+
+Audit: installed **0.11.1-beta** test build remains stopped, governor state unchanged. **160 legacy frames**, **0 ledger frames**, **0 Roo/frame processes**, no host lease, harness firewall/hosts entries or test certificates. Both data-root file sets and every SHA match slice15's as-found state exactly (0 missing/new/changed). No service, KVM, Blackwell or production mutation occurred. Unrelated Process Lasso preserved. Audit/raw task XML and hosts bytes are in audit/final-inventory.json; closed ledgers are kept with each run's cleanup receipt. Historical failed invocations remain labeled fail; only their cleanup is closed.
+
+## Limits and review
+
+No normal release build or full published/OTA/signing gate ran, as directed. P2/P3, B all/contracts/signed and final report-bearing fresh frames remain for the lead's final gate. Blackwell-only callers were not executed. pwsh is a labeled parser stand-in; ambiguity is a synthetic event-list stand-in. The fixture compiler exception is explicitly bounded and verified on short paths.
+
+The focused diff review found no remaining blocker in the requested changes. Both code trees are ready for the lead's independent diff review; merge readiness awaits the final gate requested for the next slice.
+
+
+Final parse repeated on the final B code tree: 127/127 PowerShell files, zero parse errors, HarnessTrace Add-Type successful (`artifacts/roo-63-64/slice16/final-parse/parse.json`); frame closed. Final native audit repeated after it: 160 legacy frames unchanged, no ledger frame/lease/process/harness task/firewall/hosts marker/cert, exact data bytes unchanged. All six unrelated CS2 tasks remain Ready and Enabled. Every task XML in the earlier monitored snapshot is unchanged; the broader current inventory also records OS tasks which that earlier filtered snapshot did not enumerate, so those are not claimed as newly created by this slice.
+
+The explicit lint allowlist is five entries: provider Test-Path in Harness.Common:32 (HKLM/HKCU/Cert); certificate removal at Harness.Common:538 (store/thumbprint); data-archive Directory.Move at Harness.Common:633 (both endpoints extended after identity check); certificate enumeration in Invoke-SigningScenario:41 (Cert provider); SDK enumeration in Invoke-SigningScenario:47 (fixed short Windows SDK path, owned fallback uses extended walker). The JSON records exact current line/text and reason and is authoritative if these text line references move.
+
+No task-owned Linux server or runner remains. No feed or installer production request was made. The authoritative slice evidence report is `artifacts/roo-62/slice16/report.md`; the final branches receipt records report commits and clean trees.
