@@ -10,7 +10,7 @@ Copy-HarnessFile (Join-Path $env:SystemRoot 'System32\PING.EXE') $helperPath|Out
 $script:receipt=Start-OwnedProcess -FilePath (Get-HarnessToolPath $appPath) -ArgumentList '-t 127.0.0.1' -Purpose sampler-app -WindowStyle Hidden
 $script:app=$script:receipt.process
 $helperReceipt=Start-OwnedProcess -FilePath (Get-HarnessToolPath $helperPath) -ArgumentList '-t 127.0.0.1' -Purpose sampler-helper -WindowStyle Hidden
-$script:helperId=$helperReceipt.Identity.pid
+$script:helperId=$helperReceipt.Identity.pid;$script:stoppedForSample=$false
 $script:rows=[Collections.Generic.List[object]]::new();$script:samples=[Collections.Generic.List[object]]::new();$script:samplingRaces=[Collections.Generic.List[object]]::new();$script:ownedHelpers=[Collections.Generic.List[object]]::new();$script:helpersSeen=[Collections.Generic.HashSet[string]]::new();$script:runClock=[Diagnostics.Stopwatch]::StartNew()
 function Log([string]$Text){}
 $tokens=$null;$errors=$null
@@ -18,7 +18,7 @@ $ast=[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText(
 if($errors.Count){throw 'Measurement script does not parse'}
 foreach($name in 'Processes','Sample'){$function=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true);if(-not$function){throw 'Real sampler function missing'};Invoke-Expression $function.Extent.Text}
 function Get-Process([int]$Id){
- if($Id -eq $script:helperId){Stop-HarnessProcess $helperReceipt}
+ if($Id -eq $script:helperId -and -not$script:stoppedForSample){$script:stoppedForSample=$true;Stop-HarnessProcess $helperReceipt}
  Microsoft.PowerShell.Management\Get-Process -Id $Id -ErrorAction Stop
 }
 try{
